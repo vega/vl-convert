@@ -1,3 +1,6 @@
 /.idea
 /target
 /Cargo.lock
+/src/module_loader/import_map.rs
+/vendor/
+/try_it.js
