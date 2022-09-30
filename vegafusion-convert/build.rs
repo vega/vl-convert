@@ -2,8 +2,8 @@ use std::path::Path;
 use std::fs;
 use std::process::Command;
 
-const VL_VERSION: &str = "5.2.0";
-const VL_SKYPACK_HASH: &str = "0lbC9JVxwLSC3btqiwR4";
+const VL_VERSION: &str = "4.17.0";
+const VL_SKYPACK_HASH: &str = "ycT3UrEO81NWOPVKlbjt";
 
 // Example custom build script.
 fn main() {
@@ -18,9 +18,19 @@ fn main() {
 
     // Create main.js that includes the desired imports
     let main_path = vendor_path.join("imports.js");
+    let vl_path = format!(
+        "/pin/vega-lite@v{VL_VERSION}-{VL_SKYPACK_HASH}/mode=imports,min/optimized/vega-lite.js",
+        VL_VERSION=VL_VERSION, VL_SKYPACK_HASH=VL_SKYPACK_HASH,
+    );
+
+    let vl_url = format!(
+        "https://cdn.skypack.dev{vl_path}",
+        vl_path=vl_path
+    );
+
     fs::write(main_path, format!(r#"
-import * as vl from "https://cdn.skypack.dev/pin/vega-lite@v{VL_VERSION}-{VL_SKYPACK_HASH}/mode=imports,min/optimized/vega-lite.js";
-    "#, VL_VERSION=VL_VERSION, VL_SKYPACK_HASH=VL_SKYPACK_HASH,
+import * as vl from "{vl_url}";
+    "#, vl_url=vl_url
     )).expect("Failed to write imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
@@ -46,12 +56,14 @@ import * as vl from "https://cdn.skypack.dev/pin/vega-lite@v{VL_VERSION}-{VL_SKY
     let skypack_obj = scopes.get("./cdn.skypack.dev/").unwrap();
     let skypack_obj = skypack_obj.as_object().unwrap();
 
-    let mut content = r#"
+    let mut content = format!(r#"
 use std::collections::HashMap;
 
-pub fn build_import_map() -> HashMap<String, String> {
+pub const VL_URL: &str = "{vl_url}";
+
+pub fn build_import_map() -> HashMap<String, String> {{
     let mut m: HashMap<String, String> = HashMap::new();
-"#.to_string();
+"#, vl_url=vl_url);
 
     // Add packages
     for (k, v) in skypack_obj {
@@ -65,10 +77,6 @@ pub fn build_import_map() -> HashMap<String, String> {
 
     // Add pinned packages
     // Vega-Lite
-    let vl_path = format!(
-        "/pin/vega-lite@v{VL_VERSION}-{VL_SKYPACK_HASH}/mode=imports,min/optimized/vega-lite.js",
-        VL_VERSION=VL_VERSION, VL_SKYPACK_HASH=VL_SKYPACK_HASH,
-    );
     content.push_str(&format!(
         "    m.insert(\"{vl_path}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{vl_path}\").to_string());\n",
         vl_path=vl_path,

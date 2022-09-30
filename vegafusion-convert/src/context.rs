@@ -3,6 +3,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use deno_core::error::AnyError;
 use deno_core::{JsRuntime, RuntimeOptions, serde_v8, v8};
+use crate::module_loader::import_map::VL_URL;
 use crate::module_loader::VegaFusionModuleLoader;
 
 
@@ -19,12 +20,12 @@ impl ConvertContext {
         });
 
         // Imports
-        js_runtime.execute_script("<anon>", r#"
+        js_runtime.execute_script("<anon>", &format!(r#"
 var vl;
-import('https://cdn.skypack.dev/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js').then((imported) => {
+import('{VL_URL}').then((imported) => {{
     vl = imported;
-})
-"#).expect("Failed to import vega-lite");
+}})
+"#, VL_URL=VL_URL)).expect("Failed to import vega-lite");
         js_runtime.run_event_loop(false).await?;
 
         // Define functions
