@@ -2,9 +2,9 @@ pub mod import_map;
 
 use std::collections::HashMap;
 use std::pin::Pin;
-use deno_runtime::deno_core::{ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType, resolve_import};
-use deno_runtime::deno_core::anyhow::Error;
-use deno_runtime::deno_core::futures::FutureExt;
+use deno_core::{ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType, resolve_import};
+use deno_core::anyhow::Error;
+use deno_core::futures::FutureExt;
 use crate::module_loader::import_map::build_import_map;
 
 pub struct VegaFusionModuleLoader {
