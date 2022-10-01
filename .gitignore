@@ -1,5 +1,6 @@
 /.idea
 /target
 /Cargo.lock
-/vegafusion-convert/src/module_loader/import_map.rs
-/vegafusion-convert/vendor/
+/vl-convert-rs/src/module_loader/import_map.rs
+/vl-convert-rs/vendor/
+/vl-convert-rs/tests/output/

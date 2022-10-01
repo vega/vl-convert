@@ -33,8 +33,10 @@ impl ModuleLoader for VegaFusionModuleLoader {
     fn load(&self, module_specifier: &ModuleSpecifier, _maybe_referrer: Option<ModuleSpecifier>, _is_dyn_import: bool) -> Pin<Box<ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
         let string_specifier = module_specifier.to_string();
-        let code = if string_specifier.ends_with("vegafusion-convert.js") {
-            // Load vegafusion-convert.js as an empty file
+        // println!("load: {}", string_specifier);
+
+        let code = if string_specifier.ends_with("vl-convert-rs.js") {
+            // Load vl-convert-rs.js as an empty file
             // This is the main module, which is required, but we don't need to
             // run any code here
             "".to_string()

@@ -2,8 +2,8 @@
 resolver = "2"  # Needed for proper wgpu compilation
 
 members = [
-    "vegafusion-convert",
-    "vl2vg"
+    "vl-convert-rs",
+    "vl-convert"
 ]
 
 [profile.release]

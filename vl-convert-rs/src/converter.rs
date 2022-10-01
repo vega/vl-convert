@@ -3,6 +3,7 @@ use crate::module_loader::VegaFusionModuleLoader;
 use deno_core::error::AnyError;
 use deno_core::{serde_v8, v8, JsRuntime, RuntimeOptions};
 use std::rc::Rc;
+use deno_core::anyhow::bail;
 
 pub struct VlConverter {
     js_runtime: JsRuntime,
@@ -51,7 +52,7 @@ function compileVegaLite(vlSpec) {
         Ok(Self { js_runtime })
     }
 
-    pub async fn compile_vegalite(
+    pub async fn vegalite_to_vega(
         &mut self,
         vl_spec: &serde_json::Value,
     ) -> Result<String, AnyError> {
@@ -68,8 +69,7 @@ compileVegaLite(
 "#,
                     vl_spec_str = vl_spec_str
                 ),
-            )
-            .unwrap();
+            )?;
 
         self.js_runtime.run_event_loop(false).await?;
 
@@ -80,7 +80,13 @@ compileVegaLite(
         // in this case deserialize to a JSON `Value`.
         let deserialized_value = serde_v8::from_v8::<serde_json::Value>(scope, local);
 
-        let value = deserialized_value.unwrap().as_str().unwrap().to_string();
+        let value = match deserialized_value {
+            Ok(value) => {
+                let value = value.as_str();
+                value.unwrap().to_string()
+            },
+            Err(err) => bail!("{}", err.to_string())
+        };
         Ok(value)
     }
 }
@@ -103,7 +109,7 @@ mod tests {
 }
         "##).unwrap();
 
-        let vg_spec = ctx.compile_vegalite(&vl_spec).await.unwrap();
+        let vg_spec = ctx.vegalite_to_vega(&vl_spec).await.unwrap();
         println!("vg_spec: {}", vg_spec)
     }
 }
