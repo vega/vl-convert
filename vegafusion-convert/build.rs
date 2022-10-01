@@ -2,14 +2,16 @@ use std::path::Path;
 use std::fs;
 use std::process::Command;
 
+const VL_PATHS: &[(&str, &str)] = &[
+    ("4.17", "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js"),
+    ("5.0", "/pin/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/mode=imports,min/optimized/vega-lite.js"),
+    ("5.1", "/pin/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/mode=imports,min/optimized/vega-lite.js"),
+    ("5.2", "/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js"),
+    ("5.3", "/pin/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/mode=imports,min/optimized/vega-lite.js"),
+    ("5.4", "/pin/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/mode=imports,min/optimized/vega-lite.js"),
+    ("5.5", "/pin/vega-lite@v5.5.0-x3x9oTW9wvfyOekd4a63/mode=imports,min/optimized/vega-lite.js"),
+];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
-const VL_4_17_PATH: &str = "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js";
-const VL_5_0_PATH: &str = "/pin/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/mode=imports,min/optimized/vega-lite.js";
-const VL_5_1_PATH: &str = "/pin/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/mode=imports,min/optimized/vega-lite.js";
-const VL_5_2_PATH: &str = "/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js";
-const VL_5_3_PATH: &str = "/pin/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/mode=imports,min/optimized/vega-lite.js";
-const VL_5_4_PATH: &str = "/pin/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/mode=imports,min/optimized/vega-lite.js";
-const VL_5_5_PATH: &str = "/pin/vega-lite@v5.5.0-x3x9oTW9wvfyOekd4a63/mode=imports,min/optimized/vega-lite.js";
 
 // Example custom build script.
 fn main() {
@@ -25,35 +27,17 @@ fn main() {
     // Create main.js that includes the desired imports
     let main_path = vendor_path.join("imports.js");
 
-    // let vl_path = format!(
-    //     "/pin/vega-lite@v{VL_VERSION}-{VL_SKYPACK_HASH}/mode=imports,min/optimized/vega-lite.js",
-    //     VL_VERSION=VL_VERSION, VL_SKYPACK_HASH=VL_SKYPACK_HASH,
-    // );
-    //
-    // let vl_url = format!(
-    //     "https://cdn.skypack.dev{vl_path}",
-    //     vl_path=vl_path
-    // );
-
-    fs::write(main_path, format!(
-        r#"
-import * as vl_4_17 from "{SKYPACK_URL}{VL_4_17_PATH}";
-import * as vl_5_0 from "{SKYPACK_URL}{VL_5_0_PATH}";
-import * as vl_5_1 from "{SKYPACK_URL}{VL_5_1_PATH}";
-import * as vl_5_2 from "{SKYPACK_URL}{VL_5_2_PATH}";
-import * as vl_5_3 from "{SKYPACK_URL}{VL_5_3_PATH}";
-import * as vl_5_4 from "{SKYPACK_URL}{VL_5_4_PATH}";
-import * as vl_5_5 from "{SKYPACK_URL}{VL_5_5_PATH}";
-"#,
-        SKYPACK_URL=SKYPACK_URL,
-        VL_4_17_PATH=VL_4_17_PATH,
-        VL_5_0_PATH=VL_5_0_PATH,
-        VL_5_1_PATH=VL_5_1_PATH,
-        VL_5_2_PATH=VL_5_2_PATH,
-        VL_5_3_PATH=VL_5_3_PATH,
-        VL_5_4_PATH=VL_5_4_PATH,
-        VL_5_5_PATH=VL_5_5_PATH,
-    )).expect("Failed to write imports.js");
+    let mut imports = String::new();
+    for (ver, path) in VL_PATHS {
+        let ver_under = ver.replace(".", "_");
+        imports.push_str(&format!(
+            "import * as v_{ver_under} from \"{SKYPACK_URL}{path}\";\n",
+            ver_under=ver_under,
+            SKYPACK_URL=SKYPACK_URL,
+            path=path,
+        ))
+    }
+    fs::write(main_path, imports).expect("Failed to write imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
     Command::new("deno")
@@ -64,7 +48,7 @@ import * as vl_5_5 from "{SKYPACK_URL}{VL_5_5_PATH}";
         .output()
         .expect("failed to execute deno vendor");
 
-    //
+    // Load vendored import_map
     let import_map_path = vendor_path.join("import_map.json");
     let import_map_str = fs::read_to_string(&import_map_path)
         .expect("Unable to read import_map.json file");
@@ -78,36 +62,53 @@ import * as vl_5_5 from "{SKYPACK_URL}{VL_5_5_PATH}";
     let skypack_obj = scopes.get("./cdn.skypack.dev/").unwrap();
     let skypack_obj = skypack_obj.as_object().unwrap();
 
+    // Write import_map.rs file
+    // Build versions csv
+    let ver_unders: Vec<_> = VL_PATHS.iter().map(|(ver, _)| {
+        format!("v{}", ver.replace(".", "_"))
+    }).collect();
+    let vl_versions_csv = ver_unders.join(",\n    ");
+
+    // Path match csv
+    let ver_path_matches: Vec<_> = VL_PATHS.iter().map(|(ver, path)| {
+        format!(
+            "v{} => \"{}\"",
+            ver.replace(".", "_"),
+            path
+        )
+    }).collect();
+    let path_match_csv = ver_path_matches.join(",\n            ");
+
+    // FromStr match csv
+    let from_str_matches: Vec<_> = VL_PATHS.iter().map(|(ver, _)| {
+        let ver_under = ver.replace(".", "_");
+        format!(
+            "\"{ver}\" | \"v{ver}\" | \"{ver_under}\" | \"v{ver_under}\" => Self::v{ver_under}",
+            ver=ver, ver_under=ver_under
+        )
+    }).collect();
+    let from_str_matches_csv = from_str_matches.join(",\n            ");
 
     let mut content = format!(
         r#"
 use std::collections::HashMap;
+use std::str::FromStr;
+use deno_core::anyhow::bail;
+use deno_core::error::AnyError;
 
 const SKYPACK_URL: &str = "{SKYPACK_URL}";
 
 #[derive(Debug, Copy, Clone)]
 #[allow(non_camel_case_types)]
 pub enum VlVersion {{
-    v4_17,
-    v5_0,
-    v5_1,
-    v5_2,
-    v5_3,
-    v5_4,
-    v5_5,
+    {vl_versions_csv}
 }}
 
 impl VlVersion {{
     pub fn to_path(self) -> String {{
         use VlVersion::*;
         let path = match self {{
-            v4_17 => "{VL_4_17_PATH}",
-            v5_0 => "{VL_5_0_PATH}",
-            v5_1 => "{VL_5_1_PATH}",
-            v5_2 => "{VL_5_2_PATH}",
-            v5_3 => "{VL_5_3_PATH}",
-            v5_4 => "{VL_5_4_PATH}",
-            v5_5 => "{VL_5_5_PATH}",
+            {path_match_csv}
         }};
         path.to_string()
     }}
@@ -117,17 +118,25 @@ impl VlVersion {{
     }}
 }}
 
+
+impl FromStr for VlVersion {{
+    type Err = AnyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {{
+        Ok(match s {{
+            {from_str_matches_csv},
+            _ => bail!("Unsupport Vega-Lite version string {{}}", s)
+        }})
+    }}
+}}
+
 pub fn build_import_map() -> HashMap<String, String> {{
     let mut m: HashMap<String, String> = HashMap::new();
 "#,
+        vl_versions_csv=vl_versions_csv,
+        path_match_csv=path_match_csv,
+        from_str_matches_csv=from_str_matches_csv,
         SKYPACK_URL=SKYPACK_URL,
-        VL_4_17_PATH=VL_4_17_PATH,
-        VL_5_0_PATH=VL_5_0_PATH,
-        VL_5_1_PATH=VL_5_1_PATH,
-        VL_5_2_PATH=VL_5_2_PATH,
-        VL_5_3_PATH=VL_5_3_PATH,
-        VL_5_4_PATH=VL_5_4_PATH,
-        VL_5_5_PATH=VL_5_5_PATH,
     );
     // Add packages
     for (k, v) in skypack_obj {
@@ -141,7 +150,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
 
     // Add pinned packages
     // Vega-Lite
-    for vl_path in &[VL_4_17_PATH, VL_5_0_PATH, VL_5_1_PATH, VL_5_2_PATH, VL_5_3_PATH, VL_5_4_PATH, VL_5_5_PATH] {
+    for (_, vl_path) in VL_PATHS {
         content.push_str(&format!(
             "    m.insert(\"{vl_path}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{vl_path}\").to_string());\n",
             vl_path=vl_path,
