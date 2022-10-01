@@ -40,10 +40,14 @@ import('{vl_url}').then((imported) => {{
             .execute_script(
                 "<anon>",
                 r#"
-function compileVegaLite(vlSpec) {
+function compileVegaLite(vlSpec, pretty) {
     let options = {};
     let vgSpec = vl.compile(vlSpec, options).spec;
-    return JSON.stringify(vgSpec)
+    if (pretty) {
+        return JSON.stringify(vgSpec, null, 2)
+    } else {
+        return JSON.stringify(vgSpec)
+    }
 }"#,
             )
             .expect("Failed to import vega-lite");
@@ -55,6 +59,7 @@ function compileVegaLite(vlSpec) {
     pub async fn vegalite_to_vega(
         &mut self,
         vl_spec: &serde_json::Value,
+        pretty: bool,
     ) -> Result<String, AnyError> {
         let vl_spec_str = serde_json::to_string(vl_spec)?;
         let res = self
@@ -64,10 +69,12 @@ function compileVegaLite(vlSpec) {
                 &format!(
                     r#"
 compileVegaLite(
-    {vl_spec_str}
+    {vl_spec_str},
+    {pretty}
 )
 "#,
-                    vl_spec_str = vl_spec_str
+                    vl_spec_str = vl_spec_str,
+                    pretty=pretty,
                 ),
             )?;
 

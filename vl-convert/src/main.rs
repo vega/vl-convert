@@ -18,6 +18,10 @@ struct Args {
     /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5
     #[clap(short, long, default_value = "5.5")]
     pub vl_version: String,
+
+    /// Pretty-print JSON in output file
+    #[clap(short, long)]
+    pub pretty: bool,
 }
 
 #[tokio::main]
@@ -54,7 +58,7 @@ async fn main() {
     let mut converter = VlConverter::try_new(vl_version).await.unwrap();
 
     // Perform conversion
-    let vega_str = match converter.vegalite_to_vega(&vegalite_json).await {
+    let vega_str = match converter.vegalite_to_vega(&vegalite_json, args.pretty).await {
         Ok(vega_str) => vega_str,
         Err(err) => {
             println!("Vega-Lite to Vega conversion failed: {}", err.to_string());
