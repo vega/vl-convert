@@ -30,7 +30,7 @@ impl ModuleLoader for VegaFusionModuleLoader {
         Ok(resolved)
     }
 
-    fn load(&self, module_specifier: &ModuleSpecifier, maybe_referrer: Option<ModuleSpecifier>, is_dyn_import: bool) -> Pin<Box<ModuleSourceFuture>> {
+    fn load(&self, module_specifier: &ModuleSpecifier, _maybe_referrer: Option<ModuleSpecifier>, _is_dyn_import: bool) -> Pin<Box<ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
         let string_specifier = module_specifier.to_string();
         let code = if string_specifier.ends_with("vegafusion-convert.js") {
