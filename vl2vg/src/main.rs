@@ -1,8 +1,8 @@
-use vegafusion_convert::context::ConvertContext;
+use vegafusion_convert::converter::VlConverter;
 
 #[tokio::main]
 async fn main() {
-    let mut ctx = ConvertContext::try_new().await.unwrap();
+    let mut ctx = VlConverter::try_new().await.unwrap();
     let vl_spec: serde_json::Value = serde_json::from_str(r##"
 {
     "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
