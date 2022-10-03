@@ -3,33 +3,26 @@ use std::sync::{Arc, Mutex};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use vl_convert_rs::{VlConverter as VlConverterRs};
-use tokio::runtime;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::serde_json;
+use futures::executor::block_on;
 
 #[macro_use]
 extern crate lazy_static;
 
 lazy_static! {
-    static ref TOKIO_RUNTIME: runtime::Runtime = runtime::Builder::new_multi_thread()
-    .build()
-    .expect("Failed to initialize tokio runtime");
+    static ref VL_CONVERTER: Mutex<VlConverterRs> = Mutex::new(VlConverterRs::new());
 }
 
 // TODO: make VlConverterRs sendable
-#[pyclass(unsendable)]
-struct VlConverter {
-    converter: Arc<Mutex<VlConverterRs>>,
-}
+#[pyclass]
+struct VlConverter;
 
 #[pymethods]
 impl VlConverter {
     #[new]
     fn new() -> PyResult<Self> {
-        let converter = TOKIO_RUNTIME.block_on(VlConverterRs::try_new())?;
-        Ok(Self {
-            converter: Arc::new(Mutex::new(converter))
-        })
+        Ok(Self)
     }
 
     fn vegalite_to_vega(&mut self, vl_spec: &str, vl_version: &str, pretty: Option<bool>) -> PyResult<String> {
@@ -41,12 +34,9 @@ impl VlConverter {
                 return Err(PyValueError::new_err(format!("Failed to parse vl_spec as JSON: {}", err.to_string())))
             },
         };
-        let mut converter = if let Ok(converter) = self.converter.lock() {
-            converter
-        } else {
-            return Err(PyValueError::new_err("Failed to acquire lock on Vega-Lite converter"))
-        };
-        let vega_spec = TOKIO_RUNTIME.block_on(converter.vegalite_to_vega(&vl_spec, vl_version, pretty))?;
+        let mut converter = VL_CONVERTER.lock()
+            .expect("Failed to acquire lock on Vega-Lite converter");
+        let vega_spec = block_on(converter.vegalite_to_vega(vl_spec, vl_version, pretty))?;
         Ok(vega_spec)
     }
 }

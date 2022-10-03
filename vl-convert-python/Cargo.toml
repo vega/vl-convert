@@ -11,5 +11,5 @@ crate-type = ["cdylib"]
 [dependencies]
 vl-convert-rs = { path = "../vl-convert-rs" }
 pyo3 = { version = "0.17.1", features = ["extension-module", "anyhow"] }
-tokio = { version = "1.21.2", features = ["rt", "rt-multi-thread"] }
 lazy_static = "1.4.0"
+futures = "0.3.24"
