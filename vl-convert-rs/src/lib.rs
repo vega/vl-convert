@@ -1,6 +1,8 @@
 pub mod module_loader;
 pub mod converter;
-
+pub use converter::VlConverter;
+pub use deno_core::anyhow;
+pub use serde_json;
 
 // #[cfg(test)]
 // mod tests {

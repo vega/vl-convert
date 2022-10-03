@@ -9,4 +9,7 @@ name = "vl_convert"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.17.1", features = ["extension-module"] }
+vl-convert-rs = { path = "../vl-convert-rs" }
+pyo3 = { version = "0.17.1", features = ["extension-module", "anyhow"] }
+tokio = { version = "1.21.2", features = ["rt", "rt-multi-thread"] }
+lazy_static = "1.4.0"

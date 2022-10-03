@@ -116,7 +116,29 @@ mod tests {
 }
         "##).unwrap();
 
-        let vg_spec = ctx.vegalite_to_vega(&vl_spec).await.unwrap();
+        let vg_spec = ctx.vegalite_to_vega(&vl_spec, true).await.unwrap();
         println!("vg_spec: {}", vg_spec)
+    }
+
+    #[tokio::test]
+    async fn test_multi_convert_context() {
+        let vl_spec: serde_json::Value = serde_json::from_str(r##"
+{
+    "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
+    "mark": "bar",
+    "encoding": {
+        "x": {"timeUnit": "month", "field": "date", "type": "ordinal"},
+        "y": {"aggregate": "mean", "field": "precipitation"}
+    }
+}
+        "##).unwrap();
+
+        let mut ctx1 = VlConverter::try_new(VlVersion::v4_17).await.unwrap();
+        let vg_spec1 = ctx1.vegalite_to_vega(&vl_spec, true).await.unwrap();
+        println!("vg_spec1: {}", vg_spec1);
+
+        let mut ctx1 = VlConverter::try_new(VlVersion::v5_5).await.unwrap();
+        let vg_spec2 = ctx1.vegalite_to_vega(&vl_spec, true).await.unwrap();
+        println!("vg_spec2: {}", vg_spec2);
     }
 }

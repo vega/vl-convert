@@ -18,11 +18,11 @@ fn main() {
     // Make sure vendor directory exists
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let vendor_path = root_path.join("vendor");
-
+    println!("cargo:warning={:?}", vendor_path);
     if vendor_path.exists() {
        fs::remove_dir_all(&vendor_path).unwrap();
     }
-    fs::create_dir(&vendor_path).unwrap();
+    fs::create_dir_all(&vendor_path).unwrap();
 
     // Create main.js that includes the desired imports
     let main_path = vendor_path.join("imports.js");
