@@ -4,3 +4,9 @@
 /vl-convert-rs/src/module_loader/import_map.rs
 /vl-convert-rs/vendor/
 /vl-convert-rs/tests/output/
+
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+.DS_Store

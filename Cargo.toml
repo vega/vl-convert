@@ -3,7 +3,8 @@ resolver = "2"  # Needed for proper wgpu compilation
 
 members = [
     "vl-convert-rs",
-    "vl-convert"
+    "vl-convert",
+    "vl-convert-python",
 ]
 
 [profile.release]
