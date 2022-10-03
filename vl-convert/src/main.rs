@@ -55,10 +55,10 @@ async fn main() {
     };
 
     // Initialize converter
-    let mut converter = VlConverter::try_new(vl_version).await.unwrap();
+    let mut converter = VlConverter::try_new().await.unwrap();
 
     // Perform conversion
-    let vega_str = match converter.vegalite_to_vega(&vegalite_json, args.pretty).await {
+    let vega_str = match converter.vegalite_to_vega(&vegalite_json, vl_version, args.pretty).await {
         Ok(vega_str) => vega_str,
         Err(err) => {
             println!("Vega-Lite to Vega conversion failed: {}", err.to_string());

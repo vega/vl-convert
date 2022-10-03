@@ -89,6 +89,16 @@ fn main() {
     }).collect();
     let from_str_matches_csv = from_str_matches.join(",\n            ");
 
+    // Variants csv
+    let version_instances: Vec<_> = VL_PATHS.iter().map(|(ver, _)| {
+        let ver_under = ver.replace(".", "_");
+        format!(
+            "VlVersion::v{ver_under}",
+            ver_under=ver_under
+        )
+    }).collect();
+    let version_instances_csv = version_instances.join(",\n    ");
+
     let mut content = format!(
         r#"
 use std::collections::HashMap;
@@ -130,12 +140,17 @@ impl FromStr for VlVersion {{
     }}
 }}
 
+pub const VL_VERSIONS: &[VlVersion] = &[
+    {version_instances_csv},
+];
+
 pub fn build_import_map() -> HashMap<String, String> {{
     let mut m: HashMap<String, String> = HashMap::new();
 "#,
         vl_versions_csv=vl_versions_csv,
         path_match_csv=path_match_csv,
         from_str_matches_csv=from_str_matches_csv,
+        version_instances_csv=version_instances_csv,
         SKYPACK_URL=SKYPACK_URL,
     );
     // Add packages

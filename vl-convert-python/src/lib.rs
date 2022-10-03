@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use vl_convert_rs::{VlConverter as VlConverterRs};
@@ -18,21 +19,21 @@ lazy_static! {
 // TODO: make VlConverterRs sendable
 #[pyclass(unsendable)]
 struct VlConverter {
-    converter: VlConverterRs,
+    converter: Arc<Mutex<VlConverterRs>>,
 }
 
 #[pymethods]
 impl VlConverter {
     #[new]
-    fn new(vl_version: &str) -> PyResult<Self> {
-        let vl_version = VlVersion::from_str(vl_version)?;
-        let converter = TOKIO_RUNTIME.block_on(VlConverterRs::try_new(vl_version)).unwrap();
+    fn new() -> PyResult<Self> {
+        let converter = TOKIO_RUNTIME.block_on(VlConverterRs::try_new())?;
         Ok(Self {
-            converter,
+            converter: Arc::new(Mutex::new(converter))
         })
     }
 
-    fn vegalite_to_vega(&mut self, vl_spec: &str, pretty: Option<bool>) -> PyResult<String> {
+    fn vegalite_to_vega(&mut self, vl_spec: &str, vl_version: &str, pretty: Option<bool>) -> PyResult<String> {
+        let vl_version = VlVersion::from_str(vl_version)?;
         let pretty = pretty.unwrap_or(false);
         let vl_spec = match serde_json::from_str::<serde_json::Value>(vl_spec) {
             Ok(vl_spec) => vl_spec,
@@ -40,8 +41,12 @@ impl VlConverter {
                 return Err(PyValueError::new_err(format!("Failed to parse vl_spec as JSON: {}", err.to_string())))
             },
         };
-
-        let vega_spec = TOKIO_RUNTIME.block_on(self.converter.vegalite_to_vega(&vl_spec, pretty))?;
+        let mut converter = if let Ok(converter) = self.converter.lock() {
+            converter
+        } else {
+            return Err(PyValueError::new_err("Failed to acquire lock on Vega-Lite converter"))
+        };
+        let vega_spec = TOKIO_RUNTIME.block_on(converter.vegalite_to_vega(&vl_spec, vl_version, pretty))?;
         Ok(vega_spec)
     }
 }
