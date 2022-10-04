@@ -50,10 +50,12 @@ impl ModuleLoader for VegaFusionModuleLoader {
         } else {
             self.import_map
                 .get(module_specifier.path())
-                .expect(&format!(
-                    "Unexpected source file with path: {}",
-                    module_specifier.path()
-                ))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Unexpected source file with path: {}",
+                        module_specifier.path()
+                    )
+                })
                 .clone()
         };
 

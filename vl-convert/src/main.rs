@@ -45,8 +45,7 @@ async fn main() {
         Err(err) => {
             println!(
                 "Failed to read input file: {}\n{}",
-                args.input_vegalite_file,
-                err.to_string()
+                args.input_vegalite_file, err
             );
             return;
         }
@@ -56,7 +55,7 @@ async fn main() {
     let vegalite_json = match serde_json::from_str::<serde_json::Value>(&vegalite_str) {
         Ok(vegalite_json) => vegalite_json,
         Err(err) => {
-            println!("Failed to parse input file as JSON: {}", err.to_string());
+            println!("Failed to parse input file as JSON: {}", err);
             return;
         }
     };
@@ -71,7 +70,7 @@ async fn main() {
     {
         Ok(vega_str) => vega_str,
         Err(err) => {
-            println!("Vega-Lite to Vega conversion failed: {}", err.to_string());
+            println!("Vega-Lite to Vega conversion failed: {}", err);
             return;
         }
     };
@@ -82,10 +81,8 @@ async fn main() {
         Err(err) => {
             println!(
                 "Failed to write conversion output to {}\n{}",
-                args.output_vega_file,
-                err.to_string()
+                args.output_vega_file, err
             );
-            return;
         }
     }
 }

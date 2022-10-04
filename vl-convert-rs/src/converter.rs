@@ -1,4 +1,4 @@
-use crate::module_loader::import_map::{VlVersion, VL_VERSIONS};
+use crate::module_loader::import_map::VlVersion;
 use crate::module_loader::VegaFusionModuleLoader;
 use deno_core::error::AnyError;
 use deno_core::{serde_v8, v8, JsRuntime, RuntimeOptions};
@@ -10,8 +10,6 @@ use deno_core::anyhow::bail;
 use std::thread;
 use std::thread::JoinHandle;
 
-use futures::channel::mpsc::SendError;
-use futures::channel::oneshot::Canceled;
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures::executor::block_on;
 use futures_util::{SinkExt, StreamExt};
@@ -62,14 +60,14 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
             self.js_runtime.run_event_loop(false).await?;
 
             // Register that this Vega-Lite version has been initialized
-            self.initialized_vl_versions.insert(vl_version.clone());
+            self.initialized_vl_versions.insert(*vl_version);
         }
         Ok(())
     }
 
     pub fn new() -> Self {
         let module_loader = Rc::new(VegaFusionModuleLoader::new());
-        let mut js_runtime = JsRuntime::new(RuntimeOptions {
+        let js_runtime = JsRuntime::new(RuntimeOptions {
             module_loader: Some(module_loader),
             ..Default::default()
         });
