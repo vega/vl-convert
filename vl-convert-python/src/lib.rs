@@ -2,7 +2,7 @@ use futures::executor::block_on;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::serde_json;
 use vl_convert_rs::VlConverter as VlConverterRs;
@@ -38,7 +38,7 @@ impl VlConverter {
             Err(err) => {
                 return Err(PyValueError::new_err(format!(
                     "Failed to parse vl_spec as JSON: {}",
-                    err.to_string()
+                    err
                 )))
             }
         };
@@ -50,7 +50,7 @@ impl VlConverter {
             Err(err) => {
                 return Err(PyValueError::new_err(format!(
                     "Vega-Lite to Vega conversion failed:\n{}",
-                    err.to_string()
+                    err
                 )))
             }
         };
