@@ -36,7 +36,14 @@ impl VlConverter {
         };
         let mut converter = VL_CONVERTER.lock()
             .expect("Failed to acquire lock on Vega-Lite converter");
-        let vega_spec = block_on(converter.vegalite_to_vega(vl_spec, vl_version, pretty))?;
+        let vega_spec = match block_on(converter.vegalite_to_vega(vl_spec, vl_version, pretty)) {
+            Ok(vega_spec) => vega_spec,
+            Err(err) => {
+                return Err(PyValueError::new_err(
+                    format!("Vega-Lite to Vega conversion failed:\n{}", err.to_string())
+                ))
+            }
+        };
         Ok(vega_spec)
     }
 }

@@ -132,7 +132,7 @@ pub enum VlConvertCommand {
         vl_spec: serde_json::Value,
         vl_version: VlVersion,
         pretty: bool,
-        responder: oneshot::Sender<String>,
+        responder: oneshot::Sender<Result<String, AnyError>>,
     }
 }
 
@@ -154,7 +154,7 @@ impl VlConverter {
             while let Some(cmd) = block_on(receiver.next()) {
                 match cmd {
                     VlConvertCommand::VlToVg { vl_spec, vl_version, pretty, responder } => {
-                        let vega_spec = block_on(inner.vegalite_to_vega(&vl_spec, vl_version, pretty))?;
+                        let vega_spec = block_on(inner.vegalite_to_vega(&vl_spec, vl_version, pretty));
                         responder.send(vega_spec);
                     }
                 }
@@ -174,7 +174,7 @@ impl VlConverter {
         vl_version: VlVersion,
         pretty: bool,
     ) -> Result<String, AnyError> {
-        let (resp_tx, resp_rx) = oneshot::channel::<String>();
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
         let cmd = VlConvertCommand::VlToVg {
             vl_spec,
             vl_version,
@@ -194,7 +194,7 @@ impl VlConverter {
 
         // Wait for result
         match resp_rx.await {
-            Ok(vega_spec) => Ok(vega_spec),
+            Ok(vega_spec_result) => vega_spec_result,
             Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string())
         }
     }
