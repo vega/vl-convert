@@ -135,7 +135,7 @@ pub enum VlConvertCommand {
 #[derive(Clone)]
 pub struct VlConverter {
     sender: Sender<VlConvertCommand>,
-    handle: Arc<JoinHandle<Result<(), AnyError>>>,
+    _handle: Arc<JoinHandle<Result<(), AnyError>>>,
 }
 
 impl VlConverter {
@@ -162,7 +162,7 @@ impl VlConverter {
             Ok(())
         }));
 
-        Self { sender, handle }
+        Self { sender, _handle: handle }
     }
 
     pub async fn vegalite_to_vega(
