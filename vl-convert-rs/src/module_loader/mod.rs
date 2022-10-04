@@ -1,20 +1,22 @@
 pub mod import_map;
 
-use std::collections::HashMap;
-use std::pin::Pin;
-use deno_core::{ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType, resolve_import};
+use crate::module_loader::import_map::build_import_map;
 use deno_core::anyhow::Error;
 use deno_core::futures::FutureExt;
-use crate::module_loader::import_map::build_import_map;
+use deno_core::{
+    resolve_import, ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType,
+};
+use std::collections::HashMap;
+use std::pin::Pin;
 
 pub struct VegaFusionModuleLoader {
-    import_map: HashMap<String, String>
+    import_map: HashMap<String, String>,
 }
 
 impl VegaFusionModuleLoader {
     pub fn new() -> Self {
         Self {
-            import_map: build_import_map()
+            import_map: build_import_map(),
         }
     }
 }
@@ -30,7 +32,12 @@ impl ModuleLoader for VegaFusionModuleLoader {
         Ok(resolved)
     }
 
-    fn load(&self, module_specifier: &ModuleSpecifier, _maybe_referrer: Option<ModuleSpecifier>, _is_dyn_import: bool) -> Pin<Box<ModuleSourceFuture>> {
+    fn load(
+        &self,
+        module_specifier: &ModuleSpecifier,
+        _maybe_referrer: Option<ModuleSpecifier>,
+        _is_dyn_import: bool,
+    ) -> Pin<Box<ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
         let string_specifier = module_specifier.to_string();
         // println!("load: {}", string_specifier);
@@ -41,9 +48,13 @@ impl ModuleLoader for VegaFusionModuleLoader {
             // run any code here
             "".to_string()
         } else {
-            self.import_map.get(module_specifier.path()).expect(
-                &format!("Unexpected source file with path: {}", module_specifier.path())
-            ).clone()
+            self.import_map
+                .get(module_specifier.path())
+                .expect(&format!(
+                    "Unexpected source file with path: {}",
+                    module_specifier.path()
+                ))
+                .clone()
         };
 
         async {
@@ -53,6 +64,7 @@ impl ModuleLoader for VegaFusionModuleLoader {
                 module_url_specified: string_specifier.clone(),
                 module_url_found: string_specifier,
             })
-        }.boxed_local()
+        }
+        .boxed_local()
     }
 }

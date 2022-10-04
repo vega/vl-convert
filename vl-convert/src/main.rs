@@ -1,6 +1,6 @@
+use clap::Parser;
 use std::str::FromStr;
 use vl_convert_rs::converter::VlConverter;
-use clap::Parser;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 
 /// vl-convert: A utility for converting Vega-Lite specifications into Vega specification
@@ -32,7 +32,10 @@ async fn main() {
     let vl_version = if let Ok(vl_version) = VlVersion::from_str(&args.vl_version) {
         vl_version
     } else {
-        println!("Invalid or unsupported Vega-Lite version: {}", args.vl_version);
+        println!(
+            "Invalid or unsupported Vega-Lite version: {}",
+            args.vl_version
+        );
         return;
     };
 
@@ -40,8 +43,12 @@ async fn main() {
     let vegalite_str = match std::fs::read_to_string(&args.input_vegalite_file) {
         Ok(vegalite_str) => vegalite_str,
         Err(err) => {
-            println!("Failed to read input file: {}\n{}", args.input_vegalite_file, err.to_string());
-            return
+            println!(
+                "Failed to read input file: {}\n{}",
+                args.input_vegalite_file,
+                err.to_string()
+            );
+            return;
         }
     };
 
@@ -55,14 +62,17 @@ async fn main() {
     };
 
     // Initialize converter
-    let mut converter = VlConverter::try_new().await.unwrap();
+    let mut converter = VlConverter::new();
 
     // Perform conversion
-    let vega_str = match converter.vegalite_to_vega(&vegalite_json, vl_version, args.pretty).await {
+    let vega_str = match converter
+        .vegalite_to_vega(vegalite_json, vl_version, args.pretty)
+        .await
+    {
         Ok(vega_str) => vega_str,
         Err(err) => {
             println!("Vega-Lite to Vega conversion failed: {}", err.to_string());
-            return
+            return;
         }
     };
 
@@ -75,7 +85,7 @@ async fn main() {
                 args.output_vega_file,
                 err.to_string()
             );
-            return
+            return;
         }
     }
 }

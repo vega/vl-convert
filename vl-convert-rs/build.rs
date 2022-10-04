@@ -1,15 +1,36 @@
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 
 const VL_PATHS: &[(&str, &str)] = &[
-    ("4.17", "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js"),
-    ("5.0", "/pin/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/mode=imports,min/optimized/vega-lite.js"),
-    ("5.1", "/pin/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/mode=imports,min/optimized/vega-lite.js"),
-    ("5.2", "/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js"),
-    ("5.3", "/pin/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/mode=imports,min/optimized/vega-lite.js"),
-    ("5.4", "/pin/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/mode=imports,min/optimized/vega-lite.js"),
-    ("5.5", "/pin/vega-lite@v5.5.0-x3x9oTW9wvfyOekd4a63/mode=imports,min/optimized/vega-lite.js"),
+    (
+        "4.17",
+        "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.0",
+        "/pin/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.1",
+        "/pin/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.2",
+        "/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.3",
+        "/pin/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.4",
+        "/pin/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.5",
+        "/pin/vega-lite@v5.5.0-x3x9oTW9wvfyOekd4a63/mode=imports,min/optimized/vega-lite.js",
+    ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 
@@ -20,7 +41,7 @@ fn main() {
     let vendor_path = root_path.join("vendor");
     println!("cargo:warning={:?}", vendor_path);
     if vendor_path.exists() {
-       fs::remove_dir_all(&vendor_path).unwrap();
+        fs::remove_dir_all(&vendor_path).unwrap();
     }
     fs::create_dir_all(&vendor_path).unwrap();
 
@@ -32,9 +53,9 @@ fn main() {
         let ver_under = ver.replace(".", "_");
         imports.push_str(&format!(
             "import * as v_{ver_under} from \"{SKYPACK_URL}{path}\";\n",
-            ver_under=ver_under,
-            SKYPACK_URL=SKYPACK_URL,
-            path=path,
+            ver_under = ver_under,
+            SKYPACK_URL = SKYPACK_URL,
+            path = path,
         ))
     }
     fs::write(main_path, imports).expect("Failed to write imports.js");
@@ -50,11 +71,11 @@ fn main() {
 
     // Load vendored import_map
     let import_map_path = vendor_path.join("import_map.json");
-    let import_map_str = fs::read_to_string(&import_map_path)
-        .expect("Unable to read import_map.json file");
+    let import_map_str =
+        fs::read_to_string(&import_map_path).expect("Unable to read import_map.json file");
 
-    let import_map: serde_json::Value = serde_json::from_str(&import_map_str)
-        .expect("Unable to parse import_map.json file");
+    let import_map: serde_json::Value =
+        serde_json::from_str(&import_map_str).expect("Unable to parse import_map.json file");
 
     let import_map = import_map.as_object().expect("Invalid JSON format");
     let scopes = import_map.get("scopes").unwrap();
@@ -64,39 +85,41 @@ fn main() {
 
     // Write import_map.rs file
     // Build versions csv
-    let ver_unders: Vec<_> = VL_PATHS.iter().map(|(ver, _)| {
-        format!("v{}", ver.replace(".", "_"))
-    }).collect();
+    let ver_unders: Vec<_> = VL_PATHS
+        .iter()
+        .map(|(ver, _)| format!("v{}", ver.replace(".", "_")))
+        .collect();
     let vl_versions_csv = ver_unders.join(",\n    ");
 
     // Path match csv
-    let ver_path_matches: Vec<_> = VL_PATHS.iter().map(|(ver, path)| {
-        format!(
-            "v{} => \"{}\"",
-            ver.replace(".", "_"),
-            path
-        )
-    }).collect();
+    let ver_path_matches: Vec<_> = VL_PATHS
+        .iter()
+        .map(|(ver, path)| format!("v{} => \"{}\"", ver.replace(".", "_"), path))
+        .collect();
     let path_match_csv = ver_path_matches.join(",\n            ");
 
     // FromStr match csv
-    let from_str_matches: Vec<_> = VL_PATHS.iter().map(|(ver, _)| {
-        let ver_under = ver.replace(".", "_");
-        format!(
-            "\"{ver}\" | \"v{ver}\" | \"{ver_under}\" | \"v{ver_under}\" => Self::v{ver_under}",
-            ver=ver, ver_under=ver_under
-        )
-    }).collect();
+    let from_str_matches: Vec<_> = VL_PATHS
+        .iter()
+        .map(|(ver, _)| {
+            let ver_under = ver.replace(".", "_");
+            format!(
+                "\"{ver}\" | \"v{ver}\" | \"{ver_under}\" | \"v{ver_under}\" => Self::v{ver_under}",
+                ver = ver,
+                ver_under = ver_under
+            )
+        })
+        .collect();
     let from_str_matches_csv = from_str_matches.join(",\n            ");
 
     // Variants csv
-    let version_instances: Vec<_> = VL_PATHS.iter().map(|(ver, _)| {
-        let ver_under = ver.replace(".", "_");
-        format!(
-            "VlVersion::v{ver_under}",
-            ver_under=ver_under
-        )
-    }).collect();
+    let version_instances: Vec<_> = VL_PATHS
+        .iter()
+        .map(|(ver, _)| {
+            let ver_under = ver.replace(".", "_");
+            format!("VlVersion::v{ver_under}", ver_under = ver_under)
+        })
+        .collect();
     let version_instances_csv = version_instances.join(",\n    ");
 
     let mut content = format!(
@@ -108,7 +131,7 @@ use deno_core::error::AnyError;
 
 const SKYPACK_URL: &str = "{SKYPACK_URL}";
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[allow(non_camel_case_types)]
 pub enum VlVersion {{
     {vl_versions_csv}
@@ -147,19 +170,18 @@ pub const VL_VERSIONS: &[VlVersion] = &[
 pub fn build_import_map() -> HashMap<String, String> {{
     let mut m: HashMap<String, String> = HashMap::new();
 "#,
-        vl_versions_csv=vl_versions_csv,
-        path_match_csv=path_match_csv,
-        from_str_matches_csv=from_str_matches_csv,
-        version_instances_csv=version_instances_csv,
-        SKYPACK_URL=SKYPACK_URL,
+        vl_versions_csv = vl_versions_csv,
+        path_match_csv = path_match_csv,
+        from_str_matches_csv = from_str_matches_csv,
+        version_instances_csv = version_instances_csv,
+        SKYPACK_URL = SKYPACK_URL,
     );
     // Add packages
     for (k, v) in skypack_obj {
         let v = v.as_str().unwrap();
         content.push_str(&format!(
             "    m.insert(\"{}\".to_string(), include_str!(\"../../vendor/{}\").to_string());\n",
-            k,
-            v
+            k, v
         ))
     }
 
@@ -176,11 +198,4 @@ pub fn build_import_map() -> HashMap<String, String> {{
     let deno_deps_path = root_path.join("src").join("module_loader");
 
     fs::write(deno_deps_path.join("import_map.rs"), content).unwrap();
-
-//     // // Tell Cargo that if the given file changes, to rerun this build script.
-//     // println!("cargo:rerun-if-changed=src/hello.c");
-//     // // Use the `cc` crate to build a C file and statically link it.
-//     // cc::Build::new()
-//     //     .file("src/hello.c")
-//     //     .compile("hello");
 }
