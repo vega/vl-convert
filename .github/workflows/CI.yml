@@ -20,11 +20,16 @@ jobs:
         manylinux: auto
         command: build
         args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --find-interpreter
+    - name: try deno again
+      working-directory: vl-convert-rs
+      run: |
+        deno vendor vendor/imports.js --force
     - name: Upload everything
       uses: actions/upload-artifact@v2
       with:
         name: everything
         path: vl-convert-rs
+
 #    - name: Upload wheels
 #      uses: actions/upload-artifact@v2
 #      with:
