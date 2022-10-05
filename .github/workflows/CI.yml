@@ -8,6 +8,8 @@ on:
 
 jobs:
   linux:
+    env:
+      DENO_DIR: /home/runner/deno
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -20,21 +22,11 @@ jobs:
         manylinux: auto
         command: build
         args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --find-interpreter
-    - name: try deno again
-      working-directory: vl-convert-rs
-      run: |
-        deno vendor vendor/imports.js --force
-    - name: Upload everything
+    - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
-        name: everything
-        path: vl-convert-rs
-
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
+        name: wheels
+        path: dist
 
 #  windows:
 #    runs-on: windows-latest

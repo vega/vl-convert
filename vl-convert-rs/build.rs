@@ -60,13 +60,17 @@ fn main() {
     fs::write(main_path, imports).expect("Failed to write imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
-    Command::new("deno")
+    match Command::new("deno")
         .current_dir(root_path)
         .arg("vendor")
         .arg("vendor/imports.js")
         .arg("--force")
-        .output()
-        .expect("failed to execute deno vendor");
+        .output() {
+        Err(err) => {
+            panic!("Deno vendor command failed: {}", err.to_string());
+        }
+        _ => {}
+    }
 
     // Load vendored import_map
     let import_map_path = vendor_path.join("import_map.json");
