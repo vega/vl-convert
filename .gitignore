@@ -10,3 +10,4 @@ __pycache__/
 
 .DS_Store
 /vl-convert-rs/imports.js
+/dist/
