@@ -31,23 +31,23 @@ jobs:
 #        name: wheels
 #        path: dist
 
-#  windows:
-#    runs-on: windows-latest
-#    steps:
-#    - uses: actions/checkout@v3
-#    - uses: denoland/setup-deno@v1
-#      with:
-#        deno-version: vx.x.x
-#    - uses: messense/maturin-action@v1
-#      with:
-#        command: build
-#        args: --release -m vl-convert-python/Cargo.toml -o dist --find-interpreter
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
-#
+  windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: denoland/setup-deno@v1
+      with:
+        deno-version: vx.x.x
+    - uses: messense/maturin-action@v1
+      with:
+        command: build
+        args: --release -m vl-convert-python/Cargo.toml -o dist --find-interpreter
+    - name: Upload wheels
+      uses: actions/upload-artifact@v2
+      with:
+        name: wheels
+        path: dist
+
 #  macos:
 #    runs-on: macos-latest
 #    steps:
