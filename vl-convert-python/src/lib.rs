@@ -14,15 +14,14 @@ lazy_static! {
     static ref VL_CONVERTER: Mutex<VlConverterRs> = Mutex::new(VlConverterRs::new());
 }
 
-// TODO: make VlConverterRs sendable
 #[pyclass]
 struct VlConverter;
 
 #[pymethods]
 impl VlConverter {
     #[new]
-    fn new() -> PyResult<Self> {
-        Ok(Self)
+    fn new() -> Self {
+        Self
     }
 
     fn vegalite_to_vega(
