@@ -13,17 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-#    - uses: denoland/setup-deno@v1
-#      with:
-#        deno-version: vx.x.x
-    - name: Install latest stable Rust toolchain
-      uses: actions-rs/toolchain@v1
+    - uses: denoland/setup-deno@v1
       with:
-        toolchain: stable
-        override: true
-    - name: install deno
-      run: |
-        cargo install deno
+        deno-version: v1.24.x
     - uses: messense/maturin-action@v1
       continue-on-error: true
       with:
