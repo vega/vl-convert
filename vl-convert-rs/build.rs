@@ -42,10 +42,9 @@ fn main() {
     if vendor_path.exists() {
         fs::remove_dir_all(&vendor_path).unwrap();
     }
-    fs::create_dir_all(&vendor_path).unwrap();
 
     // Create main.js that includes the desired imports
-    let main_path = vendor_path.join("imports.js");
+    let importsjs_path = root_path.join("imports.js");
 
     let mut imports = String::new();
     for (ver, path) in VL_PATHS {
@@ -57,14 +56,13 @@ fn main() {
             path = path,
         ))
     }
-    fs::write(main_path, imports).expect("Failed to write imports.js");
+    fs::write(importsjs_path, imports).expect("Failed to write imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
     match Command::new("deno")
         .current_dir(root_path)
         .arg("vendor")
-        .arg("vendor/imports.js")
-        .arg("--force")
+        .arg("imports.js")
         .output() {
         Err(err) => {
             panic!("Deno vendor command failed: {}", err.to_string());
