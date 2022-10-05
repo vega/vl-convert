@@ -31,12 +31,12 @@ jobs:
       continue-on-error: true
       working-directory: vl-convert-rs
       run: |
-        deno vendor vendor/imports.js --force
+        deno vendor imports.js --force
     - name: try deno again
       continue-on-error: true
       working-directory: vl-convert-rs
       run: |
-        sudo deno vendor vendor/imports.js --force
+        sudo deno vendor imports.js --force
     - name: Upload everything
       uses: actions/upload-artifact@v2
       with:
