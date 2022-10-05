@@ -24,7 +24,7 @@ jobs:
       uses: actions/upload-artifact@v2
       with:
         name: everything
-        path: .
+        path: vl-convert-rs
 #    - name: Upload wheels
 #      uses: actions/upload-artifact@v2
 #      with:
