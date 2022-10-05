@@ -44,7 +44,7 @@ fn main() {
     }
 
     // Create main.js that includes the desired imports
-    let importsjs_path = root_path.join("imports.js");
+    let importsjs_path = root_path.join("vendor_imports.js");
 
     let mut imports = String::new();
     for (ver, path) in VL_PATHS {
@@ -56,13 +56,13 @@ fn main() {
             path = path,
         ))
     }
-    fs::write(importsjs_path, imports).expect("Failed to write imports.js");
+    fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
     match Command::new("deno")
         .current_dir(root_path)
         .arg("vendor")
-        .arg("imports.js")
+        .arg("vendor_imports.js")
         .output() {
         Err(err) => {
             panic!("Deno vendor command failed: {}", err.to_string());
@@ -181,7 +181,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
     for (k, v) in skypack_obj {
         let v = v.as_str().unwrap();
         content.push_str(&format!(
-            "    m.insert(\"{}\".to_string(), include_str!(\"../../vendor/{}\").to_string());\n",
+            "    m.insert(\"{}\".to_string(), include_str!(\"../../../vl-convert-vendor/vendor/{}\").to_string());\n",
             k, v
         ))
     }
@@ -190,13 +190,15 @@ pub fn build_import_map() -> HashMap<String, String> {{
     // Vega-Lite
     for (_, vl_path) in VL_PATHS {
         content.push_str(&format!(
-            "    m.insert(\"{vl_path}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{vl_path}\").to_string());\n",
+            "    m.insert(\"{vl_path}\".to_string(), include_str!(\"../../../vl-convert-vendor/vendor/cdn.skypack.dev{vl_path}\").to_string());\n",
             vl_path=vl_path,
         ));
     }
 
     content.push_str("    m\n}\n");
-    let deno_deps_path = root_path.join("src").join("module_loader");
+
+    // Write to import_map.rs in vl-convert-rs crate
+    let deno_deps_path = root_path.join("..").join("vl-convert-rs").join("src").join("module_loader");
 
     fs::write(deno_deps_path.join("import_map.rs"), content).unwrap();
 }
