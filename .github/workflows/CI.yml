@@ -26,6 +26,10 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v3
+    - name: Install latest Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
     - uses: messense/maturin-action@v1
       with:
         command: build
