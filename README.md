@@ -1,5 +1,5 @@
 # VlConvert
-VlConvert provides a CLI utility and Python library for converting high-level Vega-Lite visualization specifications into low-level Vega visualization specifications, all with no web browser or system dependencies required.
+VlConvert provides a Rust library, CLI utility, and Python library for converting high-level Vega-Lite visualization specifications into low-level Vega visualization specifications, all with no web browser or system dependencies required.
 
 # Getting started
 ## CLI
@@ -85,9 +85,9 @@ print(vg_spec)
 VlConvert was motivated by the needs of VegaFusion, which extracts data transformations from Vega specifications and evaluates them on the server. Using VlConvert, VegaFusion can input Vega-Lite specifications directly.  That said, VlConvert is designed to be used by the wider Vega-Lite ecosystem, independent of VegaFusion.
 
 # How it works
-VlConvert relies on the standard Vega-Lite JavaScript library to perform the Vega-Lite to Vega conversion.  It uses the Deno project (in particular `deno_core`) to run Vega-Lite using the v8 JavaScript runtime, embedded into a Rust library. This Rust library is then wrapped as a Python library using PyO3.
+VlConvert relies on the standard Vega-Lite JavaScript library to perform the Vega-Lite to Vega conversion.  It uses the [Deno](https://deno.land/) project (in particular [`deno_core`](https://github.com/denoland/deno/tree/main/core)) to run Vega-Lite using the v8 JavaScript runtime, embedded into a Rust library called `vl-convert-rs`. This Rust library is then wrapped as a CLI application (`vl-convert`) and a Python library using PyO3 (`vl-convert-python`).
 
 In addition to easy embedding of the v8 JavaScript runtime, another advantage of building on `deno_core` is that it's possible to customize the module loading logic. vl-convert takes advantage of this to inline the minified JavaScript source code for multiple versions of Vega-Lite, and all their dependencies, into the Rust library itself. This way, no internet connection is required to use vl-convert, and the executable and Python library are truly self-contained.
 
 # Future work: Image Export
-An exciting future possibility is to use the VlConvert infrastructure to enable zero-dependency image export of Vega(-Lite) visualizations.  This is already possible outside the web browser context using NodeJs, and Deno is designed to be largely compatible with NodeJs. The main difficulty is that Vega relies on the node canvas library for computing text metrics and performing png image export. Node Canvas is not compatible with Deno, so image export doesn't work out of the box.  
+An exciting future possibility is to use the VlConvert infrastructure to enable zero-dependency image export of Vega(-Lite) visualizations.  This is already possible outside the web browser context using NodeJs, and Deno is designed to be largely compatible with NodeJs. The main difficulty is that Vega relies on the node [canvas](https://www.npmjs.com/package/canvas) library for computing text metrics and performing png image export. Node canvas is not compatible with Deno, so image export doesn't work out of the box.  

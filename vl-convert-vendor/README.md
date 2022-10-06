@@ -5,6 +5,13 @@ This crate relies on the Deno command-line program being available on the system
  
 This crate only needs to be run when a new Vega-Lite version is to be added.
 
+# Setup
+Install Deno using cargo (or another method from https://deno.land/manual@v1.26.0/getting_started/installation)
+
+```
+$ cargo install deno
+```
+
 # Adding a new version of Vega-Lite
 vl-convert inlines the source code of supported versions of Vega-Lite so that no internet connection is required at runtime. As a consequence, vl-convert must be updated each time a new version of Vega-Lite is released. Here are the steps to add support for a new version of Vega-Lite (called version X.Y.Z in this example)
 
