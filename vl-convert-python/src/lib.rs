@@ -61,5 +61,6 @@ impl VlConverter {
 #[pymodule]
 fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VlConverter>()?;
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

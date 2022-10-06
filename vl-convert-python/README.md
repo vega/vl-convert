@@ -1,6 +1,7 @@
+## Python development setup
 Create development conda environment
 ```
-$ conda create -n vl-convert-dev -c conda-forge python=3.10 maturin pytest black
+$ conda create -n vl-convert-dev -c conda-forge python=3.10 deno maturin pytest black
 ```
 
 Activate environment

@@ -1,0 +1,1 @@
+function n(t,a){if(typeof document!="undefined"&&document.createElement){const e=document.createElement("canvas");if(e&&e.getContext)return e.width=t,e.height=a,e}return null}const o=()=>typeof Image!="undefined"?Image:null;export{n as canvas,n as domCanvas,o as image};export default null;

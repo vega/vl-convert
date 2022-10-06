@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - master
   pull_request:
 
 jobs:
@@ -12,59 +11,53 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - uses: denoland/setup-deno@v1
-      with:
-        deno-version: vx.x.x
     - uses: messense/maturin-action@v1
-      continue-on-error: true
       with:
         manylinux: auto
         command: build
-        args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --find-interpreter
-    - name: Upload everything
+        args: --release -m vl-convert-python/Cargo.toml --sdist -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
+    - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
         name: wheels
-        path: .
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
+        path: dist
 
-#  windows:
-#    runs-on: windows-latest
-#    steps:
-#    - uses: actions/checkout@v3
-#    - uses: denoland/setup-deno@v1
-#      with:
-#        deno-version: vx.x.x
-#    - uses: messense/maturin-action@v1
-#      with:
-#        command: build
-#        args: --release -m vl-convert-python/Cargo.toml -o dist --find-interpreter
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
-#
-#  macos:
-#    runs-on: macos-latest
-#    steps:
-#    - uses: actions/checkout@v3
-#    - uses: denoland/setup-deno@v1
-#      with:
-#        deno-version: vx.x.x
-#    - uses: messense/maturin-action@v1
-#      with:
-#        command: build
-#        args: --release -m vl-convert-python/Cargo.toml -o dist --universal2 --find-interpreter
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
+  windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: messense/maturin-action@v1
+      with:
+        command: build
+        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.10 -i python3.9 -i python3.8 --strip
+    - name: Upload wheels
+      uses: actions/upload-artifact@v2
+      with:
+        name: wheels
+        path: dist
+
+  macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Download Apple Silicon toolchain
+      run: |
+        rustup target add aarch64-apple-darwin
+    - name: Build Intel wheels
+      uses: messense/maturin-action@v1
+      with:
+        command: build
+        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
+    - name: Build Apple Silicon wheels
+      uses: messense/maturin-action@v1
+      with:
+        command: build
+        args: --release -m vl-convert-python/Cargo.toml -o dist --target aarch64-apple-darwin -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
+    - name: Upload wheels
+      uses: actions/upload-artifact@v2
+      with:
+        name: wheels
+        path: dist
 
 #  release:
 #    name: Release
