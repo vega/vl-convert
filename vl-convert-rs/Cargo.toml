@@ -2,6 +2,11 @@
 name = "vl-convert-rs"
 version = "0.1.0"
 edition = "2021"
+license = "BSD-3-Clause"
+license-file = "LICENSE"
+readme = "README.md"
+homepage = "https://github.com/jonmmease/vl-convert"
+repository = "https://github.com/jonmmease/vl-convert"
 
 [dependencies]
 deno_core = "0.153.0"
