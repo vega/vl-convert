@@ -1,7 +1,6 @@
 /.idea
 /target
 /Cargo.lock
-/vl-convert-rs/vendor/
 /vl-convert-rs/tests/output/
 
 __pycache__/

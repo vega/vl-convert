@@ -38,13 +38,14 @@ const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 fn main() {
     // Make sure vendor directory exists
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let vendor_path = root_path.join("vendor");
+    let vl_convert_rs_path = root_path.join("../").join("vl-convert-rs");
+    let vendor_path = vl_convert_rs_path.join("vendor");
     if vendor_path.exists() {
         fs::remove_dir_all(&vendor_path).unwrap();
     }
 
     // Create main.js that includes the desired imports
-    let importsjs_path = root_path.join("vendor_imports.js");
+    let importsjs_path = vl_convert_rs_path.join("vendor_imports.js");
 
     let mut imports = String::new();
     for (ver, path) in VL_PATHS {
@@ -60,7 +61,7 @@ fn main() {
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
     match Command::new("deno")
-        .current_dir(root_path)
+        .current_dir(vl_convert_rs_path)
         .arg("vendor")
         .arg("vendor_imports.js")
         .output() {
@@ -184,7 +185,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
     for (k, v) in skypack_obj {
         let v = v.as_str().unwrap();
         content.push_str(&format!(
-            "    m.insert(\"{}\".to_string(), include_str!(\"../../../vl-convert-vendor/vendor/{}\").to_string());\n",
+            "    m.insert(\"{}\".to_string(), include_str!(\"../../vendor/{}\").to_string());\n",
             k, v
         ))
     }
@@ -193,7 +194,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
     // Vega-Lite
     for (_, vl_path) in VL_PATHS {
         content.push_str(&format!(
-            "    m.insert(\"{vl_path}\".to_string(), include_str!(\"../../../vl-convert-vendor/vendor/cdn.skypack.dev{vl_path}\").to_string());\n",
+            "    m.insert(\"{vl_path}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{vl_path}\").to_string());\n",
             vl_path=vl_path,
         ));
     }

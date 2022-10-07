@@ -19,5 +19,5 @@ vl-convert inlines the source code of supported versions of Vega-Lite so that no
 2. Update the `VL_PATHS` const variable at the top of `vl-convert-vendor/src/main.rs` to include a new tuple of the form `("X.Y", "https://cdn.skypack.dev/pin/vega-lite@vX.Y.Z-...")`. Note that only the major and minor version are included in the first element of the tuple.
 3. Run the `vl-convert-vendor` binary from the `vl-convert-vendor` directory using `cargo run`. This will download the new version of Vega-Lite, and it's dependencies, using `deno vendor`. It will also generate a new version of `vl-convert-rs/src/module_loader/import_map.rs` that includes the new version.
 4. Update the default value of the `vl_version` command line argument in `vl-convert/src/main.rs` to `X.Y`.
-5. Commit updated versions of `vl-convert-vendor/src/main.rs`, `vl-convert-rs/src/module_loader/import_map.rs`, and the files added under `vl-convert-vendor/vendor`. 
+5. Commit updated versions of `vl-convert-vendor/src/main.rs`, `vl-convert-rs/src/module_loader/import_map.rs`, and the files added under `vl-convert-rs/vendor`. 
 
