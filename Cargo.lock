@@ -940,7 +940,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-rs"
-version = "0.0.1"
+version = "0.1.0-rc1"
 dependencies = [
  "deno_core",
  "futures",
