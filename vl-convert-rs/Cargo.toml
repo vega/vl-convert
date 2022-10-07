@@ -6,6 +6,8 @@ license = "BSD-3-Clause"
 readme = "README.md"
 homepage = "https://github.com/jonmmease/vl-convert"
 repository = "https://github.com/jonmmease/vl-convert"
+description = "Library for converting Vega-Lite visualization specifications to Vega specifications"
+keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
 deno_core = "0.153.0"
