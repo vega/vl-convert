@@ -152,7 +152,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: wheels
-          path: target/wheels/
+          path: dist/
       - name: install wheels and test dependencies
         working-directory: dist/
         run: |
