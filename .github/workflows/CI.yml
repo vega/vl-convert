@@ -54,6 +54,23 @@ jobs:
       - name: Check that git detects to file changes
         run:  git diff --exit-code
 
+  vl-convert-rs-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-2022
+          - macos-11
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+      - uses: actions-rs/cargo@v1
+          with:
+            command: test
+
   linux-wheels:
     runs-on: ubuntu-latest
     steps:
