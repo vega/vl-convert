@@ -1,15 +1,18 @@
+use rstest::rstest;
 use std::fs;
 use std::path::Path;
 use vl_convert_rs::VlVersion;
-use rstest::rstest;
 
 fn load_vl_spec(name: &str) -> serde_json::Value {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let spec_path = root_path.join("tests").join("vl-specs").join(format!("{}.vl.json", name));
-    let spec_str = fs::read_to_string(&spec_path).expect(
-        &format!("Failed to read {:?}", spec_path)
-    );
-    serde_json::from_str(&spec_str).expect(&format!("Failed to parse {:?} as JSON", spec_path))
+    let spec_path = root_path
+        .join("tests")
+        .join("vl-specs")
+        .join(format!("{}.vl.json", name));
+    let spec_str =
+        fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
+    serde_json::from_str(&spec_str)
+        .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", spec_path))
 }
 
 fn load_expected_vg_spec(name: &str, vl_version: VlVersion, pretty: bool) -> Option<String> {
@@ -25,9 +28,8 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion, pretty: bool) -> Opt
             format!("{}.vg.json", name)
         });
     if spec_path.exists() {
-        let spec_str = fs::read_to_string(&spec_path).expect(
-            &format!("Failed to read {:?}", spec_path)
-        );
+        let spec_str = fs::read_to_string(&spec_path)
+            .unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
         Some(spec_str)
     } else {
         None
@@ -35,9 +37,9 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion, pretty: bool) -> Opt
 }
 
 mod test_reference_specs {
+    use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::VlConverter;
-    use crate::*;
 
     #[rstest]
     fn test(
@@ -48,21 +50,13 @@ mod test_reference_specs {
             VlVersion::v5_2,
             VlVersion::v5_3,
             VlVersion::v5_4,
-            VlVersion::v5_5,
+            VlVersion::v5_5
         )]
         vl_version: VlVersion,
 
-        #[values(
-            "circle_binned",
-            "seattle-weather",
-        )]
-        name: &str,
+        #[values("circle_binned", "seattle-weather")] name: &str,
 
-        #[values(
-            false,
-            true,
-        )]
-        pretty: bool,
+        #[values(false, true)] pretty: bool,
     ) {
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);

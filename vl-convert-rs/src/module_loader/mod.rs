@@ -21,6 +21,12 @@ impl VegaFusionModuleLoader {
     }
 }
 
+impl Default for VegaFusionModuleLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModuleLoader for VegaFusionModuleLoader {
     fn resolve(
         &self,
