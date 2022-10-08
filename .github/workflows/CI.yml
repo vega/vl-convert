@@ -139,8 +139,8 @@ jobs:
       matrix:
         options:
           - [ubuntu-latest, '3.10', cp310, manylinux2014_x86_64]
-          - [windows-2022, '3.10', cp310, win_amd64]
-          - [macos-11, '3.10', cp310, macosx_10_7_x86_64]
+#          - [windows-2022, '3.10', cp310, win_amd64]
+#          - [macos-11, '3.10', cp310, macosx_10_7_x86_64]
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
