@@ -91,12 +91,12 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
             "<anon>",
             &format!(
                 r#"
-compileVegaLite_{ver_name}(
+compileVegaLite_{ver_name:?}(
     {vl_spec_str},
     {pretty}
 )
 "#,
-                ver_name = format!("{:?}", vl_version),
+                ver_name = vl_version,
                 vl_spec_str = vl_spec_str,
                 pretty = pretty,
             ),
@@ -230,6 +230,12 @@ impl VlConverter {
             Ok(vega_spec_result) => vega_spec_result,
             Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
         }
+    }
+}
+
+impl Default for VlConverter {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

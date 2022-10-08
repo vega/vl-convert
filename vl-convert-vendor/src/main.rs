@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -50,26 +51,25 @@ fn main() {
     let mut imports = String::new();
     for (ver, path) in VL_PATHS {
         let ver_under = ver.replace('.', "_");
-        imports.push_str(&format!(
-            "import * as v_{ver_under} from \"{SKYPACK_URL}{path}\";\n",
+        writeln!(
+            imports,
+            "import * as v_{ver_under} from \"{SKYPACK_URL}{path}\";",
             ver_under = ver_under,
             SKYPACK_URL = SKYPACK_URL,
-            path = path,
-        ))
+            path = path
+        )
+        .unwrap();
     }
     fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
-    match Command::new("deno")
+    if let Err(err) = Command::new("deno")
         .current_dir(vl_convert_rs_path)
         .arg("vendor")
         .arg("vendor_imports.js")
         .output()
     {
-        Err(err) => {
-            panic!("Deno vendor command failed: {}", err);
-        }
-        _ => {}
+        panic!("Deno vendor command failed: {}", err);
     }
 
     // Load vendored import_map
@@ -185,19 +185,22 @@ pub fn build_import_map() -> HashMap<String, String> {{
     // Add packages
     for (k, v) in skypack_obj {
         let v = v.as_str().unwrap();
-        content.push_str(&format!(
-            "    m.insert(\"{}\".to_string(), include_str!(\"../../vendor/{}\").to_string());\n",
+        writeln!(
+            content,
+            "    m.insert(\"{}\".to_string(), include_str!(\"../../vendor/{}\").to_string());",
             k, v
-        ))
+        )
+        .unwrap();
     }
 
     // Add pinned packages
     // Vega-Lite
     for (_, vl_path) in VL_PATHS {
-        content.push_str(&format!(
-            "    m.insert(\"{vl_path}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{vl_path}\").to_string());\n",
+        writeln!(
+            content,
+            "    m.insert(\"{vl_path}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{vl_path}\").to_string());",
             vl_path=vl_path,
-        ));
+        ).unwrap();
     }
 
     content.push_str("    m\n}\n");
