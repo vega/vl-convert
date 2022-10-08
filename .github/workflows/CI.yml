@@ -4,78 +4,80 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'vl-convert-python@*'
   pull_request:
 
 jobs:
-  black-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: psf/black@stable
-        with:
-          options: "--check"
-          jupyter: true
-          src: "./vl-convert-python"
-
-  rust-fmt-clippy:
-    runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: "-D warnings"
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt, clippy
-      - name: Check cargo fmt compliance
-        run: cargo fmt --all -- --check
-      - name: Check no rustc warnings
-        run: cargo check --tests
-      - name: Check for clippy warnings
-        run: cargo clippy
-
-  codegen-clean:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt
-      - name: Install Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: vx.x.x
-      - name: Run codegen
-        run: cargo run
-        working-directory: vl-convert-vendor
-      - name: Check that git detects to file changes
-        run:  git diff --exit-code
-
-  vl-convert-rs-tests:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-2022
-          - macos-11
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+#  black-lint:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v2
+#      - uses: psf/black@stable
+#        with:
+#          options: "--check"
+#          jupyter: true
+#          src: "./vl-convert-python"
+#
+#  rust-fmt-clippy:
+#    runs-on: ubuntu-latest
+#    env:
+#      RUSTFLAGS: "-D warnings"
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - name: Install latest stable Rust toolchain
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#          override: true
+#          components: rustfmt, clippy
+#      - name: Check cargo fmt compliance
+#        run: cargo fmt --all -- --check
+#      - name: Check no rustc warnings
+#        run: cargo check --tests
+#      - name: Check for clippy warnings
+#        run: cargo clippy
+#
+#  codegen-clean:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - name: Install latest stable Rust toolchain
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#          override: true
+#          components: rustfmt
+#      - name: Install Deno
+#        uses: denoland/setup-deno@v1
+#        with:
+#          deno-version: vx.x.x
+#      - name: Run codegen
+#        run: cargo run
+#        working-directory: vl-convert-vendor
+#      - name: Check that git detects to file changes
+#        run:  git diff --exit-code
+#
+#  vl-convert-rs-tests:
+#    runs-on: ${{ matrix.os }}
+#    strategy:
+#      matrix:
+#        os:
+#          - ubuntu-latest
+#          - windows-2022
+#          - macos-11
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - name: Install latest stable Rust toolchain
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#      - uses: actions-rs/cargo@v1
+#        with:
+#          command: test
 
   linux-wheels:
     runs-on: ubuntu-latest
@@ -92,47 +94,47 @@ jobs:
         name: wheels
         path: dist
 
-  windows-wheels:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v3
-    - uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.10 -i python3.9 -i python3.8 --strip
-    - name: Upload wheels
-      uses: actions/upload-artifact@v2
-      with:
-        name: wheels
-        path: dist
-
-  macos-wheels:
-    runs-on: macos-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Download Apple Silicon toolchain
-      run: |
-        rustup target add aarch64-apple-darwin
-    - name: Build Intel wheels
-      uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
-    - name: Build Apple Silicon wheels
-      uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist --target aarch64-apple-darwin -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
-    - name: Upload wheels
-      uses: actions/upload-artifact@v2
-      with:
-        name: wheels
-        path: dist
+#  windows-wheels:
+#    runs-on: windows-latest
+#    steps:
+#    - uses: actions/checkout@v3
+#    - uses: messense/maturin-action@v1
+#      with:
+#        command: build
+#        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.10 -i python3.9 -i python3.8 --strip
+#    - name: Upload wheels
+#      uses: actions/upload-artifact@v2
+#      with:
+#        name: wheels
+#        path: dist
+#
+#  macos-wheels:
+#    runs-on: macos-latest
+#    steps:
+#    - uses: actions/checkout@v3
+#    - name: Download Apple Silicon toolchain
+#      run: |
+#        rustup target add aarch64-apple-darwin
+#    - name: Build Intel wheels
+#      uses: messense/maturin-action@v1
+#      with:
+#        command: build
+#        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
+#    - name: Build Apple Silicon wheels
+#      uses: messense/maturin-action@v1
+#      with:
+#        command: build
+#        args: --release -m vl-convert-python/Cargo.toml -o dist --target aarch64-apple-darwin -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
+#    - name: Upload wheels
+#      uses: actions/upload-artifact@v2
+#      with:
+#        name: wheels
+#        path: dist
 
   vl-convert-python-tests:
     needs:
-      - macos-wheels
-      - windows-wheels
+#      - macos-wheels
+#      - windows-wheels
       - linux-wheels
     runs-on: ${{ matrix.options[0] }}
     strategy:
@@ -163,19 +165,22 @@ jobs:
         run: |
           pytest tests/
 
-#  release:
-#    name: Release
-#    runs-on: ubuntu-latest
-#    if: "startsWith(github.ref, 'refs/tags/')"
-#    needs: [ macos-wheels, windows-wheels, linux-wheels ]
-#    steps:
-#      - uses: actions/download-artifact@v2
-#        with:
-#          name: wheels
-#      - name: Publish to PyPI
-#        uses: messense/maturin-action@v1
-#        env:
-#          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-#        with:
-#          command: upload
-#          args: --skip-existing *
+  publish-pypi:
+    name: Publish to PyPI
+    environment: PyPI Upload
+    runs-on: ubuntu-latest
+    if: "startsWith(github.ref, 'refs/tags/vl-convert-python@')"
+    needs: [ vl-convert-python-tests ]
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: wheels
+          path: dist/
+      - name: Publish to PyPI
+        uses: messense/maturin-action@v1
+        working-directory: dist/
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          command: upload
+          args: --skip-existing *
