@@ -7,7 +7,27 @@ on:
   pull_request:
 
 jobs:
-  linux:
+  rust-fmt-clippy:
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+      - name: Check cargo fmt compliance
+        run: cargo fmt --all -- --check
+      - name: Check no rustc warnings
+        run: cargo check --tests
+      - name: Check for clippy warnings
+        run: cargo clippy
+
+  linux-wheels:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -22,7 +42,7 @@ jobs:
         name: wheels
         path: dist
 
-  windows:
+  windows-wheels:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v3
@@ -36,7 +56,7 @@ jobs:
         name: wheels
         path: dist
 
-  macos:
+  macos-wheels:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
@@ -63,7 +83,7 @@ jobs:
 #    name: Release
 #    runs-on: ubuntu-latest
 #    if: "startsWith(github.ref, 'refs/tags/')"
-#    needs: [ macos, windows, linux ]
+#    needs: [ macos-wheels, windows-wheels, linux-wheels ]
 #    steps:
 #      - uses: actions/download-artifact@v2
 #        with:
