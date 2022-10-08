@@ -60,11 +60,11 @@ fn main() {
         )
         .unwrap();
     }
-    fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
+    fs::write(&importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
     if let Err(err) = Command::new("deno")
-        .current_dir(vl_convert_rs_path)
+        .current_dir(&vl_convert_rs_path)
         .arg("vendor")
         .arg("vendor_imports.js")
         .output()
@@ -212,5 +212,14 @@ pub fn build_import_map() -> HashMap<String, String> {{
         .join("src")
         .join("module_loader");
 
-    fs::write(deno_deps_path.join("import_map.rs"), content).unwrap();
+    let import_map_path = deno_deps_path.join("import_map.rs");
+    fs::write(&import_map_path, content).unwrap();
+
+    // Run rustfmt on import_map.rs
+    if let Err(err) = Command::new("rustfmt")
+        .arg(import_map_path.to_str().unwrap())
+        .output()
+    {
+        panic!("rustfmt command failed: {}", err);
+    }
 }
