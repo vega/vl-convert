@@ -64,7 +64,8 @@ fn main() {
         .current_dir(vl_convert_rs_path)
         .arg("vendor")
         .arg("vendor_imports.js")
-        .output() {
+        .output()
+    {
         Err(err) => {
             panic!("Deno vendor command failed: {}", err.to_string());
         }
@@ -202,7 +203,11 @@ pub fn build_import_map() -> HashMap<String, String> {{
     content.push_str("    m\n}\n");
 
     // Write to import_map.rs in vl-convert-rs crate
-    let deno_deps_path = root_path.join("..").join("vl-convert-rs").join("src").join("module_loader");
+    let deno_deps_path = root_path
+        .join("..")
+        .join("vl-convert-rs")
+        .join("src")
+        .join("module_loader");
 
     fs::write(deno_deps_path.join("import_map.rs"), content).unwrap();
 }

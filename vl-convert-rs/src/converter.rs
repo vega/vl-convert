@@ -195,7 +195,10 @@ impl VlConverter {
             Ok(())
         }));
 
-        Self { sender, _handle: handle }
+        Self {
+            sender,
+            _handle: handle,
+        }
     }
 
     pub async fn vegalite_to_vega(
