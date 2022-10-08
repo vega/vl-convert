@@ -37,6 +37,23 @@ jobs:
       - name: Check for clippy warnings
         run: cargo clippy
 
+  codegen-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt
+      - name: Run codegen
+        run: cargo run
+        working-directory: vl-convert-vendor
+      - name: Check that git detects to file changes
+        run:  git diff --exit-code
+
   linux-wheels:
     runs-on: ubuntu-latest
     steps:
