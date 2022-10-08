@@ -18,7 +18,7 @@ def load_expected_vg_spec(name, vl_version, pretty):
     filename = f"{name}.vg.pretty.json" if pretty else f"{name}.vg.json"
     spec_path = specs_dir / "expected" / vl_version / filename
     if spec_path.exists():
-        with spec_path.open("rt") as f:
+        with spec_path.open("rt", encoding='utf8') as f:
             return f.read()
     else:
         return None
