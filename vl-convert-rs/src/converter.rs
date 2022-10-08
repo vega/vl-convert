@@ -91,12 +91,12 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
             "<anon>",
             &format!(
                 r#"
-compileVegaLite_{ver_name}(
+compileVegaLite_{ver_name:?}(
     {vl_spec_str},
     {pretty}
 )
 "#,
-                ver_name = format!("{:?}", vl_version),
+                ver_name = vl_version,
                 vl_spec_str = vl_spec_str,
                 pretty = pretty,
             ),
@@ -131,7 +131,40 @@ pub enum VlConvertCommand {
     },
 }
 
-/// Public struct for performing Vega-Lite to Vega conversions
+/// Struct for performing Vega-Lite to Vega conversions using the Deno v8 Runtime
+///
+/// # Examples
+///
+/// ```
+/// use vl_convert_rs::{VlConverter, VlVersion};
+/// let mut converter = VlConverter::new();
+///
+/// let vl_spec: serde_json::Value = serde_json::from_str(r#"
+/// {
+///   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+///   "data": {"url": "data/movies.json"},
+///   "mark": "circle",
+///   "encoding": {
+///     "x": {
+///       "bin": {"maxbins": 10},
+///       "field": "IMDB Rating"
+///     },
+///     "y": {
+///       "bin": {"maxbins": 10},
+///       "field": "Rotten Tomatoes Rating"
+///     },
+///     "size": {"aggregate": "count"}
+///   }
+/// }   "#).unwrap();
+///
+///     let vega_spec = futures::executor::block_on(
+///         converter.vegalite_to_vega(vl_spec, VlVersion::v5_5, true)
+///     ).expect(
+///         "Failed to perform Vega-Lite to Vega conversion"
+///     );
+///
+///     println!("{}", vega_spec)
+/// ```
 #[derive(Clone)]
 pub struct VlConverter {
     sender: Sender<VlConvertCommand>,
@@ -162,7 +195,10 @@ impl VlConverter {
             Ok(())
         }));
 
-        Self { sender, _handle: handle }
+        Self {
+            sender,
+            _handle: handle,
+        }
     }
 
     pub async fn vegalite_to_vega(
@@ -194,6 +230,12 @@ impl VlConverter {
             Ok(vega_spec_result) => vega_spec_result,
             Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
         }
+    }
+}
+
+impl Default for VlConverter {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

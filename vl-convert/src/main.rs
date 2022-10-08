@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use clap::Parser;
 use std::str::FromStr;
 use vl_convert_rs::converter::VlConverter;

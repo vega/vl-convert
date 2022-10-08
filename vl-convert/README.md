@@ -1,19 +1,20 @@
-# vl-convert
-This crate is a thin wrapper around the `vl-convert-rs` library that provides a command line interface for converting Vega-Lite visualization specifications to Vega visualization specifications.
+## Overview
+This crate is a thin wrapper around the [`vl-convert-rs`](https://docs.rs/vl-convert-rs/) crate that provides a command line interface for converting Vega-Lite visualization specifications to Vega visualization specifications.
 
-# Installation
-Download the `vl-convert` release archive for your operating system from the GitHub release page, unzip it, and add it to your system PATH. Alternatively, install vl-convert using cargo with:
-
+## Installation
+Install `vl-convert` using cargo with:
 ```
-cargo install vl-convert
+$ cargo install vl-convert
 ```
 
-# Usage
+Alternatively, download the `vl-convert` release archive for your operating system from the GitHub [release page](https://github.com/jonmmease/vl-convert/releases), unzip it, and add it to your system PATH.
+
+## CLI Usage
 Display the documentation for the `vl-convert` command
-```
+```plain
 $ ./vl-convert --help
 ```
-```
+```plain
 vl-convert: A utility for converting Vega-Lite specifications into Vega specification
 
 Usage: vl-convert [OPTIONS] --input-vegalite-file <INPUT_VEGALITE_FILE> --output-vega-file <OUTPUT_VEGA_FILE>
@@ -33,7 +34,9 @@ Options:
           Print version information
 ```
 
-Example: Convert a Vega-Lite specification file named `in.vl.json` into a Vega specification file named `out.vg.json`. Perform the conversion using version 5.5 of the Vega-Lite JavaScript library and pretty-print the resulting JSON.
-```
-./vl-convert -i ./in.vl.json -o ./out.vg.json --vl-version 5.5 --pretty
+## CLI Example
+Convert a Vega-Lite specification file named `in.vl.json` into a Vega specification file named `out.vg.json`. Perform the conversion using version 5.5 of the Vega-Lite JavaScript library and pretty-print the resulting JSON.
+
+```plain
+$ ./vl-convert -i ./in.vl.json -o ./out.vg.json --vl-version 5.5 --pretty
 ```
