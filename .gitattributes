@@ -1,0 +1,2 @@
+# Always checkout files with \n line endings (even on Windows)
+text eol=lf
