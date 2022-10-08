@@ -48,6 +48,10 @@ jobs:
           toolchain: stable
           override: true
           components: rustfmt
+      - name: Install Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: vx.x.x
       - name: Run codegen
         run: cargo run
         working-directory: vl-convert-vendor
