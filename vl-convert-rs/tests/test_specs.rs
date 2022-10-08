@@ -10,8 +10,9 @@ fn load_vl_spec(name: &str) -> serde_json::Value {
         .join("vl-specs")
         .join(format!("{}.vl.json", name));
     let spec_str =
-        fs::read_to_string(&spec_path).expect(&format!("Failed to read {:?}", spec_path));
-    serde_json::from_str(&spec_str).expect(&format!("Failed to parse {:?} as JSON", spec_path))
+        fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
+    serde_json::from_str(&spec_str)
+        .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", spec_path))
 }
 
 fn load_expected_vg_spec(name: &str, vl_version: VlVersion, pretty: bool) -> Option<String> {
@@ -27,8 +28,8 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion, pretty: bool) -> Opt
             format!("{}.vg.json", name)
         });
     if spec_path.exists() {
-        let spec_str =
-            fs::read_to_string(&spec_path).expect(&format!("Failed to read {:?}", spec_path));
+        let spec_str = fs::read_to_string(&spec_path)
+            .unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
         Some(spec_str)
     } else {
         None

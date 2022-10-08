@@ -49,7 +49,7 @@ fn main() {
 
     let mut imports = String::new();
     for (ver, path) in VL_PATHS {
-        let ver_under = ver.replace(".", "_");
+        let ver_under = ver.replace('.', "_");
         imports.push_str(&format!(
             "import * as v_{ver_under} from \"{SKYPACK_URL}{path}\";\n",
             ver_under = ver_under,
@@ -67,7 +67,7 @@ fn main() {
         .output()
     {
         Err(err) => {
-            panic!("Deno vendor command failed: {}", err.to_string());
+            panic!("Deno vendor command failed: {}", err);
         }
         _ => {}
     }
@@ -90,14 +90,14 @@ fn main() {
     // Build versions csv
     let ver_unders: Vec<_> = VL_PATHS
         .iter()
-        .map(|(ver, _)| format!("v{}", ver.replace(".", "_")))
+        .map(|(ver, _)| format!("v{}", ver.replace('.', "_")))
         .collect();
     let vl_versions_csv = ver_unders.join(",\n    ");
 
     // Path match csv
     let ver_path_matches: Vec<_> = VL_PATHS
         .iter()
-        .map(|(ver, path)| format!("v{} => \"{}\"", ver.replace(".", "_"), path))
+        .map(|(ver, path)| format!("v{} => \"{}\"", ver.replace('.', "_"), path))
         .collect();
     let path_match_csv = ver_path_matches.join(",\n            ");
 
@@ -105,7 +105,7 @@ fn main() {
     let from_str_matches: Vec<_> = VL_PATHS
         .iter()
         .map(|(ver, _)| {
-            let ver_under = ver.replace(".", "_");
+            let ver_under = ver.replace('.', "_");
             format!(
                 "\"{ver}\" | \"v{ver}\" | \"{ver_under}\" | \"v{ver_under}\" => Self::v{ver_under}",
                 ver = ver,
@@ -119,7 +119,7 @@ fn main() {
     let version_instances: Vec<_> = VL_PATHS
         .iter()
         .map(|(ver, _)| {
-            let ver_under = ver.replace(".", "_");
+            let ver_under = ver.replace('.', "_");
             format!("VlVersion::v{ver_under}", ver_under = ver_under)
         })
         .collect();
