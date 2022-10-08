@@ -54,7 +54,7 @@ print(vg_spec)
 ## Python development setup
 Create development conda environment
 ```
-$ conda create -n vl-convert-dev -c conda-forge python=3.10 deno maturin pytest black
+$ conda create -n vl-convert-dev -c conda-forge python=3.10 deno maturin pytest black black-jupyter
 ```
 
 Activate environment
