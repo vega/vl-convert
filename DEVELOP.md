@@ -26,3 +26,8 @@ Bump version to the next patch.
 ```
 $ cargo ws version patch --all
 ```
+
+Publish custom version
+```
+$ cargo ws publish --all --force "vl-convert*" custom 0.1.0-rc3
+```
