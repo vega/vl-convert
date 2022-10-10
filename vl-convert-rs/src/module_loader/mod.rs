@@ -1,9 +1,9 @@
 pub mod import_map;
 
 use crate::module_loader::import_map::build_import_map;
-use deno_core::anyhow::Error;
-use deno_core::futures::FutureExt;
-use deno_core::{
+use deno_runtime::deno_core::anyhow::Error;
+use deno_runtime::deno_core::futures::FutureExt;
+use deno_runtime::deno_core::{
     resolve_import, ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType,
 };
 use std::collections::HashMap;

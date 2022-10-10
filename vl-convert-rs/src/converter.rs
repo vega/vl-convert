@@ -1,12 +1,22 @@
 use crate::module_loader::import_map::VlVersion;
 use crate::module_loader::VlConvertModuleLoader;
-use deno_core::error::AnyError;
-use deno_core::{serde_v8, v8, JsRuntime, RuntimeOptions};
 use std::collections::HashSet;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use deno_core::anyhow::bail;
+use deno_runtime::deno_core::anyhow::bail;
+use deno_runtime::deno_core::error::AnyError;
+use deno_runtime::deno_core::{serde_v8, v8};
+
+use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
+use deno_runtime::deno_web::BlobStore;
+use deno_runtime::permissions::Permissions;
+use deno_runtime::worker::MainWorker;
+use deno_runtime::worker::WorkerOptions;
+use deno_runtime::BootstrapOptions;
+use deno_runtime::deno_core;
+
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -14,9 +24,13 @@ use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures::executor::block_on;
 use futures_util::{SinkExt, StreamExt};
 
+fn get_error_class_name(e: &AnyError) -> &'static str {
+    deno_runtime::errors::get_error_class_name(e).unwrap_or("Error")
+}
+
 /// Struct that interacts directly with the Deno JavaScript runtime. Not Sendable
 struct InnerVlConverter {
-    js_runtime: JsRuntime,
+    worker: MainWorker,
     initialized_vl_versions: HashSet<VlVersion>,
 }
 
@@ -35,9 +49,9 @@ import('{vl_url}').then((imported) => {{
                 vl_url = vl_version.to_url()
             );
 
-            self.js_runtime.execute_script("<anon>", &import_str)?;
+            self.worker.execute_script("<anon>", &import_str)?;
 
-            self.js_runtime.run_event_loop(false).await?;
+            self.worker.run_event_loop(false).await?;
 
             // Create and initialize function string
             let function_str = format!(
@@ -55,9 +69,9 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
                 ver_name = format!("{:?}", vl_version),
             );
 
-            self.js_runtime.execute_script("<anon>", &function_str)?;
+            self.worker.execute_script("<anon>", &function_str)?;
 
-            self.js_runtime.run_event_loop(false).await?;
+            self.worker.run_event_loop(false).await?;
 
             // Register that this Vega-Lite version has been initialized
             self.initialized_vl_versions.insert(*vl_version);
@@ -65,17 +79,71 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
         Ok(())
     }
 
-    pub fn new() -> Self {
+    pub async fn try_new() -> Result<Self, AnyError> {
         let module_loader = Rc::new(VlConvertModuleLoader::new());
-        let js_runtime = JsRuntime::new(RuntimeOptions {
-            module_loader: Some(module_loader),
-            ..Default::default()
+
+        let create_web_worker_cb = Arc::new(|_| {
+            todo!("Web workers are not supported");
+        });
+        let web_worker_event_cb = Arc::new(|_| {
+            todo!("Web workers are not supported");
         });
 
-        Self {
-            js_runtime,
+        let options = WorkerOptions {
+            bootstrap: BootstrapOptions {
+                args: vec![],
+                cpu_count: 1,
+                debug_flag: false,
+                enable_testing_features: false,
+                location: None,
+                no_color: false,
+                is_tty: false,
+                runtime_version: "x".to_string(),
+                ts_version: "x".to_string(),
+                unstable: false,
+                user_agent: "hello_runtime".to_string(),
+                inspect: false,
+            },
+            extensions: vec![],
+            unsafely_ignore_certificate_errors: None,
+            root_cert_store: None,
+            seed: None,
+            source_map_getter: None,
+            format_js_error_fn: None,
+            web_worker_preload_module_cb: web_worker_event_cb.clone(),
+            web_worker_pre_execute_module_cb: web_worker_event_cb,
+            create_web_worker_cb,
+            maybe_inspector_server: None,
+            should_break_on_first_statement: false,
+            module_loader,
+            npm_resolver: None,
+            get_error_class_fn: Some(&get_error_class_name),
+            cache_storage_dir: None,
+            origin_storage_dir: None,
+            blob_store: BlobStore::default(),
+            broadcast_channel: InMemoryBroadcastChannel::default(),
+            shared_array_buffer_store: None,
+            compiled_wasm_module_store: None,
+            stdio: Default::default(),
+        };
+
+        let js_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("vl-convert-rs.js");
+        let main_module = deno_core::resolve_path(&js_path.to_string_lossy())?;
+        let permissions = Permissions::allow_all();
+
+        let mut worker = MainWorker::bootstrap_from_options(
+            main_module.clone(),
+            permissions,
+            options,
+        );
+        worker.execute_main_module(&main_module).await?;
+        worker.run_event_loop(false).await?;
+
+        Ok(Self {
+            worker,
             initialized_vl_versions: Default::default(),
-        }
+        })
     }
 
     pub async fn vegalite_to_vega(
@@ -87,7 +155,7 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
         self.init_version(&vl_version).await?;
 
         let vl_spec_str = serde_json::to_string(vl_spec)?;
-        let res = self.js_runtime.execute_script(
+        let res = self.worker.js_runtime.execute_script(
             "<anon>",
             &format!(
                 r#"
@@ -102,9 +170,9 @@ compileVegaLite_{ver_name:?}(
             ),
         )?;
 
-        self.js_runtime.run_event_loop(false).await?;
+        self.worker.run_event_loop(false).await?;
 
-        let scope = &mut self.js_runtime.handle_scope();
+        let scope = &mut self.worker.js_runtime.handle_scope();
         let local = v8::Local::new(scope, res);
 
         // Deserialize a `v8` object into a Rust type using `serde_v8`,
@@ -176,7 +244,7 @@ impl VlConverter {
         let (sender, mut receiver) = mpsc::channel::<VlConvertCommand>(32);
 
         let handle = Arc::new(thread::spawn(move || {
-            let mut inner = InnerVlConverter::new();
+            let mut inner = block_on(InnerVlConverter::try_new())?;
 
             while let Some(cmd) = block_on(receiver.next()) {
                 match cmd {
