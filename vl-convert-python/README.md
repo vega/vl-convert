@@ -9,7 +9,7 @@ $ pip install vl-convert-python
 ```
 
 # Usage
-From Python, import the `vl_convert` package, create a `VlConverter` object, and use the converter to convert a Vega-Lite specification string to a Vega specification string.
+From Python, import the library, create a `VlConverter` object, and use the `vegalite_to_vega` method to convert a Vega-Lite specification string to a Vega specification string.
 
 ```python
 from vl_convert import VlConverter
@@ -49,7 +49,6 @@ print(vg_spec)
   ...
 }
 ```
-
 
 ## Python development setup
 Create development conda environment
