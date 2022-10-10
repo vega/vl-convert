@@ -5,3 +5,4 @@ import * as v_5_2 from "https://cdn.skypack.dev/pin/vega-lite@v5.2.0-0lbC9JVxwLS
 import * as v_5_3 from "https://cdn.skypack.dev/pin/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_4 from "https://cdn.skypack.dev/pin/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_5 from "https://cdn.skypack.dev/pin/vega-lite@v5.5.0-x3x9oTW9wvfyOekd4a63/mode=imports,min/optimized/vega-lite.js";
+import * as vega from "https://cdn.skypack.dev/pin/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/mode=imports,min/optimized/vega.js";

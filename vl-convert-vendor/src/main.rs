@@ -34,6 +34,8 @@ const VL_PATHS: &[(&str, &str)] = &[
     ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
+const VEGA_PATH: &str = "/pin/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/mode=imports,min/optimized/vega.js";
+
 
 // Example custom build script.
 fn main() {
@@ -60,6 +62,13 @@ fn main() {
         )
         .unwrap();
     }
+    writeln!(
+        imports,
+        "import * as vega from \"{SKYPACK_URL}{VEGA_PATH}\";",
+        SKYPACK_URL = SKYPACK_URL,
+        VEGA_PATH = VEGA_PATH
+    )
+        .unwrap();
     fs::write(&importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
@@ -132,10 +141,15 @@ fn main() {
 // *************************************************************************
 use std::collections::HashMap;
 use std::str::FromStr;
-use deno_core::anyhow::bail;
-use deno_core::error::AnyError;
+use deno_runtime::deno_core::anyhow::bail;
+use deno_runtime::deno_core::error::AnyError;
 
 const SKYPACK_URL: &str = "{SKYPACK_URL}";
+const VEGA_PATH: &str = "{VEGA_PATH}";
+
+pub fn vega_url() -> String {{
+    format!("{{}}{{}}", SKYPACK_URL, VEGA_PATH)
+}}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[allow(non_camel_case_types)]
@@ -181,6 +195,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         from_str_matches_csv = from_str_matches_csv,
         version_instances_csv = version_instances_csv,
         SKYPACK_URL = SKYPACK_URL,
+        VEGA_PATH = VEGA_PATH,
     );
     // Add packages
     for (k, v) in skypack_obj {
@@ -202,6 +217,11 @@ pub fn build_import_map() -> HashMap<String, String> {{
             vl_path=vl_path,
         ).unwrap();
     }
+    writeln!(
+        content,
+        "    m.insert(\"{VEGA_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_PATH}\").to_string());",
+        VEGA_PATH=VEGA_PATH,
+    ).unwrap();
 
     content.push_str("    m\n}\n");
 

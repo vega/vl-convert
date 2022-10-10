@@ -1,4 +1,4 @@
-use crate::module_loader::import_map::VlVersion;
+use crate::module_loader::import_map::{VlVersion, vega_url};
 use crate::module_loader::VlConvertModuleLoader;
 use std::collections::HashSet;
 use std::path::Path;
@@ -32,10 +32,48 @@ fn get_error_class_name(e: &AnyError) -> &'static str {
 struct InnerVlConverter {
     worker: MainWorker,
     initialized_vl_versions: HashSet<VlVersion>,
+    vega_initialized: bool,
 }
 
 impl InnerVlConverter {
-    async fn init_version(&mut self, vl_version: &VlVersion) -> Result<(), AnyError> {
+    async fn init_vega(&mut self) -> Result<(), AnyError> {
+        if !self.vega_initialized {
+            let import_str = format!(
+                r#"
+var vega;
+import('{vega_url}').then((imported) => {{
+    vega = imported;
+}})
+"#,
+                vega_url = vega_url()
+            );
+
+            self.worker.execute_script("<anon>", &import_str)?;
+
+            self.worker.run_event_loop(false).await?;
+
+            // Create and initialize function string
+            let function_str =
+                r#"
+function vegaToSvg(vgSpec) {
+    let runtime = vega.parse(vgSpec);
+    let view = new vega.View(runtime, {renderer: 'none'});
+    let svgPromise = view.toSVG();
+    return svgPromise
+}
+"#;
+
+            self.worker.execute_script("<anon>", &function_str)?;
+
+            self.worker.run_event_loop(false).await?;
+
+            self.vega_initialized = true;
+        }
+
+        Ok(())
+    }
+
+    async fn init_vl_version(&mut self, vl_version: &VlVersion) -> Result<(), AnyError> {
         if !self.initialized_vl_versions.contains(vl_version) {
             // Create and evaluate import string
             let import_str = format!(
@@ -143,32 +181,12 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
         Ok(Self {
             worker,
             initialized_vl_versions: Default::default(),
+            vega_initialized: false,
         })
     }
 
-    pub async fn vegalite_to_vega(
-        &mut self,
-        vl_spec: &serde_json::Value,
-        vl_version: VlVersion,
-        pretty: bool,
-    ) -> Result<String, AnyError> {
-        self.init_version(&vl_version).await?;
-
-        let vl_spec_str = serde_json::to_string(vl_spec)?;
-        let res = self.worker.js_runtime.execute_script(
-            "<anon>",
-            &format!(
-                r#"
-compileVegaLite_{ver_name:?}(
-    {vl_spec_str},
-    {pretty}
-)
-"#,
-                ver_name = vl_version,
-                vl_spec_str = vl_spec_str,
-                pretty = pretty,
-            ),
-        )?;
+    async fn execute_script_to_string(&mut self, script: &str) -> Result<String, AnyError> {
+        let res = self.worker.js_runtime.execute_script("<anon>", script)?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -186,6 +204,57 @@ compileVegaLite_{ver_name:?}(
             }
             Err(err) => bail!("{}", err.to_string()),
         };
+
+        Ok(value)
+    }
+
+    pub async fn vegalite_to_vega(
+        &mut self,
+        vl_spec: &serde_json::Value,
+        vl_version: VlVersion,
+        pretty: bool,
+    ) -> Result<String, AnyError> {
+        self.init_vl_version(&vl_version).await?;
+
+        let vl_spec_str = serde_json::to_string(vl_spec)?;
+        let code = format!(
+            r#"
+compileVegaLite_{ver_name:?}(
+    {vl_spec_str},
+    {pretty}
+)
+"#,
+            ver_name = vl_version,
+            vl_spec_str = vl_spec_str,
+            pretty = pretty,
+        );
+
+        let value = self.execute_script_to_string(&code).await?;
+        Ok(value)
+    }
+
+    pub async fn vega_to_svg(
+        &mut self,
+        vg_spec: &serde_json::Value,
+    ) -> Result<String, AnyError> {
+        self.init_vega().await?;
+
+        let vg_spec_str = serde_json::to_string(vg_spec)?;
+        let code = format!(
+            r#"
+var svg;
+vegaToSvg(
+    {vg_spec_str}
+).then((result) => {{
+    svg = result;
+}})
+"#,
+            vg_spec_str = vg_spec_str,
+        );
+        self.worker.execute_script("<anon>", &code)?;
+        self.worker.run_event_loop(false);
+
+        let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
 }
@@ -197,6 +266,10 @@ pub enum VlConvertCommand {
         pretty: bool,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
+    VgToSvg {
+        vg_spec: serde_json::Value,
+        responder: oneshot::Sender<Result<String, AnyError>>,
+    }
 }
 
 /// Struct for performing Vega-Lite to Vega conversions using the Deno v8 Runtime
@@ -258,6 +331,11 @@ impl VlConverter {
                             block_on(inner.vegalite_to_vega(&vl_spec, vl_version, pretty));
                         responder.send(vega_spec).ok();
                     }
+                    VlConvertCommand::VgToSvg { vg_spec, responder } => {
+                        let vega_spec =
+                            block_on(inner.vega_to_svg(&vg_spec));
+                        responder.send(vega_spec).ok();
+                    }
                 }
             }
             Ok(())
@@ -296,6 +374,33 @@ impl VlConverter {
         // Wait for result
         match resp_rx.await {
             Ok(vega_spec_result) => vega_spec_result,
+            Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+        }
+    }
+
+    pub async fn vega_to_svg(
+        &mut self,
+        vg_spec: serde_json::Value,
+    ) -> Result<String, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
+        let cmd = VlConvertCommand::VgToSvg {
+            vg_spec,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send SVG conversion request: {}", err.to_string())
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(svg_result) => svg_result,
             Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
         }
     }
