@@ -1,5 +1,5 @@
 use crate::module_loader::import_map::VlVersion;
-use crate::module_loader::VegaFusionModuleLoader;
+use crate::module_loader::VlConvertModuleLoader;
 use deno_core::error::AnyError;
 use deno_core::{serde_v8, v8, JsRuntime, RuntimeOptions};
 use std::collections::HashSet;
@@ -66,7 +66,7 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
     }
 
     pub fn new() -> Self {
-        let module_loader = Rc::new(VegaFusionModuleLoader::new());
+        let module_loader = Rc::new(VlConvertModuleLoader::new());
         let js_runtime = JsRuntime::new(RuntimeOptions {
             module_loader: Some(module_loader),
             ..Default::default()
