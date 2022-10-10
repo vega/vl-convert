@@ -7,8 +7,6 @@ Install `vl-convert` using cargo with:
 $ cargo install vl-convert
 ```
 
-Alternatively, download the `vl-convert` release archive for your operating system from the GitHub [release page](https://github.com/jonmmease/vl-convert/releases), unzip it, and add it to your system PATH.
-
 ## CLI Usage
 Display the documentation for the `vl-convert` command
 ```plain
