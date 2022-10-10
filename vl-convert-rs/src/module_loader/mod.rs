@@ -9,11 +9,11 @@ use deno_core::{
 use std::collections::HashMap;
 use std::pin::Pin;
 
-pub struct VegaFusionModuleLoader {
+pub struct VlConvertModuleLoader {
     import_map: HashMap<String, String>,
 }
 
-impl VegaFusionModuleLoader {
+impl VlConvertModuleLoader {
     pub fn new() -> Self {
         Self {
             import_map: build_import_map(),
@@ -21,13 +21,13 @@ impl VegaFusionModuleLoader {
     }
 }
 
-impl Default for VegaFusionModuleLoader {
+impl Default for VlConvertModuleLoader {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ModuleLoader for VegaFusionModuleLoader {
+impl ModuleLoader for VlConvertModuleLoader {
     fn resolve(
         &self,
         specifier: &str,
