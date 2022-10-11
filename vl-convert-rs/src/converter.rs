@@ -1,4 +1,4 @@
-use crate::module_loader::import_map::{VlVersion, vega_url};
+use crate::module_loader::import_map::{VlVersion, vega_url, url_for_path};
 use crate::module_loader::VlConvertModuleLoader;
 use std::collections::HashSet;
 use std::path::Path;
@@ -41,6 +41,7 @@ struct InnerVlConverter {
     worker: MainWorker,
     initialized_vl_versions: HashSet<VlVersion>,
     vega_initialized: bool,
+    module_loader: Rc<VlConvertModuleLoader>,
 }
 
 impl InnerVlConverter {
@@ -51,20 +52,25 @@ impl InnerVlConverter {
 var vega;
 import('{vega_url}').then((imported) => {{
     vega = imported;
-}})
+}})"#,
+                vega_url = vega_url()
+            );
 
+            self.worker.execute_script("<anon>", &import_str)?;
+            self.worker.run_event_loop(false).await?;
 
-// Hack to override textMetrics. We should do this for ever version of vega-scenegraph
-// that gets pulled in by deno vendor
-var sg_494;
-import('https://cdn.skypack.dev/-/vega-scenegraph@v4.9.4-Rfd7OGmaS9T7w10Fz4Yx/dist=es2020,mode=imports,min/optimized/vega-scenegraph.js').then((imported) => {{
-    sg_494 = imported;
-    sg_494.textMetrics.width = (item, text) => {{
+            // Override text width measurement in vega-scenegraph
+            for path in self.module_loader.import_map.keys() {
+                if path.ends_with("vega-scenegraph.js") {
+                    let script = format!(
+                        r#"
+import('{url}').then((sg) => {{
+    sg.textMetrics.width = (item, text) => {{
         let style = item.fontStyle;
         let variant = item.fontVariant;
         let weight = item.fontWeight;
-        let size = sg_494.fontSize(item);
-        let family = sg_494.fontFamily(item);
+        let size = sg.fontSize(item);
+        let family = sg.fontFamily(item);
 
         let text_info = JSON.stringify({{
             style, variant, weight, size, family, text
@@ -74,14 +80,14 @@ import('https://cdn.skypack.dev/-/vega-scenegraph@v4.9.4-Rfd7OGmaS9T7w10Fz4Yx/di
     }};
 }})
 "#,
-                vega_url = vega_url()
-            );
+                        url=url_for_path(path)
+                    );
+                    self.worker.execute_script("<anon>", &script)?;
+                    self.worker.run_event_loop(false).await?;
+                }
+            }
 
-            self.worker.execute_script("<anon>", &import_str)?;
-
-            self.worker.run_event_loop(false).await?;
-
-            // Create and initialize function string
+            // Create and initialize svg function string
             let function_str =
                 r#"
 function vegaToSvg(vgSpec) {
@@ -93,7 +99,6 @@ function vegaToSvg(vgSpec) {
 "#;
 
             self.worker.execute_script("<anon>", &function_str)?;
-
             self.worker.run_event_loop(false).await?;
 
             self.vega_initialized = true;
@@ -189,7 +194,7 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
             create_web_worker_cb,
             maybe_inspector_server: None,
             should_break_on_first_statement: false,
-            module_loader,
+            module_loader: module_loader.clone(),
             npm_resolver: None,
             get_error_class_fn: Some(&get_error_class_name),
             cache_storage_dir: None,
@@ -218,6 +223,7 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
             worker,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
+            module_loader,
         };
 
         Ok(this)

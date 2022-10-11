@@ -147,8 +147,12 @@ use deno_runtime::deno_core::error::AnyError;
 const SKYPACK_URL: &str = "{SKYPACK_URL}";
 const VEGA_PATH: &str = "{VEGA_PATH}";
 
+pub fn url_for_path(path: &str) -> String {{
+    format!("{{}}{{}}", SKYPACK_URL, path)
+}}
+
 pub fn vega_url() -> String {{
-    format!("{{}}{{}}", SKYPACK_URL, VEGA_PATH)
+    url_for_path(VEGA_PATH)
 }}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]

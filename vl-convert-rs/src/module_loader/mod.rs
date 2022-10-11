@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 
 pub struct VlConvertModuleLoader {
-    import_map: HashMap<String, String>,
+    pub import_map: HashMap<String, String>,
 }
 
 impl VlConvertModuleLoader {

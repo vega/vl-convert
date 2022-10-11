@@ -9,8 +9,12 @@ use std::str::FromStr;
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/mode=imports,min/optimized/vega.js";
 
+pub fn url_for_path(path: &str) -> String {
+    format!("{}{}", SKYPACK_URL, path)
+}
+
 pub fn vega_url() -> String {
-    format!("{}{}", SKYPACK_URL, VEGA_PATH)
+    url_for_path(VEGA_PATH)
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
