@@ -1,7 +1,7 @@
 use rstest::rstest;
 use std::fs;
 use std::path::Path;
-use vl_convert_rs::VlVersion;
+use vl_convert_rs::{VlConverter, VlVersion};
 
 fn load_vl_spec(name: &str) -> serde_json::Value {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -44,12 +44,12 @@ mod test_reference_specs {
     #[rstest]
     fn test(
         #[values(
-            VlVersion::v4_17,
-            VlVersion::v5_0,
-            VlVersion::v5_1,
-            VlVersion::v5_2,
-            VlVersion::v5_3,
-            VlVersion::v5_4,
+            // VlVersion::v4_17,
+            // VlVersion::v5_0,
+            // VlVersion::v5_1,
+            // VlVersion::v5_2,
+            // VlVersion::v5_3,
+            // VlVersion::v5_4,
             VlVersion::v5_5
         )]
         vl_version: VlVersion,
@@ -84,4 +84,95 @@ mod test_reference_specs {
 
     #[test]
     fn test_marker() {} // Help IDE detect test module
+}
+
+
+mod test_reference_spec_svg {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::VlConverter;
+
+    #[rstest]
+    fn test(
+        #[values(
+        // VlVersion::v4_17,
+        // VlVersion::v5_0,
+        // VlVersion::v5_1,
+        // VlVersion::v5_2,
+        // VlVersion::v5_3,
+        // VlVersion::v5_4,
+        VlVersion::v5_5
+        )]
+        vl_version: VlVersion,
+
+        #[values(
+            "circle_binned",
+            // "seattle-weather"
+        )]
+        name: &str,
+    ) {
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
+
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
+
+        let vg_result = block_on(converter.vegalite_to_vega(vl_spec, vl_version, false)).unwrap();
+        let vg_spec: serde_json::Value = serde_json::from_str(&vg_result).unwrap();
+
+        let svg = block_on(converter.vega_to_svg(vg_spec)).unwrap();
+
+        println!("{}", svg);
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[tokio::test]
+async fn test_svg_font_metrics() {
+    let vl_spec: serde_json::Value = serde_json::from_str(r#"
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/barley.json"},
+  "mark": "bar",
+  "encoding": {
+    "x": {"aggregate": "sum", "field": "yield"},
+    "y": {"field": "variety"},
+    "color": {"field": "site"}
+  },
+  "config": {
+    "background": "aliceblue"
+  }
+}
+    "#).unwrap();
+
+//     let vl_spec: serde_json::Value = serde_json::from_str(r#"
+// {
+//   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+//   "data": {"url": "http://data/barley.json"},
+//   "mark": "bar",
+//   "encoding": {
+//     "x": {"aggregate": "sum", "field": "yield"},
+//     "y": {"field": "variety"},
+//     "color": {"field": "site"}
+//   }
+// }
+//     "#).unwrap();
+
+    let mut converter = VlConverter::new();
+    let vg_spec: serde_json::Value = serde_json::from_str(
+        &converter.vegalite_to_vega(vl_spec, VlVersion::v5_5, true).await.unwrap()
+    ).unwrap();
+
+    println!("vg_spec: {}", serde_json::to_string_pretty(&vg_spec).unwrap());
+    let svg = converter.vega_to_svg(vg_spec).await.unwrap();
+    println!("svg: {}", svg);
+
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let svg_path = root_path
+        .join("tests")
+        .join("output")
+        .join("stacked_bar_h.svg");
+    std::fs::write(svg_path, svg).unwrap();
 }

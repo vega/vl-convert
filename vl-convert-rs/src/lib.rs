@@ -2,6 +2,7 @@
 
 pub mod converter;
 pub mod module_loader;
+pub mod text;
 
 #[macro_use]
 extern crate lazy_static;

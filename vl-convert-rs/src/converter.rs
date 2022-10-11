@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
-use deno_runtime::deno_core::{serde_v8, v8};
+use deno_runtime::deno_core::{Extension, serde_v8, v8};
 
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_web::BlobStore;
@@ -15,13 +15,14 @@ use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::MainWorker;
 use deno_runtime::worker::WorkerOptions;
 use deno_runtime::BootstrapOptions;
-use deno_runtime::deno_core;
+use deno_runtime::{deno_core, deno_core::op};
 
 use std::thread;
 use std::thread::JoinHandle;
 
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
+use crate::text::op_text_width;
 
 lazy_static! {
     static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
@@ -49,6 +50,27 @@ impl InnerVlConverter {
 var vega;
 import('{vega_url}').then((imported) => {{
     vega = imported;
+}})
+
+
+// Hack to override textMetrics. We should do this for ever version of vega-scenegraph
+// that gets pulled in by deno vendor
+var sg_494;
+import('https://cdn.skypack.dev/-/vega-scenegraph@v4.9.4-Rfd7OGmaS9T7w10Fz4Yx/dist=es2020,mode=imports,min/optimized/vega-scenegraph.js').then((imported) => {{
+    sg_494 = imported;
+    sg_494.textMetrics.width = (item, text) => {{
+        let style = item.fontStyle;
+        let variant = item.fontVariant;
+        let weight = item.fontWeight;
+        let size = sg_494.fontSize(item);
+        let family = sg_494.fontFamily(item);
+
+        let text_info = JSON.stringify({{
+            style, variant, weight, size, family, text
+        }}, null, 2);
+
+        return Deno.core.ops.op_text_width(text_info)
+    }};
 }})
 "#,
                 vega_url = vega_url()
@@ -126,6 +148,13 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
     pub async fn try_new() -> Result<Self, AnyError> {
         let module_loader = Rc::new(VlConvertModuleLoader::new());
 
+        let ext = Extension::builder()
+            .ops(vec![
+                // Op to measure text width with resvg
+                op_text_width::decl(),
+            ])
+            .build();
+
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
@@ -148,7 +177,7 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
                 user_agent: "hello_runtime".to_string(),
                 inspect: false,
             },
-            extensions: vec![],
+            extensions: vec![ext],
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
             seed: None,
@@ -184,11 +213,13 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
         worker.execute_main_module(&main_module).await?;
         worker.run_event_loop(false).await?;
 
-        Ok(Self {
+        let mut this = Self {
             worker,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
-        })
+        };
+        this.init_vega();
+        Ok(this)
     }
 
     async fn execute_script_to_string(&mut self, script: &str) -> Result<String, AnyError> {
