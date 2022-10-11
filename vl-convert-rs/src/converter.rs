@@ -281,7 +281,6 @@ compileVegaLite_{ver_name:?}(
         let code = format!(
             r#"
 var svg;
-console.log("calling vegaToSvg");
 vegaToSvg(
     {vg_spec_str}
 ).then((result) => {{
@@ -447,7 +446,9 @@ impl VlConverter {
     pub async fn vega_to_png(
         &mut self,
         vg_spec: serde_json::Value,
+        scale: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
+        let scale = scale.unwrap_or(1.0);
         let svg = self.vega_to_svg(vg_spec).await?;
 
         let rtree = match usvg::Tree::from_str(&svg, &USVG_OPTIONS.to_ref()) {
@@ -458,8 +459,11 @@ impl VlConverter {
         };
 
         let pixmap_size = rtree.svg_node().size.to_screen_size();
-        let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height()).unwrap();
-        resvg::render(&rtree, usvg::FitTo::Original, tiny_skia::Transform::default(), pixmap.as_mut()).unwrap();
+        let mut pixmap = tiny_skia::Pixmap::new(
+            (pixmap_size.width() as f32 * scale) as u32,
+            (pixmap_size.height() as f32 * scale) as u32
+        ).unwrap();
+        resvg::render(&rtree, usvg::FitTo::Zoom(scale), tiny_skia::Transform::default(), pixmap.as_mut()).unwrap();
 
         match pixmap.encode_png() {
             Ok(png_data) => Ok(png_data),

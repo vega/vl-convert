@@ -201,7 +201,7 @@ async fn test_png() {
         &converter.vegalite_to_vega(vl_spec, VlVersion::v5_5, true).await.unwrap()
     ).unwrap();
 
-    let svg_data = converter.vega_to_png(vg_spec).await.unwrap();
+    let svg_data = converter.vega_to_png(vg_spec, Some(2.0)).await.unwrap();
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let png_path = root_path
         .join("tests")

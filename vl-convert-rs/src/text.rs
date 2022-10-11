@@ -68,10 +68,7 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
         Err(err) => bail!("Failed to deserialize text info: {}", err.to_string())
     };
 
-    println!("{:?}", text_info);
-
     let svg = text_info.to_svg();
-
     let rtree = usvg::Tree::from_str(&svg, &USVG_OPTIONS.to_ref()).expect("Failed to parse text SVG");
     for node in rtree.root().descendants() {
         if !rtree.is_in_defs(&node) {
@@ -80,7 +77,6 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
                 if let Some(ref bbox) = path.text_bbox {
                     let width = bbox.right() - bbox.left();
                     let height = bbox.bottom() - bbox.top();
-                    println!("width={} height={}", width, height);
                     return Ok(width)
                 }
             }

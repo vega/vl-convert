@@ -2,6 +2,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::str::FromStr;
 use std::sync::Mutex;
+use pyo3::types::PyBytes;
 use vl_convert_rs::converter::TOKIO_RUNTIME;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::serde_json;
@@ -89,7 +90,8 @@ impl VlConverter {
     fn vega_to_png(
         &mut self,
         vg_spec: &str,
-    ) -> PyResult<Vec<u8>> {
+        scale: Option<f32>,
+    ) -> PyResult<PyObject> {
         let vg_spec = match serde_json::from_str::<serde_json::Value>(vg_spec) {
             Ok(vg_spec) => vg_spec,
             Err(err) => {
@@ -104,7 +106,7 @@ impl VlConverter {
             .lock()
             .expect("Failed to acquire lock on Vega-Lite converter");
 
-        let png_data = match TOKIO_RUNTIME.block_on(converter.vega_to_png(vg_spec)) {
+        let png_data = match TOKIO_RUNTIME.block_on(converter.vega_to_png(vg_spec, scale)) {
             Ok(vega_spec) => vega_spec,
             Err(err) => {
                 return Err(PyValueError::new_err(format!(
@@ -113,7 +115,10 @@ impl VlConverter {
                 )))
             }
         };
-        Ok(png_data)
+
+        Ok(Python::with_gil(|py| -> PyObject {
+            PyObject::from(PyBytes::new(py, png_data.as_slice()))
+        }))
     }
 }
 
