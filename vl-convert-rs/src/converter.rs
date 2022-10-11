@@ -21,8 +21,14 @@ use std::thread;
 use std::thread::JoinHandle;
 
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
-use futures::executor::block_on;
 use futures_util::{SinkExt, StreamExt};
+
+lazy_static! {
+    static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+}
 
 fn get_error_class_name(e: &AnyError) -> &'static str {
     deno_runtime::errors::get_error_class_name(e).unwrap_or("Error")
@@ -243,6 +249,7 @@ compileVegaLite_{ver_name:?}(
         let code = format!(
             r#"
 var svg;
+console.log("calling vegaToSvg");
 vegaToSvg(
     {vg_spec_str}
 ).then((result) => {{
@@ -252,7 +259,7 @@ vegaToSvg(
             vg_spec_str = vg_spec_str,
         );
         self.worker.execute_script("<anon>", &code)?;
-        self.worker.run_event_loop(false);
+        self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
@@ -317,9 +324,9 @@ impl VlConverter {
         let (sender, mut receiver) = mpsc::channel::<VlConvertCommand>(32);
 
         let handle = Arc::new(thread::spawn(move || {
-            let mut inner = block_on(InnerVlConverter::try_new())?;
+            let mut inner = TOKIO_RUNTIME.block_on(InnerVlConverter::try_new())?;
 
-            while let Some(cmd) = block_on(receiver.next()) {
+            while let Some(cmd) = TOKIO_RUNTIME.block_on(receiver.next()) {
                 match cmd {
                     VlConvertCommand::VlToVg {
                         vl_spec,
@@ -328,12 +335,12 @@ impl VlConverter {
                         responder,
                     } => {
                         let vega_spec =
-                            block_on(inner.vegalite_to_vega(&vl_spec, vl_version, pretty));
+                            TOKIO_RUNTIME.block_on(inner.vegalite_to_vega(&vl_spec, vl_version, pretty));
                         responder.send(vega_spec).ok();
                     }
                     VlConvertCommand::VgToSvg { vg_spec, responder } => {
                         let vega_spec =
-                            block_on(inner.vega_to_svg(&vg_spec));
+                            TOKIO_RUNTIME.block_on(inner.vega_to_svg(&vg_spec));
                         responder.send(vega_spec).ok();
                     }
                 }

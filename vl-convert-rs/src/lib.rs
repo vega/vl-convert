@@ -3,6 +3,9 @@
 pub mod converter;
 pub mod module_loader;
 
+#[macro_use]
+extern crate lazy_static;
+
 pub use converter::VlConverter;
 pub use deno_runtime::deno_core::anyhow;
 pub use module_loader::import_map::VlVersion;
