@@ -176,3 +176,37 @@ async fn test_svg_font_metrics() {
         .join("stacked_bar_h.svg");
     std::fs::write(svg_path, svg).unwrap();
 }
+
+
+#[tokio::test]
+async fn test_png() {
+    let vl_spec: serde_json::Value = serde_json::from_str(r#"
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/barley.json"},
+  "mark": "bar",
+  "encoding": {
+    "x": {"aggregate": "sum", "field": "yield"},
+    "y": {"field": "variety"},
+    "color": {"field": "site"}
+  },
+  "config": {
+    "background": "aliceblue"
+  }
+}
+    "#).unwrap();
+
+    let mut converter = VlConverter::new();
+    let vg_spec: serde_json::Value = serde_json::from_str(
+        &converter.vegalite_to_vega(vl_spec, VlVersion::v5_5, true).await.unwrap()
+    ).unwrap();
+
+    let svg_data = converter.vega_to_png(vg_spec).await.unwrap();
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let png_path = root_path
+        .join("tests")
+        .join("output")
+        .join("stacked_bar_h_out.png");
+    std::fs::write(png_path, svg_data).unwrap();
+}
+

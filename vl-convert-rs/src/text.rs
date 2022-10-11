@@ -3,6 +3,19 @@ use deno_core::op;
 use serde::{Deserialize};
 use crate::anyhow::bail;
 
+lazy_static! {
+    pub static ref USVG_OPTIONS: usvg::Options = init_usvg_options();
+}
+
+fn init_usvg_options() -> usvg::Options {
+    let mut opt = usvg::Options::default();
+    opt.fontdb.load_system_fonts();
+    opt.fontdb.set_monospace_family("Courier New");
+    opt.fontdb.set_sans_serif_family("Arial");
+    opt.fontdb.set_serif_family("Times New Roman");
+    opt
+}
+
 #[derive(Deserialize, Clone, Debug)]
 struct TextInfo {
     style: Option<String>,
@@ -58,13 +71,8 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
     println!("{:?}", text_info);
 
     let svg = text_info.to_svg();
-    let mut opt = usvg::Options::default();
-    opt.fontdb.load_system_fonts();
-    opt.fontdb.set_monospace_family("Courier New");
-    opt.fontdb.set_sans_serif_family("Arial");
-    opt.fontdb.set_serif_family("Times New Roman");
 
-    let rtree = usvg::Tree::from_str(&svg, &opt.to_ref()).expect("Failed to parse text SVG");
+    let rtree = usvg::Tree::from_str(&svg, &USVG_OPTIONS.to_ref()).expect("Failed to parse text SVG");
     for node in rtree.root().descendants() {
         if !rtree.is_in_defs(&node) {
             // Text bboxes are different from path bboxes.

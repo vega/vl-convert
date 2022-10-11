@@ -22,10 +22,11 @@ use std::thread::JoinHandle;
 
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
-use crate::text::op_text_width;
+use usvg::{Error, Tree};
+use crate::text::{op_text_width, USVG_OPTIONS};
 
 lazy_static! {
-    static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+    pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap();
@@ -218,7 +219,7 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
         };
-        this.init_vega();
+
         Ok(this)
     }
 
@@ -440,6 +441,31 @@ impl VlConverter {
         match resp_rx.await {
             Ok(svg_result) => svg_result,
             Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+        }
+    }
+
+    pub async fn vega_to_png(
+        &mut self,
+        vg_spec: serde_json::Value,
+    ) -> Result<Vec<u8>, AnyError> {
+        let svg = self.vega_to_svg(vg_spec).await?;
+
+        let rtree = match usvg::Tree::from_str(&svg, &USVG_OPTIONS.to_ref()) {
+            Ok(rtree) => rtree,
+            Err(err) => {
+                bail!("Failed to parse SVG string: {}", err.to_string())
+            }
+        };
+
+        let pixmap_size = rtree.svg_node().size.to_screen_size();
+        let mut pixmap = tiny_skia::Pixmap::new(pixmap_size.width(), pixmap_size.height()).unwrap();
+        resvg::render(&rtree, usvg::FitTo::Original, tiny_skia::Transform::default(), pixmap.as_mut()).unwrap();
+
+        match pixmap.encode_png() {
+            Ok(png_data) => Ok(png_data),
+            Err(err) => {
+                bail!("Failed to encode PNG: {}", err.to_string())
+            }
         }
     }
 }

@@ -1,8 +1,8 @@
-use futures::executor::block_on;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::str::FromStr;
 use std::sync::Mutex;
+use vl_convert_rs::converter::TOKIO_RUNTIME;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::serde_json;
 use vl_convert_rs::VlConverter as VlConverterRs;
@@ -44,7 +44,7 @@ impl VlConverter {
         let mut converter = VL_CONVERTER
             .lock()
             .expect("Failed to acquire lock on Vega-Lite converter");
-        let vega_spec = match block_on(converter.vegalite_to_vega(vl_spec, vl_version, pretty)) {
+        let vega_spec = match TOKIO_RUNTIME.block_on(converter.vegalite_to_vega(vl_spec, vl_version, pretty)) {
             Ok(vega_spec) => vega_spec,
             Err(err) => {
                 return Err(PyValueError::new_err(format!(
@@ -54,6 +54,66 @@ impl VlConverter {
             }
         };
         Ok(vega_spec)
+    }
+
+    fn vega_to_svg(
+        &mut self,
+        vg_spec: &str,
+    ) -> PyResult<String> {
+        let vg_spec = match serde_json::from_str::<serde_json::Value>(vg_spec) {
+            Ok(vg_spec) => vg_spec,
+            Err(err) => {
+                return Err(PyValueError::new_err(format!(
+                    "Failed to parse vg_spec as JSON: {}",
+                    err
+                )))
+            }
+        };
+
+        let mut converter = VL_CONVERTER
+            .lock()
+            .expect("Failed to acquire lock on Vega-Lite converter");
+
+        let svg = match TOKIO_RUNTIME.block_on(converter.vega_to_svg(vg_spec)) {
+            Ok(vega_spec) => vega_spec,
+            Err(err) => {
+                return Err(PyValueError::new_err(format!(
+                    "Vega to SVG conversion failed:\n{}",
+                    err
+                )))
+            }
+        };
+        Ok(svg)
+    }
+
+    fn vega_to_png(
+        &mut self,
+        vg_spec: &str,
+    ) -> PyResult<Vec<u8>> {
+        let vg_spec = match serde_json::from_str::<serde_json::Value>(vg_spec) {
+            Ok(vg_spec) => vg_spec,
+            Err(err) => {
+                return Err(PyValueError::new_err(format!(
+                    "Failed to parse vg_spec as JSON: {}",
+                    err
+                )))
+            }
+        };
+
+        let mut converter = VL_CONVERTER
+            .lock()
+            .expect("Failed to acquire lock on Vega-Lite converter");
+
+        let png_data = match TOKIO_RUNTIME.block_on(converter.vega_to_png(vg_spec)) {
+            Ok(vega_spec) => vega_spec,
+            Err(err) => {
+                return Err(PyValueError::new_err(format!(
+                    "Vega to SVG conversion failed:\n{}",
+                    err
+                )))
+            }
+        };
+        Ok(png_data)
     }
 }
 
