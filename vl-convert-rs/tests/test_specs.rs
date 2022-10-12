@@ -70,12 +70,12 @@ mod test_reference_specs {
     #[rstest]
     fn test(
         #[values(
-            // VlVersion::v4_17,
-            // VlVersion::v5_0,
-            // VlVersion::v5_1,
-            // VlVersion::v5_2,
-            // VlVersion::v5_3,
-            // VlVersion::v5_4,
+            VlVersion::v4_17,
+            VlVersion::v5_0,
+            VlVersion::v5_1,
+            VlVersion::v5_2,
+            VlVersion::v5_3,
+            VlVersion::v5_4,
             VlVersion::v5_5
         )]
         vl_version: VlVersion,
@@ -109,47 +109,47 @@ mod test_reference_specs {
     fn test_marker() {} // Help IDE detect test module
 }
 
-mod test_reference_spec_svg {
-    use crate::*;
-    use futures::executor::block_on;
-    use vl_convert_rs::VlConverter;
-
-    #[rstest]
-    fn test(
-        #[values(
-        // VlVersion::v4_17,
-        // VlVersion::v5_0,
-        // VlVersion::v5_1,
-        // VlVersion::v5_2,
-        // VlVersion::v5_3,
-        // VlVersion::v5_4,
-        VlVersion::v5_5
-        )]
-        vl_version: VlVersion,
-
-        #[values(
-            "circle_binned",
-            // "seattle-weather"
-        )]
-        name: &str,
-    ) {
-        // Load example Vega-Lite spec
-        let vl_spec = load_vl_spec(name);
-
-        // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
-
-        let vg_result = block_on(converter.vegalite_to_vega(vl_spec, vl_version, false)).unwrap();
-        let vg_spec: serde_json::Value = serde_json::from_str(&vg_result).unwrap();
-
-        let svg = block_on(converter.vega_to_svg(vg_spec)).unwrap();
-
-        println!("{}", svg);
-    }
-
-    #[test]
-    fn test_marker() {} // Help IDE detect test module
-}
+// mod test_reference_spec_svg {
+//     use crate::*;
+//     use futures::executor::block_on;
+//     use vl_convert_rs::VlConverter;
+//
+//     #[rstest]
+//     fn test(
+//         #[values(
+//         // VlVersion::v4_17,
+//         // VlVersion::v5_0,
+//         // VlVersion::v5_1,
+//         // VlVersion::v5_2,
+//         // VlVersion::v5_3,
+//         // VlVersion::v5_4,
+//         VlVersion::v5_5
+//         )]
+//         vl_version: VlVersion,
+//
+//         #[values(
+//             "circle_binned",
+//             // "seattle-weather"
+//         )]
+//         name: &str,
+//     ) {
+//         // Load example Vega-Lite spec
+//         let vl_spec = load_vl_spec(name);
+//
+//         // Create Vega-Lite Converter and perform conversion
+//         let mut converter = VlConverter::new();
+//
+//         let vg_result = block_on(converter.vegalite_to_vega(vl_spec, vl_version, false)).unwrap();
+//         let vg_spec: serde_json::Value = serde_json::from_str(&vg_result).unwrap();
+//
+//         let svg = block_on(converter.vega_to_svg(vg_spec)).unwrap();
+//
+//         println!("{}", svg);
+//     }
+//
+//     #[test]
+//     fn test_marker() {} // Help IDE detect test module
+// }
 
 #[tokio::test]
 async fn test_svg() {
