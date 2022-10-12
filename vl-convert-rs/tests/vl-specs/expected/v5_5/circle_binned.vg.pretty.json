@@ -8,7 +8,7 @@
   "data": [
     {
       "name": "source_0",
-      "url": "data/movies.json",
+      "url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/movies.json",
       "format": {
         "type": "json"
       },
