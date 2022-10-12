@@ -73,6 +73,11 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - name: Install fonts on Linux
+        if: runner.os == 'Linux'
+        run: |
+          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+          sudo apt-get install ttf-mscorefonts-installer
       - uses: actions-rs/cargo@v1
         with:
           command: test
