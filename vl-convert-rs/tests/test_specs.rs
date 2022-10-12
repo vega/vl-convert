@@ -36,6 +36,32 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion, pretty: bool) -> Opt
     }
 }
 
+fn load_expected_svg(name: &str, vl_version: VlVersion) -> String {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let spec_path = root_path
+        .join("tests")
+        .join("vl-specs")
+        .join("expected")
+        .join(&format!("{:?}", vl_version))
+        .join(format!("{}.svg", name));
+    let svg_str = fs::read_to_string(&spec_path)
+        .unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
+    svg_str
+}
+
+fn load_expected_png(name: &str, vl_version: VlVersion) -> Vec<u8> {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let spec_path = root_path
+        .join("tests")
+        .join("vl-specs")
+        .join("expected")
+        .join(&format!("{:?}", vl_version))
+        .join(format!("{}.png", name));
+    let png_data = fs::read(&spec_path)
+        .unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
+    png_data
+}
+
 mod test_reference_specs {
     use crate::*;
     use futures::executor::block_on;
@@ -69,8 +95,6 @@ mod test_reference_specs {
         match load_expected_vg_spec(name, vl_version, pretty) {
             Some(expected_vg_spec) => {
                 // Conversion is expected to succeed and match this
-                println!("expected_vg_spec:\n{}", expected_vg_spec);
-
                 let vg_result = vg_result.expect("Vega-Lite to Vega conversion failed");
                 assert_eq!(vg_result, expected_vg_spec)
             }
@@ -79,7 +103,6 @@ mod test_reference_specs {
                 assert!(vg_result.is_err())
             }
         }
-        println!("{:?}", vl_version);
     }
 
     #[test]
@@ -129,98 +152,61 @@ mod test_reference_spec_svg {
 }
 
 #[tokio::test]
-async fn test_svg_font_metrics() {
-    let vl_spec: serde_json::Value = serde_json::from_str(
-        r#"
-{
-  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/barley.json"},
-  "mark": "bar",
-  "encoding": {
-    "x": {"aggregate": "sum", "field": "yield"},
-    "y": {"field": "variety"},
-    "color": {"field": "site"}
-  },
-  "config": {
-    "background": "aliceblue"
-  }
-}
-    "#,
-    )
-    .unwrap();
-
-    //     let vl_spec: serde_json::Value = serde_json::from_str(r#"
-    // {
-    //   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-    //   "data": {"url": "http://data/barley.json"},
-    //   "mark": "bar",
-    //   "encoding": {
-    //     "x": {"aggregate": "sum", "field": "yield"},
-    //     "y": {"field": "variety"},
-    //     "color": {"field": "site"}
-    //   }
-    // }
-    //     "#).unwrap();
+async fn test_svg() {
+    let name = "stacked_bar_h";
+    let vl_version = VlVersion::v5_5;
+    let vl_spec = load_vl_spec(name);
 
     let mut converter = VlConverter::new();
     let vg_spec: serde_json::Value = serde_json::from_str(
         &converter
-            .vegalite_to_vega(vl_spec, VlVersion::v5_5, true)
+            .vegalite_to_vega(vl_spec, vl_version, true)
             .await
             .unwrap(),
     )
     .unwrap();
 
-    println!(
-        "vg_spec: {}",
-        serde_json::to_string_pretty(&vg_spec).unwrap()
-    );
     let svg = converter.vega_to_svg(vg_spec).await.unwrap();
-    println!("svg: {}", svg);
+    let expected_svg = load_expected_svg(name, vl_version);
+    assert_eq!(svg, expected_svg);
 
-    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let svg_path = root_path
-        .join("tests")
-        .join("output")
-        .join("stacked_bar_h.svg");
-    std::fs::write(svg_path, svg).unwrap();
+    // // Write out reference image
+    // let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // let svg_path = root_path
+    //     .join("tests")
+    //     .join("vl-specs")
+    //     .join("expected")
+    //     .join(format!("{:?}", vl_version))
+    //     .join(format!("{}.svg", name));
+    // std::fs::write(svg_path, svg).unwrap();
 }
 
 #[tokio::test]
 async fn test_png() {
-    let vl_spec: serde_json::Value = serde_json::from_str(
-        r#"
-{
-  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/barley.json"},
-  "mark": "bar",
-  "encoding": {
-    "x": {"aggregate": "sum", "field": "yield"},
-    "y": {"field": "variety"},
-    "color": {"field": "site"}
-  },
-  "config": {
-    "background": "aliceblue"
-  }
-}
-    "#,
-    )
-    .unwrap();
+    let name = "stacked_bar_h";
+    let vl_version = VlVersion::v5_5;
+    let vl_spec = load_vl_spec(name);
 
     let mut converter = VlConverter::new();
     let vg_spec: serde_json::Value = serde_json::from_str(
         &converter
-            .vegalite_to_vega(vl_spec, VlVersion::v5_5, true)
+            .vegalite_to_vega(vl_spec, vl_version, true)
             .await
             .unwrap(),
     )
-    .unwrap();
+        .unwrap();
 
-    let svg_data = converter.vega_to_png(vg_spec, Some(2.0)).await.unwrap();
+    let png_data = converter.vega_to_png(vg_spec, Some(2.0)).await.unwrap();
+    let expected_png_data = load_expected_png(name, vl_version);
+    assert_eq!(png_data, expected_png_data);
+
+    // Write out reference image
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let png_path = root_path
         .join("tests")
-        .join("output")
-        .join("stacked_bar_h_out.png");
-    std::fs::write(png_path, svg_data).unwrap();
+        .join("vl-specs")
+        .join("expected")
+        .join(format!("{:?}", vl_version))
+        .join(format!("{}.png", name));
+    std::fs::write(png_path, png_data).unwrap();
 }
