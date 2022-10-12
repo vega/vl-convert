@@ -1,90 +1,243 @@
 #![doc = include_str!("../README.md")]
 
-use clap::Parser;
+use clap::{Parser, Subcommand, arg};
 use std::str::FromStr;
 use vl_convert_rs::converter::VlConverter;
 use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::{anyhow, anyhow::bail};
 
-/// vl-convert: A utility for converting Vega-Lite specifications into Vega specification
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
-struct Args {
-    /// Path to input Vega-Lite file
-    #[clap(short, long)]
-    pub input_vegalite_file: String,
-
-    /// Path to output Vega file to be created
-    #[clap(short, long)]
-    pub output_vega_file: String,
-
-    /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5
-    #[clap(short, long, default_value = "5.5")]
-    pub vl_version: String,
-
-    /// Pretty-print JSON in output file
-    #[clap(short, long)]
-    pub pretty: bool,
+#[derive(Debug, Parser)] // requires `derive` feature
+#[command(name = "vl-convert")]
+#[command(about = "vl-convert: A utility for converting Vega-Lite specifications", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
 }
 
-#[tokio::main]
-async fn main() {
-    let args: Args = Args::parse();
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// Convert a Vega-Lite specification to a Vega specification
+    #[command(arg_required_else_help = true)]
+    Vl2vg {
+        /// Path to input Vega-Lite file
+        #[arg(short, long)]
+        input: String,
 
-    // Parse version
-    let vl_version = if let Ok(vl_version) = VlVersion::from_str(&args.vl_version) {
-        vl_version
+        /// Path to output Vega file to be created
+        #[arg(short, long)]
+        output: String,
+
+        /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5
+        #[arg(short, long, default_value = "5.5")]
+        vl_version: String,
+
+        /// Pretty-print JSON in output file
+        #[arg(short, long)]
+        pretty: bool,
+    },
+
+    /// Convert a Vega specification to an SVG image
+    #[command(arg_required_else_help = true)]
+    Vg2svg {
+        /// Path to input Vega file
+        #[arg(short, long)]
+        input: String,
+
+        /// Path to output SVG file to be created
+        #[arg(short, long)]
+        output: String,
+    },
+
+    /// Convert a Vega specification to an PNG image
+    #[command(arg_required_else_help = true)]
+    Vg2png {
+        /// Path to input Vega file
+        #[arg(short, long)]
+        input: String,
+
+        /// Path to output PNG file to be created
+        #[arg(short, long)]
+        output: String,
+
+        /// Image scale factor
+        #[arg(short, long, default_value = "1.0")]
+        scale: f32
+    }
+}
+
+
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
+    let args = Cli::parse();
+    use crate::Commands::*;
+    match args.command {
+        Vl2vg { input: input_vegalite_file, output: output_vega_file, vl_version, pretty } => {
+            vl_2_vg(
+                &input_vegalite_file, &output_vega_file, &vl_version, pretty
+            ).await?
+        }
+        Vg2svg { input, output } => {
+            vg_2_svg(
+                &input, &output
+            ).await?
+        }
+        Vg2png { input, output, scale } => {
+            vg_2_png(&input, &output, scale).await?
+        }
+    }
+
+    Ok(())
+}
+
+
+fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
+    if let Ok(vl_version) = VlVersion::from_str(vl_version) {
+        Ok(vl_version)
     } else {
-        println!(
+        bail!(
             "Invalid or unsupported Vega-Lite version: {}",
-            args.vl_version
+            vl_version
         );
-        return;
-    };
+    }
+}
+
+fn read_input_string(input: &str) -> Result<String, anyhow::Error> {
+    match std::fs::read_to_string(&input) {
+        Ok(input_str) => Ok(input_str),
+        Err(err) => {
+            bail!(
+                "Failed to read input file: {}\n{}",
+                input, err
+            );
+        }
+    }
+}
+
+fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow::Error> {
+    match serde_json::from_str::<serde_json::Value>(&input_str) {
+        Ok(input_json) => Ok(input_json),
+        Err(err) => {
+            bail!("Failed to parse input file as JSON: {}", err);
+        }
+    }
+}
+
+fn write_output_string(output: &str, output_str: &str) -> Result<(), anyhow::Error> {
+    match std::fs::write(&output, output_str) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            bail!(
+                "Failed to write converted output to {}\n{}",
+                output, err
+            );
+        }
+    }
+}
+
+fn write_output_binary(output: &str, output_data: &[u8]) -> Result<(), anyhow::Error> {
+    match std::fs::write(&output, output_data) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            bail!(
+                "Failed to write converted output to {}\n{}",
+                output, err
+            );
+        }
+    }
+}
+
+async fn vl_2_vg(
+    input: &str,
+    output: &str,
+    vl_version: &str,
+    pretty: bool
+) -> Result<(), anyhow::Error>{
+    // Parse version
+    let vl_version = parse_vl_version(vl_version)?;
 
     // Read input file
-    let vegalite_str = match std::fs::read_to_string(&args.input_vegalite_file) {
-        Ok(vegalite_str) => vegalite_str,
-        Err(err) => {
-            println!(
-                "Failed to read input file: {}\n{}",
-                args.input_vegalite_file, err
-            );
-            return;
-        }
-    };
+    let vegalite_str = read_input_string(&input)?;
 
     // Parse input as json
-    let vegalite_json = match serde_json::from_str::<serde_json::Value>(&vegalite_str) {
-        Ok(vegalite_json) => vegalite_json,
-        Err(err) => {
-            println!("Failed to parse input file as JSON: {}", err);
-            return;
-        }
-    };
+    let vegalite_json = parse_as_json(&vegalite_str)?;
 
     // Initialize converter
     let mut converter = VlConverter::new();
 
     // Perform conversion
     let vega_str = match converter
-        .vegalite_to_vega(vegalite_json, vl_version, args.pretty)
+        .vegalite_to_vega(vegalite_json, vl_version, pretty)
         .await
     {
         Ok(vega_str) => vega_str,
         Err(err) => {
-            println!("Vega-Lite to Vega conversion failed: {}", err);
-            return;
+            bail!("Vega-Lite to Vega conversion failed: {}", err);
         }
     };
 
     // Write result
-    match std::fs::write(&args.output_vega_file, vega_str) {
-        Ok(_) => {}
+    write_output_string(&output, &vega_str)?;
+
+    Ok(())
+}
+
+async fn vg_2_svg(
+    input: &str,
+    output: &str,
+) -> Result<(), anyhow::Error> {
+    // Read input file
+    let vega_str = read_input_string(&input)?;
+
+    // Parse input as json
+    let vg_spec = parse_as_json(&vega_str)?;
+
+    // Initialize converter
+    let mut converter = VlConverter::new();
+
+    // Perform conversion
+    let svg = match converter
+        .vega_to_svg(vg_spec)
+        .await
+    {
+        Ok(svg) => svg,
         Err(err) => {
-            println!(
-                "Failed to write conversion output to {}\n{}",
-                args.output_vega_file, err
-            );
+            bail!("Vega-Lite to Vega conversion failed: {}", err);
         }
-    }
+    };
+
+    // Write result
+    write_output_string(&output, &svg)?;
+
+    Ok(())
+}
+
+async fn vg_2_png(
+    input: &str,
+    output: &str,
+    scale: f32,
+) -> Result<(), anyhow::Error> {
+    // Read input file
+    let vega_str = read_input_string(&input)?;
+
+    // Parse input as json
+    let vg_spec = parse_as_json(&vega_str)?;
+
+    // Initialize converter
+    let mut converter = VlConverter::new();
+
+    // Perform conversion
+    let png_data = match converter
+        .vega_to_png(vg_spec, Some(scale))
+        .await
+    {
+        Ok(png_data) => png_data,
+        Err(err) => {
+            bail!("Vega-Lite to Vega conversion failed: {}", err);
+        }
+    };
+
+    // Write result
+    write_output_binary(&output, &png_data)?;
+
+    Ok(())
 }
