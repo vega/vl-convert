@@ -1,0 +1,16 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/barley.json"},
+  "mark": "bar",
+  "encoding": {
+    "x": {"aggregate": "sum", "field": "yield"},
+    "y": {"field": "variety"},
+    "color": {"field": "site"}
+  },
+  "title": "Figure Title",
+  "config": {
+    "axis": {"labelFont": "monospace", "titleFont": "serif"},
+    "legend": {"labelFont": "sans-serif", "titleFont": "serif"},
+    "title": {"font": "Impact"}
+  }
+}
