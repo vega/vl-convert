@@ -62,6 +62,7 @@ fn load_expected_png(name: &str, vl_version: VlVersion) -> Vec<u8> {
     png_data
 }
 
+#[rustfmt::skip]
 mod test_reference_specs {
     use crate::*;
     use futures::executor::block_on;
@@ -80,9 +81,11 @@ mod test_reference_specs {
         )]
         vl_version: VlVersion,
 
-        #[values("circle_binned", "seattle-weather")] name: &str,
+        #[values("circle_binned", "seattle-weather", "stacked_bar_h")]
+        name: &str,
 
-        #[values(false, true)] pretty: bool,
+        #[values(false, true)]
+        pretty: bool,
     ) {
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
