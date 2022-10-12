@@ -6,6 +6,8 @@ use vl_convert_rs::converter::VlConverter;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
+const DEFAULT_VL_VERSION: &str = "5.5";
+
 #[derive(Debug, Parser)] // requires `derive` feature
 #[command(name = "vl-convert")]
 #[command(about = "vl-convert: A utility for converting Vega-Lite specifications", long_about = None)]
@@ -28,7 +30,7 @@ enum Commands {
         output: String,
 
         /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5
-        #[arg(short, long, default_value = "5.5")]
+        #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
         /// Pretty-print JSON in output file
@@ -48,7 +50,7 @@ enum Commands {
         output: String,
 
         /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5
-        #[arg(short, long, default_value = "5.5")]
+        #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
     },
 
@@ -64,7 +66,7 @@ enum Commands {
         output: String,
 
         /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5
-        #[arg(short, long, default_value = "5.5")]
+        #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
         /// Image scale factor
