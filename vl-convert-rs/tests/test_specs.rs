@@ -44,8 +44,8 @@ fn load_expected_svg(name: &str, vl_version: VlVersion) -> String {
         .join("expected")
         .join(&format!("{:?}", vl_version))
         .join(format!("{}.svg", name));
-    let svg_str = fs::read_to_string(&spec_path)
-        .unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
+    let svg_str =
+        fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
     svg_str
 }
 
@@ -57,8 +57,8 @@ fn load_expected_png(name: &str, vl_version: VlVersion) -> Vec<u8> {
         .join("expected")
         .join(&format!("{:?}", vl_version))
         .join(format!("{}.png", name));
-    let png_data = fs::read(&spec_path)
-        .unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
+    let png_data =
+        fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
     png_data
 }
 
@@ -194,7 +194,7 @@ async fn test_png() {
             .await
             .unwrap(),
     )
-        .unwrap();
+    .unwrap();
 
     let png_data = converter.vega_to_png(vg_spec, Some(2.0)).await.unwrap();
     let expected_png_data = load_expected_png(name, vl_version);
