@@ -81,6 +81,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+    - name: Cargo tree
+      run: |
+        cargo tree
     - uses: messense/maturin-action@v1
       with:
         manylinux: auto
@@ -96,6 +99,9 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v3
+    - name: Cargo tree
+      run: |
+        cargo tree
     - uses: messense/maturin-action@v1
       with:
         command: build
@@ -110,6 +116,9 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
+    - name: Cargo tree
+      run: |
+        cargo tree
     - name: Download Apple Silicon toolchain
       run: |
         rustup target add aarch64-apple-darwin
