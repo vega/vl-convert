@@ -86,7 +86,6 @@ mod test_reference_specs {
     fn test_marker() {} // Help IDE detect test module
 }
 
-
 mod test_reference_spec_svg {
     use crate::*;
     use futures::executor::block_on;
@@ -131,7 +130,8 @@ mod test_reference_spec_svg {
 
 #[tokio::test]
 async fn test_svg_font_metrics() {
-    let vl_spec: serde_json::Value = serde_json::from_str(r#"
+    let vl_spec: serde_json::Value = serde_json::from_str(
+        r#"
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
   "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/barley.json"},
@@ -145,27 +145,36 @@ async fn test_svg_font_metrics() {
     "background": "aliceblue"
   }
 }
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
-//     let vl_spec: serde_json::Value = serde_json::from_str(r#"
-// {
-//   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-//   "data": {"url": "http://data/barley.json"},
-//   "mark": "bar",
-//   "encoding": {
-//     "x": {"aggregate": "sum", "field": "yield"},
-//     "y": {"field": "variety"},
-//     "color": {"field": "site"}
-//   }
-// }
-//     "#).unwrap();
+    //     let vl_spec: serde_json::Value = serde_json::from_str(r#"
+    // {
+    //   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    //   "data": {"url": "http://data/barley.json"},
+    //   "mark": "bar",
+    //   "encoding": {
+    //     "x": {"aggregate": "sum", "field": "yield"},
+    //     "y": {"field": "variety"},
+    //     "color": {"field": "site"}
+    //   }
+    // }
+    //     "#).unwrap();
 
     let mut converter = VlConverter::new();
     let vg_spec: serde_json::Value = serde_json::from_str(
-        &converter.vegalite_to_vega(vl_spec, VlVersion::v5_5, true).await.unwrap()
-    ).unwrap();
+        &converter
+            .vegalite_to_vega(vl_spec, VlVersion::v5_5, true)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
 
-    println!("vg_spec: {}", serde_json::to_string_pretty(&vg_spec).unwrap());
+    println!(
+        "vg_spec: {}",
+        serde_json::to_string_pretty(&vg_spec).unwrap()
+    );
     let svg = converter.vega_to_svg(vg_spec).await.unwrap();
     println!("svg: {}", svg);
 
@@ -177,10 +186,10 @@ async fn test_svg_font_metrics() {
     std::fs::write(svg_path, svg).unwrap();
 }
 
-
 #[tokio::test]
 async fn test_png() {
-    let vl_spec: serde_json::Value = serde_json::from_str(r#"
+    let vl_spec: serde_json::Value = serde_json::from_str(
+        r#"
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
   "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/barley.json"},
@@ -194,12 +203,18 @@ async fn test_png() {
     "background": "aliceblue"
   }
 }
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     let mut converter = VlConverter::new();
     let vg_spec: serde_json::Value = serde_json::from_str(
-        &converter.vegalite_to_vega(vl_spec, VlVersion::v5_5, true).await.unwrap()
-    ).unwrap();
+        &converter
+            .vegalite_to_vega(vl_spec, VlVersion::v5_5, true)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
 
     let svg_data = converter.vega_to_png(vg_spec, Some(2.0)).await.unwrap();
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -209,4 +224,3 @@ async fn test_png() {
         .join("stacked_bar_h_out.png");
     std::fs::write(png_path, svg_data).unwrap();
 }
-

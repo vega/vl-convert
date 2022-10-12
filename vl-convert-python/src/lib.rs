@@ -1,8 +1,8 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use std::str::FromStr;
 use std::sync::Mutex;
-use pyo3::types::PyBytes;
 use vl_convert_rs::converter::TOKIO_RUNTIME;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::serde_json;
@@ -45,22 +45,20 @@ impl VlConverter {
         let mut converter = VL_CONVERTER
             .lock()
             .expect("Failed to acquire lock on Vega-Lite converter");
-        let vega_spec = match TOKIO_RUNTIME.block_on(converter.vegalite_to_vega(vl_spec, vl_version, pretty)) {
-            Ok(vega_spec) => vega_spec,
-            Err(err) => {
-                return Err(PyValueError::new_err(format!(
-                    "Vega-Lite to Vega conversion failed:\n{}",
-                    err
-                )))
-            }
-        };
+        let vega_spec =
+            match TOKIO_RUNTIME.block_on(converter.vegalite_to_vega(vl_spec, vl_version, pretty)) {
+                Ok(vega_spec) => vega_spec,
+                Err(err) => {
+                    return Err(PyValueError::new_err(format!(
+                        "Vega-Lite to Vega conversion failed:\n{}",
+                        err
+                    )))
+                }
+            };
         Ok(vega_spec)
     }
 
-    fn vega_to_svg(
-        &mut self,
-        vg_spec: &str,
-    ) -> PyResult<String> {
+    fn vega_to_svg(&mut self, vg_spec: &str) -> PyResult<String> {
         let vg_spec = match serde_json::from_str::<serde_json::Value>(vg_spec) {
             Ok(vg_spec) => vg_spec,
             Err(err) => {
@@ -87,11 +85,7 @@ impl VlConverter {
         Ok(svg)
     }
 
-    fn vega_to_png(
-        &mut self,
-        vg_spec: &str,
-        scale: Option<f32>,
-    ) -> PyResult<PyObject> {
+    fn vega_to_png(&mut self, vg_spec: &str, scale: Option<f32>) -> PyResult<PyObject> {
         let vg_spec = match serde_json::from_str::<serde_json::Value>(vg_spec) {
             Ok(vg_spec) => vg_spec,
             Err(err) => {

@@ -36,7 +36,6 @@ const VL_PATHS: &[(&str, &str)] = &[
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/mode=imports,min/optimized/vega.js";
 
-
 // Example custom build script.
 fn main() {
     // Make sure vendor directory exists
@@ -68,7 +67,7 @@ fn main() {
         SKYPACK_URL = SKYPACK_URL,
         VEGA_PATH = VEGA_PATH
     )
-        .unwrap();
+    .unwrap();
     fs::write(&importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory

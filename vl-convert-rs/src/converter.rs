@@ -1,4 +1,4 @@
-use crate::module_loader::import_map::{VlVersion, vega_url, url_for_path};
+use crate::module_loader::import_map::{url_for_path, vega_url, VlVersion};
 use crate::module_loader::VlConvertModuleLoader;
 use std::collections::HashSet;
 use std::path::Path;
@@ -7,29 +7,30 @@ use std::sync::Arc;
 
 use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
-use deno_runtime::deno_core::{Extension, serde_v8, v8};
+use deno_runtime::deno_core::{serde_v8, v8, Extension};
 
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
+use deno_runtime::deno_core;
 use deno_runtime::deno_web::BlobStore;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::MainWorker;
 use deno_runtime::worker::WorkerOptions;
 use deno_runtime::BootstrapOptions;
-use deno_runtime::{deno_core, deno_core::op};
 
 use std::thread;
 use std::thread::JoinHandle;
 
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
-use usvg::{Error, Tree};
+
 use crate::text::{op_text_width, USVG_OPTIONS};
 
 lazy_static! {
-    pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap();
+    pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime =
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 }
 
 fn get_error_class_name(e: &AnyError) -> &'static str {
@@ -80,7 +81,7 @@ import('{url}').then((sg) => {{
     }};
 }})
 "#,
-                        url=url_for_path(path)
+                        url = url_for_path(path)
                     );
                     self.worker.execute_script("<anon>", &script)?;
                     self.worker.run_event_loop(false).await?;
@@ -88,8 +89,7 @@ import('{url}').then((sg) => {{
             }
 
             // Create and initialize svg function string
-            let function_str =
-                r#"
+            let function_str = r#"
 function vegaToSvg(vgSpec) {
     let runtime = vega.parse(vgSpec);
     let view = new vega.View(runtime, {renderer: 'none'});
@@ -98,7 +98,7 @@ function vegaToSvg(vgSpec) {
 }
 "#;
 
-            self.worker.execute_script("<anon>", &function_str)?;
+            self.worker.execute_script("<anon>", function_str)?;
             self.worker.run_event_loop(false).await?;
 
             self.vega_initialized = true;
@@ -206,20 +206,16 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
             stdio: Default::default(),
         };
 
-        let js_path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("vl-convert-rs.js");
+        let js_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("vl-convert-rs.js");
         let main_module = deno_core::resolve_path(&js_path.to_string_lossy())?;
         let permissions = Permissions::allow_all();
 
-        let mut worker = MainWorker::bootstrap_from_options(
-            main_module.clone(),
-            permissions,
-            options,
-        );
+        let mut worker =
+            MainWorker::bootstrap_from_options(main_module.clone(), permissions, options);
         worker.execute_main_module(&main_module).await?;
         worker.run_event_loop(false).await?;
 
-        let mut this = Self {
+        let this = Self {
             worker,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
@@ -277,10 +273,7 @@ compileVegaLite_{ver_name:?}(
         Ok(value)
     }
 
-    pub async fn vega_to_svg(
-        &mut self,
-        vg_spec: &serde_json::Value,
-    ) -> Result<String, AnyError> {
+    pub async fn vega_to_svg(&mut self, vg_spec: &serde_json::Value) -> Result<String, AnyError> {
         self.init_vega().await?;
 
         let vg_spec_str = serde_json::to_string(vg_spec)?;
@@ -313,7 +306,7 @@ pub enum VlConvertCommand {
     VgToSvg {
         vg_spec: serde_json::Value,
         responder: oneshot::Sender<Result<String, AnyError>>,
-    }
+    },
 }
 
 /// Struct for performing Vega-Lite to Vega conversions using the Deno v8 Runtime
@@ -371,13 +364,12 @@ impl VlConverter {
                         pretty,
                         responder,
                     } => {
-                        let vega_spec =
-                            TOKIO_RUNTIME.block_on(inner.vegalite_to_vega(&vl_spec, vl_version, pretty));
+                        let vega_spec = TOKIO_RUNTIME
+                            .block_on(inner.vegalite_to_vega(&vl_spec, vl_version, pretty));
                         responder.send(vega_spec).ok();
                     }
                     VlConvertCommand::VgToSvg { vg_spec, responder } => {
-                        let vega_spec =
-                            TOKIO_RUNTIME.block_on(inner.vega_to_svg(&vg_spec));
+                        let vega_spec = TOKIO_RUNTIME.block_on(inner.vega_to_svg(&vg_spec));
                         responder.send(vega_spec).ok();
                     }
                 }
@@ -422,10 +414,7 @@ impl VlConverter {
         }
     }
 
-    pub async fn vega_to_svg(
-        &mut self,
-        vg_spec: serde_json::Value,
-    ) -> Result<String, AnyError> {
+    pub async fn vega_to_svg(&mut self, vg_spec: serde_json::Value) -> Result<String, AnyError> {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
         let cmd = VlConvertCommand::VgToSvg {
             vg_spec,
@@ -467,9 +456,16 @@ impl VlConverter {
         let pixmap_size = rtree.svg_node().size.to_screen_size();
         let mut pixmap = tiny_skia::Pixmap::new(
             (pixmap_size.width() as f32 * scale) as u32,
-            (pixmap_size.height() as f32 * scale) as u32
-        ).unwrap();
-        resvg::render(&rtree, usvg::FitTo::Zoom(scale), tiny_skia::Transform::default(), pixmap.as_mut()).unwrap();
+            (pixmap_size.height() as f32 * scale) as u32,
+        )
+        .unwrap();
+        resvg::render(
+            &rtree,
+            usvg::FitTo::Zoom(scale),
+            tiny_skia::Transform::default(),
+            pixmap.as_mut(),
+        )
+        .unwrap();
 
         match pixmap.encode_png() {
             Ok(png_data) => Ok(png_data),
