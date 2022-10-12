@@ -137,6 +137,12 @@ function compileVegaLite_{ver_name}(vlSpec, pretty) {{
         return JSON.stringify(vgSpec)
     }}
 }}
+
+function vegaLiteToSvg_{ver_name}(vlSpec) {{
+    let options = {{}};
+    let vgSpec = {ver_name}.compile(vlSpec, options).spec;
+    return vegaToSvg(vgSpec)
+}}
 "#,
                 ver_name = format!("{:?}", vl_version),
             );
@@ -273,6 +279,35 @@ compileVegaLite_{ver_name:?}(
         Ok(value)
     }
 
+    pub async fn vegalite_to_svg(
+        &mut self,
+        vl_spec: &serde_json::Value,
+        vl_version: VlVersion,
+    ) -> Result<String, AnyError> {
+        self.init_vega().await?;
+        self.init_vl_version(&vl_version).await?;
+
+        let vl_spec_str = serde_json::to_string(vl_spec)?;
+
+        let code = format!(
+            r#"
+var svg;
+vegaLiteToSvg_{ver_name:?}(
+    {vl_spec_str}
+).then((result) => {{
+    svg = result;
+}});
+"#,
+            ver_name = vl_version,
+            vl_spec_str = vl_spec_str,
+        );
+        self.worker.execute_script("<anon>", &code)?;
+        self.worker.run_event_loop(false).await?;
+
+        let value = self.execute_script_to_string("svg").await?;
+        Ok(value)
+    }
+
     pub async fn vega_to_svg(&mut self, vg_spec: &serde_json::Value) -> Result<String, AnyError> {
         self.init_vega().await?;
 
@@ -305,6 +340,11 @@ pub enum VlConvertCommand {
     },
     VgToSvg {
         vg_spec: serde_json::Value,
+        responder: oneshot::Sender<Result<String, AnyError>>,
+    },
+    VlToSvg {
+        vl_spec: serde_json::Value,
+        vl_version: VlVersion,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
 }
@@ -369,8 +409,17 @@ impl VlConverter {
                         responder.send(vega_spec).ok();
                     }
                     VlConvertCommand::VgToSvg { vg_spec, responder } => {
-                        let vega_spec = TOKIO_RUNTIME.block_on(inner.vega_to_svg(&vg_spec));
-                        responder.send(vega_spec).ok();
+                        let svg_result = TOKIO_RUNTIME.block_on(inner.vega_to_svg(&vg_spec));
+                        responder.send(svg_result).ok();
+                    }
+                    VlConvertCommand::VlToSvg {
+                        vl_spec,
+                        vl_version,
+                        responder,
+                    } => {
+                        let svg_result =
+                            TOKIO_RUNTIME.block_on(inner.vegalite_to_svg(&vl_spec, vl_version));
+                        responder.send(svg_result).ok();
                     }
                 }
             }
@@ -438,6 +487,35 @@ impl VlConverter {
         }
     }
 
+    pub async fn vegalite_to_svg(
+        &mut self,
+        vl_spec: serde_json::Value,
+        vl_version: VlVersion,
+    ) -> Result<String, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
+        let cmd = VlConvertCommand::VlToSvg {
+            vl_spec,
+            vl_version,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send SVG conversion request: {}", err.to_string())
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(svg_result) => svg_result,
+            Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+        }
+    }
+
     pub async fn vega_to_png(
         &mut self,
         vg_spec: serde_json::Value,
@@ -445,7 +523,21 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vega_to_svg(vg_spec).await?;
+        Self::svg_to_png(&svg, scale)
+    }
 
+    pub async fn vegalite_to_png(
+        &mut self,
+        vl_spec: serde_json::Value,
+        vl_version: VlVersion,
+        scale: Option<f32>,
+    ) -> Result<Vec<u8>, AnyError> {
+        let scale = scale.unwrap_or(1.0);
+        let svg = self.vegalite_to_svg(vl_spec, vl_version).await?;
+        Self::svg_to_png(&svg, scale)
+    }
+
+    fn svg_to_png(svg: &String, scale: f32) -> Result<Vec<u8>, AnyError> {
         let rtree = match usvg::Tree::from_str(&svg, &USVG_OPTIONS.to_ref()) {
             Ok(rtree) => rtree,
             Err(err) => {

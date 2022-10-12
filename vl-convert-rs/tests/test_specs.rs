@@ -156,18 +156,26 @@ async fn test_svg() {
     let name = "stacked_bar_h";
     let vl_version = VlVersion::v5_5;
     let vl_spec = load_vl_spec(name);
-
+    let expected_svg = load_expected_svg(name, vl_version);
     let mut converter = VlConverter::new();
+
+    // Convert to vega first
     let vg_spec: serde_json::Value = serde_json::from_str(
         &converter
-            .vegalite_to_vega(vl_spec, vl_version, true)
+            .vegalite_to_vega(vl_spec.clone(), vl_version, true)
             .await
             .unwrap(),
     )
     .unwrap();
 
     let svg = converter.vega_to_svg(vg_spec).await.unwrap();
-    let expected_svg = load_expected_svg(name, vl_version);
+    assert_eq!(svg, expected_svg);
+
+    // Convert directly to svg
+    let svg = converter
+        .vegalite_to_svg(vl_spec, vl_version)
+        .await
+        .unwrap();
     assert_eq!(svg, expected_svg);
 
     // // Write out reference image
@@ -186,27 +194,35 @@ async fn test_png() {
     let name = "stacked_bar_h";
     let vl_version = VlVersion::v5_5;
     let vl_spec = load_vl_spec(name);
-
+    let expected_png_data = load_expected_png(name, vl_version);
     let mut converter = VlConverter::new();
+
+    // Convert to vega first
     let vg_spec: serde_json::Value = serde_json::from_str(
         &converter
-            .vegalite_to_vega(vl_spec, vl_version, true)
+            .vegalite_to_vega(vl_spec.clone(), vl_version, true)
             .await
             .unwrap(),
     )
     .unwrap();
 
     let png_data = converter.vega_to_png(vg_spec, Some(2.0)).await.unwrap();
-    let expected_png_data = load_expected_png(name, vl_version);
     assert_eq!(png_data, expected_png_data);
 
-    // Write out reference image
-    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let png_path = root_path
-        .join("tests")
-        .join("vl-specs")
-        .join("expected")
-        .join(format!("{:?}", vl_version))
-        .join(format!("{}.png", name));
-    std::fs::write(png_path, png_data).unwrap();
+    // Convert directly to png
+    let png_data = converter
+        .vegalite_to_png(vl_spec, vl_version, Some(2.0))
+        .await
+        .unwrap();
+    assert_eq!(png_data, expected_png_data);
+
+    // // Write out reference image
+    // let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    // let png_path = root_path
+    //     .join("tests")
+    //     .join("vl-specs")
+    //     .join("expected")
+    //     .join(format!("{:?}", vl_version))
+    //     .join(format!("{}.png", name));
+    // std::fs::write(png_path, png_data).unwrap();
 }
