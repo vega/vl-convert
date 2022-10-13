@@ -2,6 +2,7 @@ use crate::anyhow::bail;
 use deno_core::error::AnyError;
 use deno_core::op;
 use serde::Deserialize;
+use std::collections::HashSet;
 
 lazy_static! {
     pub static ref USVG_OPTIONS: usvg::Options = init_usvg_options();
@@ -10,9 +11,39 @@ lazy_static! {
 fn init_usvg_options() -> usvg::Options {
     let mut opt = usvg::Options::default();
     opt.fontdb.load_system_fonts();
-    opt.fontdb.set_monospace_family("Courier New");
-    opt.fontdb.set_sans_serif_family("Arial");
-    opt.fontdb.set_serif_family("Times New Roman");
+
+    // Collect set of system font families
+    let families: HashSet<String> = opt
+        .fontdb
+        .faces()
+        .iter()
+        .map(|face| face.family.clone())
+        .collect();
+
+    // Set default monospace font family
+    for family in ["Courier New", "Courier", "DejaVu Sans Mono"] {
+        if families.contains(family) {
+            opt.fontdb.set_monospace_family(family);
+            break;
+        }
+    }
+
+    // Set default sans-serif font family
+    for family in ["Arial", "Helvetica", "DejaVu Sans"] {
+        if families.contains(family) {
+            opt.fontdb.set_sans_serif_family(family);
+            break;
+        }
+    }
+
+    // Set default serif font family
+    for family in ["Times New Roman", "Times", "DejaVu Serif"] {
+        if families.contains(family) {
+            opt.fontdb.set_serif_family(family);
+            break;
+        }
+    }
+
     opt
 }
 
