@@ -1,5 +1,5 @@
 ## Overview
-This crate is a thin wrapper around the [`vl-convert-rs`](https://docs.rs/vl-convert-rs/) crate that provides a command line interface for converting Vega-Lite visualization specifications to Vega visualization specifications.
+This crate is a thin wrapper around the [`vl-convert-rs`](https://docs.rs/vl-convert-rs/) crate that provides a command line interface for converting Vega-Lite visualization specifications into various formats.
 
 ## Installation
 Install `vl-convert` using cargo with:
