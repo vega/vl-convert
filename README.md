@@ -4,32 +4,32 @@ VlConvert provides a Rust library, CLI utility, and Python library for convertin
 # Getting started
 ## CLI
 Install `vl-convert` using [cargo](https://doc.rust-lang.org/cargo/) with:
-```
+
+```plain
 $ cargo install vl-convert
-$ ./vl-convert --help
+$ vl-convert --help
 
-vl-convert: A utility for converting Vega-Lite specifications into Vega specification
+vl-convert: A utility for converting Vega-Lite specifications
 
-Usage: vl-convert [OPTIONS] --input-vegalite-file <INPUT_VEGALITE_FILE> --output-vega-file <OUTPUT_VEGA_FILE>
+Usage: vl-convert <COMMAND>
+
+Commands:
+  vl2vg   Convert a Vega-Lite specification to a Vega specification
+  vl2svg  Convert a Vega-Lite specification to an SVG image
+  vl2png  Convert a Vega-Lite specification to an PNG image
+  vg2svg  Convert a Vega specification to an SVG image
+  vg2png  Convert a Vega specification to an PNG image
+  help    Print this message or the help of the given subcommand(s)
 
 Options:
-  -i, --input-vegalite-file <INPUT_VEGALITE_FILE>
-          Path to input Vega-Lite file
-  -o, --output-vega-file <OUTPUT_VEGA_FILE>
-          Path to output Vega file to be created
-  -v, --vl-version <VL_VERSION>
-          Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5 [default: 5.5]
-  -p, --pretty
-          Pretty-print JSON in output file
-  -h, --help
-          Print help information
-  -V, --version
-          Print version information
+  -h, --help     Print help information
+  -V, --version  Print version information
 ```
 
-Example: Convert a Vega-Lite specification file named `in.vl.json` into a Vega specification file named `out.vg.json`. Perform the conversion using version 5.5 of the Vega-Lite JavaScript library and pretty-print the resulting JSON.
-```
-$ ./vl-convert -i ./in.vl.json -o ./out.vg.json --vl-version 5.5 --pretty
+For example, convert a Vega-Lite specification file named `in.vl.json` into an SVG file named `out.svg`. Perform the conversion using version 5.5 of the Vega-Lite JavaScript library.
+
+```plain
+$ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --vl-version 5.5
 ```
 
 ## Python

@@ -9,7 +9,7 @@ use vl_convert_rs::{anyhow, anyhow::bail};
 const DEFAULT_VL_VERSION: &str = "5.5";
 
 #[derive(Debug, Parser)] // requires `derive` feature
-#[command(name = "vl-convert")]
+#[command(version, name = "vl-convert")]
 #[command(about = "vl-convert: A utility for converting Vega-Lite specifications", long_about = None)]
 struct Cli {
     #[command(subcommand)]
