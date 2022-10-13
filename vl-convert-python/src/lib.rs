@@ -89,7 +89,6 @@ impl VlConverter {
         &mut self,
         vl_spec: &str,
         vl_version: &str,
-        scale: Option<f32>,
     ) -> PyResult<String> {
         let vl_version = VlVersion::from_str(vl_version)?;
         let vl_spec = match serde_json::from_str::<serde_json::Value>(vl_spec) {
@@ -107,7 +106,7 @@ impl VlConverter {
             .expect("Failed to acquire lock on Vega-Lite converter");
 
         let svg =
-            match TOKIO_RUNTIME.block_on(converter.vegalite_to_svg(vl_spec, vl_version, scale)) {
+            match TOKIO_RUNTIME.block_on(converter.vegalite_to_svg(vl_spec, vl_version)) {
                 Ok(vega_spec) => vega_spec,
                 Err(err) => {
                     return Err(PyValueError::new_err(format!(
