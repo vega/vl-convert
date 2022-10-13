@@ -145,12 +145,15 @@ jobs:
 
   vl-convert-python-tests:
     runs-on: ${{ matrix.options[0] }}
+    defaults:
+      run:
+        shell: ${{ matrix.options[2] }}
     strategy:
       matrix:
         options:
-          - [ubuntu-latest, '3.10']
-          - [windows-2022, '3.10']
-          - [macos-11, '3.10']
+          - [ubuntu-latest, '3.10', 'bash -l {0}']
+          - [windows-2022, '3.10', "pwsh"]
+          - [macos-11, '3.10', 'bash -l {0}']
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
