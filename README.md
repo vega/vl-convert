@@ -88,5 +88,15 @@ VlConvert relies on the standard Vega-Lite JavaScript library to perform the Veg
 
 In addition to easy embedding of the v8 JavaScript runtime, another advantage of building on `deno_core` is that it's possible to customize the module loading logic. `vl-convert-rs` takes advantage of this to inline the minified JavaScript source code for multiple versions of Vega-Lite, and all their dependencies, into the Rust library itself. This way, no internet connection is required to use vl-convert, and the executable and Python library are truly self-contained.
 
-# Future work: Image Export
-An exciting future possibility is to use the VlConvert infrastructure to enable zero-dependency image export of Vega(-Lite) visualizations.  This is already possible outside the web browser context using Node.js, and Deno is designed to be largely compatible with Node.js. The main difficulty is that Vega relies on the node [canvas](https://www.npmjs.com/package/canvas) library for computing text metrics and performing png image export. Node canvas is not compatible with Deno, so image export doesn't work out of the box.  
+## Vega-Lite to Vega conversion
+The Vega-Lite to Vega compilation is performed directly by the Vega-Lite library running fully in the Deno runtime.
+
+## Vega(-Lite) to SVG
+The Vega JavaScript library supports exporting chart specifications to SVG images, and this conversion works in Deno. However, there is a subtle complication. In order to properly position text within the exported SVG, Vega needs to compute the width of text fragments (at a particular font size, in a particular font, etc.). When running in Node.js, these calculations are done using node canvas, which does not work in Deno. When node canvas is not available, Vega falls back to a rough heuristic for text measurement that results in poor text placement results.
+
+VlConvert works around this by overriding the text width calculation function using a custom Rust function. This custom Rust function uses the `usvg` crate (part of the `resvg` project) to compute the width of text fragments.  With this customization, we regain accurate text placement in the SVG results produced by Vega.
+
+## Vega(-Lite) to PNG
+The Vega JavaScript library supports exporting chart specifications directly to PNG images. When running in Node.js, this functionality relies on node canvas, which is not available in Deno.
+
+VlConvert generates PNG images by first exporting charts to SVG as described above, then converting the SVG image to a PNG image using the `resvg` crate.
