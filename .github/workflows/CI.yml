@@ -172,12 +172,10 @@ jobs:
           python-version: ${{ matrix.options[1] }}
       - name: install Python dependencies
         run: |
-          python -m pip install pytest
+          python -m pip install pytest maturin
       - name: Build development wheel
-        uses: messense/maturin-action@v1
-        with:
-          command: develop
-          args: -m vl-convert-python/Cargo.toml
+        run: |
+          maturin develop -m vl-convert-python/Cargo.toml
       - name: Run tests
         working-directory: vl-convert-python/
         run: |
