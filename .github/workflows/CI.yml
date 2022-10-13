@@ -7,302 +7,116 @@ on:
   pull_request:
 
 jobs:
-  build-cli-linux-64:
+  black-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: psf/black@stable
         with:
-          toolchain: stable
-          override: true
-      - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
-      - name: zip executable
-        uses: papeloto/action-zip@v1
-        with:
-          files: target/release/vl-convert
-          dest: vl-convert_linux-64.zip
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: vl-convert
-          path: |
-            vl-convert_linux-64.zip
+          options: "--check"
+          jupyter: true
+          src: "./vl-convert-python"
 
-  build-cli-win-64:
-    runs-on: windows-2022
+  rust-fmt-clippy:
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v2
+      - name: Check out repository code
+        uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
-      - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
-      - name: zip executable
-        uses: papeloto/action-zip@v1
-        with:
-          files: target/release/vl-convert.exe
-          dest: vl-convert_win-64.zip
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: vl-convert
-          path: |
-            vl-convert_win-64.zip
+          components: rustfmt, clippy
+      - name: Check cargo fmt compliance
+        run: cargo fmt --all -- --check
+      - name: Check no rustc warnings
+        run: cargo check --tests
+      - name: Check for clippy warnings
+        run: cargo clippy
 
-  build-cli-osx-64:
-    runs-on: macos-11
+  codegen-clean:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Check out repository code
+        uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
-      - name: Build vl-convert
-        uses: actions-rs/cargo@v1
+          components: rustfmt
+      - name: Install Deno
+        uses: denoland/setup-deno@v1
         with:
-          command: build
-          args: -p vl-convert --release
-      - name: zip executable
-        uses: papeloto/action-zip@v1
-        with:
-          files: target/release/vl-convert
-          dest: vl-convert_osx-64.zip
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: vl-convert
-          path: |
-            vl-convert_osx-64.zip
+          deno-version: vx.x.x
+      - name: Run codegen
+        run: cargo run
+        working-directory: vl-convert-vendor
+      - name: Check that git detects to file changes
+        run:  git diff --exit-code
 
-  build-cli-osx-arm64:
-    runs-on: macos-11
+  vl-convert-rs-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-2022
+          - macos-11
     steps:
-      - uses: actions/checkout@v2
+      - name: Check out repository code
+        uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          override: true
-      - name: Download Apple Silicon toolchain
+      - name: Install fonts on Linux
+        if: runner.os == 'Linux'
         run: |
-          rustup target add aarch64-apple-darwin
-      - name: Build vl-convert
-        uses: actions-rs/cargo@v1
+          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+          sudo apt-get install ttf-mscorefonts-installer
+      - uses: actions-rs/cargo@v1
         with:
-          command: build
-          args: -p vl-convert --release --target aarch64-apple-darwin
-      - name: zip executable
-        uses: papeloto/action-zip@v1
-        with:
-          files: target/aarch64-apple-darwin/release/vl-convert
-          dest: vl-convert_osx-arm64.zip
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: vl-convert
-          path: |
-            vl-convert_osx-arm64.zip
+          command: test
 
-#  black-lint:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v2
-#      - uses: psf/black@stable
-#        with:
-#          options: "--check"
-#          jupyter: true
-#          src: "./vl-convert-python"
-#
-#  rust-fmt-clippy:
-#    runs-on: ubuntu-latest
-#    env:
-#      RUSTFLAGS: "-D warnings"
-#    steps:
-#      - name: Check out repository code
-#        uses: actions/checkout@v2
-#      - name: Install latest stable Rust toolchain
-#        uses: actions-rs/toolchain@v1
-#        with:
-#          toolchain: stable
-#          override: true
-#          components: rustfmt, clippy
-#      - name: Check cargo fmt compliance
-#        run: cargo fmt --all -- --check
-#      - name: Check no rustc warnings
-#        run: cargo check --tests
-#      - name: Check for clippy warnings
-#        run: cargo clippy
-#
-#  codegen-clean:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - name: Check out repository code
-#        uses: actions/checkout@v2
-#      - name: Install latest stable Rust toolchain
-#        uses: actions-rs/toolchain@v1
-#        with:
-#          toolchain: stable
-#          override: true
-#          components: rustfmt
-#      - name: Install Deno
-#        uses: denoland/setup-deno@v1
-#        with:
-#          deno-version: vx.x.x
-#      - name: Run codegen
-#        run: cargo run
-#        working-directory: vl-convert-vendor
-#      - name: Check that git detects to file changes
-#        run:  git diff --exit-code
-#
-#  vl-convert-rs-tests:
-#    runs-on: ${{ matrix.os }}
-#    strategy:
-#      matrix:
-#        os:
-#          - ubuntu-latest
-#          - windows-2022
-#          - macos-11
-#    steps:
-#      - name: Check out repository code
-#        uses: actions/checkout@v2
-#      - name: Install latest stable Rust toolchain
-#        uses: actions-rs/toolchain@v1
-#        with:
-#          toolchain: stable
-#      - name: Install fonts on Linux
-#        if: runner.os == 'Linux'
-#        run: |
-#          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
-#          sudo apt-get install ttf-mscorefonts-installer
-#      - uses: actions-rs/cargo@v1
-#        with:
-#          command: test
-#
-#  linux-wheels:
-#    runs-on: ubuntu-latest
-#    steps:
-#    - uses: actions/checkout@v3
-#    - name: Cargo tree
-#      run: |
-#        cargo tree
-#    - uses: messense/maturin-action@v1
-#      with:
-#        manylinux: auto
-#        command: build
-#        args: --release -m vl-convert-python/Cargo.toml --sdist -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
-#
-#  windows-wheels:
-#    runs-on: windows-latest
-#    steps:
-#    - uses: actions/checkout@v3
-#    - name: Cargo tree
-#      run: |
-#        cargo tree
-#    - uses: messense/maturin-action@v1
-#      with:
-#        command: build
-#        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.10 -i python3.9 -i python3.8 --strip
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
-#
-#  macos-wheels:
-#    runs-on: macos-latest
-#    steps:
-#    - uses: actions/checkout@v3
-#    - name: Cargo tree
-#      run: |
-#        cargo tree
-#    - name: Download Apple Silicon toolchain
-#      run: |
-#        rustup target add aarch64-apple-darwin
-#    - name: Build Intel wheels
-#      uses: messense/maturin-action@v1
-#      with:
-#        command: build
-#        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
-#    - name: Build Apple Silicon wheels
-#      uses: messense/maturin-action@v1
-#      with:
-#        command: build
-#        args: --release -m vl-convert-python/Cargo.toml -o dist --target aarch64-apple-darwin -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
-#    - name: Upload wheels
-#      uses: actions/upload-artifact@v2
-#      with:
-#        name: wheels
-#        path: dist
-#
-#  vl-convert-python-tests:
-#    runs-on: ${{ matrix.options[0] }}
-#    defaults:
-#      run:
-#        shell: ${{ matrix.options[2] }}
-#    strategy:
-#      matrix:
-#        options:
-#          - [ubuntu-latest, '3.10', 'bash -l {0}']
-#          - [windows-2022, '3.10', "pwsh"]
-#          - [macos-11, '3.10', 'bash -l {0}']
-#    steps:
-#      - name: Check out repository code
-#        uses: actions/checkout@v2
-#      - name: Install latest stable Rust toolchain
-#        uses: actions-rs/toolchain@v1
-#        with:
-#          toolchain: stable
-#      - name: Install fonts on Linux
-#        if: runner.os == 'Linux'
-#        run: |
-#          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
-#          sudo apt-get install ttf-mscorefonts-installer
-#      - uses: conda-incubator/setup-miniconda@v2
-#        with:
-#          activate-environment: dev
-#          python-version: ${{ matrix.options[1] }}
-#      - name: install Python dependencies
-#        run: |
-#          python -m pip install pytest maturin
-#      - name: Build development wheel
-#        run: |
-#          maturin develop -m vl-convert-python/Cargo.toml
-#      - name: Run tests
-#        working-directory: vl-convert-python/
-#        run: |
-#          pytest tests/
-#
-#  publish-pypi:
-#    name: Publish to PyPI
-#    environment: PyPI Upload
-#    runs-on: ubuntu-latest
-#    if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-#    needs: [ vl-convert-python-tests ]
-#    steps:
-#      - uses: actions/download-artifact@v2
-#        with:
-#          name: wheels
-#          path: dist/
-#      - name: Publish to PyPI
-#        uses: messense/maturin-action@v1
-#        env:
-#          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-#        with:
-#          command: upload
-#          args: --skip-existing dist/*
+  vl-convert-python-tests:
+    runs-on: ${{ matrix.options[0] }}
+    defaults:
+      run:
+        shell: ${{ matrix.options[2] }}
+    strategy:
+      matrix:
+        options:
+          - [ubuntu-latest, '3.10', 'bash -l {0}']
+          - [windows-2022, '3.10', "pwsh"]
+          - [macos-11, '3.10', 'bash -l {0}']
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install fonts on Linux
+        if: runner.os == 'Linux'
+        run: |
+          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+          sudo apt-get install ttf-mscorefonts-installer
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: dev
+          python-version: ${{ matrix.options[1] }}
+      - name: install Python dependencies
+        run: |
+          python -m pip install pytest maturin
+      - name: Build development wheel
+        run: |
+          maturin develop -m vl-convert-python/Cargo.toml
+      - name: Run tests
+        working-directory: vl-convert-python/
+        run: |
+          pytest tests/
+
