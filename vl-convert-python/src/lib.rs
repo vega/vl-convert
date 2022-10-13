@@ -15,6 +15,7 @@ lazy_static! {
     static ref VL_CONVERTER: Mutex<VlConverterRs> = Mutex::new(VlConverterRs::new());
 }
 
+/// Class to convert Vega-Lite specifications to other formats
 #[pyclass]
 struct VlConverter;
 
@@ -25,6 +26,18 @@ impl VlConverter {
         Self
     }
 
+    /// Convert a Vega-Lite spec to a Vega spec using a particular
+    /// version of the Vega-Lite JavaScript library.
+    ///
+    /// Args:
+    ///     vl_spec (str): Vega-Lite JSON specification string
+    ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+    ///     pretty (bool): If True, pretty-print resulting Vega JSON
+    ///         specification (default False)
+    ///
+    /// Returns:
+    ///     str: Vega JSON specification string
+    #[pyo3(text_signature = "($self, vl_spec, vl_version, pretty)")]
     fn vegalite_to_vega(
         &mut self,
         vl_spec: &str,
@@ -58,6 +71,14 @@ impl VlConverter {
         Ok(vega_spec)
     }
 
+    /// Convert a Vega spec to an SVG image string
+    ///
+    /// Args:
+    ///     vg_spec (str): Vega JSON specification string
+    ///
+    /// Returns:
+    ///     str: SVG image string
+    #[pyo3(text_signature = "($self, vg_spec)")]
     fn vega_to_svg(&mut self, vg_spec: &str) -> PyResult<String> {
         let vg_spec = match serde_json::from_str::<serde_json::Value>(vg_spec) {
             Ok(vg_spec) => vg_spec,
@@ -85,11 +106,17 @@ impl VlConverter {
         Ok(svg)
     }
 
-    fn vegalite_to_svg(
-        &mut self,
-        vl_spec: &str,
-        vl_version: &str,
-    ) -> PyResult<String> {
+    /// Convert a Vega-Lite spec to an SVG image string using a
+    /// particular version of the Vega-Lite JavaScript library.
+    ///
+    /// Args:
+    ///     vl_spec (str): Vega-Lite JSON specification string
+    ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+    ///
+    /// Returns:
+    ///     str: SVG image string
+    #[pyo3(text_signature = "($self, vl_spec, vl_version)")]
+    fn vegalite_to_svg(&mut self, vl_spec: &str, vl_version: &str) -> PyResult<String> {
         let vl_version = VlVersion::from_str(vl_version)?;
         let vl_spec = match serde_json::from_str::<serde_json::Value>(vl_spec) {
             Ok(vl_spec) => vl_spec,
@@ -105,19 +132,27 @@ impl VlConverter {
             .lock()
             .expect("Failed to acquire lock on Vega-Lite converter");
 
-        let svg =
-            match TOKIO_RUNTIME.block_on(converter.vegalite_to_svg(vl_spec, vl_version)) {
-                Ok(vega_spec) => vega_spec,
-                Err(err) => {
-                    return Err(PyValueError::new_err(format!(
-                        "Vega to SVG conversion failed:\n{}",
-                        err
-                    )))
-                }
-            };
+        let svg = match TOKIO_RUNTIME.block_on(converter.vegalite_to_svg(vl_spec, vl_version)) {
+            Ok(vega_spec) => vega_spec,
+            Err(err) => {
+                return Err(PyValueError::new_err(format!(
+                    "Vega to SVG conversion failed:\n{}",
+                    err
+                )))
+            }
+        };
         Ok(svg)
     }
 
+    /// Convert a Vega spec to PNG image data.
+    ///
+    /// Args:
+    ///     vg_spec (str): Vega JSON specification string
+    ///     scale (float): Image scale factor (default 1.0)
+    ///
+    /// Returns:
+    ///     bytes: PNG image data
+    #[pyo3(text_signature = "($self, vg_spec, scale)")]
     fn vega_to_png(&mut self, vg_spec: &str, scale: Option<f32>) -> PyResult<PyObject> {
         let vg_spec = match serde_json::from_str::<serde_json::Value>(vg_spec) {
             Ok(vg_spec) => vg_spec,
@@ -148,6 +183,17 @@ impl VlConverter {
         }))
     }
 
+    /// Convert a Vega-Lite spec to PNG image data using a particular
+    /// version of the Vega-Lite JavaScript library.
+    ///
+    /// Args:
+    ///     vl_spec (str): Vega-Lite JSON specification string
+    ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+    ///     scale (float): Image scale factor (default 1.0)
+    ///
+    /// Returns:
+    ///     bytes: PNG image data
+    #[pyo3(text_signature = "($self, vl_spec, vl_version, scale)")]
     fn vegalite_to_png(
         &mut self,
         vl_spec: &str,
@@ -186,7 +232,7 @@ impl VlConverter {
     }
 }
 
-/// A Python module implemented in Rust.
+/// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<VlConverter>()?;
