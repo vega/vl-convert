@@ -17,10 +17,10 @@ jobs:
           toolchain: stable
           override: true
       - name: Build vl-convert
-          uses: actions-rs/cargo@v1
-          with:
-            command: build
-            args: -p vl-convert --release
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: -p vl-convert --release
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
