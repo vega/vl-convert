@@ -176,9 +176,9 @@ jobs:
           command: develop
           args: -m vl-convert-python/Cargo.toml
       - name: Run tests
-          working-directory: vl-convert-python/
-          run: |
-            pytest tests/
+        working-directory: vl-convert-python/
+        run: |
+          pytest tests/
 #
 #  vl-convert-python-tests2:
 #    needs:
