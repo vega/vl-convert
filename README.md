@@ -1,6 +1,8 @@
 # VlConvert
 VlConvert provides a Rust library, CLI utility, and Python library for converting high-level [Vega-Lite](https://vega.github.io/vega-lite/) visualization specifications into low-level [Vega](https://vega.github.io/vega/) visualization specifications, all with no web browser or system dependencies required.
 
+[:tada: Announcement Blog Post :tada:](https://medium.com/@jonmmease/introducing-vlconvert-c763f0076e89)
+
 # Getting started
 ## CLI
 Install `vl-convert` using [cargo](https://doc.rust-lang.org/cargo/) with:
