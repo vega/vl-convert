@@ -154,7 +154,7 @@ fn read_input_string(input: &str) -> Result<String, anyhow::Error> {
 }
 
 fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow::Error> {
-    match serde_json::from_str::<serde_json::Value>(&input_str) {
+    match serde_json::from_str::<serde_json::Value>(input_str) {
         Ok(input_json) => Ok(input_json),
         Err(err) => {
             bail!("Failed to parse input file as JSON: {}", err);
@@ -190,7 +190,7 @@ async fn vl_2_vg(
     let vl_version = parse_vl_version(vl_version)?;
 
     // Read input file
-    let vegalite_str = read_input_string(&input)?;
+    let vegalite_str = read_input_string(input)?;
 
     // Parse input as json
     let vegalite_json = parse_as_json(&vegalite_str)?;
@@ -210,14 +210,14 @@ async fn vl_2_vg(
     };
 
     // Write result
-    write_output_string(&output, &vega_str)?;
+    write_output_string(output, &vega_str)?;
 
     Ok(())
 }
 
 async fn vg_2_svg(input: &str, output: &str) -> Result<(), anyhow::Error> {
     // Read input file
-    let vega_str = read_input_string(&input)?;
+    let vega_str = read_input_string(input)?;
 
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
@@ -234,14 +234,14 @@ async fn vg_2_svg(input: &str, output: &str) -> Result<(), anyhow::Error> {
     };
 
     // Write result
-    write_output_string(&output, &svg)?;
+    write_output_string(output, &svg)?;
 
     Ok(())
 }
 
 async fn vg_2_png(input: &str, output: &str, scale: f32) -> Result<(), anyhow::Error> {
     // Read input file
-    let vega_str = read_input_string(&input)?;
+    let vega_str = read_input_string(input)?;
 
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
@@ -258,7 +258,7 @@ async fn vg_2_png(input: &str, output: &str, scale: f32) -> Result<(), anyhow::E
     };
 
     // Write result
-    write_output_binary(&output, &png_data)?;
+    write_output_binary(output, &png_data)?;
 
     Ok(())
 }
@@ -268,7 +268,7 @@ async fn vl_2_svg(input: &str, output: &str, vl_version: &str) -> Result<(), any
     let vl_version = parse_vl_version(vl_version)?;
 
     // Read input file
-    let vegalite_str = read_input_string(&input)?;
+    let vegalite_str = read_input_string(input)?;
 
     // Parse input as json
     let vl_spec = parse_as_json(&vegalite_str)?;
@@ -285,7 +285,7 @@ async fn vl_2_svg(input: &str, output: &str, vl_version: &str) -> Result<(), any
     };
 
     // Write result
-    write_output_string(&output, &svg)?;
+    write_output_string(output, &svg)?;
 
     Ok(())
 }
@@ -300,7 +300,7 @@ async fn vl_2_png(
     let vl_version = parse_vl_version(vl_version)?;
 
     // Read input file
-    let vegalite_str = read_input_string(&input)?;
+    let vegalite_str = read_input_string(input)?;
 
     // Parse input as json
     let vl_spec = parse_as_json(&vegalite_str)?;
@@ -320,7 +320,7 @@ async fn vl_2_png(
     };
 
     // Write result
-    write_output_binary(&output, &png_data)?;
+    write_output_binary(output, &png_data)?;
 
     Ok(())
 }

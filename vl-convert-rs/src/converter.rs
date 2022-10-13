@@ -537,8 +537,8 @@ impl VlConverter {
         Self::svg_to_png(&svg, scale)
     }
 
-    fn svg_to_png(svg: &String, scale: f32) -> Result<Vec<u8>, AnyError> {
-        let rtree = match usvg::Tree::from_str(&svg, &USVG_OPTIONS.to_ref()) {
+    fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
+        let rtree = match usvg::Tree::from_str(svg, &USVG_OPTIONS.to_ref()) {
             Ok(rtree) => rtree,
             Err(err) => {
                 bail!("Failed to parse SVG string: {}", err.to_string())
