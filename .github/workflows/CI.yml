@@ -82,67 +82,6 @@ jobs:
         with:
           command: test
 
-  linux-wheels:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Cargo tree
-      run: |
-        cargo tree
-    - uses: messense/maturin-action@v1
-      with:
-        manylinux: auto
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml --sdist -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
-    - name: Upload wheels
-      uses: actions/upload-artifact@v2
-      with:
-        name: wheels
-        path: dist
-
-  windows-wheels:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Cargo tree
-      run: |
-        cargo tree
-    - uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.10 -i python3.9 -i python3.8 --strip
-    - name: Upload wheels
-      uses: actions/upload-artifact@v2
-      with:
-        name: wheels
-        path: dist
-
-  macos-wheels:
-    runs-on: macos-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Cargo tree
-      run: |
-        cargo tree
-    - name: Download Apple Silicon toolchain
-      run: |
-        rustup target add aarch64-apple-darwin
-    - name: Build Intel wheels
-      uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
-    - name: Build Apple Silicon wheels
-      uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist --target aarch64-apple-darwin -i python3.11 -i python3.10 -i python3.9 -i python3.8 --strip
-    - name: Upload wheels
-      uses: actions/upload-artifact@v2
-      with:
-        name: wheels
-        path: dist
-
   vl-convert-python-tests:
     runs-on: ${{ matrix.options[0] }}
     defaults:
@@ -181,21 +120,3 @@ jobs:
         run: |
           pytest tests/
 
-  publish-pypi:
-    name: Publish to PyPI
-    environment: PyPI Upload
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-    needs: [ vl-convert-python-tests ]
-    steps:
-      - uses: actions/download-artifact@v2
-        with:
-          name: wheels
-          path: dist/
-      - name: Publish to PyPI
-        uses: messense/maturin-action@v1
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        with:
-          command: upload
-          args: --skip-existing dist/*
