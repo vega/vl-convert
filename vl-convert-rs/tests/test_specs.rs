@@ -36,6 +36,33 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion, pretty: bool) -> Opt
     }
 }
 
+fn load_expected_svg(name: &str, vl_version: VlVersion) -> String {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let spec_path = root_path
+        .join("tests")
+        .join("vl-specs")
+        .join("expected")
+        .join(&format!("{:?}", vl_version))
+        .join(format!("{}.svg", name));
+    let svg_str =
+        fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
+    svg_str
+}
+
+fn load_expected_png(name: &str, vl_version: VlVersion) -> Vec<u8> {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let spec_path = root_path
+        .join("tests")
+        .join("vl-specs")
+        .join("expected")
+        .join(&format!("{:?}", vl_version))
+        .join(format!("{}.png", name));
+    let png_data =
+        fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
+    png_data
+}
+
+#[rustfmt::skip]
 mod test_reference_specs {
     use crate::*;
     use futures::executor::block_on;
@@ -54,9 +81,11 @@ mod test_reference_specs {
         )]
         vl_version: VlVersion,
 
-        #[values("circle_binned", "seattle-weather")] name: &str,
+        #[values("circle_binned", "seattle-weather", "stacked_bar_h")]
+        name: &str,
 
-        #[values(false, true)] pretty: bool,
+        #[values(false, true)]
+        pretty: bool,
     ) {
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
@@ -69,8 +98,6 @@ mod test_reference_specs {
         match load_expected_vg_spec(name, vl_version, pretty) {
             Some(expected_vg_spec) => {
                 // Conversion is expected to succeed and match this
-                println!("expected_vg_spec:\n{}", expected_vg_spec);
-
                 let vg_result = vg_result.expect("Vega-Lite to Vega conversion failed");
                 assert_eq!(vg_result, expected_vg_spec)
             }
@@ -79,7 +106,109 @@ mod test_reference_specs {
                 assert!(vg_result.is_err())
             }
         }
-        println!("{:?}", vl_version);
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[rustfmt::skip]
+mod test_svg {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::VlConverter;
+
+    #[rstest]
+    fn test(
+        #[values("circle_binned", "stacked_bar_h")]
+        name: &str,
+    ) {
+        let vl_version = VlVersion::v5_5;
+
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
+
+        // Load expected SVG image
+        let expected_svg = load_expected_svg(name, vl_version);
+
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
+
+        // Convert to vega first
+        let vg_spec: serde_json::Value = serde_json::from_str(
+            &block_on(converter.vegalite_to_vega(vl_spec.clone(), vl_version, false)).unwrap(),
+        )
+            .unwrap();
+
+        let svg = block_on(converter.vega_to_svg(vg_spec)).unwrap();
+        assert_eq!(svg, expected_svg);
+
+        // Convert directly to svg
+        let svg = block_on(converter.vegalite_to_svg(vl_spec, vl_version)).unwrap();
+        assert_eq!(svg, svg);
+
+        // // Write out reference image
+        // let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+        // let svg_path = root_path
+        //     .join("tests")
+        //     .join("vl-specs")
+        //     .join("expected")
+        //     .join(format!("{:?}", vl_version))
+        //     .join(format!("{}.svg", name));
+        // std::fs::write(svg_path, svg).unwrap();
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[rustfmt::skip]
+mod test_png {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::VlConverter;
+
+    #[rstest(name, scale,
+        case("circle_binned", 1.0),
+        case("stacked_bar_h", 2.0)
+    )]
+    fn test(
+        name: &str,
+        scale: f32
+    ) {
+        let vl_version = VlVersion::v5_5;
+
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
+
+        // Load expected SVG image
+        let expected_png_data = load_expected_png(name, vl_version);
+
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
+
+        // Convert to vega first
+        let vg_spec: serde_json::Value = serde_json::from_str(
+            &block_on(converter.vegalite_to_vega(vl_spec.clone(), vl_version, false)).unwrap(),
+        )
+            .unwrap();
+
+        let png_data = block_on(converter.vega_to_png(vg_spec, Some(scale))).unwrap();
+        assert_eq!(png_data, expected_png_data);
+
+        // Convert directly to svg
+        let png_data = block_on(converter.vegalite_to_png(vl_spec, vl_version, Some(scale))).unwrap();
+        assert_eq!(png_data, png_data);
+
+        // // Write out reference image
+        // let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+        // let png_path = root_path
+        //     .join("tests")
+        //     .join("vl-specs")
+        //     .join("expected")
+        //     .join(format!("{:?}", vl_version))
+        //     .join(format!("{}.png", name));
+        // std::fs::write(png_path, png_data).unwrap();
     }
 
     #[test]

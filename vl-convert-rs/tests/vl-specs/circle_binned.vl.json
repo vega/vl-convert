@@ -1,6 +1,6 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "data": {"url": "data/movies.json"},
+  "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/movies.json"},
   "mark": "circle",
   "encoding": {
     "x": {
