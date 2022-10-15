@@ -87,7 +87,6 @@ jobs:
         with:
           files: artifacts/
           dest: vl-convert_osx-64.zip
-          recursive: false
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
