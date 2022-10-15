@@ -20,11 +20,11 @@ jobs:
         with:
           command: build
           args: -p vl-convert --release
-      - name: zip executable
-        uses: papeloto/action-zip@v1
-        with:
-          files: target/release/vl-convert
-          dest: vl-convert_linux-64.zip
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          zip -r vl-convert_linux-64.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -46,10 +46,14 @@ jobs:
         with:
           command: build
           args: -p vl-convert --release
+      - name: Move executable to bin directory
+        run: |
+          New-Item -Path "artifacts\bin" -ItemType Directory
+          Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
-          files: target/release/vl-convert.exe
+          files: artifacts/
           dest: vl-convert_win-64.zip
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
@@ -72,11 +76,11 @@ jobs:
         with:
           command: build
           args: -p vl-convert --release
-      - name: zip executable
-        uses: papeloto/action-zip@v1
-        with:
-          files: target/release/vl-convert
-          dest: vl-convert_osx-64.zip
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          zip -r vl-convert_osx-64.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -101,11 +105,11 @@ jobs:
         with:
           command: build
           args: -p vl-convert --release --target aarch64-apple-darwin
-      - name: zip executable
-        uses: papeloto/action-zip@v1
-        with:
-          files: target/aarch64-apple-darwin/release/vl-convert
-          dest: vl-convert_osx-arm64.zip
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/aarch64-apple-darwin/release/vl-convert bin/
+          zip -r vl-convert_osx-arm64.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
