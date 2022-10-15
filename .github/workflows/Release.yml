@@ -20,14 +20,9 @@ jobs:
           args: -p vl-convert --release
       - name: Move executable to bin directory
         run: |
-          mkdir -p artifacts/bin
-          cp target/release/vl-convert artifacts/bin
-          chmod +x artifacts/bin/vl-convert*
-      - name: zip bin directory
-        uses: papeloto/action-zip@v1
-        with:
-          files: artifacts/
-          dest: vl-convert_linux-64.zip
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          zip -r vl-convert_linux-64.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -81,14 +76,9 @@ jobs:
           args: -p vl-convert --release
       - name: Move executable to bin directory
         run: |
-          mkdir -p artifacts/bin
-          cp target/release/vl-convert artifacts/bin
-          chmod +x artifacts/bin/vl-convert*
-      - name: zip executable
-        uses: papeloto/action-zip@v1
-        with:
-          files: artifacts/
-          dest: vl-convert_osx-64.zip
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          zip -r vl-convert_osx-64.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -115,14 +105,9 @@ jobs:
           args: -p vl-convert --release --target aarch64-apple-darwin
       - name: Move executable to bin directory
         run: |
-          mkdir -p artifacts/bin
-          cp target/aarch64-apple-darwin/release/vl-convert artifacts/bin
-          chmod +x artifacts/bin/vl-convert*
-      - name: zip executable
-        uses: papeloto/action-zip@v1
-        with:
-          files: artifacts/
-          dest: vl-convert_osx-arm64.zip
+          mkdir -p bin
+          cp target/aarch64-apple-darwin/release/vl-convert bin/
+          zip -r vl-convert_osx-arm64.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
