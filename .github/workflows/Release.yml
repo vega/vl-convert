@@ -81,7 +81,7 @@ jobs:
       - name: Move executable to bin directory
         run: |
           mkdir target/release/bin
-          cp target/release/vl-convert target/release/bin"
+          cp target/release/vl-convert target/release/bin
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
