@@ -20,10 +20,14 @@ jobs:
         with:
           command: build
           args: -p vl-convert --release
-      - name: zip executable
+      - name: Move executable to bin directory
+        run: |
+          mkdir target/release/bin
+          cp target/release/vl-convert target/release/bin
+      - name: zip bin directory
         uses: papeloto/action-zip@v1
         with:
-          files: target/release/vl-convert
+          files: target/release/bin
           dest: vl-convert_linux-64.zip
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
@@ -46,10 +50,14 @@ jobs:
         with:
           command: build
           args: -p vl-convert --release
+      - name: Move executable to bin directory
+        run: |
+          mkdir target\release\bin
+          Copy-Item "target\release\vl-convert.exe" -Destination "target\release\bin"
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
-          files: target/release/vl-convert.exe
+          files: target/release/bin
           dest: vl-convert_win-64.zip
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
@@ -72,10 +80,14 @@ jobs:
         with:
           command: build
           args: -p vl-convert --release
+      - name: Move executable to bin directory
+        run: |
+          mkdir target/release/bin
+          cp target/release/vl-convert target/release/bin"
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
-          files: target/release/vl-convert
+          files: target/release/bin
           dest: vl-convert_osx-64.zip
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
@@ -101,10 +113,14 @@ jobs:
         with:
           command: build
           args: -p vl-convert --release --target aarch64-apple-darwin
+      - name: Move executable to bin directory
+        run: |
+          mkdir target/aarch64-apple-darwin/release/bin
+          cp target/aarch64-apple-darwin/release/vl-convert target/aarch64-apple-darwin/release/bin
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
-          files: target/aarch64-apple-darwin/release/vl-convert
+          files: target/aarch64-apple-darwin/release/bin
           dest: vl-convert_osx-arm64.zip
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
