@@ -20,14 +20,13 @@ jobs:
           args: -p vl-convert --release
       - name: Move executable to bin directory
         run: |
-          mkdir target/release/bin
-          cp target/release/vl-convert target/release/bin
+          mkdir artifacts/bin
+          cp target/release/vl-convert artifacts/bin
       - name: zip bin directory
         uses: papeloto/action-zip@v1
         with:
-          files: target/release/bin
+          files: artifacts/
           dest: vl-convert_linux-64.zip
-          recursive: false
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -51,14 +50,13 @@ jobs:
           args: -p vl-convert --release
       - name: Move executable to bin directory
         run: |
-          mkdir target\release\bin
-          Copy-Item "target\release\vl-convert.exe" -Destination "target\release\bin"
+          mkdir artifacts\bin
+          Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
-          files: target/release/bin
+          files: artifacts/
           dest: vl-convert_win-64.zip
-          recursive: false
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
@@ -82,12 +80,12 @@ jobs:
           args: -p vl-convert --release
       - name: Move executable to bin directory
         run: |
-          mkdir target/release/bin
-          cp target/release/vl-convert target/release/bin
+          mkdir artifacts/bin
+          cp target/release/vl-convert artifacts/bin
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
-          files: target/release/bin
+          files: artifacts/
           dest: vl-convert_osx-64.zip
           recursive: false
       - name: Upload artifacts
@@ -116,14 +114,13 @@ jobs:
           args: -p vl-convert --release --target aarch64-apple-darwin
       - name: Move executable to bin directory
         run: |
-          mkdir target/aarch64-apple-darwin/release/bin
-          cp target/aarch64-apple-darwin/release/vl-convert target/aarch64-apple-darwin/release/bin
+          mkdir artifacts/bin
+          cp target/aarch64-apple-darwin/release/vl-convert artifacts/bin
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
-          files: target/aarch64-apple-darwin/release/bin
+          files: artifacts/
           dest: vl-convert_osx-arm64.zip
-          recursive: false
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
