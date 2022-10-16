@@ -1,5 +1,5 @@
 from pathlib import Path
-from vl_convert import VlConverter
+import vl_convert as vlc
 import pytest
 
 tests_dir = Path(__file__).parent
@@ -47,16 +47,11 @@ def test_reference_specs(name, vl_version, pretty):
     vl_spec = load_vl_spec(name)
     expected_vg_spec = load_expected_vg_spec(name, vl_version, pretty)
 
-    # Initialize converter
-    converter = VlConverter()
-
     if expected_vg_spec is None:
         with pytest.raises(ValueError):
-            converter.vegalite_to_vega(vl_spec, vl_version=vl_version, pretty=pretty)
+            vlc.vegalite_to_vega(vl_spec, vl_version=vl_version, pretty=pretty)
     else:
-        vg_spec = converter.vegalite_to_vega(
-            vl_spec, vl_version=vl_version, pretty=pretty
-        )
+        vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version, pretty=pretty)
         assert expected_vg_spec == vg_spec
 
 
@@ -66,16 +61,13 @@ def test_svg(name):
     vl_spec = load_vl_spec(name)
     expected_svg = load_expected_svg(name, vl_version)
 
-    # Initialize converter
-    converter = VlConverter()
-
     # Convert to vega first
-    vg_spec = converter.vegalite_to_vega(vl_spec, vl_version=vl_version)
-    svg = converter.vega_to_svg(vg_spec)
+    vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
+    svg = vlc.vega_to_svg(vg_spec)
     assert svg == expected_svg
 
     # Convert directly to image
-    svg = converter.vegalite_to_svg(vl_spec, vl_version=vl_version)
+    svg = vlc.vegalite_to_svg(vl_spec, vl_version=vl_version)
     assert svg == expected_svg
 
 
@@ -85,14 +77,11 @@ def test_png(name, scale):
     vl_spec = load_vl_spec(name)
     expected_png = load_expected_png(name, vl_version)
 
-    # Initialize converter
-    converter = VlConverter()
-
     # Convert to vega first
-    vg_spec = converter.vegalite_to_vega(vl_spec, vl_version=vl_version)
-    png = converter.vega_to_png(vg_spec, scale=scale)
+    vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
+    png = vlc.vega_to_png(vg_spec, scale=scale)
     assert png == expected_png
 
     # Convert directly to image
-    png = converter.vegalite_to_png(vl_spec, vl_version=vl_version, scale=scale)
+    png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version, scale=scale)
     assert png == expected_png

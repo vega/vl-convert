@@ -10,3 +10,4 @@ __pycache__/
 /vl-convert-rs/imports.js
 /dist/
 /vl-convert-python/notebooks/.ipynb_checkpoints/
+/vl-convert-python/notebooks/output/
