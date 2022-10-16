@@ -1,5 +1,5 @@
 ## Overview
-This crate provides a self-contained Rust library for converting [Vega-Lite](https://vega.github.io/vega-lite/) visualization specifications into various formats.  The conversions are performed using the Vega-Lite and Vega JavaScript libraries running in a v8 JavaScript runtime provided by the [`deno_core`](https://crates.io/crates/deno_core) crate.
+This crate provides a self-contained Rust library for converting [Vega-Lite](https://vega.github.io/vega-lite/) visualization specifications into various formats.  The conversions are performed using the Vega-Lite and Vega JavaScript libraries running in a v8 JavaScript runtime provided by the [`deno_runtime`](https://crates.io/crates/deno_runtime) crate.
 
 This crate is a dependency of the [`vl-convert`](https://crates.io/crates/vl-convert) CLI application crate and the [`vl-convert-python`](https://pypi.org/project/vl-convert-python/) Python library.
 
