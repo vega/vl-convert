@@ -107,6 +107,16 @@ impl TextInfo {
             text = self.text
         )
     }
+
+    /// Strip potentially unsupported font properties and replace with a supported font
+    fn fallback(&self) -> Self {
+        let mut new = self.clone();
+        new.style = None;
+        new.family = Some("sans-serif".to_string());
+        new.variant = None;
+        new.weight = None;
+        new
+    }
 }
 
 #[op]
@@ -117,6 +127,17 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
     };
 
     let svg = text_info.to_svg();
+    if let Ok(width) = extract_text_width(&svg) {
+        Ok(width)
+    } else {
+        // Try falling back to a supported text info
+        let text_info = text_info.fallback();
+        let svg = text_info.to_svg();
+        extract_text_width(&svg)
+    }
+}
+
+fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
     let rtree =
         usvg::Tree::from_str(&svg, &USVG_OPTIONS.to_ref()).expect("Failed to parse text SVG");
     for node in rtree.root().descendants() {
@@ -132,5 +153,11 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
         }
     }
 
-    bail!("Failed to locate text in SVG")
+    let node_strs: Vec<_> = rtree
+        .root()
+        .descendants()
+        .into_iter()
+        .map(|node| format!("{:?}", node))
+        .collect();
+    bail!("Failed to locate text in SVG:\n{}\n{:?}", svg, node_strs)
 }
