@@ -139,7 +139,7 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
 
 fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
     let rtree =
-        usvg::Tree::from_str(&svg, &USVG_OPTIONS.to_ref()).expect("Failed to parse text SVG");
+        usvg::Tree::from_str(svg, &USVG_OPTIONS.to_ref()).expect("Failed to parse text SVG");
     for node in rtree.root().descendants() {
         if !rtree.is_in_defs(&node) {
             // Text bboxes are different from path bboxes.
