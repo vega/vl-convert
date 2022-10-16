@@ -21,6 +21,7 @@ lazy_static! {
 /// Args:
 ///     vl_spec (str): Vega-Lite JSON specification string
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///         (default to latest)
 ///     pretty (bool): If True, pretty-print resulting Vega JSON
 ///         specification (default False)
 ///
@@ -30,10 +31,14 @@ lazy_static! {
 #[pyo3(text_signature = "(vl_spec, vl_version, pretty)")]
 fn vegalite_to_vega(
     vl_spec: &str,
-    vl_version: &str,
+    vl_version: Option<&str>,
     pretty: Option<bool>,
 ) -> PyResult<String> {
-    let vl_version = VlVersion::from_str(vl_version)?;
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
     let pretty = pretty.unwrap_or(false);
     let vl_spec = match serde_json::from_str::<serde_json::Value>(vl_spec) {
         Ok(vl_spec) => vl_spec,
@@ -96,20 +101,24 @@ fn vega_to_svg(vg_spec: &str) -> PyResult<String> {
     Ok(svg)
 }
 
-
 /// Convert a Vega-Lite spec to an SVG image string using a
 /// particular version of the Vega-Lite JavaScript library.
 ///
 /// Args:
 ///     vl_spec (str): Vega-Lite JSON specification string
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///         (default to latest)
 ///
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
 #[pyo3(text_signature = "(vl_spec, vl_version)")]
-fn vegalite_to_svg(vl_spec: &str, vl_version: &str) -> PyResult<String> {
-    let vl_version = VlVersion::from_str(vl_version)?;
+fn vegalite_to_svg(vl_spec: &str, vl_version: Option<&str>) -> PyResult<String> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
     let vl_spec = match serde_json::from_str::<serde_json::Value>(vl_spec) {
         Ok(vl_spec) => vl_spec,
         Err(err) => {
@@ -176,13 +185,13 @@ fn vega_to_png(vg_spec: &str, scale: Option<f32>) -> PyResult<PyObject> {
     }))
 }
 
-
 /// Convert a Vega-Lite spec to PNG image data using a particular
 /// version of the Vega-Lite JavaScript library.
 ///
 /// Args:
 ///     vl_spec (str): Vega-Lite JSON specification string
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///         (default to latest)
 ///     scale (float): Image scale factor (default 1.0)
 ///
 /// Returns:
@@ -191,10 +200,14 @@ fn vega_to_png(vg_spec: &str, scale: Option<f32>) -> PyResult<PyObject> {
 #[pyo3(text_signature = "(vl_spec, vl_version, scale)")]
 fn vegalite_to_png(
     vl_spec: &str,
-    vl_version: &str,
+    vl_version: Option<&str>,
     scale: Option<f32>,
 ) -> PyResult<PyObject> {
-    let vl_version = VlVersion::from_str(vl_version)?;
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
     let vl_spec = match serde_json::from_str::<serde_json::Value>(vl_spec) {
         Ok(vl_spec) => vl_spec,
         Err(err) => {
@@ -224,7 +237,6 @@ fn vegalite_to_png(
         PyObject::from(PyBytes::new(py, png_data.as_slice()))
     }))
 }
-
 
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]

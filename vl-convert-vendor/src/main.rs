@@ -174,6 +174,11 @@ impl VlVersion {{
     }}
 }}
 
+impl Default for VlVersion {{
+    fn default() -> Self {{
+        VlVersion::from_str("{LATEST_VEGALITE}").unwrap()
+    }}
+}}
 
 impl FromStr for VlVersion {{
     type Err = AnyError;
@@ -199,6 +204,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         version_instances_csv = version_instances_csv,
         SKYPACK_URL = SKYPACK_URL,
         VEGA_PATH = VEGA_PATH,
+        LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
     // Add packages
     for (k, v) in skypack_obj {

@@ -49,6 +49,12 @@ impl VlVersion {
     }
 }
 
+impl Default for VlVersion {
+    fn default() -> Self {
+        VlVersion::from_str("5.5").unwrap()
+    }
+}
+
 impl FromStr for VlVersion {
     type Err = AnyError;
 
