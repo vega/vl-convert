@@ -1,0 +1,3 @@
+vl-convert-python
+altair
+vega-datasets
