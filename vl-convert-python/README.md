@@ -54,7 +54,7 @@ with open("chart.vg.json", "wt") as f:
     f.write(vg_spec)
 ```
 
-## Convert Altair Chart to SVG and PNG, and Vega
+## Convert Altair Chart to SVG, PNG, and Vega
 The Altair visualization library provides a Pythonic API for generating Vega-Lite visualizations. As such, `vl-convert-python` can be used to convert Altair charts to PNG, SVG, or Vega. The `vegalite_*` functions support an optional `vl_version` argument that can be used to specify the particular version of the Vega-Lite JavaScript library to use.  Version 4.2 of the Altair package uses Vega-Lite version 4.17, so this is the version that should be specified when converting Altair charts.
 
 ```python
