@@ -41,7 +41,7 @@ Install the `vl-convert-python` pacakge using pip
 $ pip install vl-convert-python
 ```
 
-Then in Python, import the library, create a `VlConverter` object, and use the `vegalite_to_vega` method to convert a Vega-Lite specification string to a Vega specification string.
+UpdThen in Python, import the library, use the `vegalite_to_png` function to convert a Vega-Lite specification string to a PNG image, then write the image to a file.
 
 ```python
 import vl_convert as vlc
@@ -65,20 +65,12 @@ vl_spec = r"""
 }
 """
 
-vg_spec = vlc.vegalite_to_vega(vl_spec=vl_spec, vl_version="5.5", pretty=True)
-print(vg_spec)
+png_data = vlc.vegalite_to_png(vl_spec=vl_spec, scale=2)
+with open("chart.png", "wb") as f:
+    f.write(png_data)
 ```
-```
-{
-  "$schema": "https://vega.github.io/schema/vega/v5.json",
-  "background": "white",
-  "padding": 5,
-  "width": 200,
-  "height": 200,
-  "style": "cell",
-  ...
-}
-```
+
+For more examples, see the [`vl-convert-python` README](https://github.com/jonmmease/vl-convert/tree/main/vl-convert-python#readme).
 
 # Motivation
 VlConvert was motivated by the needs of [VegaFusion](https://vegafusion.io/), which extracts data transformations from Vega specifications and evaluates them on the server. Using VlConvert, VegaFusion can input Vega-Lite specifications directly.  That said, VlConvert is designed to be used by the wider Vega-Lite ecosystem, independent of VegaFusion.
