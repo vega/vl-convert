@@ -44,9 +44,7 @@ $ pip install vl-convert-python
 Then in Python, import the library, create a `VlConverter` object, and use the `vegalite_to_vega` method to convert a Vega-Lite specification string to a Vega specification string.
 
 ```python
-from vl_convert import VlConverter
-
-converter = VlConverter()
+import vl_convert as vlc
 
 vl_spec = r"""
 {
@@ -67,7 +65,7 @@ vl_spec = r"""
 }
 """
 
-vg_spec = converter.vegalite_to_vega(vl_spec=vl_spec, vl_version="5.5", pretty=True)
+vg_spec = vlc.vegalite_to_vega(vl_spec=vl_spec, vl_version="5.5", pretty=True)
 print(vg_spec)
 ```
 ```
