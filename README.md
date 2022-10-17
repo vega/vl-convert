@@ -1,5 +1,5 @@
 # VlConvert
-VlConvert provides a Rust library, CLI utility, and Python library for converting high-level [Vega-Lite](https://vega.github.io/vega-lite/) visualization specifications into low-level [Vega](https://vega.github.io/vega/) visualization specifications, all with no web browser or system dependencies required.
+VlConvert provides a Rust library, CLI utility, and Python library for converting [Vega-Lite](https://vega.github.io/vega-lite/) chart specifications into static images (SVG or PNG) or [Vega](https://vega.github.io/vega/) chart specifications.
 
 [:tada: Announcement Blog Post :tada:](https://medium.com/@jonmmease/introducing-vlconvert-c763f0076e89)
 
@@ -45,7 +45,7 @@ Install the `vl-convert-python` pacakge using pip
 $ pip install vl-convert-python
 ```
 
-UpdThen in Python, import the library, use the `vegalite_to_png` function to convert a Vega-Lite specification string to a PNG image, then write the image to a file.
+Then in Python, import the library, use the `vegalite_to_png` function to convert a Vega-Lite specification string to a PNG image, then write the image to a file.
 
 ```python
 import vl_convert as vlc
@@ -80,9 +80,9 @@ For more examples, see the [`vl-convert-python` README](https://github.com/jonmm
 VlConvert was motivated by the needs of [VegaFusion](https://vegafusion.io/), which extracts data transformations from Vega specifications and evaluates them on the server. Using VlConvert, VegaFusion can input Vega-Lite specifications directly.  That said, VlConvert is designed to be used by the wider Vega-Lite ecosystem, independent of VegaFusion.
 
 # How it works
-VlConvert relies on the standard Vega-Lite JavaScript library to perform the Vega-Lite to Vega conversion.  It uses the [Deno](https://deno.land/) project (in particular [`deno_core`](https://github.com/denoland/deno/tree/main/core)) to run Vega-Lite using the v8 JavaScript runtime, embedded into a Rust library called `vl-convert-rs`. This Rust library is then wrapped as a CLI application (`vl-convert`) and a Python library using PyO3 (`vl-convert-python`).
+VlConvert relies on the standard Vega-Lite JavaScript library to perform the Vega-Lite to Vega conversion.  It uses the [Deno](https://deno.land/) project (in particular [`deno_runtime`](https://github.com/denoland/deno/tree/main/runtime)) to run Vega-Lite using the v8 JavaScript runtime, embedded into a Rust library called `vl-convert-rs`. This Rust library is then wrapped as a CLI application (`vl-convert`) and a Python library using PyO3 (`vl-convert-python`).
 
-In addition to easy embedding of the v8 JavaScript runtime, another advantage of building on `deno_core` is that it's possible to customize the module loading logic. `vl-convert-rs` takes advantage of this to inline the minified JavaScript source code for multiple versions of Vega-Lite, and all their dependencies, into the Rust library itself. This way, no internet connection is required to use vl-convert, and the executable and Python library are truly self-contained.
+In addition to easy embedding of the v8 JavaScript runtime, another advantage of building on `deno_runtime` is that it's possible to customize the module loading logic. `vl-convert-rs` takes advantage of this to inline the minified JavaScript source code for multiple versions of Vega-Lite, and all their dependencies, into the Rust library itself. This way, no internet connection is required to use vl-convert, and the executable and Python library are truly self-contained.
 
 ## Vega-Lite to Vega conversion
 The Vega-Lite to Vega compilation is performed directly by the Vega-Lite library running fully in the Deno runtime.

@@ -1,5 +1,6 @@
 # Overview
-`vl-convert-python` is a dependency-free Python package for converting Vega-Lite chart specifications to static images (SVG or PNG) or Vega chart specifications.
+`vl-convert-python` is a dependency-free Python package for converting [Vega-Lite](https://vega.github.io/vega-lite/) chart specifications into static images (SVG or PNG) or [Vega](https://vega.github.io/vega/) chart specifications.
+
 
 Since an Altair chart can generate Vega-Lite, this package can be used to easily create static images from Altair charts.
 
