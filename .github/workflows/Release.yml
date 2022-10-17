@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  build-cli-linux-64:
+  build-cli-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -127,7 +127,7 @@ jobs:
           path: |
             vl-convert_osx-arm64.zip
 
-  build-wheels-linux-64:
+  build-wheels-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -199,7 +199,7 @@ jobs:
     name: Publish to PyPI
     environment: PyPI Upload
     runs-on: ubuntu-latest
-    needs: [ build-wheels-linux-64, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
+    needs: [ build-wheels-linux, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
     steps:
       - uses: actions/download-artifact@v2
         with:
