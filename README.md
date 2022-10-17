@@ -3,6 +3,10 @@ VlConvert provides a Rust library, CLI utility, and Python library for convertin
 
 [:tada: Announcement Blog Post :tada:](https://medium.com/@jonmmease/introducing-vlconvert-c763f0076e89)
 
+Try the Python library out on Binder! \
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/jonmmease/vl-convert/main?labpath=vl-convert-python%2Fnotebooks%2Fconvert_vegalite.ipynb)
+
+
 # Getting started
 ## CLI
 Install `vl-convert` using [cargo](https://doc.rust-lang.org/cargo/) with:
