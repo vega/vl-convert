@@ -34,7 +34,7 @@ jobs:
         run: |
           mkdir -p bin
           cp target/${{ matrix.options[0] }}/release/vl-convert bin/
-          zip -r vl-convert_linux-64.zip bin/
+          zip -r vl-convert_${{ matrix.options[1] }}.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
