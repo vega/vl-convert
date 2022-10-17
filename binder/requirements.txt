@@ -1,3 +1,3 @@
-vl-convert-python >=0.3.0rc1
+vl-convert-python >=0.3.0rc3
 altair
 vega-datasets

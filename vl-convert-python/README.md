@@ -3,6 +3,9 @@
 
 Since an Altair chart can generate Vega-Lite, this package can be used to easily create static images from Altair charts.
 
+Try it out on Binder! \
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/jonmmease/vl-convert/main?labpath=vl-convert-python%2Fnotebooks%2Fconvert_vegalite.ipynb)
+
 # Installation
 `vl-convert-python` can be installed using pip with
 
