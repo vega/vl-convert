@@ -22,6 +22,7 @@ lazy_static = "1.4.0"
 usvg = "0.23.0"
 resvg = "0.23.0"
 tiny-skia = "0.6"
+fontdb = {version="0.9.1", features=["fontconfig"]}
 
 [dev-dependencies]
 tokio = {version="1.21.2", features=["macros", "rt", "rt-multi-thread"]}
