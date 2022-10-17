@@ -49,7 +49,12 @@ fn init_usvg_options() -> usvg::Options {
     }
 
     // Set default monospace font family
-    for family in ["Courier New", "Courier", "Liberation Mono"] {
+    for family in [
+        "Courier New",
+        "Courier",
+        "Liberation Mono",
+        "DejaVu Sans Mono",
+    ] {
         if families.contains(family) {
             opt.fontdb.set_monospace_family(family);
             break;
@@ -57,7 +62,12 @@ fn init_usvg_options() -> usvg::Options {
     }
 
     // Set default serif font family
-    for family in ["Times New Roman", "Times", "Liberation Serif"] {
+    for family in [
+        "Times New Roman",
+        "Times",
+        "Liberation Serif",
+        "DejaVu Serif",
+    ] {
         if families.contains(family) {
             opt.fontdb.set_serif_family(family);
             break;
