@@ -27,6 +27,7 @@ jobs:
       - name: Build vl-convert
         uses: actions-rs/cargo@v1
         with:
+          use-cross: true
           command: build
           args: -p vl-convert --release --target ${{ matrix.options[0] }}
       - name: Move executable to bin directory
