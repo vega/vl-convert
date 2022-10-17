@@ -8,12 +8,13 @@ lazy_static! {
     pub static ref USVG_OPTIONS: usvg::Options = init_usvg_options();
 }
 
-const SANS_SERIF_REGULAR: &[u8] =
+const LIBERATION_SANS_REGULAR: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-Regular.ttf");
-const SANS_SERIF_BOLD: &[u8] = include_bytes!("../fonts/liberation-sans/LiberationSans-Bold.ttf");
-const SANS_SERIF_ITALIC: &[u8] =
+const LIBERATION_SANS_BOLD: &[u8] =
+    include_bytes!("../fonts/liberation-sans/LiberationSans-Bold.ttf");
+const LIBERATION_SANS_ITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-Italic.ttf");
-const SANS_SERIF_BOLDITALIC: &[u8] =
+const LIBERATION_SANS_BOLDITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-BoldItalic.ttf");
 
 fn init_usvg_options() -> usvg::Options {
@@ -21,6 +22,16 @@ fn init_usvg_options() -> usvg::Options {
 
     // Load fonts from the operating system
     opt.fontdb.load_system_fonts();
+
+    // Set default sans-serif font family.
+    // By default, Vega outputs SVGs with "sans-serif" as the font family, so
+    // we vendor the "Liberation Sans" font so that there is always a fallback
+    opt.fontdb
+        .load_font_data(Vec::from(LIBERATION_SANS_REGULAR));
+    opt.fontdb.load_font_data(Vec::from(LIBERATION_SANS_BOLD));
+    opt.fontdb.load_font_data(Vec::from(LIBERATION_SANS_ITALIC));
+    opt.fontdb
+        .load_font_data(Vec::from(LIBERATION_SANS_BOLDITALIC));
 
     // Collect set of system font families
     let families: HashSet<String> = opt
@@ -30,14 +41,6 @@ fn init_usvg_options() -> usvg::Options {
         .map(|face| face.family.clone())
         .collect();
 
-    // Set default sans-serif font family.
-    // By default, Vega outputs SVGs with "sans-serif" as the font family, so
-    // we vendor the "Liberation Sans" font so that there is always a fallback
-    opt.fontdb.load_font_data(Vec::from(SANS_SERIF_REGULAR));
-    opt.fontdb.load_font_data(Vec::from(SANS_SERIF_BOLD));
-    opt.fontdb.load_font_data(Vec::from(SANS_SERIF_ITALIC));
-    opt.fontdb.load_font_data(Vec::from(SANS_SERIF_BOLDITALIC));
-
     for family in ["Arial", "Helvetica", "Liberation Sans"] {
         if families.contains(family) {
             opt.fontdb.set_sans_serif_family(family);
@@ -46,7 +49,12 @@ fn init_usvg_options() -> usvg::Options {
     }
 
     // Set default monospace font family
-    for family in ["Courier New", "Courier", "Liberation Mono"] {
+    for family in [
+        "Courier New",
+        "Courier",
+        "Liberation Mono",
+        "DejaVu Sans Mono",
+    ] {
         if families.contains(family) {
             opt.fontdb.set_monospace_family(family);
             break;
@@ -54,7 +62,12 @@ fn init_usvg_options() -> usvg::Options {
     }
 
     // Set default serif font family
-    for family in ["Times New Roman", "Times", "Liberation Serif"] {
+    for family in [
+        "Times New Roman",
+        "Times",
+        "Liberation Serif",
+        "DejaVu Serif",
+    ] {
         if families.contains(family) {
             opt.fontdb.set_serif_family(family);
             break;
