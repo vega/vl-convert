@@ -14,7 +14,6 @@ jobs:
         options:
          - [ "x86_64-unknown-linux-gnu", "linux-64"]
          - [ "aarch64-unknown-linux-gnu", "linux-aarch64"]
-         - [ "armv7-unknown-linux-gnueabihf", "linux-armv7"]
     steps:
       - uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
@@ -134,7 +133,6 @@ jobs:
         arch:
           - "x86_64-unknown-linux-gnu"
           - "aarch64-unknown-linux-gnu"
-          - "armv7-unknown-linux-gnueabihf"
     steps:
     - uses: actions/checkout@v3
     - uses: messense/maturin-action@v1
