@@ -1,7 +1,21 @@
 use rstest::rstest;
 use std::fs;
 use std::path::Path;
+use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::VlVersion;
+
+use std::sync::Once;
+
+static INIT: Once = Once::new();
+
+pub fn initialize() {
+    INIT.call_once(|| {
+        let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let fonts_dir = root_path.join("tests").join("fonts");
+        register_font_directory(fonts_dir.to_str().unwrap())
+            .expect("Failed to register test font directory");
+    });
+}
 
 fn load_vl_spec(name: &str) -> serde_json::Value {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -87,6 +101,8 @@ mod test_reference_specs {
         #[values(false, true)]
         pretty: bool,
     ) {
+        initialize();
+
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
 
@@ -123,6 +139,8 @@ mod test_svg {
         #[values("circle_binned", "stacked_bar_h")]
         name: &str,
     ) {
+        initialize();
+
         let vl_version = VlVersion::v5_5;
 
         // Load example Vega-Lite spec
@@ -176,6 +194,8 @@ mod test_png {
         name: &str,
         scale: f32
     ) {
+        initialize();
+
         let vl_version = VlVersion::v5_5;
 
         // Load example Vega-Lite spec

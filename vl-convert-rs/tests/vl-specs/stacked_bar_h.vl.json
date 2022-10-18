@@ -11,6 +11,6 @@
   "config": {
     "axis": {"labelFont": "monospace", "titleFont": "serif"},
     "legend": {"labelFont": "sans-serif", "titleFont": "serif"},
-    "title": {"font": "Impact"}
+    "title": {"font": "Caveat"}
   }
 }
