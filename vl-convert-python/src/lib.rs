@@ -250,10 +250,7 @@ fn vegalite_to_png(
 #[pyo3(text_signature = "(font_dir)")]
 fn register_font_directory(font_dir: &str) -> PyResult<()> {
     register_font_directory_rs(font_dir).map_err(|err| {
-        PyValueError::new_err(format!(
-            "Failed to register font directory: {}",
-            err.to_string()
-        ))
+        PyValueError::new_err(format!("Failed to register font directory: {}", err))
     })?;
     Ok(())
 }
