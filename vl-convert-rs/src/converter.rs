@@ -20,6 +20,7 @@ use deno_runtime::BootstrapOptions;
 use std::thread;
 use std::thread::JoinHandle;
 
+use crate::anyhow::anyhow;
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
 
@@ -538,7 +539,10 @@ impl VlConverter {
     }
 
     fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
-        let rtree = match usvg::Tree::from_str(svg, &USVG_OPTIONS.to_ref()) {
+        let opts = USVG_OPTIONS
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+        let rtree = match usvg::Tree::from_str(svg, &opts.to_ref()) {
             Ok(rtree) => rtree,
             Err(err) => {
                 bail!("Failed to parse SVG string: {}", err.to_string())

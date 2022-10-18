@@ -4,6 +4,7 @@ use clap::{arg, Parser, Subcommand};
 use std::str::FromStr;
 use vl_convert_rs::converter::VlConverter;
 use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
 const DEFAULT_VL_VERSION: &str = "5.5";
@@ -52,6 +53,10 @@ enum Commands {
         /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
+
+        /// Additional directory to search for fonts
+        #[arg(long)]
+        font_dir: Option<String>,
     },
 
     /// Convert a Vega-Lite specification to an PNG image
@@ -72,6 +77,10 @@ enum Commands {
         /// Image scale factor
         #[arg(short, long, default_value = "1.0")]
         scale: f32,
+
+        /// Additional directory to search for fonts
+        #[arg(long)]
+        font_dir: Option<String>,
     },
 
     /// Convert a Vega specification to an SVG image
@@ -84,6 +93,10 @@ enum Commands {
         /// Path to output SVG file to be created
         #[arg(short, long)]
         output: String,
+
+        /// Additional directory to search for fonts
+        #[arg(long)]
+        font_dir: Option<String>,
     },
 
     /// Convert a Vega specification to an PNG image
@@ -100,6 +113,10 @@ enum Commands {
         /// Image scale factor
         #[arg(short, long, default_value = "1.0")]
         scale: f32,
+
+        /// Additional directory to search for fonts
+        #[arg(long)]
+        font_dir: Option<String>,
     },
 }
 
@@ -118,21 +135,47 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             vl_version,
-        } => vl_2_svg(&input, &output, &vl_version).await?,
+            font_dir,
+        } => {
+            register_font_dir(font_dir)?;
+            vl_2_svg(&input, &output, &vl_version).await?
+        }
         Vl2png {
             input,
             output,
             vl_version,
             scale,
-        } => vl_2_png(&input, &output, &vl_version, scale).await?,
-        Vg2svg { input, output } => vg_2_svg(&input, &output).await?,
+            font_dir,
+        } => {
+            register_font_dir(font_dir)?;
+            vl_2_png(&input, &output, &vl_version, scale).await?
+        }
+        Vg2svg {
+            input,
+            output,
+            font_dir,
+        } => {
+            register_font_dir(font_dir)?;
+            vg_2_svg(&input, &output).await?
+        }
         Vg2png {
             input,
             output,
             scale,
-        } => vg_2_png(&input, &output, scale).await?,
+            font_dir,
+        } => {
+            register_font_dir(font_dir)?;
+            vg_2_png(&input, &output, scale).await?
+        }
     }
 
+    Ok(())
+}
+
+fn register_font_dir(dir: Option<String>) -> Result<(), anyhow::Error> {
+    if let Some(dir) = dir {
+        register_font_directory(&dir)?
+    }
     Ok(())
 }
 
