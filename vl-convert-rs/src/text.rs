@@ -1,11 +1,13 @@
-use crate::anyhow::bail;
+use crate::anyhow;
+use crate::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use deno_core::op;
 use serde::Deserialize;
 use std::collections::HashSet;
+use std::sync::Mutex;
 
 lazy_static! {
-    pub static ref USVG_OPTIONS: usvg::Options = init_usvg_options();
+    pub static ref USVG_OPTIONS: Mutex<usvg::Options> = Mutex::new(init_usvg_options());
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -151,8 +153,10 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
 }
 
 fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
-    let rtree =
-        usvg::Tree::from_str(svg, &USVG_OPTIONS.to_ref()).expect("Failed to parse text SVG");
+    let opts = USVG_OPTIONS
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+    let rtree = usvg::Tree::from_str(svg, &opts.to_ref()).expect("Failed to parse text SVG");
     for node in rtree.root().descendants() {
         if !rtree.is_in_defs(&node) {
             // Text bboxes are different from path bboxes.
@@ -173,4 +177,12 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
         .map(|node| format!("{:?}", node))
         .collect();
     bail!("Failed to locate text in SVG:\n{}\n{:?}", svg, node_strs)
+}
+
+pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
+    let mut opts = USVG_OPTIONS
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+    opts.fontdb.load_fonts_dir(dir);
+    Ok(())
 }
