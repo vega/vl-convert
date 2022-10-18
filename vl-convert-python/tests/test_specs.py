@@ -5,6 +5,11 @@ import pytest
 tests_dir = Path(__file__).parent
 root_dir = tests_dir.parent.parent
 specs_dir = root_dir / "vl-convert-rs" / "tests" / "vl-specs"
+fonts_dir = root_dir / "vl-convert-rs" / "tests" / "fonts"
+
+
+def setup_module(module):
+    vlc.register_font_directory(str(fonts_dir))
 
 
 def load_vl_spec(name):

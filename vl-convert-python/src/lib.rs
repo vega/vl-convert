@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use vl_convert_rs::converter::TOKIO_RUNTIME;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::serde_json;
+use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
 use vl_convert_rs::VlConverter as VlConverterRs;
 
 #[macro_use]
@@ -238,6 +239,25 @@ fn vegalite_to_png(
     }))
 }
 
+/// Register a directory of fonts for use in subsequent conversions
+///
+/// Args:
+///     font_dir (str): Absolute path to a directory containing font files
+///
+/// Returns:
+///     bytes: PNG image data
+#[pyfunction]
+#[pyo3(text_signature = "(font_dir)")]
+fn register_font_directory(font_dir: &str) -> PyResult<()> {
+    register_font_directory_rs(font_dir).map_err(|err| {
+        PyValueError::new_err(format!(
+            "Failed to register font directory: {}",
+            err.to_string()
+        ))
+    })?;
+    Ok(())
+}
+
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -246,6 +266,7 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
+    m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
