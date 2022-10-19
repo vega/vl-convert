@@ -5,6 +5,7 @@ use deno_core::op;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Mutex;
+use usvg::fontdb::Database;
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options> = Mutex::new(init_usvg_options());
@@ -21,23 +22,26 @@ const LIBERATION_SANS_BOLDITALIC: &[u8] =
 
 fn init_usvg_options() -> usvg::Options {
     let mut opt = usvg::Options::default();
+    let fontdb = &mut opt.fontdb;
 
     // Load fonts from the operating system
-    opt.fontdb.load_system_fonts();
+    fontdb.load_system_fonts();
 
     // Set default sans-serif font family.
     // By default, Vega outputs SVGs with "sans-serif" as the font family, so
     // we vendor the "Liberation Sans" font so that there is always a fallback
-    opt.fontdb
-        .load_font_data(Vec::from(LIBERATION_SANS_REGULAR));
-    opt.fontdb.load_font_data(Vec::from(LIBERATION_SANS_BOLD));
-    opt.fontdb.load_font_data(Vec::from(LIBERATION_SANS_ITALIC));
-    opt.fontdb
-        .load_font_data(Vec::from(LIBERATION_SANS_BOLDITALIC));
+    fontdb.load_font_data(Vec::from(LIBERATION_SANS_REGULAR));
+    fontdb.load_font_data(Vec::from(LIBERATION_SANS_BOLD));
+    fontdb.load_font_data(Vec::from(LIBERATION_SANS_ITALIC));
+    fontdb.load_font_data(Vec::from(LIBERATION_SANS_BOLDITALIC));
 
+    setup_default_fonts(fontdb);
+    opt
+}
+
+fn setup_default_fonts(fontdb: &mut Database) {
     // Collect set of system font families
-    let families: HashSet<String> = opt
-        .fontdb
+    let families: HashSet<String> = fontdb
         .faces()
         .iter()
         .map(|face| face.family.clone())
@@ -45,7 +49,7 @@ fn init_usvg_options() -> usvg::Options {
 
     for family in ["Arial", "Helvetica", "Liberation Sans"] {
         if families.contains(family) {
-            opt.fontdb.set_sans_serif_family(family);
+            fontdb.set_sans_serif_family(family);
             break;
         }
     }
@@ -58,7 +62,7 @@ fn init_usvg_options() -> usvg::Options {
         "DejaVu Sans Mono",
     ] {
         if families.contains(family) {
-            opt.fontdb.set_monospace_family(family);
+            fontdb.set_monospace_family(family);
             break;
         }
     }
@@ -71,12 +75,10 @@ fn init_usvg_options() -> usvg::Options {
         "DejaVu Serif",
     ] {
         if families.contains(family) {
-            opt.fontdb.set_serif_family(family);
+            fontdb.set_serif_family(family);
             break;
         }
     }
-
-    opt
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -184,5 +186,7 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
     opts.fontdb.load_fonts_dir(dir);
+
+    setup_default_fonts(&mut opts.fontdb);
     Ok(())
 }
