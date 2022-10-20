@@ -26,7 +26,7 @@ async fn main() {
     .unwrap();
 
     let vega_spec = converter
-        .vegalite_to_vega(vl_spec, VlVersion::v5_5, true)
+        .vegalite_to_vega(vl_spec, VlVersion::v5_5)
         .await
         .expect("Failed to perform Vega-Lite to Vega conversion");
 

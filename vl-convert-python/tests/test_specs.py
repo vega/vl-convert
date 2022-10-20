@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import vl_convert as vlc
 import pytest
@@ -19,12 +20,12 @@ def load_vl_spec(name):
     return spec_str
 
 
-def load_expected_vg_spec(name, vl_version, pretty):
-    filename = f"{name}.vg.pretty.json" if pretty else f"{name}.vg.json"
+def load_expected_vg_spec(name, vl_version):
+    filename = f"{name}.vg.json"
     spec_path = specs_dir / "expected" / vl_version / filename
     if spec_path.exists():
         with spec_path.open("rt", encoding="utf8") as f:
-            return f.read()
+            return json.load(f)
     else:
         return None
 
@@ -47,23 +48,32 @@ def load_expected_png(name, vl_version):
 @pytest.mark.parametrize(
     "vl_version", ["v4_17", "v5_0", "v5_1", "v5_2", "v5_3", "v5_4", "v5_5"]
 )
-@pytest.mark.parametrize("pretty", [True, False])
-def test_reference_specs(name, vl_version, pretty):
+@pytest.mark.parametrize("as_dict", [False, True])
+def test_vega(name, vl_version, as_dict):
     vl_spec = load_vl_spec(name)
-    expected_vg_spec = load_expected_vg_spec(name, vl_version, pretty)
+
+    if as_dict:
+        vl_spec = json.loads(vl_spec)
+
+    expected_vg_spec = load_expected_vg_spec(name, vl_version)
 
     if expected_vg_spec is None:
         with pytest.raises(ValueError):
-            vlc.vegalite_to_vega(vl_spec, vl_version=vl_version, pretty=pretty)
+            vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     else:
-        vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version, pretty=pretty)
+        vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
         assert expected_vg_spec == vg_spec
 
 
 @pytest.mark.parametrize("name", ["circle_binned", "stacked_bar_h"])
-def test_svg(name):
+@pytest.mark.parametrize("as_dict", [False, True])
+def test_svg(name, as_dict):
     vl_version = "v5_5"
     vl_spec = load_vl_spec(name)
+
+    if as_dict:
+        vl_spec = json.loads(vl_spec)
+
     expected_svg = load_expected_svg(name, vl_version)
 
     # Convert to vega first
@@ -77,9 +87,14 @@ def test_svg(name):
 
 
 @pytest.mark.parametrize("name,scale", [("circle_binned", 1.0), ("stacked_bar_h", 2.0)])
-def test_png(name, scale):
+@pytest.mark.parametrize("as_dict", [False, True])
+def test_png(name, scale, as_dict):
     vl_version = "v5_5"
     vl_spec = load_vl_spec(name)
+
+    if as_dict:
+        vl_spec = json.loads(vl_spec)
+
     expected_png = load_expected_png(name, vl_version)
 
     # Convert to vega first

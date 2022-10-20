@@ -22,6 +22,7 @@ The `vegalite_to_svg` and `vegalite_to_png` functions can be used to convert Veg
 
 ```python
 import vl_convert as vlc
+import json
 
 vl_spec = r"""
 {
@@ -55,7 +56,7 @@ with open("chart.png", "wb") as f:
 # Create low-level Vega representation of chart and write to file
 vg_spec = vlc.vegalite_to_vega(vl_spec)
 with open("chart.vg.json", "wt") as f:
-    f.write(vg_spec)
+    json.dump(vg_spec, f)
 ```
 
 ## Convert Altair Chart to SVG, PNG, and Vega
@@ -65,6 +66,7 @@ The Altair visualization library provides a Pythonic API for generating Vega-Lit
 import altair as alt
 from vega_datasets import data
 import vl_convert as vlc
+import json
 
 source = data.barley()
 
@@ -87,7 +89,7 @@ with open("altair_chart.png", "wb") as f:
 # Create low-level Vega representation of chart and write to file
 vg_spec = vlc.vegalite_to_vega(chart.to_json(), vl_version="4.17")
 with open("altair_chart.vg.json", "wt") as f:
-    f.write(vg_spec)
+    json.dump(vg_spec, f)
 ```
 # How it works
 This crate uses [PyO3](https://pyo3.rs/) to wrap the [`vl-convert-rs`](https://crates.io/crates/vl-convert-rs) Rust crate as a Python library. The `vl-convert-rs` crate is a self-contained Rust library for converting [Vega-Lite](https://vega.github.io/vega-lite/) visualization specifications into various formats.  The conversions are performed using the Vega-Lite and Vega JavaScript libraries running in a v8 JavaScript runtime provided by the [`deno_runtime`](https://crates.io/crates/deno_runtime) crate.  Font metrics and SVG-to-PNG conversions are provided by the [`resvg`](https://crates.io/crates/resvg) crate.
