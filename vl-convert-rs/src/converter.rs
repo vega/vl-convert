@@ -436,7 +436,7 @@ pub enum VlConvertCommand {
 /// }   "#).unwrap();
 ///
 ///     let vega_spec = futures::executor::block_on(
-///         converter.vegalite_to_vega(vl_spec, VlVersion::v5_5, true)
+///         converter.vegalite_to_vega(vl_spec, VlVersion::v5_5)
 ///     ).expect(
 ///         "Failed to perform Vega-Lite to Vega conversion"
 ///     );
