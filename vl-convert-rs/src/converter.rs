@@ -1,6 +1,6 @@
 use crate::module_loader::import_map::{url_for_path, vega_url, VlVersion};
 use crate::module_loader::VlConvertModuleLoader;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -33,26 +33,47 @@ lazy_static! {
             .enable_all()
             .build()
             .unwrap();
-    static ref STRING_ARG: Arc<Mutex<serde_json::Value>> =
-        Arc::new(Mutex::new(serde_json::Value::Null));
+    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, serde_json::Value>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
-fn set_json_arg(arg: serde_json::Value) -> Result<(), AnyError> {
-    match STRING_ARG.lock() {
+fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
+    // Increment arg id
+    let id = match NEXT_ARG_ID.lock() {
         Ok(mut guard) => {
-            *guard = arg;
+            let id = *guard;
+            *guard = (*guard + 1) % i32::MAX;
+            id
+        }
+        Err(err) => {
+            bail!("Failed to acquire lock: {}", err.to_string())
+        }
+    };
+
+    // Add Arg at id to args
+    match JSON_ARGS.lock() {
+        Ok(mut guard) => {
+            guard.insert(id, arg);
         }
         Err(err) => {
             bail!("Failed to acquire lock: {}", err.to_string())
         }
     }
-    Ok(())
+
+    Ok(id)
 }
 
 #[op]
-fn op_get_json_arg() -> Result<serde_json::Value, AnyError> {
-    match STRING_ARG.lock() {
-        Ok(guard) => Ok(guard.clone()),
+fn op_get_json_arg(arg_id: i32) -> Result<serde_json::Value, AnyError> {
+    match JSON_ARGS.lock() {
+        Ok(mut guard) => {
+            if let Some(arg) = guard.remove(&arg_id) {
+                Ok(arg)
+            } else {
+                bail!("Arg id not found")
+            }
+        }
         Err(err) => {
             bail!("Failed to acquire lock: {}", err.to_string())
         }
@@ -305,14 +326,15 @@ function vegaLiteToSvg_{ver_name}(vlSpec) {{
     ) -> Result<serde_json::Value, AnyError> {
         self.init_vl_version(&vl_version).await?;
 
-        set_json_arg(vl_spec.clone())?;
+        let arg_id = set_json_arg(vl_spec.clone())?;
         let code = format!(
             r#"
 compileVegaLite_{ver_name:?}(
-    Deno.core.ops.op_get_json_arg()
+    Deno.core.ops.op_get_json_arg({arg_id})
 )
 "#,
             ver_name = vl_version,
+            arg_id = arg_id
         );
 
         let value = self.execute_script_to_json(&code).await?;
@@ -327,17 +349,18 @@ compileVegaLite_{ver_name:?}(
         self.init_vega().await?;
         self.init_vl_version(&vl_version).await?;
 
-        set_json_arg(vl_spec.clone())?;
+        let arg_id = set_json_arg(vl_spec.clone())?;
         let code = format!(
             r#"
 var svg;
 vegaLiteToSvg_{ver_name:?}(
-    Deno.core.ops.op_get_json_arg(),
+    Deno.core.ops.op_get_json_arg({arg_id}),
 ).then((result) => {{
     svg = result;
 }});
 "#,
             ver_name = vl_version,
+            arg_id = arg_id,
         );
         self.worker.execute_script("<anon>", &code)?;
         self.worker.run_event_loop(false).await?;
@@ -349,16 +372,19 @@ vegaLiteToSvg_{ver_name:?}(
     pub async fn vega_to_svg(&mut self, vg_spec: &serde_json::Value) -> Result<String, AnyError> {
         self.init_vega().await?;
 
-        set_json_arg(vg_spec.clone())?;
-        let code = r#"
+        let arg_id = set_json_arg(vg_spec.clone())?;
+        let code = format!(
+            r#"
 var svg;
 vegaToSvg(
-    Deno.core.ops.op_get_json_arg(),
-).then((result) => {
+    Deno.core.ops.op_get_json_arg({arg_id}),
+).then((result) => {{
     svg = result;
-})
-"#;
-        self.worker.execute_script("<anon>", code)?;
+}})
+"#,
+            arg_id = arg_id
+        );
+        self.worker.execute_script("<anon>", &code)?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
