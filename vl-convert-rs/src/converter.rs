@@ -653,7 +653,7 @@ mod tests {
         "##).unwrap();
 
         let vg_spec = ctx
-            .vegalite_to_vega(vl_spec, VlVersion::v4_17, true)
+            .vegalite_to_vega(vl_spec, VlVersion::v4_17)
             .await
             .unwrap();
         println!("vg_spec: {}", vg_spec)
@@ -674,14 +674,14 @@ mod tests {
 
         let mut ctx1 = VlConverter::new();
         let vg_spec1 = ctx1
-            .vegalite_to_vega(vl_spec.clone(), VlVersion::v4_17, true)
+            .vegalite_to_vega(vl_spec.clone(), VlVersion::v4_17)
             .await
             .unwrap();
         println!("vg_spec1: {}", vg_spec1);
 
         let mut ctx1 = VlConverter::new();
         let vg_spec2 = ctx1
-            .vegalite_to_vega(vl_spec, VlVersion::v5_5, true)
+            .vegalite_to_vega(vl_spec, VlVersion::v5_5)
             .await
             .unwrap();
         println!("vg_spec2: {}", vg_spec2);
