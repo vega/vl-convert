@@ -115,7 +115,7 @@ fn check_no_command() -> Result<(), Box<dyn std::error::Error>> {
 
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("Usage: vl-convert <COMMAND>"));
+        .stderr(predicate::str::contains("Usage: vl-convert"));
     Ok(())
 }
 
