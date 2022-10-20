@@ -20,12 +20,12 @@ def load_vl_spec(name):
     return spec_str
 
 
-def load_expected_vg_spec(name, vl_version, pretty):
-    filename = f"{name}.vg.pretty.json" if pretty else f"{name}.vg.json"
+def load_expected_vg_spec(name, vl_version):
+    filename = f"{name}.vg.json"
     spec_path = specs_dir / "expected" / vl_version / filename
     if spec_path.exists():
         with spec_path.open("rt", encoding="utf8") as f:
-            return f.read()
+            return json.load(f)
     else:
         return None
 
@@ -48,21 +48,20 @@ def load_expected_png(name, vl_version):
 @pytest.mark.parametrize(
     "vl_version", ["v4_17", "v5_0", "v5_1", "v5_2", "v5_3", "v5_4", "v5_5"]
 )
-@pytest.mark.parametrize("pretty", [True, False])
 @pytest.mark.parametrize("as_dict", [False, True])
-def test_vega(name, vl_version, pretty, as_dict):
+def test_vega(name, vl_version, as_dict):
     vl_spec = load_vl_spec(name)
 
     if as_dict:
         vl_spec = json.loads(vl_spec)
 
-    expected_vg_spec = load_expected_vg_spec(name, vl_version, pretty)
+    expected_vg_spec = load_expected_vg_spec(name, vl_version)
 
     if expected_vg_spec is None:
         with pytest.raises(ValueError):
-            vlc.vegalite_to_vega(vl_spec, vl_version=vl_version, pretty=pretty)
+            vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     else:
-        vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version, pretty=pretty)
+        vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
         assert expected_vg_spec == vg_spec
 
 

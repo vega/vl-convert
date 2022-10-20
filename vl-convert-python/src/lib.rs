@@ -1,7 +1,7 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyString};
-use pythonize::depythonize;
+use pyo3::types::{PyBytes, PyDict};
+use pythonize::{depythonize, pythonize};
 use std::str::FromStr;
 use std::sync::Mutex;
 use vl_convert_rs::converter::TOKIO_RUNTIME;
@@ -31,11 +31,7 @@ lazy_static! {
 ///     str: Vega JSON specification string
 #[pyfunction]
 #[pyo3(text_signature = "(vl_spec, vl_version, pretty)")]
-fn vegalite_to_vega(
-    vl_spec: PyObject,
-    vl_version: Option<&str>,
-    pretty: Option<bool>,
-) -> PyResult<String> {
+fn vegalite_to_vega(vl_spec: PyObject, vl_version: Option<&str>) -> PyResult<PyObject> {
     let vl_spec = parse_json_spec(vl_spec)?;
 
     let vl_version = if let Some(vl_version) = vl_version {
@@ -43,22 +39,22 @@ fn vegalite_to_vega(
     } else {
         Default::default()
     };
-    let pretty = pretty.unwrap_or(false);
 
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
-    let vega_spec =
-        match TOKIO_RUNTIME.block_on(converter.vegalite_to_vega(vl_spec, vl_version, pretty)) {
-            Ok(vega_spec) => vega_spec,
-            Err(err) => {
-                return Err(PyValueError::new_err(format!(
-                    "Vega-Lite to Vega conversion failed:\n{}",
-                    err
-                )))
-            }
-        };
-    Ok(vega_spec)
+    let vega_spec = match TOKIO_RUNTIME.block_on(converter.vegalite_to_vega(vl_spec, vl_version)) {
+        Ok(vega_spec) => vega_spec,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "Vega-Lite to Vega conversion failed:\n{}",
+                err
+            )))
+        }
+    };
+    Python::with_gil(|py| -> PyResult<PyObject> {
+        pythonize(py, &vega_spec).map_err(|err| PyValueError::new_err(err.to_string()))
+    })
 }
 
 /// Convert a Vega spec to an SVG image string
@@ -70,16 +66,8 @@ fn vegalite_to_vega(
 ///     str: SVG image string
 #[pyfunction]
 #[pyo3(text_signature = "(vg_spec)")]
-fn vega_to_svg(vg_spec: &str) -> PyResult<String> {
-    let vg_spec = match serde_json::from_str::<serde_json::Value>(vg_spec) {
-        Ok(vg_spec) => vg_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Failed to parse vg_spec as JSON: {}",
-                err
-            )))
-        }
-    };
+fn vega_to_svg(vg_spec: PyObject) -> PyResult<String> {
+    let vg_spec = parse_json_spec(vg_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()

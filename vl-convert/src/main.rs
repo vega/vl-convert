@@ -242,18 +242,29 @@ async fn vl_2_vg(
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let vega_str = match converter
-        .vegalite_to_vega(vegalite_json, vl_version, pretty)
-        .await
-    {
+    let vega_json = match converter.vegalite_to_vega(vegalite_json, vl_version).await {
         Ok(vega_str) => vega_str,
         Err(err) => {
             bail!("Vega-Lite to Vega conversion failed: {}", err);
         }
     };
-
-    // Write result
-    write_output_string(output, &vega_str)?;
+    let vega_str_res = if pretty {
+        serde_json::to_string_pretty(&vega_json)
+    } else {
+        serde_json::to_string(&vega_json)
+    };
+    match vega_str_res {
+        Ok(vega_str) => {
+            // Write result
+            write_output_string(output, &vega_str)?;
+        }
+        Err(err) => {
+            bail!(
+                "Failed to serialize Vega spec to JSON string: {}",
+                err.to_string()
+            )
+        }
+    }
 
     Ok(())
 }

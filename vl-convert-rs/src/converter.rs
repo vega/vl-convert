@@ -3,12 +3,13 @@ use crate::module_loader::VlConvertModuleLoader;
 use std::collections::HashSet;
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8, Extension};
 
+use deno_core::op;
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_core;
 use deno_runtime::deno_web::BlobStore;
@@ -32,6 +33,30 @@ lazy_static! {
             .enable_all()
             .build()
             .unwrap();
+    static ref STRING_ARG: Arc<Mutex<serde_json::Value>> =
+        Arc::new(Mutex::new(serde_json::Value::Null));
+}
+
+fn set_json_arg(arg: serde_json::Value) -> Result<(), AnyError> {
+    match STRING_ARG.lock() {
+        Ok(mut guard) => {
+            *guard = arg;
+        }
+        Err(err) => {
+            bail!("Failed to acquire lock: {}", err.to_string())
+        }
+    }
+    Ok(())
+}
+
+#[op]
+fn op_get_json_arg() -> Result<serde_json::Value, AnyError> {
+    match STRING_ARG.lock() {
+        Ok(guard) => Ok(guard.clone()),
+        Err(err) => {
+            bail!("Failed to acquire lock: {}", err.to_string())
+        }
+    }
 }
 
 fn get_error_class_name(e: &AnyError) -> &'static str {
@@ -129,14 +154,9 @@ import('{vl_url}').then((imported) => {{
             // Create and initialize function string
             let function_str = format!(
                 r#"
-function compileVegaLite_{ver_name}(vlSpec, pretty) {{
+function compileVegaLite_{ver_name}(vlSpec) {{
     let options = {{}};
-    let vgSpec = {ver_name}.compile(vlSpec, options).spec;
-    if (pretty) {{
-        return JSON.stringify(vgSpec, null, 2)
-    }} else {{
-        return JSON.stringify(vgSpec)
-    }}
+    return {ver_name}.compile(vlSpec, options).spec
 }}
 
 function vegaLiteToSvg_{ver_name}(vlSpec) {{
@@ -165,6 +185,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec) {{
             .ops(vec![
                 // Op to measure text width with resvg
                 op_text_width::decl(),
+                op_get_json_arg::decl(),
             ])
             .build();
 
@@ -232,6 +253,28 @@ function vegaLiteToSvg_{ver_name}(vlSpec) {{
         Ok(this)
     }
 
+    async fn execute_script_to_json(
+        &mut self,
+        script: &str,
+    ) -> Result<serde_json::Value, AnyError> {
+        let res = self.worker.js_runtime.execute_script("<anon>", script)?;
+
+        self.worker.run_event_loop(false).await?;
+
+        let scope = &mut self.worker.js_runtime.handle_scope();
+        let local = v8::Local::new(scope, res);
+
+        // Deserialize a `v8` object into a Rust type using `serde_v8`,
+        // in this case deserialize to a JSON `Value`.
+        let deserialized_value = serde_v8::from_v8::<serde_json::Value>(scope, local);
+        deserialized_value.map_err(|err| {
+            anyhow!(
+                "Failed to deserialize JavaScript value: {}",
+                err.to_string()
+            )
+        })
+    }
+
     async fn execute_script_to_string(&mut self, script: &str) -> Result<String, AnyError> {
         let res = self.worker.js_runtime.execute_script("<anon>", script)?;
 
@@ -259,24 +302,20 @@ function vegaLiteToSvg_{ver_name}(vlSpec) {{
         &mut self,
         vl_spec: &serde_json::Value,
         vl_version: VlVersion,
-        pretty: bool,
-    ) -> Result<String, AnyError> {
+    ) -> Result<serde_json::Value, AnyError> {
         self.init_vl_version(&vl_version).await?;
 
-        let vl_spec_str = serde_json::to_string(vl_spec)?;
+        set_json_arg(vl_spec.clone())?;
         let code = format!(
             r#"
 compileVegaLite_{ver_name:?}(
-    {vl_spec_str},
-    {pretty}
+    Deno.core.ops.op_get_json_arg()
 )
 "#,
             ver_name = vl_version,
-            vl_spec_str = vl_spec_str,
-            pretty = pretty,
         );
 
-        let value = self.execute_script_to_string(&code).await?;
+        let value = self.execute_script_to_json(&code).await?;
         Ok(value)
     }
 
@@ -288,19 +327,17 @@ compileVegaLite_{ver_name:?}(
         self.init_vega().await?;
         self.init_vl_version(&vl_version).await?;
 
-        let vl_spec_str = serde_json::to_string(vl_spec)?;
-
+        set_json_arg(vl_spec.clone())?;
         let code = format!(
             r#"
 var svg;
 vegaLiteToSvg_{ver_name:?}(
-    {vl_spec_str}
+    Deno.core.ops.op_get_json_arg(),
 ).then((result) => {{
     svg = result;
 }});
 "#,
             ver_name = vl_version,
-            vl_spec_str = vl_spec_str,
         );
         self.worker.execute_script("<anon>", &code)?;
         self.worker.run_event_loop(false).await?;
@@ -312,19 +349,16 @@ vegaLiteToSvg_{ver_name:?}(
     pub async fn vega_to_svg(&mut self, vg_spec: &serde_json::Value) -> Result<String, AnyError> {
         self.init_vega().await?;
 
-        let vg_spec_str = serde_json::to_string(vg_spec)?;
-        let code = format!(
-            r#"
+        set_json_arg(vg_spec.clone())?;
+        let code = r#"
 var svg;
 vegaToSvg(
-    {vg_spec_str}
-).then((result) => {{
+    Deno.core.ops.op_get_json_arg(),
+).then((result) => {
     svg = result;
-}})
-"#,
-            vg_spec_str = vg_spec_str,
-        );
-        self.worker.execute_script("<anon>", &code)?;
+})
+"#;
+        self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
@@ -336,8 +370,7 @@ pub enum VlConvertCommand {
     VlToVg {
         vl_spec: serde_json::Value,
         vl_version: VlVersion,
-        pretty: bool,
-        responder: oneshot::Sender<Result<String, AnyError>>,
+        responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToSvg {
         vg_spec: serde_json::Value,
@@ -402,11 +435,10 @@ impl VlConverter {
                     VlConvertCommand::VlToVg {
                         vl_spec,
                         vl_version,
-                        pretty,
                         responder,
                     } => {
-                        let vega_spec = TOKIO_RUNTIME
-                            .block_on(inner.vegalite_to_vega(&vl_spec, vl_version, pretty));
+                        let vega_spec =
+                            TOKIO_RUNTIME.block_on(inner.vegalite_to_vega(&vl_spec, vl_version));
                         responder.send(vega_spec).ok();
                     }
                     VlConvertCommand::VgToSvg { vg_spec, responder } => {
@@ -437,13 +469,11 @@ impl VlConverter {
         &mut self,
         vl_spec: serde_json::Value,
         vl_version: VlVersion,
-        pretty: bool,
-    ) -> Result<String, AnyError> {
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
+    ) -> Result<serde_json::Value, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
         let cmd = VlConvertCommand::VlToVg {
             vl_spec,
             vl_version,
-            pretty,
             responder: resp_tx,
         };
 
