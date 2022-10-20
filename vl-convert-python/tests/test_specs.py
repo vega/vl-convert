@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import vl_convert as vlc
 import pytest
@@ -48,8 +49,13 @@ def load_expected_png(name, vl_version):
     "vl_version", ["v4_17", "v5_0", "v5_1", "v5_2", "v5_3", "v5_4", "v5_5"]
 )
 @pytest.mark.parametrize("pretty", [True, False])
-def test_reference_specs(name, vl_version, pretty):
+@pytest.mark.parametrize("as_dict", [False, True])
+def test_vega(name, vl_version, pretty, as_dict):
     vl_spec = load_vl_spec(name)
+
+    if as_dict:
+        vl_spec = json.loads(vl_spec)
+
     expected_vg_spec = load_expected_vg_spec(name, vl_version, pretty)
 
     if expected_vg_spec is None:
@@ -61,9 +67,14 @@ def test_reference_specs(name, vl_version, pretty):
 
 
 @pytest.mark.parametrize("name", ["circle_binned", "stacked_bar_h"])
-def test_svg(name):
+@pytest.mark.parametrize("as_dict", [False, True])
+def test_svg(name, as_dict):
     vl_version = "v5_5"
     vl_spec = load_vl_spec(name)
+
+    if as_dict:
+        vl_spec = json.loads(vl_spec)
+
     expected_svg = load_expected_svg(name, vl_version)
 
     # Convert to vega first
@@ -77,9 +88,14 @@ def test_svg(name):
 
 
 @pytest.mark.parametrize("name,scale", [("circle_binned", 1.0), ("stacked_bar_h", 2.0)])
-def test_png(name, scale):
+@pytest.mark.parametrize("as_dict", [False, True])
+def test_png(name, scale, as_dict):
     vl_version = "v5_5"
     vl_spec = load_vl_spec(name)
+
+    if as_dict:
+        vl_spec = json.loads(vl_spec)
+
     expected_png = load_expected_png(name, vl_version)
 
     # Convert to vega first

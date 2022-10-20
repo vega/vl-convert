@@ -2534,6 +2534,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pythonize"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f7f0c136f5fbc01868185eef462800e49659eb23acca83b9e884367a006acb6"
+dependencies = [
+ "pyo3",
+ "serde",
+]
+
+[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3855,6 +3865,7 @@ dependencies = [
  "futures",
  "lazy_static",
  "pyo3",
+ "pythonize",
  "vl-convert-rs",
 ]
 

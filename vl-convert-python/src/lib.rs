@@ -1,6 +1,7 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyDict, PyString};
+use pythonize::depythonize;
 use std::str::FromStr;
 use std::sync::Mutex;
 use vl_convert_rs::converter::TOKIO_RUNTIME;
@@ -20,7 +21,7 @@ lazy_static! {
 /// version of the Vega-Lite JavaScript library.
 ///
 /// Args:
-///     vl_spec (str): Vega-Lite JSON specification string
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
 ///     pretty (bool): If True, pretty-print resulting Vega JSON
@@ -31,25 +32,19 @@ lazy_static! {
 #[pyfunction]
 #[pyo3(text_signature = "(vl_spec, vl_version, pretty)")]
 fn vegalite_to_vega(
-    vl_spec: &str,
+    vl_spec: PyObject,
     vl_version: Option<&str>,
     pretty: Option<bool>,
 ) -> PyResult<String> {
+    let vl_spec = parse_json_spec(vl_spec)?;
+
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
         Default::default()
     };
     let pretty = pretty.unwrap_or(false);
-    let vl_spec = match serde_json::from_str::<serde_json::Value>(vl_spec) {
-        Ok(vl_spec) => vl_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Failed to parse vl_spec as JSON: {}",
-                err
-            )))
-        }
-    };
+
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
@@ -69,7 +64,7 @@ fn vegalite_to_vega(
 /// Convert a Vega spec to an SVG image string
 ///
 /// Args:
-///     vg_spec (str): Vega JSON specification string
+///     vg_spec (str | dict): Vega JSON specification string or dict
 ///
 /// Returns:
 ///     str: SVG image string
@@ -106,7 +101,7 @@ fn vega_to_svg(vg_spec: &str) -> PyResult<String> {
 /// particular version of the Vega-Lite JavaScript library.
 ///
 /// Args:
-///     vl_spec (str): Vega-Lite JSON specification string
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
 ///
@@ -114,20 +109,13 @@ fn vega_to_svg(vg_spec: &str) -> PyResult<String> {
 ///     str: SVG image string
 #[pyfunction]
 #[pyo3(text_signature = "(vl_spec, vl_version)")]
-fn vegalite_to_svg(vl_spec: &str, vl_version: Option<&str>) -> PyResult<String> {
+fn vegalite_to_svg(vl_spec: PyObject, vl_version: Option<&str>) -> PyResult<String> {
+    let vl_spec = parse_json_spec(vl_spec)?;
+
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
         Default::default()
-    };
-    let vl_spec = match serde_json::from_str::<serde_json::Value>(vl_spec) {
-        Ok(vl_spec) => vl_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Failed to parse vl_spec as JSON: {}",
-                err
-            )))
-        }
     };
 
     let mut converter = VL_CONVERTER
@@ -149,23 +137,15 @@ fn vegalite_to_svg(vl_spec: &str, vl_version: Option<&str>) -> PyResult<String> 
 /// Convert a Vega spec to PNG image data.
 ///
 /// Args:
-///     vg_spec (str): Vega JSON specification string
+///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
 ///
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
 #[pyo3(text_signature = "(vg_spec, scale)")]
-fn vega_to_png(vg_spec: &str, scale: Option<f32>) -> PyResult<PyObject> {
-    let vg_spec = match serde_json::from_str::<serde_json::Value>(vg_spec) {
-        Ok(vg_spec) => vg_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Failed to parse vg_spec as JSON: {}",
-                err
-            )))
-        }
-    };
+fn vega_to_png(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
+    let vg_spec = parse_json_spec(vg_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -190,7 +170,7 @@ fn vega_to_png(vg_spec: &str, scale: Option<f32>) -> PyResult<PyObject> {
 /// version of the Vega-Lite JavaScript library.
 ///
 /// Args:
-///     vl_spec (str): Vega-Lite JSON specification string
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
 ///     scale (float): Image scale factor (default 1.0)
@@ -200,7 +180,7 @@ fn vega_to_png(vg_spec: &str, scale: Option<f32>) -> PyResult<PyObject> {
 #[pyfunction]
 #[pyo3(text_signature = "(vl_spec, vl_version, scale)")]
 fn vegalite_to_png(
-    vl_spec: &str,
+    vl_spec: PyObject,
     vl_version: Option<&str>,
     scale: Option<f32>,
 ) -> PyResult<PyObject> {
@@ -209,15 +189,7 @@ fn vegalite_to_png(
     } else {
         Default::default()
     };
-    let vl_spec = match serde_json::from_str::<serde_json::Value>(vl_spec) {
-        Ok(vl_spec) => vl_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Failed to parse vg_spec as JSON: {}",
-                err
-            )))
-        }
-    };
+    let vl_spec = parse_json_spec(vl_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -237,6 +209,35 @@ fn vegalite_to_png(
     Ok(Python::with_gil(|py| -> PyObject {
         PyObject::from(PyBytes::new(py, png_data.as_slice()))
     }))
+}
+
+/// Helper function to parse an input Python string or dict as a serde_json::Value
+fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
+    Python::with_gil(|py| -> PyResult<serde_json::Value> {
+        if let Ok(vl_spec) = vl_spec.extract::<&str>(py) {
+            match serde_json::from_str::<serde_json::Value>(vl_spec) {
+                Ok(vl_spec) => Ok(vl_spec),
+                Err(err) => {
+                    return Err(PyValueError::new_err(format!(
+                        "Failed to parse vl_spec string as JSON: {}",
+                        err
+                    )))
+                }
+            }
+        } else if let Ok(vl_spec) = vl_spec.cast_as::<PyDict>(py) {
+            match depythonize(vl_spec) {
+                Ok(vl_spec) => Ok(vl_spec),
+                Err(err) => {
+                    return Err(PyValueError::new_err(format!(
+                        "Failed to parse vl_spec dict as JSON: {}",
+                        err
+                    )))
+                }
+            }
+        } else {
+            return Err(PyValueError::new_err("vl_spec must be a string or dict"));
+        }
+    })
 }
 
 /// Register a directory of fonts for use in subsequent conversions
