@@ -205,25 +205,21 @@ fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
         if let Ok(vl_spec) = vl_spec.extract::<&str>(py) {
             match serde_json::from_str::<serde_json::Value>(vl_spec) {
                 Ok(vl_spec) => Ok(vl_spec),
-                Err(err) => {
-                    return Err(PyValueError::new_err(format!(
-                        "Failed to parse vl_spec string as JSON: {}",
-                        err
-                    )))
-                }
+                Err(err) => Err(PyValueError::new_err(format!(
+                    "Failed to parse vl_spec string as JSON: {}",
+                    err
+                ))),
             }
         } else if let Ok(vl_spec) = vl_spec.cast_as::<PyDict>(py) {
             match depythonize(vl_spec) {
                 Ok(vl_spec) => Ok(vl_spec),
-                Err(err) => {
-                    return Err(PyValueError::new_err(format!(
-                        "Failed to parse vl_spec dict as JSON: {}",
-                        err
-                    )))
-                }
+                Err(err) => Err(PyValueError::new_err(format!(
+                    "Failed to parse vl_spec dict as JSON: {}",
+                    err
+                ))),
             }
         } else {
-            return Err(PyValueError::new_err("vl_spec must be a string or dict"));
+            Err(PyValueError::new_err("vl_spec must be a string or dict"))
         }
     })
 }
