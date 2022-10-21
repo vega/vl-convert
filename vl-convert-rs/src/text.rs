@@ -163,6 +163,12 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
         Err(err) => bail!("Failed to deserialize text info: {}", err.to_string()),
     };
 
+    if let Some(text) = text_info.text.as_str() {
+        if text.is_empty() {
+            return Ok(0.0);
+        }
+    }
+
     let svg = text_info.to_svg();
     if let Ok(width) = extract_text_width(&svg) {
         Ok(width)
