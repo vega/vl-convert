@@ -96,3 +96,17 @@ VlConvert works around this by overriding the text width calculation function us
 The Vega JavaScript library supports exporting chart specifications directly to PNG images. When running in Node.js, this functionality relies on node canvas, which is not available in Deno.
 
 VlConvert generates PNG images by first exporting charts to SVG as described above, then converting the SVG image to a PNG image using the `resvg` crate.
+
+## Limitations
+### PNG Performance
+VlConvert relies on the [`resvg`](https://github.com/RazrFalcon/resvg) Rust library for rendering PNG images from the SVG produced by Vega. resvg is a very accurate implementation of SVG rendering, but it is not GPU accelerated and can be somewhat slow when asked to render charts with many individual marks (e.g. large scatter plots).  For a single pane scatter plot, the performance is on the order of 1 second per 1000 points.
+
+If PNG rendering performance is prohibitive, the recommended approach is to export to SVG and use another approach to convert the resulting SVG images to PNG.
+
+### System font requirements
+SVG text placement and PNG text rendering require that the fonts referenced by the exported chart are installed on the system that VlConvert is running on.  For example, when using the `vl-convert-python` package in [Google Colab](https://colab.research.google.com/), VlConvert will only have access to the limited set of fonts installed in the Colab kernel. It will not have access to the user fonts that the web browser has access to.
+
+A directory containing additional font files can registered with the VlConvert Python library using the `vl_convert.register_font_directory` function. Similarly, the `--font-dir` argument can be used to register custom fonts in the `vl-convert` CLI application.
+
+### Emoji support in PNG export
+The Altair [isotype emoji](https://altair-viz.github.io/gallery/isotype_emoji.html) gallery example does not currently convert property to PNG.
