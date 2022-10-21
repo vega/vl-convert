@@ -11,4 +11,5 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
 ]
 
-
+[tool.maturin]
+sdist-include = ["*_thirdparty.*"]
