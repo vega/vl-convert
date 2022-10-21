@@ -3,6 +3,7 @@ use crate::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use deno_core::op;
 use serde::Deserialize;
+use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use usvg::fontdb::Database;
@@ -88,7 +89,7 @@ struct TextInfo {
     weight: Option<String>,
     family: Option<String>,
     size: i32,
-    text: String,
+    text: Value,
 }
 
 impl TextInfo {
@@ -114,9 +115,14 @@ impl TextInfo {
         }
 
         let text_attrs_str = text_attrs.join(" ");
-
         let mut escaped_text = String::new();
-        for char in self.text.chars() {
+
+        let text = match &self.text {
+            Value::String(s) => s.to_string(),
+            text => text.to_string(),
+        };
+
+        for char in text.chars() {
             match char {
                 '<' => escaped_text.push_str("&lt;"),
                 '>' => escaped_text.push_str("&gt;"),
