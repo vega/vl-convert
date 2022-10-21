@@ -1,7 +1,7 @@
-## Update rust_thirdparty.yaml license file
+## Update rust_thirdparty.yaml and copy license files to Python directory
 
 ```
-$ cargo bundle-licenses --format yaml --output rust_thirdparty.yaml && cp *_thirdparty.* vl-convert-python/
+$ cargo bundle-licenses --format yaml --output thirdparty_rust.yaml && cp thirdparty_*.* vl-convert-python/
 
 ```
 

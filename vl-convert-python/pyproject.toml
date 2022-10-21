@@ -12,4 +12,4 @@ classifiers = [
 ]
 
 [tool.maturin]
-sdist-include = ["rust_thirdparty.yaml"]
+sdist-include = ["*_thirdparty.*"]
