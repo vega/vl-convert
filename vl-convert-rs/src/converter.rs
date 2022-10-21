@@ -33,8 +33,7 @@ lazy_static! {
             .enable_all()
             .build()
             .unwrap();
-    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
