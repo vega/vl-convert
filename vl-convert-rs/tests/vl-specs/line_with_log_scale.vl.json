@@ -1,0 +1,17 @@
+{
+  "config": {"view": {"continuousWidth": 400, "continuousHeight": 300}},
+  "data": {
+    "url": "https://cdn.jsdelivr.net/npm/vega-datasets@v1.29.0/data/population.json"
+  },
+  "mark": "line",
+  "encoding": {
+    "x": {"field": "year", "type": "ordinal"},
+    "y": {
+      "aggregate": "sum",
+      "field": "people",
+      "scale": {"type": "log"},
+      "type": "quantitative"
+    }
+  },
+  "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json"
+}
