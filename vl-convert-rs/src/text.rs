@@ -115,13 +115,27 @@ impl TextInfo {
 
         let text_attrs_str = text_attrs.join(" ");
 
+        let mut escaped_text = String::new();
+        for char in self.text.chars() {
+            match char {
+                '<' => escaped_text.push_str("&lt;"),
+                '>' => escaped_text.push_str("&gt;"),
+                '"' => escaped_text.push_str("&quot;"),
+                '\'' => escaped_text.push_str("&apos;"),
+                '&' => escaped_text.push_str("&amp;"),
+                '\n' => escaped_text.push_str("&#xA;"),
+                '\r' => escaped_text.push_str("&#xD;"),
+                _ => escaped_text.push(char),
+            }
+        }
+
         format!(
             r#"
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100" height="100">
-    <text x="20" y="50" {text_attrs_str}>{text}</text>
+    <text x="20" y="50" {text_attrs_str}>{escaped_text}</text>
 </svg>"#,
             text_attrs_str = text_attrs_str,
-            text = self.text
+            escaped_text = escaped_text
         )
     }
 

@@ -7,7 +7,7 @@
     "y": {"field": "variety"},
     "color": {"field": "site"}
   },
-  "title": "Figure Title",
+  "title": "Figure & Title < ' >",
   "config": {
     "axis": {"labelFont": "monospace", "titleFont": "serif"},
     "legend": {"labelFont": "sans-serif", "titleFont": "serif"},
