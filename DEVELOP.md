@@ -1,3 +1,10 @@
+## Update rust_thirdparty.yaml license file
+
+```
+$ cargo bundle-licenses --format yaml --output rust_thirdparty.yaml && cp *_thirdparty.* vl-convert-python/
+
+```
+
 ## Release process
 Releases of VlConvert crates are handled using [cargo-workspaces](https://github.com/pksunkara/cargo-workspaces), which can be installed with:
 

@@ -37,6 +37,21 @@ jobs:
       - name: Check for clippy warnings
         run: cargo clippy
 
+  cargo-bundle-license:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install cargo bundle license
+        run: cargo install cargo-bundle-licenses
+      - name: Check that license is up to date
+        run: cargo bundle-licenses --format yaml --output CI.yaml --previous rust_thirdparty.yml --check-previous
+
   codegen-clean:
     runs-on: ubuntu-latest
     steps:
