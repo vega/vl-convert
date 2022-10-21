@@ -33,7 +33,7 @@ lazy_static! {
             .enable_all()
             .build()
             .unwrap();
-    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, serde_json::Value>>> =
+    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> =
         Arc::new(Mutex::new(HashMap::new()));
     static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
@@ -54,7 +54,7 @@ fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
     // Add Arg at id to args
     match JSON_ARGS.lock() {
         Ok(mut guard) => {
-            guard.insert(id, arg);
+            guard.insert(id, serde_json::to_string(&arg).unwrap());
         }
         Err(err) => {
             bail!("Failed to acquire lock: {}", err.to_string())
@@ -65,7 +65,7 @@ fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
 }
 
 #[op]
-fn op_get_json_arg(arg_id: i32) -> Result<serde_json::Value, AnyError> {
+fn op_get_json_arg(arg_id: i32) -> Result<String, AnyError> {
     match JSON_ARGS.lock() {
         Ok(mut guard) => {
             if let Some(arg) = guard.remove(&arg_id) {
@@ -330,7 +330,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec) {{
         let code = format!(
             r#"
 compileVegaLite_{ver_name:?}(
-    Deno.core.ops.op_get_json_arg({arg_id})
+    JSON.parse(Deno.core.ops.op_get_json_arg({arg_id}))
 )
 "#,
             ver_name = vl_version,
@@ -354,7 +354,7 @@ compileVegaLite_{ver_name:?}(
             r#"
 var svg;
 vegaLiteToSvg_{ver_name:?}(
-    Deno.core.ops.op_get_json_arg({arg_id}),
+    JSON.parse(Deno.core.ops.op_get_json_arg({arg_id}))
 ).then((result) => {{
     svg = result;
 }});
@@ -377,7 +377,7 @@ vegaLiteToSvg_{ver_name:?}(
             r#"
 var svg;
 vegaToSvg(
-    Deno.core.ops.op_get_json_arg({arg_id}),
+    JSON.parse(Deno.core.ops.op_get_json_arg({arg_id}))
 ).then((result) => {{
     svg = result;
 }})
