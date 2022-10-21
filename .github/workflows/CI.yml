@@ -50,7 +50,7 @@ jobs:
       - name: Install cargo bundle license
         run: cargo install cargo-bundle-licenses
       - name: Check that license is up to date
-        run: cargo bundle-licenses --format yaml --output CI.yaml --previous rust_thirdparty.yml --check-previous
+        run: cargo bundle-licenses --format yaml --output CI.yaml --previous thirdparty_rust.yml --check-previous
 
   codegen-clean:
     runs-on: ubuntu-latest
