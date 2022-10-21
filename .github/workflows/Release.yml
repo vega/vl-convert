@@ -33,6 +33,8 @@ jobs:
         run: |
           mkdir -p bin
           cp target/${{ matrix.options[0] }}/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
           zip -r vl-convert_${{ matrix.options[1] }}.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
@@ -59,6 +61,8 @@ jobs:
         run: |
           New-Item -Path "artifacts\bin" -ItemType Directory
           Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
+          Copy-Item "LICENSE" -Destination "artifacts\bin"
+          Copy-Item "thirdparty_*" -Destination "artifacts\bin"
       - name: zip executable
         uses: papeloto/action-zip@v1
         with:
@@ -89,6 +93,8 @@ jobs:
         run: |
           mkdir -p bin
           cp target/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
           zip -r vl-convert_osx-64.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
@@ -118,6 +124,8 @@ jobs:
         run: |
           mkdir -p bin
           cp target/aarch64-apple-darwin/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
           zip -r vl-convert_osx-arm64.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
