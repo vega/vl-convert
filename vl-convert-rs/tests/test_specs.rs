@@ -130,7 +130,7 @@ mod test_svg {
 
     #[rstest]
     fn test(
-        #[values("circle_binned", "stacked_bar_h")]
+        #[values("circle_binned", "stacked_bar_h", "bar_chart_trellis_compact")]
         name: &str,
     ) {
         initialize();
@@ -180,7 +180,8 @@ mod test_png {
 
     #[rstest(name, scale,
         case("circle_binned", 1.0),
-        case("stacked_bar_h", 2.0)
+        case("stacked_bar_h", 2.0),
+        case("bar_chart_trellis_compact", 2.0),
     )]
     fn test(
         name: &str,

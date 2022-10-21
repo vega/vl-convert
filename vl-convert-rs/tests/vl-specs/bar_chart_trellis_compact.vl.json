@@ -1,0 +1,61 @@
+{
+  "config": {"view": {"continuousWidth": 400, "continuousHeight": 300}},
+  "data": {"name": "data-e90feaf959fd425e1afec00a92fd04a7"},
+  "mark": "bar",
+  "encoding": {
+    "color": {
+      "field": "c",
+      "legend": {"orient": "bottom", "titleOrient": "left"},
+      "title": "settings",
+      "type": "nominal"
+    },
+    "column": {"field": "b", "title": "Factor B", "type": "nominal"},
+    "row": {
+      "field": "a",
+      "header": {"labelAngle": 0},
+      "title": "Factor A",
+      "type": "nominal"
+    },
+    "x": {
+      "axis": {"format": "%"},
+      "field": "p",
+      "title": null,
+      "type": "quantitative"
+    },
+    "y": {"axis": null, "field": "c", "type": "nominal"}
+  },
+  "height": {"step": 8},
+  "width": 60,
+  "$schema": "https://vega.github.io/schema/vega-lite/v4.17.0.json",
+  "datasets": {
+    "data-e90feaf959fd425e1afec00a92fd04a7": [
+      {"a": "a1", "b": "b1", "c": "x", "p": "0.14"},
+      {"a": "a1", "b": "b1", "c": "y", "p": "0.60"},
+      {"a": "a1", "b": "b1", "c": "z", "p": "0.03"},
+      {"a": "a1", "b": "b2", "c": "x", "p": "0.80"},
+      {"a": "a1", "b": "b2", "c": "y", "p": "0.38"},
+      {"a": "a1", "b": "b2", "c": "z", "p": "0.55"},
+      {"a": "a1", "b": "b3", "c": "x", "p": "0.11"},
+      {"a": "a1", "b": "b3", "c": "y", "p": "0.58"},
+      {"a": "a1", "b": "b3", "c": "z", "p": "0.79"},
+      {"a": "a2", "b": "b1", "c": "x", "p": "0.83"},
+      {"a": "a2", "b": "b1", "c": "y", "p": "0.87"},
+      {"a": "a2", "b": "b1", "c": "z", "p": "0.67"},
+      {"a": "a2", "b": "b2", "c": "x", "p": "0.97"},
+      {"a": "a2", "b": "b2", "c": "y", "p": "0.84"},
+      {"a": "a2", "b": "b2", "c": "z", "p": "0.90"},
+      {"a": "a2", "b": "b3", "c": "x", "p": "0.74"},
+      {"a": "a2", "b": "b3", "c": "y", "p": "0.64"},
+      {"a": "a2", "b": "b3", "c": "z", "p": "0.19"},
+      {"a": "a3", "b": "b1", "c": "x", "p": "0.57"},
+      {"a": "a3", "b": "b1", "c": "y", "p": "0.35"},
+      {"a": "a3", "b": "b1", "c": "z", "p": "0.49"},
+      {"a": "a3", "b": "b2", "c": "x", "p": "0.91"},
+      {"a": "a3", "b": "b2", "c": "y", "p": "0.38"},
+      {"a": "a3", "b": "b2", "c": "z", "p": "0.91"},
+      {"a": "a3", "b": "b3", "c": "x", "p": "0.99"},
+      {"a": "a3", "b": "b3", "c": "y", "p": "0.80"},
+      {"a": "a3", "b": "b3", "c": "z", "p": "0.37"}
+    ]
+  }
+}
