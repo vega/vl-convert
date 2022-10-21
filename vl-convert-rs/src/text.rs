@@ -164,7 +164,7 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
     };
 
     if let Some(text) = text_info.text.as_str() {
-        if text.is_empty() {
+        if text.trim().is_empty() {
             return Ok(0.0);
         }
     }
