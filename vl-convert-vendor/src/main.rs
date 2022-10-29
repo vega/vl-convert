@@ -32,6 +32,10 @@ const VL_PATHS: &[(&str, &str)] = &[
         "5.5",
         "/pin/vega-lite@v5.5.0-x3x9oTW9wvfyOekd4a63/mode=imports,min/optimized/vega-lite.js",
     ),
+    (
+        "5.6",
+        "/pin/vega-lite@v5.6.0-jKfgpjSz6Y52Dxyq2kpj/mode=imports,min/optimized/vega-lite.js",
+    ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/mode=imports,min/optimized/vega.js";
