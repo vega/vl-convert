@@ -39,7 +39,7 @@ $ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --vl-version 5.5
 ```
 
 ## Python
-Install the `vl-convert-python` pacakge using pip
+Install the `vl-convert-python` package using pip
 
 ```
 $ pip install vl-convert-python
