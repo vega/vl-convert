@@ -188,7 +188,7 @@ fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
 }
 
 fn read_input_string(input: &str) -> Result<String, anyhow::Error> {
-    match std::fs::read_to_string(&input) {
+    match std::fs::read_to_string(input) {
         Ok(input_str) => Ok(input_str),
         Err(err) => {
             bail!("Failed to read input file: {}\n{}", input, err);
@@ -206,7 +206,7 @@ fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow::Error> {
 }
 
 fn write_output_string(output: &str, output_str: &str) -> Result<(), anyhow::Error> {
-    match std::fs::write(&output, output_str) {
+    match std::fs::write(output, output_str) {
         Ok(_) => Ok(()),
         Err(err) => {
             bail!("Failed to write converted output to {}\n{}", output, err);
@@ -215,7 +215,7 @@ fn write_output_string(output: &str, output_str: &str) -> Result<(), anyhow::Err
 }
 
 fn write_output_binary(output: &str, output_data: &[u8]) -> Result<(), anyhow::Error> {
-    match std::fs::write(&output, output_data) {
+    match std::fs::write(output, output_data) {
         Ok(_) => Ok(()),
         Err(err) => {
             bail!("Failed to write converted output to {}\n{}", output, err);

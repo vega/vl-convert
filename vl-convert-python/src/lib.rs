@@ -240,6 +240,28 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
     Ok(())
 }
 
+/// Get the named local timezone that Vega uses to perform timezone calculations
+///
+/// Returns:
+///     str: Named local timezone (e.g. "America/New_York")
+#[pyfunction]
+#[pyo3(text_signature = "()")]
+fn get_local_tz() -> PyResult<String> {
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+    let local_tz = match TOKIO_RUNTIME.block_on(converter.get_local_tz()) {
+        Ok(local_tz) => local_tz,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "get_local_tz request failed:\n{}",
+                err
+            )))
+        }
+    };
+    Ok(local_tz)
+}
+
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -249,6 +271,7 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
