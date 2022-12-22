@@ -389,6 +389,15 @@ vegaToSvg(
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
+
+    pub async fn get_local_tz(&mut self) -> Result<String, AnyError> {
+        let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;";
+        self.worker.execute_script("<anon>", &code)?;
+        self.worker.run_event_loop(false).await?;
+
+        let value = self.execute_script_to_string("localTz").await?;
+        Ok(value)
+    }
 }
 
 pub enum VlConvertCommand {
@@ -404,6 +413,9 @@ pub enum VlConvertCommand {
     VlToSvg {
         vl_spec: serde_json::Value,
         vl_version: VlVersion,
+        responder: oneshot::Sender<Result<String, AnyError>>,
+    },
+    GetLocalTz {
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
 }
@@ -478,6 +490,10 @@ impl VlConverter {
                         let svg_result =
                             TOKIO_RUNTIME.block_on(inner.vegalite_to_svg(&vl_spec, vl_version));
                         responder.send(svg_result).ok();
+                    }
+                    VlConvertCommand::GetLocalTz { responder } => {
+                        let local_tz = TOKIO_RUNTIME.block_on(inner.get_local_tz());
+                        responder.send(local_tz).ok();
                     }
                 }
             }
@@ -623,6 +639,30 @@ impl VlConverter {
             Err(err) => {
                 bail!("Failed to encode PNG: {}", err.to_string())
             }
+        }
+    }
+
+    pub async fn get_local_tz(&mut self) -> Result<String, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
+        let cmd = VlConvertCommand::GetLocalTz { responder: resp_tx };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send get_local_tz request: {}", err.to_string())
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(local_tz_result) => local_tz_result,
+            Err(err) => bail!(
+                "Failed to retrieve get_local_tz result: {}",
+                err.to_string()
+            ),
         }
     }
 }
