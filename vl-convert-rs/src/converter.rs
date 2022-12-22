@@ -392,7 +392,7 @@ vegaToSvg(
 
     pub async fn get_local_tz(&mut self) -> Result<String, AnyError> {
         let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;";
-        self.worker.execute_script("<anon>", &code)?;
+        self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("localTz").await?;

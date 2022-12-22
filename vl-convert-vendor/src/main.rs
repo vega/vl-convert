@@ -72,7 +72,7 @@ fn main() {
         VEGA_PATH = VEGA_PATH
     )
     .unwrap();
-    fs::write(&importsjs_path, imports).expect("Failed to write vendor_imports.js");
+    fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
     if let Err(err) = Command::new("deno")
@@ -87,7 +87,7 @@ fn main() {
     // Load vendored import_map
     let import_map_path = vendor_path.join("import_map.json");
     let import_map_str =
-        fs::read_to_string(&import_map_path).expect("Unable to read import_map.json file");
+        fs::read_to_string(import_map_path).expect("Unable to read import_map.json file");
 
     let import_map: serde_json::Value =
         serde_json::from_str(&import_map_str).expect("Unable to parse import_map.json file");
