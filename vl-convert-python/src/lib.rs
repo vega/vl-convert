@@ -28,7 +28,7 @@ lazy_static! {
 ///         specification (default False)
 ///
 /// Returns:
-///     str: Vega JSON specification string
+///     dict: Vega JSON specification dict
 #[pyfunction]
 #[pyo3(text_signature = "(vl_spec, vl_version, pretty)")]
 fn vegalite_to_vega(vl_spec: PyObject, vl_version: Option<&str>) -> PyResult<PyObject> {
