@@ -185,21 +185,19 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
     let rtree = usvg::Tree::from_str(svg, &opts.to_ref()).expect("Failed to parse text SVG");
-    for node in rtree.root().descendants() {
-        if !rtree.is_in_defs(&node) {
-            // Text bboxes are different from path bboxes.
-            if let usvg::NodeKind::Path(ref path) = *node.borrow() {
-                if let Some(ref bbox) = path.text_bbox {
-                    let width = bbox.right() - bbox.left();
-                    let _height = bbox.bottom() - bbox.top();
-                    return Ok(width);
-                }
+    for node in rtree.root.descendants() {
+        // Text bboxes are different from path bboxes.
+        if let usvg::NodeKind::Path(ref path) = *node.borrow() {
+            if let Some(ref bbox) = path.text_bbox {
+                let width = bbox.right() - bbox.left();
+                let _height = bbox.bottom() - bbox.top();
+                return Ok(width);
             }
         }
     }
 
     let node_strs: Vec<_> = rtree
-        .root()
+        .root
         .descendants()
         .into_iter()
         .map(|node| format!("{:?}", node))

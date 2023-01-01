@@ -16,7 +16,6 @@ use deno_runtime::deno_web::BlobStore;
 use deno_runtime::permissions::Permissions;
 use deno_runtime::worker::MainWorker;
 use deno_runtime::worker::WorkerOptions;
-use deno_runtime::BootstrapOptions;
 
 use std::thread;
 use std::thread::JoinHandle;
@@ -217,21 +216,9 @@ function vegaLiteToSvg_{ver_name}(vlSpec) {{
         });
 
         let options = WorkerOptions {
-            bootstrap: BootstrapOptions {
-                args: vec![],
-                cpu_count: 1,
-                debug_flag: false,
-                enable_testing_features: false,
-                location: None,
-                no_color: false,
-                is_tty: false,
-                runtime_version: "x".to_string(),
-                ts_version: "x".to_string(),
-                unstable: false,
-                user_agent: "hello_runtime".to_string(),
-                inspect: false,
-            },
+            bootstrap: Default::default(),
             extensions: vec![ext],
+            startup_snapshot: None,
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
             seed: None,
@@ -252,6 +239,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec) {{
             shared_array_buffer_store: None,
             compiled_wasm_module_store: None,
             stdio: Default::default(),
+            should_wait_for_inspector_session: false,
         };
 
         let js_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("vl-convert-rs.js");
@@ -620,7 +608,7 @@ impl VlConverter {
             }
         };
 
-        let pixmap_size = rtree.svg_node().size.to_screen_size();
+        let pixmap_size = rtree.size.to_screen_size();
         let mut pixmap = tiny_skia::Pixmap::new(
             (pixmap_size.width() as f32 * scale) as u32,
             (pixmap_size.height() as f32 * scale) as u32,
