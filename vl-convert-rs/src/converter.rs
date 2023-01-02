@@ -378,13 +378,17 @@ vegaToSvg(
         Ok(value)
     }
 
-    pub async fn get_local_tz(&mut self) -> Result<String, AnyError> {
-        let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;";
+    pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
+        let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';";
         self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("localTz").await?;
-        Ok(value)
+        if value == "undefined" {
+            Ok(None)
+        } else {
+            Ok(Some(value))
+        }
     }
 }
 
@@ -404,7 +408,7 @@ pub enum VlConvertCommand {
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     GetLocalTz {
-        responder: oneshot::Sender<Result<String, AnyError>>,
+        responder: oneshot::Sender<Result<Option<String>, AnyError>>,
     },
 }
 
@@ -630,8 +634,8 @@ impl VlConverter {
         }
     }
 
-    pub async fn get_local_tz(&mut self) -> Result<String, AnyError> {
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
+    pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Option<String>, AnyError>>();
         let cmd = VlConvertCommand::GetLocalTz { responder: resp_tx };
 
         // Send request
