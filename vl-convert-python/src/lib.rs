@@ -243,10 +243,11 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
 /// Get the named local timezone that Vega uses to perform timezone calculations
 ///
 /// Returns:
-///     str: Named local timezone (e.g. "America/New_York")
+///     str: Named local timezone (e.g. "America/New_York"),
+///          or None if the local timezone cannot be determined
 #[pyfunction]
 #[pyo3(text_signature = "()")]
-fn get_local_tz() -> PyResult<String> {
+fn get_local_tz() -> PyResult<Option<String>> {
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
