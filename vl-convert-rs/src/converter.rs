@@ -448,7 +448,11 @@ vegaToSvg(
     pub async fn get_themes(&mut self) -> Result<serde_json::Value, AnyError> {
         self.init_vega().await?;
 
-        let code = "var themes = vegaThemes;";
+        let code = r#"
+var themes = Object.assign({}, vegaThemes);
+delete themes.version
+delete themes.default
+"#;
         self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 
