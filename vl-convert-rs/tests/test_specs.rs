@@ -1,12 +1,14 @@
 use rstest::rstest;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::VlVersion;
 
 use std::sync::Once;
+use usvg::PathBbox;
 
 static INIT: Once = Once::new();
+const BACKGROUND_COLOR: &str = "#abc";
 
 pub fn initialize() {
     INIT.call_once(|| {
@@ -46,27 +48,47 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion) -> Option<serde_json
     }
 }
 
-fn load_expected_svg(name: &str, vl_version: VlVersion) -> String {
+fn make_expected_svg_path(name: &str, vl_version: VlVersion, theme: Option<&str>) -> PathBuf {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let spec_path = root_path
+    root_path
         .join("tests")
         .join("vl-specs")
         .join("expected")
         .join(&format!("{:?}", vl_version))
-        .join(format!("{}.svg", name));
+        .join(
+            if let Some(theme) = theme {
+                format!("{}-{}.svg", name, theme)
+            } else {
+                format!("{}.svg", name)
+            }
+        )
+}
+
+fn load_expected_svg(name: &str, vl_version: VlVersion, theme: Option<&str>) -> String {
+    let spec_path = make_expected_svg_path(name, vl_version, theme);
     let svg_str =
         fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
     svg_str
 }
 
-fn load_expected_png(name: &str, vl_version: VlVersion) -> Vec<u8> {
+fn make_expected_png_path(name: &str, vl_version: VlVersion, theme: Option<&str>) -> PathBuf {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let spec_path = root_path
+    root_path
         .join("tests")
         .join("vl-specs")
         .join("expected")
         .join(&format!("{:?}", vl_version))
-        .join(format!("{}.png", name));
+        .join(
+            if let Some(theme) = theme {
+                format!("{}-{}.png", name, theme)
+            } else {
+                format!("{}.png", name)
+            }
+        )
+}
+
+fn load_expected_png(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Vec<u8> {
+    let spec_path = make_expected_png_path(name, vl_version, theme);
     let png_data =
         fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
     png_data
@@ -151,7 +173,7 @@ mod test_svg {
         let vl_spec = load_vl_spec(name);
 
         // Load expected SVG image
-        let expected_svg = load_expected_svg(name, vl_version);
+        let expected_svg = load_expected_svg(name, vl_version, None);
 
         // Create Vega-Lite Converter and perform conversion
         let mut converter = VlConverter::new();
@@ -168,13 +190,7 @@ mod test_svg {
         assert_eq!(svg, svg);
 
         // // Write out reference image
-        // let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-        // let svg_path = root_path
-        //     .join("tests")
-        //     .join("vl-specs")
-        //     .join("expected")
-        //     .join(format!("{:?}", vl_version))
-        //     .join(format!("{}.svg", name));
+        // let svg_path = make_expected_svg_path(name, vl_version, None);
         // std::fs::write(svg_path, svg).unwrap();
     }
 
@@ -206,8 +222,8 @@ mod test_png {
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
 
-        // Load expected SVG image
-        let expected_png_data = load_expected_png(name, vl_version);
+        // Load expected PNG image
+        let expected_png_data = load_expected_png(name, vl_version, None);
 
         // Create Vega-Lite Converter and perform conversion
         let mut converter = VlConverter::new();
@@ -220,21 +236,70 @@ mod test_png {
         let png_data = block_on(converter.vega_to_png(vg_spec, Some(scale))).unwrap();
         assert_eq!(png_data, expected_png_data);
 
-        // Convert directly to svg
+        // Convert directly to png
         let png_data = block_on(
             converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(scale))
         ).unwrap();
         assert_eq!(png_data, png_data);
 
         // // Write out reference image
-        // let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-        // let png_path = root_path
-        //     .join("tests")
-        //     .join("vl-specs")
-        //     .join("expected")
-        //     .join(format!("{:?}", vl_version))
-        //     .join(format!("{}.png", name));
+        // let png_path = make_expected_png_path(name, vl_version, None);
         // std::fs::write(png_path, png_data).unwrap();
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+
+#[rustfmt::skip]
+mod test_png_theme_config {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::converter::VlOpts;
+    use vl_convert_rs::VlConverter;
+
+    #[rstest(name, scale, theme,
+    case("circle_binned", 1.0, "dark"),
+    case("stacked_bar_h", 2.0, "vox"),
+    case("bar_chart_trellis_compact", 2.0, "excel"),
+    case("line_with_log_scale", 2.0, "fivethirtyeight")
+    )]
+    fn test(
+        name: &str,
+        scale: f32,
+        theme: &str,
+    ) {
+        initialize();
+
+        let vl_version = VlVersion::v5_5;
+
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
+
+        // Load expected PNG image
+        let expected_png_data = load_expected_png(name, vl_version, Some(theme));
+
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
+
+        // Convert directly to png with theme and config that overrides background color
+        let png_data = block_on(
+            converter.vegalite_to_png(
+                vl_spec,
+                VlOpts {
+                    vl_version,
+                    theme: Some(theme.to_string()),
+                    config: Some(serde_json::json!({"background": BACKGROUND_COLOR})),
+                    ..Default::default()
+                }, Some(scale)
+            )
+        ).unwrap();
+        assert_eq!(png_data, expected_png_data);
+
+        // Write out reference image
+        let png_path = make_expected_png_path(name, vl_version, Some(theme));
+        std::fs::write(png_path, png_data).unwrap();
     }
 
     #[test]
