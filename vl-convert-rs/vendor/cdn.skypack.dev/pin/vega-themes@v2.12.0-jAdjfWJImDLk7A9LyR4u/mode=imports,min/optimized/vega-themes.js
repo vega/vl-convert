@@ -5,5 +5,3 @@
 
 export * from '/-/vega-themes@v2.12.0-jAdjfWJImDLk7A9LyR4u/dist=es2020,mode=imports,min/optimized/vega-themes.js';
 export {default} from '/-/vega-themes@v2.12.0-jAdjfWJImDLk7A9LyR4u/dist=es2020,mode=imports,min/optimized/vega-themes.js';
-
-// Perf Optimization: Preload Deep Imports
