@@ -1,5 +1,7 @@
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
+use tempfile::NamedTempFile;
+use std::io::Write;
 use rstest::rstest;
 use std::fs;
 use std::path::Path;
@@ -8,6 +10,7 @@ use std::str::FromStr; // Run programs
 use std::sync::Once;
 use vl_convert_rs::VlVersion;
 
+const BACKGROUND_COLOR: &str = "#abc";
 static INIT: Once = Once::new();
 
 pub fn initialize() {
@@ -70,7 +73,7 @@ fn load_expected_svg(name: &str, vl_version: &str) -> String {
     fs::read_to_string(&spec_path).unwrap()
 }
 
-fn load_expected_png(name: &str, vl_version: &str) -> Vec<u8> {
+fn load_expected_png(name: &str, vl_version: &str, theme: Option<&str>) -> Vec<u8> {
     let vl_version = VlVersion::from_str(vl_version).unwrap();
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let spec_path = root_path
@@ -80,7 +83,13 @@ fn load_expected_png(name: &str, vl_version: &str) -> Vec<u8> {
         .join("vl-specs")
         .join("expected")
         .join(&format!("{:?}", vl_version))
-        .join(format!("{}.png", name));
+        .join(
+            if let Some(theme) = theme {
+                format!("{}-{}.png", name, theme)
+            } else {
+                format!("{}.png", name)
+            }
+        );
     let png_data =
         fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
     png_data
@@ -257,12 +266,63 @@ mod test_vl2png {
             .arg("--scale").arg(scale.to_string());
 
         // Load expected
-        let expected_str = load_expected_png(name, vl_version);
+        let expected_png = load_expected_png(name, vl_version, None);
         cmd.assert().success();
 
         // Load written spec
-        let output_str = fs::read(&output).unwrap();
-        assert_eq!(expected_str, output_str);
+        let output_png = fs::read(&output).unwrap();
+        assert_eq!(expected_png, output_png);
+
+        Ok(())
+    }
+}
+
+
+#[rustfmt::skip]
+mod test_vl2png_theme_config {
+    use std::fs;
+    use std::process::Command;
+    use crate::*;
+
+    #[rstest(name, scale, theme,
+    case("circle_binned", 1.0, "dark"),
+    case("stacked_bar_h", 2.0, "vox")
+    )]
+    fn test(
+        name: &str,
+        scale: f32,
+        theme: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let vl_version = "5_5";
+        let output_filename = format!("{}_{}.png", vl_version, name);
+
+        let vl_path = vl_spec_path(name);
+        let output = output_path(&output_filename);
+
+        // Write config with background color to temporary file
+        let mut config_file = NamedTempFile::new().unwrap();
+        writeln!(config_file, r#"{{"background": "{}"}}"#, BACKGROUND_COLOR).unwrap();
+        let config_path = config_file.path().to_str().unwrap();
+
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let cmd = cmd.arg("vl2png")
+            .arg("-i").arg(vl_path)
+            .arg("-o").arg(&output)
+            .arg("--vl-version").arg(vl_version)
+            .arg("--font-dir").arg(test_font_dir())
+            .arg("--theme").arg(theme)
+            .arg("--config").arg(config_path)
+            .arg("--scale").arg(scale.to_string());
+
+        // Load expected
+        let expected_png = load_expected_png(name, vl_version, Some(theme));
+        cmd.assert().success();
+
+        // Load written spec
+        let output_png = fs::read(&output).unwrap();
+        assert_eq!(expected_png, output_png);
 
         Ok(())
     }
