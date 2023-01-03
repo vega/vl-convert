@@ -20,7 +20,7 @@ pub fn vega_url() -> String {
 }
 
 pub fn vega_themes_url() -> String {
-    url_for_path(VEGA_PATH)
+    url_for_path(VEGA_THEMES_PATH)
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]

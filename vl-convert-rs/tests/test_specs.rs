@@ -102,7 +102,7 @@ mod test_vegalite_to_vega {
         // Create Vega-Lite Converter and perform conversion
         let mut converter = VlConverter::new();
 
-        let vg_result = block_on(converter.vegalite_to_vega(vl_spec, vl_version));
+        let vg_result = block_on(converter.vegalite_to_vega(vl_spec, None,vl_version));
 
         match load_expected_vg_spec(name, vl_version) {
             Some(expected_vg_spec) => {
@@ -153,13 +153,13 @@ mod test_svg {
 
         // Convert to vega first
         let vg_spec =
-            block_on(converter.vegalite_to_vega(vl_spec.clone(), vl_version)).unwrap();
+            block_on(converter.vegalite_to_vega(vl_spec.clone(), None, vl_version)).unwrap();
 
         let svg = block_on(converter.vega_to_svg(vg_spec)).unwrap();
         assert_eq!(svg, expected_svg);
 
         // Convert directly to svg
-        let svg = block_on(converter.vegalite_to_svg(vl_spec, vl_version)).unwrap();
+        let svg = block_on(converter.vegalite_to_svg(vl_spec, None, vl_version)).unwrap();
         assert_eq!(svg, svg);
 
         // // Write out reference image
@@ -207,13 +207,13 @@ mod test_png {
         let mut converter = VlConverter::new();
 
         // Convert to vega first
-        let vg_spec = block_on(converter.vegalite_to_vega(vl_spec.clone(), vl_version)).unwrap();
+        let vg_spec = block_on(converter.vegalite_to_vega(vl_spec.clone(), None,vl_version)).unwrap();
 
         let png_data = block_on(converter.vega_to_png(vg_spec, Some(scale))).unwrap();
         assert_eq!(png_data, expected_png_data);
 
         // Convert directly to svg
-        let png_data = block_on(converter.vegalite_to_png(vl_spec, vl_version, Some(scale))).unwrap();
+        let png_data = block_on(converter.vegalite_to_png(vl_spec, None, vl_version, Some(scale))).unwrap();
         assert_eq!(png_data, png_data);
 
         // // Write out reference image
