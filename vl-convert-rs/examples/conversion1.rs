@@ -1,3 +1,4 @@
+use vl_convert_rs::converter::VlOpts;
 use vl_convert_rs::{VlConverter, VlVersion};
 
 #[tokio::main]
@@ -26,7 +27,13 @@ async fn main() {
     .unwrap();
 
     let vega_spec = converter
-        .vegalite_to_vega(vl_spec, VlVersion::v5_5)
+        .vegalite_to_vega(
+            vl_spec,
+            VlOpts {
+                vl_version: VlVersion::v5_5,
+                ..Default::default()
+            },
+        )
         .await
         .expect("Failed to perform Vega-Lite to Vega conversion");
 

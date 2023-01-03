@@ -39,7 +39,8 @@ const VL_PATHS: &[(&str, &str)] = &[
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/mode=imports,min/optimized/vega.js";
-const VEGA_THEMES_PATH: &str = "/pin/vega-themes@v2.12.0-jAdjfWJImDLk7A9LyR4u/mode=imports,min/optimized/vega-themes.js";
+const VEGA_THEMES_PATH: &str =
+    "/pin/vega-themes@v2.12.0-jAdjfWJImDLk7A9LyR4u/mode=imports,min/optimized/vega-themes.js";
 
 // Example custom build script.
 fn main() {
@@ -85,7 +86,7 @@ fn main() {
         SKYPACK_URL = SKYPACK_URL,
         VEGA_THEMES_PATH = VEGA_THEMES_PATH
     )
-        .unwrap();
+    .unwrap();
 
     fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
 

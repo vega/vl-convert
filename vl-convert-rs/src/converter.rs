@@ -36,6 +36,23 @@ lazy_static! {
     static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
+#[derive(Debug, Clone)]
+pub struct VlOpts {
+    pub config: Option<serde_json::Value>,
+    pub theme: Option<String>,
+    pub vl_version: VlVersion,
+}
+
+impl Default for VlOpts {
+    fn default() -> Self {
+        Self {
+            config: None,
+            theme: None,
+            vl_version: Default::default(),
+        }
+    }
+}
+
 fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
     // Increment arg id
     let id = match NEXT_ARG_ID.lock() {
@@ -87,31 +104,10 @@ struct InnerVlConverter {
     worker: MainWorker,
     initialized_vl_versions: HashSet<VlVersion>,
     vega_initialized: bool,
-    vega_themes_initialized: bool,
     module_loader: Rc<VlConvertModuleLoader>,
 }
 
 impl InnerVlConverter {
-
-    async fn init_vega_themes(&mut self) -> Result<(), AnyError> {
-        if !self.vega_themes_initialized {
-            let import_str = format!(
-                r#"
-var vegaThemes;
-import('{vega_themes_url}').then((imported) => {{
-    vegaThemes = imported;
-}})"#,
-                vega_themes_url = vega_themes_url(),
-            );
-
-            self.worker.execute_script("<anon>", &import_str)?;
-            self.worker.run_event_loop(false).await?;
-
-            self.vega_themes_initialized = true;
-        }
-        Ok(())
-    }
-
     async fn init_vega(&mut self) -> Result<(), AnyError> {
         if !self.vega_initialized {
             let import_str = format!(
@@ -119,8 +115,15 @@ import('{vega_themes_url}').then((imported) => {{
 var vega;
 import('{vega_url}').then((imported) => {{
     vega = imported;
-}})"#,
+}})
+
+var vegaThemes;
+import('{vega_themes_url}').then((imported) => {{
+    vegaThemes = imported;
+}})
+"#,
                 vega_url = vega_url(),
+                vega_themes_url = vega_themes_url(),
             );
 
             self.worker.execute_script("<anon>", &import_str)?;
@@ -194,26 +197,26 @@ import('{vl_url}').then((imported) => {{
             // Create and initialize function string
             let function_str = format!(
                 r#"
-function compileVegaLite_{ver_name}(vlSpec, config) {{
+function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
     let options = {{}};
 
-    // Add config or theme
-    if (typeof config === "string") {{
-        options["config"] = vegaThemes[config];
-    }} else if (typeof config === "object") {{
+    // Handle config and theme
+    if (theme != null) {{
+        options["config"] = vega.mergeConfig(vegaThemes[theme], config ?? {{}});
+    }} else if (config != null) {{
         options["config"] = config;
     }}
 
     return {ver_name}.compile(vlSpec, options).spec
 }}
 
-function vegaLiteToSvg_{ver_name}(vlSpec, config) {{
+function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
     let options = {{}};
 
-    // Add config or theme
-    if (typeof config === "string") {{
-        options["config"] = vegaThemes[config];
-    }} else if (typeof config === "object") {{
+    // Handle config and theme
+    if (theme != null) {{
+        options["config"] = vega.mergeConfig(vegaThemes[theme], config ?? {{}});
+    }} else if (config != null) {{
         options["config"] = config;
     }}
 
@@ -292,7 +295,6 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config) {{
             worker,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
-            vega_themes_initialized: false,
             module_loader,
         };
 
@@ -347,25 +349,32 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config) {{
     pub async fn vegalite_to_vega(
         &mut self,
         vl_spec: &serde_json::Value,
-        config: Option<&serde_json::Value>,
-        vl_version: VlVersion,
+        vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
-        self.init_vl_version(&vl_version).await?;
-        self.init_vega_themes().await?;
-        let config = config.cloned().unwrap_or(serde_json::Value::Null);
+        self.init_vega().await?;
+        self.init_vl_version(&vl_opts.vl_version).await?;
+        let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
 
         let spec_arg_id = set_json_arg(vl_spec.clone())?;
         let config_arg_id = set_json_arg(config)?;
+
+        let theme_arg = match &vl_opts.theme {
+            None => "null".to_string(),
+            Some(s) => format!("'{}'", s),
+        };
+
         let code = format!(
             r#"
 compileVegaLite_{ver_name:?}(
     JSON.parse(Deno.core.ops.op_get_json_arg({spec_arg_id})),
-    JSON.parse(Deno.core.ops.op_get_json_arg({config_arg_id}))
+    JSON.parse(Deno.core.ops.op_get_json_arg({config_arg_id})),
+    {theme_arg}
 )
 "#,
-            ver_name = vl_version,
+            ver_name = vl_opts.vl_version,
             spec_arg_id = spec_arg_id,
-            config_arg_id = config_arg_id
+            config_arg_id = config_arg_id,
+            theme_arg = theme_arg,
         );
 
         let value = self.execute_script_to_json(&code).await?;
@@ -375,29 +384,34 @@ compileVegaLite_{ver_name:?}(
     pub async fn vegalite_to_svg(
         &mut self,
         vl_spec: &serde_json::Value,
-        config: Option<&serde_json::Value>,
-        vl_version: VlVersion,
+        vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
         self.init_vega().await?;
-        self.init_vl_version(&vl_version).await?;
-        self.init_vega_themes().await?;
+        self.init_vl_version(&vl_opts.vl_version).await?;
 
-        let config = config.cloned().unwrap_or(serde_json::Value::Null);
+        let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
         let spec_arg_id = set_json_arg(vl_spec.clone())?;
         let config_arg_id = set_json_arg(config)?;
+        let theme_arg = match &vl_opts.theme {
+            None => "null".to_string(),
+            Some(s) => format!("'{}'", s),
+        };
+
         let code = format!(
             r#"
 var svg;
 vegaLiteToSvg_{ver_name:?}(
     JSON.parse(Deno.core.ops.op_get_json_arg({spec_arg_id})),
-    JSON.parse(Deno.core.ops.op_get_json_arg({config_arg_id}))
+    JSON.parse(Deno.core.ops.op_get_json_arg({config_arg_id})),
+    {theme_arg}
 ).then((result) => {{
     svg = result;
 }});
 "#,
-            ver_name = vl_version,
+            ver_name = vl_opts.vl_version,
             spec_arg_id = spec_arg_id,
-            config_arg_id = config_arg_id
+            config_arg_id = config_arg_id,
+            theme_arg = theme_arg,
         );
         self.worker.execute_script("<anon>", &code)?;
         self.worker.run_event_loop(false).await?;
@@ -440,13 +454,23 @@ vegaToSvg(
             Ok(Some(value))
         }
     }
+
+    pub async fn get_themes(&mut self) -> Result<serde_json::Value, AnyError> {
+        self.init_vega().await?;
+
+        let code = "var themes = vegaThemes;";
+        self.worker.execute_script("<anon>", code)?;
+        self.worker.run_event_loop(false).await?;
+
+        let value = self.execute_script_to_json("themes").await?;
+        Ok(value)
+    }
 }
 
 pub enum VlConvertCommand {
     VlToVg {
         vl_spec: serde_json::Value,
-        config: Option<serde_json::Value>,
-        vl_version: VlVersion,
+        vl_opts: VlOpts,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToSvg {
@@ -455,12 +479,14 @@ pub enum VlConvertCommand {
     },
     VlToSvg {
         vl_spec: serde_json::Value,
-        config: Option<serde_json::Value>,
-        vl_version: VlVersion,
+        vl_opts: VlOpts,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     GetLocalTz {
         responder: oneshot::Sender<Result<Option<String>, AnyError>>,
+    },
+    GetThemes {
+        responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
 }
 
@@ -491,7 +517,7 @@ pub enum VlConvertCommand {
 /// }   "#).unwrap();
 ///
 ///     let vega_spec = futures::executor::block_on(
-///         converter.vegalite_to_vega(vl_spec, None, VlVersion::v5_5)
+///         converter.vegalite_to_vega(vl_spec, Default::default())
 ///     ).expect(
 ///         "Failed to perform Vega-Lite to Vega conversion"
 ///     );
@@ -515,12 +541,11 @@ impl VlConverter {
                 match cmd {
                     VlConvertCommand::VlToVg {
                         vl_spec,
-                        config,
-                        vl_version,
+                        vl_opts,
                         responder,
                     } => {
                         let vega_spec =
-                            TOKIO_RUNTIME.block_on(inner.vegalite_to_vega(&vl_spec, config.as_ref(), vl_version));
+                            TOKIO_RUNTIME.block_on(inner.vegalite_to_vega(&vl_spec, vl_opts));
                         responder.send(vega_spec).ok();
                     }
                     VlConvertCommand::VgToSvg { vg_spec, responder } => {
@@ -529,17 +554,20 @@ impl VlConverter {
                     }
                     VlConvertCommand::VlToSvg {
                         vl_spec,
-                        config,
-                        vl_version,
+                        vl_opts,
                         responder,
                     } => {
                         let svg_result =
-                            TOKIO_RUNTIME.block_on(inner.vegalite_to_svg(&vl_spec, config.as_ref(), vl_version));
+                            TOKIO_RUNTIME.block_on(inner.vegalite_to_svg(&vl_spec, vl_opts));
                         responder.send(svg_result).ok();
                     }
                     VlConvertCommand::GetLocalTz { responder } => {
                         let local_tz = TOKIO_RUNTIME.block_on(inner.get_local_tz());
                         responder.send(local_tz).ok();
+                    }
+                    VlConvertCommand::GetThemes { responder } => {
+                        let themes = TOKIO_RUNTIME.block_on(inner.get_themes());
+                        responder.send(themes).ok();
                     }
                 }
             }
@@ -555,14 +583,12 @@ impl VlConverter {
     pub async fn vegalite_to_vega(
         &mut self,
         vl_spec: serde_json::Value,
-        config: Option<serde_json::Value>,
-        vl_version: VlVersion,
+        vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
         let cmd = VlConvertCommand::VlToVg {
             vl_spec,
-            config,
-            vl_version,
+            vl_opts,
             responder: resp_tx,
         };
 
@@ -610,14 +636,12 @@ impl VlConverter {
     pub async fn vegalite_to_svg(
         &mut self,
         vl_spec: serde_json::Value,
-        config: Option<serde_json::Value>,
-        vl_version: VlVersion,
+        vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
         let cmd = VlConvertCommand::VlToSvg {
             vl_spec,
-            config,
-            vl_version,
+            vl_opts,
             responder: resp_tx,
         };
 
@@ -651,12 +675,11 @@ impl VlConverter {
     pub async fn vegalite_to_png(
         &mut self,
         vl_spec: serde_json::Value,
-        config: Option<serde_json::Value>,
-        vl_version: VlVersion,
+        vl_opts: VlOpts,
         scale: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
-        let svg = self.vegalite_to_svg(vl_spec, config, vl_version).await?;
+        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
         Self::svg_to_png(&svg, scale)
     }
 
@@ -716,6 +739,27 @@ impl VlConverter {
             ),
         }
     }
+
+    pub async fn get_themes(&mut self) -> Result<serde_json::Value, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
+        let cmd = VlConvertCommand::GetThemes { responder: resp_tx };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send get_themes request: {}", err.to_string())
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(themes_result) => themes_result,
+            Err(err) => bail!("Failed to retrieve get_themes result: {}", err.to_string()),
+        }
+    }
 }
 
 impl Default for VlConverter {
@@ -743,7 +787,13 @@ mod tests {
         "##).unwrap();
 
         let vg_spec = ctx
-            .vegalite_to_vega(vl_spec, None, VlVersion::v4_17)
+            .vegalite_to_vega(
+                vl_spec,
+                VlOpts {
+                    vl_version: VlVersion::v4_17,
+                    ..Default::default()
+                },
+            )
             .await
             .unwrap();
         println!("vg_spec: {}", vg_spec)
@@ -764,14 +814,26 @@ mod tests {
 
         let mut ctx1 = VlConverter::new();
         let vg_spec1 = ctx1
-            .vegalite_to_vega(vl_spec.clone(), None, VlVersion::v4_17)
+            .vegalite_to_vega(
+                vl_spec.clone(),
+                VlOpts {
+                    vl_version: VlVersion::v4_17,
+                    ..Default::default()
+                },
+            )
             .await
             .unwrap();
         println!("vg_spec1: {}", vg_spec1);
 
         let mut ctx1 = VlConverter::new();
         let vg_spec2 = ctx1
-            .vegalite_to_vega(vl_spec, None, VlVersion::v5_5)
+            .vegalite_to_vega(
+                vl_spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_5,
+                    ..Default::default()
+                },
+            )
             .await
             .unwrap();
         println!("vg_spec2: {}", vg_spec2);

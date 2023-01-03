@@ -2,7 +2,7 @@
 
 use clap::{arg, Parser, Subcommand};
 use std::str::FromStr;
-use vl_convert_rs::converter::VlConverter;
+use vl_convert_rs::converter::{VlConverter, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
@@ -242,7 +242,16 @@ async fn vl_2_vg(
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let vega_json = match converter.vegalite_to_vega(vegalite_json, vl_version).await {
+    let vega_json = match converter
+        .vegalite_to_vega(
+            vegalite_json,
+            VlOpts {
+                vl_version,
+                ..Default::default()
+            },
+        )
+        .await
+    {
         Ok(vega_str) => vega_str,
         Err(err) => {
             bail!("Vega-Lite to Vega conversion failed: {}", err);
@@ -331,7 +340,16 @@ async fn vl_2_svg(input: &str, output: &str, vl_version: &str) -> Result<(), any
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let svg = match converter.vegalite_to_svg(vl_spec, vl_version).await {
+    let svg = match converter
+        .vegalite_to_svg(
+            vl_spec,
+            VlOpts {
+                vl_version,
+                ..Default::default()
+            },
+        )
+        .await
+    {
         Ok(svg) => svg,
         Err(err) => {
             bail!("Vega-Lite to Vega conversion failed: {}", err);
@@ -364,7 +382,14 @@ async fn vl_2_png(
 
     // Perform conversion
     let png_data = match converter
-        .vegalite_to_png(vl_spec, vl_version, Some(scale))
+        .vegalite_to_png(
+            vl_spec,
+            VlOpts {
+                vl_version,
+                ..Default::default()
+            },
+            Some(scale),
+        )
         .await
     {
         Ok(png_data) => png_data,
