@@ -1,7 +1,8 @@
 #![doc = include_str!("../README.md")]
 
-use std::path::Path;
 use clap::{arg, Parser, Subcommand};
+use itertools::Itertools;
+use std::path::Path;
 use std::str::FromStr;
 use vl_convert_rs::converter::{VlConverter, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
@@ -144,6 +145,16 @@ enum Commands {
         #[arg(long)]
         font_dir: Option<String>,
     },
+
+    /// List available themes
+    LsThemes,
+
+    /// Print the config JSON for a theme
+    #[command(arg_required_else_help = true)]
+    CatTheme {
+        /// Name of a theme
+        theme: String,
+    },
 }
 
 #[tokio::main]
@@ -158,7 +169,17 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             pretty,
-        } => vl_2_vg(&input_vegalite_file, &output_vega_file, &vl_version, theme, config, pretty).await?,
+        } => {
+            vl_2_vg(
+                &input_vegalite_file,
+                &output_vega_file,
+                &vl_version,
+                theme,
+                config,
+                pretty,
+            )
+            .await?
+        }
         Vl2svg {
             input,
             output,
@@ -199,6 +220,8 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             vg_2_png(&input, &output, scale).await?
         }
+        LsThemes => list_themes().await?,
+        CatTheme { theme } => cat_theme(&theme).await?,
     }
 
     Ok(())
@@ -271,11 +294,10 @@ fn normalize_config_path(config: Option<String>) -> Option<String> {
 
 fn read_config_json(config: Option<String>) -> Result<Option<serde_json::Value>, anyhow::Error> {
     let config = normalize_config_path(config);
-    println!("config: {:?}", config);
     match config {
         None => Ok(None),
         Some(config) => {
-            let config_str= match std::fs::read_to_string(&config) {
+            let config_str = match std::fs::read_to_string(&config) {
                 Ok(config_str) => config_str,
                 Err(err) => {
                     bail!("Failed to read config file: {}\n{}", config, err);
@@ -490,5 +512,37 @@ async fn vl_2_png(
     // Write result
     write_output_binary(output, &png_data)?;
 
+    Ok(())
+}
+
+async fn list_themes() -> Result<(), anyhow::Error> {
+    // Initialize converter
+    let mut converter = VlConverter::new();
+
+    if let serde_json::Value::Object(themes) = converter.get_themes().await? {
+        for theme in themes.keys().sorted() {
+            println!("{}", theme)
+        }
+    } else {
+        bail!("Failed to load themes")
+    }
+
+    Ok(())
+}
+
+async fn cat_theme(theme: &str) -> Result<(), anyhow::Error> {
+    // Initialize converter
+    let mut converter = VlConverter::new();
+
+    if let serde_json::Value::Object(themes) = converter.get_themes().await? {
+        if let Some(theme_config) = themes.get(theme) {
+            let theme_config_str = serde_json::to_string_pretty(theme_config).unwrap();
+            println!("{}", theme_config_str);
+        } else {
+            bail!("No theme named '{}'", theme)
+        }
+    } else {
+        bail!("Failed to load themes")
+    }
     Ok(())
 }

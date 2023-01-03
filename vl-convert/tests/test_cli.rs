@@ -1,13 +1,13 @@
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
-use tempfile::NamedTempFile;
-use std::io::Write;
 use rstest::rstest;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr; // Run programs
 use std::sync::Once;
+use tempfile::NamedTempFile;
 use vl_convert_rs::VlVersion;
 
 const BACKGROUND_COLOR: &str = "#abc";
@@ -83,13 +83,11 @@ fn load_expected_png(name: &str, vl_version: &str, theme: Option<&str>) -> Vec<u
         .join("vl-specs")
         .join("expected")
         .join(&format!("{:?}", vl_version))
-        .join(
-            if let Some(theme) = theme {
-                format!("{}-{}.png", name, theme)
-            } else {
-                format!("{}.png", name)
-            }
-        );
+        .join(if let Some(theme) = theme {
+            format!("{}-{}.png", name, theme)
+        } else {
+            format!("{}.png", name)
+        });
     let png_data =
         fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
     png_data
@@ -277,7 +275,6 @@ mod test_vl2png {
     }
 }
 
-
 #[rustfmt::skip]
 mod test_vl2png_theme_config {
     use std::fs;
@@ -326,4 +323,33 @@ mod test_vl2png_theme_config {
 
         Ok(())
     }
+}
+
+#[test]
+fn test_ls_themes() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let cmd = cmd.arg("ls-themes");
+    cmd.assert().success();
+
+    let output = cmd.output().unwrap();
+    let output_str = String::from_utf8(output.stdout).unwrap();
+    assert!(output_str.contains("dark"));
+
+    Ok(())
+}
+
+#[test]
+fn test_cat_theme() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let cmd = cmd.arg("cat-theme").arg("dark");
+    cmd.assert().success();
+
+    let output = cmd.output().unwrap();
+    let output_str = String::from_utf8(output.stdout).unwrap();
+
+    // Check for known background color entry
+    assert!(output_str.contains(r##""background": "#333"##));
+    println!("output_str: {}", output_str);
+
+    Ok(())
 }
