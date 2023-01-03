@@ -340,7 +340,6 @@ async fn vl_2_vg(
                 vl_version,
                 theme,
                 config,
-                ..Default::default()
             },
         )
         .await
@@ -449,7 +448,6 @@ async fn vl_2_svg(
                 vl_version,
                 config,
                 theme,
-                ..Default::default()
             },
         )
         .await
@@ -497,7 +495,6 @@ async fn vl_2_png(
                 vl_version,
                 config,
                 theme,
-                ..Default::default()
             },
             Some(scale),
         )

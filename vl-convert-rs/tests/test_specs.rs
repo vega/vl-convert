@@ -5,7 +5,6 @@ use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::VlVersion;
 
 use std::sync::Once;
-use usvg::PathBbox;
 
 static INIT: Once = Once::new();
 const BACKGROUND_COLOR: &str = "#abc";
@@ -37,7 +36,7 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion) -> Option<serde_json
         .join("tests")
         .join("vl-specs")
         .join("expected")
-        .join(&format!("{:?}", vl_version))
+        .join(format!("{:?}", vl_version))
         .join(format!("{}.vg.json", name));
     if spec_path.exists() {
         let spec_str = fs::read_to_string(&spec_path)
@@ -54,7 +53,7 @@ fn make_expected_svg_path(name: &str, vl_version: VlVersion, theme: Option<&str>
         .join("tests")
         .join("vl-specs")
         .join("expected")
-        .join(&format!("{:?}", vl_version))
+        .join(format!("{:?}", vl_version))
         .join(if let Some(theme) = theme {
             format!("{}-{}.svg", name, theme)
         } else {
@@ -64,9 +63,7 @@ fn make_expected_svg_path(name: &str, vl_version: VlVersion, theme: Option<&str>
 
 fn load_expected_svg(name: &str, vl_version: VlVersion, theme: Option<&str>) -> String {
     let spec_path = make_expected_svg_path(name, vl_version, theme);
-    let svg_str =
-        fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
-    svg_str
+    fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path))
 }
 
 fn make_expected_png_path(name: &str, vl_version: VlVersion, theme: Option<&str>) -> PathBuf {
@@ -75,7 +72,7 @@ fn make_expected_png_path(name: &str, vl_version: VlVersion, theme: Option<&str>
         .join("tests")
         .join("vl-specs")
         .join("expected")
-        .join(&format!("{:?}", vl_version))
+        .join(format!("{:?}", vl_version))
         .join(if let Some(theme) = theme {
             format!("{}-{}.png", name, theme)
         } else {
@@ -85,9 +82,7 @@ fn make_expected_png_path(name: &str, vl_version: VlVersion, theme: Option<&str>
 
 fn load_expected_png(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Vec<u8> {
     let spec_path = make_expected_png_path(name, vl_version, theme);
-    let png_data =
-        fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
-    png_data
+    fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path))
 }
 
 #[rustfmt::skip]
@@ -183,7 +178,7 @@ mod test_svg {
 
         // Convert directly to svg
         let svg = block_on(converter.vegalite_to_svg(vl_spec, VlOpts{vl_version, ..Default::default()})).unwrap();
-        assert_eq!(svg, svg);
+        assert_eq!(svg, expected_svg);
 
         // // Write out reference image
         // let svg_path = make_expected_svg_path(name, vl_version, None);
@@ -236,7 +231,7 @@ mod test_png {
         let png_data = block_on(
             converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(scale))
         ).unwrap();
-        assert_eq!(png_data, png_data);
+        assert_eq!(png_data, expected_png_data);
 
         // // Write out reference image
         // let png_path = make_expected_png_path(name, vl_version, None);
@@ -286,7 +281,6 @@ mod test_png_theme_config {
                     vl_version,
                     theme: Some(theme.to_string()),
                     config: Some(serde_json::json!({"background": BACKGROUND_COLOR})),
-                    ..Default::default()
                 }, Some(scale)
             )
         ).unwrap();

@@ -42,7 +42,7 @@ fn load_expected_vg_spec(name: &str, vl_version: &str, pretty: bool) -> Option<S
         .join("tests")
         .join("vl-specs")
         .join("expected")
-        .join(&format!("{:?}", vl_version))
+        .join(format!("{:?}", vl_version))
         .join(if pretty {
             format!("{}.vg.pretty.json", name)
         } else {
@@ -67,10 +67,10 @@ fn load_expected_svg(name: &str, vl_version: &str) -> String {
         .join("tests")
         .join("vl-specs")
         .join("expected")
-        .join(&format!("{:?}", vl_version))
+        .join(format!("{:?}", vl_version))
         .join(format!("{}.svg", name));
 
-    fs::read_to_string(&spec_path).unwrap()
+    fs::read_to_string(spec_path).unwrap()
 }
 
 fn load_expected_png(name: &str, vl_version: &str, theme: Option<&str>) -> Vec<u8> {
@@ -82,15 +82,13 @@ fn load_expected_png(name: &str, vl_version: &str, theme: Option<&str>) -> Vec<u
         .join("tests")
         .join("vl-specs")
         .join("expected")
-        .join(&format!("{:?}", vl_version))
+        .join(format!("{:?}", vl_version))
         .join(if let Some(theme) = theme {
             format!("{}-{}.png", name, theme)
         } else {
             format!("{}.png", name)
         });
-    let png_data =
-        fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
-    png_data
+    fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path))
 }
 
 fn output_path(filename: &str) -> String {
@@ -349,7 +347,6 @@ fn test_cat_theme() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check for known background color entry
     assert!(output_str.contains(r##""background": "#333"##));
-    println!("output_str: {}", output_str);
 
     Ok(())
 }
