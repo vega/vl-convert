@@ -55,13 +55,11 @@ fn make_expected_svg_path(name: &str, vl_version: VlVersion, theme: Option<&str>
         .join("vl-specs")
         .join("expected")
         .join(&format!("{:?}", vl_version))
-        .join(
-            if let Some(theme) = theme {
-                format!("{}-{}.svg", name, theme)
-            } else {
-                format!("{}.svg", name)
-            }
-        )
+        .join(if let Some(theme) = theme {
+            format!("{}-{}.svg", name, theme)
+        } else {
+            format!("{}.svg", name)
+        })
 }
 
 fn load_expected_svg(name: &str, vl_version: VlVersion, theme: Option<&str>) -> String {
@@ -78,13 +76,11 @@ fn make_expected_png_path(name: &str, vl_version: VlVersion, theme: Option<&str>
         .join("vl-specs")
         .join("expected")
         .join(&format!("{:?}", vl_version))
-        .join(
-            if let Some(theme) = theme {
-                format!("{}-{}.png", name, theme)
-            } else {
-                format!("{}.png", name)
-            }
-        )
+        .join(if let Some(theme) = theme {
+            format!("{}-{}.png", name, theme)
+        } else {
+            format!("{}.png", name)
+        })
 }
 
 fn load_expected_png(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Vec<u8> {
@@ -250,7 +246,6 @@ mod test_png {
     #[test]
     fn test_marker() {} // Help IDE detect test module
 }
-
 
 #[rustfmt::skip]
 mod test_png_theme_config {
