@@ -8,6 +8,8 @@ root_dir = tests_dir.parent.parent
 specs_dir = root_dir / "vl-convert-rs" / "tests" / "vl-specs"
 fonts_dir = root_dir / "vl-convert-rs" / "tests" / "fonts"
 
+BACKGROUND_COLOR = "#abc"
+
 
 def setup_module(module):
     vlc.register_font_directory(str(fonts_dir))
@@ -37,8 +39,8 @@ def load_expected_svg(name, vl_version):
         return f.read()
 
 
-def load_expected_png(name, vl_version):
-    filename = f"{name}.png"
+def load_expected_png(name, vl_version, theme=None):
+    filename = f"{name}-{theme}.png" if theme else f"{name}.png"
     spec_path = specs_dir / "expected" / vl_version / filename
     with spec_path.open("rb") as f:
         return f.read()
@@ -104,4 +106,25 @@ def test_png(name, scale, as_dict):
 
     # Convert directly to image
     png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version, scale=scale)
+    assert png == expected_png
+
+
+@pytest.mark.parametrize(
+    "name,scale,theme", [("circle_binned", 1.0, "dark"), ("stacked_bar_h", 2.0, "vox")]
+)
+def test_png_theme_config(name, scale, theme):
+    vl_version = "v5_5"
+    vl_spec = json.loads(load_vl_spec(name))
+
+    expected_png = load_expected_png(name, vl_version, theme)
+
+    # Convert directly to image
+    config = dict(background=BACKGROUND_COLOR)
+    png = vlc.vegalite_to_png(
+        vl_spec,
+        vl_version=vl_version,
+        scale=scale,
+        theme=theme,
+        config=config,
+    )
     assert png == expected_png

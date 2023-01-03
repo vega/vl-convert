@@ -1,13 +1,16 @@
 #![doc = include_str!("../README.md")]
 
 use clap::{arg, Parser, Subcommand};
+use itertools::Itertools;
+use std::path::Path;
 use std::str::FromStr;
-use vl_convert_rs::converter::VlConverter;
+use vl_convert_rs::converter::{VlConverter, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
 const DEFAULT_VL_VERSION: &str = "5.6";
+const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
 
 #[derive(Debug, Parser)] // requires `derive` feature
 #[command(version, name = "vl-convert")]
@@ -34,6 +37,14 @@ enum Commands {
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
+        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        #[arg(short, long)]
+        theme: Option<String>,
+
+        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// Pretty-print JSON in output file
         #[arg(short, long)]
         pretty: bool,
@@ -54,6 +65,14 @@ enum Commands {
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
+        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        #[arg(short, long)]
+        theme: Option<String>,
+
+        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
@@ -73,6 +92,14 @@ enum Commands {
         /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
+
+        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        #[arg(short, long)]
+        theme: Option<String>,
+
+        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        #[arg(short, long)]
+        config: Option<String>,
 
         /// Image scale factor
         #[arg(short, long, default_value = "1.0")]
@@ -118,6 +145,16 @@ enum Commands {
         #[arg(long)]
         font_dir: Option<String>,
     },
+
+    /// List available themes
+    LsThemes,
+
+    /// Print the config JSON for a theme
+    #[command(arg_required_else_help = true)]
+    CatTheme {
+        /// Name of a theme
+        theme: String,
+    },
 }
 
 #[tokio::main]
@@ -129,26 +166,42 @@ async fn main() -> Result<(), anyhow::Error> {
             input: input_vegalite_file,
             output: output_vega_file,
             vl_version,
+            theme,
+            config,
             pretty,
-        } => vl_2_vg(&input_vegalite_file, &output_vega_file, &vl_version, pretty).await?,
+        } => {
+            vl_2_vg(
+                &input_vegalite_file,
+                &output_vega_file,
+                &vl_version,
+                theme,
+                config,
+                pretty,
+            )
+            .await?
+        }
         Vl2svg {
             input,
             output,
             vl_version,
+            theme,
+            config,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_svg(&input, &output, &vl_version).await?
+            vl_2_svg(&input, &output, &vl_version, theme, config).await?
         }
         Vl2png {
             input,
             output,
             vl_version,
+            theme,
+            config,
             scale,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_png(&input, &output, &vl_version, scale).await?
+            vl_2_png(&input, &output, &vl_version, theme, config, scale).await?
         }
         Vg2svg {
             input,
@@ -167,6 +220,8 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             vg_2_png(&input, &output, scale).await?
         }
+        LsThemes => list_themes().await?,
+        CatTheme { theme } => cat_theme(&theme).await?,
     }
 
     Ok(())
@@ -223,10 +278,43 @@ fn write_output_binary(output: &str, output_data: &[u8]) -> Result<(), anyhow::E
     }
 }
 
+fn normalize_config_path(config: Option<String>) -> Option<String> {
+    match config {
+        Some(config) => Some(shellexpand::tilde(config.trim()).to_string()),
+        None => {
+            let default_path = shellexpand::tilde(DEFAULT_CONFIG_PATH).to_string();
+            if Path::new(&default_path).exists() {
+                Some(default_path)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+fn read_config_json(config: Option<String>) -> Result<Option<serde_json::Value>, anyhow::Error> {
+    let config = normalize_config_path(config);
+    match config {
+        None => Ok(None),
+        Some(config) => {
+            let config_str = match std::fs::read_to_string(&config) {
+                Ok(config_str) => config_str,
+                Err(err) => {
+                    bail!("Failed to read config file: {}\n{}", config, err);
+                }
+            };
+            let config_json: serde_json::Value = serde_json::from_str(&config_str)?;
+            Ok(Some(config_json))
+        }
+    }
+}
+
 async fn vl_2_vg(
     input: &str,
     output: &str,
     vl_version: &str,
+    theme: Option<String>,
+    config: Option<String>,
     pretty: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -238,11 +326,24 @@ async fn vl_2_vg(
     // Parse input as json
     let vegalite_json = parse_as_json(&vegalite_str)?;
 
+    // Load config from file
+    let config = read_config_json(config)?;
+
     // Initialize converter
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let vega_json = match converter.vegalite_to_vega(vegalite_json, vl_version).await {
+    let vega_json = match converter
+        .vegalite_to_vega(
+            vegalite_json,
+            VlOpts {
+                vl_version,
+                theme,
+                config,
+            },
+        )
+        .await
+    {
         Ok(vega_str) => vega_str,
         Err(err) => {
             bail!("Vega-Lite to Vega conversion failed: {}", err);
@@ -317,7 +418,13 @@ async fn vg_2_png(input: &str, output: &str, scale: f32) -> Result<(), anyhow::E
     Ok(())
 }
 
-async fn vl_2_svg(input: &str, output: &str, vl_version: &str) -> Result<(), anyhow::Error> {
+async fn vl_2_svg(
+    input: &str,
+    output: &str,
+    vl_version: &str,
+    theme: Option<String>,
+    config: Option<String>,
+) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
 
@@ -327,11 +434,24 @@ async fn vl_2_svg(input: &str, output: &str, vl_version: &str) -> Result<(), any
     // Parse input as json
     let vl_spec = parse_as_json(&vegalite_str)?;
 
+    // Load config from file
+    let config = read_config_json(config)?;
+
     // Initialize converter
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let svg = match converter.vegalite_to_svg(vl_spec, vl_version).await {
+    let svg = match converter
+        .vegalite_to_svg(
+            vl_spec,
+            VlOpts {
+                vl_version,
+                config,
+                theme,
+            },
+        )
+        .await
+    {
         Ok(svg) => svg,
         Err(err) => {
             bail!("Vega-Lite to Vega conversion failed: {}", err);
@@ -348,6 +468,8 @@ async fn vl_2_png(
     input: &str,
     output: &str,
     vl_version: &str,
+    theme: Option<String>,
+    config: Option<String>,
     scale: f32,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -359,12 +481,23 @@ async fn vl_2_png(
     // Parse input as json
     let vl_spec = parse_as_json(&vegalite_str)?;
 
+    // Load config from file
+    let config = read_config_json(config)?;
+
     // Initialize converter
     let mut converter = VlConverter::new();
 
     // Perform conversion
     let png_data = match converter
-        .vegalite_to_png(vl_spec, vl_version, Some(scale))
+        .vegalite_to_png(
+            vl_spec,
+            VlOpts {
+                vl_version,
+                config,
+                theme,
+            },
+            Some(scale),
+        )
         .await
     {
         Ok(png_data) => png_data,
@@ -376,5 +509,37 @@ async fn vl_2_png(
     // Write result
     write_output_binary(output, &png_data)?;
 
+    Ok(())
+}
+
+async fn list_themes() -> Result<(), anyhow::Error> {
+    // Initialize converter
+    let mut converter = VlConverter::new();
+
+    if let serde_json::Value::Object(themes) = converter.get_themes().await? {
+        for theme in themes.keys().sorted() {
+            println!("{}", theme)
+        }
+    } else {
+        bail!("Failed to load themes")
+    }
+
+    Ok(())
+}
+
+async fn cat_theme(theme: &str) -> Result<(), anyhow::Error> {
+    // Initialize converter
+    let mut converter = VlConverter::new();
+
+    if let serde_json::Value::Object(themes) = converter.get_themes().await? {
+        if let Some(theme_config) = themes.get(theme) {
+            let theme_config_str = serde_json::to_string_pretty(theme_config).unwrap();
+            println!("{}", theme_config_str);
+        } else {
+            bail!("No theme named '{}'", theme)
+        }
+    } else {
+        bail!("Failed to load themes")
+    }
     Ok(())
 }

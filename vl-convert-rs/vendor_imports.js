@@ -7,3 +7,4 @@ import * as v_5_4 from "https://cdn.skypack.dev/pin/vega-lite@v5.4.0-9xYSqs414yD
 import * as v_5_5 from "https://cdn.skypack.dev/pin/vega-lite@v5.5.0-x3x9oTW9wvfyOekd4a63/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_6 from "https://cdn.skypack.dev/pin/vega-lite@v5.6.0-jKfgpjSz6Y52Dxyq2kpj/mode=imports,min/optimized/vega-lite.js";
 import * as vega from "https://cdn.skypack.dev/pin/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/mode=imports,min/optimized/vega.js";
+import * as vegaThemes from "https://cdn.skypack.dev/pin/vega-themes@v2.12.0-jAdjfWJImDLk7A9LyR4u/mode=imports,min/optimized/vega-themes.js";
