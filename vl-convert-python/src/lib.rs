@@ -22,11 +22,10 @@ lazy_static! {
 ///
 /// Args:
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
-///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///     vl_version (str | None): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
-///     pretty (bool): If True, pretty-print resulting Vega JSON
-///         specification (default False)
-///
+///     config (dict | None): Chart configuration object to apply during conversion
+///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 /// Returns:
 ///     dict: Vega JSON specification dict
 #[pyfunction]
@@ -103,13 +102,14 @@ fn vega_to_svg(vg_spec: PyObject) -> PyResult<String> {
 ///
 /// Args:
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
-///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///     vl_version (str | None): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
-///
+///     config (dict | None): Chart configuration object to apply during conversion
+///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, config, theme)")]
 fn vegalite_to_svg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -188,11 +188,13 @@ fn vega_to_png(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
 ///     scale (float): Image scale factor (default 1.0)
+///     config (dict | None): Chart configuration object to apply during conversion
+///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, scale)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, scale, config, theme)")]
 fn vegalite_to_png(
     vl_spec: PyObject,
     vl_version: Option<&str>,
