@@ -302,7 +302,7 @@ fn get_local_tz() -> PyResult<Option<String>> {
 /// Get the config dict for each built-in theme
 ///
 /// Returns:
-///     dict: dict for theme name to config object
+///     dict: dict from theme name to config object
 #[pyfunction]
 #[pyo3(text_signature = "()")]
 fn get_themes() -> PyResult<PyObject> {
