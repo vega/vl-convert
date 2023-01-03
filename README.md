@@ -20,12 +20,14 @@ vl-convert: A utility for converting Vega-Lite specifications
 Usage: vl-convert <COMMAND>
 
 Commands:
-  vl2vg   Convert a Vega-Lite specification to a Vega specification
-  vl2svg  Convert a Vega-Lite specification to an SVG image
-  vl2png  Convert a Vega-Lite specification to an PNG image
-  vg2svg  Convert a Vega specification to an SVG image
-  vg2png  Convert a Vega specification to an PNG image
-  help    Print this message or the help of the given subcommand(s)
+  vl2vg      Convert a Vega-Lite specification to a Vega specification
+  vl2svg     Convert a Vega-Lite specification to an SVG image
+  vl2png     Convert a Vega-Lite specification to an PNG image
+  vg2svg  f   Convert a Vega specification to an SVG image
+  vg2png     Convert a Vega specification to an PNG image
+  ls-themes  List available themes
+  cat-theme  Print the config JSON for a theme
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help information
