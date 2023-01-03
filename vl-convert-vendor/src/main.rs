@@ -39,6 +39,7 @@ const VL_PATHS: &[(&str, &str)] = &[
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/mode=imports,min/optimized/vega.js";
+const VEGA_THEMES_PATH: &str = "/pin/vega-themes@v2.12.0-jAdjfWJImDLk7A9LyR4u/mode=imports,min/optimized/vega-themes.js";
 
 // Example custom build script.
 fn main() {
@@ -54,6 +55,8 @@ fn main() {
     let importsjs_path = vl_convert_rs_path.join("vendor_imports.js");
 
     let mut imports = String::new();
+
+    // Write Vega-Lite
     for (ver, path) in VL_PATHS {
         let ver_under = ver.replace('.', "_");
         writeln!(
@@ -65,6 +68,8 @@ fn main() {
         )
         .unwrap();
     }
+
+    // Write Vega
     writeln!(
         imports,
         "import * as vega from \"{SKYPACK_URL}{VEGA_PATH}\";",
@@ -72,6 +77,16 @@ fn main() {
         VEGA_PATH = VEGA_PATH
     )
     .unwrap();
+
+    // Write VegaThemes
+    writeln!(
+        imports,
+        "import * as vegaThemes from \"{SKYPACK_URL}{VEGA_THEMES_PATH}\";",
+        SKYPACK_URL = SKYPACK_URL,
+        VEGA_THEMES_PATH = VEGA_THEMES_PATH
+    )
+        .unwrap();
+
     fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
@@ -149,12 +164,17 @@ use deno_runtime::deno_core::error::AnyError;
 
 const SKYPACK_URL: &str = "{SKYPACK_URL}";
 const VEGA_PATH: &str = "{VEGA_PATH}";
+const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
 
 pub fn url_for_path(path: &str) -> String {{
     format!("{{}}{{}}", SKYPACK_URL, path)
 }}
 
 pub fn vega_url() -> String {{
+    url_for_path(VEGA_PATH)
+}}
+
+pub fn vega_themes_url() -> String {{
     url_for_path(VEGA_PATH)
 }}
 
@@ -208,6 +228,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         version_instances_csv = version_instances_csv,
         SKYPACK_URL = SKYPACK_URL,
         VEGA_PATH = VEGA_PATH,
+        VEGA_THEMES_PATH = VEGA_THEMES_PATH,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
     // Add packages
@@ -230,10 +251,19 @@ pub fn build_import_map() -> HashMap<String, String> {{
             vl_path=vl_path,
         ).unwrap();
     }
+
+    // Vega
     writeln!(
         content,
         "    m.insert(\"{VEGA_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_PATH}\").to_string());",
         VEGA_PATH=VEGA_PATH,
+    ).unwrap();
+
+    // Vega Themes
+    writeln!(
+        content,
+        "    m.insert(\"{VEGA_THEMES_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_THEMES_PATH}\").to_string());",
+        VEGA_THEMES_PATH=VEGA_THEMES_PATH,
     ).unwrap();
 
     content.push_str("    m\n}\n");
