@@ -23,7 +23,7 @@ Commands:
   vl2vg      Convert a Vega-Lite specification to a Vega specification
   vl2svg     Convert a Vega-Lite specification to an SVG image
   vl2png     Convert a Vega-Lite specification to an PNG image
-  vg2svg  f   Convert a Vega specification to an SVG image
+  vg2svg     Convert a Vega specification to an SVG image
   vg2png     Convert a Vega specification to an PNG image
   ls-themes  List available themes
   cat-theme  Print the config JSON for a theme
