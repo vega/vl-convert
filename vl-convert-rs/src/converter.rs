@@ -36,21 +36,11 @@ lazy_static! {
     static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct VlOpts {
     pub config: Option<serde_json::Value>,
     pub theme: Option<String>,
     pub vl_version: VlVersion,
-}
-
-impl Default for VlOpts {
-    fn default() -> Self {
-        Self {
-            config: None,
-            theme: None,
-            vl_version: Default::default(),
-        }
-    }
 }
 
 fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
