@@ -1,0 +1,27 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "layer": [
+    {
+      "data": {
+        "name": "df",
+        "values": [{"a": 1, "b": 1}, {"a": 2, "b": 3}, {"a": 3, "b": 2}]
+      },
+      "layer": [
+        {
+          "transform": [],
+          "layer": [{"mark": {"type": "line"}}],
+          "encoding": {
+            "x": {"field": "a", "type": "quantitative"},
+            "y": {"field": "b", "type": "quantitative"}
+          }
+        }
+      ]
+    }
+  ],
+  "config": {
+    "style": {
+      "guide-label": {"font": "\"Liberation Sans\", sans-serif"},
+      "guide-title": {"font": "\"Liberation Sans\", sans-serif"}
+    }
+  }
+}
