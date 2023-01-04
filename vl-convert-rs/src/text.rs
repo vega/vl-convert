@@ -99,6 +99,8 @@ impl TextInfo {
         text_attrs.push(format!("font-size=\"{}\"", self.size));
 
         if let Some(family) = &self.family {
+            // Remove quotes since usvg can't handle them
+            let family = family.replace('"', "").replace("'", "");
             text_attrs.push(format!("font-family=\"{}\"", family));
         }
 

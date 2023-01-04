@@ -2,9 +2,10 @@ use rstest::rstest;
 use std::fs;
 use std::path::{Path, PathBuf};
 use vl_convert_rs::text::register_font_directory;
-use vl_convert_rs::VlVersion;
+use vl_convert_rs::{VlConverter, VlVersion};
 
 use std::sync::Once;
+use vl_convert_rs::converter::VlOpts;
 
 static INIT: Once = Once::new();
 const BACKGROUND_COLOR: &str = "#abc";
@@ -286,11 +287,44 @@ mod test_png_theme_config {
         ).unwrap();
         assert_eq!(png_data, expected_png_data);
 
-        // Write out reference image
-        let png_path = make_expected_png_path(name, vl_version, Some(theme));
-        std::fs::write(png_path, png_data).unwrap();
+        // // Write out reference image
+        // let png_path = make_expected_png_path(name, vl_version, Some(theme));
+        // std::fs::write(png_path, png_data).unwrap();
     }
 
     #[test]
     fn test_marker() {} // Help IDE detect test module
+}
+
+#[tokio::test]
+async fn test_font_with_quotes() {
+    let vl_version = VlVersion::v5_5;
+
+    // Load example Vega-Lite spec
+    let name = "font_with_quotes";
+    let vl_spec = load_vl_spec(name);
+
+    // Create Vega-Lite Converter and perform conversion
+    let mut converter = VlConverter::new();
+
+    // Load expected PNG image
+    let expected_png_data = load_expected_png(name, vl_version, None);
+
+    let png_data = converter
+        .vegalite_to_png(
+            vl_spec,
+            VlOpts {
+                vl_version,
+                ..Default::default()
+            },
+            Some(2.0),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(png_data, expected_png_data);
+
+    // // Write out reference image
+    // let png_path = make_expected_png_path(name, vl_version, None);
+    // std::fs::write(png_path, png_data).unwrap();
 }
