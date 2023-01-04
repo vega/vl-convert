@@ -247,6 +247,7 @@ mod test_png {
 mod test_png_theme_config {
     use crate::*;
     use futures::executor::block_on;
+    use serde_json::json;
     use vl_convert_rs::converter::VlOpts;
     use vl_convert_rs::VlConverter;
 
@@ -277,11 +278,31 @@ mod test_png_theme_config {
         // Convert directly to png with theme and config that overrides background color
         let png_data = block_on(
             converter.vegalite_to_png(
-                vl_spec,
+                vl_spec.clone(),
                 VlOpts {
                     vl_version,
                     theme: Some(theme.to_string()),
-                    config: Some(serde_json::json!({"background": BACKGROUND_COLOR})),
+                    config: Some(json!({"background": BACKGROUND_COLOR})),
+                }, Some(scale)
+            )
+        ).unwrap();
+        assert_eq!(png_data, expected_png_data);
+
+        // Patch spec to put theme in `vl_spec.usermeta.embedOptions.theme` and don't pass theme
+        // argument
+        let mut usermeta_spec = vl_spec.clone();
+        let usermeta_spec_obj = usermeta_spec.as_object_mut().unwrap();
+        usermeta_spec_obj.insert("usermeta".to_string(), json!({
+            "embedOptions": {"theme": theme.to_string()}
+        }));
+
+        let png_data = block_on(
+            converter.vegalite_to_png(
+                usermeta_spec,
+                VlOpts {
+                    vl_version,
+                    theme: None,
+                    config: Some(json!({"background": BACKGROUND_COLOR})),
                 }, Some(scale)
             )
         ).unwrap();

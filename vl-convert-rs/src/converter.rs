@@ -191,8 +191,10 @@ function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
     let options = {{}};
 
     // Handle config and theme
-    if (theme != null) {{
-        options["config"] = vega.mergeConfig(vegaThemes[theme], config ?? {{}});
+    let usermetaTheme = ((vlSpec.usermeta ?? {{}}).embedOptions ?? {{}}).theme;
+    let namedTheme = theme ?? usermetaTheme;
+    if (namedTheme != null) {{
+        options["config"] = vega.mergeConfig(vegaThemes[namedTheme], config ?? {{}});
     }} else if (config != null) {{
         options["config"] = config;
     }}
@@ -204,8 +206,10 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
     let options = {{}};
 
     // Handle config and theme
-    if (theme != null) {{
-        options["config"] = vega.mergeConfig(vegaThemes[theme], config ?? {{}});
+    let usermetaTheme = ((vlSpec.usermeta ?? {{}}).embedOptions ?? {{}}).theme;
+    let namedTheme = theme ?? usermetaTheme;
+    if (namedTheme != null) {{
+        options["config"] = vega.mergeConfig(vegaThemes[namedTheme], config ?? {{}});
     }} else if (config != null) {{
         options["config"] = config;
     }}
