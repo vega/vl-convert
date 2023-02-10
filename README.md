@@ -112,3 +112,8 @@ A directory containing additional font files can registered with the VlConvert P
 
 ### Emoji support in PNG export
 The Altair [isotype emoji](https://altair-viz.github.io/gallery/isotype_emoji.html) gallery example does not currently convert property to PNG.
+
+### Built-in Datasets
+The [Vega Editor](https://vega.github.io/editor/) supports referring to built-in datasets as if the exist under a `data/` directory (e.g. `data/cars.json`). This is not currently supporte by VlConvert. Instead an absolute URL must be used (e.g. `https://raw.githubusercontent.com/vega/vega-datasets/next/data/cars.json`).
+
+
