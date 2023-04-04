@@ -18,8 +18,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 vl-convert-rs = { path = "../vl-convert-rs", version= "0.7.0" }
-pyo3 = { version = "0.17.1", features = ["extension-module", "anyhow"] }
+pyo3 = { version = "0.18.2", features = ["extension-module", "anyhow"] }
 lazy_static = "1.4.0"
 futures = "0.3.24"
-pythonize = "0.17.0"
+pythonize = "0.18.0"
 

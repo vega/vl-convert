@@ -21,6 +21,6 @@ itertools = "0.10.5"
 
 [dev-dependencies]
 assert_cmd = "2.0"
-predicates = "2.1"
-rstest = "0.16.0"
+predicates = "3.0.2"
+rstest = "0.17.0"
 tempfile = "3.3.0"

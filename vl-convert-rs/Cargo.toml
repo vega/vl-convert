@@ -10,8 +10,8 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-deno_runtime = "0.90.0"
-deno_core = "0.164.0"
+deno_runtime = "0.105.0"
+deno_core = "0.179.0"
 serde_json = {version="1.0.85", features=["preserve_order"]}
 serde = {version="1.0.145", features=["derive"]}
 futures = "0.3.24"
@@ -19,14 +19,14 @@ futures-util = "0.3.24"
 tokio = {version= "1.21", features=["rt-multi-thread"]}
 reqwest = {version="0.11.12", default-features=false, features=["rustls-tls"]}
 lazy_static = "1.4.0"
-usvg = "0.27.0"
-resvg = "0.27.0"
+usvg = "0.30.0"
+resvg = "0.30.0"
 tiny-skia = "0.8.2"
-fontdb = {version= "0.11.1", features=["fontconfig"]}
+fontdb = {version= "0.13.0", features=["fontconfig"]}
 
 [dev-dependencies]
 tokio = {version="1.21", features=["macros", "rt", "rt-multi-thread"]}
-rstest = "0.16.0"
+rstest = "0.17.0"
 
 [build-dependencies]
 serde_json = "1.0.85"

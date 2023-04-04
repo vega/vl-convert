@@ -1,6 +1,7 @@
 pub mod import_map;
 
 use crate::module_loader::import_map::build_import_map;
+use deno_core::{ModuleCode, ResolutionKind};
 use deno_runtime::deno_core::anyhow::Error;
 use deno_runtime::deno_core::futures::FutureExt;
 use deno_runtime::deno_core::{
@@ -32,7 +33,7 @@ impl ModuleLoader for VlConvertModuleLoader {
         &self,
         specifier: &str,
         referrer: &str,
-        _is_main: bool,
+        _kind: ResolutionKind,
     ) -> Result<ModuleSpecifier, Error> {
         let resolved = resolve_import(specifier, referrer).unwrap();
         Ok(resolved)
@@ -67,7 +68,7 @@ impl ModuleLoader for VlConvertModuleLoader {
 
         async {
             Ok(ModuleSource {
-                code: code.into_boxed_str().into_boxed_bytes(),
+                code: ModuleCode::from(code),
                 module_type: ModuleType::JavaScript,
                 module_url_specified: string_specifier.clone(),
                 module_url_found: string_specifier,
