@@ -7,7 +7,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use usvg::fontdb::Database;
-use usvg::{Node, NodeKind, TextToPath, TreeParsing, TreeTextToPath};
+use usvg::{TreeParsing, TreeTextToPath};
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options> = Mutex::new(init_usvg_options());
