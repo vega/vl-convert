@@ -291,7 +291,7 @@ mod test_vl2png_theme_config {
         initialize();
 
         let vl_version = "5_5";
-        let output_filename = format!("{}_{}.png", vl_version, name);
+        let output_filename = format!("{}_{}_theme.png", vl_version, name);
 
         let vl_path = vl_spec_path(name);
         let output = output_path(&output_filename);
