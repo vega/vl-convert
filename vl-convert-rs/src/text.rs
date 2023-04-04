@@ -41,7 +41,7 @@ fn init_font_db() -> Database {
     font_database.load_font_data(Vec::from(LIBERATION_SANS_BOLDITALIC));
 
     setup_default_fonts(&mut font_database);
-    return font_database;
+    font_database
 }
 
 fn setup_default_fonts(fontdb: &mut Database) {
