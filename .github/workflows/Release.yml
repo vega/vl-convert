@@ -162,7 +162,7 @@ jobs:
     - uses: messense/maturin-action@v1
       with:
         command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.10 -i python3.9 -i python3.8 -i python3.7 --strip
+        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 -i python3.7 --strip
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
