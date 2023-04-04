@@ -8,6 +8,7 @@ use deno_runtime::deno_core::{
 };
 use std::collections::HashMap;
 use std::pin::Pin;
+use deno_core::{ModuleCode, ResolutionKind};
 
 pub struct VlConvertModuleLoader {
     pub import_map: HashMap<String, String>,
@@ -32,7 +33,7 @@ impl ModuleLoader for VlConvertModuleLoader {
         &self,
         specifier: &str,
         referrer: &str,
-        _is_main: bool,
+        _kind: ResolutionKind,
     ) -> Result<ModuleSpecifier, Error> {
         let resolved = resolve_import(specifier, referrer).unwrap();
         Ok(resolved)
@@ -67,7 +68,7 @@ impl ModuleLoader for VlConvertModuleLoader {
 
         async {
             Ok(ModuleSource {
-                code: code.into_boxed_str().into_boxed_bytes(),
+                code: ModuleCode::from(code),
                 module_type: ModuleType::JavaScript,
                 module_url_specified: string_specifier.clone(),
                 module_url_found: string_specifier,

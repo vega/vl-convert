@@ -9,11 +9,11 @@ use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8, Extension};
 
-use deno_core::op;
+use deno_core::{ModuleCode, op};
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_core;
 use deno_runtime::deno_web::BlobStore;
-use deno_runtime::permissions::Permissions;
+use deno_runtime::permissions::{Permissions, PermissionsContainer};
 use deno_runtime::worker::MainWorker;
 use deno_runtime::worker::WorkerOptions;
 
@@ -100,7 +100,7 @@ struct InnerVlConverter {
 impl InnerVlConverter {
     async fn init_vega(&mut self) -> Result<(), AnyError> {
         if !self.vega_initialized {
-            let import_str = format!(
+            let import_code = ModuleCode::from(format!(
                 r#"
 var vega;
 import('{vega_url}').then((imported) => {{
@@ -114,15 +114,15 @@ import('{vega_themes_url}').then((imported) => {{
 "#,
                 vega_url = vega_url(),
                 vega_themes_url = vega_themes_url(),
-            );
+            ));
 
-            self.worker.execute_script("<anon>", &import_str)?;
+            self.worker.execute_script("<anon>", import_code)?;
             self.worker.run_event_loop(false).await?;
 
             // Override text width measurement in vega-scenegraph
             for path in self.module_loader.import_map.keys() {
                 if path.ends_with("vega-scenegraph.js") {
-                    let script = format!(
+                    let script_code = ModuleCode::from(format!(
                         r#"
 import('{url}').then((sg) => {{
     sg.textMetrics.width = (item, text) => {{
@@ -144,8 +144,8 @@ import('{url}').then((sg) => {{
 }})
 "#,
                         url = url_for_path(path)
-                    );
-                    self.worker.execute_script("<anon>", &script)?;
+                    ));
+                    self.worker.execute_script("<anon>", script_code)?;
                     self.worker.run_event_loop(false).await?;
                 }
             }
@@ -172,7 +172,7 @@ function vegaToSvg(vgSpec) {
     async fn init_vl_version(&mut self, vl_version: &VlVersion) -> Result<(), AnyError> {
         if !self.initialized_vl_versions.contains(vl_version) {
             // Create and evaluate import string
-            let import_str = format!(
+            let import_code = ModuleCode::from(format!(
                 r#"
 var {ver_name};
 import('{vl_url}').then((imported) => {{
@@ -181,14 +181,14 @@ import('{vl_url}').then((imported) => {{
 "#,
                 ver_name = format!("{:?}", vl_version),
                 vl_url = vl_version.to_url()
-            );
+            ));
 
-            self.worker.execute_script("<anon>", &import_str)?;
+            self.worker.execute_script("<anon>", import_code)?;
 
             self.worker.run_event_loop(false).await?;
 
             // Create and initialize function string
-            let function_str = format!(
+            let function_code = ModuleCode::from(format!(
                 r#"
 function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
     let options = {{}};
@@ -222,9 +222,9 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
 }}
 "#,
                 ver_name = format!("{:?}", vl_version),
-            );
+            ));
 
-            self.worker.execute_script("<anon>", &function_str)?;
+            self.worker.execute_script("<anon>", function_code)?;
 
             self.worker.run_event_loop(false).await?;
 
@@ -237,7 +237,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
     pub async fn try_new() -> Result<Self, AnyError> {
         let module_loader = Rc::new(VlConvertModuleLoader::new());
 
-        let ext = Extension::builder()
+        let ext = Extension::builder("vl_convert_extensions")
             .ops(vec![
                 // Op to measure text width with resvg
                 op_text_width::decl(),
@@ -279,9 +279,8 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
             should_wait_for_inspector_session: false,
         };
 
-        let js_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("vl-convert-rs.js");
-        let main_module = deno_core::resolve_path(&js_path.to_string_lossy())?;
-        let permissions = Permissions::allow_all();
+        let main_module = deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
+        let permissions = PermissionsContainer::new(Permissions::allow_all());
 
         let mut worker =
             MainWorker::bootstrap_from_options(main_module.clone(), permissions, options);
@@ -302,7 +301,8 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
         &mut self,
         script: &str,
     ) -> Result<serde_json::Value, AnyError> {
-        let res = self.worker.js_runtime.execute_script("<anon>", script)?;
+        let code = ModuleCode::from(script.to_string());
+        let res = self.worker.js_runtime.execute_script("<anon>", code)?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -321,7 +321,8 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
     }
 
     async fn execute_script_to_string(&mut self, script: &str) -> Result<String, AnyError> {
-        let res = self.worker.js_runtime.execute_script("<anon>", script)?;
+        let code = ModuleCode::from(script.to_string());
+        let res = self.worker.js_runtime.execute_script("<anon>", code)?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -410,7 +411,7 @@ vegaLiteToSvg_{ver_name:?}(
             config_arg_id = config_arg_id,
             theme_arg = theme_arg,
         );
-        self.worker.execute_script("<anon>", &code)?;
+        self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
@@ -432,7 +433,7 @@ vegaToSvg(
 "#,
             arg_id = arg_id
         );
-        self.worker.execute_script("<anon>", &code)?;
+        self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
