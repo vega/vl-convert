@@ -139,7 +139,7 @@ import('{url}').then((sg) => {{
             style, variant, weight, size, family, text
         }}, null, 2);
 
-        return Deno.core.ops.op_text_width(text_info)
+        return Deno[Deno.internal].core.ops.op_text_width(text_info)
     }};
 }})
 "#,
@@ -243,6 +243,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
                 op_text_width::decl(),
                 op_get_json_arg::decl(),
             ])
+            .force_op_registration()
             .build();
 
         let create_web_worker_cb = Arc::new(|_| {
@@ -364,8 +365,8 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
         let code = format!(
             r#"
 compileVegaLite_{ver_name:?}(
-    JSON.parse(Deno.core.ops.op_get_json_arg({spec_arg_id})),
-    JSON.parse(Deno.core.ops.op_get_json_arg({config_arg_id})),
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({spec_arg_id})),
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({config_arg_id})),
     {theme_arg}
 )
 "#,
@@ -399,8 +400,8 @@ compileVegaLite_{ver_name:?}(
             r#"
 var svg;
 vegaLiteToSvg_{ver_name:?}(
-    JSON.parse(Deno.core.ops.op_get_json_arg({spec_arg_id})),
-    JSON.parse(Deno.core.ops.op_get_json_arg({config_arg_id})),
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({spec_arg_id})),
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({config_arg_id})),
     {theme_arg}
 ).then((result) => {{
     svg = result;
@@ -426,7 +427,7 @@ vegaLiteToSvg_{ver_name:?}(
             r#"
 var svg;
 vegaToSvg(
-    JSON.parse(Deno.core.ops.op_get_json_arg({arg_id}))
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({arg_id}))
 ).then((result) => {{
     svg = result;
 }})
