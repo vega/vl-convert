@@ -291,7 +291,7 @@ mod test_png_theme_config {
 
         // Patch spec to put theme in `vl_spec.usermeta.embedOptions.theme` and don't pass theme
         // argument
-        let mut usermeta_spec = vl_spec.clone();
+        let mut usermeta_spec = vl_spec;
         let usermeta_spec_obj = usermeta_spec.as_object_mut().unwrap();
         usermeta_spec_obj.insert("usermeta".to_string(), json!({
             "embedOptions": {"theme": theme.to_string()}

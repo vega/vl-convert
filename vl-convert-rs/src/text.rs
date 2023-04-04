@@ -201,7 +201,6 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
     let node_strs: Vec<_> = rtree
         .root
         .descendants()
-        .into_iter()
         .map(|node| format!("{:?}", node))
         .collect();
     bail!("Failed to locate text in SVG:\n{}\n{:?}", svg, node_strs)
