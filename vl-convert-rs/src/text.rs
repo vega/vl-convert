@@ -7,9 +7,11 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use usvg::fontdb::Database;
+use usvg::{Node, NodeKind, TextToPath, TreeParsing, TreeTextToPath};
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options> = Mutex::new(init_usvg_options());
+    pub static ref FONT_DB: Mutex<Database> = Mutex::new(init_font_db());
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -22,30 +24,36 @@ const LIBERATION_SANS_BOLDITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-BoldItalic.ttf");
 
 fn init_usvg_options() -> usvg::Options {
-    let mut opt = usvg::Options::default();
-    let fontdb = &mut opt.fontdb;
+    usvg::Options::default()
+}
 
+fn init_font_db() -> Database {
+    let mut font_database = Database::new();
     // Load fonts from the operating system
-    fontdb.load_system_fonts();
+    font_database.load_system_fonts();
 
     // Set default sans-serif font family.
     // By default, Vega outputs SVGs with "sans-serif" as the font family, so
     // we vendor the "Liberation Sans" font so that there is always a fallback
-    fontdb.load_font_data(Vec::from(LIBERATION_SANS_REGULAR));
-    fontdb.load_font_data(Vec::from(LIBERATION_SANS_BOLD));
-    fontdb.load_font_data(Vec::from(LIBERATION_SANS_ITALIC));
-    fontdb.load_font_data(Vec::from(LIBERATION_SANS_BOLDITALIC));
+    font_database.load_font_data(Vec::from(LIBERATION_SANS_REGULAR));
+    font_database.load_font_data(Vec::from(LIBERATION_SANS_BOLD));
+    font_database.load_font_data(Vec::from(LIBERATION_SANS_ITALIC));
+    font_database.load_font_data(Vec::from(LIBERATION_SANS_BOLDITALIC));
 
-    setup_default_fonts(fontdb);
-    opt
+    setup_default_fonts(&mut font_database);
+    return font_database;
 }
 
 fn setup_default_fonts(fontdb: &mut Database) {
     // Collect set of system font families
     let families: HashSet<String> = fontdb
         .faces()
-        .iter()
-        .map(|face| face.family.clone())
+        .flat_map(|face| {
+            face.families
+                .iter()
+                .map(|(fam, _lang)| fam.clone())
+                .collect::<Vec<_>>()
+        })
         .collect();
 
     for family in ["Arial", "Helvetica", "Liberation Sans"] {
@@ -186,7 +194,14 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
     let opts = USVG_OPTIONS
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
-    let rtree = usvg::Tree::from_str(svg, &opts.to_ref()).expect("Failed to parse text SVG");
+    let mut rtree = usvg::Tree::from_str(svg, &opts).expect("Failed to parse text SVG");
+
+    let font_database = FONT_DB
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+
+    rtree.convert_text(&font_database);
+
     for node in rtree.root.descendants() {
         // Text bboxes are different from path bboxes.
         if let usvg::NodeKind::Path(ref path) = *node.borrow() {
@@ -207,11 +222,11 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
 }
 
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
-    let mut opts = USVG_OPTIONS
+    let mut font_database = FONT_DB
         .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
-    opts.fontdb.load_fonts_dir(dir);
+        .map_err(|err| anyhow!("Failed to acquire font_db lock: {}", err.to_string()))?;
+    font_database.load_fonts_dir(dir);
 
-    setup_default_fonts(&mut opts.fontdb);
+    setup_default_fonts(&mut font_database);
     Ok(())
 }

@@ -9,7 +9,7 @@ use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8, Extension};
 
-use deno_core::{ModuleCode, op};
+use deno_core::{op, ModuleCode};
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_core;
 use deno_runtime::deno_web::BlobStore;
@@ -23,8 +23,10 @@ use std::thread::JoinHandle;
 use crate::anyhow::anyhow;
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
+use resvg::FitTo;
+use usvg::{TreeParsing, TreeTextToPath};
 
-use crate::text::{op_text_width, USVG_OPTIONS};
+use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
 
 lazy_static! {
     pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime =
@@ -280,7 +282,8 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
             should_wait_for_inspector_session: false,
         };
 
-        let main_module = deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
+        let main_module =
+            deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
         let permissions = PermissionsContainer::new(Permissions::allow_all());
 
         let mut worker =
@@ -690,12 +693,19 @@ impl VlConverter {
         let opts = USVG_OPTIONS
             .lock()
             .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
-        let rtree = match usvg::Tree::from_str(svg, &opts.to_ref()) {
+
+        let font_database = FONT_DB
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+
+        let mut rtree = match usvg::Tree::from_str(svg, &opts) {
             Ok(rtree) => rtree,
             Err(err) => {
                 bail!("Failed to parse SVG string: {}", err.to_string())
             }
         };
+
+        rtree.convert_text(&font_database);
 
         let pixmap_size = rtree.size.to_screen_size();
         let mut pixmap = tiny_skia::Pixmap::new(
@@ -705,7 +715,7 @@ impl VlConverter {
         .unwrap();
         resvg::render(
             &rtree,
-            usvg::FitTo::Zoom(scale),
+            FitTo::Zoom(scale),
             tiny_skia::Transform::default(),
             pixmap.as_mut(),
         )
