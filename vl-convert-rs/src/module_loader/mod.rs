@@ -1,6 +1,7 @@
 pub mod import_map;
 
 use crate::module_loader::import_map::build_import_map;
+use deno_core::{ModuleCode, ResolutionKind};
 use deno_runtime::deno_core::anyhow::Error;
 use deno_runtime::deno_core::futures::FutureExt;
 use deno_runtime::deno_core::{
@@ -8,7 +9,6 @@ use deno_runtime::deno_core::{
 };
 use std::collections::HashMap;
 use std::pin::Pin;
-use deno_core::{ModuleCode, ResolutionKind};
 
 pub struct VlConvertModuleLoader {
     pub import_map: HashMap<String, String>,
