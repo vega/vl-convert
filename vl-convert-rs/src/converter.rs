@@ -128,7 +128,10 @@ import('{url}').then((sg) => {{
     sg.textMetrics.width = (item, text) => {{
         let style = item.fontStyle;
         let variant = item.fontVariant;
-        let weight = item.fontWeight;
+
+        // weight may be string like "bold" or number like 600.
+        // Convert number form to string
+        let weight = String(item.fontWeight);
         let size = sg.fontSize(item);
         let family = sg.fontFamily(item);
 

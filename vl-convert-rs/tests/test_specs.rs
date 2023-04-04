@@ -153,7 +153,8 @@ mod test_svg {
             "circle_binned",
             "stacked_bar_h",
             "bar_chart_trellis_compact",
-            "line_with_log_scale"
+            "line_with_log_scale",
+            "numeric_font_weight"
         )]
         name: &str,
     ) {
