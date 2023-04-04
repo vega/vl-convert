@@ -248,7 +248,7 @@ fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
                     err
                 ))),
             }
-        } else if let Ok(vl_spec) = vl_spec.cast_as::<PyDict>(py) {
+        } else if let Ok(vl_spec) = vl_spec.downcast::<PyDict>(py) {
             match depythonize(vl_spec) {
                 Ok(vl_spec) => Ok(vl_spec),
                 Err(err) => Err(PyValueError::new_err(format!(
