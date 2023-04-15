@@ -4722,7 +4722,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vl-convert"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -4738,7 +4738,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-python"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "futures",
  "lazy_static",
@@ -4749,7 +4749,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-rs"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "deno_core",
  "deno_runtime",
@@ -4769,7 +4769,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-vendor"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serde_json",
 ]
