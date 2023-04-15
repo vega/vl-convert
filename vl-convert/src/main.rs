@@ -9,7 +9,7 @@ use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
-const DEFAULT_VL_VERSION: &str = "5.6";
+const DEFAULT_VL_VERSION: &str = "5.7";
 const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
 
 #[derive(Debug, Parser)] // requires `derive` feature
