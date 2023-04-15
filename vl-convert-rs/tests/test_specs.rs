@@ -102,7 +102,9 @@ mod test_vegalite_to_vega {
             VlVersion::v5_2,
             VlVersion::v5_3,
             VlVersion::v5_4,
-            VlVersion::v5_5
+            VlVersion::v5_5,
+            VlVersion::v5_6,
+            VlVersion::v5_7,
         )]
         vl_version: VlVersion,
 
