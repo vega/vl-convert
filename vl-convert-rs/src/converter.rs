@@ -9,7 +9,7 @@ use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8, Extension};
 
-use deno_core::{op, ModuleCode};
+use deno_core::{ascii_str, op, FastString, ModuleCode};
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_core;
 use deno_runtime::deno_web::BlobStore;
@@ -153,14 +153,16 @@ import('{url}').then((sg) => {{
             }
 
             // Create and initialize svg function string
-            let function_str = r#"
+            let function_str: FastString = ascii_str!(
+                r#"
 function vegaToSvg(vgSpec) {
     let runtime = vega.parse(vgSpec);
     let view = new vega.View(runtime, {renderer: 'none'});
     let svgPromise = view.toSVG();
     return svgPromise
 }
-"#;
+"#
+            );
 
             self.worker.execute_script("<anon>", function_str)?;
             self.worker.run_event_loop(false).await?;
@@ -415,7 +417,7 @@ vegaLiteToSvg_{ver_name:?}(
             config_arg_id = config_arg_id,
             theme_arg = theme_arg,
         );
-        self.worker.execute_script("<anon>", code)?;
+        self.worker.execute_script("<anon>", code.into())?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
@@ -437,7 +439,7 @@ vegaToSvg(
 "#,
             arg_id = arg_id
         );
-        self.worker.execute_script("<anon>", code)?;
+        self.worker.execute_script("<anon>", code.into())?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
@@ -445,7 +447,9 @@ vegaToSvg(
     }
 
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
-        let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';";
+        let code: FastString = ascii_str!(
+            "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';"
+        );
         self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 
@@ -460,11 +464,13 @@ vegaToSvg(
     pub async fn get_themes(&mut self) -> Result<serde_json::Value, AnyError> {
         self.init_vega().await?;
 
-        let code = r#"
+        let code: FastString = ascii_str!(
+            r#"
 var themes = Object.assign({}, vegaThemes);
 delete themes.version
 delete themes.default
-"#;
+"#
+        );
         self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 

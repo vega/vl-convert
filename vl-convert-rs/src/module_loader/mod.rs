@@ -42,7 +42,7 @@ impl ModuleLoader for VlConvertModuleLoader {
     fn load(
         &self,
         module_specifier: &ModuleSpecifier,
-        _maybe_referrer: Option<ModuleSpecifier>,
+        _maybe_referrer: Option<&ModuleSpecifier>,
         _is_dyn_import: bool,
     ) -> Pin<Box<ModuleSourceFuture>> {
         let module_specifier = module_specifier.clone();
@@ -66,13 +66,12 @@ impl ModuleLoader for VlConvertModuleLoader {
                 .clone()
         };
 
-        async {
-            Ok(ModuleSource {
-                code: ModuleCode::from(code),
-                module_type: ModuleType::JavaScript,
-                module_url_specified: string_specifier.clone(),
-                module_url_found: string_specifier,
-            })
+        async move {
+            Ok(ModuleSource::new(
+                ModuleType::JavaScript,
+                ModuleCode::from(code),
+                &ModuleSpecifier::parse(&string_specifier).unwrap(),
+            ))
         }
         .boxed_local()
     }
