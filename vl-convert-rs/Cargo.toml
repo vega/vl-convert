@@ -10,8 +10,9 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-deno_runtime = "0.105.0"
-deno_core = "0.179.0"
+# Deno 1.30.4
+deno_runtime = "0.97.0"
+deno_core = "0.171.0"
 serde_json = {version="1.0.85", features=["preserve_order"]}
 serde = {version="1.0.145", features=["derive"]}
 futures = "0.3.24"
