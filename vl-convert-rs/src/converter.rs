@@ -9,7 +9,7 @@ use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8, Extension};
 
-use deno_core::{ascii_str, op, FastString, ModuleCode};
+use deno_core::op;
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_core;
 use deno_runtime::deno_web::BlobStore;
@@ -102,7 +102,7 @@ struct InnerVlConverter {
 impl InnerVlConverter {
     async fn init_vega(&mut self) -> Result<(), AnyError> {
         if !self.vega_initialized {
-            let import_code = ModuleCode::from(format!(
+            let import_code = format!(
                 r#"
 var vega;
 import('{vega_url}').then((imported) => {{
@@ -116,15 +116,15 @@ import('{vega_themes_url}').then((imported) => {{
 "#,
                 vega_url = vega_url(),
                 vega_themes_url = vega_themes_url(),
-            ));
+            );
 
-            self.worker.execute_script("<anon>", import_code)?;
+            self.worker.execute_script("<anon>", &import_code)?;
             self.worker.run_event_loop(false).await?;
 
             // Override text width measurement in vega-scenegraph
             for path in self.module_loader.import_map.keys() {
                 if path.ends_with("vega-scenegraph.js") {
-                    let script_code = ModuleCode::from(format!(
+                    let script_code = format!(
                         r#"
 import('{url}').then((sg) => {{
     sg.textMetrics.width = (item, text) => {{
@@ -146,23 +146,21 @@ import('{url}').then((sg) => {{
 }})
 "#,
                         url = url_for_path(path)
-                    ));
-                    self.worker.execute_script("<anon>", script_code)?;
+                    );
+                    self.worker.execute_script("<anon>", &script_code)?;
                     self.worker.run_event_loop(false).await?;
                 }
             }
 
             // Create and initialize svg function string
-            let function_str: FastString = ascii_str!(
-                r#"
+            let function_str = r#"
 function vegaToSvg(vgSpec) {
     let runtime = vega.parse(vgSpec);
     let view = new vega.View(runtime, {renderer: 'none'});
     let svgPromise = view.toSVG();
     return svgPromise
 }
-"#
-            );
+"#;
 
             self.worker.execute_script("<anon>", function_str)?;
             self.worker.run_event_loop(false).await?;
@@ -176,7 +174,7 @@ function vegaToSvg(vgSpec) {
     async fn init_vl_version(&mut self, vl_version: &VlVersion) -> Result<(), AnyError> {
         if !self.initialized_vl_versions.contains(vl_version) {
             // Create and evaluate import string
-            let import_code = ModuleCode::from(format!(
+            let import_code = format!(
                 r#"
 var {ver_name};
 import('{vl_url}').then((imported) => {{
@@ -185,14 +183,14 @@ import('{vl_url}').then((imported) => {{
 "#,
                 ver_name = format!("{:?}", vl_version),
                 vl_url = vl_version.to_url()
-            ));
+            );
 
-            self.worker.execute_script("<anon>", import_code)?;
+            self.worker.execute_script("<anon>", &import_code)?;
 
             self.worker.run_event_loop(false).await?;
 
             // Create and initialize function string
-            let function_code = ModuleCode::from(format!(
+            let function_code = format!(
                 r#"
 function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
     let options = {{}};
@@ -226,9 +224,9 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
 }}
 "#,
                 ver_name = format!("{:?}", vl_version),
-            ));
+            );
 
-            self.worker.execute_script("<anon>", function_code)?;
+            self.worker.execute_script("<anon>", &function_code)?;
 
             self.worker.run_event_loop(false).await?;
 
@@ -247,7 +245,6 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
                 op_text_width::decl(),
                 op_get_json_arg::decl(),
             ])
-            .force_op_registration()
             .build();
 
         let create_web_worker_cb = Arc::new(|_| {
@@ -260,6 +257,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
         let options = WorkerOptions {
             bootstrap: Default::default(),
             extensions: vec![ext],
+            extensions_with_js: vec![],
             startup_snapshot: None,
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
@@ -284,8 +282,8 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
             should_wait_for_inspector_session: false,
         };
 
-        let main_module =
-            deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
+        let js_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("vl-convert-rs.js");
+        let main_module = deno_core::resolve_path(&js_path.to_string_lossy())?;
         let permissions = PermissionsContainer::new(Permissions::allow_all());
 
         let mut worker =
@@ -307,8 +305,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
         &mut self,
         script: &str,
     ) -> Result<serde_json::Value, AnyError> {
-        let code = ModuleCode::from(script.to_string());
-        let res = self.worker.js_runtime.execute_script("<anon>", code)?;
+        let res = self.worker.js_runtime.execute_script("<anon>", script)?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -327,8 +324,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
     }
 
     async fn execute_script_to_string(&mut self, script: &str) -> Result<String, AnyError> {
-        let code = ModuleCode::from(script.to_string());
-        let res = self.worker.js_runtime.execute_script("<anon>", code)?;
+        let res = self.worker.js_runtime.execute_script("<anon>", script)?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -417,7 +413,7 @@ vegaLiteToSvg_{ver_name:?}(
             config_arg_id = config_arg_id,
             theme_arg = theme_arg,
         );
-        self.worker.execute_script("<anon>", code.into())?;
+        self.worker.execute_script("<anon>", &code)?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
@@ -439,7 +435,7 @@ vegaToSvg(
 "#,
             arg_id = arg_id
         );
-        self.worker.execute_script("<anon>", code.into())?;
+        self.worker.execute_script("<anon>", &code)?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
@@ -447,9 +443,7 @@ vegaToSvg(
     }
 
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
-        let code: FastString = ascii_str!(
-            "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';"
-        );
+        let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';";
         self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 
@@ -464,13 +458,12 @@ vegaToSvg(
     pub async fn get_themes(&mut self) -> Result<serde_json::Value, AnyError> {
         self.init_vega().await?;
 
-        let code: FastString = ascii_str!(
+        let code =
             r#"
 var themes = Object.assign({}, vegaThemes);
 delete themes.version
 delete themes.default
-"#
-        );
+"#;
         self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
 
