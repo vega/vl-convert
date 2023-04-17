@@ -17,6 +17,7 @@ jobs:
       V8_FROM_SOURCE: 1
     steps:
     - uses: actions/checkout@v3
+    - run: sudo apt install libglib2.0-dev
     - uses: messense/maturin-action@v1
       with:
         manylinux: ${{ matrix.options[1] }}
