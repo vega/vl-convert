@@ -257,7 +257,6 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
         let options = WorkerOptions {
             bootstrap: Default::default(),
             extensions: vec![ext],
-            extensions_with_js: vec![],
             startup_snapshot: None,
             unsafely_ignore_certificate_errors: None,
             root_cert_store: None,
@@ -282,8 +281,8 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
             should_wait_for_inspector_session: false,
         };
 
-        let js_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("vl-convert-rs.js");
-        let main_module = deno_core::resolve_path(&js_path.to_string_lossy())?;
+        let main_module =
+            deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
         let permissions = PermissionsContainer::new(Permissions::allow_all());
 
         let mut worker =
