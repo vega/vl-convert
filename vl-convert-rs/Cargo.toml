@@ -11,8 +11,8 @@ keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
 # Deno 1.31.0:
-deno_runtime = "0.98.0"
-deno_core = "0.172.0"
+deno_runtime = "0.93.0"
+deno_core = "0.167.0"
 serde_json = {version="1.0.85", features=["preserve_order"]}
 serde = {version="1.0.145", features=["derive"]}
 futures = "0.3.24"
