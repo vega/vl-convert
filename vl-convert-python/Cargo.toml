@@ -1,6 +1,6 @@
 [package]
 name = "vl-convert-python"
-version = "0.8.1"
+version = "0.9.0"
 edition = "2021"
 license = "BSD-3-Clause"
 readme = "README.md"
@@ -17,7 +17,7 @@ name = "vl_convert"
 crate-type = ["cdylib"]
 
 [dependencies]
-vl-convert-rs = { path = "../vl-convert-rs", version= "0.8.0" }
+vl-convert-rs = { path = "../vl-convert-rs", version= "0.9.0" }
 pyo3 = { version = "0.18.2", features = ["extension-module", "anyhow"] }
 lazy_static = "1.4.0"
 futures = "0.3.24"
