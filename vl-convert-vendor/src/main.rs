@@ -95,6 +95,7 @@ fn main() {
         .current_dir(&vl_convert_rs_path)
         .arg("vendor")
         .arg("vendor_imports.js")
+        .arg("--reload")
         .output()
     {
         panic!("Deno vendor command failed: {}", err);
