@@ -234,6 +234,14 @@ pub fn build_import_map() -> HashMap<String, String> {{
     );
     // Add packages
     for (k, v) in skypack_obj {
+
+        // Strip trailing ? suffixes like ?from=vega
+        let k = if let Some(question_inex) = k.find("?") {
+            k[..question_inex].to_string()
+        } else {
+            k.clone()
+        };
+
         let v = v.as_str().unwrap();
         writeln!(
             content,
