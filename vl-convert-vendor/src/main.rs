@@ -9,14 +9,6 @@ const VL_PATHS: &[(&str, &str)] = &[
         "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js",
     ),
     (
-        "5.0",
-        "/pin/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
-        "5.1",
-        "/pin/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
         "5.2",
         "/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js",
     ),

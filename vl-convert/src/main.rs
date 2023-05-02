@@ -33,7 +33,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
+        /// Vega-Lite Version. One of 4.17, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -61,7 +61,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
+        /// Vega-Lite Version. One of 4.17, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -89,7 +89,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 4.17, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
+        /// Vega-Lite Version. One of 4.17, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 

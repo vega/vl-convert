@@ -27,8 +27,6 @@ pub fn vega_themes_url() -> String {
 #[allow(non_camel_case_types)]
 pub enum VlVersion {
     v4_17,
-    v5_0,
-    v5_1,
     v5_2,
     v5_3,
     v5_4,
@@ -42,8 +40,6 @@ impl VlVersion {
         use VlVersion::*;
         let path = match self {
             v4_17 => "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js",
-            v5_0 => "/pin/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/mode=imports,min/optimized/vega-lite.js",
-            v5_1 => "/pin/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/mode=imports,min/optimized/vega-lite.js",
             v5_2 => "/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js",
             v5_3 => "/pin/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/mode=imports,min/optimized/vega-lite.js",
             v5_4 => "/pin/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/mode=imports,min/optimized/vega-lite.js",
@@ -71,8 +67,6 @@ impl FromStr for VlVersion {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "4.17" | "v4.17" | "4_17" | "v4_17" => Self::v4_17,
-            "5.0" | "v5.0" | "5_0" | "v5_0" => Self::v5_0,
-            "5.1" | "v5.1" | "5_1" | "v5_1" => Self::v5_1,
             "5.2" | "v5.2" | "5_2" | "v5_2" => Self::v5_2,
             "5.3" | "v5.3" | "5_3" | "v5_3" => Self::v5_3,
             "5.4" | "v5.4" | "5_4" | "v5_4" => Self::v5_4,
@@ -86,8 +80,6 @@ impl FromStr for VlVersion {
 
 pub const VL_VERSIONS: &[VlVersion] = &[
     VlVersion::v4_17,
-    VlVersion::v5_0,
-    VlVersion::v5_1,
     VlVersion::v5_2,
     VlVersion::v5_3,
     VlVersion::v5_4,
@@ -173,7 +165,6 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/vega-event-selector@v3.0.0-l4odHnkvkuEDkNxAGBfX/dist=es2020,mode=imports,min/optimized/vega-event-selector.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-event-selector@v3.0.0-l4odHnkvkuEDkNxAGBfX/dist=es2020,mode=imports,min/optimized/vega-event-selector.js").to_string());
     m.insert("/-/vega-event-selector@v3.0.1-UgiEAWJA4WQL4DTKnV4R/dist=es2020,mode=imports,min/optimized/vega-event-selector.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-event-selector@v3.0.1-UgiEAWJA4WQL4DTKnV4R/dist=es2020,mode=imports,min/optimized/vega-event-selector.js").to_string());
     m.insert("/-/vega-expression@v3.0.1-A7mhk5wjrSNOpQiSL1LP/dist=es2020,mode=imports,min/optimized/vega-expression.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-expression@v3.0.1-A7mhk5wjrSNOpQiSL1LP/dist=es2020,mode=imports,min/optimized/vega-expression.js").to_string());
-    m.insert("/-/vega-expression@v4.0.1-L6nuo9Nkz3BnDTZBigv3/dist=es2020,mode=imports,min/optimized/vega-expression.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-expression@v4.0.1-L6nuo9Nkz3BnDTZBigv3/dist=es2020,mode=imports,min/optimized/vega-expression.js").to_string());
     m.insert("/-/vega-expression@v5.0.0-kP0F2avA8xgwhtleXksI/dist=es2020,mode=imports,min/optimized/vega-expression.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-expression@v5.0.0-kP0F2avA8xgwhtleXksI/dist=es2020,mode=imports,min/optimized/vega-expression.js").to_string());
     m.insert("/-/vega-expression@v5.0.1-M3HJnXNS0AVPna9ohQFr/dist=es2020,mode=imports,min/optimized/vega-expression.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-expression@v5.0.1-M3HJnXNS0AVPna9ohQFr/dist=es2020,mode=imports,min/optimized/vega-expression.js").to_string());
     m.insert("/-/vega-force@v4.0.7-PSUFEGG7pO0gjWmlkXJl/dist=es2020,mode=imports,min/optimized/vega-force.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-force@v4.0.7-PSUFEGG7pO0gjWmlkXJl/dist=es2020,mode=imports,min/optimized/vega-force.js").to_string());
@@ -195,8 +186,6 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/vega-label@v1.2.0-hR00I9PV97W3D9H0bvXR/dist=es2020,mode=imports,min/optimized/vega-label.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-label@v1.2.0-hR00I9PV97W3D9H0bvXR/dist=es2020,mode=imports,min/optimized/vega-label.js").to_string());
     m.insert("/-/vega-label@v1.2.1-hEHqe293fM7lKP2OHb0o/dist=es2020,mode=imports,min/optimized/vega-label.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-label@v1.2.1-hEHqe293fM7lKP2OHb0o/dist=es2020,mode=imports,min/optimized/vega-label.js").to_string());
     m.insert("/-/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
-    m.insert("/-/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
-    m.insert("/-/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
@@ -253,8 +242,6 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/dist=es2020,mode=imports,min/optimized/vega.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega@v5.22.1-1GozmoxV3boOt3w4YuEn/dist=es2020,mode=imports,min/optimized/vega.js").to_string());
     m.insert("/-/vega@v5.24.0-1k4m6TDjSYdmzGt1pFvV/dist=es2020,mode=imports,min/optimized/vega.js".to_string(), include_str!("../../vendor/./cdn.skypack.dev/-/vega@v5.24.0-1k4m6TDjSYdmzGt1pFvV/dist=es2020,mode=imports,min/optimized/vega.js").to_string());
     m.insert("/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js").to_string());
-    m.insert("/pin/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/mode=imports,min/optimized/vega-lite.js").to_string());
-    m.insert("/pin/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/mode=imports,min/optimized/vega-lite.js").to_string());
