@@ -12,6 +12,12 @@ Install Deno using cargo (or another method from https://deno.land/manual@v1.26.
 $ cargo install deno
 ```
 
+# Run
+
+```
+$ cargo run
+```
+
 # Adding a new version of Vega-Lite
 vl-convert inlines the source code of supported versions of Vega-Lite so that no internet connection is required at runtime. As a consequence, vl-convert must be updated each time a new version of Vega-Lite is released. Here are the steps to add support for a new version of Vega-Lite (called version X.Y.Z in this example)
 

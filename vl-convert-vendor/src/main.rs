@@ -9,14 +9,6 @@ const VL_PATHS: &[(&str, &str)] = &[
         "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js",
     ),
     (
-        "5.0",
-        "/pin/vega-lite@v5.0.0-pmBUeju4pfpuhRqteP34/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
-        "5.1",
-        "/pin/vega-lite@v5.1.1-qL3Pu0B4EEJouhGpByed/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
         "5.2",
         "/pin/vega-lite@v5.2.0-0lbC9JVxwLSC3btqiwR4/mode=imports,min/optimized/vega-lite.js",
     ),
@@ -38,13 +30,17 @@ const VL_PATHS: &[(&str, &str)] = &[
     ),
     (
         "5.7",
-        "/pin/vega-lite@v5.7.0-ncNL6eSKc4SG6C52t5RF/dist=es2019,mode=imports,min/optimized/vega-lite.js"
-    )
+        "/pin/vega-lite@v5.7.1-C1L95AD7TVhfiybpzZ1h/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.8",
+        "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
+    ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
-const VEGA_PATH: &str = "/pin/vega@v5.24.0-1k4m6TDjSYdmzGt1pFvV/mode=imports,min/optimized/vega.js";
+const VEGA_PATH: &str = "/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
-    "/pin/vega-themes@v2.12.1-0vNozk9ahcosEoL8IJBx/mode=imports,min/optimized/vega-themes.js";
+    "/pin/vega-themes@v2.13.0-mG3SR6UGwwl83yUi5ncr/mode=imports,min/optimized/vega-themes.js";
 
 // Example custom build script.
 fn main() {
@@ -99,6 +95,7 @@ fn main() {
         .current_dir(&vl_convert_rs_path)
         .arg("vendor")
         .arg("vendor_imports.js")
+        .arg("--reload")
         .output()
     {
         panic!("Deno vendor command failed: {}", err);
@@ -238,6 +235,13 @@ pub fn build_import_map() -> HashMap<String, String> {{
     );
     // Add packages
     for (k, v) in skypack_obj {
+        // Strip trailing ? suffixes like ?from=vega
+        let k = if let Some(question_inex) = k.find('?') {
+            k[..question_inex].to_string()
+        } else {
+            k.clone()
+        };
+
         let v = v.as_str().unwrap();
         writeln!(
             content,

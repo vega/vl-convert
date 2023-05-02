@@ -48,7 +48,7 @@ def load_expected_png(name, vl_version, theme=None):
 
 @pytest.mark.parametrize("name", ["circle_binned", "seattle-weather", "stacked_bar_h"])
 @pytest.mark.parametrize(
-    "vl_version", ["v4_17", "v5_0", "v5_1", "v5_2", "v5_3", "v5_4", "v5_5"]
+    "vl_version", ["v4_17", "v5_2", "v5_3", "v5_4", "v5_5", "v5_6", "v5_7", "v5_8"]
 )
 @pytest.mark.parametrize("as_dict", [False, True])
 def test_vega(name, vl_version, as_dict):
@@ -70,7 +70,7 @@ def test_vega(name, vl_version, as_dict):
 @pytest.mark.parametrize("name", ["circle_binned", "stacked_bar_h"])
 @pytest.mark.parametrize("as_dict", [False, True])
 def test_svg(name, as_dict):
-    vl_version = "v5_5"
+    vl_version = "v5_8"
     vl_spec = load_vl_spec(name)
 
     if as_dict:
@@ -91,7 +91,7 @@ def test_svg(name, as_dict):
 @pytest.mark.parametrize("name,scale", [("circle_binned", 1.0), ("stacked_bar_h", 2.0)])
 @pytest.mark.parametrize("as_dict", [False, True])
 def test_png(name, scale, as_dict):
-    vl_version = "v5_5"
+    vl_version = "v5_8"
     vl_spec = load_vl_spec(name)
 
     if as_dict:
@@ -113,7 +113,7 @@ def test_png(name, scale, as_dict):
     "name,scale,theme", [("circle_binned", 1.0, "dark"), ("stacked_bar_h", 2.0, "vox")]
 )
 def test_png_theme_config(name, scale, theme):
-    vl_version = "v5_5"
+    vl_version = "v5_8"
     vl_spec = json.loads(load_vl_spec(name))
 
     expected_png = load_expected_png(name, vl_version, theme)
