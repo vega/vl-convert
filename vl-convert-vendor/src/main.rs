@@ -30,12 +30,12 @@ const VL_PATHS: &[(&str, &str)] = &[
     ),
     (
         "5.7",
-        "/pin/vega-lite@v5.7.1-C1L95AD7TVhfiybpzZ1h/mode=imports,min/optimized/vega-lite.js"
+        "/pin/vega-lite@v5.7.1-C1L95AD7TVhfiybpzZ1h/mode=imports,min/optimized/vega-lite.js",
     ),
     (
         "5.8",
-        "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js"
-    )
+        "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
+    ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
@@ -234,7 +234,6 @@ pub fn build_import_map() -> HashMap<String, String> {{
     );
     // Add packages
     for (k, v) in skypack_obj {
-
         // Strip trailing ? suffixes like ?from=vega
         let k = if let Some(question_inex) = k.find("?") {
             k[..question_inex].to_string()
