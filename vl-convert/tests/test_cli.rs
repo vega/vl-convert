@@ -134,12 +134,13 @@ mod test_vl2vg {
     fn test(
         #[values(
             "4.17",
-            "5_0",
-            "v5.1",
             "v5_2",
             "v5_3",
             "v5_4",
             "v5_5",
+            "v5_6",
+            "v5_7",
+            "v5_8",
         )]
         vl_version: &str,
 
@@ -198,7 +199,7 @@ mod test_vl2svg {
     #[rstest]
     fn test(
         #[values(
-            "v5_5",
+            "v5_8",
         )]
         vl_version: &str,
 
@@ -247,7 +248,7 @@ mod test_vl2png {
     ) -> Result<(), Box<dyn std::error::Error>> {
         initialize();
 
-        let vl_version = "5_5";
+        let vl_version = "5_8";
         let output_filename = format!("{}_{}.png", vl_version, name);
 
         let vl_path = vl_spec_path(name);
@@ -290,7 +291,7 @@ mod test_vl2png_theme_config {
     ) -> Result<(), Box<dyn std::error::Error>> {
         initialize();
 
-        let vl_version = "5_5";
+        let vl_version = "5_8";
         let output_filename = format!("{}_{}_theme.png", vl_version, name);
 
         let vl_path = vl_spec_path(name);
