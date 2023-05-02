@@ -161,7 +161,7 @@ mod test_svg {
     ) {
         initialize();
 
-        let vl_version = VlVersion::v5_5;
+        let vl_version = VlVersion::v5_8;
 
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
@@ -211,7 +211,7 @@ mod test_png {
     ) {
         initialize();
 
-        let vl_version = VlVersion::v5_5;
+        let vl_version = VlVersion::v5_8;
 
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
@@ -266,7 +266,7 @@ mod test_png_theme_config {
     ) {
         initialize();
 
-        let vl_version = VlVersion::v5_5;
+        let vl_version = VlVersion::v5_8;
 
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
@@ -321,7 +321,7 @@ mod test_png_theme_config {
 
 #[tokio::test]
 async fn test_font_with_quotes() {
-    let vl_version = VlVersion::v5_5;
+    let vl_version = VlVersion::v5_8;
 
     // Load example Vega-Lite spec
     let name = "font_with_quotes";
