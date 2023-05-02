@@ -38,9 +38,9 @@ const VL_PATHS: &[(&str, &str)] = &[
     )
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
-const VEGA_PATH: &str = "/pin/vega@v5.24.0-1k4m6TDjSYdmzGt1pFvV/mode=imports,min/optimized/vega.js";
+const VEGA_PATH: &str = "/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
-    "/pin/vega-themes@v2.12.1-0vNozk9ahcosEoL8IJBx/mode=imports,min/optimized/vega-themes.js";
+    "/pin/vega-themes@v2.13.0-mG3SR6UGwwl83yUi5ncr/mode=imports,min/optimized/vega-themes.js";
 
 // Example custom build script.
 fn main() {
