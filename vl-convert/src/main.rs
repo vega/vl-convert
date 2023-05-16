@@ -9,7 +9,7 @@ use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
-const DEFAULT_VL_VERSION: &str = "5.8";
+const DEFAULT_VL_VERSION: &str = "5.9";
 const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
 
 #[derive(Debug, Parser)] // requires `derive` feature
@@ -33,7 +33,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 4.17, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8
+        /// Vega-Lite Version. One of 4.17, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -61,7 +61,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 4.17, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8
+        /// Vega-Lite Version. One of 4.17, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -89,7 +89,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 4.17, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8
+        /// Vega-Lite Version. One of 4.17, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
