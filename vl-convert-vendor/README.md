@@ -27,3 +27,17 @@ vl-convert inlines the source code of supported versions of Vega-Lite so that no
 4. Update the value of `DEFAULT_VL_VERSION` in `vl-convert/src/main.rs` to `X.Y`. Update the CLI argument documentation strings to include `X.Y`. 
 5. Commit updated versions of `vl-convert-vendor/src/main.rs`, `vl-convert-rs/src/module_loader/import_map.rs`, and the files added under `vl-convert-rs/vendor`. 
 
+# Failing codegen-clean CI task
+The `codegen-clean` CI job checks that running `vl-convert-vendor` does not result in changes to the vendored files. If the files hosted on skypack change, it may be necessary to clear deno's local cache and rerun `vl-convert-vendor` locally. Find the `DENO_DIR` by running `deno info`:
+
+```
+% deno info
+DENO_DIR location: /Users/jonmmease/Library/Caches/deno
+Remote modules cache: /Users/jonmmease/Library/Caches/deno/deps
+npm modules cache: /Users/jonmmease/Library/Caches/deno/npm
+Emitted modules cache: /Users/jonmmease/Library/Caches/deno/gen
+Language server registries cache: /Users/jonmmease/Library/Caches/deno/registries
+Origin storage: /Users/jonmmease/Library/Caches/deno/location_data
+```
+
+The cache of downloaded files is stored in `$DENO_DIR/deps`. This directory is safe to delete, and will cause deno to re-download all of the JavaScript files from skypack.

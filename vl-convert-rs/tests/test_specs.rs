@@ -97,13 +97,13 @@ mod test_vegalite_to_vega {
     fn test(
         #[values(
             VlVersion::v4_17,
-            VlVersion::v5_2,
             VlVersion::v5_3,
             VlVersion::v5_4,
             VlVersion::v5_5,
             VlVersion::v5_6,
             VlVersion::v5_7,
             VlVersion::v5_8,
+            VlVersion::v5_9,
         )]
         vl_version: VlVersion,
 
