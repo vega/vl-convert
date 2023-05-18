@@ -25,8 +25,10 @@ const LIBERATION_SANS_BOLDITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-BoldItalic.ttf");
 
 fn init_usvg_options() -> usvg::Options {
-    let mut image_href_resolver = ImageHrefResolver::default();
-    image_href_resolver.resolve_string = custom_string_resolver();
+    let image_href_resolver = ImageHrefResolver {
+        resolve_string: custom_string_resolver(),
+        ..Default::default()
+    };
     usvg::Options {
         image_href_resolver,
         ..Default::default()
