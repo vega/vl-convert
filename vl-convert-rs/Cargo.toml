@@ -18,12 +18,13 @@ serde = {version="1.0.145", features=["derive"]}
 futures = "0.3.24"
 futures-util = "0.3.24"
 tokio = {version= "1.21", features=["rt-multi-thread"]}
-reqwest = {version="0.11.12", default-features=false, features=["rustls-tls"]}
+reqwest = {version="0.11.12", default-features=false, features=["rustls-tls", "blocking"]}
 lazy_static = "1.4.0"
 usvg = "0.32.0"
 resvg = "0.32.0"
 tiny-skia = "0.9.0"
-fontdb = {version= "0.13.0", features=["fontconfig"]}
+fontdb = {version="0.13.0", features=["fontconfig"]}
+tempfile = "3.3.0"
 
 [dev-dependencies]
 tokio = {version="1.21", features=["macros", "rt", "rt-multi-thread"]}

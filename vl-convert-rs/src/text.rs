@@ -1,5 +1,6 @@
 use crate::anyhow;
 use crate::anyhow::{anyhow, bail};
+use crate::image_loading::custom_string_resolver;
 use deno_core::error::AnyError;
 use deno_core::op;
 use serde::Deserialize;
@@ -7,7 +8,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use usvg::fontdb::Database;
-use usvg::{TreeParsing, TreeTextToPath};
+use usvg::{ImageHrefResolver, TreeParsing, TreeTextToPath};
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options> = Mutex::new(init_usvg_options());
@@ -24,7 +25,12 @@ const LIBERATION_SANS_BOLDITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-BoldItalic.ttf");
 
 fn init_usvg_options() -> usvg::Options {
-    usvg::Options::default()
+    let mut image_href_resolver = ImageHrefResolver::default();
+    image_href_resolver.resolve_string = custom_string_resolver();
+    usvg::Options {
+        image_href_resolver,
+        ..Default::default()
+    }
 }
 
 fn init_font_db() -> Database {
