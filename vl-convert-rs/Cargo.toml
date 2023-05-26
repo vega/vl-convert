@@ -10,7 +10,7 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-# Deno 1.30.3. Before updating deno_runtime/deno_core, see not in DEVELOP.md
+# Deno 1.30.3. Before updating deno_runtime/deno_core, see note in DEVELOP.md
 deno_runtime = "0.97.0"
 deno_core = "0.171.0"
 serde_json = {version="1.0.85", features=["preserve_order"]}
@@ -18,7 +18,8 @@ serde = {version="1.0.145", features=["derive"]}
 futures = "0.3.24"
 futures-util = "0.3.24"
 tokio = {version= "1.21", features=["rt-multi-thread"]}
-reqwest = {version="0.11.12", default-features=false, features=["rustls-tls", "blocking"]}
+reqwest = {version="=0.11.12", default-features=false, features=["rustls-tls", "blocking"]}
+rustls = "=0.20.6"
 lazy_static = "1.4.0"
 usvg = "0.32.0"
 resvg = "0.32.0"
