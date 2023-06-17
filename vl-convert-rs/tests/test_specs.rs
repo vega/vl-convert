@@ -193,7 +193,7 @@ mod test_svg {
 }
 
 #[rustfmt::skip]
-mod test_png {
+mod test_png_no_theme {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::VlOpts;
@@ -205,6 +205,7 @@ mod test_png {
         case("bar_chart_trellis_compact", 2.0),
         case("line_with_log_scale", 2.0),
         case("remote_images", 1.0),
+        case("maptile_background", 1.0),
     )]
     fn test(
         name: &str,
