@@ -536,6 +536,9 @@ pub struct VlConverter {
 
 impl VlConverter {
     pub fn new() -> Self {
+        // Initialize environment logger
+        env_logger::try_init().ok();
+
         let (sender, mut receiver) = mpsc::channel::<VlConvertCommand>(32);
 
         let handle = Arc::new(thread::spawn(move || {

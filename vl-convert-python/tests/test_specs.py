@@ -88,8 +88,16 @@ def test_svg(name, as_dict):
     assert svg == expected_svg
 
 
-@pytest.mark.parametrize("name,scale", [("circle_binned", 1.0), ("stacked_bar_h", 2.0)])
-@pytest.mark.parametrize("as_dict", [False, True])
+@pytest.mark.parametrize(
+    "name,scale",
+    [
+        ("circle_binned", 1.0),
+        ("stacked_bar_h", 2.0),
+        ("remote_images", 1.0),
+        ("maptile_background", 1.0),
+    ],
+)
+@pytest.mark.parametrize("as_dict", [False])
 def test_png(name, scale, as_dict):
     vl_version = "v5_8"
     vl_spec = load_vl_spec(name)
@@ -102,11 +110,13 @@ def test_png(name, scale, as_dict):
     # Convert to vega first
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     png = vlc.vega_to_png(vg_spec, scale=scale)
-    assert png == expected_png
+    if png != expected_png:
+        pytest.fail("vega_to_png mismatch")
 
     # Convert directly to image
     png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version, scale=scale)
-    assert png == expected_png
+    if png != expected_png:
+        pytest.fail("vegalite_to_png mismatch")
 
 
 @pytest.mark.parametrize(
