@@ -88,12 +88,15 @@ def test_svg(name, as_dict):
     assert svg == expected_svg
 
 
-@pytest.mark.parametrize("name,scale", [
-    ("circle_binned", 1.0),
-    ("stacked_bar_h", 2.0),
-    ("remote_images", 1.0),
-    ("maptile_background", 1.0),
-])
+@pytest.mark.parametrize(
+    "name,scale",
+    [
+        ("circle_binned", 1.0),
+        ("stacked_bar_h", 2.0),
+        ("remote_images", 1.0),
+        ("maptile_background", 1.0),
+    ],
+)
 @pytest.mark.parametrize("as_dict", [False])
 def test_png(name, scale, as_dict):
     vl_version = "v5_8"
