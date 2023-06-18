@@ -708,10 +708,9 @@ impl VlConverter {
 
         let rtree = resvg::Tree::from_usvg(&rtree);
 
-        let pixmap_size = resvg::IntSize::from_usvg(rtree.size);
         let mut pixmap = tiny_skia::Pixmap::new(
-            (pixmap_size.width() as f32 * scale) as u32,
-            (pixmap_size.height() as f32 * scale) as u32,
+            (rtree.size.width() * scale) as u32,
+            (rtree.size.height() * scale) as u32,
         )
         .unwrap();
 

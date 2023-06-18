@@ -21,9 +21,9 @@ tokio = {version= "1.21", features=["rt-multi-thread"]}
 reqwest = {version="=0.11.12", default-features=false, features=["rustls-tls", "blocking"]}
 rustls = "=0.20.6"
 lazy_static = "1.4.0"
-usvg = "0.33.0"
-resvg = "0.33.0"
-tiny-skia = "0.9.1"
+usvg = "0.34.1"
+resvg = "0.34.1"
+tiny-skia = "0.10.0"
 png = "=0.17.6"
 fontdb = {version= "0.14.1", features=["fontconfig"]}
 tempfile = "3.3.0"
