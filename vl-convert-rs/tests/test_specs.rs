@@ -115,11 +115,6 @@ fn make_expected_png_path(name: &str, vl_version: VlVersion, theme: Option<&str>
         })
 }
 
-fn load_expected_png(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Vec<u8> {
-    let spec_path = make_expected_png_path(name, vl_version, theme);
-    fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path))
-}
-
 fn load_expected_png_dssim(
     name: &str,
     vl_version: VlVersion,
@@ -161,7 +156,7 @@ fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8])
     let img_dssim = to_dssim(img);
 
     let attr = Dssim::new();
-    let (diff, ssim_maps) = attr.compare(&expected_dssim, img_dssim);
+    let (diff, _) = attr.compare(&expected_dssim, img_dssim);
 
     if diff > 0.0001 {
         println!("DSSIM diff {diff}");
