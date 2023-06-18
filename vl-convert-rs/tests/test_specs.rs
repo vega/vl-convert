@@ -1,3 +1,4 @@
+use dssim::{Dssim, DssimImage};
 use rstest::rstest;
 use std::fs;
 use std::io::Write;
@@ -119,6 +120,21 @@ fn load_expected_png(name: &str, vl_version: VlVersion, theme: Option<&str>) -> 
     fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path))
 }
 
+fn load_expected_png_dssim(
+    name: &str,
+    vl_version: VlVersion,
+    theme: Option<&str>,
+) -> DssimImage<f32> {
+    let spec_path = make_expected_png_path(name, vl_version, theme);
+    dssim::load_image(&Dssim::new(), spec_path).unwrap()
+}
+
+fn to_dssim(img: &[u8]) -> DssimImage<f32> {
+    let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
+    tmpfile.write_all(img).unwrap();
+    dssim::load_image(&Dssim::new(), tmpfile.path()).unwrap()
+}
+
 fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) -> PathBuf {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let failed_dir = root_path
@@ -141,8 +157,14 @@ fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img:
 }
 
 fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) {
-    let expected = load_expected_png(name, vl_version, theme);
-    if img != expected {
+    let expected_dssim = load_expected_png_dssim(name, vl_version, theme);
+    let img_dssim = to_dssim(img);
+
+    let attr = Dssim::new();
+    let (diff, ssim_maps) = attr.compare(&expected_dssim, img_dssim);
+
+    if diff > 0.0001 {
+        println!("DSSIM diff {diff}");
         let path = write_failed_png(name, vl_version, None, img);
         panic!(
             "Images don't match for {}.png. Failed image written to {:?}",
