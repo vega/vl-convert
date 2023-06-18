@@ -12,3 +12,4 @@ __pycache__/
 /vl-convert-python/notebooks/.ipynb_checkpoints/
 /vl-convert-python/notebooks/output/
 /vl-convert/tests/output/
+/vl-convert-rs/tests/vl-specs/failed/
