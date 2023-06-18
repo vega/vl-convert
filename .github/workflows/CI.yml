@@ -96,6 +96,13 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
+      - name: Upload test failures
+        uses: actions/upload-artifact@v2
+        if: always()
+        with:
+          name: failed-images
+          path: |
+            vl-convert-rs/tests/vl-specs/failed
 
   vl-convert-python-tests:
     runs-on: ${{ matrix.options[0] }}

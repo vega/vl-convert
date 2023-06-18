@@ -216,7 +216,7 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
             if let Some(ref bbox) = path.text_bbox {
                 let width = bbox.right() - bbox.left();
                 let _height = bbox.bottom() - bbox.top();
-                return Ok(width);
+                return Ok(width as f64);
             }
         }
     }

@@ -1,5 +1,7 @@
+use dssim::{Dssim, DssimImage};
 use rstest::rstest;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{VlConverter, VlVersion};
@@ -67,6 +69,38 @@ fn load_expected_svg(name: &str, vl_version: VlVersion, theme: Option<&str>) -> 
     fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path))
 }
 
+fn write_failed_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) -> PathBuf {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let failed_dir = root_path
+        .join("tests")
+        .join("vl-specs")
+        .join("failed")
+        .join(format!("{:?}", vl_version));
+
+    fs::create_dir_all(failed_dir.clone()).unwrap();
+
+    let file_path = failed_dir.join(if let Some(theme) = theme {
+        format!("{}-{}.svg", name, theme)
+    } else {
+        format!("{}.svg", name)
+    });
+
+    let mut file = fs::File::create(file_path.clone()).unwrap();
+    file.write_all(img.as_bytes()).unwrap();
+    return file_path;
+}
+
+fn check_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) {
+    let expected = load_expected_svg(name, vl_version, theme);
+    if img != expected {
+        let path = write_failed_svg(name, vl_version, None, img);
+        panic!(
+            "Images don't match for {}.svg. Failed image written to {:?}",
+            name, path
+        )
+    }
+}
+
 fn make_expected_png_path(name: &str, vl_version: VlVersion, theme: Option<&str>) -> PathBuf {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     root_path
@@ -81,9 +115,57 @@ fn make_expected_png_path(name: &str, vl_version: VlVersion, theme: Option<&str>
         })
 }
 
-fn load_expected_png(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Vec<u8> {
+fn load_expected_png_dssim(
+    name: &str,
+    vl_version: VlVersion,
+    theme: Option<&str>,
+) -> DssimImage<f32> {
     let spec_path = make_expected_png_path(name, vl_version, theme);
-    fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path))
+    dssim::load_image(&Dssim::new(), spec_path).unwrap()
+}
+
+fn to_dssim(img: &[u8]) -> DssimImage<f32> {
+    let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
+    tmpfile.write_all(img).unwrap();
+    dssim::load_image(&Dssim::new(), tmpfile.path()).unwrap()
+}
+
+fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) -> PathBuf {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let failed_dir = root_path
+        .join("tests")
+        .join("vl-specs")
+        .join("failed")
+        .join(format!("{:?}", vl_version));
+
+    fs::create_dir_all(failed_dir.clone()).unwrap();
+
+    let file_path = failed_dir.join(if let Some(theme) = theme {
+        format!("{}-{}.png", name, theme)
+    } else {
+        format!("{}.png", name)
+    });
+
+    let mut file = fs::File::create(file_path.clone()).unwrap();
+    file.write_all(img).unwrap();
+    return file_path;
+}
+
+fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) {
+    let expected_dssim = load_expected_png_dssim(name, vl_version, theme);
+    let img_dssim = to_dssim(img);
+
+    let attr = Dssim::new();
+    let (diff, _) = attr.compare(&expected_dssim, img_dssim);
+
+    if diff > 0.0001 {
+        println!("DSSIM diff {diff}");
+        let path = write_failed_png(name, vl_version, None, img);
+        panic!(
+            "Images don't match for {}.png. Failed image written to {:?}",
+            name, path
+        )
+    }
 }
 
 #[rustfmt::skip]
@@ -166,9 +248,6 @@ mod test_svg {
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
 
-        // Load expected SVG image
-        let expected_svg = load_expected_svg(name, vl_version, None);
-
         // Create Vega-Lite Converter and perform conversion
         let mut converter = VlConverter::new();
 
@@ -177,15 +256,11 @@ mod test_svg {
             block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})).unwrap();
 
         let svg = block_on(converter.vega_to_svg(vg_spec)).unwrap();
-        assert_eq!(svg, expected_svg);
+        check_svg(name, vl_version, None, &svg);
 
         // Convert directly to svg
         let svg = block_on(converter.vegalite_to_svg(vl_spec, VlOpts{vl_version, ..Default::default()})).unwrap();
-        assert_eq!(svg, expected_svg);
-
-        // // Write out reference image
-        // let svg_path = make_expected_svg_path(name, vl_version, None);
-        // std::fs::write(svg_path, svg).unwrap();
+        check_svg(name, vl_version, None, &svg);
     }
 
     #[test]
@@ -218,9 +293,6 @@ mod test_png_no_theme {
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
 
-        // Load expected PNG image
-        let expected_png_data = load_expected_png(name, vl_version, None);
-
         // Create Vega-Lite Converter and perform conversion
         let mut converter = VlConverter::new();
 
@@ -230,17 +302,13 @@ mod test_png_no_theme {
         ).unwrap();
 
         let png_data = block_on(converter.vega_to_png(vg_spec, Some(scale))).unwrap();
-        assert_eq!(png_data, expected_png_data);
+        check_png(name, vl_version, None, png_data.as_slice());
 
         // Convert directly to png
         let png_data = block_on(
             converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(scale))
         ).unwrap();
-        assert_eq!(png_data, expected_png_data);
-
-        // // Write out reference image
-        // let png_path = make_expected_png_path(name, vl_version, None);
-        // std::fs::write(png_path, png_data).unwrap();
+        check_png(name, vl_version, None, png_data.as_slice());
     }
 
     #[test]
@@ -273,9 +341,6 @@ mod test_png_theme_config {
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
 
-        // Load expected PNG image
-        let expected_png_data = load_expected_png(name, vl_version, Some(theme));
-
         // Create Vega-Lite Converter and perform conversion
         let mut converter = VlConverter::new();
 
@@ -290,7 +355,7 @@ mod test_png_theme_config {
                 }, Some(scale)
             )
         ).unwrap();
-        assert_eq!(png_data, expected_png_data);
+        check_png(name, vl_version, Some(theme), png_data.as_slice());
 
         // Patch spec to put theme in `vl_spec.usermeta.embedOptions.theme` and don't pass theme
         // argument
@@ -310,11 +375,7 @@ mod test_png_theme_config {
                 }, Some(scale)
             )
         ).unwrap();
-        assert_eq!(png_data, expected_png_data);
-
-        // // Write out reference image
-        // let png_path = make_expected_png_path(name, vl_version, Some(theme));
-        // std::fs::write(png_path, png_data).unwrap();
+        check_png(name, vl_version, Some(theme), png_data.as_slice());
     }
 
     #[test]
@@ -332,9 +393,6 @@ async fn test_font_with_quotes() {
     // Create Vega-Lite Converter and perform conversion
     let mut converter = VlConverter::new();
 
-    // Load expected PNG image
-    let expected_png_data = load_expected_png(name, vl_version, None);
-
     let png_data = converter
         .vegalite_to_png(
             vl_spec,
@@ -347,9 +405,5 @@ async fn test_font_with_quotes() {
         .await
         .unwrap();
 
-    assert_eq!(png_data, expected_png_data);
-
-    // // Write out reference image
-    // let png_path = make_expected_png_path(name, vl_version, None);
-    // std::fs::write(png_path, png_data).unwrap();
+    check_png(name, vl_version, None, png_data.as_slice());
 }

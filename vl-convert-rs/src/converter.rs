@@ -23,7 +23,6 @@ use std::thread::JoinHandle;
 use crate::anyhow::anyhow;
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
-use resvg::FitTo;
 use usvg::{TreeParsing, TreeTextToPath};
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
@@ -705,22 +704,18 @@ impl VlConverter {
                 bail!("Failed to parse SVG string: {}", err.to_string())
             }
         };
-
         rtree.convert_text(&font_database);
 
-        let pixmap_size = rtree.size.to_screen_size();
+        let rtree = resvg::Tree::from_usvg(&rtree);
+
         let mut pixmap = tiny_skia::Pixmap::new(
-            (pixmap_size.width() as f32 * scale) as u32,
-            (pixmap_size.height() as f32 * scale) as u32,
+            (rtree.size.width() * scale) as u32,
+            (rtree.size.height() * scale) as u32,
         )
         .unwrap();
-        resvg::render(
-            &rtree,
-            FitTo::Zoom(scale),
-            tiny_skia::Transform::default(),
-            pixmap.as_mut(),
-        )
-        .unwrap();
+
+        let transform = tiny_skia::Transform::from_scale(scale, scale);
+        resvg::Tree::render(&rtree, transform, &mut pixmap.as_mut());
 
         match pixmap.encode_png() {
             Ok(png_data) => Ok(png_data),
