@@ -19,8 +19,8 @@ jobs:
       uses: docker/setup-qemu-action@v1
     - uses: messense/maturin-action@v1
       with:
-        manylinux: 2_24
-        container: quay.io/pypa/manylinux_2_24_aarch64
+        manylinux: auto
+        container: quay.io/pypa/manylinux2014_aarch64
         target: ${{ matrix.arch }}
         command: build
         args: --release -m vl-convert-python/Cargo.toml --sdist -o dist -i python3.9 --strip
