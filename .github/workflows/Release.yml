@@ -17,7 +17,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: messense/maturin-action@v1
       with:
-        manylinux: 2_24
+        manylinux: 2_28
         target: ${{ matrix.arch }}
         command: build
         args: --release -m vl-convert-python/Cargo.toml --sdist -o dist -i python3.9 --strip
