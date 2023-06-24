@@ -13,7 +13,6 @@ jobs:
       matrix:
         options:
          - [ "x86_64-unknown-linux-gnu", "linux-64"]
-         - [ "aarch64-unknown-linux-gnu", "linux-aarch64"]
     steps:
       - uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
@@ -103,37 +102,6 @@ jobs:
           name: vl-convert
           path: |
             vl-convert_osx-64.zip
-
-  build-cli-osx-arm64:
-    runs-on: macos-11
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      - name: Download Apple Silicon toolchain
-        run: |
-          rustup target add aarch64-apple-darwin
-      - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release --target aarch64-apple-darwin
-      - name: Move executable to bin directory
-        run: |
-          mkdir -p bin
-          cp target/aarch64-apple-darwin/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
-          zip -r vl-convert_osx-arm64.zip bin/
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: vl-convert
-          path: |
-            vl-convert_osx-arm64.zip
 
   build-wheels-linux-x86_64:
     runs-on: ubuntu-latest
