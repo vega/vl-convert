@@ -24,6 +24,14 @@ jobs:
         target: ${{ matrix.arch }}
         command: build
         args: --release -m vl-convert-python/Cargo.toml --sdist -o dist -i python3.9 --strip
+    # Not sure why the compiled wheels end up with x86_64 in the file name,
+    # they are aarch64 and work properly after being renamed.
+    - name: Rename files
+      run: |
+        sudo apt-get update
+        sudo apt-get install rename
+        ls dist/
+        rename 's/x86_64/aarch64/' dist/vl_convert_python-*.whl
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
