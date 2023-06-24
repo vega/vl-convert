@@ -233,7 +233,7 @@ jobs:
     name: Publish to PyPI
     environment: PyPI Upload
     runs-on: ubuntu-latest
-    needs: [ build-wheels-linux, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
+    needs: [ build-wheels-linux-x86_64, build-wheels-linux-aarch64, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
     steps:
       - uses: actions/download-artifact@v2
         with:
