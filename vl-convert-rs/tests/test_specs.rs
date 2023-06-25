@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{VlConverter, VlVersion};
 
+use serde_json::Value;
 use std::sync::Once;
 use vl_convert_rs::converter::VlOpts;
 
@@ -47,6 +48,42 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion) -> Option<serde_json
         Some(serde_json::from_str(&spec_str).unwrap())
     } else {
         None
+    }
+}
+
+fn write_failed_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) {
+    if let Some(vg_spec) = vg_spec {
+        let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let failed_dir = root_path
+            .join("tests")
+            .join("vl-specs")
+            .join("failed")
+            .join(format!("{:?}", vl_version));
+
+        fs::create_dir_all(failed_dir.clone()).unwrap();
+
+        // Write standard
+        let file_path = failed_dir.join(format!("{}.vg.json", name));
+        let mut file = fs::File::create(file_path.clone()).unwrap();
+        file.write_all(serde_json::to_string(&vg_spec).unwrap().as_bytes())
+            .unwrap();
+
+        // Write pretty
+        let file_path = failed_dir.join(format!("{}.vg.pretty.json", name));
+        let mut file = fs::File::create(file_path.clone()).unwrap();
+        file.write_all(serde_json::to_string_pretty(&vg_spec).unwrap().as_bytes())
+            .unwrap();
+    }
+}
+
+fn check_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) {
+    let expected = load_expected_vg_spec(name, vl_version);
+    if vg_spec != expected {
+        let path = write_failed_vg(name, vl_version, vg_spec);
+        panic!(
+            "Images don't match for {}.svg. Failed image written to {:?}",
+            name, path
+        )
     }
 }
 
@@ -186,6 +223,8 @@ mod test_vegalite_to_vega {
             VlVersion::v5_7,
             VlVersion::v5_8,
             VlVersion::v5_9,
+            VlVersion::v5_10,
+            VlVersion::v5_11,
         )]
         vl_version: VlVersion,
 
@@ -203,20 +242,9 @@ mod test_vegalite_to_vega {
         let vg_result = block_on(
             converter.vegalite_to_vega(vl_spec, VlOpts{vl_version, ..Default::default()}
             )
-        );
+        ).ok();
 
-        match load_expected_vg_spec(name, vl_version) {
-            Some(expected_vg_spec) => {
-                // Conversion is expected to succeed and match this
-                let vg_result = vg_result.expect("Vega-Lite to Vega conversion failed");
-                assert_eq!(vg_result, expected_vg_spec)
-            }
-            None => {
-                println!("{:?}", vg_result);
-                // Conversion is expected to fail
-                assert!(vg_result.is_err())
-            }
-        }
+        check_vg(name, vl_version, vg_result);
     }
 
     #[test]
