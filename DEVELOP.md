@@ -27,7 +27,9 @@ The `cargo ws publish ...` command above will push a commit to the `main` branch
 Create a new GitHub release using the `v0.1.0` tag.
 
 ## Upgrading Deno
-The Deno dependencies currently correspond to Deno 1.30.3. When updating to later versions, we've run into errors for packages cross compiled to Linux aarch64. See https://github.com/vega/vl-convert/issues/52. Be sure to test this scenario when updating Deno in the future.
+Updating the CI build to use QEMU seems to have fixed the issue. Leaving this comment for posterity.
+
+ > The Deno dependencies currently correspond to Deno 1.30.3. When updating to later versions, we've run into errors for packages cross compiled to Linux aarch64. See https://github.com/vega/vl-convert/issues/52. Be sure to test this scenario when updating Deno in the future.
 
 ## Debug Logging
 To enable logging, set the RUST_LOG environment variable to "vl_convert"

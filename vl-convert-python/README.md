@@ -99,7 +99,7 @@ Of note, `vl-convert-python` is fully self-contained and has no dependency on an
 # Development setup
 Create development conda environment
 ```
-$ conda create -n vl-convert-dev -c conda-forge python=3.10 deno maturin altair pytest black black-jupyter
+$ conda create -n vl-convert-dev -c conda-forge python=3.10 deno maturin altair pytest black black-jupyter scikit-image
 ```
 
 Activate environment
