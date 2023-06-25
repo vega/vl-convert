@@ -186,29 +186,11 @@ jobs:
         name: wheels
         path: dist
 
-  build-wheels-osx-arm64:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Download Apple Silicon toolchain
-        run: |
-          rustup target add aarch64-apple-darwin
-      - name: Build Apple Silicon wheels
-        uses: messense/maturin-action@v1
-        with:
-          command: build
-          args: --release -m vl-convert-python/Cargo.toml -o dist --target aarch64-apple-darwin -i python3.11 -i python3.10 -i python3.9 -i python3.8 -i python3.7 --strip
-      - name: Upload wheels
-        uses: actions/upload-artifact@v2
-        with:
-          name: wheels
-          path: dist
-
   publish-pypi:
     name: Publish to PyPI
     environment: PyPI Upload
     runs-on: ubuntu-latest
-    needs: [ build-wheels-linux-x86_64, build-wheels-linux-aarch64, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
+    needs: [ build-wheels-linux-x86_64, build-wheels-linux-aarch64, build-wheels-win-64, build-wheels-osx-64 ]
     steps:
       - uses: actions/download-artifact@v2
         with:
