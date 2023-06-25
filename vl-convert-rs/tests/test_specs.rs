@@ -265,7 +265,8 @@ mod test_svg {
             "stacked_bar_h",
             "bar_chart_trellis_compact",
             "line_with_log_scale",
-            "numeric_font_weight"
+            "numeric_font_weight",
+            "float_font_size",
         )]
         name: &str,
     ) {
@@ -309,6 +310,7 @@ mod test_png_no_theme {
         case("line_with_log_scale", 2.0),
         case("remote_images", 1.0),
         case("maptile_background", 1.0),
+        case("float_font_size", 1.0),
     )]
     fn test(
         name: &str,

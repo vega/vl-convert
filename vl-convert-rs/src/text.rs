@@ -104,7 +104,7 @@ struct TextInfo {
     variant: Option<String>,
     weight: Option<String>,
     family: Option<String>,
-    size: i32,
+    size: f64,
     text: Value,
 }
 
