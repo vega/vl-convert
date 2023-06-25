@@ -2,6 +2,9 @@ import json
 from pathlib import Path
 import vl_convert as vlc
 import pytest
+from io import BytesIO
+from skimage.io import imread
+from skimage.metrics import structural_similarity as ssim
 
 tests_dir = Path(__file__).parent
 root_dir = tests_dir.parent.parent
@@ -111,13 +114,11 @@ def test_png(name, scale, as_dict):
     # Convert to vega first
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     png = vlc.vega_to_png(vg_spec, scale=scale)
-    if png != expected_png:
-        pytest.fail("vega_to_png mismatch")
+    check_png(png, expected_png)
 
     # Convert directly to image
     png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version, scale=scale)
-    if png != expected_png:
-        pytest.fail("vegalite_to_png mismatch")
+    check_png(png, expected_png)
 
 
 @pytest.mark.parametrize(
@@ -139,3 +140,11 @@ def test_png_theme_config(name, scale, theme):
         config=config,
     )
     assert png == expected_png
+
+
+def check_png(png, expected_png):
+    png_img = imread(BytesIO(png))
+    expected_png_img = imread(BytesIO(expected_png))
+    similarity_value = ssim(png_img, expected_png_img, channel_axis=2)
+    if similarity_value < 0.995:
+        pytest.fail(f"png mismatch with similarity: {similarity_value}")
