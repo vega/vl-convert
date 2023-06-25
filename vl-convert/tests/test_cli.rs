@@ -141,6 +141,8 @@ mod test_vl2vg {
             "v5_7",
             "v5_8",
             "v5_9",
+            "v5_10",
+            "v5_11",
         )]
         vl_version: &str,
 
