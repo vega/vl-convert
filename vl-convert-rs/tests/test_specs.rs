@@ -275,6 +275,7 @@ mod test_svg {
             "line_with_log_scale",
             "numeric_font_weight",
             "float_font_size",
+            "no_text_in_font_metrics"
         )]
         name: &str,
     ) {
@@ -319,6 +320,7 @@ mod test_png_no_theme {
         case("remote_images", 1.0),
         case("maptile_background", 1.0),
         case("float_font_size", 1.0),
+        case("no_text_in_font_metrics", 1.0),
     )]
     fn test(
         name: &str,

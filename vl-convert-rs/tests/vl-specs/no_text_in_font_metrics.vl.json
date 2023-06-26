@@ -1,0 +1,30 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.9.3.json",
+  "description": "https://github.com/vega/vl-convert/issues/72",
+  "data": {
+    "values": [
+      {
+        "column_name": "Prior",
+        "previous_sum": 1.2,
+        "log2_bayes_factor": 2.4,
+        "value": "inal score"
+      }
+    ]
+  },
+  "layer": [
+    {
+      "mark": {"type": "bar", "width": 60},
+      "encoding": {
+        "x": {
+          "type": "nominal",
+          "axis": {
+            "labelExpr": "datum.value == 'Prior' || datum.value == 'Final score' ? '' : datum.value",
+            "tickBand": "extent"
+          },
+          "field": "column_name"
+        },
+        "y": {"type": "quantitative", "field": "previous_sum"}
+      }
+    }
+  ]
+}
