@@ -1,0 +1,18 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": 500,
+  "height": 300,
+  "projection": {"translate": [1200, 700], "type": "albersUsa", "scale": 3000},
+  "layer": [
+    {
+      "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/main/data/airports.csv"},
+      "mark": "circle",
+      "encoding": {
+        "longitude": {"field": "longitude", "type": "quantitative"},
+        "latitude": {"field": "latitude", "type": "quantitative"},
+        "size": {"value": 10},
+        "color": {"value": "steelblue"}
+      }
+    }
+  ]
+}
