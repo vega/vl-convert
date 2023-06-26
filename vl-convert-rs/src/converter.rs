@@ -18,6 +18,7 @@ use deno_runtime::worker::MainWorker;
 use deno_runtime::worker::WorkerOptions;
 
 use deno_runtime::deno_fs::RealFs;
+use std::panic;
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -709,30 +710,33 @@ impl VlConverter {
             .lock()
             .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
 
-        let mut rtree = match usvg::Tree::from_str(svg, &opts) {
-            Ok(rtree) => rtree,
-            Err(err) => {
-                bail!("Failed to parse SVG string: {}", err.to_string())
-            }
-        };
-        rtree.convert_text(&font_database);
+        // catch_unwind so that we don't poison Mutexes
+        // if usvg/resvg panics
+        let response = panic::catch_unwind(|| {
+            let mut rtree = match usvg::Tree::from_str(svg, &opts) {
+                Ok(rtree) => rtree,
+                Err(err) => {
+                    bail!("Failed to parse SVG string: {}", err.to_string())
+                }
+            };
+            rtree.convert_text(&font_database);
 
-        let rtree = resvg::Tree::from_usvg(&rtree);
+            let rtree = resvg::Tree::from_usvg(&rtree);
 
-        let mut pixmap = tiny_skia::Pixmap::new(
-            (rtree.size.width() * scale) as u32,
-            (rtree.size.height() * scale) as u32,
-        )
-        .unwrap();
+            let mut pixmap = tiny_skia::Pixmap::new(
+                (rtree.size.width() * scale) as u32,
+                (rtree.size.height() * scale) as u32,
+            )
+            .unwrap();
 
-        let transform = tiny_skia::Transform::from_scale(scale, scale);
-        resvg::Tree::render(&rtree, transform, &mut pixmap.as_mut());
+            let transform = tiny_skia::Transform::from_scale(scale, scale);
+            resvg::Tree::render(&rtree, transform, &mut pixmap.as_mut());
 
-        match pixmap.encode_png() {
-            Ok(png_data) => Ok(png_data),
-            Err(err) => {
-                bail!("Failed to encode PNG: {}", err.to_string())
-            }
+            Ok(pixmap.encode_png())
+        });
+        match response {
+            Ok(Ok(Ok(png_result))) => Ok(png_result),
+            err => bail!("{err:?}"),
         }
     }
 
