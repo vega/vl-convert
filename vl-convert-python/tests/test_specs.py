@@ -99,6 +99,7 @@ def test_svg(name, as_dict):
         ("stacked_bar_h", 2.0),
         ("remote_images", 1.0),
         ("maptile_background", 1.0),
+        ("no_text_in_font_metrics", 1.0),
     ],
 )
 @pytest.mark.parametrize("as_dict", [False])

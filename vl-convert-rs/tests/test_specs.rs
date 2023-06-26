@@ -101,9 +101,9 @@ fn make_expected_svg_path(name: &str, vl_version: VlVersion, theme: Option<&str>
         })
 }
 
-fn load_expected_svg(name: &str, vl_version: VlVersion, theme: Option<&str>) -> String {
+fn load_expected_svg(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Option<String> {
     let spec_path = make_expected_svg_path(name, vl_version, theme);
-    fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path))
+    fs::read_to_string(&spec_path).ok()
 }
 
 fn write_failed_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) -> PathBuf {
@@ -129,7 +129,7 @@ fn write_failed_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img:
 
 fn check_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) {
     let expected = load_expected_svg(name, vl_version, theme);
-    if img != expected {
+    if Some(img.to_string()) != expected {
         let path = write_failed_svg(name, vl_version, None, img);
         panic!(
             "Images don't match for {}.svg. Failed image written to {:?}",
@@ -156,9 +156,9 @@ fn load_expected_png_dssim(
     name: &str,
     vl_version: VlVersion,
     theme: Option<&str>,
-) -> DssimImage<f32> {
+) -> Option<DssimImage<f32>> {
     let spec_path = make_expected_png_path(name, vl_version, theme);
-    dssim::load_image(&Dssim::new(), spec_path).unwrap()
+    dssim::load_image(&Dssim::new(), spec_path).ok()
 }
 
 fn to_dssim(img: &[u8]) -> DssimImage<f32> {
@@ -190,16 +190,24 @@ fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img:
 
 fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) {
     let expected_dssim = load_expected_png_dssim(name, vl_version, theme);
-    let img_dssim = to_dssim(img);
+    if let Some(expected_dssim) = expected_dssim {
+        let img_dssim = to_dssim(img);
 
-    let attr = Dssim::new();
-    let (diff, _) = attr.compare(&expected_dssim, img_dssim);
+        let attr = Dssim::new();
+        let (diff, _) = attr.compare(&expected_dssim, img_dssim);
 
-    if diff > 0.0001 {
-        println!("DSSIM diff {diff}");
+        if diff > 0.0001 {
+            println!("DSSIM diff {diff}");
+            let path = write_failed_png(name, vl_version, None, img);
+            panic!(
+                "Images don't match for {}.png. Failed image written to {:?}",
+                name, path
+            )
+        }
+    } else {
         let path = write_failed_png(name, vl_version, None, img);
         panic!(
-            "Images don't match for {}.png. Failed image written to {:?}",
+            "Baseline image does not exist for {}.png. Failed image written to {:?}",
             name, path
         )
     }
@@ -267,6 +275,7 @@ mod test_svg {
             "line_with_log_scale",
             "numeric_font_weight",
             "float_font_size",
+            "no_text_in_font_metrics"
         )]
         name: &str,
     ) {
@@ -311,6 +320,7 @@ mod test_png_no_theme {
         case("remote_images", 1.0),
         case("maptile_background", 1.0),
         case("float_font_size", 1.0),
+        case("no_text_in_font_metrics", 1.0),
     )]
     fn test(
         name: &str,

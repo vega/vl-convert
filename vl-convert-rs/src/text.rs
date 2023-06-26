@@ -105,7 +105,7 @@ struct TextInfo {
     weight: Option<String>,
     family: Option<String>,
     size: f64,
-    text: Value,
+    text: Option<Value>,
 }
 
 impl TextInfo {
@@ -136,8 +136,9 @@ impl TextInfo {
         let mut escaped_text = String::new();
 
         let text = match &self.text {
-            Value::String(s) => s.to_string(),
-            text => text.to_string(),
+            Some(Value::String(s)) => s.to_string(),
+            Some(text) => text.to_string(),
+            None => "".to_string(),
         };
 
         for char in text.chars() {
@@ -181,10 +182,17 @@ pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
         Err(err) => bail!("Failed to deserialize text info: {}", err.to_string()),
     };
 
-    if let Some(text) = text_info.text.as_str() {
-        if text.trim().is_empty() {
+    // Return width zero for empty strings and missing text
+    match &text_info.text {
+        Some(Value::String(text)) => {
+            if text.trim().is_empty() {
+                return Ok(0.0);
+            }
+        }
+        None => {
             return Ok(0.0);
         }
+        _ => {}
     }
 
     let svg = text_info.to_svg();
