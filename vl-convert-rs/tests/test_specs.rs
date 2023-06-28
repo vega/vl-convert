@@ -321,6 +321,7 @@ mod test_png_no_theme {
         case("maptile_background", 1.0),
         case("float_font_size", 1.0),
         case("no_text_in_font_metrics", 1.0),
+        case("custom_projection", 1.0),
     )]
     fn test(
         name: &str,
