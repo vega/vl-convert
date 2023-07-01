@@ -1,0 +1,32 @@
+{
+  "config": {"view": {"continuousWidth": 300, "continuousHeight": 300}},
+  "data": {
+    "url": "https://cdn.jsdelivr.net/npm/vega-datasets@v1.29.0/data/income.json"
+  },
+  "mark": {"type": "geoshape"},
+  "encoding": {
+    "color": {"field": "pct", "type": "quantitative"},
+    "shape": {"field": "geo", "type": "geojson"},
+    "tooltip": [
+      {"field": "name", "type": "nominal"},
+      {"field": "pct", "type": "quantitative"}
+    ]
+  },
+  "height": 175,
+  "projection": {"type": "albersUsa"},
+  "transform": [
+    {
+      "lookup": "id",
+      "as": "geo",
+      "from": {
+        "data": {
+          "url": "https://cdn.jsdelivr.net/npm/vega-datasets@v1.29.0/data/us-10m.json",
+          "format": {"feature": "states", "type": "topojson"}
+        },
+        "key": "id"
+      }
+    }
+  ],
+  "width": 300,
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.8.0.json"
+}
