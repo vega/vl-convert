@@ -116,7 +116,7 @@ jobs:
         manylinux: auto
         target: ${{ matrix.arch }}
         command: build
-        args: --release -m vl-convert-python/Cargo.toml --sdist -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 -i python3.7 --strip
+        args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
@@ -125,14 +125,6 @@ jobs:
 
   build-wheels-linux-aarch64:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        pyversion:
-          - "python3.11"
-          - "python3.10"
-          - "python3.9"
-          - "python3.8"
-          - "python3.7"
     steps:
       - uses: actions/checkout@v3
       - name: Setup QEMU
@@ -143,7 +135,7 @@ jobs:
           container: quay.io/pypa/manylinux2014_aarch64
           target: aarch64-unknown-linux-gnu
           command: build
-          args: --release -m vl-convert-python/Cargo.toml --sdist -o dist -i ${{ matrix.pyversion }} --strip
+          args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
       - name: Rename files
@@ -165,7 +157,7 @@ jobs:
     - uses: messense/maturin-action@v1
       with:
         command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 -i python3.7 --strip
+        args: --release -m vl-convert-python/Cargo.toml -o dist --strip
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
@@ -180,7 +172,7 @@ jobs:
       uses: messense/maturin-action@v1
       with:
         command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist -i python3.11 -i python3.10 -i python3.9 -i python3.8 -i python3.7 --strip
+        args: --release -m vl-convert-python/Cargo.toml -o dist --strip
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
