@@ -37,7 +37,7 @@ This will produce `target/release/vl-convert`, which should be uploaded to the G
 ### Build Python wheels
 Build the Python wheels with:
 ```
-maturin build -m vl-convert-python/Cargo.toml --release -i python3.11 -i python3.10 -i python3.9 -i python3.8 -i python3.7 --strip 
+maturin build -m vl-convert-python/Cargo.toml --release --strip 
 ```
 
 This will produce a collection of wheel files in `target/wheels`, which should be uploaded to the GitHub Release below. These wheels must also be uploaded to PyPI with:
