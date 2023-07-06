@@ -553,42 +553,43 @@ impl VlConverter {
         let (sender, mut receiver) = mpsc::channel::<VlConvertCommand>(32);
 
         let handle = Arc::new(thread::spawn(move || {
-            let mut inner = TOKIO_RUNTIME.block_on(InnerVlConverter::try_new())?;
-
-            while let Some(cmd) = TOKIO_RUNTIME.block_on(receiver.next()) {
-                match cmd {
-                    VlConvertCommand::VlToVg {
-                        vl_spec,
-                        vl_opts,
-                        responder,
-                    } => {
-                        let vega_spec =
-                            TOKIO_RUNTIME.block_on(inner.vegalite_to_vega(&vl_spec, vl_opts));
-                        responder.send(vega_spec).ok();
-                    }
-                    VlConvertCommand::VgToSvg { vg_spec, responder } => {
-                        let svg_result = TOKIO_RUNTIME.block_on(inner.vega_to_svg(&vg_spec));
-                        responder.send(svg_result).ok();
-                    }
-                    VlConvertCommand::VlToSvg {
-                        vl_spec,
-                        vl_opts,
-                        responder,
-                    } => {
-                        let svg_result =
-                            TOKIO_RUNTIME.block_on(inner.vegalite_to_svg(&vl_spec, vl_opts));
-                        responder.send(svg_result).ok();
-                    }
-                    VlConvertCommand::GetLocalTz { responder } => {
-                        let local_tz = TOKIO_RUNTIME.block_on(inner.get_local_tz());
-                        responder.send(local_tz).ok();
-                    }
-                    VlConvertCommand::GetThemes { responder } => {
-                        let themes = TOKIO_RUNTIME.block_on(inner.get_themes());
-                        responder.send(themes).ok();
+            TOKIO_RUNTIME.block_on(async {
+                let mut inner = InnerVlConverter::try_new().await?;
+                while let Some(cmd) = receiver.next().await {
+                    match cmd {
+                        VlConvertCommand::VlToVg {
+                            vl_spec,
+                            vl_opts,
+                            responder,
+                        } => {
+                            let vega_spec = inner.vegalite_to_vega(&vl_spec, vl_opts).await;
+                            responder.send(vega_spec).ok();
+                        }
+                        VlConvertCommand::VgToSvg { vg_spec, responder } => {
+                            let svg_result = inner.vega_to_svg(&vg_spec).await;
+                            responder.send(svg_result).ok();
+                        }
+                        VlConvertCommand::VlToSvg {
+                            vl_spec,
+                            vl_opts,
+                            responder,
+                        } => {
+                            let svg_result = inner.vegalite_to_svg(&vl_spec, vl_opts).await;
+                            responder.send(svg_result).ok();
+                        }
+                        VlConvertCommand::GetLocalTz { responder } => {
+                            let local_tz = inner.get_local_tz().await;
+                            responder.send(local_tz).ok();
+                        }
+                        VlConvertCommand::GetThemes { responder } => {
+                            let themes = inner.get_themes().await;
+                            responder.send(themes).ok();
+                        }
                     }
                 }
-            }
+                Ok::<(), AnyError>(())
+            })?;
+
             Ok(())
         }));
 
