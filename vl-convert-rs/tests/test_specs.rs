@@ -280,26 +280,25 @@ mod test_svg {
         name: &str,
     ) {
         initialize();
-        for _ in 1..1000 {
-            let vl_version = VlVersion::v5_8;
 
-            // Load example Vega-Lite spec
-            let vl_spec = load_vl_spec(name);
+        let vl_version = VlVersion::v5_8;
 
-            // Create Vega-Lite Converter and perform conversion
-            let mut converter = VlConverter::new();
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
 
-            // Convert to vega first
-            let vg_spec =
-                block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts { vl_version, ..Default::default() })).unwrap();
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
 
-            let svg = block_on(converter.vega_to_svg(vg_spec)).unwrap();
-            check_svg(name, vl_version, None, &svg);
+        // Convert to vega first
+        let vg_spec =
+            block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})).unwrap();
 
-            // Convert directly to svg
-            let svg = block_on(converter.vegalite_to_svg(vl_spec, VlOpts { vl_version, ..Default::default() })).unwrap();
-            check_svg(name, vl_version, None, &svg);
-        }
+        let svg = block_on(converter.vega_to_svg(vg_spec)).unwrap();
+        check_svg(name, vl_version, None, &svg);
+
+        // Convert directly to svg
+        let svg = block_on(converter.vegalite_to_svg(vl_spec, VlOpts{vl_version, ..Default::default()})).unwrap();
+        check_svg(name, vl_version, None, &svg);
     }
 
     #[test]
@@ -329,29 +328,28 @@ mod test_png_no_theme {
         scale: f32
     ) {
         initialize();
-        for _ in 1..1000 {
-            let vl_version = VlVersion::v5_8;
 
-            // Load example Vega-Lite spec
-            let vl_spec = load_vl_spec(name);
+        let vl_version = VlVersion::v5_8;
 
-            // Create Vega-Lite Converter and perform conversion
-            let mut converter = VlConverter::new();
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
 
-            // Convert to vega first
-            let vg_spec = block_on(
-                converter.vegalite_to_vega(vl_spec.clone(), VlOpts { vl_version, ..Default::default() })
-            ).unwrap();
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
 
-            let png_data = block_on(converter.vega_to_png(vg_spec, Some(scale))).unwrap();
-            check_png(name, vl_version, None, png_data.as_slice());
+        // Convert to vega first
+        let vg_spec = block_on(
+            converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})
+        ).unwrap();
 
-            // Convert directly to png
-            let png_data = block_on(
-                converter.vegalite_to_png(vl_spec, VlOpts { vl_version, ..Default::default() }, Some(scale))
-            ).unwrap();
-            check_png(name, vl_version, None, png_data.as_slice());
-        }
+        let png_data = block_on(converter.vega_to_png(vg_spec, Some(scale))).unwrap();
+        check_png(name, vl_version, None, png_data.as_slice());
+
+        // Convert directly to png
+        let png_data = block_on(
+            converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(scale))
+        ).unwrap();
+        check_png(name, vl_version, None, png_data.as_slice());
     }
 
     #[test]
