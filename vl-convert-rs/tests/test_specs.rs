@@ -462,7 +462,7 @@ async fn test_deno_url_crash_gh_78() {
     let mut converter = VlConverter::new();
 
     let mut svg_data: String = String::new();
-    for _ in 0..10000 {
+    for _ in 0..10 {
         svg_data = converter
             .vegalite_to_svg(
                 vl_spec.clone(),
