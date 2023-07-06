@@ -31,7 +31,7 @@ use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
 
 lazy_static! {
     pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime =
-        tokio::runtime::Builder::new_multi_thread()
+        tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
