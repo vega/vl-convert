@@ -449,7 +449,6 @@ async fn test_font_with_quotes() {
     check_png(name, vl_version, None, png_data.as_slice());
 }
 
-
 #[tokio::test]
 async fn test_deno_url_crash_gh_78() {
     let vl_version = VlVersion::v5_8;
