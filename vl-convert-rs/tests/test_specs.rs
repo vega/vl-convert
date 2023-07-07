@@ -460,19 +460,20 @@ async fn test_deno_url_crash_gh_78() {
     // Create Vega-Lite Converter and perform conversion
     let mut converter = VlConverter::new();
 
-    let mut svg_data: String = String::new();
+    let mut png_data: Vec<u8> = Vec::new();
     for _ in 0..10 {
-        svg_data = converter
-            .vegalite_to_svg(
+        png_data = converter
+            .vegalite_to_png(
                 vl_spec.clone(),
                 VlOpts {
                     vl_version,
                     ..Default::default()
                 },
+                None
             )
             .await
             .unwrap();
     }
 
-    check_svg(name, vl_version, None, &svg_data);
+    check_png(name, vl_version, None, &png_data);
 }

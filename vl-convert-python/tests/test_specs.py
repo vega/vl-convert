@@ -85,11 +85,11 @@ def test_svg(name, as_dict):
     # Convert to vega first
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     svg = vlc.vega_to_svg(vg_spec)
-    assert svg == expected_svg
+    check_svg(svg, expected_svg)
 
     # Convert directly to image
     svg = vlc.vegalite_to_svg(vl_spec, vl_version=vl_version)
-    assert svg == expected_svg
+    check_svg(svg, expected_svg)
 
 
 @pytest.mark.parametrize(
@@ -100,6 +100,7 @@ def test_svg(name, as_dict):
         ("remote_images", 1.0),
         ("maptile_background", 1.0),
         ("no_text_in_font_metrics", 1.0),
+        ("lookup_urls", 1.0),
     ],
 )
 @pytest.mark.parametrize("as_dict", [False])
@@ -143,9 +144,27 @@ def test_png_theme_config(name, scale, theme):
     assert png == expected_png
 
 
+def test_gh_78():
+    vl_version = "v5_8"
+    name = "lookup_urls"
+    vl_spec = json.loads(load_vl_spec(name))
+
+    png = None
+    for i in range(10):
+        png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version)
+
+    expected_png = load_expected_png(name, vl_version)
+    check_png(png, expected_png)
+
+
 def check_png(png, expected_png):
     png_img = imread(BytesIO(png))
     expected_png_img = imread(BytesIO(expected_png))
     similarity_value = ssim(png_img, expected_png_img, channel_axis=2)
     if similarity_value < 0.995:
         pytest.fail(f"png mismatch with similarity: {similarity_value}")
+
+
+def check_svg(svg, expected_svg):
+    if svg != expected_svg:
+        pytest.fail(f"svg image mismatch")
