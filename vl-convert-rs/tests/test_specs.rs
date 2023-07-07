@@ -448,4 +448,3 @@ async fn test_font_with_quotes() {
 
     check_png(name, vl_version, None, png_data.as_slice());
 }
-
