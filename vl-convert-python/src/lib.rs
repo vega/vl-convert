@@ -4,7 +4,7 @@ use pyo3::types::{PyBytes, PyDict};
 use pythonize::{depythonize, pythonize};
 use std::str::FromStr;
 use std::sync::Mutex;
-use vl_convert_rs::converter::{VlOpts, TOKIO_RUNTIME};
+use vl_convert_rs::converter::VlOpts;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::serde_json;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
@@ -15,6 +15,11 @@ extern crate lazy_static;
 
 lazy_static! {
     static ref VL_CONVERTER: Mutex<VlConverterRs> = Mutex::new(VlConverterRs::new());
+    static ref PYTHON_RUNTIME: tokio::runtime::Runtime =
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 }
 
 /// Convert a Vega-Lite spec to a Vega spec using a particular
@@ -48,7 +53,7 @@ fn vegalite_to_vega(
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
-    let vega_spec = match TOKIO_RUNTIME.block_on(converter.vegalite_to_vega(
+    let vega_spec = match PYTHON_RUNTIME.block_on(converter.vegalite_to_vega(
         vl_spec,
         VlOpts {
             vl_version,
@@ -85,7 +90,7 @@ fn vega_to_svg(vg_spec: PyObject) -> PyResult<String> {
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let svg = match TOKIO_RUNTIME.block_on(converter.vega_to_svg(vg_spec)) {
+    let svg = match PYTHON_RUNTIME.block_on(converter.vega_to_svg(vg_spec)) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -129,7 +134,7 @@ fn vegalite_to_svg(
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let svg = match TOKIO_RUNTIME.block_on(converter.vegalite_to_svg(
+    let svg = match PYTHON_RUNTIME.block_on(converter.vegalite_to_svg(
         vl_spec,
         VlOpts {
             vl_version,
@@ -165,7 +170,7 @@ fn vega_to_png(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let png_data = match TOKIO_RUNTIME.block_on(converter.vega_to_png(vg_spec, scale)) {
+    let png_data = match PYTHON_RUNTIME.block_on(converter.vega_to_png(vg_spec, scale)) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -214,7 +219,7 @@ fn vegalite_to_png(
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let png_data = match TOKIO_RUNTIME.block_on(converter.vegalite_to_png(
+    let png_data = match PYTHON_RUNTIME.block_on(converter.vegalite_to_png(
         vl_spec,
         VlOpts {
             vl_version,
@@ -289,7 +294,7 @@ fn get_local_tz() -> PyResult<Option<String>> {
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
-    let local_tz = match TOKIO_RUNTIME.block_on(converter.get_local_tz()) {
+    let local_tz = match PYTHON_RUNTIME.block_on(converter.get_local_tz()) {
         Ok(local_tz) => local_tz,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -311,7 +316,7 @@ fn get_themes() -> PyResult<PyObject> {
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
-    let themes = match TOKIO_RUNTIME.block_on(converter.get_themes()) {
+    let themes = match PYTHON_RUNTIME.block_on(converter.get_themes()) {
         Ok(themes) => themes,
         Err(err) => {
             return Err(PyValueError::new_err(format!(

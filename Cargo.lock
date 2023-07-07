@@ -5700,6 +5700,7 @@ dependencies = [
  "lazy_static",
  "pyo3",
  "pythonize",
+ "tokio",
  "vl-convert-rs",
 ]
 
