@@ -14,6 +14,12 @@ lazy_static! {
         .user_agent(VL_CONVERT_USER_AGENT)
         .build()
         .expect("Failed to construct reqwest client");
+
+    static ref REQWEST_CLIENT_RUNTIME: tokio::runtime::Runtime =
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 }
 
 /// A shorthand for [ImageHrefResolver]'s string function.
@@ -35,7 +41,7 @@ pub fn custom_string_resolver() -> ImageHrefStringResolverFn {
 
             // Download image to temporary file with reqwest
             let bytes: Option<_> = task::block_in_place(move || {
-                TOKIO_RUNTIME.block_on(async {
+                REQWEST_CLIENT_RUNTIME.block_on(async {
                     if let Ok(response) = REQWEST_CLIENT.get(href).send().await {
                         // Check status code.
                         match response.status() {
