@@ -1,4 +1,3 @@
-use crate::converter::TOKIO_RUNTIME;
 use http::StatusCode;
 use log::error;
 use reqwest::Client;
