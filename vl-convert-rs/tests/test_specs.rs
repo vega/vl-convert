@@ -449,31 +449,3 @@ async fn test_font_with_quotes() {
     check_png(name, vl_version, None, png_data.as_slice());
 }
 
-#[tokio::test]
-async fn test_deno_url_crash_gh_78() {
-    let vl_version = VlVersion::v5_8;
-
-    // Load example Vega-Lite spec
-    let name = "lookup_urls";
-    let vl_spec = load_vl_spec(name);
-
-    // Create Vega-Lite Converter and perform conversion
-    let mut converter = VlConverter::new();
-
-    let mut png_data: Vec<u8> = Vec::new();
-    for _ in 0..10 {
-        png_data = converter
-            .vegalite_to_png(
-                vl_spec.clone(),
-                VlOpts {
-                    vl_version,
-                    ..Default::default()
-                },
-                None
-            )
-            .await
-            .unwrap();
-    }
-
-    check_png(name, vl_version, None, &png_data);
-}

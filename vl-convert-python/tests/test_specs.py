@@ -150,7 +150,7 @@ def test_gh_78():
     vl_spec = json.loads(load_vl_spec(name))
 
     png = None
-    for i in range(10):
+    for i in range(30):
         png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version)
 
     expected_png = load_expected_png(name, vl_version)
