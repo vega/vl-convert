@@ -14,7 +14,6 @@ lazy_static! {
         .user_agent(VL_CONVERT_USER_AGENT)
         .build()
         .expect("Failed to construct reqwest client");
-
     static ref REQWEST_CLIENT_RUNTIME: tokio::runtime::Runtime =
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
