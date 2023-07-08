@@ -134,8 +134,6 @@ mod test_vl2vg {
     fn test(
         #[values(
             "4.17",
-            "v5_3",
-            "v5_4",
             "v5_5",
             "v5_6",
             "v5_7",
@@ -143,6 +141,8 @@ mod test_vl2vg {
             "v5_9",
             "v5_10",
             "v5_11",
+            "v5_12",
+            "v5_13",
         )]
         vl_version: &str,
 

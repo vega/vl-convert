@@ -104,8 +104,7 @@
             "field": "variety"
           },
           "height": {
-            "scale": "y",
-            "band": 1
+            "signal": "max(0.25, bandwidth('y'))"
           }
         }
       }
