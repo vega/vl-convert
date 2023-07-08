@@ -30,6 +30,7 @@ Cross compiling vl-convert packages from macOS x86 to macOS arm64 is not current
 Build the Apple Silicon CLI application with:
 ```
 cargo build -p vl-convert --release
+zip -j target/release/vl-convert_osx-arm64.zip target/release/vl-convert
 ```
 
 This will produce `target/release/vl-convert`, which should be uploaded to the GitHub Release below
@@ -37,10 +38,11 @@ This will produce `target/release/vl-convert`, which should be uploaded to the G
 ### Build Python wheels
 Build the Python wheels with:
 ```
+rm -rf target/wheels
 maturin build -m vl-convert-python/Cargo.toml --release --strip 
 ```
 
-This will produce a collection of wheel files in `target/wheels`, which should be uploaded to the GitHub Release below. These wheels must also be uploaded to PyPI with:
+This will produce a wheel file in `target/wheels`, which should be uploaded to the GitHub Release below. These wheels must also be uploaded to PyPI with:
 
 ```
 twine upload target/wheels/*.whl
