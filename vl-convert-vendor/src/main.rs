@@ -4,17 +4,10 @@ use std::path::Path;
 use std::process::Command;
 
 const VL_PATHS: &[(&str, &str)] = &[
+    // 4.17 is used by Altair 4.2 (keep forever)
     (
         "4.17",
         "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
-        "5.3",
-        "/pin/vega-lite@v5.3.0-dnS8FsGfJPn0FoksPhAq/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
-        "5.4",
-        "/pin/vega-lite@v5.4.0-9xYSqs414yDb6NHwONaK/mode=imports,min/optimized/vega-lite.js",
     ),
     (
         "5.5",
@@ -28,6 +21,7 @@ const VL_PATHS: &[(&str, &str)] = &[
         "5.7",
         "/pin/vega-lite@v5.7.1-C1L95AD7TVhfiybpzZ1h/mode=imports,min/optimized/vega-lite.js",
     ),
+    // 5.8 is used by Altair 5.0 (keep forever)
     (
         "5.8",
         "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
@@ -43,6 +37,14 @@ const VL_PATHS: &[(&str, &str)] = &[
     (
         "5.11",
         "/pin/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.12",
+        "/pin/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.13",
+        "/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js",
     ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
