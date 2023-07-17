@@ -105,6 +105,10 @@ enum Commands {
         #[arg(short, long, default_value = "1.0")]
         scale: f32,
 
+        /// Pixels per inch
+        #[arg(short, long, default_value = "72.0")]
+        ppi: f32,
+
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
@@ -140,6 +144,10 @@ enum Commands {
         /// Image scale factor
         #[arg(short, long, default_value = "1.0")]
         scale: f32,
+
+        /// Pixels per inch
+        #[arg(short, long, default_value = "72.0")]
+        ppi: f32,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -198,10 +206,11 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             scale,
+            ppi,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_png(&input, &output, &vl_version, theme, config, scale).await?
+            vl_2_png(&input, &output, &vl_version, theme, config, scale, ppi).await?
         }
         Vg2svg {
             input,
@@ -215,10 +224,11 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             scale,
+            ppi,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_png(&input, &output, scale).await?
+            vg_2_png(&input, &output, scale, ppi).await?
         }
         LsThemes => list_themes().await?,
         CatTheme { theme } => cat_theme(&theme).await?,
@@ -394,7 +404,7 @@ async fn vg_2_svg(input: &str, output: &str) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn vg_2_png(input: &str, output: &str, scale: f32) -> Result<(), anyhow::Error> {
+async fn vg_2_png(input: &str, output: &str, scale: f32, ppi: f32) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
 
@@ -405,7 +415,7 @@ async fn vg_2_png(input: &str, output: &str, scale: f32) -> Result<(), anyhow::E
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let png_data = match converter.vega_to_png(vg_spec, Some(scale)).await {
+    let png_data = match converter.vega_to_png(vg_spec, Some(scale), Some(ppi)).await {
         Ok(png_data) => png_data,
         Err(err) => {
             bail!("Vega-Lite to Vega conversion failed: {}", err);
@@ -471,6 +481,7 @@ async fn vl_2_png(
     theme: Option<String>,
     config: Option<String>,
     scale: f32,
+    ppi: f32,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -497,6 +508,7 @@ async fn vl_2_png(
                 theme,
             },
             Some(scale),
+            Some(ppi),
         )
         .await
     {

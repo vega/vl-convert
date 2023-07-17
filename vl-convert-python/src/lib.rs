@@ -158,19 +158,20 @@ fn vegalite_to_svg(
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
+///     ppi (float): Pixels per inch (default 72)
 ///
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
 #[pyo3(text_signature = "(vg_spec, scale)")]
-fn vega_to_png(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
+fn vega_to_png(vg_spec: PyObject, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let png_data = match PYTHON_RUNTIME.block_on(converter.vega_to_png(vg_spec, scale)) {
+    let png_data = match PYTHON_RUNTIME.block_on(converter.vega_to_png(vg_spec, scale, ppi)) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -193,6 +194,7 @@ fn vega_to_png(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
 ///     scale (float): Image scale factor (default 1.0)
+///     ppi (float): Pixels per inch (default 72)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///
@@ -204,6 +206,7 @@ fn vegalite_to_png(
     vl_spec: PyObject,
     vl_version: Option<&str>,
     scale: Option<f32>,
+    ppi: Option<f32>,
     config: Option<PyObject>,
     theme: Option<String>,
 ) -> PyResult<PyObject> {
@@ -227,6 +230,7 @@ fn vegalite_to_png(
             theme,
         },
         scale,
+        ppi,
     )) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {

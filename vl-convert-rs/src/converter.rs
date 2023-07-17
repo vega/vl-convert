@@ -687,10 +687,11 @@ impl VlConverter {
         &mut self,
         vg_spec: serde_json::Value,
         scale: Option<f32>,
+        ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vega_to_svg(vg_spec).await?;
-        Self::svg_to_png(&svg, scale)
+        Self::svg_to_png(&svg, scale, ppi)
     }
 
     pub async fn vegalite_to_png(
@@ -698,13 +699,17 @@ impl VlConverter {
         vl_spec: serde_json::Value,
         vl_opts: VlOpts,
         scale: Option<f32>,
+        ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        Self::svg_to_png(&svg, scale)
+        Self::svg_to_png(&svg, scale, ppi)
     }
 
-    fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
+    fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
+        // default ppi to 72
+        let ppi = ppi.unwrap_or(72.0);
+        let scale = scale * ppi / 72.0;
         let opts = USVG_OPTIONS
             .lock()
             .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
@@ -735,7 +740,7 @@ impl VlConverter {
             let transform = tiny_skia::Transform::from_scale(scale, scale);
             resvg::Tree::render(&rtree, transform, &mut pixmap.as_mut());
 
-            Ok(encode_png(pixmap))
+            Ok(encode_png(pixmap, ppi))
         });
         match response {
             Ok(Ok(Ok(png_result))) => Ok(png_result),
@@ -796,7 +801,7 @@ impl Default for VlConverter {
 }
 
 // Modified from tiny-skia-0.10.0/src/pixmap.rs to include DPI
-pub fn encode_png(pixmap: Pixmap) -> Result<Vec<u8>, AnyError> {
+pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
     let mut pixmap = pixmap;
 
     // Demultiply alpha.
@@ -805,8 +810,8 @@ pub fn encode_png(pixmap: Pixmap) -> Result<Vec<u8>, AnyError> {
     // due to rounding. So we stick with this method for now.
     for pixel in pixmap.pixels_mut() {
         let c = pixel.demultiply();
-        *pixel =
-            PremultipliedColorU8::from_rgba(c.red(), c.green(), c.blue(), c.alpha()).expect("from_rgba returned None");
+        *pixel = PremultipliedColorU8::from_rgba(c.red(), c.green(), c.blue(), c.alpha())
+            .expect("from_rgba returned None");
     }
 
     let mut data = Vec::new();
@@ -814,12 +819,10 @@ pub fn encode_png(pixmap: Pixmap) -> Result<Vec<u8>, AnyError> {
         let mut encoder = png::Encoder::new(&mut data, pixmap.width(), pixmap.height());
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
-        // let ppu = 7874; // 200ppi
-        // let ppu = 3937; // 100ppi
-        let ppu = 394; // 10ppi
+        let ppm = (ppi.max(0.0) / 0.0254).round() as u32;
         encoder.set_pixel_dims(Some(PixelDimensions {
-            xppu: ppu,
-            yppu: ppu,
+            xppu: ppm,
+            yppu: ppm,
             unit: Unit::Meter,
         }));
 
