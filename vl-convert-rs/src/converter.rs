@@ -814,9 +814,12 @@ pub fn encode_png(pixmap: Pixmap) -> Result<Vec<u8>, AnyError> {
         let mut encoder = png::Encoder::new(&mut data, pixmap.width(), pixmap.height());
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
+        // let ppu = 7874; // 200ppi
+        // let ppu = 3937; // 100ppi
+        let ppu = 394; // 10ppi
         encoder.set_pixel_dims(Some(PixelDimensions {
-            xppu: 5000,
-            yppu: 5000,
+            xppu: ppu,
+            yppu: ppu,
             unit: Unit::Meter,
         }));
 
