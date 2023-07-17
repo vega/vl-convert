@@ -25,6 +25,8 @@ use std::thread::JoinHandle;
 use crate::anyhow::anyhow;
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
+use png::{PixelDimensions, Unit};
+use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{TreeParsing, TreeTextToPath};
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
@@ -733,7 +735,7 @@ impl VlConverter {
             let transform = tiny_skia::Transform::from_scale(scale, scale);
             resvg::Tree::render(&rtree, transform, &mut pixmap.as_mut());
 
-            Ok(pixmap.encode_png())
+            Ok(encode_png(pixmap))
         });
         match response {
             Ok(Ok(Ok(png_result))) => Ok(png_result),
@@ -791,6 +793,38 @@ impl Default for VlConverter {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// Modified from tiny-skia-0.10.0/src/pixmap.rs to include DPI
+pub fn encode_png(pixmap: Pixmap) -> Result<Vec<u8>, AnyError> {
+    let mut pixmap = pixmap;
+
+    // Demultiply alpha.
+    //
+    // RasterPipeline is 15% faster here, but produces slightly different results
+    // due to rounding. So we stick with this method for now.
+    for pixel in pixmap.pixels_mut() {
+        let c = pixel.demultiply();
+        *pixel =
+            PremultipliedColorU8::from_rgba(c.red(), c.green(), c.blue(), c.alpha()).expect("from_rgba returned None");
+    }
+
+    let mut data = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut data, pixmap.width(), pixmap.height());
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.set_pixel_dims(Some(PixelDimensions {
+            xppu: 5000,
+            yppu: 5000,
+            unit: Unit::Meter,
+        }));
+
+        let mut writer = encoder.write_header()?;
+        writer.write_image_data(&pixmap.data())?;
+    }
+
+    Ok(data)
 }
 
 #[cfg(test)]
