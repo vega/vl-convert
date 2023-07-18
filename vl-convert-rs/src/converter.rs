@@ -827,7 +827,7 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
         }));
 
         let mut writer = encoder.write_header()?;
-        writer.write_image_data(&pixmap.data())?;
+        writer.write_image_data(pixmap.data())?;
     }
 
     Ok(data)
