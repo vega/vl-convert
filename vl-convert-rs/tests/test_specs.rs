@@ -314,14 +314,14 @@ mod test_png_no_theme {
 
     #[rstest(name, scale,
         case("circle_binned", 1.0),
-        // case("stacked_bar_h", 2.0),
-        // case("bar_chart_trellis_compact", 2.0),
-        // case("line_with_log_scale", 2.0),
-        // case("remote_images", 1.0),
-        // case("maptile_background", 1.0),
-        // case("float_font_size", 1.0),
-        // case("no_text_in_font_metrics", 1.0),
-        // case("custom_projection", 1.0),
+        case("stacked_bar_h", 2.0),
+        case("bar_chart_trellis_compact", 2.0),
+        case("line_with_log_scale", 2.0),
+        case("remote_images", 1.0),
+        case("maptile_background", 1.0),
+        case("float_font_size", 1.0),
+        case("no_text_in_font_metrics", 1.0),
+        case("custom_projection", 1.0),
     )]
     fn test(
         name: &str,
@@ -342,12 +342,12 @@ mod test_png_no_theme {
             converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})
         ).unwrap();
 
-        let png_data = block_on(converter.vega_to_png(vg_spec, Some(scale))).unwrap();
+        let png_data = block_on(converter.vega_to_png(vg_spec, Some(scale), None)).unwrap();
         check_png(name, vl_version, None, png_data.as_slice());
 
         // Convert directly to png
         let png_data = block_on(
-            converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(scale))
+            converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(scale), None)
         ).unwrap();
         check_png(name, vl_version, None, png_data.as_slice());
     }
@@ -393,7 +393,9 @@ mod test_png_theme_config {
                     vl_version,
                     theme: Some(theme.to_string()),
                     config: Some(json!({"background": BACKGROUND_COLOR})),
-                }, Some(scale)
+                },
+                Some(scale),
+                None
             )
         ).unwrap();
         check_png(name, vl_version, Some(theme), png_data.as_slice());
@@ -413,7 +415,9 @@ mod test_png_theme_config {
                     vl_version,
                     theme: None,
                     config: Some(json!({"background": BACKGROUND_COLOR})),
-                }, Some(scale)
+                },
+                Some(scale),
+                None
             )
         ).unwrap();
         check_png(name, vl_version, Some(theme), png_data.as_slice());
@@ -442,6 +446,7 @@ async fn test_font_with_quotes() {
                 ..Default::default()
             },
             Some(2.0),
+            None,
         )
         .await
         .unwrap();
