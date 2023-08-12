@@ -10,10 +10,6 @@ const VL_PATHS: &[(&str, &str)] = &[
         "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js",
     ),
     (
-        "5.5",
-        "/pin/vega-lite@v5.5.0-x3x9oTW9wvfyOekd4a63/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
         "5.6",
         "/pin/vega-lite@v5.6.0-jKfgpjSz6Y52Dxyq2kpj/mode=imports,min/optimized/vega-lite.js",
     ),
@@ -46,11 +42,16 @@ const VL_PATHS: &[(&str, &str)] = &[
         "5.13",
         "/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js",
     ),
+    // 5.14 is used by Altair 5.1 (keep forever)
+    (
+        "5.14",
+        "/pin/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/mode=imports,min/optimized/vega-lite.js",
+    ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
-    "/pin/vega-themes@v2.13.0-mG3SR6UGwwl83yUi5ncr/mode=imports,min/optimized/vega-themes.js";
+    "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
 
 // Example custom build script.
 fn main() {
