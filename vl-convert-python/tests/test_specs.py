@@ -152,7 +152,7 @@ def test_png_theme_config(name, scale, theme):
         theme=theme,
         config=config,
     )
-    assert png == expected_png
+    check_png(png, expected_png)
 
 
 def test_gh_78():
