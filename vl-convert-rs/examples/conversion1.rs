@@ -30,7 +30,7 @@ async fn main() {
         .vegalite_to_vega(
             vl_spec,
             VlOpts {
-                vl_version: VlVersion::v5_5,
+                vl_version: VlVersion::v5_8,
                 ..Default::default()
             },
         )
