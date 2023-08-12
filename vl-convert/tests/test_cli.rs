@@ -1,4 +1,5 @@
 use assert_cmd::prelude::*; // Add methods on commands
+use dssim::{Dssim, DssimImage};
 use predicates::prelude::*; // Used for writing assertions
 use rstest::rstest;
 use std::fs;
@@ -9,7 +10,6 @@ use std::str::FromStr; // Run programs
 use std::sync::Once;
 use tempfile::NamedTempFile;
 use vl_convert_rs::VlVersion;
-use dssim::{Dssim, DssimImage};
 
 const BACKGROUND_COLOR: &str = "#abc";
 static INIT: Once = Once::new();
