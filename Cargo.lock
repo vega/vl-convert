@@ -5742,6 +5742,7 @@ version = "0.11.2"
 dependencies = [
  "assert_cmd",
  "clap",
+ "dssim",
  "itertools",
  "predicates",
  "rstest",
