@@ -30,6 +30,10 @@ jobs:
           toolchain: stable
           override: true
           components: rustfmt, clippy
+      - name: Cache rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: True
       - name: Check cargo fmt compliance
         run: cargo fmt --all -- --check
       - name: Check no rustc warnings
@@ -63,6 +67,10 @@ jobs:
           toolchain: stable
           override: true
           components: rustfmt
+      - name: Cache rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: True
       - name: Install Deno
         uses: denoland/setup-deno@v1
         with:
@@ -88,6 +96,10 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - name: Cache rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: True
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
@@ -122,6 +134,10 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - name: Cache rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: True
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
