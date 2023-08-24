@@ -23,8 +23,7 @@ lazy_static = "1.4.0"
 usvg = "0.35.0"
 resvg = "0.35.0"
 tiny-skia = "0.10.0"
-png = {git = "https://github.com/Fight-For-Food/image-png.git", branch="ppu"}
-#png = "=0.17.6"
+png = "0.17.9"
 fontdb = {version= "0.14.1", features=["fontconfig"]}
 tempfile = "3.3.0"
 log = "0.4.17"
