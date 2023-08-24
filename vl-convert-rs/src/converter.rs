@@ -1,5 +1,6 @@
 use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
 use crate::module_loader::VlConvertModuleLoader;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::rc::Rc;
@@ -9,7 +10,7 @@ use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8, Extension};
 
-use deno_core::{op, ModuleCode};
+use deno_core::{op, ModuleCode, Op};
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_core;
 use deno_runtime::deno_web::BlobStore;
@@ -243,13 +244,15 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
     pub async fn try_new() -> Result<Self, AnyError> {
         let module_loader = Rc::new(VlConvertModuleLoader::new());
 
-        let ext = Extension::builder("vl_convert_extensions")
-            .ops(vec![
-                // Op to measure text width with resvg
-                op_text_width::decl(),
-                op_get_json_arg::decl(),
-            ])
-            .build();
+        let ext = Extension {
+            name: "vl_convert_extensions",
+            ops: Cow::Owned(vec![
+                // Op to measure text width with resvg,
+                op_text_width::DECL,
+                op_get_json_arg::DECL,
+            ]),
+            ..Default::default()
+        };
 
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
@@ -278,7 +281,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
             get_error_class_fn: Some(&get_error_class_name),
             cache_storage_dir: None,
             origin_storage_dir: None,
-            blob_store: BlobStore::default(),
+            blob_store: Arc::new(BlobStore::default()),
             broadcast_channel: InMemoryBroadcastChannel::default(),
             shared_array_buffer_store: None,
             compiled_wasm_module_store: None,
@@ -895,7 +898,7 @@ mod tests {
             .vegalite_to_vega(
                 vl_spec,
                 VlOpts {
-                    vl_version: VlVersion::v5_5,
+                    vl_version: VlVersion::v5_8,
                     ..Default::default()
                 },
             )

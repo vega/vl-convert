@@ -54,7 +54,6 @@ def load_expected_png(name, vl_version, theme=None):
     "vl_version",
     [
         "v4_17",
-        "v5_5",
         "v5_6",
         "v5_7",
         "v5_8",
@@ -63,6 +62,7 @@ def load_expected_png(name, vl_version, theme=None):
         "v5_11",
         "v5_12",
         "v5_13",
+        "v5_14",
     ],
 )
 @pytest.mark.parametrize("as_dict", [False, True])
@@ -152,7 +152,7 @@ def test_png_theme_config(name, scale, theme):
         theme=theme,
         config=config,
     )
-    assert png == expected_png
+    check_png(png, expected_png)
 
 
 def test_gh_78():

@@ -1,4 +1,3 @@
-use crate::converter::TOKIO_RUNTIME;
 use http::StatusCode;
 use log::error;
 use reqwest::Client;
@@ -10,6 +9,11 @@ static VL_CONVERT_USER_AGENT: &str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 lazy_static! {
+    static ref IMAGE_TOKIO_RUNTIME: tokio::runtime::Runtime =
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
     static ref REQWEST_CLIENT: Client = reqwest::ClientBuilder::new()
         .user_agent(VL_CONVERT_USER_AGENT)
         .build()
@@ -35,7 +39,7 @@ pub fn custom_string_resolver() -> ImageHrefStringResolverFn {
 
             // Download image to temporary file with reqwest
             let bytes: Option<_> = task::block_in_place(move || {
-                TOKIO_RUNTIME.block_on(async {
+                IMAGE_TOKIO_RUNTIME.block_on(async {
                     if let Ok(response) = REQWEST_CLIENT.get(href).send().await {
                         // Check status code.
                         match response.status() {

@@ -1,4 +1,5 @@
 use assert_cmd::prelude::*; // Add methods on commands
+use dssim::{Dssim, DssimImage};
 use predicates::prelude::*; // Used for writing assertions
 use rstest::rstest;
 use std::fs;
@@ -73,10 +74,10 @@ fn load_expected_svg(name: &str, vl_version: &str) -> String {
     fs::read_to_string(spec_path).unwrap()
 }
 
-fn load_expected_png(name: &str, vl_version: &str, theme: Option<&str>) -> Vec<u8> {
+fn load_expected_png(name: &str, vl_version: &str, theme: Option<&str>) -> Option<DssimImage<f32>> {
     let vl_version = VlVersion::from_str(vl_version).unwrap();
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let spec_path = root_path
+    let image_path = root_path
         .join("..")
         .join("vl-convert-rs")
         .join("tests")
@@ -88,7 +89,7 @@ fn load_expected_png(name: &str, vl_version: &str, theme: Option<&str>) -> Vec<u
         } else {
             format!("{}.png", name)
         });
-    fs::read(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path))
+    dssim::load_image(&Dssim::new(), image_path).ok()
 }
 
 fn output_path(filename: &str) -> String {
@@ -134,7 +135,6 @@ mod test_vl2vg {
     fn test(
         #[values(
             "4.17",
-            "v5_5",
             "v5_6",
             "v5_7",
             "v5_8",
@@ -143,6 +143,7 @@ mod test_vl2vg {
             "v5_11",
             "v5_12",
             "v5_13",
+            "v5_14",
         )]
         vl_version: &str,
 
@@ -236,7 +237,6 @@ mod test_vl2svg {
 
 #[rustfmt::skip]
 mod test_vl2png {
-    use std::fs;
     use std::process::Command;
     use crate::*;
 
@@ -264,13 +264,24 @@ mod test_vl2png {
             .arg("--font-dir").arg(test_font_dir())
             .arg("--scale").arg(scale.to_string());
 
-        // Load expected
-        let expected_png = load_expected_png(name, vl_version, None);
         cmd.assert().success();
 
+        // Load expected
+        let expected_png = load_expected_png(name, vl_version, None).unwrap();
+
+
         // Load written spec
-        let output_png = fs::read(&output).unwrap();
-        assert_eq!(expected_png, output_png);
+        let output_png = dssim::load_image(&Dssim::new(), &output).unwrap();
+
+        let attr = Dssim::new();
+        let (diff, _) = attr.compare(&expected_png, &output_png);
+
+        if diff > 0.0001 {
+            panic!(
+                "Images don't match for {}.png with diff {}",
+                name, diff
+            )
+        }
 
         Ok(())
     }
@@ -278,7 +289,6 @@ mod test_vl2png {
 
 #[rustfmt::skip]
 mod test_vl2png_theme_config {
-    use std::fs;
     use std::process::Command;
     use crate::*;
 
@@ -314,13 +324,23 @@ mod test_vl2png_theme_config {
             .arg("--config").arg(config_path)
             .arg("--scale").arg(scale.to_string());
 
-        // Load expected
-        let expected_png = load_expected_png(name, vl_version, Some(theme));
         cmd.assert().success();
 
+        // Load expected
+        let expected_png = load_expected_png(name, vl_version, Some(theme)).unwrap();
+
         // Load written spec
-        let output_png = fs::read(&output).unwrap();
-        assert_eq!(expected_png, output_png);
+        let output_png = dssim::load_image(&Dssim::new(), &output).unwrap();
+
+        let attr = Dssim::new();
+        let (diff, _) = attr.compare(&expected_png, &output_png);
+
+        if diff > 0.0001 {
+            panic!(
+                "Images don't match for {}.png with diff {}",
+                name, diff
+            )
+        }
 
         Ok(())
     }

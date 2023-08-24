@@ -1,6 +1,6 @@
 [package]
 name = "vl-convert-rs"
-version = "0.11.2"
+version = "0.12.0"
 edition = "2021"
 license = "BSD-3-Clause"
 readme = "README.md"
@@ -10,17 +10,15 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-# Deno 1.34.2. Before updating deno_runtime/deno_core, see note in DEVELOP.md
-deno_runtime = "0.116.0"
-deno_core = "0.190.0"
-swc_macros_common = "=0.3.7"
+# Deno 1.36.1. Before updating deno_runtime/deno_core, see note in DEVELOP.md
+deno_runtime = "0.123.0"
+deno_core = "0.200.0"
 serde_json = {version="1.0.85", features=["preserve_order"]}
 serde = {version="1.0.145", features=["derive"]}
 futures = "0.3.24"
 futures-util = "0.3.24"
-tokio = {version= "1.21", features=["rt-multi-thread"]}
+tokio = {version= "1.28.1", features=["rt-multi-thread"]}
 reqwest = {version="0.11.12", default-features=false, features=["rustls-tls", "blocking"]}
-rustls = "=0.20.6"
 lazy_static = "1.4.0"
 usvg = "0.35.0"
 resvg = "0.35.0"
