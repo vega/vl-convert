@@ -163,7 +163,7 @@ fn vegalite_to_svg(
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, scale)")]
+#[pyo3(text_signature = "(vg_spec, scale, ppi)")]
 fn vega_to_png(vg_spec: PyObject, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
 
@@ -201,7 +201,7 @@ fn vega_to_png(vg_spec: PyObject, scale: Option<f32>, ppi: Option<f32>) -> PyRes
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, scale, config, theme)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, scale, ppi, config, theme)")]
 fn vegalite_to_png(
     vl_spec: PyObject,
     vl_version: Option<&str>,
