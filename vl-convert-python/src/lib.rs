@@ -251,7 +251,7 @@ fn vegalite_to_png(
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
-///     quality (int): JPEG Quality between 1 (worst) and 100 (best)
+///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
 ///
 /// Returns:
 ///     bytes: JPEG image data
@@ -287,7 +287,7 @@ fn vega_to_jpeg(vg_spec: PyObject, scale: Option<f32>, quality: Option<u8>) -> P
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
 ///     scale (float): Image scale factor (default 1.0)
-///     quality (int): JPEG Quality between 1 (worst) and 100 (best)
+///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///
