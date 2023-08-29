@@ -346,6 +346,46 @@ mod test_vl2png_theme_config {
     }
 }
 
+#[rustfmt::skip]
+mod test_vl2jpeg {
+    use std::process::Command;
+    use crate::*;
+
+    #[rstest(name, scale,
+    case("circle_binned", 1.0),
+    case("stacked_bar_h", 2.0)
+    )]
+    fn test(
+        name: &str,
+        scale: f32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let vl_version = "5_8";
+        let output_filename = format!("{}_{}.jpeg", vl_version, name);
+
+        let vl_path = vl_spec_path(name);
+        let output = output_path(&output_filename);
+
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let cmd = cmd.arg("vl2jpeg")
+            .arg("-i").arg(vl_path)
+            .arg("-o").arg(&output)
+            .arg("--vl-version").arg(vl_version)
+            .arg("--font-dir").arg(test_font_dir())
+            .arg("--scale").arg(scale.to_string())
+            .arg("--quality").arg("99");
+
+        cmd.assert().success();
+
+        // Load written spec
+        let output_jpg = fs::read(&output).expect("Failed to read output image");
+        assert_eq!(&output_jpg.as_slice()[..10], b"\xff\xd8\xff\xe0\x00\x10JFIF");
+
+        Ok(())
+    }
+}
+
 #[test]
 fn test_ls_themes() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("vl-convert")?;

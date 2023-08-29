@@ -145,7 +145,7 @@ fn vegalite_to_svg(
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
-                "Vega to SVG conversion failed:\n{}",
+                "Vega-Lite to SVG conversion failed:\n{}",
                 err
             )))
         }
@@ -175,7 +175,7 @@ fn vega_to_png(vg_spec: PyObject, scale: Option<f32>, ppi: Option<f32>) -> PyRes
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
-                "Vega to SVG conversion failed:\n{}",
+                "Vega to PNG conversion failed:\n{}",
                 err
             )))
         }
@@ -235,7 +235,7 @@ fn vegalite_to_png(
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
-                "Vega to SVG conversion failed:\n{}",
+                "Vega-Lite to PNG conversion failed:\n{}",
                 err
             )))
         }
@@ -243,6 +243,99 @@ fn vegalite_to_png(
 
     Ok(Python::with_gil(|py| -> PyObject {
         PyObject::from(PyBytes::new(py, png_data.as_slice()))
+    }))
+}
+
+/// Convert a Vega spec to JPEG image data.
+///
+/// Args:
+///     vg_spec (str | dict): Vega JSON specification string or dict
+///     scale (float): Image scale factor (default 1.0)
+///     quality (int): JPEG Quality between 1 (worst) and 100 (best)
+///
+/// Returns:
+///     bytes: JPEG image data
+#[pyfunction]
+#[pyo3(text_signature = "(vg_spec, scale, quality)")]
+fn vega_to_jpeg(vg_spec: PyObject, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    let jpeg_data = match PYTHON_RUNTIME.block_on(converter.vega_to_jpeg(vg_spec, scale, quality)) {
+        Ok(vega_spec) => vega_spec,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "Vega to JPEG conversion failed:\n{}",
+                err
+            )))
+        }
+    };
+
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, jpeg_data.as_slice()))
+    }))
+}
+
+/// Convert a Vega-Lite spec to JPEG image data using a particular
+/// version of the Vega-Lite JavaScript library.
+///
+/// Args:
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
+///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///         (default to latest)
+///     scale (float): Image scale factor (default 1.0)
+///     quality (int): JPEG Quality between 1 (worst) and 100 (best)
+///     config (dict | None): Chart configuration object to apply during conversion
+///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
+///
+/// Returns:
+///     bytes: JPEG image data
+#[pyfunction]
+#[pyo3(text_signature = "(vl_spec, vl_version, scale, quality, config, theme)")]
+fn vegalite_to_jpeg(
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    scale: Option<f32>,
+    quality: Option<u8>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+) -> PyResult<PyObject> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    let jpeg_data = match PYTHON_RUNTIME.block_on(converter.vegalite_to_jpeg(
+        vl_spec,
+        VlOpts {
+            vl_version,
+            config,
+            theme,
+        },
+        scale,
+        quality,
+    )) {
+        Ok(vega_spec) => vega_spec,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "Vega-Lite to JPEG conversion failed:\n{}",
+                err
+            )))
+        }
+    };
+
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, jpeg_data.as_slice()))
     }))
 }
 
@@ -340,8 +433,10 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_png, m)?)?;
+    m.add_function(wrap_pyfunction!(vegalite_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
+    m.add_function(wrap_pyfunction!(vega_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;

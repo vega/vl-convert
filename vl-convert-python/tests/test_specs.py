@@ -155,6 +155,36 @@ def test_png_theme_config(name, scale, theme):
     check_png(png, expected_png)
 
 
+@pytest.mark.parametrize(
+    "name,scale",
+    [
+        ("circle_binned", 1.0),
+        ("stacked_bar_h", 2.0),
+        ("remote_images", 1.0),
+        ("maptile_background", 1.0),
+        ("no_text_in_font_metrics", 1.0),
+        ("lookup_urls", 1.0),
+    ],
+)
+@pytest.mark.parametrize("as_dict", [False])
+def test_jpeg(name, scale, as_dict):
+    vl_version = "v5_8"
+    vl_spec = load_vl_spec(name)
+
+    if as_dict:
+        vl_spec = json.loads(vl_spec)
+
+    # Convert to vega first
+    jpeg_prefix = b'\xff\xd8\xff\xe0\x00\x10JFIF'
+    vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
+    jpeg = vlc.vega_to_jpeg(vg_spec, scale=scale)
+    assert jpeg[:10] == jpeg_prefix
+
+    # Convert directly to image
+    jpeg = vlc.vegalite_to_jpeg(vl_spec, vl_version=vl_version, scale=scale)
+    assert jpeg[:10] == jpeg_prefix
+
+
 def test_gh_78():
     vl_version = "v5_8"
     name = "lookup_urls"

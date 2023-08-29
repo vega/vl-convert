@@ -114,6 +114,42 @@ enum Commands {
         font_dir: Option<String>,
     },
 
+    /// Convert a Vega-Lite specification to an JPEG image
+    #[command(arg_required_else_help = true)]
+    Vl2jpeg {
+        /// Path to input Vega-Lite file
+        #[arg(short, long)]
+        input: String,
+
+        /// Path to output PNG file to be created
+        #[arg(short, long)]
+        output: String,
+
+        /// Vega-Lite Version. One of 4.17, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11
+        #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
+        vl_version: String,
+
+        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        #[arg(short, long)]
+        theme: Option<String>,
+
+        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        #[arg(short, long)]
+        config: Option<String>,
+
+        /// Image scale factor
+        #[arg(short, long, default_value = "1.0")]
+        scale: f32,
+
+        /// JPEG Quality between 0 (worst) and 100 (best)
+        #[arg(short, long, default_value = "90")]
+        quality: u8,
+
+        /// Additional directory to search for fonts
+        #[arg(long)]
+        font_dir: Option<String>,
+    },
+
     /// Convert a Vega specification to an SVG image
     #[command(arg_required_else_help = true)]
     Vg2svg {
@@ -148,6 +184,30 @@ enum Commands {
         /// Pixels per inch
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
+
+        /// Additional directory to search for fonts
+        #[arg(long)]
+        font_dir: Option<String>,
+    },
+
+    /// Convert a Vega specification to an JPEG image
+    #[command(arg_required_else_help = true)]
+    Vg2jpeg {
+        /// Path to input Vega file
+        #[arg(short, long)]
+        input: String,
+
+        /// Path to output PNG file to be created
+        #[arg(short, long)]
+        output: String,
+
+        /// Image scale factor
+        #[arg(short, long, default_value = "1.0")]
+        scale: f32,
+
+        /// JPEG Quality between 0 (worst) and 100 (best)
+        #[arg(short, long, default_value = "90")]
+        quality: u8,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -212,6 +272,19 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             vl_2_png(&input, &output, &vl_version, theme, config, scale, ppi).await?
         }
+        Vl2jpeg {
+            input,
+            output,
+            vl_version,
+            theme,
+            config,
+            scale,
+            quality,
+            font_dir,
+        } => {
+            register_font_dir(font_dir)?;
+            vl_2_jpeg(&input, &output, &vl_version, theme, config, scale, quality).await?
+        }
         Vg2svg {
             input,
             output,
@@ -229,6 +302,16 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vg_2_png(&input, &output, scale, ppi).await?
+        }
+        Vg2jpeg {
+            input,
+            output,
+            scale,
+            quality,
+            font_dir,
+        } => {
+            register_font_dir(font_dir)?;
+            vg_2_jpeg(&input, &output, scale, quality).await?
         }
         LsThemes => list_themes().await?,
         CatTheme { theme } => cat_theme(&theme).await?,
@@ -394,7 +477,7 @@ async fn vg_2_svg(input: &str, output: &str) -> Result<(), anyhow::Error> {
     let svg = match converter.vega_to_svg(vg_spec).await {
         Ok(svg) => svg,
         Err(err) => {
-            bail!("Vega-Lite to Vega conversion failed: {}", err);
+            bail!("Vega to SVG conversion failed: {}", err);
         }
     };
 
@@ -418,12 +501,44 @@ async fn vg_2_png(input: &str, output: &str, scale: f32, ppi: f32) -> Result<(),
     let png_data = match converter.vega_to_png(vg_spec, Some(scale), Some(ppi)).await {
         Ok(png_data) => png_data,
         Err(err) => {
-            bail!("Vega-Lite to Vega conversion failed: {}", err);
+            bail!("Vega to PNG conversion failed: {}", err);
         }
     };
 
     // Write result
     write_output_binary(output, &png_data)?;
+
+    Ok(())
+}
+
+async fn vg_2_jpeg(
+    input: &str,
+    output: &str,
+    scale: f32,
+    quality: u8,
+) -> Result<(), anyhow::Error> {
+    // Read input file
+    let vega_str = read_input_string(input)?;
+
+    // Parse input as json
+    let vg_spec = parse_as_json(&vega_str)?;
+
+    // Initialize converter
+    let mut converter = VlConverter::new();
+
+    // Perform conversion
+    let jpeg_data = match converter
+        .vega_to_jpeg(vg_spec, Some(scale), Some(quality))
+        .await
+    {
+        Ok(jpeg_data) => jpeg_data,
+        Err(err) => {
+            bail!("Vega to JPEG conversion failed: {}", err);
+        }
+    };
+
+    // Write result
+    write_output_binary(output, &jpeg_data)?;
 
     Ok(())
 }
@@ -464,7 +579,7 @@ async fn vl_2_svg(
     {
         Ok(svg) => svg,
         Err(err) => {
-            bail!("Vega-Lite to Vega conversion failed: {}", err);
+            bail!("Vega-Lite to SVG conversion failed: {}", err);
         }
     };
 
@@ -514,12 +629,62 @@ async fn vl_2_png(
     {
         Ok(png_data) => png_data,
         Err(err) => {
-            bail!("Vega-Lite to Vega conversion failed: {}", err);
+            bail!("Vega-Lite to PNG conversion failed: {}", err);
         }
     };
 
     // Write result
     write_output_binary(output, &png_data)?;
+
+    Ok(())
+}
+
+async fn vl_2_jpeg(
+    input: &str,
+    output: &str,
+    vl_version: &str,
+    theme: Option<String>,
+    config: Option<String>,
+    scale: f32,
+    quality: u8,
+) -> Result<(), anyhow::Error> {
+    // Parse version
+    let vl_version = parse_vl_version(vl_version)?;
+
+    // Read input file
+    let vegalite_str = read_input_string(input)?;
+
+    // Parse input as json
+    let vl_spec = parse_as_json(&vegalite_str)?;
+
+    // Load config from file
+    let config = read_config_json(config)?;
+
+    // Initialize converter
+    let mut converter = VlConverter::new();
+
+    // Perform conversion
+    let jpeg_data = match converter
+        .vegalite_to_jpeg(
+            vl_spec,
+            VlOpts {
+                vl_version,
+                config,
+                theme,
+            },
+            Some(scale),
+            Some(quality),
+        )
+        .await
+    {
+        Ok(jpeg_data) => jpeg_data,
+        Err(err) => {
+            bail!("Vega-Lite to JPEG conversion failed: {}", err);
+        }
+    };
+
+    // Write result
+    write_output_binary(output, &jpeg_data)?;
 
     Ok(())
 }

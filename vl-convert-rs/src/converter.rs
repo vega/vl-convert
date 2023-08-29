@@ -2,6 +2,7 @@ use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, 
 use crate::module_loader::VlConvertModuleLoader;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::io::Cursor;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -29,6 +30,8 @@ use futures_util::{SinkExt, StreamExt};
 use png::{PixelDimensions, Unit};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{TreeParsing, TreeTextToPath};
+
+use image::io::Reader as ImageReader;
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
 
@@ -709,6 +712,29 @@ impl VlConverter {
         Self::svg_to_png(&svg, scale, ppi)
     }
 
+    pub async fn vega_to_jpeg(
+        &mut self,
+        vg_spec: serde_json::Value,
+        scale: Option<f32>,
+        quality: Option<u8>,
+    ) -> Result<Vec<u8>, AnyError> {
+        let scale = scale.unwrap_or(1.0);
+        let svg = self.vega_to_svg(vg_spec).await?;
+        Self::svg_to_jpeg(&svg, scale, quality)
+    }
+
+    pub async fn vegalite_to_jpeg(
+        &mut self,
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+        scale: Option<f32>,
+        quality: Option<u8>,
+    ) -> Result<Vec<u8>, AnyError> {
+        let scale = scale.unwrap_or(1.0);
+        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
+        Self::svg_to_jpeg(&svg, scale, quality)
+    }
+
     fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
         // default ppi to 72
         let ppi = ppi.unwrap_or(72.0);
@@ -749,6 +775,27 @@ impl VlConverter {
             Ok(Ok(Ok(png_result))) => Ok(png_result),
             err => bail!("{err:?}"),
         }
+    }
+
+    fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>, AnyError> {
+        let png_bytes = Self::svg_to_png(svg, scale, None)?;
+        let img = ImageReader::new(Cursor::new(png_bytes))
+            .with_guessed_format()?
+            .decode()?;
+
+        let quality = quality.unwrap_or(90);
+        if quality > 100 {
+            bail!(
+                "JPEG quality parameter must be between 0 and 100 inclusive. Received: {quality}"
+            );
+        }
+
+        let mut jpeg_bytes: Vec<u8> = Vec::new();
+        img.write_to(
+            &mut Cursor::new(&mut jpeg_bytes),
+            image::ImageOutputFormat::Jpeg(quality),
+        )?;
+        Ok(jpeg_bytes)
     }
 
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
