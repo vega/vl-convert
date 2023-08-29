@@ -121,7 +121,7 @@ enum Commands {
         #[arg(short, long)]
         input: String,
 
-        /// Path to output PNG file to be created
+        /// Path to output JPEG file to be created
         #[arg(short, long)]
         output: String,
 
@@ -197,7 +197,7 @@ enum Commands {
         #[arg(short, long)]
         input: String,
 
-        /// Path to output PNG file to be created
+        /// Path to output JPEG file to be created
         #[arg(short, long)]
         output: String,
 
