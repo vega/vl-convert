@@ -453,3 +453,51 @@ async fn test_font_with_quotes() {
 
     check_png(name, vl_version, None, png_data.as_slice());
 }
+
+#[rustfmt::skip]
+mod test_jpeg {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::converter::VlOpts;
+    use vl_convert_rs::VlConverter;
+
+    #[rstest]
+    fn test(
+        #[values(
+        "circle_binned",
+        "stacked_bar_h",
+        "bar_chart_trellis_compact",
+        "line_with_log_scale",
+        "numeric_font_weight",
+        "float_font_size",
+        "no_text_in_font_metrics"
+        )]
+        name: &str,
+    ) {
+        initialize();
+
+        let vl_version = VlVersion::v5_8;
+
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
+
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
+
+        // Convert to vega first
+        let vg_spec =
+            block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})).unwrap();
+
+        let jpeg_bytes = block_on(converter.vega_to_jpeg(vg_spec, None, None)).unwrap();
+
+        // Check for JPEG prefix
+        assert_eq!(&jpeg_bytes.as_slice()[..10], b"\xff\xd8\xff\xe0\x00\x10JFIF");
+
+        // Convert directly to JPEG
+        let jpeg_bytes = block_on(converter.vegalite_to_jpeg(vl_spec, VlOpts{vl_version, ..Default::default()}, None, None)).unwrap();
+        assert_eq!(&jpeg_bytes.as_slice()[..10], b"\xff\xd8\xff\xe0\x00\x10JFIF");
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
