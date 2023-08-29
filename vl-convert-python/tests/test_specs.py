@@ -175,7 +175,7 @@ def test_jpeg(name, scale, as_dict):
         vl_spec = json.loads(vl_spec)
 
     # Convert to vega first
-    jpeg_prefix = b'\xff\xd8\xff\xe0\x00\x10JFIF'
+    jpeg_prefix = b"\xff\xd8\xff\xe0\x00\x10JFIF"
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     jpeg = vlc.vega_to_jpeg(vg_spec, scale=scale)
     assert jpeg[:10] == jpeg_prefix
