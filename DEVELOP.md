@@ -33,7 +33,7 @@ cargo build -p vl-convert --release
 zip -j target/release/vl-convert_osx-arm64.zip target/release/vl-convert
 ```
 
-This will produce `target/release/vl-convert`, which should be uploaded to the GitHub Release below
+This will produce `target/release/vl-convert_osx-arm64.zip`, which should be uploaded to the GitHub Release below
 
 ### Build Python wheels
 Build the Python wheels with:
