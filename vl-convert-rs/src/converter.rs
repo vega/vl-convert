@@ -32,6 +32,7 @@ use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{TreeParsing, TreeTextToPath};
 
 use image::io::Reader as ImageReader;
+use vl_convert_pdf::svg_to_pdf;
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
 
@@ -735,6 +736,45 @@ impl VlConverter {
         Self::svg_to_jpeg(&svg, scale, quality)
     }
 
+    pub async fn vega_to_pdf(
+        &mut self,
+        vg_spec: serde_json::Value,
+    ) -> Result<Vec<u8>, AnyError> {
+        let svg = self.vega_to_svg(vg_spec).await?;
+
+        // Load system fonts
+        let font_db = FONT_DB
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+
+        // Parse SVG and convert text nodes to paths
+        let opts = USVG_OPTIONS
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+
+        svg_to_pdf(&svg, &font_db, &opts)
+    }
+
+    pub async fn vegalite_to_pdf(
+        &mut self,
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+    ) -> Result<Vec<u8>, AnyError> {
+        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
+
+        // Load system fonts
+        let font_db = FONT_DB
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+
+        // Parse SVG and convert text nodes to paths
+        let opts = USVG_OPTIONS
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+
+        svg_to_pdf(&svg, &font_db, &opts)
+    }
+
     fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
         // default ppi to 72
         let ppi = ppi.unwrap_or(72.0);
@@ -911,7 +951,7 @@ mod tests {
             )
             .await
             .unwrap();
-        println!("vg_spec: {}", vg_spec)
+        // println!("vg_spec: {}", vg_spec)
     }
 
     #[tokio::test]
