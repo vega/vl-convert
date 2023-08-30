@@ -863,7 +863,8 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
         let alpha = c.alpha();
 
         // jonmmease: tiny-skia uses the private PremultipliedColorU8::from_rgba_unchecked here,
-        // but all this method does is construct a `PremultipliedColorU8` from components.
+        // but we need to use from_rgba, which checks to make sure r/g/b are less then or equal
+        // to alpha. Use min to ensure we don't trigger the check
         *pixel = PremultipliedColorU8::from_rgba(
             c.red().min(alpha),
             c.green().min(alpha),
