@@ -6,6 +6,7 @@ members = [
     "vl-convert",
     "vl-convert-python",
     "vl-convert-vendor",
+    "vl-convert-pdf",
 ]
 
 [profile.release]

@@ -1,0 +1,12 @@
+[package]
+name = "vl-convert-pdf"
+version = "0.13.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+svg2pdf = {git="https://github.com/LaurenzV/svg2pdf.git", rev="b63a8e142e2225a39e4b66571c01c20df9601299"}
+pdf-writer = {git = "https://github.com/LaurenzV/pdf-writer", rev = "353b65d"}
+usvg = "0.35.0"
+anyhow = "1.0.71"
