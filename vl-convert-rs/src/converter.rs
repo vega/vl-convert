@@ -869,7 +869,8 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
             c.green().min(alpha),
             c.blue().min(alpha),
             alpha,
-        ).expect("Failed to construct PremultipliedColorU8 from rgba");
+        )
+        .expect("Failed to construct PremultipliedColorU8 from rgba");
     }
 
     let mut data = Vec::new();
