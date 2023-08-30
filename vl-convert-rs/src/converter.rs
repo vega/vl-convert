@@ -860,8 +860,18 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
     // due to rounding. So we stick with this method for now.
     for pixel in pixmap.pixels_mut() {
         let c = pixel.demultiply();
-        *pixel = PremultipliedColorU8::from_rgba(c.red(), c.green(), c.blue(), c.alpha())
-            .expect("from_rgba returned None");
+        let alpha = c.alpha();
+
+        // jonmmease: tiny-skia uses the private PremultipliedColorU8::from_rgba_unchecked here,
+        // but we need to use from_rgba, which checks to make sure r/g/b are less then or equal
+        // to alpha. Use min to ensure we don't trigger the check
+        *pixel = PremultipliedColorU8::from_rgba(
+            c.red().min(alpha),
+            c.green().min(alpha),
+            c.blue().min(alpha),
+            alpha,
+        )
+        .expect("Failed to construct PremultipliedColorU8 from rgba");
     }
 
     let mut data = Vec::new();
