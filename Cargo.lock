@@ -5969,7 +5969,11 @@ name = "vl-convert-pdf"
 version = "0.13.0"
 dependencies = [
  "anyhow",
+ "lazy_static",
  "pdf-writer",
+ "resvg",
+ "serde",
+ "serde_json",
  "svg2pdf",
  "usvg",
 ]

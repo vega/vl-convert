@@ -736,10 +736,7 @@ impl VlConverter {
         Self::svg_to_jpeg(&svg, scale, quality)
     }
 
-    pub async fn vega_to_pdf(
-        &mut self,
-        vg_spec: serde_json::Value,
-    ) -> Result<Vec<u8>, AnyError> {
+    pub async fn vega_to_pdf(&mut self, vg_spec: serde_json::Value) -> Result<Vec<u8>, AnyError> {
         let svg = self.vega_to_svg(vg_spec).await?;
 
         // Load system fonts

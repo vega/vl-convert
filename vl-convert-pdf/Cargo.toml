@@ -10,3 +10,15 @@ svg2pdf = {git="https://github.com/LaurenzV/svg2pdf.git", rev="b63a8e142e2225a39
 pdf-writer = {git = "https://github.com/LaurenzV/pdf-writer", rev = "353b65d"}
 usvg = "0.35.0"
 anyhow = "1.0.71"
+resvg = { version = "0.35.0", optional = true }
+serde = { version = "1.0.164", features = ["derive"]}
+serde_json = "1.0.99"
+lazy_static = "1.4.0"
+
+[dev-dependencies]
+resvg = "0.35.0"
+
+[[bin]]
+name = "generate_metrics"
+path = "src/bin/generate_metrics.rs"
+required-features = ["resvg"]
