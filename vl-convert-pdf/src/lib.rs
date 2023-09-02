@@ -1,18 +1,23 @@
-extern crate core;
+pub mod encoding;
 
-use std::collections::{HashMap, HashSet};
+use crate::encoding::WIN_ANSI_ENCODING;
 use anyhow::{bail, Error as AnyError};
+use lazy_static::lazy_static;
 use pdf_writer::{Content, Finish, Name, PdfWriter, Rect, Ref, Str};
 use serde::{Deserialize, Serialize};
-use usvg::fontdb::Database;
-use usvg::{Font, FontStretch, FontStyle, Node, NodeExt, NodeKind, Opacity, TextAnchor, TextToPath, Tree, TreeParsing, TreeTextToPath};
 use serde_json;
-use lazy_static::lazy_static;
+use std::collections::{HashMap, HashSet};
+use usvg::fontdb::Database;
+use usvg::{
+    Font, FontStretch, FontStyle, Node, NodeExt, NodeKind, Opacity, TextAnchor, TextToPath, Tree,
+    TreeParsing, TreeTextToPath,
+};
 
 const METRICS_JSON_STR: &str = include_str!("../font_metrics/metrics.json");
 
-lazy_static!{
-    static ref METRICS_JSON: FontMetrics = serde_json::from_str(METRICS_JSON_STR).expect("Failed to parse metrics.json");
+lazy_static! {
+    static ref METRICS_JSON: FontMetrics =
+        serde_json::from_str(METRICS_JSON_STR).expect("Failed to parse metrics.json");
 }
 
 pub fn svg_to_pdf(
@@ -69,7 +74,7 @@ pub fn svg_to_pdf(
         for mapped_font in font_mapping.values() {
             resource_fonts.pair(
                 Name(mapped_font.font_ref_name.as_slice()),
-                mapped_font.font_ref
+                mapped_font.font_ref,
             );
         }
     }
@@ -96,7 +101,10 @@ pub fn svg_to_pdf(
     // ## Font
     // Set a predefined font, so we do not have to load anything extra.
     for mapped_font in font_mapping.values() {
-        writer.type1_font(mapped_font.font_ref).base_font(Name(mapped_font.font_name.as_bytes()));
+        writer
+            .type1_font(mapped_font.font_ref)
+            .base_font(Name(mapped_font.font_name.as_bytes()))
+            .encoding_predefined(Name(encoding::WIN_ANSI_ENCODING.get_name().as_bytes()));
     }
 
     // ## External Graphics
@@ -207,12 +215,14 @@ fn overlay_text(
                 height - tx.ty as f32,
             ]);
 
+            // Encode text in the Windows-1252 format that we told the PDF we're using
+            let encoded_text = WIN_ANSI_ENCODING.encode_string(&chunk.text);
             content
                 .begin_text()
                 .set_font(Name(base_font.font_ref_name.as_slice()), scaled_font_size)
                 .set_fill_rgb(0.0, 1.0, 1.0)
                 .next_line(chunk_x as f32, chunk_y as f32)
-                .show(Str(chunk.text.as_bytes()))
+                .show(Str(encoded_text.as_slice()))
                 .end_text()
                 .restore_state();
         }
@@ -268,7 +278,9 @@ pub fn collect_fonts(tree: &Tree) -> HashSet<Font> {
     let mut fonts: HashSet<Font> = HashSet::new();
     for node in tree.root.descendants() {
         match *node.borrow() {
-            NodeKind::Text(ref text) if text.chunks.len() == 1 && text.chunks[0].spans.len() == 1  => {
+            NodeKind::Text(ref text)
+                if text.chunks.len() == 1 && text.chunks[0].spans.len() == 1 =>
+            {
                 fonts.insert(text.chunks[0].spans[0].font.clone());
             }
             _ => {}
@@ -277,7 +289,11 @@ pub fn collect_fonts(tree: &Tree) -> HashSet<Font> {
     fonts
 }
 
-pub fn compute_font_mapping(fonts: &HashSet<Font>, font_db: &Database, next_ref: i32) -> Result<(HashMap<Font, MappedFont>, i32), anyhow::Error> {
+pub fn compute_font_mapping(
+    fonts: &HashSet<Font>,
+    font_db: &Database,
+    next_ref: i32,
+) -> Result<(HashMap<Font, MappedFont>, i32), anyhow::Error> {
     let metrics = METRICS_JSON.clone();
     let mut next_ref = next_ref;
     let mut mapping: HashMap<Font, MappedFont> = Default::default();
@@ -302,9 +318,13 @@ pub fn compute_font_mapping(fonts: &HashSet<Font>, font_db: &Database, next_ref:
         let mut min_font_name = "".to_string();
         let mut min_total_width = 0.0;
         for base_font in &metrics.fonts {
-            let residual: f64 = (0..widths.len()).map(|i| {
-                ((widths[i] - base_font.widths[i]).powi(2) + (heights[i] - base_font.heights[i]).powi(2)).sqrt()
-            }).sum();
+            let residual: f64 = (0..widths.len())
+                .map(|i| {
+                    ((widths[i] - base_font.widths[i]).powi(2)
+                        + (heights[i] - base_font.heights[i]).powi(2))
+                    .sqrt()
+                })
+                .sum();
 
             if residual < min_residual {
                 min_residual = residual;
@@ -317,12 +337,15 @@ pub fn compute_font_mapping(fonts: &HashSet<Font>, font_db: &Database, next_ref:
         let scale_factor = min_total_width / total_width;
 
         // Update mapping
-        mapping.insert(font.clone(), MappedFont {
-            font_name: min_font_name.clone(),
-            font_ref: Ref::new(next_ref),
-            font_ref_name: min_font_name.replace(" ", "").into_bytes(),
-            scale_factor
-        });
+        mapping.insert(
+            font.clone(),
+            MappedFont {
+                font_name: min_font_name.clone(),
+                font_ref: Ref::new(next_ref),
+                font_ref_name: min_font_name.replace(" ", "").into_bytes(),
+                scale_factor,
+            },
+        );
         next_ref += 1;
     }
 
@@ -334,22 +357,28 @@ pub fn svg_for_font(text: &str, font_size: f64, font: &Font) -> String {
         format!("font-size=\"{}\"", font_size),
         format!("font-family=\"{}\"", font.families.join(" ")),
         format!("font-weight=\"{}\"", font.weight),
-        format!("font-stretch=\"{}\"", match font.stretch {
-            FontStretch::UltraCondensed => "ultra-Condensed",
-            FontStretch::ExtraCondensed => "extra-condensed",
-            FontStretch::Condensed => "condensed",
-            FontStretch::SemiCondensed => "semi-condensed",
-            FontStretch::Normal => "normal",
-            FontStretch::SemiExpanded => "semi-expanded",
-            FontStretch::Expanded => "expanded",
-            FontStretch::ExtraExpanded => "extra-expanded",
-            FontStretch::UltraExpanded => "ultra-expanded",
-        }),
-        format!("font-style=\"{}\"", match font.style {
-            FontStyle::Normal => "normal",
-            FontStyle::Italic => "italic",
-            FontStyle::Oblique => "oblique",
-        })
+        format!(
+            "font-stretch=\"{}\"",
+            match font.stretch {
+                FontStretch::UltraCondensed => "ultra-Condensed",
+                FontStretch::ExtraCondensed => "extra-condensed",
+                FontStretch::Condensed => "condensed",
+                FontStretch::SemiCondensed => "semi-condensed",
+                FontStretch::Normal => "normal",
+                FontStretch::SemiExpanded => "semi-expanded",
+                FontStretch::Expanded => "expanded",
+                FontStretch::ExtraExpanded => "extra-expanded",
+                FontStretch::UltraExpanded => "ultra-expanded",
+            }
+        ),
+        format!(
+            "font-style=\"{}\"",
+            match font.style {
+                FontStyle::Normal => "normal",
+                FontStyle::Italic => "italic",
+                FontStyle::Oblique => "oblique",
+            }
+        ),
     ];
     let text_attrs_str = text_attrs.join(" ");
 
