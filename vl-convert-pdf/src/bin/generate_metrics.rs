@@ -1,9 +1,9 @@
-use std::collections::HashSet;
-use resvg::tiny_skia::Pixmap;
-use std::fs;
 use anyhow::bail;
+use resvg::tiny_skia::Pixmap;
+use std::collections::HashSet;
+use std::fs;
 use usvg::{fontdb, TreeParsing, TreeTextToPath};
-use vl_convert_pdf::{FontMetricFonts, FontMetrics, get_text_width_height};
+use vl_convert_pdf::{get_text_width_height, FontMetricFonts, FontMetrics};
 
 fn main() -> Result<(), anyhow::Error> {
     let mut font_db = fontdb::Database::new();
@@ -32,7 +32,10 @@ fn main() -> Result<(), anyhow::Error> {
         "-123",
         "+456",
         "—7890",
-    ].into_iter().map(|s| s.to_string()).collect();
+    ]
+    .into_iter()
+    .map(|s| s.to_string())
+    .collect();
 
     let mut font_metric_fonts: Vec<FontMetricFonts> = Vec::new();
     for font_family in ["Helvetica", "Courier", "Times"] {
@@ -49,7 +52,7 @@ fn main() -> Result<(), anyhow::Error> {
                 match font_weight {
                     "bold" => "-Bold",
                     "regular" if font_family == "Times" => "-Roman",
-                    _ => ""
+                    _ => "",
                 }
             );
             let mut widths: Vec<f64> = Vec::new();
@@ -106,8 +109,10 @@ fn main() -> Result<(), anyhow::Error> {
         font_size,
         fonts: font_metric_fonts,
     };
-    let json_str = serde_json::to_string_pretty(&font_metrics).expect("Failed to serialize metrics to JSON");
+    let json_str =
+        serde_json::to_string_pretty(&font_metrics).expect("Failed to serialize metrics to JSON");
     println!("{json_str}");
-    fs::write("vl-convert-pdf/font_metrics/metrics.json", json_str).expect("Failed to write font metrics");
+    fs::write("vl-convert-pdf/font_metrics/metrics.json", json_str)
+        .expect("Failed to write font metrics");
     Ok(())
 }
