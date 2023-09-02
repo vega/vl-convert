@@ -36,108 +36,14 @@ pub fn svg_to_pdf(
     let width = converted_tree.size.width();
     let height = converted_tree.size.height();
 
-    // Allocate the indirect reference IDs
-    let catalog_id = Ref::new(1);
-    let page_tree_id = Ref::new(2);
-    let page_id = Ref::new(3);
-    let content_id = Ref::new(4);
-    let ext_graphics_id = Ref::new(5);
-
-    // Compute font pairs
-    let next_ref = 6;
-    let (font_mapping, next_ref) = compute_font_mapping(&fonts, &font_db, next_ref)?;
-    let svg_id = Ref::new(next_ref);
-
-    // Define names.
-    let svg_name = Name(b"S1");
-    let ext_graphics_name = Name(b"G1");
-
-    // Start writing a PDF.
-    let mut writer = PdfWriter::new();
-    writer.catalog(catalog_id).pages(page_tree_id);
-    writer.pages(page_tree_id).kids([page_id]).count(1);
-
-    // Initialize page with size matching the SVG image
-    let mut page = writer.page(page_id);
-    page.media_box(Rect::new(0.0, 0.0, width as f32, height as f32));
-    page.parent(page_tree_id);
-    page.contents(content_id);
-
-    // Setup the page's resources so these can be referenced in the page's content stream
-    //      - The SVG XObject
-    //      - The font(s)
-    //      - The external graphics configuration used for overlay text
-    let mut resources = page.resources();
-    resources.x_objects().pair(svg_name, svg_id);
-    {
-        let mut resource_fonts = resources.fonts();
-        for mapped_font in font_mapping.values() {
-            resource_fonts.pair(
-                Name(mapped_font.font_ref_name.as_slice()),
-                mapped_font.font_ref,
-            );
-        }
-    }
-    resources
-        .ext_g_states()
-        .pair(ext_graphics_name, ext_graphics_id);
-    resources.finish();
-
-    // Finish page configuration
-    page.finish();
-
-    // Write resources to the file with the writer
-    // ## Xobject
-    // This call allocates some indirect object reference IDs for itself. If we
-    // wanted to write some more indirect objects afterwards, we could use the
-    // return value as the next unused reference ID.
-    svg2pdf::convert_tree_into(
-        &converted_tree,
-        svg2pdf::Options::default(),
-        &mut writer,
-        svg_id,
-    );
-
-    // ## Font
-    // Set a predefined font, so we do not have to load anything extra.
-    for mapped_font in font_mapping.values() {
-        writer
-            .type1_font(mapped_font.font_ref)
-            .base_font(Name(mapped_font.font_name.as_bytes()))
-            .encoding_predefined(Name(encoding::WIN_ANSI_ENCODING.get_name().as_bytes()));
-    }
-
-    // ## External Graphics
-    // Make extended graphic to set text to be transparent
-    // (or semi-transparent for testing/debugging)
-    writer.ext_graphics(ext_graphics_id).non_stroking_alpha(0.3);
-
-    // Create a content stream with the SVG and overlay text
-    let mut content = Content::new();
-
-    // Add reference to the SVG XObject
-    // It's re-scaled to the size of the document because convert_tree_into above
-    // scales it to 1.0 x 1.0
-    content
-        .save_state()
-        .transform([width as f32, 0.0, 0.0, height as f32, 0.0, 0.0])
-        .x_object(svg_name)
-        .restore_state();
-
-    // Add Overlay Text
-    content.save_state().set_parameters(ext_graphics_name);
-
-    for node in unconverted_tree.root.children() {
-        overlay_text(node, &mut content, &font_db, height as f32, &font_mapping)?;
-    }
-
-    content.restore_state();
-
-    // Write the content stream
-    writer.stream(content_id, &content.finish());
-
-    // Generate the final PDF file's contents
-    Ok(writer.finish())
+    let mut ctx = PdfContext::new(width, height);
+    let font_mapping = compute_font_mapping(&mut ctx, &fonts, &font_db)?;
+    construct_page(&mut ctx, &font_mapping);
+    write_svg(&mut ctx, &converted_tree);
+    write_fonts(&mut ctx, &font_mapping)?;
+    write_ext_graphics(&mut ctx);
+    write_content(&mut ctx, &unconverted_tree, &font_mapping, &font_db)?;
+    Ok(ctx.writer.finish())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,6 +66,166 @@ pub struct MappedFont {
     pub font_ref: Ref,
     pub font_ref_name: Vec<u8>,
     pub scale_factor: f64,
+}
+
+struct PdfContext {
+    writer: PdfWriter,
+    width: f32,
+    height: f32,
+    alloc: Ref,
+    catalog_id: Ref,
+    page_tree_id: Ref,
+    page_id: Ref,
+    content_id: Ref,
+    svg_id: Ref,
+    svg_name: Vec<u8>,
+    ext_graphics_id: Ref,
+    ext_graphics_name: Vec<u8>,
+}
+
+/// Additional methods for [`Ref`].
+trait RefExt {
+    /// Bump the reference up by one and return the previous one.
+    fn bump(&mut self) -> Self;
+}
+
+impl RefExt for Ref {
+    fn bump(&mut self) -> Self {
+        let prev = *self;
+        *self = Self::new(prev.get() + 1);
+        prev
+    }
+}
+
+impl PdfContext {
+    fn new(width: f32, height: f32) -> Self {
+        let mut alloc = Ref::new(1);
+        let catalog_id = alloc.bump();
+        let page_tree_id = alloc.bump();
+        let page_id = alloc.bump();
+        let content_id = alloc.bump();
+        let svg_id = alloc.bump();
+        let ext_graphics_id = alloc.bump();
+
+        Self {
+            writer: PdfWriter::new(),
+            width,
+            height,
+            alloc,
+            catalog_id,
+            page_tree_id,
+            page_id,
+            content_id,
+            svg_id,
+            svg_name: Vec::from(b"S1".as_slice()),
+            ext_graphics_id,
+            ext_graphics_name: Vec::from(b"G1".as_slice()),
+        }
+    }
+}
+
+fn construct_page(ctx: &mut PdfContext, font_mapping: &HashMap<Font, MappedFont>) {
+    ctx.writer.catalog(ctx.catalog_id).pages(ctx.page_tree_id);
+    ctx.writer
+        .pages(ctx.page_tree_id)
+        .kids([ctx.page_id])
+        .count(1);
+
+    // Initialize page with size matching the SVG image
+    let mut page = ctx.writer.page(ctx.page_id);
+    page.media_box(Rect::new(0.0, 0.0, ctx.width, ctx.height));
+    page.parent(ctx.page_tree_id);
+    page.contents(ctx.content_id);
+
+    let mut resources = page.resources();
+    // SVG
+    resources
+        .x_objects()
+        .pair(Name(ctx.svg_name.as_slice()), ctx.svg_id);
+
+    // Fonts
+    let mut resource_fonts = resources.fonts();
+    for mapped_font in font_mapping.values() {
+        resource_fonts.pair(
+            Name(mapped_font.font_ref_name.as_slice()),
+            mapped_font.font_ref,
+        );
+    }
+    resource_fonts.finish();
+
+    // Ext Graphics
+    resources
+        .ext_g_states()
+        .pair(Name(ctx.ext_graphics_name.as_slice()), ctx.ext_graphics_id);
+
+    resources.finish();
+
+    // Finish page configuration
+    page.finish();
+}
+
+fn write_svg(ctx: &mut PdfContext, tree: &Tree) {
+    ctx.alloc = svg2pdf::convert_tree_into(
+        &tree,
+        svg2pdf::Options::default(),
+        &mut ctx.writer,
+        ctx.svg_id,
+    );
+}
+
+fn write_fonts(
+    ctx: &mut PdfContext,
+    font_mapping: &HashMap<Font, MappedFont>,
+) -> Result<(), AnyError> {
+    // ## Font
+    // Set a predefined font, so we do not have to load anything extra.
+    for mapped_font in font_mapping.values() {
+        ctx.writer
+            .type1_font(mapped_font.font_ref)
+            .base_font(Name(mapped_font.font_name.as_bytes()))
+            .encoding_predefined(Name(encoding::WIN_ANSI_ENCODING.get_name().as_bytes()));
+    }
+    Ok(())
+}
+
+fn write_ext_graphics(ctx: &mut PdfContext) {
+    ctx.writer
+        .ext_graphics(ctx.ext_graphics_id)
+        .non_stroking_alpha(0.3);
+}
+
+fn write_content(
+    ctx: &mut PdfContext,
+    unconverted_tree: &Tree,
+    font_mapping: &HashMap<Font, MappedFont>,
+    font_db: &Database,
+) -> Result<(), AnyError> {
+    // Create a content stream with the SVG and overlay text
+    let mut content = Content::new();
+
+    // Add reference to the SVG XObject
+    // It's re-scaled to the size of the document because convert_tree_into above
+    // scales it to 1.0 x 1.0
+    content
+        .save_state()
+        .transform([ctx.width, 0.0, 0.0, ctx.height, 0.0, 0.0])
+        .x_object(Name(ctx.svg_name.as_slice()))
+        .restore_state();
+
+    // Add Overlay Text
+    content
+        .save_state()
+        .set_parameters(Name(ctx.ext_graphics_name.as_slice()));
+
+    for node in unconverted_tree.root.children() {
+        overlay_text(node, &mut content, &font_db, ctx.height, &font_mapping)?;
+    }
+
+    content.restore_state();
+
+    // Write the content stream
+    ctx.writer.stream(ctx.content_id, &content.finish());
+    Ok(())
 }
 
 fn overlay_text(
@@ -289,13 +355,12 @@ pub fn collect_fonts(tree: &Tree) -> HashSet<Font> {
     fonts
 }
 
-pub fn compute_font_mapping(
+fn compute_font_mapping(
+    ctx: &mut PdfContext,
     fonts: &HashSet<Font>,
     font_db: &Database,
-    next_ref: i32,
-) -> Result<(HashMap<Font, MappedFont>, i32), anyhow::Error> {
+) -> Result<HashMap<Font, MappedFont>, anyhow::Error> {
     let metrics = METRICS_JSON.clone();
-    let mut next_ref = next_ref;
     let mut mapping: HashMap<Font, MappedFont> = Default::default();
     for font in fonts.iter() {
         // Compute widths/heights for reference text strings
@@ -341,15 +406,14 @@ pub fn compute_font_mapping(
             font.clone(),
             MappedFont {
                 font_name: min_font_name.clone(),
-                font_ref: Ref::new(next_ref),
+                font_ref: ctx.alloc.bump(),
                 font_ref_name: min_font_name.replace(" ", "").into_bytes(),
                 scale_factor,
             },
         );
-        next_ref += 1;
     }
 
-    Ok((mapping, next_ref))
+    Ok(mapping)
 }
 
 pub fn svg_for_font(text: &str, font_size: f64, font: &Font) -> String {
