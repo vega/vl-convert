@@ -24,18 +24,6 @@ impl Encoding {
         let mut result = Vec::with_capacity(size);
         for ch in text.chars() {
             match self.unicode_to_code.get(&ch).cloned() {
-                Some(b'\\') => {
-                    result.push(b'\\');
-                    result.push(b'\\')
-                }
-                Some(b'(') => {
-                    result.push(b'\\');
-                    result.push(b'(')
-                }
-                Some(b')') => {
-                    result.push(b'\\');
-                    result.push(b')')
-                }
                 Some(ch) => result.push(ch),
                 None => {
                     // When character is not found in the encoding, attempt to convert
