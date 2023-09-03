@@ -38,6 +38,8 @@ pub fn svg_to_pdf(
 
     let mut ctx = PdfContext::new(width, height);
     let font_mapping = compute_font_mapping(&mut ctx, &fonts, &font_db)?;
+    // Need to update svg_id to be last id before calling svg2pdf because it will allocate more ids
+    ctx.svg_id = ctx.alloc.bump();
     construct_page(&mut ctx, &font_mapping);
     write_svg(&mut ctx, &converted_tree);
     write_fonts(&mut ctx, &font_mapping)?;
@@ -104,8 +106,10 @@ impl PdfContext {
         let page_tree_id = alloc.bump();
         let page_id = alloc.bump();
         let content_id = alloc.bump();
-        let svg_id = alloc.bump();
         let ext_graphics_id = alloc.bump();
+
+        // svg_id will be replaced later because it must be the last id before calling svg2pdf
+        let svg_id = Ref::new(1);
 
         Self {
             writer: PdfWriter::new(),
