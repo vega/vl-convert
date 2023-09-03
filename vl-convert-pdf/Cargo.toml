@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-svg2pdf = {git="https://github.com/LaurenzV/svg2pdf.git", rev="b63a8e142e2225a39e4b66571c01c20df9601299"}
-pdf-writer = {git = "https://github.com/LaurenzV/pdf-writer", rev = "353b65d"}
+svg2pdf = {git="https://github.com/LaurenzV/svg2pdf.git", rev="39f12b1aca0fea68ff2cf3af8f31ba3c776fa9e7"}
+pdf-writer = "0.8"
 usvg = "0.35.0"
 anyhow = "1.0.71"
 resvg = { version = "0.35.0", optional = true }
