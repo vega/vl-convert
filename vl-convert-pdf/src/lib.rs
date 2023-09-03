@@ -255,9 +255,10 @@ fn overlay_text(
             let span = chunk.spans[0].clone();
             let font_size = span.font_size.get() as f32;
 
-            // Skip zero opacity text
-            let span_opacity = span.fill.unwrap_or_default().opacity;
-            if span_opacity == Opacity::ZERO || node_has_zero_opacity(&node) {
+            // Skip zero opacity text, and text without a fill
+            let span_opacity = span.fill.clone().unwrap_or_default().opacity;
+            if span.fill.is_none() || span_opacity == Opacity::ZERO || node_has_zero_opacity(&node)
+            {
                 return Ok(());
             }
 
