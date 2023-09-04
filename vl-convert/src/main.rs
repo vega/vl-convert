@@ -50,7 +50,7 @@ enum Commands {
         pretty: bool,
 
         /// Whether to show Vega-Lite compilation warnings
-        #[arg(short, long)]
+        #[arg(long)]
         show_warnings: bool,
     },
 
@@ -78,7 +78,7 @@ enum Commands {
         config: Option<String>,
 
         /// Whether to show Vega-Lite compilation warnings
-        #[arg(short, long)]
+        #[arg(long)]
         show_warnings: bool,
 
         /// Additional directory to search for fonts
@@ -110,7 +110,7 @@ enum Commands {
         config: Option<String>,
 
         /// Image scale factor
-        #[arg(short, long, default_value = "1.0")]
+        #[arg(long, default_value = "1.0")]
         scale: f32,
 
         /// Pixels per inch
@@ -118,7 +118,7 @@ enum Commands {
         ppi: f32,
 
         /// Whether to show Vega-Lite compilation warnings
-        #[arg(short, long)]
+        #[arg(long)]
         show_warnings: bool,
 
         /// Additional directory to search for fonts
@@ -150,7 +150,7 @@ enum Commands {
         config: Option<String>,
 
         /// Image scale factor
-        #[arg(short, long, default_value = "1.0")]
+        #[arg(long, default_value = "1.0")]
         scale: f32,
 
         /// JPEG Quality between 0 (worst) and 100 (best)
@@ -194,7 +194,7 @@ enum Commands {
         output: String,
 
         /// Image scale factor
-        #[arg(short, long, default_value = "1.0")]
+        #[arg(long, default_value = "1.0")]
         scale: f32,
 
         /// Pixels per inch
@@ -218,7 +218,7 @@ enum Commands {
         output: String,
 
         /// Image scale factor
-        #[arg(short, long, default_value = "1.0")]
+        #[arg(long, default_value = "1.0")]
         scale: f32,
 
         /// JPEG Quality between 0 (worst) and 100 (best)
