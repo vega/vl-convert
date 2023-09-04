@@ -634,6 +634,7 @@ async fn vl_2_svg(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn vl_2_png(
     input: &str,
     output: &str,
@@ -686,6 +687,7 @@ async fn vl_2_png(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn vl_2_jpeg(
     input: &str,
     output: &str,
