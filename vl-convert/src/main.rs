@@ -48,6 +48,10 @@ enum Commands {
         /// Pretty-print JSON in output file
         #[arg(short, long)]
         pretty: bool,
+
+        /// Whether to show Vega-Lite compilation warnings
+        #[arg(short, long)]
+        show_warnings: bool,
     },
 
     /// Convert a Vega-Lite specification to an SVG image
@@ -72,6 +76,10 @@ enum Commands {
         /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
         #[arg(short, long)]
         config: Option<String>,
+
+        /// Whether to show Vega-Lite compilation warnings
+        #[arg(short, long)]
+        show_warnings: bool,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -109,6 +117,10 @@ enum Commands {
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
 
+        /// Whether to show Vega-Lite compilation warnings
+        #[arg(short, long)]
+        show_warnings: bool,
+
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
@@ -144,6 +156,10 @@ enum Commands {
         /// JPEG Quality between 0 (worst) and 100 (best)
         #[arg(short, long, default_value = "90")]
         quality: u8,
+
+        /// Whether to show Vega-Lite compilation warnings
+        #[arg(short, long)]
+        show_warnings: bool,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -237,6 +253,7 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             pretty,
+            show_warnings,
         } => {
             vl_2_vg(
                 &input_vegalite_file,
@@ -245,6 +262,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 theme,
                 config,
                 pretty,
+                show_warnings,
             )
             .await?
         }
@@ -254,10 +272,11 @@ async fn main() -> Result<(), anyhow::Error> {
             vl_version,
             theme,
             config,
+            show_warnings,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_svg(&input, &output, &vl_version, theme, config).await?
+            vl_2_svg(&input, &output, &vl_version, theme, config, show_warnings).await?
         }
         Vl2png {
             input,
@@ -267,10 +286,11 @@ async fn main() -> Result<(), anyhow::Error> {
             config,
             scale,
             ppi,
+            show_warnings,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_png(&input, &output, &vl_version, theme, config, scale, ppi).await?
+            vl_2_png(&input, &output, &vl_version, theme, config, scale, ppi, show_warnings).await?
         }
         Vl2jpeg {
             input,
@@ -280,10 +300,11 @@ async fn main() -> Result<(), anyhow::Error> {
             config,
             scale,
             quality,
+            show_warnings,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_jpeg(&input, &output, &vl_version, theme, config, scale, quality).await?
+            vl_2_jpeg(&input, &output, &vl_version, theme, config, scale, quality, show_warnings).await?
         }
         Vg2svg {
             input,
@@ -409,6 +430,7 @@ async fn vl_2_vg(
     theme: Option<String>,
     config: Option<String>,
     pretty: bool,
+    show_warnings: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -433,6 +455,7 @@ async fn vl_2_vg(
                 vl_version,
                 theme,
                 config,
+                show_warnings,
             },
         )
         .await
@@ -549,6 +572,7 @@ async fn vl_2_svg(
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
+    show_warnings: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -573,6 +597,7 @@ async fn vl_2_svg(
                 vl_version,
                 config,
                 theme,
+                show_warnings,
             },
         )
         .await
@@ -597,6 +622,7 @@ async fn vl_2_png(
     config: Option<String>,
     scale: f32,
     ppi: f32,
+    show_warnings: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -621,6 +647,7 @@ async fn vl_2_png(
                 vl_version,
                 config,
                 theme,
+                show_warnings,
             },
             Some(scale),
             Some(ppi),
@@ -647,6 +674,7 @@ async fn vl_2_jpeg(
     config: Option<String>,
     scale: f32,
     quality: u8,
+    show_warnings: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -671,6 +699,7 @@ async fn vl_2_jpeg(
                 vl_version,
                 config,
                 theme,
+                show_warnings,
             },
             Some(scale),
             Some(quality),
