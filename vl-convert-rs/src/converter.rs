@@ -50,6 +50,7 @@ pub struct VlOpts {
     pub config: Option<serde_json::Value>,
     pub theme: Option<String>,
     pub vl_version: VlVersion,
+    pub show_warnings: bool,
 }
 
 fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
@@ -126,6 +127,42 @@ import('{vega_themes_url}').then((imported) => {{
             ));
 
             self.worker.execute_script("<anon>", import_code)?;
+
+            let logger_code = ModuleCode::from(
+                r#"""
+class WarningCollector {
+  constructor() {
+    this.warningsLogs = [];
+  }
+
+  level(lvl) {
+    if (lvl == null) return 0;
+    return this;
+  }
+
+  error(msg) {
+    console.error(msg);
+    return this;
+  }
+
+  warn(msg) {
+    this.warningsLogs.push(msg);
+    return this;
+  }
+
+  // skip info an debug
+  info() {
+    return this;
+  }
+
+  debug() {
+    return this;
+  }
+}
+            """#
+                .to_string(),
+            );
+            self.worker.execute_script("<anon>", logger_code)?;
             self.worker.run_event_loop(false).await?;
 
             // Override text width measurement in vega-scenegraph
@@ -200,7 +237,7 @@ import('{vl_url}').then((imported) => {{
             // Create and initialize function string
             let function_code = ModuleCode::from(format!(
                 r#"
-function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
+function compileVegaLite_{ver_name}(vlSpec, config, theme, warnings) {{
     let options = {{}};
 
     // Handle config and theme
@@ -212,10 +249,14 @@ function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
         options["config"] = config;
     }}
 
+    if (!warnings) {{
+        options["logger"] = new WarningCollector();
+    }}
+
     return {ver_name}.compile(vlSpec, options).spec
 }}
 
-function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
+function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings) {{
     let options = {{}};
 
     // Handle config and theme
@@ -225,6 +266,10 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
         options["config"] = vega.mergeConfig(vegaThemes[namedTheme], config ?? {{}});
     }} else if (config != null) {{
         options["config"] = config;
+    }}
+
+    if (!warnings) {{
+        options["logger"] = new WarningCollector();
     }}
 
     let vgSpec = {ver_name}.compile(vlSpec, options).spec;
@@ -381,13 +426,15 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme) {{
 compileVegaLite_{ver_name:?}(
     JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({spec_arg_id})),
     JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({config_arg_id})),
-    {theme_arg}
+    {theme_arg},
+    {show_warnings},
 )
 "#,
             ver_name = vl_opts.vl_version,
             spec_arg_id = spec_arg_id,
             config_arg_id = config_arg_id,
             theme_arg = theme_arg,
+            show_warnings = vl_opts.show_warnings,
         );
 
         let value = self.execute_script_to_json(&code).await?;
@@ -416,7 +463,8 @@ var svg;
 vegaLiteToSvg_{ver_name:?}(
     JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({spec_arg_id})),
     JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({config_arg_id})),
-    {theme_arg}
+    {theme_arg},
+    {show_warnings}
 ).then((result) => {{
     svg = result;
 }});
@@ -425,6 +473,7 @@ vegaLiteToSvg_{ver_name:?}(
             spec_arg_id = spec_arg_id,
             config_arg_id = config_arg_id,
             theme_arg = theme_arg,
+            show_warnings = vl_opts.show_warnings,
         ));
         self.worker.execute_script("<anon>", code)?;
         self.worker.run_event_loop(false).await?;
