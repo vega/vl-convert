@@ -290,7 +290,17 @@ async fn main() -> Result<(), anyhow::Error> {
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_png(&input, &output, &vl_version, theme, config, scale, ppi, show_warnings).await?
+            vl_2_png(
+                &input,
+                &output,
+                &vl_version,
+                theme,
+                config,
+                scale,
+                ppi,
+                show_warnings,
+            )
+            .await?
         }
         Vl2jpeg {
             input,
@@ -304,7 +314,17 @@ async fn main() -> Result<(), anyhow::Error> {
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_jpeg(&input, &output, &vl_version, theme, config, scale, quality, show_warnings).await?
+            vl_2_jpeg(
+                &input,
+                &output,
+                &vl_version,
+                theme,
+                config,
+                scale,
+                quality,
+                show_warnings,
+            )
+            .await?
         }
         Vg2svg {
             input,
