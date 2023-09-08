@@ -1,11 +1,7 @@
-pub mod encoding;
-
-use crate::encoding::WIN_ANSI_ENCODING;
 use anyhow::{bail, Error as AnyError};
-use lazy_static::lazy_static;
 use pdf_writer::{Content, Filter, Finish, Name, PdfWriter, Rect, Ref, Str};
-use serde::{Deserialize, Serialize};
-use serde_json;
+
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::hash::Hash;
@@ -13,9 +9,7 @@ use pdf_writer::types::{CidFontType, FontFlags, SystemInfo, UnicodeCmap};
 use siphasher::sip128::{Hasher128, SipHasher13};
 use ttf_parser::GlyphId;
 use usvg::fontdb::{Database, Family, Query, Source, Stretch, Style, Weight};
-use usvg::{Fill, Font, FontStretch, FontStyle, Node, NodeExt, NodeKind, Opacity, Paint, TextAnchor, TextToPath, Tree, TreeParsing, TreeTextToPath};
-
-const METRICS_JSON_STR: &str = include_str!("../font_metrics/metrics.json");
+use usvg::{Font, FontStretch, FontStyle, Node, NodeExt, NodeKind, Opacity, Paint, TextAnchor, TextToPath, Tree, TreeParsing};
 
 const SYSTEM_INFO: SystemInfo = SystemInfo {
     registry: Str(b"Adobe"),
@@ -24,28 +18,18 @@ const SYSTEM_INFO: SystemInfo = SystemInfo {
 };
 const CMAP_NAME: Name = Name(b"Custom");
 
-lazy_static! {
-    static ref METRICS_JSON: FontMetrics =
-        serde_json::from_str(METRICS_JSON_STR).expect("Failed to parse metrics.json");
-}
 
 pub fn svg_to_pdf(
     svg: &str,
     font_db: &Database,
     usvg_opts: &usvg::Options,
 ) -> Result<Vec<u8>, AnyError> {
-    let mut converted_tree = Tree::from_str(&svg, usvg_opts)?;
-    // converted_tree.convert_text(&font_db);
-
-    // Parse SVG again so that we have a copy that's not converted
-    let unconverted_tree = Tree::from_str(&svg, usvg_opts)?;
-    let font_chars = collect_font_chars(&unconverted_tree)?;
-
-    let fonts = collect_fonts(&unconverted_tree);
+    let tree = Tree::from_str(&svg, usvg_opts)?;
+    let font_chars = collect_font_chars(&tree)?;
 
     // Extract SVGs size. We'll use this as the size of the resulting PDF docuemnt
-    let width = converted_tree.size.width();
-    let height = converted_tree.size.height();
+    let width = tree.size.width();
+    let height = tree.size.height();
 
     let mut ctx = PdfContext::new(width, height);
     let mut font_metrics = HashMap::new();
@@ -57,34 +41,13 @@ pub fn svg_to_pdf(
     // Need to update svg_id to be last id before calling svg2pdf because it will allocate more ids
     ctx.svg_id = ctx.alloc.bump();
     construct_page(&mut ctx, &font_metrics);
-    write_svg(&mut ctx, &converted_tree);
+    write_svg(&mut ctx, &tree);
     write_fonts(&mut ctx, &font_metrics)?;
     write_ext_graphics(&mut ctx);
-    write_content(&mut ctx, &unconverted_tree, &font_metrics, &font_db)?;
+    write_content(&mut ctx, &tree, &font_metrics, &font_db)?;
     Ok(ctx.writer.finish())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FontMetrics {
-    pub texts: Vec<String>,
-    pub font_size: f64,
-    pub fonts: Vec<FontMetricFonts>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FontMetricFonts {
-    pub widths: Vec<f64>,
-    pub heights: Vec<f64>,
-    pub font_name: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct MappedFont {
-    pub font_name: String,
-    pub font_ref: Ref,
-    pub font_ref_name: Vec<u8>,
-    pub scale_factor: f64,
-}
 
 struct PdfContext {
     writer: PdfWriter,
@@ -152,7 +115,7 @@ impl PdfContext {
     }
 }
 
-fn construct_page(ctx: &mut PdfContext, font_metrics: &HashMap<Font, FontSpecs>) {
+fn construct_page(ctx: &mut PdfContext, font_metrics: &HashMap<Font, FontMetrics>) {
     ctx.writer.catalog(ctx.catalog_id).pages(ctx.page_tree_id);
     ctx.writer
         .pages(ctx.page_tree_id)
@@ -203,7 +166,7 @@ fn write_svg(ctx: &mut PdfContext, tree: &Tree) {
 
 fn write_fonts(
     ctx: &mut PdfContext,
-    font_metrics: &HashMap<Font, FontSpecs>,
+    font_metrics: &HashMap<Font, FontMetrics>,
 ) -> Result<(), AnyError> {
     // ## Font
     // Set a predefined font, so we do not have to load anything extra.
@@ -263,7 +226,7 @@ fn write_fonts(
         let glyphs: Vec<_> = font_specs.glyph_set.keys().copied().collect();
         let profile = subsetter::Profile::pdf(&glyphs);
         let subsetted = subsetter::subset(&font_specs.font_data, font_specs.face_index, profile);
-        let mut subset_font_data = deflate(subsetted.as_deref().unwrap_or(&font_specs.font_data));
+        let subset_font_data = deflate(subsetted.as_deref().unwrap_or(&font_specs.font_data));
 
         let mut stream = ctx.writer.stream(data_ref, &subset_font_data);
         stream.filter(Filter::FlateDecode);
@@ -279,7 +242,7 @@ fn write_ext_graphics(ctx: &mut PdfContext) {
 fn write_content(
     ctx: &mut PdfContext,
     unconverted_tree: &Tree,
-    font_mapping: &HashMap<Font, FontSpecs>,
+    font_mapping: &HashMap<Font, FontMetrics>,
     font_db: &Database,
 ) -> Result<(), AnyError> {
     // Create a content stream with the SVG and overlay text
@@ -315,7 +278,7 @@ fn write_text(
     content: &mut Content,
     font_db: &Database,
     height: f32,
-    font_metrics: &HashMap<Font, FontSpecs>,
+    font_metrics: &HashMap<Font, FontMetrics>,
 ) -> Result<(), AnyError> {
     // let font_name = Name(b"F1");
     match *node.borrow() {
@@ -404,115 +367,6 @@ fn write_text(
 }
 
 
-// fn write_content(
-//     ctx: &mut PdfContext,
-//     unconverted_tree: &Tree,
-//     font_mapping: &HashMap<Font, MappedFont>,
-//     font_db: &Database,
-// ) -> Result<(), AnyError> {
-//     // Create a content stream with the SVG and overlay text
-//     let mut content = Content::new();
-//
-//     // Add reference to the SVG XObject
-//     // It's re-scaled to the size of the document because convert_tree_into above
-//     // scales it to 1.0 x 1.0
-//     content
-//         .save_state()
-//         .transform([ctx.width, 0.0, 0.0, ctx.height, 0.0, 0.0])
-//         .x_object(Name(ctx.svg_name.as_slice()))
-//         .restore_state();
-//
-//     // Add Overlay Text
-//     content
-//         .save_state()
-//         .set_parameters(Name(ctx.ext_graphics_name.as_slice()));
-//
-//     for node in unconverted_tree.root.children() {
-//         overlay_text(node, &mut content, &font_db, ctx.height, &font_mapping)?;
-//     }
-//
-//     content.restore_state();
-//
-//     // Write the content stream
-//     ctx.writer.stream(ctx.content_id, &content.finish());
-//     Ok(())
-// }
-
-// fn overlay_text(
-//     node: Node,
-//     content: &mut Content,
-//     font_db: &Database,
-//     height: f32,
-//     font_mapping: &HashMap<Font, MappedFont>,
-// ) -> Result<(), AnyError> {
-//     // let font_name = Name(b"F1");
-//     match *node.borrow() {
-//         NodeKind::Text(ref text) if text.chunks.len() == 1 && text.chunks[0].spans.len() == 1 => {
-//             // For now, only overlay text with one chunk and one span.
-//             let Some(text_path_node) = text.convert(font_db, Default::default()) else {
-//                 bail!("Failed to calculate text bounding box")
-//             };
-//
-//             let Some((text_width, _)) = get_text_width_height(text_path_node) else {
-//                 bail!("Failed to get text width from converted paths")
-//             };
-//
-//             let chunk = &text.chunks[0];
-//             let span = chunk.spans[0].clone();
-//             let font_size = span.font_size.get() as f32;
-//
-//             // Skip zero opacity text, and text without a fill
-//             let span_opacity = span.fill.clone().unwrap_or_default().opacity;
-//             if span.fill.is_none() || span_opacity == Opacity::ZERO || node_has_zero_opacity(&node)
-//             {
-//                 return Ok(());
-//             }
-//
-//             let Some(base_font) = font_mapping.get(&span.font) else { bail!("Mapped font not found") };
-//             let scaled_font_size = font_size / (base_font.scale_factor as f32);
-//
-//             let x_offset = match chunk.anchor {
-//                 TextAnchor::Start => 0.0,
-//                 TextAnchor::Middle => -text_width / 2.0,
-//                 TextAnchor::End => -text_width,
-//             };
-//
-//             let tx = node.abs_transform();
-//
-//             // Compute chunk x/y
-//             let chunk_x = chunk.x.unwrap_or(0.0) + x_offset as f32;
-//             let chunk_y = chunk.y.unwrap_or(0.0);
-//
-//             content.save_state().transform([
-//                 tx.sx as f32,
-//                 tx.kx as f32,
-//                 tx.ky as f32,
-//                 tx.sy as f32,
-//                 tx.tx as f32,
-//                 height - tx.ty as f32,
-//             ]);
-//
-//             // Encode text in the Windows-1252 format that we told the PDF we're using
-//             let encoded_text = WIN_ANSI_ENCODING.encode_string(&chunk.text);
-//             content
-//                 .begin_text()
-//                 .set_font(Name(base_font.font_ref_name.as_slice()), scaled_font_size)
-//                 .set_fill_rgb(0.0, 1.0, 1.0)
-//                 .next_line(chunk_x as f32, chunk_y as f32)
-//                 .show(Str(encoded_text.as_slice()))
-//                 .end_text()
-//                 .restore_state();
-//         }
-//         NodeKind::Group(_) => {
-//             for child in node.children() {
-//                 overlay_text(child, content, font_db, height, font_mapping)?;
-//             }
-//         }
-//         _ => {}
-//     }
-//     Ok(())
-// }
-
 // Check if this node is a group node with zero opacity,
 // or if it has an ancestor group node with zero opacity
 fn node_has_zero_opacity(node: &Node) -> bool {
@@ -577,8 +431,7 @@ fn collect_font_chars(tree: &Tree) -> Result<HashMap<Font, HashSet<char>>, anyho
     Ok(fonts)
 }
 
-struct FontSpecs {
-    postscript_name: String,
+struct FontMetrics {
     font_ref: Ref,
     font_ref_name: Vec<u8>,
     font_data: Vec<u8>,
@@ -596,7 +449,7 @@ struct FontSpecs {
     base_font: String,
 }
 
-fn compute_font_metrics(ctx: &mut PdfContext, font: &Font, chars: &HashSet<char>, font_db: &Database) -> Result<FontSpecs, anyhow::Error> {
+fn compute_font_metrics(ctx: &mut PdfContext, font: &Font, chars: &HashSet<char>, font_db: &Database) -> Result<FontMetrics, anyhow::Error> {
     let families = font.families.iter().map(|family| {
         match family.as_str() {
             "serif" => Family::Serif,
@@ -704,8 +557,7 @@ fn compute_font_metrics(ctx: &mut PdfContext, font: &Font, chars: &HashSet<char>
     let base_font = format!("{subset_tag}+{postscript_name}");
 
     // Compute font Name
-    Ok(FontSpecs {
-        postscript_name,
+    Ok(FontMetrics {
         base_font,
         font_ref: ctx.alloc.bump(),
         font_ref_name: Vec::from(ctx.next_font_name().as_bytes()),
@@ -722,123 +574,6 @@ fn compute_font_metrics(ctx: &mut PdfContext, font: &Font, chars: &HashSet<char>
         cap_height,
         stem_v,
     })
-}
-
-
-pub fn collect_fonts(tree: &Tree) -> HashSet<Font> {
-    let mut fonts: HashSet<Font> = HashSet::new();
-    for node in tree.root.descendants() {
-        match *node.borrow() {
-            NodeKind::Text(ref text)
-                if text.chunks.len() == 1 && text.chunks[0].spans.len() == 1 =>
-            {
-                fonts.insert(text.chunks[0].spans[0].font.clone());
-            }
-            _ => {}
-        }
-    }
-    fonts
-}
-
-fn compute_font_mapping(
-    ctx: &mut PdfContext,
-    fonts: &HashSet<Font>,
-    font_db: &Database,
-) -> Result<HashMap<Font, MappedFont>, anyhow::Error> {
-    let metrics = METRICS_JSON.clone();
-    let mut mapping: HashMap<Font, MappedFont> = Default::default();
-    for font in fonts.iter() {
-        // Compute widths/heights for reference text strings
-        let mut widths = Vec::new();
-        let mut heights = Vec::new();
-        for text in &metrics.texts {
-            let svg_for_text = svg_for_font(text, metrics.font_size, font);
-            let mut tree = Tree::from_str(&svg_for_text, &Default::default())?;
-            tree.convert_text(&font_db);
-            let Some((width, height)) = get_text_width_height(tree.root ) else {
-                bail!("Failed to locate text in svg node");
-            };
-            widths.push(width);
-            heights.push(height)
-        }
-        let total_width: f64 = widths.iter().sum();
-
-        // Find closest base font
-        let mut min_residual = f64::MAX;
-        let mut min_font_name = "".to_string();
-        let mut min_total_width = 0.0;
-        for base_font in &metrics.fonts {
-            let residual: f64 = (0..widths.len())
-                .map(|i| {
-                    ((widths[i] - base_font.widths[i]).powi(2)
-                        + (heights[i] - base_font.heights[i]).powi(2))
-                    .sqrt()
-                })
-                .sum();
-
-            if residual < min_residual {
-                min_residual = residual;
-                min_font_name = base_font.font_name.clone();
-                min_total_width = base_font.widths.iter().sum();
-            }
-        }
-
-        // Compute font size scale factor for closes base font
-        let scale_factor = min_total_width / total_width;
-
-        // Update mapping
-        mapping.insert(
-            font.clone(),
-            MappedFont {
-                font_name: min_font_name.clone(),
-                font_ref: ctx.alloc.bump(),
-                font_ref_name: min_font_name.replace(" ", "").into_bytes(),
-                scale_factor,
-            },
-        );
-    }
-
-    Ok(mapping)
-}
-
-pub fn svg_for_font(text: &str, font_size: f64, font: &Font) -> String {
-    let text_attrs = vec![
-        format!("font-size=\"{}\"", font_size),
-        format!("font-family=\"{}\"", font.families.join(" ")),
-        format!("font-weight=\"{}\"", font.weight),
-        format!(
-            "font-stretch=\"{}\"",
-            match font.stretch {
-                FontStretch::UltraCondensed => "ultra-Condensed",
-                FontStretch::ExtraCondensed => "extra-condensed",
-                FontStretch::Condensed => "condensed",
-                FontStretch::SemiCondensed => "semi-condensed",
-                FontStretch::Normal => "normal",
-                FontStretch::SemiExpanded => "semi-expanded",
-                FontStretch::Expanded => "expanded",
-                FontStretch::ExtraExpanded => "extra-expanded",
-                FontStretch::UltraExpanded => "ultra-expanded",
-            }
-        ),
-        format!(
-            "font-style=\"{}\"",
-            match font.style {
-                FontStyle::Normal => "normal",
-                FontStyle::Italic => "italic",
-                FontStyle::Oblique => "oblique",
-            }
-        ),
-    ];
-    let text_attrs_str = text_attrs.join(" ");
-
-    let svg_width = 200;
-    let svg_height = 200;
-    format!(
-        r#"
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="{svg_width}" height="{svg_height}">
-<text x="20" y="50" {text_attrs_str}>{text}</text>
-</svg>"#
-    )
 }
 
 /// Produce a unique 6 letter tag for a glyph set.
