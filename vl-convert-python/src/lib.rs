@@ -401,6 +401,7 @@ fn vegalite_to_pdf(
     scale: Option<f32>,
     config: Option<PyObject>,
     theme: Option<String>,
+    show_warnings: Option<bool>,
 ) -> PyResult<PyObject> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -420,6 +421,7 @@ fn vegalite_to_pdf(
             vl_version,
             config,
             theme,
+            show_warnings: show_warnings.unwrap_or(false),
         },
         scale,
     )) {

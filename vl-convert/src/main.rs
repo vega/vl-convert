@@ -190,8 +190,12 @@ enum Commands {
         config: Option<String>,
 
         /// Image scale factor
-        #[arg(short, long, default_value = "1.0")]
+        #[arg(long, default_value = "1.0")]
         scale: f32,
+
+        /// Whether to show Vega-Lite compilation warnings
+        #[arg(long)]
+        show_warnings: bool,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -385,10 +389,20 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             scale,
+            show_warnings,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_pdf(&input, &output, &vl_version, theme, config, scale).await?
+            vl_2_pdf(
+                &input,
+                &output,
+                &vl_version,
+                theme,
+                config,
+                scale,
+                show_warnings,
+            )
+            .await?
         }
         Vg2svg {
             input,
@@ -844,6 +858,7 @@ async fn vl_2_pdf(
     theme: Option<String>,
     config: Option<String>,
     scale: f32,
+    show_warnings: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -868,6 +883,7 @@ async fn vl_2_pdf(
                 vl_version,
                 config,
                 theme,
+                show_warnings,
             },
             Some(scale),
         )
