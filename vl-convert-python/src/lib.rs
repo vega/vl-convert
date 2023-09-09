@@ -343,19 +343,20 @@ fn vegalite_to_jpeg(
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
+///     scale (float): Image scale factor (default 1.0)
 ///
 /// Returns:
 ///     bytes: PDF file bytes
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec)")]
-fn vega_to_pdf(vg_spec: PyObject) -> PyResult<PyObject> {
+#[pyo3(text_signature = "(vg_spec, scale)")]
+fn vega_to_pdf(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let pdf_bytes = match PYTHON_RUNTIME.block_on(converter.vega_to_pdf(vg_spec)) {
+    let pdf_bytes = match PYTHON_RUNTIME.block_on(converter.vega_to_pdf(vg_spec, scale)) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -376,16 +377,18 @@ fn vega_to_pdf(vg_spec: PyObject) -> PyResult<PyObject> {
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
+///     scale (float): Image scale factor (default 1.0)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, config, theme)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, scale, config, theme)")]
 fn vegalite_to_pdf(
     vl_spec: PyObject,
     vl_version: Option<&str>,
+    scale: Option<f32>,
     config: Option<PyObject>,
     theme: Option<String>,
 ) -> PyResult<PyObject> {
@@ -408,6 +411,7 @@ fn vegalite_to_pdf(
             config,
             theme,
         },
+        scale,
     )) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {

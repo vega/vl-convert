@@ -173,6 +173,10 @@ enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
+        /// Image scale factor
+        #[arg(short, long, default_value = "1.0")]
+        scale: f32,
+
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
@@ -252,6 +256,10 @@ enum Commands {
         /// Path to output PDF file to be created
         #[arg(short, long)]
         output: String,
+
+        /// Image scale factor
+        #[arg(short, long, default_value = "1.0")]
+        scale: f32,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -335,10 +343,11 @@ async fn main() -> Result<(), anyhow::Error> {
             vl_version,
             theme,
             config,
+            scale,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_pdf(&input, &output, &vl_version, theme, config).await?
+            vl_2_pdf(&input, &output, &vl_version, theme, config, scale).await?
         }
         Vg2svg {
             input,
@@ -371,10 +380,11 @@ async fn main() -> Result<(), anyhow::Error> {
         Vg2pdf {
             input,
             output,
+            scale,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_pdf(&input, &output).await?
+            vg_2_pdf(&input, &output, scale).await?
         }
         LsThemes => list_themes().await?,
         CatTheme { theme } => cat_theme(&theme).await?,
@@ -606,7 +616,7 @@ async fn vg_2_jpeg(
     Ok(())
 }
 
-async fn vg_2_pdf(input: &str, output: &str) -> Result<(), anyhow::Error> {
+async fn vg_2_pdf(input: &str, output: &str, scale: f32) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
 
@@ -617,7 +627,7 @@ async fn vg_2_pdf(input: &str, output: &str) -> Result<(), anyhow::Error> {
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let pdf_data = match converter.vega_to_pdf(vg_spec).await {
+    let pdf_data = match converter.vega_to_pdf(vg_spec, Some(scale)).await {
         Ok(pdf_data) => pdf_data,
         Err(err) => {
             bail!("Vega to PDF conversion failed: {}", err);
@@ -782,6 +792,7 @@ async fn vl_2_pdf(
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
+    scale: f32,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -807,6 +818,7 @@ async fn vl_2_pdf(
                 config,
                 theme,
             },
+            Some(scale)
         )
         .await
     {

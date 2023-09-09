@@ -736,7 +736,8 @@ impl VlConverter {
         Self::svg_to_jpeg(&svg, scale, quality)
     }
 
-    pub async fn vega_to_pdf(&mut self, vg_spec: serde_json::Value) -> Result<Vec<u8>, AnyError> {
+    pub async fn vega_to_pdf(&mut self, vg_spec: serde_json::Value, scale: Option<f32>) -> Result<Vec<u8>, AnyError> {
+        let scale = scale.unwrap_or(1.0);
         let svg = self.vega_to_svg(vg_spec).await?;
 
         // Load system fonts
@@ -749,14 +750,18 @@ impl VlConverter {
             .lock()
             .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
 
-        svg_to_pdf(&svg, &font_db, &opts)
+        let tree = usvg::Tree::from_str(&svg, &opts)?;
+
+        svg_to_pdf(&tree, &font_db, scale)
     }
 
     pub async fn vegalite_to_pdf(
         &mut self,
         vl_spec: serde_json::Value,
         vl_opts: VlOpts,
+        scale: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
+        let scale = scale.unwrap_or(1.0);
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
 
         // Load system fonts
@@ -769,7 +774,9 @@ impl VlConverter {
             .lock()
             .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
 
-        svg_to_pdf(&svg, &font_db, &opts)
+        let tree = usvg::Tree::from_str(&svg, &opts)?;
+
+        svg_to_pdf(&tree, &font_db, scale)
     }
 
     fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
