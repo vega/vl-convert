@@ -1,5 +1,5 @@
 use anyhow::{bail, Error as AnyError};
-use pdf_writer::{Content, Filter, Finish, Name, PdfWriter, Rect, Ref, Str};
+use pdf_writer::{Content, Filter, Finish, Name, PdfWriter, Rect, Ref, Str, TextStr};
 
 use itertools::Itertools;
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo, UnicodeCmap};
@@ -75,6 +75,7 @@ struct PdfContext {
     height: f32,
     scale: f32,
     alloc: Ref,
+    info_id: Ref,
     catalog_id: Ref,
     page_tree_id: Ref,
     page_id: Ref,
@@ -87,6 +88,7 @@ struct PdfContext {
 impl PdfContext {
     fn new(width: f32, height: f32, scale: f32) -> Self {
         let mut alloc = Ref::new(1);
+        let info_id = alloc.bump();
         let catalog_id = alloc.bump();
         let page_tree_id = alloc.bump();
         let page_id = alloc.bump();
@@ -101,6 +103,7 @@ impl PdfContext {
             height,
             scale,
             alloc,
+            info_id,
             catalog_id,
             page_tree_id,
             page_id,
@@ -120,6 +123,10 @@ impl PdfContext {
 
 /// Construct a single PDF page (with required parents)
 fn construct_page(ctx: &mut PdfContext, font_metrics: &HashMap<Font, FontMetrics>) {
+    let mut info = ctx.writer.document_info(ctx.info_id);
+    info.creator(TextStr("VlConvert"));
+    info.finish();
+
     ctx.writer.catalog(ctx.catalog_id).pages(ctx.page_tree_id);
     ctx.writer
         .pages(ctx.page_tree_id)
