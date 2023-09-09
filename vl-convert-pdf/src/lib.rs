@@ -6,11 +6,13 @@ use siphasher::sip128::{Hasher128, SipHasher13};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::hash::Hash;
+use itertools::Itertools;
 use ttf_parser::GlyphId;
+use unicode_bidi::BidiInfo;
 use usvg::fontdb::{Database, Family, Query, Source, Stretch, Style, Weight};
 use usvg::{
-    Font, FontStretch, FontStyle, Node, NodeExt, NodeKind, Opacity, Paint, TextAnchor, TextToPath,
-    Tree, TreeParsing,
+    Font, FontStretch, FontStyle, Node, NodeExt, NodeKind, Opacity, Paint, Text, TextAnchor,
+    TextToPath, Tree,
 };
 
 const SYSTEM_INFO: SystemInfo = SystemInfo {
@@ -20,21 +22,23 @@ const SYSTEM_INFO: SystemInfo = SystemInfo {
 };
 const CMAP_NAME: Name = Name(b"Custom");
 
-pub fn svg_to_pdf(
-    svg: &str,
-    font_db: &Database,
-    usvg_opts: &usvg::Options,
-) -> Result<Vec<u8>, AnyError> {
-    let tree = Tree::from_str(&svg, usvg_opts)?;
-    let font_chars = collect_font_chars(&tree)?;
-
-    // Extract SVGs size. We'll use this as the size of the resulting PDF docuemnt
+/// Convert a usvg::Tree into the bytes for a standalone PDF document
+/// This function uses sv2pdf to perform non-text conversion and then overlays embedded
+/// text on top.
+pub fn svg_to_pdf(tree: &Tree, font_db: &Database, scale: f32) -> Result<Vec<u8>, AnyError> {
+    // Extract SVGs size. We'll use this as the size of the resulting PDF document
     let width = tree.size.width();
     let height = tree.size.height();
 
-    let mut ctx = PdfContext::new(width, height);
+    let font_chars = collect_font_to_chars_mapping(&tree)?;
+
+    let mut ctx = PdfContext::new(width, height, scale);
+
+    // Create mapping from usvg::Font to FontMetrics, which contains the info needed to
+    // build the embedded PDF font. Sort by Debug representation of Font for deterministic
+    // ordering
     let mut font_metrics = HashMap::new();
-    for (font, chars) in font_chars.iter() {
+    for (font, chars) in font_chars.iter().sorted_by_key(|(f, _)| format!("{f:?}")) {
         font_metrics.insert(
             font.clone(),
             compute_font_metrics(&mut ctx, font, chars, font_db)?,
@@ -47,25 +51,8 @@ pub fn svg_to_pdf(
     construct_page(&mut ctx, &font_metrics);
     write_svg(&mut ctx, &tree);
     write_fonts(&mut ctx, &font_metrics)?;
-    write_ext_graphics(&mut ctx);
     write_content(&mut ctx, &tree, &font_metrics, &font_db)?;
     Ok(ctx.writer.finish())
-}
-
-struct PdfContext {
-    writer: PdfWriter,
-    width: f32,
-    height: f32,
-    alloc: Ref,
-    catalog_id: Ref,
-    page_tree_id: Ref,
-    page_id: Ref,
-    content_id: Ref,
-    svg_id: Ref,
-    svg_name: Vec<u8>,
-    ext_graphics_id: Ref,
-    ext_graphics_name: Vec<u8>,
-    next_font_name_index: usize,
 }
 
 /// Additional methods for [`Ref`].
@@ -82,14 +69,28 @@ impl RefExt for Ref {
     }
 }
 
+struct PdfContext {
+    writer: PdfWriter,
+    width: f32,
+    height: f32,
+    scale: f32,
+    alloc: Ref,
+    catalog_id: Ref,
+    page_tree_id: Ref,
+    page_id: Ref,
+    content_id: Ref,
+    svg_id: Ref,
+    svg_name: Vec<u8>,
+    next_font_name_index: usize,
+}
+
 impl PdfContext {
-    fn new(width: f32, height: f32) -> Self {
+    fn new(width: f32, height: f32, scale: f32) -> Self {
         let mut alloc = Ref::new(1);
         let catalog_id = alloc.bump();
         let page_tree_id = alloc.bump();
         let page_id = alloc.bump();
         let content_id = alloc.bump();
-        let ext_graphics_id = alloc.bump();
 
         // svg_id will be replaced later because it must be the last id before calling svg2pdf
         let svg_id = Ref::new(1);
@@ -98,6 +99,7 @@ impl PdfContext {
             writer: PdfWriter::new(),
             width,
             height,
+            scale,
             alloc,
             catalog_id,
             page_tree_id,
@@ -105,8 +107,6 @@ impl PdfContext {
             content_id,
             svg_id,
             svg_name: Vec::from(b"S1".as_slice()),
-            ext_graphics_id,
-            ext_graphics_name: Vec::from(b"G1".as_slice()),
             next_font_name_index: 1,
         }
     }
@@ -118,6 +118,7 @@ impl PdfContext {
     }
 }
 
+/// Construct a single PDF page (with required parents)
 fn construct_page(ctx: &mut PdfContext, font_metrics: &HashMap<Font, FontMetrics>) {
     ctx.writer.catalog(ctx.catalog_id).pages(ctx.page_tree_id);
     ctx.writer
@@ -127,7 +128,7 @@ fn construct_page(ctx: &mut PdfContext, font_metrics: &HashMap<Font, FontMetrics
 
     // Initialize page with size matching the SVG image
     let mut page = ctx.writer.page(ctx.page_id);
-    page.media_box(Rect::new(0.0, 0.0, ctx.width, ctx.height));
+    page.media_box(Rect::new(0.0, 0.0, ctx.width * ctx.scale, ctx.height * ctx.scale));
     page.parent(ctx.page_tree_id);
     page.contents(ctx.content_id);
 
@@ -146,18 +147,15 @@ fn construct_page(ctx: &mut PdfContext, font_metrics: &HashMap<Font, FontMetrics
         );
     }
     resource_fonts.finish();
-
-    // Ext Graphics
-    resources
-        .ext_g_states()
-        .pair(Name(ctx.ext_graphics_name.as_slice()), ctx.ext_graphics_id);
-
     resources.finish();
 
     // Finish page configuration
     page.finish();
 }
 
+/// Write the SVG to a PDF XObject using svg2pdf.
+/// Note that svg2pdf currently ignores Text nodes, which is why we handle text
+/// separately
 fn write_svg(ctx: &mut PdfContext, tree: &Tree) {
     ctx.alloc = svg2pdf::convert_tree_into(
         &tree,
@@ -167,12 +165,11 @@ fn write_svg(ctx: &mut PdfContext, tree: &Tree) {
     );
 }
 
+/// Write fonts to PDF resources
 fn write_fonts(
     ctx: &mut PdfContext,
     font_metrics: &HashMap<Font, FontMetrics>,
 ) -> Result<(), AnyError> {
-    // ## Font
-    // Set a predefined font, so we do not have to load anything extra.
     for font_specs in font_metrics.values() {
         let cid_ref = ctx.alloc.bump();
         let descriptor_ref = ctx.alloc.bump();
@@ -238,17 +235,14 @@ fn write_fonts(
     Ok(())
 }
 
-fn write_ext_graphics(ctx: &mut PdfContext) {
-    ctx.writer.ext_graphics(ctx.ext_graphics_id);
-}
 
 fn write_content(
     ctx: &mut PdfContext,
-    unconverted_tree: &Tree,
+    tree: &Tree,
     font_mapping: &HashMap<Font, FontMetrics>,
     font_db: &Database,
 ) -> Result<(), AnyError> {
-    // Create a content stream with the SVG and overlay text
+    // Create a content stream with the SVG and text
     let mut content = Content::new();
 
     // Add reference to the SVG XObject
@@ -256,17 +250,15 @@ fn write_content(
     // scales it to 1.0 x 1.0
     content
         .save_state()
-        .transform([ctx.width, 0.0, 0.0, ctx.height, 0.0, 0.0])
+        .transform([ctx.width * ctx.scale, 0.0, 0.0, ctx.height * ctx.scale, 0.0, 0.0])
         .x_object(Name(ctx.svg_name.as_slice()))
         .restore_state();
 
-    // Add Overlay Text
-    content
-        .save_state()
-        .set_parameters(Name(ctx.ext_graphics_name.as_slice()));
+    // Add Text
+    content.save_state();
 
-    for node in unconverted_tree.root.children() {
-        write_text(node, &mut content, &font_db, ctx.height, &font_mapping)?;
+    for node in tree.root.children() {
+        write_text(ctx, node, &mut content, &font_db, &font_mapping)?;
     }
 
     content.restore_state();
@@ -277,22 +269,16 @@ fn write_content(
 }
 
 fn write_text(
+    ctx: &PdfContext,
     node: Node,
     content: &mut Content,
     font_db: &Database,
-    height: f32,
     font_metrics: &HashMap<Font, FontMetrics>,
 ) -> Result<(), AnyError> {
-    // let font_name = Name(b"F1");
     match *node.borrow() {
         NodeKind::Text(ref text) if text.chunks.len() == 1 => {
-            // For now, only write text with one chunk.
-            let Some(text_path_node) = text.convert(font_db, Default::default()) else {
+            let Some(text_width) = get_text_width(text, font_db) else {
                 bail!("Failed to calculate text bounding box")
-            };
-
-            let Some((text_width, _)) = get_text_width_height(text_path_node) else {
-                bail!("Failed to get text width from converted paths")
             };
 
             let chunk = &text.chunks[0];
@@ -309,12 +295,12 @@ fn write_text(
             let tx = node.abs_transform();
 
             content.save_state().transform([
-                tx.sx as f32,
-                tx.kx as f32,
-                tx.ky as f32,
-                tx.sy as f32,
-                tx.tx as f32,
-                height - tx.ty as f32,
+                tx.sx * ctx.scale,
+                tx.kx,
+                tx.ky,
+                tx.sy * ctx.scale,
+                tx.tx * ctx.scale,
+                (ctx.height - tx.ty) * ctx.scale,
             ]);
 
             // Start text
@@ -323,8 +309,8 @@ fn write_text(
                 .next_line(chunk_x as f32, chunk_y as f32);
 
             for span in &chunk.spans {
-                let span_text = &chunk.text[span.start..span.end];
                 let font_size = span.font_size.get() as f32;
+
                 // Skip zero opacity text, and text without a fill
                 let span_opacity = span.fill.clone().unwrap_or_default().opacity;
                 if span.fill.is_none()
@@ -334,14 +320,26 @@ fn write_text(
                     continue;
                 }
 
-                let Some(font_specs) = font_metrics.get(&span.font) else { bail!("Mapped font not found") };
+                let Some(font_specs) = font_metrics.get(&span.font) else {
+                    bail!("Font metrics not found")
+                };
 
+                // Compute left-to-right ordering of characters
+                let mut span_text = chunk.text[span.start..span.end].to_string();
+                let bidi_info = BidiInfo::new(&span_text, None);
+                if bidi_info.paragraphs.len() == 1 {
+                    let para = &bidi_info.paragraphs[0];
+                    let line = para.range.clone();
+                    span_text = bidi_info.reorder_line(para, line).to_string();
+                }
+
+                // Encode 16-bit glyph index into two bytes
                 let mut encoded_text = Vec::new();
                 for ch in span_text.chars() {
-                    // Probably shouldn't unwrap here
-                    let g = font_specs.char_set.get(&ch).unwrap();
-                    encoded_text.push((*g >> 8) as u8);
-                    encoded_text.push((*g & 0xff) as u8);
+                    if let Some(g) = font_specs.char_set.get(&ch) {
+                        encoded_text.push((*g >> 8) as u8);
+                        encoded_text.push((*g & 0xff) as u8);
+                    }
                 }
 
                 // Extract fill color
@@ -371,7 +369,7 @@ fn write_text(
         }
         NodeKind::Group(_) => {
             for child in node.children() {
-                write_text(child, content, font_db, height, font_metrics)?;
+                write_text(ctx,child, content, font_db, font_metrics)?;
             }
         }
         _ => {}
@@ -379,8 +377,8 @@ fn write_text(
     Ok(())
 }
 
-// Check if this node is a group node with zero opacity,
-// or if it has an ancestor group node with zero opacity
+/// Check if this node is a group node with zero opacity,
+/// or if it has an ancestor group node with zero opacity
 fn node_has_zero_opacity(node: &Node) -> bool {
     if let NodeKind::Group(ref group) = *node.borrow() {
         if group.opacity == Opacity::ZERO {
@@ -394,13 +392,16 @@ fn node_has_zero_opacity(node: &Node) -> bool {
     }
 }
 
-/// TODO, unify with text module
-pub fn get_text_width_height(node: Node) -> Option<(f64, f64)> {
-    let bbox = node.calculate_bbox()?;
+fn get_text_width(text: &Text, font_db: &Database) -> Option<f64> {
+    let Some(node) = text.convert(font_db, Default::default()) else { return None };
+    get_text_text_bbox_from_path(node)
+}
+
+fn get_text_text_bbox_from_path(node: Node) -> Option<f64> {
     match *node.borrow() {
         NodeKind::Group(_) => {
             for child in node.children() {
-                if let Some(res) = get_text_width_height(child) {
+                if let Some(res) = get_text_text_bbox_from_path(child) {
                     return Some(res);
                 }
             }
@@ -408,17 +409,14 @@ pub fn get_text_width_height(node: Node) -> Option<(f64, f64)> {
         }
         NodeKind::Path(ref path) => {
             // Use text_box width and bounding box height
-            return path
-                .text_bbox
-                .map(|p| (p.width() as f64, bbox.height() as f64));
+            return path.text_bbox.map(|p| p.width() as f64);
         }
-        NodeKind::Image(_) => None,
-        NodeKind::Text(_) => None,
+        _ => None,
     }
 }
 
-/// Collect mapping from font to Unicode characters
-fn collect_font_chars(tree: &Tree) -> Result<HashMap<Font, HashSet<char>>, anyhow::Error> {
+/// Collect mapping from usvg::Font to Unicode characters in that font
+fn collect_font_to_chars_mapping(tree: &Tree) -> Result<HashMap<Font, HashSet<char>>, anyhow::Error> {
     let mut fonts: HashMap<Font, HashSet<char>> = HashMap::new();
     for node in tree.root.descendants() {
         match *node.borrow() {
@@ -462,6 +460,7 @@ struct FontMetrics {
     base_font: String,
 }
 
+/// Compute the font metrics and references required by PDF embedding for a usvg::Font
 fn compute_font_metrics(
     ctx: &mut PdfContext,
     font: &Font,
@@ -608,7 +607,7 @@ fn subset_tag(glyphs: &BTreeMap<u16, String>) -> String {
 }
 
 /// Calculate a 128-bit siphash of a value.
-pub fn hash128<T: Hash + ?Sized>(value: &T) -> u128 {
+fn hash128<T: Hash + ?Sized>(value: &T) -> u128 {
     let mut state = SipHasher13::new();
     value.hash(&mut state);
     state.finish128().as_u128()
