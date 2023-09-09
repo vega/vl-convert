@@ -31,15 +31,17 @@ lazy_static! {
 ///         (default to latest)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
+///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 /// Returns:
 ///     dict: Vega JSON specification dict
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, config, theme)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, config, theme, show_warnings)")]
 fn vegalite_to_vega(
     vl_spec: PyObject,
     vl_version: Option<&str>,
     config: Option<PyObject>,
     theme: Option<String>,
+    show_warnings: Option<bool>,
 ) -> PyResult<PyObject> {
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
@@ -59,6 +61,7 @@ fn vegalite_to_vega(
             vl_version,
             config,
             theme,
+            show_warnings: show_warnings.unwrap_or(false),
         },
     )) {
         Ok(vega_spec) => vega_spec,
@@ -111,15 +114,17 @@ fn vega_to_svg(vg_spec: PyObject) -> PyResult<String> {
 ///         (default to latest)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
+///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, config, theme)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, config, theme, show_warnings)")]
 fn vegalite_to_svg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
     config: Option<PyObject>,
     theme: Option<String>,
+    show_warnings: Option<bool>,
 ) -> PyResult<String> {
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
@@ -140,6 +145,7 @@ fn vegalite_to_svg(
             vl_version,
             config,
             theme,
+            show_warnings: show_warnings.unwrap_or(false),
         },
     )) {
         Ok(vega_spec) => vega_spec,
@@ -197,11 +203,11 @@ fn vega_to_png(vg_spec: PyObject, scale: Option<f32>, ppi: Option<f32>) -> PyRes
 ///     ppi (float): Pixels per inch (default 72)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///
+///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, scale, ppi, config, theme)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, scale, ppi, config, theme, show_warnings)")]
 fn vegalite_to_png(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -209,6 +215,7 @@ fn vegalite_to_png(
     ppi: Option<f32>,
     config: Option<PyObject>,
     theme: Option<String>,
+    show_warnings: Option<bool>,
 ) -> PyResult<PyObject> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -228,6 +235,7 @@ fn vegalite_to_png(
             vl_version,
             config,
             theme,
+            show_warnings: show_warnings.unwrap_or(false),
         },
         scale,
         ppi,
@@ -290,11 +298,11 @@ fn vega_to_jpeg(vg_spec: PyObject, scale: Option<f32>, quality: Option<u8>) -> P
 ///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///
+///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, scale, quality, config, theme)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, scale, quality, config, theme, show_warnings)")]
 fn vegalite_to_jpeg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -302,6 +310,7 @@ fn vegalite_to_jpeg(
     quality: Option<u8>,
     config: Option<PyObject>,
     theme: Option<String>,
+    show_warnings: Option<bool>,
 ) -> PyResult<PyObject> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -321,6 +330,7 @@ fn vegalite_to_jpeg(
             vl_version,
             config,
             theme,
+            show_warnings: show_warnings.unwrap_or(false),
         },
         scale,
         quality,
