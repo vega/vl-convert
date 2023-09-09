@@ -409,7 +409,9 @@ fn node_has_zero_opacity(node: &Node) -> bool {
 }
 
 fn get_text_width(text: &Text, font_db: &Database) -> Option<f64> {
-    let Some(node) = text.convert(font_db, Default::default()) else { return None };
+    let Some(node) = text.convert(font_db, Default::default()) else {
+        return None;
+    };
     get_text_text_bbox_from_path(node)
 }
 
