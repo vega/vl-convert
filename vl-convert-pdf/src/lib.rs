@@ -315,9 +315,7 @@ fn write_text(
             ]);
 
             // Start text
-            content
-                .begin_text()
-                .next_line(chunk_x, chunk_y);
+            content.begin_text().next_line(chunk_x, chunk_y);
 
             for span in &chunk.spans {
                 let font_size = span.font_size.get();
@@ -432,10 +430,11 @@ fn collect_font_to_chars_mapping(
 ) -> Result<HashMap<Font, HashSet<char>>, anyhow::Error> {
     let mut fonts: HashMap<Font, HashSet<char>> = HashMap::new();
     for node in tree.root.descendants() {
-        match *node.borrow() {
-            NodeKind::Text(ref text) => {
-                // Ignore zero chunk text
-                if text.chunks.len() == 1 {
+        if let NodeKind::Text(ref text) = *node.borrow() {
+            // Ignore zero chunk text
+            match text.chunks.len() {
+                0 => {}
+                1 => {
                     let chunk = &text.chunks[0];
                     let chunk_text = chunk.text.as_str();
                     for span in &chunk.spans {
@@ -446,11 +445,9 @@ fn collect_font_to_chars_mapping(
                             .or_default()
                             .extend(span_text.chars());
                     }
-                } else if text.chunks.len() > 1 {
-                    bail!("multi-chunk text not supported");
                 }
+                _ => bail!("multi-chunk text not supported"),
             }
-            _ => {}
         }
     }
     Ok(fonts)
