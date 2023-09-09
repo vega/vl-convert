@@ -2,17 +2,16 @@
 name = "vl-convert-pdf"
 version = "0.13.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "BSD-3-Clause"
+readme = "README.md"
+homepage = "https://github.com/jonmmease/vl-convert"
+repository = "https://github.com/jonmmease/vl-convert"
 
 [dependencies]
 svg2pdf = {git="https://github.com/typst/svg2pdf.git", rev="d507d79"}
 pdf-writer = "0.8.1"
 usvg = "0.35.0"
 anyhow = "1.0.71"
-serde = { version = "1.0.164", features = ["derive"]}
-serde_json = "1.0.99"
-lazy_static = "1.4.0"
 ttf-parser = "0.19.1"
 subsetter = "0.1.1"
 miniz_oxide = "0.7.1"
