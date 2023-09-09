@@ -8,6 +8,7 @@ from skimage.metrics import structural_similarity as ssim
 import os
 import math
 import ctypes
+import sys
 import pypdfium2.raw as pdfium_c
 from tempfile import NamedTemporaryFile
 import PIL.Image
@@ -191,6 +192,9 @@ def test_jpeg(name, scale, as_dict):
     assert jpeg[:10] == jpeg_prefix
 
 
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="PDF tests not supported on windows"
+)
 @pytest.mark.parametrize(
     "name,scale,tol",
     [
