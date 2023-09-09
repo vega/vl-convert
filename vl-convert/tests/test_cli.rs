@@ -274,7 +274,7 @@ mod test_vl2png {
         let output_png = dssim::load_image(&Dssim::new(), &output).unwrap();
 
         let attr = Dssim::new();
-        let (diff, _) = attr.compare(&expected_png, &output_png);
+        let (diff, _) = attr.compare(&expected_png, output_png);
 
         if diff > 0.0001 {
             panic!(
@@ -333,7 +333,7 @@ mod test_vl2png_theme_config {
         let output_png = dssim::load_image(&Dssim::new(), &output).unwrap();
 
         let attr = Dssim::new();
-        let (diff, _) = attr.compare(&expected_png, &output_png);
+        let (diff, _) = attr.compare(&expected_png, output_png);
 
         if diff > 0.0001 {
             panic!(

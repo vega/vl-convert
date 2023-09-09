@@ -959,7 +959,7 @@ mod tests {
             )
             .await
             .unwrap();
-        // println!("vg_spec: {}", vg_spec)
+        println!("vg_spec: {}", vg_spec)
     }
 
     #[tokio::test]

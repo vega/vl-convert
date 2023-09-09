@@ -30,7 +30,7 @@ pub fn svg_to_pdf(tree: &Tree, font_db: &Database, scale: f32) -> Result<Vec<u8>
     let width = tree.size.width();
     let height = tree.size.height();
 
-    let font_chars = collect_font_to_chars_mapping(&tree)?;
+    let font_chars = collect_font_to_chars_mapping(tree)?;
 
     let mut ctx = PdfContext::new(width, height, scale);
 
@@ -49,9 +49,9 @@ pub fn svg_to_pdf(tree: &Tree, font_db: &Database, scale: f32) -> Result<Vec<u8>
     // Need to update svg_id to be last id before calling svg2pdf because it will allocate more ids
     ctx.svg_id = ctx.alloc.bump();
     construct_page(&mut ctx, &font_metrics);
-    write_svg(&mut ctx, &tree);
+    write_svg(&mut ctx, tree);
     write_fonts(&mut ctx, &font_metrics)?;
-    write_content(&mut ctx, &tree, &font_metrics, &font_db)?;
+    write_content(&mut ctx, tree, &font_metrics, font_db)?;
     Ok(ctx.writer.finish())
 }
 
@@ -163,7 +163,7 @@ fn construct_page(ctx: &mut PdfContext, font_metrics: &HashMap<Font, FontMetrics
 /// separately
 fn write_svg(ctx: &mut PdfContext, tree: &Tree) {
     ctx.alloc = svg2pdf::convert_tree_into(
-        &tree,
+        tree,
         svg2pdf::Options::default(),
         &mut ctx.writer,
         ctx.svg_id,
@@ -269,7 +269,7 @@ fn write_content(
     content.save_state();
 
     for node in tree.root.children() {
-        write_text(ctx, node, &mut content, &font_db, &font_mapping)?;
+        write_text(ctx, node, &mut content, font_db, font_mapping)?;
     }
 
     content.restore_state();
@@ -317,10 +317,10 @@ fn write_text(
             // Start text
             content
                 .begin_text()
-                .next_line(chunk_x as f32, chunk_y as f32);
+                .next_line(chunk_x, chunk_y);
 
             for span in &chunk.spans {
-                let font_size = span.font_size.get() as f32;
+                let font_size = span.font_size.get();
 
                 // Skip zero opacity text, and text without a fill
                 let span_opacity = span.fill.clone().unwrap_or_default().opacity;
@@ -420,7 +420,7 @@ fn get_text_text_bbox_from_path(node: Node) -> Option<f64> {
         }
         NodeKind::Path(ref path) => {
             // Use text_box width and bounding box height
-            return path.text_bbox.map(|p| p.width() as f64);
+            path.text_bbox.map(|p| p.width() as f64)
         }
         _ => None,
     }
