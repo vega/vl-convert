@@ -20,8 +20,12 @@ Commands:
   vl2vg      Convert a Vega-Lite specification to a Vega specification
   vl2svg     Convert a Vega-Lite specification to an SVG image
   vl2png     Convert a Vega-Lite specification to an PNG image
+  vl2jpeg    Convert a Vega-Lite specification to an JPEG image
+  vl2pdf     Convert a Vega-Lite specification to a PDF image
   vg2svg     Convert a Vega specification to an SVG image
   vg2png     Convert a Vega specification to an PNG image
+  vg2jpeg    Convert a Vega specification to an JPEG image
+  vg2pdf     Convert a Vega specification to an PDF image
   ls-themes  List available themes
   cat-theme  Print the config JSON for a theme
   help       Print this message or the help of the given subcommand(s)
@@ -85,7 +89,7 @@ $ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --vl-version 5.5 --theme dark
 ```
 
 ### vl2png
-Convert a Vega-Lite specification to an PNG image
+Convert a Vega-Lite specification to a PNG image
 
 ```
 $ vl-convert vl2png --help
@@ -109,6 +113,30 @@ For example, convert a Vega-Lite specification file named `in.vl.json` into a PN
 
 ```plain
 $ vl-convert vl2png -i ./in.vl.json -o ./out.png --vl-version 5.5 --scale 2 --config ~/my-config.json
+```
+
+### vl2pdf
+Convert a Vega-Lite specification to a PDF image
+```
+Convert a Vega-Lite specification to a PDF image
+
+Usage: vl-convert vl2pdf [OPTIONS] --input <INPUT> --output <OUTPUT>
+
+Options:
+  -i, --input <INPUT>            Path to input Vega-Lite file
+  -o, --output <OUTPUT>          Path to output PDF file to be created
+  -v, --vl-version <VL_VERSION>  Vega-Lite Version. One of 4.17, 5.6, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14 [default: 5.14]
+  -t, --theme <THEME>            Named theme provided by the vegaThemes package (e.g. "dark")
+  -c, --config <CONFIG>          Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+  -s, --scale <SCALE>            Image scale factor [default: 1.0]
+      --font-dir <FONT_DIR>      Additional directory to search for fonts
+  -h, --help                     Print help
+```
+
+For example, convert a Vega-Lite specification file named `in.vl.json` into a PNG file named `out.pdf` with a scale factor of 2.
+
+```
+$ vl-convert vl2pdf -i ./in.vl.json -o ./out.pdf --scale 2
 ```
 
 ### vg2svg
@@ -152,6 +180,26 @@ For example, convert a Vega specification file named `in.vg.json` into a PNG fil
 
 ```plain
 $ vl-convert vg2png -i ./in.vg.json -o ./out.png --scale 2
+```
+
+### vg2pdf
+```
+Convert a Vega specification to an PDF image
+
+Usage: vl-convert vg2pdf [OPTIONS] --input <INPUT> --output <OUTPUT>
+
+Options:
+  -i, --input <INPUT>        Path to input Vega file
+  -o, --output <OUTPUT>      Path to output PDF file to be created
+  -s, --scale <SCALE>        Image scale factor [default: 1.0]
+      --font-dir <FONT_DIR>  Additional directory to search for fonts
+  -h, --help                 Print help
+```
+
+For example, convert a Vega specification file named `in.vg.json` into a PDF file named `out.pdf` with a scale factor of 2.
+
+```plain
+$ vl-convert vg2pdf -i ./in.vg.json -o ./out.pdf --scale 2
 ```
 
 ### ls-themes
