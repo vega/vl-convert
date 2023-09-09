@@ -296,8 +296,8 @@ fn write_text(
 
             content.save_state().transform([
                 tx.sx * ctx.scale,
-                tx.kx,
-                tx.ky,
+                tx.kx * ctx.scale,
+                tx.ky * ctx.scale,
                 tx.sy * ctx.scale,
                 tx.tx * ctx.scale,
                 (ctx.height - tx.ty) * ctx.scale,
