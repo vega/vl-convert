@@ -1,12 +1,12 @@
 use anyhow::{bail, Error as AnyError};
 use pdf_writer::{Content, Filter, Finish, Name, PdfWriter, Rect, Ref, Str};
 
+use itertools::Itertools;
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo, UnicodeCmap};
 use siphasher::sip128::{Hasher128, SipHasher13};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::hash::Hash;
-use itertools::Itertools;
 use ttf_parser::GlyphId;
 use unicode_bidi::BidiInfo;
 use usvg::fontdb::{Database, Family, Query, Source, Stretch, Style, Weight};
@@ -128,7 +128,12 @@ fn construct_page(ctx: &mut PdfContext, font_metrics: &HashMap<Font, FontMetrics
 
     // Initialize page with size matching the SVG image
     let mut page = ctx.writer.page(ctx.page_id);
-    page.media_box(Rect::new(0.0, 0.0, ctx.width * ctx.scale, ctx.height * ctx.scale));
+    page.media_box(Rect::new(
+        0.0,
+        0.0,
+        ctx.width * ctx.scale,
+        ctx.height * ctx.scale,
+    ));
     page.parent(ctx.page_tree_id);
     page.contents(ctx.content_id);
 
@@ -235,7 +240,6 @@ fn write_fonts(
     Ok(())
 }
 
-
 fn write_content(
     ctx: &mut PdfContext,
     tree: &Tree,
@@ -250,7 +254,14 @@ fn write_content(
     // scales it to 1.0 x 1.0
     content
         .save_state()
-        .transform([ctx.width * ctx.scale, 0.0, 0.0, ctx.height * ctx.scale, 0.0, 0.0])
+        .transform([
+            ctx.width * ctx.scale,
+            0.0,
+            0.0,
+            ctx.height * ctx.scale,
+            0.0,
+            0.0,
+        ])
         .x_object(Name(ctx.svg_name.as_slice()))
         .restore_state();
 
@@ -369,7 +380,7 @@ fn write_text(
         }
         NodeKind::Group(_) => {
             for child in node.children() {
-                write_text(ctx,child, content, font_db, font_metrics)?;
+                write_text(ctx, child, content, font_db, font_metrics)?;
             }
         }
         _ => {}
@@ -416,25 +427,28 @@ fn get_text_text_bbox_from_path(node: Node) -> Option<f64> {
 }
 
 /// Collect mapping from usvg::Font to Unicode characters in that font
-fn collect_font_to_chars_mapping(tree: &Tree) -> Result<HashMap<Font, HashSet<char>>, anyhow::Error> {
+fn collect_font_to_chars_mapping(
+    tree: &Tree,
+) -> Result<HashMap<Font, HashSet<char>>, anyhow::Error> {
     let mut fonts: HashMap<Font, HashSet<char>> = HashMap::new();
     for node in tree.root.descendants() {
         match *node.borrow() {
-            NodeKind::Text(ref text) if text.chunks.len() == 1 => {
-                let chunk = &text.chunks[0];
-                let chunk_text = chunk.text.as_str();
-                for span in &chunk.spans {
-                    let span_text = &chunk_text[span.start..span.end];
-                    let font = &span.font;
-                    fonts
-                        .entry(font.clone())
-                        .or_default()
-                        .extend(span_text.chars());
+            NodeKind::Text(ref text) => {
+                // Ignore zero chunk text
+                if text.chunks.len() == 1 {
+                    let chunk = &text.chunks[0];
+                    let chunk_text = chunk.text.as_str();
+                    for span in &chunk.spans {
+                        let span_text = &chunk_text[span.start..span.end];
+                        let font = &span.font;
+                        fonts
+                            .entry(font.clone())
+                            .or_default()
+                            .extend(span_text.chars());
+                    }
+                } else if text.chunks.len() > 1 {
+                    bail!("multi-chunk text not supported");
                 }
-            }
-            NodeKind::Text(_) => {
-                // Should convert these nodes
-                bail!("multi-chunk text not supported")
             }
             _ => {}
         }

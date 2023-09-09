@@ -818,7 +818,7 @@ async fn vl_2_pdf(
                 config,
                 theme,
             },
-            Some(scale)
+            Some(scale),
         )
         .await
     {
