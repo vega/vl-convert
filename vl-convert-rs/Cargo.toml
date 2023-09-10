@@ -25,16 +25,13 @@ resvg = "0.35.0"
 tiny-skia = "0.10.0"
 png = "0.17.10"
 fontdb = {version= "0.14.1", features=["fontconfig"]}
-tempfile = "3.3.0"
-log = "0.4.17"
+tempfile = "3.8.0"
+log = "0.4.20"
 env_logger = "0.10.0"
-http = "0.2.8"
-image = {version="0.24.6", features=["jpeg"]}
+http = "0.2.9"
+image = {version="0.24.7", features=["jpeg"]}
 
 [dev-dependencies]
 tokio = {version="1.32", features=["macros", "rt"]}
-rstest = "0.17.0"
+rstest = "0.18.2"
 dssim = "3.2.4"
-
-[build-dependencies]
-serde_json = "1.0.106"
