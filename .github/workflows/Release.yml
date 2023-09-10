@@ -39,6 +39,42 @@ jobs:
           path: |
             vl-convert_linux-64.zip
 
+  build-cli-linux-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install cross-compilation tools
+        uses: taiki-e/setup-cross-toolchain-action@v1
+        with:
+          target: aarch64-unknown-linux-gnu
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+      - name: Build vl-convert
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: -p vl-convert --release
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/aarch64-unknown-linux-gnu/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
+          zip -r vl-convert_linux-aarch64.zip bin/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: vl-convert
+          path: |
+            vl-convert_linux-aarch64.zip
+
   build-cli-win-64:
     runs-on: windows-2022
     steps:
