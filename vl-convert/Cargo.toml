@@ -9,8 +9,7 @@ repository = "https://github.com/jonmmease/vl-convert"
 description = "CLI application for converting Vega-Lite visualization specifications to Vega specifications"
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
-[features]
-protobuf-src = [ "vl-convert-rs/protobuf-src"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 vl-convert-rs = {path= "../vl-convert-rs", version= "0.13.0" }

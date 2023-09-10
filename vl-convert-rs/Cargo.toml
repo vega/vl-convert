@@ -35,7 +35,3 @@ image = {version="0.24.7", features=["jpeg"]}
 tokio = {version="1.32", features=["macros", "rt"]}
 rstest = "0.18.2"
 dssim = "3.2.4"
-
-[build-dependencies.protobuf-src]
-version = "1.1.0"
-optional = true
