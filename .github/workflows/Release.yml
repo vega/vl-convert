@@ -7,12 +7,8 @@ on:
   pull_request:
 
 jobs:
-  build-cli-linux:
+  build-cli-linux-x86:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        options:
-         - [ "x86_64-unknown-linux-gnu", "linux-64"]
     steps:
       - uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
@@ -24,28 +20,24 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install protobuf-compiler
-      - name: Download architecture toolchain
-        run: |
-          rustup target add ${{ matrix.options[0] }}
       - name: Build vl-convert
         uses: actions-rs/cargo@v1
         with:
-          use-cross: true
           command: build
-          args: -p vl-convert --release --target ${{ matrix.options[0] }}
+          args: -p vl-convert --release
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
-          cp target/${{ matrix.options[0] }}/release/vl-convert bin/
+          cp target/release/vl-convert bin/
           cp LICENSE bin/
           cp thirdparty_* bin/
-          zip -r vl-convert_${{ matrix.options[1] }}.zip bin/
+          zip -r vl-convert_linux-64.zip bin/
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
           name: vl-convert
           path: |
-            vl-convert_${{ matrix.options[1] }}.zip
+            vl-convert_linux-64.zip
 
   build-cli-win-64:
     runs-on: windows-2022
