@@ -153,7 +153,9 @@ jobs:
             # Build CLI application here as well
             cd vl-convert
             cargo build --release
+            cd ..
             mkdir -p bin
+            ls -la target
             cp target/release/vl-convert bin/
             cp LICENSE bin/
             cp thirdparty_* bin/
