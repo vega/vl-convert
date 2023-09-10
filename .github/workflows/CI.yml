@@ -36,6 +36,8 @@ jobs:
           cache-on-failure: True
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check cargo fmt compliance
         run: cargo fmt --all -- --check
       - name: Check no rustc warnings
@@ -104,6 +106,8 @@ jobs:
           cache-on-failure: True
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
@@ -144,6 +148,8 @@ jobs:
           cache-on-failure: True
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
