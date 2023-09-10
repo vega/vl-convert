@@ -305,9 +305,6 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings) {{
         let create_web_worker_cb = Arc::new(|_| {
             todo!("Web workers are not supported");
         });
-        let web_worker_event_cb = Arc::new(|_| {
-            todo!("Web workers are not supported");
-        });
 
         let options = WorkerOptions {
             bootstrap: Default::default(),
@@ -319,8 +316,6 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings) {{
             seed: None,
             source_map_getter: None,
             format_js_error_fn: None,
-            web_worker_preload_module_cb: web_worker_event_cb.clone(),
-            web_worker_pre_execute_module_cb: web_worker_event_cb,
             create_web_worker_cb,
             maybe_inspector_server: None,
             should_break_on_first_statement: false,
