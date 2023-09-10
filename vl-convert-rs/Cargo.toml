@@ -15,9 +15,9 @@ deno_runtime = "0.126.0"
 deno_core = "0.204.0"
 serde_json = {version="1.0.106", features=["preserve_order"]}
 serde = {version="1.0.188", features=["derive"]}
-futures = "0.3.24"
-futures-util = "0.3.24"
-tokio = {version= "1.28.1", features=["rt-multi-thread"]}
+futures = "0.3.28"
+futures-util = "0.3.28"
+tokio = { version= "1.32.0" }
 reqwest = {version="0.11.12", default-features=false, features=["rustls-tls", "blocking"]}
 lazy_static = "1.4.0"
 usvg = "0.35.0"
@@ -32,7 +32,7 @@ http = "0.2.8"
 image = {version="0.24.6", features=["jpeg"]}
 
 [dev-dependencies]
-tokio = {version="1.21", features=["macros", "rt", "rt-multi-thread"]}
+tokio = {version="1.32", features=["macros", "rt"]}
 rstest = "0.17.0"
 dssim = "3.2.4"
 
