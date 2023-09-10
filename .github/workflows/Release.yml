@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-cli-linux-x86:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
@@ -38,42 +38,6 @@ jobs:
           name: vl-convert
           path: |
             vl-convert_linux-64.zip
-
-  build-cli-linux-aarch64:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      - name: Install cross-compilation tools
-        uses: taiki-e/setup-cross-toolchain-action@v1
-        with:
-          target: aarch64-unknown-linux-gnu
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install protobuf-compiler
-      - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
-      - name: Move executable to bin directory
-        run: |
-          mkdir -p bin
-          cp target/aarch64-unknown-linux-gnu/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
-          zip -r vl-convert_linux-aarch64.zip bin/
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: vl-convert
-          path: |
-            vl-convert_linux-aarch64.zip
 
   build-cli-win-64:
     runs-on: windows-2022
@@ -144,7 +108,7 @@ jobs:
             vl-convert_osx-64.zip
 
   build-wheels-linux-x86_64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         arch:
@@ -168,7 +132,7 @@ jobs:
         path: dist
 
   build-wheels-linux-aarch64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
       - name: Setup QEMU
@@ -181,9 +145,20 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
+            # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
             unzip protoc-24.0-linux-aarch_64.zip -d /usr/
+            
+            # Build CLI application here as well
+            cd vl-convert
+            cargo build --release
+            mkdir -p bin
+            cp target/release/vl-convert bin/
+            cp LICENSE bin/
+            cp thirdparty_* bin/
+            zip -r vl-convert_linux-aarch64.zip bin/
+
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
       - name: Rename files
@@ -197,6 +172,12 @@ jobs:
         with:
           name: wheels
           path: dist
+      - name: Upload executable
+        uses: actions/upload-artifact@v2
+        with:
+          name: vl-convert
+          path: |
+            vl-convert_linux-aarch64.zip
 
   build-wheels-win-64:
     runs-on: windows-latest
