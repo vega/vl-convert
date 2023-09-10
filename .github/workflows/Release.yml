@@ -21,7 +21,9 @@ jobs:
           toolchain: stable
           override: true
       - name: Install protoc
-        run: apt-get install protobuf-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
       - name: Download architecture toolchain
         run: |
           rustup target add ${{ matrix.options[0] }}
@@ -124,7 +126,8 @@ jobs:
         command: build
         args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
         before-script-linux: |
-          apt-get install protobuf-compiler
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
@@ -145,7 +148,8 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            apt-get install protobuf-compiler
+            sudo apt-get update
+            sudo apt-get install protobuf-compiler
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
       - name: Rename files
