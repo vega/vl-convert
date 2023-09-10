@@ -20,6 +20,8 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: Install protoc
+        run: apt-get install protobuf-compiler
       - name: Download architecture toolchain
         run: |
           rustup target add ${{ matrix.options[0] }}
@@ -52,6 +54,8 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
       - name: Build vl-convert
         uses: actions-rs/cargo@v1
         with:
@@ -84,6 +88,8 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
       - name: Build vl-convert
         uses: actions-rs/cargo@v1
         with:
@@ -117,6 +123,8 @@ jobs:
         target: ${{ matrix.arch }}
         command: build
         args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
+        before-script-linux: |
+          apt-get install protobuf-compiler
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
@@ -136,6 +144,8 @@ jobs:
           target: aarch64-unknown-linux-gnu
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
+          before-script-linux: |
+            apt-get install protobuf-compiler
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
       - name: Rename files
@@ -154,6 +164,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v3
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v2
     - uses: messense/maturin-action@v1
       with:
         command: build
@@ -168,6 +180,8 @@ jobs:
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v2
     - name: Build Intel wheels
       uses: messense/maturin-action@v1
       with:
