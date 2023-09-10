@@ -34,6 +34,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: True
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
       - name: Check cargo fmt compliance
         run: cargo fmt --all -- --check
       - name: Check no rustc warnings
@@ -100,6 +102,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: True
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
@@ -138,6 +142,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: True
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
