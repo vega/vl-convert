@@ -122,9 +122,10 @@ jobs:
           command: help
           before-script-linux: |
             # Install protoc
+            echo $PATH
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
-            unzip protoc-24.0-linux-aarch_64.zip -d /usr/
+            sudo unzip protoc-24.0-linux-aarch_64.zip -d /usr/
             
             # Build CLI application here
             cd vl-convert
@@ -182,6 +183,7 @@ jobs:
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
             # Install protoc
+            echo $PATH
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
             unzip protoc-24.0-linux-aarch_64.zip -d /usr/
