@@ -47,6 +47,13 @@ jobs:
         uses: docker/setup-qemu-action@v1
         with:
           platforms: arm64
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          key: build-cli-linux-aarch64-${{ hashFiles('Cargo.lock') }}
+          path: |
+            cargo-arm64
+            target-arm64
       - name: Build in Docker
         run: |
           docker run \
@@ -55,6 +62,7 @@ jobs:
             -w /workspace \
             --platform linux/arm64 \
             --env CARGO_TARGET_DIR=/workspace/target-arm64 \
+            --env CARGO_HOME=/workspace/cargo-arm64 \
             rust:1.72-slim-bullseye \
             bash -c "\
               uname -a && \
@@ -63,10 +71,13 @@ jobs:
               curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protoc-24.0-linux-aarch_64.zip && \
               unzip protoc-24.0-linux-aarch_64.zip -d /usr/ && \
               which protoc && \
-              cargo build --release -p vl-convert
-              cp target/release/vl-convert bin/
-              cp LICENSE bin/
-              cp thirdparty_* bin/
+              cargo build --release -p vl-convert && \
+              rm -rf bin/ && \
+              rm -rf vl-convert_linux-aarch64.zip && \
+              mkdir -p bin/ && \
+              cp target-arm64/release/vl-convert bin/ && \
+              cp LICENSE bin/ && \
+              cp thirdparty_* bin/ && \
               zip -r vl-convert_linux-aarch64.zip bin/
             "
       - name: Upload executable
