@@ -43,26 +43,38 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
-      - name: Install Rust
-        run: rustup update stable
-      - name: Install cross-compilation tools
-        uses: taiki-e/setup-cross-toolchain-action@v1
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
         with:
-          target: aarch64-unknown-linux-gnu
-      - run: |
-          uname -a
-          ls /lib
-          sudo apt-get update
-          sudo apt-get install protobuf-compiler
-      - run: |
-          cargo build -p vl-convert --release
-          ls target/
-      - run: |
-          mkdir -p bin
-          cp target/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
-          zip -r vl-convert_linux-aarch64.zip bin/
+          platforms: arm64
+      - name: Build in Docker
+        run: |
+          docker run \
+            --rm \
+            -v $(pwd):/workspace \
+            -w /workspace \
+            --platform linux/arm64 \
+            --env CARGO_TARGET_DIR=/workspace/target-arm64 \
+            rust:1.72-slim-bullseye \
+            bash -c "\
+              uname -a && \
+              apt update -y && \
+              apt install cmake curl zip unzip -y && \
+              curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protoc-24.0-linux-aarch_64.zip && \
+              unzip protoc-24.0-linux-aarch_64.zip -d /usr/ && \
+              which protoc && \
+              cargo build --release -p vl-convert
+              cp target/release/vl-convert bin/
+              cp LICENSE bin/
+              cp thirdparty_* bin/
+              zip -r vl-convert_linux-aarch64.zip bin/
+            "
+      - name: Upload executable
+        uses: actions/upload-artifact@v2
+        with:
+          name: vl-convert
+          path: |
+            vl-convert_linux-aarch64.zip
 
 #  build-cli-win-64:
 #    runs-on: windows-2022
