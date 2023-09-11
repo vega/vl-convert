@@ -107,6 +107,42 @@ jobs:
           path: |
             vl-convert_osx-64.zip
 
+  # Use the maturin action with before-script-linux to build the CLI in the manylinux container
+  build-cli-linux-aarch64:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v1
+      - uses: messense/maturin-action@v1
+        with:
+          manylinux: auto
+          container: quay.io/pypa/manylinux2014_aarch64
+          target: aarch64-unknown-linux-gnu
+          command: help
+          before-script-linux: |
+            # Install protoc
+            PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+            curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
+            unzip protoc-24.0-linux-aarch_64.zip -d /usr/
+            
+            # Build CLI application here
+            cd vl-convert
+            cargo build --release
+            cd ..
+            mkdir -p bin
+            ls -la target
+            cp target/release/vl-convert bin/
+            cp LICENSE bin/
+            cp thirdparty_* bin/
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v2
+        with:
+          name: vl-convert
+          path: |
+            vl-convert_linux-aarch64.zip
+
   build-wheels-linux-x86_64:
     runs-on: ubuntu-20.04
     strategy:
@@ -149,16 +185,6 @@ jobs:
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
             unzip protoc-24.0-linux-aarch_64.zip -d /usr/
-            
-            # Build CLI application here as well
-            cd vl-convert
-            cargo build --release
-            cd ..
-            mkdir -p bin
-            ls -la target
-            cp target/release/vl-convert bin/
-            cp LICENSE bin/
-            cp thirdparty_* bin/
 
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
@@ -174,12 +200,6 @@ jobs:
         with:
           name: wheels
           path: dist
-      - name: Upload executable
-        uses: actions/upload-artifact@v2
-        with:
-          name: vl-convert
-          path: |
-            vl-convert_linux-aarch64.zip
 
   build-wheels-win-64:
     runs-on: windows-latest
