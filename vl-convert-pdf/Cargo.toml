@@ -1,6 +1,6 @@
 [package]
 name = "vl-convert-pdf"
-version = "0.13.0"
+version = "0.13.1"
 edition = "2021"
 license = "BSD-3-Clause"
 readme = "README.md"
