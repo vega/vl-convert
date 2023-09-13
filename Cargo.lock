@@ -6075,7 +6075,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-pdf"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "itertools 0.11.0",
