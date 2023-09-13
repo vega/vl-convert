@@ -45,7 +45,6 @@ pub fn svg_to_pdf(tree: &Tree, font_db: &Database, scale: f32) -> Result<Vec<u8>
         );
     }
 
-    // let font_mapping = compute_font_mapping(&mut ctx, &fonts, &font_db)?;
     // Need to update svg_id to be last id before calling svg2pdf because it will allocate more ids
     ctx.svg_id = ctx.alloc.bump();
     construct_page(&mut ctx, &font_metrics);
@@ -412,14 +411,14 @@ fn get_text_width(text: &Text, font_db: &Database) -> Option<f64> {
     let Some(node) = text.convert(font_db, Default::default()) else {
         return None;
     };
-    get_text_text_bbox_from_path(node)
+    get_text_width_from_path(node)
 }
 
-fn get_text_text_bbox_from_path(node: Node) -> Option<f64> {
+fn get_text_width_from_path(node: Node) -> Option<f64> {
     match *node.borrow() {
         NodeKind::Group(_) => {
             for child in node.children() {
-                if let Some(res) = get_text_text_bbox_from_path(child) {
+                if let Some(res) = get_text_width_from_path(child) {
                     return Some(res);
                 }
             }
@@ -440,8 +439,8 @@ fn collect_font_to_chars_mapping(
     let mut fonts: HashMap<Font, HashSet<char>> = HashMap::new();
     for node in tree.root.descendants() {
         if let NodeKind::Text(ref text) = *node.borrow() {
-            // Ignore zero chunk text
             match text.chunks.len() {
+                // Ignore zero chunk text
                 0 => {}
                 1 => {
                     let chunk = &text.chunks[0];
@@ -540,7 +539,7 @@ fn compute_font_metrics(
 
     let ttf = ttf_parser::Face::parse(&font_data, face.index)?;
 
-    // Conversion function from ttf values in em to PDFs font units
+    // Conversion function from ttf values in em to PDF's font units
     let to_font_units = |v: f32| (v / ttf.units_per_em() as f32) * 1000.0;
 
     // Font flags
@@ -560,7 +559,7 @@ fn compute_font_metrics(
         to_font_units(global_bbox.y_max.into()),
     );
 
-    // Compute glyph set
+    // Compute glyph set and chart set
     let mut glyph_set: BTreeMap<u16, String> = BTreeMap::new();
     let mut char_set: BTreeMap<char, u16> = BTreeMap::new();
     for ch in chars {
@@ -593,7 +592,6 @@ fn compute_font_metrics(
     let subset_tag = subset_tag(&glyph_set);
     let base_font = format!("{subset_tag}+{postscript_name}");
 
-    // Compute font Name
     Ok(FontMetrics {
         base_font,
         font_ref: ctx.alloc.bump(),

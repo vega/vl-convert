@@ -380,7 +380,7 @@ fn vega_to_pdf(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
     }))
 }
 
-/// Convert a Vega-Lite spec to JPEG image data using a particular
+/// Convert a Vega-Lite spec to PDF image data using a particular
 /// version of the Vega-Lite JavaScript library.
 ///
 /// Args:
