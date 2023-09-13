@@ -994,7 +994,7 @@ mod tests {
     #[tokio::test]
     async fn test_convert_context() {
         let mut ctx = VlConverter::new();
-        let vl_spec: serde_json::Value = serde_json::from_str(r##"
+        let vl_spec: serde_json::Value = serde_json::from_str(r#"
 {
     "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
     "mark": "bar",
@@ -1003,7 +1003,7 @@ mod tests {
         "y": {"aggregate": "mean", "field": "precipitation"}
     }
 }
-        "##).unwrap();
+        "#).unwrap();
 
         let vg_spec = ctx
             .vegalite_to_vega(
@@ -1020,7 +1020,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multi_convert_context() {
-        let vl_spec: serde_json::Value = serde_json::from_str(r##"
+        let vl_spec: serde_json::Value = serde_json::from_str(r#"
 {
     "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
     "mark": "bar",
@@ -1029,7 +1029,7 @@ mod tests {
         "y": {"aggregate": "mean", "field": "precipitation"}
     }
 }
-        "##).unwrap();
+        "#).unwrap();
 
         let mut ctx1 = VlConverter::new();
         let vg_spec1 = ctx1
