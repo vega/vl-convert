@@ -23,7 +23,7 @@ const SYSTEM_INFO: SystemInfo = SystemInfo {
 const CMAP_NAME: Name = Name(b"Custom");
 
 /// Convert a usvg::Tree into the bytes for a standalone PDF document
-/// This function uses sv2pdf to perform non-text conversion and then overlays embedded
+/// This function uses svg2pdf to perform non-text conversion and then overlays embedded
 /// text on top.
 pub fn svg_to_pdf(tree: &Tree, font_db: &Database, scale: f32) -> Result<Vec<u8>, AnyError> {
     // Extract SVGs size. We'll use this as the size of the resulting PDF document
@@ -308,7 +308,7 @@ fn write_text(
 
             // Compute chunk x/y
             let chunk_x = chunk.x.unwrap_or(0.0) + x_offset as f32;
-            let chunk_y = chunk.y.unwrap_or(0.0);
+            let chunk_y = -chunk.y.unwrap_or(0.0);
 
             let tx = node.abs_transform();
 
