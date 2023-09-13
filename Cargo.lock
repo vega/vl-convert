@@ -3473,6 +3473,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdf-writer"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d77bc47c8968aa63f86a7e6693e270a6cbd1e3b784c364f1711a0ddecc71447"
+dependencies = [
+ "bitflags 1.3.2",
+ "itoa",
+ "ryu",
+]
+
+[[package]]
 name = "pem-rfc7468"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4977,10 +4988,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "subsetter"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09eab8a83bff89ba2200bd4c59be45c7c787f988431b936099a5a266c957f2f9"
+
+[[package]]
 name = "subtle"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
+
+[[package]]
+name = "svg2pdf"
+version = "0.6.0"
+source = "git+https://github.com/typst/svg2pdf.git?rev=d507d79#d507d79c9c4cca9026e81a2a6c7fb813b9eb339d"
+dependencies = [
+ "image",
+ "miniz_oxide",
+ "pdf-writer",
+ "usvg",
+]
 
 [[package]]
 name = "svgtypes"
@@ -6045,6 +6073,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "vl-convert-pdf"
+version = "0.13.0"
+dependencies = [
+ "anyhow",
+ "itertools 0.11.0",
+ "miniz_oxide",
+ "pdf-writer",
+ "siphasher",
+ "subsetter",
+ "svg2pdf",
+ "ttf-parser 0.19.1",
+ "unicode-bidi",
+ "usvg",
+]
+
+[[package]]
 name = "vl-convert-python"
 version = "0.13.1"
 dependencies = [
@@ -6081,6 +6125,7 @@ dependencies = [
  "tiny-skia",
  "tokio",
  "usvg",
+ "vl-convert-pdf",
 ]
 
 [[package]]
