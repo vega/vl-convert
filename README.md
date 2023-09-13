@@ -23,8 +23,12 @@ Commands:
   vl2vg      Convert a Vega-Lite specification to a Vega specification
   vl2svg     Convert a Vega-Lite specification to an SVG image
   vl2png     Convert a Vega-Lite specification to an PNG image
+  vl2jpeg    Convert a Vega-Lite specification to an JPEG image
+  vl2pdf     Convert a Vega-Lite specification to a PDF image
   vg2svg     Convert a Vega specification to an SVG image
   vg2png     Convert a Vega specification to an PNG image
+  vg2jpeg    Convert a Vega specification to an JPEG image
+  vg2pdf     Convert a Vega specification to an PDF image
   ls-themes  List available themes
   cat-theme  Print the config JSON for a theme
   help       Print this message or the help of the given subcommand(s)
@@ -98,6 +102,9 @@ VlConvert works around this by overriding the text width calculation function us
 The Vega JavaScript library supports exporting chart specifications directly to PNG images. When running in Node.js, this functionality relies on node canvas, which is not available in Deno.
 
 VlConvert generates PNG images by first exporting charts to SVG as described above, then converting the SVG image to a PNG image using the `resvg` crate.
+
+## Vega(-Lite) to PDF
+VlConvert generates PDF images by first exporting charts to SVG as described above, then converting them to PDF with a combination of the `svg2pdf` crate and custom text layout and font embedding logic. Font embedding currently supports TrueType fonts only.
 
 ## Limitations
 ### PNG Performance

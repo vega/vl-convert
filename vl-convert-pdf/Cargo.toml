@@ -1,0 +1,20 @@
+[package]
+name = "vl-convert-pdf"
+version = "0.13.1"
+edition = "2021"
+license = "BSD-3-Clause"
+readme = "README.md"
+homepage = "https://github.com/jonmmease/vl-convert"
+repository = "https://github.com/jonmmease/vl-convert"
+
+[dependencies]
+svg2pdf = "0.7.0"
+pdf-writer = "0.8.1"
+usvg = "0.35.0"
+anyhow = "1.0.71"
+ttf-parser = "0.19.1"
+subsetter = "0.1.1"
+miniz_oxide = "0.7.1"
+siphasher = "0.3.10"
+itertools = "0.11.0"
+unicode-bidi = "0.3.13"

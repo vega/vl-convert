@@ -5,6 +5,13 @@ import pytest
 from io import BytesIO
 from skimage.io import imread
 from skimage.metrics import structural_similarity as ssim
+import os
+import math
+import ctypes
+import sys
+import pypdfium2.raw as pdfium_c
+from tempfile import NamedTemporaryFile
+import PIL.Image
 
 tests_dir = Path(__file__).parent
 root_dir = tests_dir.parent.parent
@@ -185,6 +192,43 @@ def test_jpeg(name, scale, as_dict):
     assert jpeg[:10] == jpeg_prefix
 
 
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="PDF tests not supported on windows"
+)
+@pytest.mark.parametrize(
+    "name,scale,tol",
+    [
+        ("circle_binned", 1.0, 0.97),
+        ("stacked_bar_h", 2.0, 0.98),
+        ("remote_images", 1.0, 0.98),
+        ("maptile_background", 1.0, 0.97),
+        ("no_text_in_font_metrics", 1.0, 0.94),
+        ("lookup_urls", 1.0, 0.99),
+    ],
+)
+@pytest.mark.parametrize("as_dict", [False])
+def test_pdf(name, scale, tol, as_dict):
+    vl_version = "v5_8"
+    vl_spec = load_vl_spec(name)
+
+    if as_dict:
+        vl_spec = json.loads(vl_spec)
+
+    expected_png = load_expected_png(name, vl_version)
+
+    # Convert to vega first
+    vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
+    pdf = vlc.vega_to_pdf(vg_spec, scale=scale)
+    png = pdf_to_png(pdf)
+    # Lower tolerance because pdfium does its own text rendering, which won't be pixel identical to resvg
+    check_png(png, expected_png, tol=tol)
+
+    # Convert directly to image
+    pdf = vlc.vegalite_to_pdf(vl_spec, vl_version=vl_version, scale=scale)
+    png = pdf_to_png(pdf)
+    check_png(png, expected_png, tol=tol)
+
+
 def test_gh_78():
     vl_version = "v5_8"
     name = "lookup_urls"
@@ -198,14 +242,78 @@ def test_gh_78():
     check_png(png, expected_png)
 
 
-def check_png(png, expected_png):
+def check_png(png, expected_png, tol=0.995):
     png_img = imread(BytesIO(png))
     expected_png_img = imread(BytesIO(expected_png))
     similarity_value = ssim(png_img, expected_png_img, channel_axis=2)
-    if similarity_value < 0.995:
+    if similarity_value < tol:
         pytest.fail(f"png mismatch with similarity: {similarity_value}")
 
 
 def check_svg(svg, expected_svg):
     if svg != expected_svg:
         pytest.fail(f"svg image mismatch")
+
+
+def pdf_to_png(pdf_bytes):
+    """
+    Helper that uses pdfium to convert PDF to PNG
+
+    Adapted from pdfium2 README
+    """
+    with NamedTemporaryFile() as nf:
+        nf.write(pdf_bytes)
+        filepath = os.path.abspath(nf.name)
+        pdf = pdfium_c.FPDF_LoadDocument((filepath + "\x00").encode("utf-8"), None)
+        page_count = pdfium_c.FPDF_GetPageCount(pdf)
+        assert page_count >= 1
+
+        # Load the first page and get its dimensions
+        page = pdfium_c.FPDF_LoadPage(pdf, 0)
+        width = math.ceil(pdfium_c.FPDF_GetPageWidthF(page))
+        height = math.ceil(pdfium_c.FPDF_GetPageHeightF(page))
+
+        use_alpha = False
+        bitmap = pdfium_c.FPDFBitmap_Create(width, height, int(use_alpha))
+
+        # Fill the whole bitmap with a white background
+        # The color is given as a 32-bit integer in ARGB format (8 bits per channel)
+        pdfium_c.FPDFBitmap_FillRect(bitmap, 0, 0, width, height, 0xFFFFFFFF)
+
+        # Store common rendering arguments
+        render_args = (
+            bitmap,  # the bitmap
+            page,  # the page
+            # positions and sizes are to be given in pixels and may exceed the bitmap
+            0,  # left start position
+            0,  # top start position
+            width,  # horizontal size
+            height,  # vertical size
+            0,  # rotation (as constant, not in degrees!)
+            pdfium_c.FPDF_LCD_TEXT
+            | pdfium_c.FPDF_ANNOT,  # rendering flags, combined with binary or
+        )
+
+        # Render the page
+        pdfium_c.FPDF_RenderPageBitmap(*render_args)
+
+        # Get a pointer to the first item of the buffer
+        first_item = pdfium_c.FPDFBitmap_GetBuffer(bitmap)
+        # Re-interpret the pointer to encompass the whole buffer
+        buffer = ctypes.cast(
+            first_item, ctypes.POINTER(ctypes.c_ubyte * (width * height * 4))
+        )
+
+        # Create a PIL image from the buffer contents
+        img = PIL.Image.frombuffer(
+            "RGBA", (width, height), buffer.contents, "raw", "BGRA", 0, 1
+        )
+        # Save it as file
+        buffer = BytesIO()
+        img.save(buffer, format="png")
+
+        # Free resources
+        pdfium_c.FPDFBitmap_Destroy(bitmap)
+        pdfium_c.FPDF_ClosePage(page)
+        pdfium_c.FPDF_CloseDocument(pdf)
+    return buffer.getvalue()

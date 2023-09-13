@@ -32,6 +32,7 @@ use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{TreeParsing, TreeTextToPath};
 
 use image::io::Reader as ImageReader;
+use vl_convert_pdf::svg_to_pdf;
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
 
@@ -781,6 +782,53 @@ impl VlConverter {
         Self::svg_to_jpeg(&svg, scale, quality)
     }
 
+    pub async fn vega_to_pdf(
+        &mut self,
+        vg_spec: serde_json::Value,
+        scale: Option<f32>,
+    ) -> Result<Vec<u8>, AnyError> {
+        let scale = scale.unwrap_or(1.0);
+        let svg = self.vega_to_svg(vg_spec).await?;
+
+        // Load system fonts
+        let font_db = FONT_DB
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+
+        // Parse SVG and convert text nodes to paths
+        let opts = USVG_OPTIONS
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+
+        let tree = usvg::Tree::from_str(&svg, &opts)?;
+
+        svg_to_pdf(&tree, &font_db, scale)
+    }
+
+    pub async fn vegalite_to_pdf(
+        &mut self,
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+        scale: Option<f32>,
+    ) -> Result<Vec<u8>, AnyError> {
+        let scale = scale.unwrap_or(1.0);
+        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
+
+        // Load system fonts
+        let font_db = FONT_DB
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+
+        // Parse SVG and convert text nodes to paths
+        let opts = USVG_OPTIONS
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+
+        let tree = usvg::Tree::from_str(&svg, &opts)?;
+
+        svg_to_pdf(&tree, &font_db, scale)
+    }
+
     fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
         // default ppi to 72
         let ppi = ppi.unwrap_or(72.0);
@@ -946,7 +994,7 @@ mod tests {
     #[tokio::test]
     async fn test_convert_context() {
         let mut ctx = VlConverter::new();
-        let vl_spec: serde_json::Value = serde_json::from_str(r##"
+        let vl_spec: serde_json::Value = serde_json::from_str(r#"
 {
     "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
     "mark": "bar",
@@ -955,7 +1003,7 @@ mod tests {
         "y": {"aggregate": "mean", "field": "precipitation"}
     }
 }
-        "##).unwrap();
+        "#).unwrap();
 
         let vg_spec = ctx
             .vegalite_to_vega(
@@ -972,7 +1020,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multi_convert_context() {
-        let vl_spec: serde_json::Value = serde_json::from_str(r##"
+        let vl_spec: serde_json::Value = serde_json::from_str(r#"
 {
     "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
     "mark": "bar",
@@ -981,7 +1029,7 @@ mod tests {
         "y": {"aggregate": "mean", "field": "precipitation"}
     }
 }
-        "##).unwrap();
+        "#).unwrap();
 
         let mut ctx1 = VlConverter::new();
         let vg_spec1 = ctx1

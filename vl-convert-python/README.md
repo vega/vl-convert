@@ -102,9 +102,10 @@ Create development conda environment
 $ conda create -n vl-convert-dev -c conda-forge python=3.10 deno maturin altair pytest black black-jupyter scikit-image
 ```
 
-Activate environment
+Activate environment and pip install remaining dependencies
 ```
 $ conda activate vl-convert-dev
+$ pip install pypdfium2
 ```
 
 Change to Python package directory

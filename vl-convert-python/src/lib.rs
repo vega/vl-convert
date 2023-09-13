@@ -349,6 +349,96 @@ fn vegalite_to_jpeg(
     }))
 }
 
+/// Convert a Vega spec to PDF format
+///
+/// Args:
+///     vg_spec (str | dict): Vega JSON specification string or dict
+///     scale (float): Image scale factor (default 1.0)
+///
+/// Returns:
+///     bytes: PDF file bytes
+#[pyfunction]
+#[pyo3(text_signature = "(vg_spec, scale)")]
+fn vega_to_pdf(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    let pdf_bytes = match PYTHON_RUNTIME.block_on(converter.vega_to_pdf(vg_spec, scale)) {
+        Ok(vega_spec) => vega_spec,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "Vega to PDF conversion failed:\n{}",
+                err
+            )))
+        }
+    };
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, pdf_bytes.as_slice()))
+    }))
+}
+
+/// Convert a Vega-Lite spec to PDF image data using a particular
+/// version of the Vega-Lite JavaScript library.
+///
+/// Args:
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
+///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///         (default to latest)
+///     scale (float): Image scale factor (default 1.0)
+///     config (dict | None): Chart configuration object to apply during conversion
+///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
+///
+/// Returns:
+///     bytes: JPEG image data
+#[pyfunction]
+#[pyo3(text_signature = "(vl_spec, vl_version, scale, config, theme)")]
+fn vegalite_to_pdf(
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    scale: Option<f32>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    show_warnings: Option<bool>,
+) -> PyResult<PyObject> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    let pdf_data = match PYTHON_RUNTIME.block_on(converter.vegalite_to_pdf(
+        vl_spec,
+        VlOpts {
+            vl_version,
+            config,
+            theme,
+            show_warnings: show_warnings.unwrap_or(false),
+        },
+        scale,
+    )) {
+        Ok(vega_spec) => vega_spec,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "Vega-Lite to PDF conversion failed:\n{}",
+                err
+            )))
+        }
+    };
+
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
+    }))
+}
+
 /// Helper function to parse an input Python string or dict as a serde_json::Value
 fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
     Python::with_gil(|py| -> PyResult<serde_json::Value> {
@@ -444,9 +534,11 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_jpeg, m)?)?;
+    m.add_function(wrap_pyfunction!(vegalite_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_jpeg, m)?)?;
+    m.add_function(wrap_pyfunction!(vega_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
