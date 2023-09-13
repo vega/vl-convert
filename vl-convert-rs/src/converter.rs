@@ -200,7 +200,9 @@ import('{url}').then((sg) => {{
             let function_str = r#"
 function vegaToSvg(vgSpec) {
     let runtime = vega.parse(vgSpec);
-    let view = new vega.View(runtime, {renderer: 'none'});
+    const baseURL = 'https://vega.github.io/vega-datasets/';
+    const loader = vega.loader({ mode: 'http', baseURL });
+    let view = new vega.View(runtime, {renderer: 'none', loader});
     let svgPromise = view.toSVG();
     return svgPromise
 }
