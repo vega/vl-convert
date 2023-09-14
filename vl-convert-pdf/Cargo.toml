@@ -8,7 +8,7 @@ homepage = "https://github.com/jonmmease/vl-convert"
 repository = "https://github.com/jonmmease/vl-convert"
 
 [dependencies]
-svg2pdf = "0.7.0"
+svg2pdf = "0.7.1"
 pdf-writer = "0.8.1"
 usvg = "0.35.0"
 anyhow = "1.0.71"
