@@ -151,6 +151,7 @@ Usage: vl-convert vl2url --input <INPUT>
 
 Options:
   -i, --input <INPUT>  Path to input Vega-Lite file
+      --fullscreen     Open chart in fullscreen mode
   -h, --help           Print help
 ```
 
@@ -227,6 +228,7 @@ Usage: vl-convert vg2url --input <INPUT>
 
 Options:
   -i, --input <INPUT>  Path to input Vega file
+      --fullscreen     Open chart in fullscreen mode
   -h, --help           Print help
 ```
 
