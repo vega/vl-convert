@@ -987,6 +987,22 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
     Ok(data)
 }
 
+pub fn vegalite_to_url(vl_spec: &serde_json::Value) -> Result<String, AnyError> {
+    let spec_str = serde_json::to_string(vl_spec)?;
+    let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
+    Ok(format!(
+        "https://vega.github.io/editor/#/url/vega-lite/{compressed_data}"
+    ))
+}
+
+pub fn vega_to_url(vg_spec: &serde_json::Value) -> Result<String, AnyError> {
+    let spec_str = serde_json::to_string(vg_spec)?;
+    let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
+    Ok(format!(
+        "https://vega.github.io/editor/#/url/vega/{compressed_data}"
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1056,5 +1072,139 @@ mod tests {
             .await
             .unwrap();
         println!("vg_spec2: {}", vg_spec2);
+    }
+
+    #[test]
+    fn test_convert_vegalite_to_url() {
+        let vl_spec: serde_json::Value = serde_json::from_str(r#"
+{
+    "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
+    "mark": "bar",
+    "encoding": {
+        "x": {"timeUnit": "month", "field": "date", "type": "ordinal"},
+        "y": {"aggregate": "mean", "field": "precipitation"}
+    }
+}
+        "#).unwrap();
+
+        let url = vegalite_to_url(&vl_spec).unwrap();
+        let expected = concat!(
+            "https://vega.github.io/editor/#/url/vega-lite/",
+            "N4IgJghgLhIFygK4CcA28QAspQA4Gc4B6I5CAdwDoBzASyk0QCNF8BTZAYwHsA7KNv0o8AtkQBubahAlSIAWkg",
+            "x2UfERER8A5ESUz20KKjbzybaJg7D84kAF8ANCA3IA1hiYRkIJ4J5haXmp4UAAPEJAoWhE2AFVeegwRPgYfEAA",
+            "zWjZUMAwlNjSoAE9cArgQbmQA3gh0RxAiiIhqamQ5ASTzXjTM7Nzy3DbOWlx6aFo+ezs7IA",
+        );
+        println!("{url}");
+        assert_eq!(url, expected);
+    }
+
+    #[test]
+    fn test_convert_vega_to_url() {
+        let vl_spec: serde_json::Value = serde_json::from_str(
+            r#"
+{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "description": "A basic stacked bar chart example.",
+  "width": 500,
+  "height": 200,
+  "padding": 5,
+
+  "data": [
+    {
+      "name": "table",
+      "values": [
+        {"x": 0, "y": 28, "c": 0}, {"x": 0, "y": 55, "c": 1},
+        {"x": 1, "y": 43, "c": 0}, {"x": 1, "y": 91, "c": 1},
+        {"x": 2, "y": 81, "c": 0}, {"x": 2, "y": 53, "c": 1},
+        {"x": 3, "y": 19, "c": 0}, {"x": 3, "y": 87, "c": 1},
+        {"x": 4, "y": 52, "c": 0}, {"x": 4, "y": 48, "c": 1},
+        {"x": 5, "y": 24, "c": 0}, {"x": 5, "y": 49, "c": 1},
+        {"x": 6, "y": 87, "c": 0}, {"x": 6, "y": 66, "c": 1},
+        {"x": 7, "y": 17, "c": 0}, {"x": 7, "y": 27, "c": 1},
+        {"x": 8, "y": 68, "c": 0}, {"x": 8, "y": 16, "c": 1},
+        {"x": 9, "y": 49, "c": 0}, {"x": 9, "y": 15, "c": 1}
+      ],
+      "transform": [
+        {
+          "type": "stack",
+          "groupby": ["x"],
+          "sort": {"field": "c"},
+          "field": "y"
+        }
+      ]
+    }
+  ],
+
+  "scales": [
+    {
+      "name": "x",
+      "type": "band",
+      "range": "width",
+      "domain": {"data": "table", "field": "x"}
+    },
+    {
+      "name": "y",
+      "type": "linear",
+      "range": "height",
+      "nice": true, "zero": true,
+      "domain": {"data": "table", "field": "y1"}
+    },
+    {
+      "name": "color",
+      "type": "ordinal",
+      "range": "category",
+      "domain": {"data": "table", "field": "c"}
+    }
+  ],
+
+  "axes": [
+    {"orient": "bottom", "scale": "x", "zindex": 1},
+    {"orient": "left", "scale": "y", "zindex": 1}
+  ],
+
+  "marks": [
+    {
+      "type": "rect",
+      "from": {"data": "table"},
+      "encode": {
+        "enter": {
+          "x": {"scale": "x", "field": "x"},
+          "width": {"scale": "x", "band": 1, "offset": -1},
+          "y": {"scale": "y", "field": "y0"},
+          "y2": {"scale": "y", "field": "y1"},
+          "fill": {"scale": "color", "field": "c"}
+        },
+        "update": {
+          "fillOpacity": {"value": 1}
+        },
+        "hover": {
+          "fillOpacity": {"value": 0.5}
+        }
+      }
+    }
+  ]
+}
+        "#,
+        )
+        .unwrap();
+
+        let url = vega_to_url(&vl_spec).unwrap();
+        println!("{url}");
+        let expected = concat!(
+            "https://vega.github.io/editor/#/url/vega/",
+            "N4IgJAzgxgFgpgWwIYgFwhgF0wBwqgegIDc4BzJAOjIEtMYBXAI0poHsDp5kTykSArJQBWENgDsQAGhAATONA",
+            "BONHJnaT0AQQAETJBBpRtETEigBrOLN1JF22Lcza4ADyQIcAGziVpIAO40svRoAgAMYTLwNGRYaABMETI4SLK",
+            "yNOJkoTKySKZoANqg4u5waCCmTN5+xEieDAqFoC5okSAAngkAHDJQrQC+Us2tMp2oAgK9aACMg8Oo06NoACwA",
+            "zFOoYXMgLQtLqACciyB9C9u78ftdx6dbQzsJ+wLrJzPnaC9j0wcbd-OfaC6AHYNrN7rtlk9Lq9Nu9UJCOisej",
+            "CwfNJojUPEEbc4eixssfii4QA2K4gmF-B6oUkY4k006oqnkr7knHgtDMhKst7s1DIsbE5Fs+b8mb0nnzQn4wn",
+            "CqlSmbohn9AC6MkwiiQ4ggADM2IoEE0Ku0cGV0CYzOY-GRFGwGDgmGMCg9VSAxIpMGhQNqaHBPLJyn1BiBvb7",
+            "-ehOiqVTJoHVGqgiiASghTQ81caU3pxP6ZBrMinAsEYH5ZGxkBlPXI8ih0JVqjIQ37yi1+tskynOmmTeVPBk4L",
+            "Y-LmyCnorEPTJxIZTeqGjIAF5wG1oadwHKlpDl1CgXL5GtIKples+xvh6YgFv3NsBtiePV+TDp8p69IlTwDzVD",
+            "gN5ch6jtyNcbrcq3KWsD2DI8w1eFsXSQFw4wTPUfXED10CYNhsFLPwY2qdAWjnDJ5F2RkELgJDuzgbUx1dKBY3",
+            "KX9Z3w1w3hdZBFHMCBDXvLt0EUOAoEo7UbQNTdKx3Co92qIMSKgNh5ArEjMAXCtdlALCU1wsDQybM8ZALEJhNU",
+            "rSZEzMNjjYbVtQgOBkIAWjBDEVOo7DEUPTTwzCbSOniCsDPDPwGwg9pTyDb1PFffTHJTaSb0UPzwIDM8gztbdT",
+            "S9GhQoAeRSKA6DGUBanqU1ZiDGA2FIGLhJCzxMrMHKK3yhpWkoAQWyg-ogA",
+        );
+        assert_eq!(url, expected);
     }
 }

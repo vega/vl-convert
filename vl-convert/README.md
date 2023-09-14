@@ -22,10 +22,12 @@ Commands:
   vl2png     Convert a Vega-Lite specification to an PNG image
   vl2jpeg    Convert a Vega-Lite specification to an JPEG image
   vl2pdf     Convert a Vega-Lite specification to a PDF image
+  vl2url     Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
   vg2svg     Convert a Vega specification to an SVG image
   vg2png     Convert a Vega specification to an PNG image
   vg2jpeg    Convert a Vega specification to an JPEG image
   vg2pdf     Convert a Vega specification to an PDF image
+  vg2url     Convert a Vega specification to a URL that opens the chart in the Vega editor
   ls-themes  List available themes
   cat-theme  Print the config JSON for a theme
   help       Print this message or the help of the given subcommand(s)
@@ -139,6 +141,19 @@ For example, convert a Vega-Lite specification file named `in.vl.json` into a PN
 $ vl-convert vl2pdf -i ./in.vl.json -o ./out.pdf --scale 2
 ```
 
+### vl2url
+Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
+
+```
+Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
+
+Usage: vl-convert vl2url --input <INPUT>
+
+Options:
+  -i, --input <INPUT>  Path to input Vega-Lite file
+  -h, --help           Print help
+```
+
 ### vg2svg
 Convert a Vega specification to an SVG image
 
@@ -200,6 +215,19 @@ For example, convert a Vega specification file named `in.vg.json` into a PDF fil
 
 ```plain
 $ vl-convert vg2pdf -i ./in.vg.json -o ./out.pdf --scale 2
+```
+
+### vg2url
+Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
+
+```
+Convert a Vega specification to a URL that opens the chart in the Vega editor
+
+Usage: vl-convert vg2url --input <INPUT>
+
+Options:
+  -i, --input <INPUT>  Path to input Vega file
+  -h, --help           Print help
 ```
 
 ### ls-themes
