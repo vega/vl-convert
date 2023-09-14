@@ -1097,7 +1097,7 @@ mod tests {
 }
         "#).unwrap();
 
-        let url = vegalite_to_url(&vl_spec).unwrap();
+        let url = vegalite_to_url(&vl_spec, false).unwrap();
         let expected = concat!(
             "https://vega.github.io/editor/#/url/vega-lite/",
             "N4IgJghgLhIFygK4CcA28QAspQA4Gc4B6I5CAdwDoBzASyk0QCNF8BTZAYwHsA7KNv0o8AtkQBubahAlSIAWkg",
@@ -1198,7 +1198,7 @@ mod tests {
         )
         .unwrap();
 
-        let url = vega_to_url(&vl_spec).unwrap();
+        let url = vega_to_url(&vl_spec, true).unwrap();
         println!("{url}");
         let expected = concat!(
             "https://vega.github.io/editor/#/url/vega/",
@@ -1213,7 +1213,7 @@ mod tests {
             "gN5ch6jtyNcbrcq3KWsD2DI8w1eFsXSQFw4wTPUfXED10CYNhsFLPwY2qdAWjnDJ5F2RkELgJDuzgbUx1dKBY3",
             "KX9Z3w1w3hdZBFHMCBDXvLt0EUOAoEo7UbQNTdKx3Co92qIMSKgNh5ArEjMAXCtdlALCU1wsDQybM8ZALEJhNU",
             "rSZEzMNjjYbVtQgOBkIAWjBDEVOo7DEUPTTwzCbSOniCsDPDPwGwg9pTyDb1PFffTHJTaSb0UPzwIDM8gztbdT",
-            "S9GhQoAeRSKA6DGUBanqU1ZiDGA2FIGLhJCzxMrMHKK3yhpWkoAQWyg-ogA",
+            "S9GhQoAeRSKA6DGUBanqU1ZiDGA2FIGLhJCzxMrMHKK3yhpWkoAQWyg-ogA/view",
         );
         assert_eq!(url, expected);
     }
