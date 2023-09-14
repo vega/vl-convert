@@ -4,7 +4,7 @@ use clap::{arg, Parser, Subcommand};
 use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
-use vl_convert_rs::converter::{VlConverter, VlOpts};
+use vl_convert_rs::converter::{vega_to_url, vegalite_to_url, VlConverter, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
@@ -202,6 +202,18 @@ enum Commands {
         font_dir: Option<String>,
     },
 
+    /// Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
+    #[command(arg_required_else_help = true)]
+    Vl2url {
+        /// Path to input Vega-Lite file
+        #[arg(short, long)]
+        input: String,
+
+        /// Open chart in fullscreen mode
+        #[arg(long, default_value = "false")]
+        fullscreen: bool,
+    },
+
     /// Convert a Vega specification to an SVG image
     #[command(arg_required_else_help = true)]
     Vg2svg {
@@ -284,6 +296,18 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+    },
+
+    /// Convert a Vega specification to a URL that opens the chart in the Vega editor
+    #[command(arg_required_else_help = true)]
+    Vg2url {
+        /// Path to input Vega file
+        #[arg(short, long)]
+        input: String,
+
+        /// Open chart in fullscreen mode
+        #[arg(long, default_value = "false")]
+        fullscreen: bool,
     },
 
     /// List available themes
@@ -404,6 +428,11 @@ async fn main() -> Result<(), anyhow::Error> {
             )
             .await?
         }
+        Vl2url { input, fullscreen } => {
+            let vl_str = read_input_string(&input)?;
+            let vl_spec = serde_json::from_str(&vl_str)?;
+            println!("{}", vegalite_to_url(&vl_spec, fullscreen)?)
+        }
         Vg2svg {
             input,
             output,
@@ -440,6 +469,11 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vg_2_pdf(&input, &output, scale).await?
+        }
+        Vg2url { input, fullscreen } => {
+            let vg_str = read_input_string(&input)?;
+            let vg_spec = serde_json::from_str(&vg_str)?;
+            println!("{}", vega_to_url(&vg_spec, fullscreen)?)
         }
         LsThemes => list_themes().await?,
         CatTheme { theme } => cat_theme(&theme).await?,
