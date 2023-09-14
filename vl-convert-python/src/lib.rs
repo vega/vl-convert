@@ -439,6 +439,40 @@ fn vegalite_to_pdf(
     }))
 }
 
+/// Convert a Vega-Lite spec to a URL that opens the chart in the Vega editor
+///
+/// Args:
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
+///     fullscreen (bool): Whether to open the chart in full screen in the editor
+/// Returns:
+///     str: URL string
+#[pyfunction]
+#[pyo3(text_signature = "(vl_spec, fullscreen)")]
+fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
+    let vl_spec = parse_json_spec(vl_spec)?;
+    Ok(vl_convert_rs::converter::vegalite_to_url(
+        &vl_spec,
+        fullscreen.unwrap_or(false),
+    )?)
+}
+
+/// Convert a Vega spec to a URL that opens the chart in the Vega editor
+///
+/// Args:
+///     vg_spec (str | dict): Vega JSON specification string or dict
+///     fullscreen (bool): Whether to open the chart in full screen in the editor
+/// Returns:
+///     str: URL string
+#[pyfunction]
+#[pyo3(text_signature = "(vg_spec, fullscreen)")]
+fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    Ok(vl_convert_rs::converter::vega_to_url(
+        &vg_spec,
+        fullscreen.unwrap_or(false),
+    )?)
+}
+
 /// Helper function to parse an input Python string or dict as a serde_json::Value
 fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
     Python::with_gil(|py| -> PyResult<serde_json::Value> {
@@ -535,10 +569,12 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_pdf, m)?)?;
+    m.add_function(wrap_pyfunction!(vegalite_to_url, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_pdf, m)?)?;
+    m.add_function(wrap_pyfunction!(vega_to_url, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
