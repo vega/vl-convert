@@ -208,6 +208,10 @@ enum Commands {
         /// Path to input Vega-Lite file
         #[arg(short, long)]
         input: String,
+
+        /// Open chart in fullscreen mode
+        #[arg(long, default_value = "false")]
+        fullscreen: bool,
     },
 
     /// Convert a Vega specification to an SVG image
@@ -300,6 +304,10 @@ enum Commands {
         /// Path to input Vega file
         #[arg(short, long)]
         input: String,
+
+        /// Open chart in fullscreen mode
+        #[arg(long, default_value = "false")]
+        fullscreen: bool,
     },
 
     /// List available themes
@@ -420,10 +428,10 @@ async fn main() -> Result<(), anyhow::Error> {
             )
             .await?
         }
-        Vl2url { input } => {
+        Vl2url { input, fullscreen } => {
             let vl_str = read_input_string(&input)?;
             let vl_spec = serde_json::from_str(&vl_str)?;
-            println!("{}", vegalite_to_url(&vl_spec)?)
+            println!("{}", vegalite_to_url(&vl_spec, fullscreen)?)
         }
         Vg2svg {
             input,
@@ -462,10 +470,10 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             vg_2_pdf(&input, &output, scale).await?
         }
-        Vg2url { input } => {
+        Vg2url { input, fullscreen } => {
             let vg_str = read_input_string(&input)?;
             let vg_spec = serde_json::from_str(&vg_str)?;
-            println!("{}", vega_to_url(&vg_spec)?)
+            println!("{}", vega_to_url(&vg_spec, fullscreen)?)
         }
         LsThemes => list_themes().await?,
         CatTheme { theme } => cat_theme(&theme).await?,

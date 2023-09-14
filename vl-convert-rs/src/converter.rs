@@ -987,19 +987,29 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
     Ok(data)
 }
 
-pub fn vegalite_to_url(vl_spec: &serde_json::Value) -> Result<String, AnyError> {
+pub fn vegalite_to_url(vl_spec: &serde_json::Value, fullscreen: bool) -> Result<String, AnyError> {
     let spec_str = serde_json::to_string(vl_spec)?;
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
+    let view = if fullscreen {
+        "/view".to_string()
+    } else {
+        String::new()
+    };
     Ok(format!(
-        "https://vega.github.io/editor/#/url/vega-lite/{compressed_data}"
+        "https://vega.github.io/editor/#/url/vega-lite/{compressed_data}{view}"
     ))
 }
 
-pub fn vega_to_url(vg_spec: &serde_json::Value) -> Result<String, AnyError> {
+pub fn vega_to_url(vg_spec: &serde_json::Value, fullscreen: bool) -> Result<String, AnyError> {
     let spec_str = serde_json::to_string(vg_spec)?;
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
+    let view = if fullscreen {
+        "/view".to_string()
+    } else {
+        String::new()
+    };
     Ok(format!(
-        "https://vega.github.io/editor/#/url/vega/{compressed_data}"
+        "https://vega.github.io/editor/#/url/vega/{compressed_data}{view}"
     ))
 }
 
