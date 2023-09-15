@@ -8,11 +8,11 @@ homepage = "https://github.com/jonmmease/vl-convert"
 repository = "https://github.com/jonmmease/vl-convert"
 
 [dependencies]
-svg2pdf = "0.7.0"
+svg2pdf = "0.7.1"
 pdf-writer = "0.8.1"
 usvg = "0.35.0"
 anyhow = "1.0.71"
-ttf-parser = "0.19.1"
+ttf-parser = "0.19.2"
 subsetter = "0.1.1"
 miniz_oxide = "0.7.1"
 siphasher = "0.3.10"

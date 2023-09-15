@@ -7,7 +7,7 @@ use siphasher::sip128::{Hasher128, SipHasher13};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::hash::Hash;
-use ttf_parser::GlyphId;
+use ttf_parser::{GlyphId, Tag};
 use unicode_bidi::BidiInfo;
 use usvg::fontdb::{Database, Family, Query, Source, Stretch, Style, Weight};
 use usvg::{
@@ -15,6 +15,7 @@ use usvg::{
     TextToPath, Tree,
 };
 
+const CFF: Tag = Tag::from_bytes(b"CFF ");
 const SYSTEM_INFO: SystemInfo = SystemInfo {
     registry: Str(b"Adobe"),
     ordering: Str(b"Identity"),
@@ -186,10 +187,11 @@ fn write_fonts(
         let descriptor_ref = ctx.alloc.bump();
         let cmap_ref = ctx.alloc.bump();
         let data_ref = ctx.alloc.bump();
+        let is_cff = font_specs.is_cff;
 
         ctx.writer
             .type0_font(font_specs.font_ref)
-            .base_font(Name(font_specs.base_font.as_bytes()))
+            .base_font(Name(font_specs.base_font_type0.as_bytes()))
             .encoding_predefined(Name(b"Identity-H"))
             .descendant_font(cid_ref)
             .to_unicode(cmap_ref);
@@ -197,11 +199,18 @@ fn write_fonts(
         // Write the CID font referencing the font descriptor.
         let mut cid = ctx.writer.cid_font(cid_ref);
         cid.subtype(CidFontType::Type2);
+        cid.subtype(if is_cff {
+            CidFontType::Type0
+        } else {
+            CidFontType::Type2
+        });
         cid.base_font(Name(font_specs.base_font.as_bytes()));
         cid.system_info(SYSTEM_INFO);
         cid.font_descriptor(descriptor_ref);
         cid.default_width(0.0);
-        cid.cid_to_gid_map_predefined(Name(b"Identity"));
+        if !is_cff {
+            cid.cid_to_gid_map_predefined(Name(b"Identity"));
+        }
 
         // Write all non-zero glyph widths.
         let mut width_writer = cid.widths();
@@ -226,12 +235,16 @@ fn write_fonts(
             .cap_height(font_specs.cap_height)
             .stem_v(font_specs.stem_v);
 
-        font_descriptor.font_file2(data_ref);
+        if is_cff {
+            font_descriptor.font_file3(data_ref);
+        } else {
+            font_descriptor.font_file2(data_ref);
+        }
         font_descriptor.finish();
 
-        // Write the /ToUnicode character map, which maps glyph ids back to
+        // Write the /ToUnicode character map, which maps character ids back to
         // unicode codepoints to enable copying out of the PDF.
-        let cmap = create_cmap(&font_specs.glyph_set);
+        let cmap = create_cmap(&font_specs.cid_set);
         ctx.writer.cmap(cmap_ref, &cmap.finish());
 
         let glyphs: Vec<_> = font_specs.glyph_set.keys().copied().collect();
@@ -241,6 +254,9 @@ fn write_fonts(
 
         let mut stream = ctx.writer.stream(data_ref, &subset_font_data);
         stream.filter(Filter::FlateDecode);
+        if is_cff {
+            stream.pair(Name(b"Subtype"), Name(b"CIDFontType0C"));
+        }
         stream.finish();
     }
     Ok(())
@@ -477,6 +493,9 @@ struct FontMetrics {
     cap_height: f32,
     stem_v: f32,
     base_font: String,
+    is_cff: bool,
+    base_font_type0: String,
+    cid_set: BTreeMap<u16, String>,
 }
 
 /// Compute the font metrics and references required by PDF embedding for a usvg::Font
@@ -539,6 +558,8 @@ fn compute_font_metrics(
 
     let ttf = ttf_parser::Face::parse(&font_data, face.index)?;
 
+    let is_cff = ttf.raw_face().table(CFF).is_some();
+
     // Conversion function from ttf values in em to PDF's font units
     let to_font_units = |v: f32| (v / ttf.units_per_em() as f32) * 1000.0;
 
@@ -561,20 +582,27 @@ fn compute_font_metrics(
 
     // Compute glyph set and chart set
     let mut glyph_set: BTreeMap<u16, String> = BTreeMap::new();
+    let mut cid_set: BTreeMap<u16, String> = BTreeMap::new();
     let mut char_set: BTreeMap<char, u16> = BTreeMap::new();
     for ch in chars {
         if let Some(g) = ttf.glyph_index(*ch) {
+            let cid = glyph_cid(&ttf, g.0);
             glyph_set.entry(g.0).or_default().push(*ch);
-            char_set.insert(*ch, g.0);
+            cid_set.entry(cid).or_default().push(*ch);
+            char_set.insert(*ch, cid);
         }
     }
 
     // Compute widths
-    let num_glyphs = ttf.number_of_glyphs();
-    let mut widths = vec![0.0; num_glyphs as usize];
-    for g in glyph_set.keys().copied() {
-        let x = ttf.glyph_hor_advance(GlyphId(g)).unwrap_or(0);
-        widths[g as usize] = to_font_units(x as f32);
+    let mut widths = vec![];
+    for gid in std::iter::once(0).chain(glyph_set.keys().copied()) {
+        let width = ttf.glyph_hor_advance(GlyphId(gid)).unwrap_or(0);
+        let units = to_font_units(width as f32);
+        let cid = glyph_cid(&ttf, gid);
+        if usize::from(cid) >= widths.len() {
+            widths.resize(usize::from(cid) + 1, 0.0);
+            widths[usize::from(cid)] = units;
+        }
     }
 
     // metrics
@@ -591,14 +619,22 @@ fn compute_font_metrics(
     // Compute base_font name with subset tag
     let subset_tag = subset_tag(&glyph_set);
     let base_font = format!("{subset_tag}+{postscript_name}");
+    let base_font_type0 = if is_cff {
+        format!("{base_font}-Identity-H")
+    } else {
+        base_font.clone()
+    };
 
     Ok(FontMetrics {
         base_font,
+        base_font_type0,
+        is_cff,
         font_ref: ctx.alloc.bump(),
         font_ref_name: Vec::from(ctx.next_font_name().as_bytes()),
         font_data,
         face_index: face.index,
         glyph_set,
+        cid_set,
         char_set,
         flags,
         bbox,
@@ -632,10 +668,10 @@ fn hash128<T: Hash + ?Sized>(value: &T) -> u128 {
 }
 
 /// Create a /ToUnicode CMap.
-fn create_cmap(glyph_set: &BTreeMap<u16, String>) -> UnicodeCmap {
+fn create_cmap(cid_set: &BTreeMap<u16, String>) -> UnicodeCmap {
     // Produce a reverse mapping from glyphs to unicode strings.
     let mut cmap = UnicodeCmap::new(CMAP_NAME, SYSTEM_INFO);
-    for (&g, text) in glyph_set.iter() {
+    for (&g, text) in cid_set.iter() {
         if !text.is_empty() {
             cmap.pair_with_multiple(g, text.chars());
         }
@@ -647,4 +683,37 @@ fn create_cmap(glyph_set: &BTreeMap<u16, String>) -> UnicodeCmap {
 fn deflate(data: &[u8]) -> Vec<u8> {
     const COMPRESSION_LEVEL: u8 = 6;
     miniz_oxide::deflate::compress_to_vec_zlib(data, COMPRESSION_LEVEL)
+}
+
+/// Get the CID for a glyph id.
+///
+/// jonmmease: function and docstring taken from Typst
+///
+/// When writing text into a PDF, we have to specify CIDs (character ids) not
+/// GIDs (glyph IDs).
+///
+/// Most of the time, the mapping between these two is an identity mapping. In
+/// particular, for TrueType fonts, the mapping is an identity mapping because
+/// of this line above:
+/// ```ignore
+/// cid.cid_to_gid_map_predefined(Name(b"Identity"));
+/// ```
+///
+/// However, CID-keyed CFF fonts may have a non-identity mapping defined in
+/// their charset. For those, we must map the glyph IDs in a `TextItem` to CIDs.
+/// The font defines the map through its charset. The charset usually maps
+/// glyphs to SIDs (string ids) specifying the glyph's name. Not for CID-keyed
+/// fonts though! For these, the SIDs are CIDs in disguise. Relevant quote from
+/// the CFF spec:
+///
+/// > The charset data, although in the same format as non-CIDFonts, will
+/// > represent CIDs rather than SIDs, [...]
+///
+/// This function performs the mapping from glyph ID to CID. It also works for
+/// non CID-keyed fonts. Then, it will simply return the glyph ID.
+fn glyph_cid(ttf: &ttf_parser::Face, glyph_id: u16) -> u16 {
+    ttf.tables()
+        .cff
+        .and_then(|cff| cff.glyph_cid(ttf_parser::GlyphId(glyph_id)))
+        .unwrap_or(glyph_id)
 }
