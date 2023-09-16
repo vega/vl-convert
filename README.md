@@ -25,10 +25,15 @@ Commands:
   vl2png     Convert a Vega-Lite specification to an PNG image
   vl2jpeg    Convert a Vega-Lite specification to an JPEG image
   vl2pdf     Convert a Vega-Lite specification to a PDF image
+  vl2url     Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
   vg2svg     Convert a Vega specification to an SVG image
   vg2png     Convert a Vega specification to an PNG image
   vg2jpeg    Convert a Vega specification to an JPEG image
   vg2pdf     Convert a Vega specification to an PDF image
+  vg2url     Convert a Vega specification to a URL that opens the chart in the Vega editor
+  svg2png    Convert an SVG image to a PNG image
+  svg2jpeg   Convert an SVG image to a JPEG image
+  svg2pdf    Convert an SVG image to a PDF image
   ls-themes  List available themes
   cat-theme  Print the config JSON for a theme
   help       Print this message or the help of the given subcommand(s)

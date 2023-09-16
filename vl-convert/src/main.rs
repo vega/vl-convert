@@ -310,6 +310,74 @@ enum Commands {
         fullscreen: bool,
     },
 
+    /// Convert an SVG image to a PNG image
+    #[command(arg_required_else_help = true)]
+    Svg2png {
+        /// Path to input SVG file
+        #[arg(short, long)]
+        input: String,
+
+        /// Path to output PNG file to be created
+        #[arg(short, long)]
+        output: String,
+
+        /// Image scale factor
+        #[arg(long, default_value = "1.0")]
+        scale: f32,
+
+        /// Pixels per inch
+        #[arg(short, long, default_value = "72.0")]
+        ppi: f32,
+
+        /// Additional directory to search for fonts
+        #[arg(long)]
+        font_dir: Option<String>,
+    },
+
+    /// Convert an SVG image to a JPEG image
+    #[command(arg_required_else_help = true)]
+    Svg2jpeg {
+        /// Path to input SVG file
+        #[arg(short, long)]
+        input: String,
+
+        /// Path to output JPEG file to be created
+        #[arg(short, long)]
+        output: String,
+
+        /// Image scale factor
+        #[arg(long, default_value = "1.0")]
+        scale: f32,
+
+        /// JPEG Quality between 0 (worst) and 100 (best)
+        #[arg(short, long, default_value = "90")]
+        quality: u8,
+
+        /// Additional directory to search for fonts
+        #[arg(long)]
+        font_dir: Option<String>,
+    },
+
+    /// Convert an SVG image to a PDF image
+    #[command(arg_required_else_help = true)]
+    Svg2pdf {
+        /// Path to input SVG file
+        #[arg(short, long)]
+        input: String,
+
+        /// Path to output PDF file to be created
+        #[arg(short, long)]
+        output: String,
+
+        /// Image scale factor
+        #[arg(long, default_value = "1.0")]
+        scale: f32,
+
+        /// Additional directory to search for fonts
+        #[arg(long)]
+        font_dir: Option<String>,
+    },
+
     /// List available themes
     LsThemes,
 
@@ -474,6 +542,41 @@ async fn main() -> Result<(), anyhow::Error> {
             let vg_str = read_input_string(&input)?;
             let vg_spec = serde_json::from_str(&vg_str)?;
             println!("{}", vega_to_url(&vg_spec, fullscreen)?)
+        }
+        Svg2png {
+            input,
+            output,
+            scale,
+            ppi,
+            font_dir,
+        } => {
+            register_font_dir(font_dir)?;
+            let svg = read_input_string(&input)?;
+            let png_data = vl_convert_rs::converter::svg_to_png(&svg, scale, Some(ppi))?;
+            write_output_binary(&output, &png_data)?;
+        }
+        Svg2jpeg {
+            input,
+            output,
+            scale,
+            quality,
+            font_dir,
+        } => {
+            register_font_dir(font_dir)?;
+            let svg = read_input_string(&input)?;
+            let jpeg_data = vl_convert_rs::converter::svg_to_jpeg(&svg, scale, Some(quality))?;
+            write_output_binary(&output, &jpeg_data)?;
+        }
+        Svg2pdf {
+            input,
+            output,
+            scale,
+            font_dir,
+        } => {
+            register_font_dir(font_dir)?;
+            let svg = read_input_string(&input)?;
+            let pdf_data = vl_convert_rs::converter::svg_to_pdf(&svg, scale)?;
+            write_output_binary(&output, &pdf_data)?;
         }
         LsThemes => list_themes().await?,
         CatTheme { theme } => cat_theme(&theme).await?,
