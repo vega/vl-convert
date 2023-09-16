@@ -113,9 +113,10 @@ jobs:
         run: |
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - name: Run tests
+        # Run tests on single thread for Deno, which expects this
+        run: |
+          cargo test -- --test-threads=1
       - name: Upload test failures
         uses: actions/upload-artifact@v2
         if: always()
