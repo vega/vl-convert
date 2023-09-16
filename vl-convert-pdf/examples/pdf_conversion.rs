@@ -17,5 +17,5 @@ fn main() {
     font_db.load_system_fonts();
 
     let pdf_bytes = svg_to_pdf(&tree, &font_db, 1.0).unwrap();
-    fs::write("target/hello.pdf".to_string(), pdf_bytes).unwrap();
+    fs::write("target/hello.pdf", pdf_bytes).unwrap();
 }

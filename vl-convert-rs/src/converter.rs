@@ -908,7 +908,7 @@ pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, An
     // catch_unwind so that we don't poison Mutexes
     // if usvg/resvg panics
     let response = panic::catch_unwind(|| {
-        let mut rtree = match parse_svg(&svg) {
+        let mut rtree = match parse_svg(svg) {
             Ok(rtree) => rtree,
             Err(err) => return Err(err),
         };
@@ -959,7 +959,7 @@ pub fn svg_to_pdf(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
         .lock()
         .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
 
-    let tree = parse_svg(&svg)?;
+    let tree = parse_svg(svg)?;
     vl_convert_pdf::svg_to_pdf(&tree, &font_db, scale)
 }
 
