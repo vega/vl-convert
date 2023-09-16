@@ -28,6 +28,9 @@ Commands:
   vg2jpeg    Convert a Vega specification to an JPEG image
   vg2pdf     Convert a Vega specification to an PDF image
   vg2url     Convert a Vega specification to a URL that opens the chart in the Vega editor
+  svg2png    Convert an SVG image to a PNG image
+  svg2jpeg   Convert an SVG image to a JPEG image
+  svg2pdf    Convert an SVG image to a PDF image
   ls-themes  List available themes
   cat-theme  Print the config JSON for a theme
   help       Print this message or the help of the given subcommand(s)
@@ -230,6 +233,54 @@ Options:
   -i, --input <INPUT>  Path to input Vega file
       --fullscreen     Open chart in fullscreen mode
   -h, --help           Print help
+```
+
+### svg2png
+Convert an SVG image to a PNG image
+
+```
+Convert an SVG image to a PNG image
+
+Usage: vl-convert svg2png [OPTIONS] --input <INPUT> --output <OUTPUT>
+
+Options:
+  -i, --input <INPUT>        Path to input SVG file
+  -o, --output <OUTPUT>      Path to output PNG file to be created
+      --scale <SCALE>        Image scale factor [default: 1.0]
+  -p, --ppi <PPI>            Pixels per inch [default: 72.0]
+      --font-dir <FONT_DIR>  Additional directory to search for fonts
+  -h, --help                 Print help
+```
+
+### svg2jpeg
+Convert an SVG image to a JPEG image
+```
+Convert an SVG image to a JPEG image
+
+Usage: vl-convert svg2jpeg [OPTIONS] --input <INPUT> --output <OUTPUT>
+
+Options:
+  -i, --input <INPUT>        Path to input SVG file
+  -o, --output <OUTPUT>      Path to output JPEG file to be created
+      --scale <SCALE>        Image scale factor [default: 1.0]
+  -q, --quality <QUALITY>    JPEG Quality between 0 (worst) and 100 (best) [default: 90]
+      --font-dir <FONT_DIR>  Additional directory to search for fonts
+  -h, --help                 Print help
+```
+
+### svg2pdf
+Convert an SVG image to a PDF image
+```
+Convert an SVG image to a PDF image
+
+Usage: vl-convert svg2pdf [OPTIONS] --input <INPUT> --output <OUTPUT>
+
+Options:
+  -i, --input <INPUT>        Path to input SVG file
+  -o, --output <OUTPUT>      Path to output PDF file to be created
+      --scale <SCALE>        Image scale factor [default: 1.0]
+      --font-dir <FONT_DIR>  Additional directory to search for fonts
+  -h, --help                 Print help
 ```
 
 ### ls-themes

@@ -392,7 +392,7 @@ fn vega_to_pdf(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///
 /// Returns:
-///     bytes: JPEG image data
+///     bytes: PDF image data
 #[pyfunction]
 #[pyo3(text_signature = "(vl_spec, vl_version, scale, config, theme)")]
 fn vegalite_to_pdf(
@@ -471,6 +471,56 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
         &vg_spec,
         fullscreen.unwrap_or(false),
     )?)
+}
+
+/// Convert an SVG image string to PNG image data
+///
+/// Args:
+///     svg (str): SVG image string
+///     scale (float): Image scale factor (default 1.0)
+///     ppi (float): Pixels per inch (default 72)
+/// Returns:
+///     bytes: PNG image data
+#[pyfunction]
+#[pyo3(text_signature = "(svg, scale, ppi)")]
+fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
+    let png_data = vl_convert_rs::converter::svg_to_png(svg, scale.unwrap_or(1.0), ppi)?;
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, png_data.as_slice()))
+    }))
+}
+
+/// Convert an SVG image string to JPEG image data
+///
+/// Args:
+///     svg (str): SVG image string
+///     scale (float): Image scale factor (default 1.0)
+///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
+/// Returns:
+///     bytes: JPEG image data
+#[pyfunction]
+#[pyo3(text_signature = "(svg, scale, quality)")]
+fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
+    let jpeg_data = vl_convert_rs::converter::svg_to_jpeg(svg, scale.unwrap_or(1.0), quality)?;
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, jpeg_data.as_slice()))
+    }))
+}
+
+/// Convert an SVG image string to PDF document data
+///
+/// Args:
+///     svg (str): SVG image string
+///     scale (float): Image scale factor (default 1.0)
+/// Returns:
+///     bytes: PDF document data
+#[pyfunction]
+#[pyo3(text_signature = "(svg, scale)")]
+fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
+    let pdf_data = vl_convert_rs::converter::svg_to_pdf(svg, scale.unwrap_or(1.0))?;
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
+    }))
 }
 
 /// Helper function to parse an input Python string or dict as a serde_json::Value
@@ -575,6 +625,9 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vega_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_url, m)?)?;
+    m.add_function(wrap_pyfunction!(svg_to_png, m)?)?;
+    m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
+    m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;

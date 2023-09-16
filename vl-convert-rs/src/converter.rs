@@ -32,7 +32,6 @@ use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{TreeParsing, TreeTextToPath};
 
 use image::io::Reader as ImageReader;
-use vl_convert_pdf::svg_to_pdf;
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
 
@@ -744,7 +743,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vega_to_svg(vg_spec).await?;
-        Self::svg_to_png(&svg, scale, ppi)
+        svg_to_png(&svg, scale, ppi)
     }
 
     pub async fn vegalite_to_png(
@@ -756,7 +755,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        Self::svg_to_png(&svg, scale, ppi)
+        svg_to_png(&svg, scale, ppi)
     }
 
     pub async fn vega_to_jpeg(
@@ -767,7 +766,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vega_to_svg(vg_spec).await?;
-        Self::svg_to_jpeg(&svg, scale, quality)
+        svg_to_jpeg(&svg, scale, quality)
     }
 
     pub async fn vegalite_to_jpeg(
@@ -779,7 +778,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        Self::svg_to_jpeg(&svg, scale, quality)
+        svg_to_jpeg(&svg, scale, quality)
     }
 
     pub async fn vega_to_pdf(
@@ -789,20 +788,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vega_to_svg(vg_spec).await?;
-
-        // Load system fonts
-        let font_db = FONT_DB
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
-
-        // Parse SVG and convert text nodes to paths
-        let opts = USVG_OPTIONS
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
-
-        let tree = usvg::Tree::from_str(&svg, &opts)?;
-
-        svg_to_pdf(&tree, &font_db, scale)
+        svg_to_pdf(&svg, scale)
     }
 
     pub async fn vegalite_to_pdf(
@@ -813,83 +799,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-
-        // Load system fonts
-        let font_db = FONT_DB
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
-
-        // Parse SVG and convert text nodes to paths
-        let opts = USVG_OPTIONS
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
-
-        let tree = usvg::Tree::from_str(&svg, &opts)?;
-
-        svg_to_pdf(&tree, &font_db, scale)
-    }
-
-    fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
-        // default ppi to 72
-        let ppi = ppi.unwrap_or(72.0);
-        let scale = scale * ppi / 72.0;
-        let opts = USVG_OPTIONS
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
-
-        let font_database = FONT_DB
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
-
-        // catch_unwind so that we don't poison Mutexes
-        // if usvg/resvg panics
-        let response = panic::catch_unwind(|| {
-            let mut rtree = match usvg::Tree::from_str(svg, &opts) {
-                Ok(rtree) => rtree,
-                Err(err) => {
-                    bail!("Failed to parse SVG string: {}", err.to_string())
-                }
-            };
-            rtree.convert_text(&font_database);
-
-            let rtree = resvg::Tree::from_usvg(&rtree);
-
-            let mut pixmap = tiny_skia::Pixmap::new(
-                (rtree.size.width() * scale) as u32,
-                (rtree.size.height() * scale) as u32,
-            )
-            .unwrap();
-
-            let transform = tiny_skia::Transform::from_scale(scale, scale);
-            resvg::Tree::render(&rtree, transform, &mut pixmap.as_mut());
-
-            Ok(encode_png(pixmap, ppi))
-        });
-        match response {
-            Ok(Ok(Ok(png_result))) => Ok(png_result),
-            err => bail!("{err:?}"),
-        }
-    }
-
-    fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>, AnyError> {
-        let png_bytes = Self::svg_to_png(svg, scale, None)?;
-        let img = ImageReader::new(Cursor::new(png_bytes))
-            .with_guessed_format()?
-            .decode()?;
-
-        let quality = quality.unwrap_or(90);
-        if quality > 100 {
-            bail!(
-                "JPEG quality parameter must be between 0 and 100 inclusive. Received: {quality}"
-            );
-        }
-
-        let mut jpeg_bytes: Vec<u8> = Vec::new();
-        img.write_to(
-            &mut Cursor::new(&mut jpeg_bytes),
-            image::ImageOutputFormat::Jpeg(quality),
-        )?;
-        Ok(jpeg_bytes)
+        svg_to_pdf(&svg, scale)
     }
 
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
@@ -985,6 +895,107 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
     }
 
     Ok(data)
+}
+
+pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
+    // default ppi to 72
+    let ppi = ppi.unwrap_or(72.0);
+    let scale = scale * ppi / 72.0;
+    let font_database = FONT_DB
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+
+    // catch_unwind so that we don't poison Mutexes
+    // if usvg/resvg panics
+    let response = panic::catch_unwind(|| {
+        let mut rtree = match parse_svg(&svg) {
+            Ok(rtree) => rtree,
+            Err(err) => return Err(err),
+        };
+        rtree.convert_text(&font_database);
+
+        let rtree = resvg::Tree::from_usvg(&rtree);
+
+        let mut pixmap = tiny_skia::Pixmap::new(
+            (rtree.size.width() * scale) as u32,
+            (rtree.size.height() * scale) as u32,
+        )
+        .unwrap();
+
+        let transform = tiny_skia::Transform::from_scale(scale, scale);
+        resvg::Tree::render(&rtree, transform, &mut pixmap.as_mut());
+
+        Ok(encode_png(pixmap, ppi))
+    });
+    match response {
+        Ok(Ok(Ok(png_result))) => Ok(png_result),
+        Ok(Err(err)) => Err(err),
+        err => bail!("{err:?}"),
+    }
+}
+
+pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>, AnyError> {
+    let png_bytes = svg_to_png(svg, scale, None)?;
+    let img = ImageReader::new(Cursor::new(png_bytes))
+        .with_guessed_format()?
+        .decode()?;
+
+    let quality = quality.unwrap_or(90);
+    if quality > 100 {
+        bail!("JPEG quality parameter must be between 0 and 100 inclusive. Received: {quality}");
+    }
+
+    let mut jpeg_bytes: Vec<u8> = Vec::new();
+    img.write_to(
+        &mut Cursor::new(&mut jpeg_bytes),
+        image::ImageOutputFormat::Jpeg(quality),
+    )?;
+    Ok(jpeg_bytes)
+}
+
+pub fn svg_to_pdf(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
+    // Load system fonts
+    let font_db = FONT_DB
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+
+    let tree = parse_svg(&svg)?;
+    vl_convert_pdf::svg_to_pdf(&tree, &font_db, scale)
+}
+
+/// Helper to parse svg string to usvg Tree with more helpful error messages
+fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
+    let xml_opt = usvg::roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..Default::default()
+    };
+
+    let opts = USVG_OPTIONS
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+
+    let doc = usvg::roxmltree::Document::parse_with_options(svg, xml_opt)?;
+
+    match doc.root_element().tag_name().namespace() {
+        Some("http://www.w3.org/2000/svg") => {
+            // All good
+        }
+        Some(other) => {
+            bail!(
+                "Invalid xmlns for SVG file. \n\
+                Expected \"http://www.w3.org/2000/svg\". \n\
+                Found \"{other}\""
+            );
+        }
+        None => {
+            bail!(
+                "SVG file must have the xmlns attribute set to \"http://www.w3.org/2000/svg\"\n\
+                For example <svg width=\"100\", height=\"100\", xmlns=\"http://www.w3.org/2000/svg\">...</svg>"
+            )
+        }
+    }
+
+    Ok(usvg::Tree::from_xmltree(&doc, &opts)?)
 }
 
 pub fn vegalite_to_url(vl_spec: &serde_json::Value, fullscreen: bool) -> Result<String, AnyError> {
