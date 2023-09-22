@@ -61,7 +61,6 @@ def load_expected_png(name, vl_version, theme=None):
     "vl_version",
     [
         "v4_17",
-        "v5_6",
         "v5_7",
         "v5_8",
         "v5_9",
@@ -70,6 +69,7 @@ def load_expected_png(name, vl_version, theme=None):
         "v5_12",
         "v5_13",
         "v5_14",
+        "v5_15",
     ],
 )
 @pytest.mark.parametrize("as_dict", [False, True])

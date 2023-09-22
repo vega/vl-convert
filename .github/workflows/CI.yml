@@ -116,7 +116,7 @@ jobs:
       - name: Run tests
         # Run tests on single thread for Deno, which expects this
         run: |
-          cargo test -- --test-threads=1
+          cargo test --release -- --test-threads=1
       - name: Upload test failures
         uses: actions/upload-artifact@v2
         if: always()
