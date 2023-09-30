@@ -152,7 +152,7 @@ fn construct_page(ctx: &mut PdfContext, font_metrics: &HashMap<Font, FontMetrics
 
     // Fonts
     let mut resource_fonts = resources.fonts();
-    for mapped_font in font_metrics.values() {
+    for mapped_font in font_metrics.values().sorted_by_key(|f| f.font_ref) {
         resource_fonts.pair(
             Name(mapped_font.font_ref_name.as_slice()),
             mapped_font.font_ref,
@@ -182,7 +182,7 @@ fn write_fonts(
     ctx: &mut PdfContext,
     font_metrics: &HashMap<Font, FontMetrics>,
 ) -> Result<(), AnyError> {
-    for font_specs in font_metrics.values() {
+    for font_specs in font_metrics.values().sorted_by_key(|f| f.font_ref) {
         let cid_ref = ctx.alloc.bump();
         let descriptor_ref = ctx.alloc.bump();
         let cmap_ref = ctx.alloc.bump();
