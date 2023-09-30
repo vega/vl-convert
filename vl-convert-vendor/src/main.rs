@@ -52,6 +52,8 @@ const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
+const VEGA_TOOLTIP_PATH: &str =
+    "/pin/vega-tooltip@v0.33.0-DfMhYyd4NOGdbNfmDNiw/mode=imports,min/optimized/vega-tooltip.js";
 
 // Example custom build script.
 fn main() {
@@ -98,6 +100,15 @@ fn main() {
         VEGA_THEMES_PATH = VEGA_THEMES_PATH
     )
     .unwrap();
+
+    // Write VegaTooltip
+    writeln!(
+        imports,
+        "import * as vegaTooltip from \"{SKYPACK_URL}{VEGA_TOOLTIP_PATH}\";",
+        SKYPACK_URL = SKYPACK_URL,
+        VEGA_TOOLTIP_PATH = VEGA_TOOLTIP_PATH
+    )
+        .unwrap();
 
     fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
@@ -178,6 +189,7 @@ use deno_runtime::deno_core::error::AnyError;
 const SKYPACK_URL: &str = "{SKYPACK_URL}";
 const VEGA_PATH: &str = "{VEGA_PATH}";
 const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
+const VEGA_TOOLTIP_PATH: &str = "{VEGA_TOOLTIP_PATH}";
 
 pub fn url_for_path(path: &str) -> String {{
     format!("{{}}{{}}", SKYPACK_URL, path)
@@ -242,6 +254,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         SKYPACK_URL = SKYPACK_URL,
         VEGA_PATH = VEGA_PATH,
         VEGA_THEMES_PATH = VEGA_THEMES_PATH,
+        VEGA_TOOLTIP_PATH = VEGA_TOOLTIP_PATH,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
     // Add packages
@@ -284,6 +297,13 @@ pub fn build_import_map() -> HashMap<String, String> {{
         content,
         "    m.insert(\"{VEGA_THEMES_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_THEMES_PATH}\").to_string());",
         VEGA_THEMES_PATH=VEGA_THEMES_PATH,
+    ).unwrap();
+
+    // Vega Tooltip
+    writeln!(
+        content,
+        "    m.insert(\"{VEGA_TOOLTIP_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_TOOLTIP_PATH}\").to_string());",
+        VEGA_TOOLTIP_PATH=VEGA_TOOLTIP_PATH,
     ).unwrap();
 
     content.push_str("    m\n}\n");
