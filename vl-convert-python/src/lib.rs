@@ -473,6 +473,72 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
     )?)
 }
 
+/// Convert a Vega-Lite spec to self-contained HTML document using a particular
+/// version of the Vega-Lite JavaScript library.
+///
+/// Args:
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
+///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///         (default to latest)
+///     bundle (bool): If True (default) bundle all dependencies in HTML file
+///         If False, HTML file will load dependencies from only CDN
+///     config (dict | None): Chart configuration object to apply during conversion
+///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
+///
+/// Returns:
+///     string: HTML document
+#[pyfunction]
+#[pyo3(text_signature = "(vl_spec, vl_version, bundle, config, theme)")]
+fn vegalite_to_html(
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    bundle: Option<bool>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+) -> PyResult<String> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    Ok(PYTHON_RUNTIME.block_on(converter.vegalite_to_html(
+        vl_spec,
+        VlOpts {
+            vl_version,
+            config,
+            theme,
+            show_warnings: false,
+        },
+        bundle.unwrap_or(true),
+    ))?)
+}
+
+/// Convert a Vega spec to a self-contained HTML document
+///
+/// Args:
+///     vg_spec (str | dict): Vega JSON specification string or dict
+///     bundle (bool): If True (default) bundle all dependencies in HTML file
+///         If False, HTML file will load dependencies from only CDN
+///
+/// Returns:
+///     string: HTML document
+#[pyfunction]
+#[pyo3(text_signature = "(vg_spec, bundle)")]
+fn vega_to_html(vg_spec: PyObject, bundle: Option<bool>) -> PyResult<String> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+    Ok(PYTHON_RUNTIME.block_on(converter.vega_to_html(vg_spec, bundle.unwrap_or(true)))?)
+}
+
 /// Convert an SVG image string to PNG image data
 ///
 /// Args:
@@ -620,11 +686,13 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_url, m)?)?;
+    m.add_function(wrap_pyfunction!(vegalite_to_html, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_url, m)?)?;
+    m.add_function(wrap_pyfunction!(vega_to_html, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;

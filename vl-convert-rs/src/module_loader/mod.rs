@@ -12,8 +12,6 @@ use deno_runtime::deno_core::{
 };
 use regex::Regex;
 use std::collections::HashMap;
-use std::fmt::format;
-use std::ops::Deref;
 use std::pin::Pin;
 
 lazy_static! {
