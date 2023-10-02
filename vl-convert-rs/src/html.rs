@@ -84,7 +84,6 @@ pub async fn bundle_index_js(index_js: String, vl_version: VlVersion) -> Result<
                 ..Default::default()
             },
             emit_ignore_directives: false,
-            minify: true,
         },
     )
     .await
