@@ -62,6 +62,22 @@ impl VlVersion {
     pub fn to_url(self) -> String {
         format!("{}{}", SKYPACK_URL, self.to_path())
     }
+
+    pub fn to_semver(self) -> &'static str {
+        use VlVersion::*;
+        match self {
+            v4_17 => "4.17",
+            v5_7 => "5.7",
+            v5_8 => "5.8",
+            v5_9 => "5.9",
+            v5_10 => "5.10",
+            v5_11 => "5.11",
+            v5_12 => "5.12",
+            v5_13 => "5.13",
+            v5_14 => "5.14",
+            v5_15 => "5.15",
+        }
+    }
 }
 
 impl Default for VlVersion {

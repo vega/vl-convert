@@ -166,6 +166,13 @@ fn main() {
         .collect();
     let from_str_matches_csv = from_str_matches.join(",\n            ");
 
+    // To semver match csv
+    let to_semver_matches: Vec<_> = VL_PATHS
+        .iter()
+        .map(|(ver, _)| format!("v{} => \"{}\"", ver.replace('.', "_"), ver))
+        .collect();
+    let to_semver_match_csv = to_semver_matches.join(",\n            ");
+
     // Variants csv
     let version_instances: Vec<_> = VL_PATHS
         .iter()
@@ -221,6 +228,13 @@ impl VlVersion {{
     pub fn to_url(self) -> String {{
         format!("{{}}{{}}", SKYPACK_URL, self.to_path())
     }}
+
+    pub fn to_semver(self) -> &'static str {{
+        use VlVersion::*;
+        match self {{
+            {to_semver_match_csv}
+        }}
+    }}
 }}
 
 impl Default for VlVersion {{
@@ -250,6 +264,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         vl_versions_csv = vl_versions_csv,
         path_match_csv = path_match_csv,
         from_str_matches_csv = from_str_matches_csv,
+        to_semver_match_csv = to_semver_match_csv,
         version_instances_csv = version_instances_csv,
         SKYPACK_URL = SKYPACK_URL,
         VEGA_PATH = VEGA_PATH,
