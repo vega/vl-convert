@@ -10,3 +10,4 @@ import * as v_5_14 from "https://cdn.skypack.dev/pin/vega-lite@v5.14.1-0IRM1Vigc
 import * as v_5_15 from "https://cdn.skypack.dev/pin/vega-lite@v5.15.0-l27jdbpFztiLqmj2Waun/mode=imports,min/optimized/vega-lite.js";
 import * as vega from "https://cdn.skypack.dev/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
 import * as vegaThemes from "https://cdn.skypack.dev/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
+import * as vegEmbed from "https://cdn.skypack.dev/pin/vega-embed@v6.23.0-Fpmq39rehEH8HWtd6nzv/mode=imports,min/optimized/vega-embed.js";
