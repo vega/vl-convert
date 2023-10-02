@@ -6,6 +6,8 @@ license = "BSD-3-Clause"
 readme = "README.md"
 homepage = "https://github.com/jonmmease/vl-convert"
 repository = "https://github.com/jonmmease/vl-convert"
+description = "Crate to convert SVG to PDF with embedded text"
+keywords = ["SVG", "PDF"]
 
 [dependencies]
 svg2pdf = "0.7.1"
