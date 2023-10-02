@@ -214,6 +214,35 @@ enum Commands {
         fullscreen: bool,
     },
 
+    /// Convert a Vega-Lite specification to an HTML file
+    #[command(arg_required_else_help = true)]
+    Vl2html {
+        /// Path to input Vega-Lite file
+        #[arg(short, long)]
+        input: String,
+
+        /// Path to output HTML file to be created
+        #[arg(short, long)]
+        output: String,
+
+        /// Vega-Lite Version. One of 4.17, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15
+        #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
+        vl_version: String,
+
+        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        #[arg(short, long)]
+        theme: Option<String>,
+
+        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        #[arg(short, long)]
+        config: Option<String>,
+
+        /// Whether to bundle JavaScript dependencies in the HTML file
+        /// instead of loading them from a CDN
+        #[arg(short, long)]
+        bundle: bool,
+    },
+
     /// Convert a Vega specification to an SVG image
     #[command(arg_required_else_help = true)]
     Vg2svg {
@@ -308,6 +337,23 @@ enum Commands {
         /// Open chart in fullscreen mode
         #[arg(long, default_value = "false")]
         fullscreen: bool,
+    },
+
+    /// Convert a Vega specification to an HTML file
+    #[command(arg_required_else_help = true)]
+    Vg2html {
+        /// Path to input Vega file
+        #[arg(short, long)]
+        input: String,
+
+        /// Path to output HTML file to be created
+        #[arg(short, long)]
+        output: String,
+
+        /// Whether to bundle JavaScript dependencies in the HTML file
+        /// instead of loading them from a CDN
+        #[arg(short, long)]
+        bundle: bool,
     },
 
     /// Convert an SVG image to a PNG image
@@ -501,6 +547,26 @@ async fn main() -> Result<(), anyhow::Error> {
             let vl_spec = serde_json::from_str(&vl_str)?;
             println!("{}", vegalite_to_url(&vl_spec, fullscreen)?)
         }
+        Vl2html { input, output, vl_version, theme, config, bundle } => {
+            // Initialize converter
+            let vl_str = read_input_string(&input)?;
+            let vl_spec = serde_json::from_str(&vl_str)?;
+            let config = read_config_json(config)?;
+            let vl_version = parse_vl_version(&vl_version)?;
+
+            let mut converter = VlConverter::new();
+            let html = converter.vegalite_to_html(
+                vl_spec,
+                VlOpts {
+                    config,
+                    theme,
+                    vl_version,
+                    show_warnings: false,
+                },
+                bundle,
+            ).await?;
+            write_output_string(&output, &html)?;
+        }
         Vg2svg {
             input,
             output,
@@ -542,6 +608,18 @@ async fn main() -> Result<(), anyhow::Error> {
             let vg_str = read_input_string(&input)?;
             let vg_spec = serde_json::from_str(&vg_str)?;
             println!("{}", vega_to_url(&vg_spec, fullscreen)?)
+        }
+        Vg2html { input, output, bundle } => {
+            // Initialize converter
+            let vg_str = read_input_string(&input)?;
+            let vg_spec = serde_json::from_str(&vg_str)?;
+
+            let mut converter = VlConverter::new();
+            let html = converter.vega_to_html(
+                vg_spec,
+                bundle,
+            ).await?;
+            write_output_string(&output, &html)?;
         }
         Svg2png {
             input,

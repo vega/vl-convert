@@ -3,7 +3,7 @@ use crate::module_loader::import_map::{SKYPACK_URL, VEGA_EMBED_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
 use deno_core::error::AnyError;
-use deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, ModuleSpecifier};
+use deno_emit::{bundle, BundleOptions, BundleType, EmitOptions};
 use std::path::Path;
 
 pub fn get_vegalite_index_js(

@@ -1,7 +1,7 @@
 use crate::module_loader::import_map::{
-    url_for_path, vega_themes_url, vega_url, VlVersion, SKYPACK_URL, VEGA_EMBED_PATH,
+    url_for_path, vega_themes_url, vega_url, VlVersion,
 };
-use crate::module_loader::{VlConvertBundleLoader, VlConvertModuleLoader, IMPORT_MAP};
+use crate::module_loader::{VlConvertModuleLoader, IMPORT_MAP};
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
@@ -14,7 +14,7 @@ use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8, Extension};
 
-use deno_core::{op, ModuleCode, ModuleSpecifier, Op};
+use deno_core::{op, ModuleCode, Op};
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_core;
 use deno_runtime::deno_web::BlobStore;
@@ -22,7 +22,6 @@ use deno_runtime::permissions::{Permissions, PermissionsContainer};
 use deno_runtime::worker::MainWorker;
 use deno_runtime::worker::WorkerOptions;
 
-use deno_emit::{bundle, BundleOptions, BundleType, EmitOptions};
 use deno_runtime::deno_fs::RealFs;
 use std::panic;
 use std::thread;
@@ -1131,6 +1130,52 @@ pub fn vega_to_url(vg_spec: &serde_json::Value, fullscreen: bool) -> Result<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+    use std::fs;
+
+    #[tokio::test]
+    async fn try_emit() {
+        let mut ctx = VlConverter::new();
+        let spec = json!({
+        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+        "description": "Pie Chart with percentage_tooltip",
+        "data": {
+          "values": [
+            {"category": 1, "value": 4},
+            {"category": 2, "value": 6},
+            {"category": 3, "value": 10},
+            {"category": 4, "value": 3},
+            {"category": 5, "value": 7},
+            {"category": 6, "value": 8}
+          ]
+        },
+        "mark": {"type": "arc", "tooltip": true},
+        "encoding": {
+          "theta": {"field": "value", "type": "quantitative", "stack": "normalize"},
+          "color": {"field": "category", "type": "nominal"}
+        }
+              });
+
+        let html = ctx
+            .vegalite_to_html(
+                spec,
+                VlOpts {
+                    config: None,
+                    theme: Some("dark".to_string()),
+                    vl_version: VlVersion::v5_13,
+                    show_warnings: false,
+                },
+                true,
+            )
+            .await
+            .unwrap();
+
+        fs::write(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("bundled_fn.html"),
+            html,
+        )
+        .unwrap();
+    }
 
     #[tokio::test]
     async fn test_convert_context() {

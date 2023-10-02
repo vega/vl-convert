@@ -23,11 +23,13 @@ Commands:
   vl2jpeg    Convert a Vega-Lite specification to an JPEG image
   vl2pdf     Convert a Vega-Lite specification to a PDF image
   vl2url     Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
+  vl2html    Convert a Vega-Lite specification to an HTML file
   vg2svg     Convert a Vega specification to an SVG image
   vg2png     Convert a Vega specification to an PNG image
   vg2jpeg    Convert a Vega specification to an JPEG image
   vg2pdf     Convert a Vega specification to an PDF image
   vg2url     Convert a Vega specification to a URL that opens the chart in the Vega editor
+  vg2html    Convert a Vega specification to an HTML file
   svg2png    Convert an SVG image to a PNG image
   svg2jpeg   Convert an SVG image to a JPEG image
   svg2pdf    Convert an SVG image to a PDF image
@@ -158,6 +160,22 @@ Options:
   -h, --help           Print help
 ```
 
+### vl2html
+Convert a Vega-Lite specification to an HTML file
+```
+Convert a Vega-Lite specification to an HTML file
+
+Usage: vl-convert vl2html [OPTIONS] --input <INPUT> --output <OUTPUT>
+
+Options:
+  -i, --input <INPUT>            Path to input Vega-Lite file
+  -o, --output <OUTPUT>          Path to output HTML file to be created
+  -v, --vl-version <VL_VERSION>  Vega-Lite Version. One of 4.17, 5.7, 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15 [default: 5.15]
+  -t, --theme <THEME>            Named theme provided by the vegaThemes package (e.g. "dark")
+  -c, --config <CONFIG>          Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+  -b, --bundle                   Whether to bundle JavaScript dependencies in the HTML file instead of loading them from a CDN
+  -h, --help                     Print help
+```
 ### vg2svg
 Convert a Vega specification to an SVG image
 
@@ -233,6 +251,20 @@ Options:
   -i, --input <INPUT>  Path to input Vega file
       --fullscreen     Open chart in fullscreen mode
   -h, --help           Print help
+```
+
+### vg2html
+Convert a Vega specification to an HTML file
+```
+Convert a Vega specification to an HTML file
+
+Usage: vl-convert vg2html [OPTIONS] --input <INPUT> --output <OUTPUT>
+
+Options:
+  -i, --input <INPUT>    Path to input Vega file
+  -o, --output <OUTPUT>  Path to output HTML file to be created
+  -b, --bundle           Whether to bundle JavaScript dependencies in the HTML file instead of loading them from a CDN
+  -h, --help             Print help
 ```
 
 ### svg2png
