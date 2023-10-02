@@ -1,5 +1,5 @@
 use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
-use crate::module_loader::VlConvertModuleLoader;
+use crate::module_loader::{VlConvertModuleLoader, IMPORT_MAP};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
@@ -166,7 +166,7 @@ class WarningCollector {
             self.worker.run_event_loop(false).await?;
 
             // Override text width measurement in vega-scenegraph
-            for path in self.module_loader.import_map.keys() {
+            for path in IMPORT_MAP.keys() {
                 if path.ends_with("vega-scenegraph.js") {
                     let script_code = ModuleCode::from(format!(
                         r#"
@@ -292,7 +292,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings) {{
     }
 
     pub async fn try_new() -> Result<Self, AnyError> {
-        let module_loader = Rc::new(VlConvertModuleLoader::new());
+        let module_loader = Rc::new(VlConvertModuleLoader);
 
         let ext = Extension {
             name: "vl_convert_extensions",

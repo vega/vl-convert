@@ -10,21 +10,15 @@ use deno_runtime::deno_core::{
 use std::collections::HashMap;
 use std::pin::Pin;
 
-pub struct VlConvertModuleLoader {
-    pub import_map: HashMap<String, String>,
+lazy_static! {
+    pub static ref IMPORT_MAP: HashMap<String, String> = build_import_map();
 }
 
-impl VlConvertModuleLoader {
-    pub fn new() -> Self {
-        Self {
-            import_map: build_import_map(),
-        }
-    }
-}
+pub struct VlConvertModuleLoader;
 
 impl Default for VlConvertModuleLoader {
     fn default() -> Self {
-        Self::new()
+        Self
     }
 }
 
@@ -55,7 +49,7 @@ impl ModuleLoader for VlConvertModuleLoader {
             // run any code here
             "".to_string()
         } else {
-            self.import_map
+            IMPORT_MAP
                 .get(module_specifier.path())
                 .unwrap_or_else(|| {
                     panic!(
