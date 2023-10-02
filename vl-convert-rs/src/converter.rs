@@ -1,6 +1,4 @@
-use crate::module_loader::import_map::{
-    url_for_path, vega_themes_url, vega_url, VlVersion,
-};
+use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
 use crate::module_loader::{VlConvertModuleLoader, IMPORT_MAP};
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;

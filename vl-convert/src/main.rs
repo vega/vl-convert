@@ -547,7 +547,14 @@ async fn main() -> Result<(), anyhow::Error> {
             let vl_spec = serde_json::from_str(&vl_str)?;
             println!("{}", vegalite_to_url(&vl_spec, fullscreen)?)
         }
-        Vl2html { input, output, vl_version, theme, config, bundle } => {
+        Vl2html {
+            input,
+            output,
+            vl_version,
+            theme,
+            config,
+            bundle,
+        } => {
             // Initialize converter
             let vl_str = read_input_string(&input)?;
             let vl_spec = serde_json::from_str(&vl_str)?;
@@ -555,16 +562,18 @@ async fn main() -> Result<(), anyhow::Error> {
             let vl_version = parse_vl_version(&vl_version)?;
 
             let mut converter = VlConverter::new();
-            let html = converter.vegalite_to_html(
-                vl_spec,
-                VlOpts {
-                    config,
-                    theme,
-                    vl_version,
-                    show_warnings: false,
-                },
-                bundle,
-            ).await?;
+            let html = converter
+                .vegalite_to_html(
+                    vl_spec,
+                    VlOpts {
+                        config,
+                        theme,
+                        vl_version,
+                        show_warnings: false,
+                    },
+                    bundle,
+                )
+                .await?;
             write_output_string(&output, &html)?;
         }
         Vg2svg {
@@ -609,16 +618,17 @@ async fn main() -> Result<(), anyhow::Error> {
             let vg_spec = serde_json::from_str(&vg_str)?;
             println!("{}", vega_to_url(&vg_spec, fullscreen)?)
         }
-        Vg2html { input, output, bundle } => {
+        Vg2html {
+            input,
+            output,
+            bundle,
+        } => {
             // Initialize converter
             let vg_str = read_input_string(&input)?;
             let vg_spec = serde_json::from_str(&vg_str)?;
 
             let mut converter = VlConverter::new();
-            let html = converter.vega_to_html(
-                vg_spec,
-                bundle,
-            ).await?;
+            let html = converter.vega_to_html(vg_spec, bundle).await?;
             write_output_string(&output, &html)?;
         }
         Svg2png {
