@@ -480,8 +480,8 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
 ///         (default to latest)
-///     bundle (bool): If True (default) bundle all dependencies in HTML file
-///         If False, HTML file will load dependencies from only CDN
+///     bundle (bool): If True, bundle all dependencies in HTML file
+///         If False (default), HTML file will load dependencies from only CDN
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///
@@ -516,7 +516,7 @@ fn vegalite_to_html(
             theme,
             show_warnings: false,
         },
-        bundle.unwrap_or(true),
+        bundle.unwrap_or(false),
     ))?)
 }
 
@@ -524,8 +524,8 @@ fn vegalite_to_html(
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
-///     bundle (bool): If True (default) bundle all dependencies in HTML file
-///         If False, HTML file will load dependencies from only CDN
+///     bundle (bool): If True, bundle all dependencies in HTML file
+///         If False (default), HTML file will load dependencies from only CDN
 ///
 /// Returns:
 ///     string: HTML document
@@ -536,7 +536,7 @@ fn vega_to_html(vg_spec: PyObject, bundle: Option<bool>) -> PyResult<String> {
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
-    Ok(PYTHON_RUNTIME.block_on(converter.vega_to_html(vg_spec, bundle.unwrap_or(true)))?)
+    Ok(PYTHON_RUNTIME.block_on(converter.vega_to_html(vg_spec, bundle.unwrap_or(false)))?)
 }
 
 /// Convert an SVG image string to PNG image data
