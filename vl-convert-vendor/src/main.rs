@@ -52,8 +52,8 @@ const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
-const VEGA_TOOLTIP_PATH: &str =
-    "/pin/vega-tooltip@v0.33.0-DfMhYyd4NOGdbNfmDNiw/mode=imports,min/optimized/vega-tooltip.js";
+const VEGA_EMBED_PATH: &str =
+    "/pin/vega-embed@v6.23.0-Fpmq39rehEH8HWtd6nzv/mode=imports,min/optimized/vega-embed.js";
 
 // Example custom build script.
 fn main() {
@@ -104,11 +104,11 @@ fn main() {
     // Write VegaTooltip
     writeln!(
         imports,
-        "import * as vegaTooltip from \"{SKYPACK_URL}{VEGA_TOOLTIP_PATH}\";",
+        "import * as vegEmbed from \"{SKYPACK_URL}{VEGA_TOOLTIP_PATH}\";",
         SKYPACK_URL = SKYPACK_URL,
-        VEGA_TOOLTIP_PATH = VEGA_TOOLTIP_PATH
+        VEGA_TOOLTIP_PATH = VEGA_EMBED_PATH
     )
-        .unwrap();
+    .unwrap();
 
     fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
@@ -186,10 +186,10 @@ use std::str::FromStr;
 use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 
-const SKYPACK_URL: &str = "{SKYPACK_URL}";
-const VEGA_PATH: &str = "{VEGA_PATH}";
-const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
-const VEGA_TOOLTIP_PATH: &str = "{VEGA_TOOLTIP_PATH}";
+pub const SKYPACK_URL: &str = "{SKYPACK_URL}";
+pub const VEGA_PATH: &str = "{VEGA_PATH}";
+pub const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
+pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
 
 pub fn url_for_path(path: &str) -> String {{
     format!("{{}}{{}}", SKYPACK_URL, path)
@@ -254,7 +254,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         SKYPACK_URL = SKYPACK_URL,
         VEGA_PATH = VEGA_PATH,
         VEGA_THEMES_PATH = VEGA_THEMES_PATH,
-        VEGA_TOOLTIP_PATH = VEGA_TOOLTIP_PATH,
+        VEGA_EMBED_PATH = VEGA_EMBED_PATH,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
     // Add packages
@@ -299,11 +299,11 @@ pub fn build_import_map() -> HashMap<String, String> {{
         VEGA_THEMES_PATH=VEGA_THEMES_PATH,
     ).unwrap();
 
-    // Vega Tooltip
+    // Vega Embed
     writeln!(
         content,
-        "    m.insert(\"{VEGA_TOOLTIP_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_TOOLTIP_PATH}\").to_string());",
-        VEGA_TOOLTIP_PATH=VEGA_TOOLTIP_PATH,
+        "    m.insert(\"{VEGA_EMBED_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_EMBED_PATH}\").to_string());",
+        VEGA_EMBED_PATH= VEGA_EMBED_PATH,
     ).unwrap();
 
     content.push_str("    m\n}\n");
