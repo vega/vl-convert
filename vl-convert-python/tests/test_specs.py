@@ -89,6 +89,53 @@ def test_vega(name, vl_version, as_dict):
         assert expected_vg_spec == vg_spec
 
 
+@pytest.mark.parametrize("name", ["circle_binned"])
+@pytest.mark.parametrize(
+    "vl_version",
+    [
+        "5.7",
+        "5.8",
+        "5.9",
+        "5.10",
+        "5.11",
+        "5.12",
+        "5.13",
+        "5.14",
+        "5.15",
+    ],
+)
+def test_vegalite_to_html_no_bundle(name, vl_version):
+    vl_spec = load_vl_spec(name)
+    html = vlc.vegalite_to_html(vl_spec, vl_version=vl_version, bundle=False)
+    assert html.startswith("<!DOCTYPE html>")
+    assert f"cdn.jsdelivr.net/npm/vega-lite@{vl_version}" in html
+    assert "cdn.jsdelivr.net/npm/vega@5" in html
+    assert "cdn.jsdelivr.net/npm/vega-embed@6" in html
+
+
+@pytest.mark.parametrize("name", ["circle_binned"])
+@pytest.mark.parametrize(
+    "vl_version",
+    [
+        "5.7",
+        "5.8",
+        "5.9",
+        "5.10",
+        "5.11",
+        "5.12",
+        "5.13",
+        "5.14",
+        "5.15",
+    ],
+)
+def test_vegalite_to_html_bundle(name, vl_version):
+    vl_spec = load_vl_spec(name)
+    html = vlc.vegalite_to_html(vl_spec, vl_version=vl_version, bundle=True)
+    assert html.startswith("<!DOCTYPE html>")
+    assert vl_version in html
+    assert "Jeffrey Heer" in html
+
+
 @pytest.mark.parametrize("name", ["circle_binned", "stacked_bar_h"])
 @pytest.mark.parametrize("as_dict", [False, True])
 def test_svg(name, as_dict):
