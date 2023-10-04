@@ -112,6 +112,18 @@ def test_vegalite_to_html_no_bundle(name, vl_version):
     assert "cdn.jsdelivr.net/npm/vega@5" in html
     assert "cdn.jsdelivr.net/npm/vega-embed@6" in html
 
+    # Check themes
+    html = vlc.vegalite_to_html(
+        vl_spec, vl_version=vl_version, bundle=False, theme="fivethirtyeight"
+    )
+    assert '{"theme":"fivethirtyeight"}' in html
+    assert '{"theme":"dark"}' not in html
+
+    html = vlc.vegalite_to_html(
+        vl_spec, vl_version=vl_version, bundle=False, theme="dark"
+    )
+    assert '{"theme":"dark"}' in html
+
 
 @pytest.mark.parametrize("name", ["circle_binned"])
 @pytest.mark.parametrize(
@@ -134,6 +146,18 @@ def test_vegalite_to_html_bundle(name, vl_version):
     assert html.startswith("<!DOCTYPE html>")
     assert vl_version in html
     assert "Jeffrey Heer" in html
+
+    # Make sure themes aren't cached
+    html = vlc.vegalite_to_html(
+        vl_spec, vl_version=vl_version, bundle=True, theme="fivethirtyeight"
+    )
+    assert '{"theme":"fivethirtyeight"}' in html
+    assert '{"theme":"dark"}' not in html
+
+    html = vlc.vegalite_to_html(
+        vl_spec, vl_version=vl_version, bundle=True, theme="dark"
+    )
+    assert '{"theme":"dark"}' in html
 
 
 @pytest.mark.parametrize("name", ["circle_binned", "stacked_bar_h"])
