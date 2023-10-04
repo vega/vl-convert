@@ -93,8 +93,7 @@ pub async fn bundle_index_js(index_js: String, vl_version: VlVersion) -> Result<
 
 pub fn build_bundled_html(code: String) -> String {
     format!(
-        r#"
-<!DOCTYPE html>
+        r#"<!DOCTYPE html>
 <html lang="en">
 <script type=module>{code}</script>
 <head>
@@ -121,8 +120,7 @@ pub fn build_bundled_html(code: String) -> String {
 
 pub fn build_cdn_html(code: String, vl_version: VlVersion) -> String {
     format!(
-        r#"
-<!DOCTYPE html>
+        r#"<!DOCTYPE html>
 <html>
   <head>
     <style>
