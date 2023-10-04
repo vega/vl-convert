@@ -100,10 +100,10 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: True
+#      - name: Cache rust dependencies
+#        uses: Swatinem/rust-cache@v2
+#        with:
+#          cache-on-failure: True
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
