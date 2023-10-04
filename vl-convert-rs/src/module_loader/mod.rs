@@ -116,7 +116,7 @@ impl Loader for VlConvertBundleLoader {
         _cache_setting: CacheSetting,
     ) -> LoadFuture {
         let module_specifier = module_specifier.clone();
-        let last_path_part = module_specifier.path().split('/').rev().next().unwrap();
+        let last_path_part = module_specifier.path().split('/').next_back().unwrap();
         let code = if last_path_part == "vl-convert-index.js" {
             self.index_js.clone()
         } else {

@@ -845,7 +845,7 @@ impl VlConverter {
         };
 
         let bundle = match self._vegaembed_vegalite_bundle_templates.entry(vl_version) {
-            Entry::Occupied(occupied) => fill_bundled_html_template(&occupied.get())?,
+            Entry::Occupied(occupied) => fill_bundled_html_template(occupied.get())?,
             Entry::Vacant(vacant) => {
                 let inner_bundle_template = get_vegalite_index_js(
                     serde_json::Value::String(BUNDLE_SPEC_MARKER.to_string()),
