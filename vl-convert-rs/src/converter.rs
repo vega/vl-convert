@@ -50,6 +50,7 @@ lazy_static! {
 }
 
 const BUNDLE_SPEC_MARKER: &str = "_$@vl-convert-spec$@_";
+const BUNDLE_OPTS_MARKER: &str = "_$@vl-convert-opts$@_";
 
 #[derive(Debug, Clone, Default)]
 pub struct VlOpts {
@@ -57,6 +58,25 @@ pub struct VlOpts {
     pub theme: Option<String>,
     pub vl_version: VlVersion,
     pub show_warnings: bool,
+}
+
+impl VlOpts {
+    pub fn to_embed_opts(&self) -> serde_json::Value {
+        let mut opts_map = serde_json::Map::new();
+
+        if let Some(theme) = &self.theme {
+            opts_map.insert(
+                "theme".to_string(),
+                serde_json::Value::String(theme.clone()),
+            );
+        }
+
+        if let Some(config) = &self.config {
+            opts_map.insert("config".to_string(), config.clone());
+        }
+
+        serde_json::Value::Object(opts_map)
+    }
 }
 
 fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
@@ -816,23 +836,26 @@ impl VlConverter {
         vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
         let vl_version = vl_opts.vl_version;
-        let spec_str = serde_json::to_string(&spec)?;
+
+        let fill_bundled_html_template = |template: &str| -> Result<String, AnyError> {
+            let spec_str = serde_json::to_string(&spec)?;
+            let opts_str = serde_json::to_string(&vl_opts.to_embed_opts())?;
+            let bundle = template.replace(&format!("\"{BUNDLE_SPEC_MARKER}\""), &spec_str);
+            Ok(bundle.replace(&format!("\"{BUNDLE_OPTS_MARKER}\""), &opts_str))
+        };
+
         let bundle = match self._vegaembed_vegalite_bundle_templates.entry(vl_version) {
-            Entry::Occupied(occupied) => {
-                let inner_bundle_template = occupied.get();
-                inner_bundle_template.replace(&format!("\"{BUNDLE_SPEC_MARKER}\""), &spec_str)
-            }
+            Entry::Occupied(occupied) => fill_bundled_html_template(&occupied.get())?,
             Entry::Vacant(vacant) => {
                 let inner_bundle_template = get_vegalite_index_js(
                     serde_json::Value::String(BUNDLE_SPEC_MARKER.to_string()),
-                    vl_opts,
+                    serde_json::Value::String(BUNDLE_OPTS_MARKER.to_string()),
                     true,
                 )?;
                 let inner_bundle_template =
                     bundle_index_js(inner_bundle_template, vl_version).await?;
 
-                let bundle =
-                    inner_bundle_template.replace(&format!("\"{BUNDLE_SPEC_MARKER}\""), &spec_str);
+                let bundle = fill_bundled_html_template(&inner_bundle_template)?;
                 vacant.insert(inner_bundle_template);
                 bundle
             }
@@ -882,7 +905,7 @@ impl VlConverter {
                 .await?;
             build_bundled_html(index_js)
         } else {
-            let index_js = get_vegalite_index_js(vl_spec, vl_opts, false)?;
+            let index_js = get_vegalite_index_js(vl_spec, vl_opts.to_embed_opts(), false)?;
             build_cdn_html(index_js, vl_version)
         };
         Ok(html)

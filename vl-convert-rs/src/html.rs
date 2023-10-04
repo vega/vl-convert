@@ -1,4 +1,3 @@
-use crate::converter::VlOpts;
 use crate::module_loader::import_map::{SKYPACK_URL, VEGA_EMBED_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
@@ -8,7 +7,7 @@ use std::path::Path;
 
 pub fn get_vegalite_index_js(
     spec: serde_json::Value,
-    vl_opts: VlOpts,
+    opts: serde_json::Value,
     bundle: bool,
 ) -> Result<String, AnyError> {
     let chart_id = "vega-chart";
@@ -21,16 +20,7 @@ pub fn get_vegalite_index_js(
     };
 
     // Setup embed opts
-    let mut opts = "const opts = {};\n".to_string();
-    if let Some(theme) = &vl_opts.theme {
-        opts.push_str(&format!("opts['theme'] = '{theme}';\n"));
-    }
-    if let Some(config) = &vl_opts.config {
-        opts.push_str(&format!(
-            "opts['config'] = {};\n",
-            serde_json::to_string(config)?
-        ));
-    }
+    let opts = format!("const opts = {}", serde_json::to_string(&opts)?);
 
     let index_js = format!(
         r##"
