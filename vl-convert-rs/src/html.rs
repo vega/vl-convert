@@ -84,8 +84,6 @@ pub async fn bundle_index_js(index_js: String, vl_version: VlVersion) -> Result<
 pub fn build_bundled_html(code: String) -> String {
     format!(
         r#"<!DOCTYPE html>
-<html lang="en">
-<script type=module>{code}</script>
 <head>
     <style>
         vega-chart.vega-embed {{
@@ -99,6 +97,7 @@ pub fn build_bundled_html(code: String) -> String {
     </style>
     <meta charset="UTF-8">
     <title>Chart</title>
+    <script type=module>{code}</script>
 </head>
 <body>
     <div id="vega-chart"></div>
@@ -123,6 +122,7 @@ pub fn build_cdn_html(code: String, vl_version: VlVersion) -> String {
           position: relative;
         }}
     </style>
+    <meta charset="UTF-8">
     <title>Chart</title>
     <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
     <script src="https://cdn.jsdelivr.net/npm/vega-lite@{vl_ver}"></script>
