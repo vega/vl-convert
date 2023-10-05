@@ -103,6 +103,7 @@ jobs:
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
+          prefix-key: "v1-rust"
           cache-on-failure: True
       - name: Install Protoc
         uses: arduino/setup-protoc@v2

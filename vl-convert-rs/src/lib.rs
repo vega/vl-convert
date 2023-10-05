@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod converter;
+pub mod html;
 pub mod image_loading;
 pub mod module_loader;
 pub mod text;

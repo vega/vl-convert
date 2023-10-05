@@ -1,6 +1,7 @@
 use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
-use crate::module_loader::VlConvertModuleLoader;
+use crate::module_loader::{VlConvertModuleLoader, IMPORT_MAP};
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use std::path::Path;
@@ -31,6 +32,7 @@ use png::{PixelDimensions, Unit};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{TreeParsing, TreeTextToPath};
 
+use crate::html::{bundle_vega_snippet, get_vega_script, get_vegalite_script};
 use image::io::Reader as ImageReader;
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
@@ -51,6 +53,25 @@ pub struct VlOpts {
     pub theme: Option<String>,
     pub vl_version: VlVersion,
     pub show_warnings: bool,
+}
+
+impl VlOpts {
+    pub fn to_embed_opts(&self) -> serde_json::Value {
+        let mut opts_map = serde_json::Map::new();
+
+        if let Some(theme) = &self.theme {
+            opts_map.insert(
+                "theme".to_string(),
+                serde_json::Value::String(theme.clone()),
+            );
+        }
+
+        if let Some(config) = &self.config {
+            opts_map.insert("config".to_string(), config.clone());
+        }
+
+        serde_json::Value::Object(opts_map)
+    }
 }
 
 fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
@@ -104,7 +125,6 @@ struct InnerVlConverter {
     worker: MainWorker,
     initialized_vl_versions: HashSet<VlVersion>,
     vega_initialized: bool,
-    module_loader: Rc<VlConvertModuleLoader>,
 }
 
 impl InnerVlConverter {
@@ -166,7 +186,7 @@ class WarningCollector {
             self.worker.run_event_loop(false).await?;
 
             // Override text width measurement in vega-scenegraph
-            for path in self.module_loader.import_map.keys() {
+            for path in IMPORT_MAP.keys() {
                 if path.ends_with("vega-scenegraph.js") {
                     let script_code = ModuleCode::from(format!(
                         r#"
@@ -292,7 +312,7 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings) {{
     }
 
     pub async fn try_new() -> Result<Self, AnyError> {
-        let module_loader = Rc::new(VlConvertModuleLoader::new());
+        let module_loader = Rc::new(VlConvertModuleLoader);
 
         let ext = Extension {
             name: "vl_convert_extensions",
@@ -348,7 +368,6 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings) {{
             worker,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
-            module_loader,
         };
 
         Ok(this)
@@ -597,6 +616,7 @@ pub enum VlConvertCommand {
 pub struct VlConverter {
     sender: Sender<VlConvertCommand>,
     _handle: Arc<JoinHandle<Result<(), AnyError>>>,
+    _vegaembed_bundles: HashMap<VlVersion, String>,
 }
 
 impl VlConverter {
@@ -650,6 +670,7 @@ impl VlConverter {
         Self {
             sender,
             _handle: handle,
+            _vegaembed_bundles: Default::default(),
         }
     }
 
@@ -800,6 +821,94 @@ impl VlConverter {
         let scale = scale.unwrap_or(1.0);
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
         svg_to_pdf(&svg, scale)
+    }
+
+    async fn get_vegaembed_bundle(&mut self, vl_version: VlVersion) -> Result<String, AnyError> {
+        // TODO: return &str and avoid cloning
+        let bundle = match self._vegaembed_bundles.entry(vl_version) {
+            Entry::Occupied(occupied) => occupied.get().clone(),
+            Entry::Vacant(vacant) => {
+                let bundle =
+                    bundle_vega_snippet("window.vegaEmbed = vegaEmbed;", vl_version).await?;
+                vacant.insert(bundle.clone());
+                bundle
+            }
+        };
+
+        Ok(bundle)
+    }
+
+    async fn build_html(
+        &mut self,
+        code: &str,
+        vl_version: VlVersion,
+        bundle: bool,
+    ) -> Result<String, AnyError> {
+        let script_tags = if bundle {
+            format!(
+                r#"
+    <script type="text/javascript">{}</script>
+            "#,
+                self.get_vegaembed_bundle(vl_version).await?
+            )
+        } else {
+            format!(
+                r#"
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@{vl_ver}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+            "#,
+                vl_ver = vl_version.to_semver()
+            )
+        };
+
+        Ok(format!(
+            r#"<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+        vega-chart.vega-embed {{
+          width: 100%;
+          display: flex;
+        }}
+        vega-chart.vega-embed details,
+        vega-chart.vega-embed details summary {{
+          position: relative;
+        }}
+    </style>
+    <meta charset="UTF-8">
+    <title>Chart</title>
+{script_tags}
+  </head>
+  <body>
+    <div id="vega-chart"></div>
+    <script type="text/javascript">
+{code}
+    </script>
+  </body>
+</html>
+        "#
+        ))
+    }
+
+    pub async fn vegalite_to_html(
+        &mut self,
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+        bundle: bool,
+    ) -> Result<String, AnyError> {
+        let vl_version = vl_opts.vl_version;
+        let code = get_vegalite_script(vl_spec, vl_opts.to_embed_opts())?;
+        self.build_html(&code, vl_version, bundle).await
+    }
+
+    pub async fn vega_to_html(
+        &mut self,
+        vg_spec: serde_json::Value,
+        bundle: bool,
+    ) -> Result<String, AnyError> {
+        let code = get_vega_script(vg_spec)?;
+        self.build_html(&code, Default::default(), bundle).await
     }
 
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {

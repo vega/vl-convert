@@ -260,6 +260,101 @@ mod test_vegalite_to_vega {
 }
 
 #[rustfmt::skip]
+mod test_vegalite_to_html_no_bundle {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::converter::VlOpts;
+    use vl_convert_rs::VlConverter;
+
+    #[rstest]
+    fn test(
+        #[values(
+        VlVersion::v5_7,
+        VlVersion::v5_8,
+        VlVersion::v5_9,
+        VlVersion::v5_10,
+        VlVersion::v5_11,
+        VlVersion::v5_12,
+        VlVersion::v5_13,
+        VlVersion::v5_14,
+        VlVersion::v5_15,
+        )]
+        vl_version: VlVersion,
+
+        #[values("circle_binned")]
+        name: &str,
+    ) {
+        initialize();
+
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
+
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
+
+        let html_result = block_on(
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, false)
+        ).unwrap();
+
+        // Check for expected patterns
+        assert!(html_result.starts_with("<!DOCTYPE html>"));
+        assert!(html_result.contains(&format!("cdn.jsdelivr.net/npm/vega-lite@{}", vl_version.to_semver())));
+        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@5"));
+        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega-embed@6"));
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[rustfmt::skip]
+mod test_vegalite_to_html_bundle {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::converter::VlOpts;
+    use vl_convert_rs::VlConverter;
+
+    #[rstest]
+    fn test(
+        #[values(
+            VlVersion::v5_7,
+            VlVersion::v5_8,
+            VlVersion::v5_9,
+            VlVersion::v5_10,
+            VlVersion::v5_11,
+            VlVersion::v5_12,
+            VlVersion::v5_13,
+            VlVersion::v5_14,
+            VlVersion::v5_15,
+        )]
+        vl_version: VlVersion,
+
+        #[values("circle_binned")]
+        name: &str,
+    ) {
+        initialize();
+
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
+
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
+
+        let html_result = block_on(
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, true)
+        ).unwrap();
+
+        // Check for expected patterns
+        assert!(html_result.starts_with("<!DOCTYPE html>"));
+        assert!(html_result.contains(vl_version.to_semver()));
+        assert!(html_result.contains("Jeffrey Heer"));
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[rustfmt::skip]
 mod test_svg {
     use crate::*;
     use futures::executor::block_on;

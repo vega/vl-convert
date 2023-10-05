@@ -194,6 +194,108 @@ mod test_vl2vg {
 }
 
 #[rustfmt::skip]
+mod test_vl2html_no_bundle {
+    use std::fs;
+    use std::process::Command;
+    use crate::*;
+
+    #[rstest]
+    fn test(
+        #[values(
+            "5.7",
+            "5.8",
+            "5.9",
+            "5.10",
+            "5.11",
+            "5.12",
+            "5.13",
+            "5.14",
+            "5.15",
+        )]
+        vl_version: &str,
+
+        #[values("circle_binned")]
+        name: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let output_filename = format!("{}_{}.html", vl_version, name);
+
+        let vl_path = vl_spec_path(name);
+        let output = output_path(&output_filename);
+
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let cmd = cmd.arg("vl2html")
+            .arg("-i").arg(vl_path)
+            .arg("-o").arg(&output)
+            .arg("--vl-version").arg(vl_version);
+        cmd.assert().success();
+
+        // Load written html
+        let html_result = fs::read_to_string(&output).unwrap();
+
+        // Check for expected patterns
+        assert!(html_result.starts_with("<!DOCTYPE html>"));
+        assert!(html_result.contains(&format!("cdn.jsdelivr.net/npm/vega-lite@{vl_version}")));
+        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@5"));
+        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega-embed@6"));
+
+        Ok(())
+    }
+}
+
+#[rustfmt::skip]
+mod test_vl2html_bundle {
+    use std::fs;
+    use std::process::Command;
+    use crate::*;
+
+    #[rstest]
+    fn test(
+        #[values(
+            "5.7",
+            "5.8",
+            "5.9",
+            "5.10",
+            "5.11",
+            "5.12",
+            "5.13",
+            "5.14",
+            "5.15",
+        )]
+        vl_version: &str,
+
+        #[values("circle_binned")]
+        name: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let output_filename = format!("{}_{}.html", vl_version, name);
+
+        let vl_path = vl_spec_path(name);
+        let output = output_path(&output_filename);
+
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let cmd = cmd.arg("vl2html")
+            .arg("-i").arg(vl_path)
+            .arg("-o").arg(&output)
+            .arg("--vl-version").arg(vl_version)
+            .arg("--bundle");
+        cmd.assert().success();
+
+        // Load written html
+        let html_result = fs::read_to_string(&output).unwrap();
+
+        // Check for expected patterns
+        assert!(html_result.starts_with("<!DOCTYPE html>"));
+        assert!(html_result.contains(vl_version));
+        assert!(html_result.contains("Jeffrey Heer"));
+
+        Ok(())
+    }
+}
+
+#[rustfmt::skip]
 mod test_vl2svg {
     use std::fs;
     use std::process::Command;

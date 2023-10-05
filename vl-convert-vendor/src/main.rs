@@ -53,6 +53,10 @@ const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
+const VEGA_EMBED_PATH: &str =
+    "/pin/vega-embed@v6.23.0-Fpmq39rehEH8HWtd6nzv/mode=imports,min/optimized/vega-embed.js";
+const DEBOUNCE_PATH: &str =
+    "/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js";
 
 // Example custom build script.
 fn main() {
@@ -97,6 +101,22 @@ fn main() {
         "import * as vegaThemes from \"{SKYPACK_URL}{VEGA_THEMES_PATH}\";",
         SKYPACK_URL = SKYPACK_URL,
         VEGA_THEMES_PATH = VEGA_THEMES_PATH
+    )
+    .unwrap();
+
+    // Write Vega Embed
+    writeln!(
+        imports,
+        "import * as vegaEmbed from \"{SKYPACK_URL}{VEGA_TOOLTIP_PATH}\";",
+        SKYPACK_URL = SKYPACK_URL,
+        VEGA_TOOLTIP_PATH = VEGA_EMBED_PATH
+    )
+    .unwrap();
+
+    // Write debounce
+    writeln!(
+        imports,
+        "import lodashDebounce from \"{SKYPACK_URL}{DEBOUNCE_PATH}\";",
     )
     .unwrap();
 
@@ -156,6 +176,13 @@ fn main() {
         .collect();
     let from_str_matches_csv = from_str_matches.join(",\n            ");
 
+    // To semver match csv
+    let to_semver_matches: Vec<_> = VL_PATHS
+        .iter()
+        .map(|(ver, _)| format!("v{} => \"{}\"", ver.replace('.', "_"), ver))
+        .collect();
+    let to_semver_match_csv = to_semver_matches.join(",\n            ");
+
     // Variants csv
     let version_instances: Vec<_> = VL_PATHS
         .iter()
@@ -176,9 +203,11 @@ use std::str::FromStr;
 use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 
-const SKYPACK_URL: &str = "{SKYPACK_URL}";
-const VEGA_PATH: &str = "{VEGA_PATH}";
-const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
+pub const SKYPACK_URL: &str = "{SKYPACK_URL}";
+pub const VEGA_PATH: &str = "{VEGA_PATH}";
+pub const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
+pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
+pub const DEBOUNCE_PATH: &str = "{DEBOUNCE_PATH}";
 
 pub fn url_for_path(path: &str) -> String {{
     format!("{{}}{{}}", SKYPACK_URL, path)
@@ -210,6 +239,13 @@ impl VlVersion {{
     pub fn to_url(self) -> String {{
         format!("{{}}{{}}", SKYPACK_URL, self.to_path())
     }}
+
+    pub fn to_semver(self) -> &'static str {{
+        use VlVersion::*;
+        match self {{
+            {to_semver_match_csv}
+        }}
+    }}
 }}
 
 impl Default for VlVersion {{
@@ -239,10 +275,12 @@ pub fn build_import_map() -> HashMap<String, String> {{
         vl_versions_csv = vl_versions_csv,
         path_match_csv = path_match_csv,
         from_str_matches_csv = from_str_matches_csv,
+        to_semver_match_csv = to_semver_match_csv,
         version_instances_csv = version_instances_csv,
         SKYPACK_URL = SKYPACK_URL,
         VEGA_PATH = VEGA_PATH,
         VEGA_THEMES_PATH = VEGA_THEMES_PATH,
+        VEGA_EMBED_PATH = VEGA_EMBED_PATH,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
     // Add packages
@@ -285,6 +323,19 @@ pub fn build_import_map() -> HashMap<String, String> {{
         content,
         "    m.insert(\"{VEGA_THEMES_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_THEMES_PATH}\").to_string());",
         VEGA_THEMES_PATH=VEGA_THEMES_PATH,
+    ).unwrap();
+
+    // Vega Embed
+    writeln!(
+        content,
+        "    m.insert(\"{VEGA_EMBED_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_EMBED_PATH}\").to_string());",
+        VEGA_EMBED_PATH= VEGA_EMBED_PATH,
+    ).unwrap();
+
+    // Debounce
+    writeln!(
+        content,
+        "    m.insert(\"{DEBOUNCE_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{DEBOUNCE_PATH}\").to_string());",
     ).unwrap();
 
     content.push_str("    m\n}\n");

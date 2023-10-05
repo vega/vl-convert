@@ -5,6 +5,7 @@ use pythonize::{depythonize, pythonize};
 use std::str::FromStr;
 use std::sync::Mutex;
 use vl_convert_rs::converter::VlOpts;
+use vl_convert_rs::html::bundle_vega_snippet;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::serde_json;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
@@ -27,7 +28,7 @@ lazy_static! {
 ///
 /// Args:
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
-///     vl_version (str | None): Vega-Lite library version string (e.g. 'v5.5')
+///     vl_version (str | None): Vega-Lite library version string (e.g. 'v5.15')
 ///         (default to latest)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
@@ -110,7 +111,7 @@ fn vega_to_svg(vg_spec: PyObject) -> PyResult<String> {
 ///
 /// Args:
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
-///     vl_version (str | None): Vega-Lite library version string (e.g. 'v5.5')
+///     vl_version (str | None): Vega-Lite library version string (e.g. 'v5.15')
 ///         (default to latest)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
@@ -197,7 +198,7 @@ fn vega_to_png(vg_spec: PyObject, scale: Option<f32>, ppi: Option<f32>) -> PyRes
 ///
 /// Args:
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
-///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///     vl_version (str): Vega-Lite library version string (e.g. 'v5.15')
 ///         (default to latest)
 ///     scale (float): Image scale factor (default 1.0)
 ///     ppi (float): Pixels per inch (default 72)
@@ -292,7 +293,7 @@ fn vega_to_jpeg(vg_spec: PyObject, scale: Option<f32>, quality: Option<u8>) -> P
 ///
 /// Args:
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
-///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///     vl_version (str): Vega-Lite library version string (e.g. 'v5.15')
 ///         (default to latest)
 ///     scale (float): Image scale factor (default 1.0)
 ///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
@@ -385,7 +386,7 @@ fn vega_to_pdf(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
 ///
 /// Args:
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
-///     vl_version (str): Vega-Lite library version string (e.g. 'v5.5')
+///     vl_version (str): Vega-Lite library version string (e.g. 'v5.15')
 ///         (default to latest)
 ///     scale (float): Image scale factor (default 1.0)
 ///     config (dict | None): Chart configuration object to apply during conversion
@@ -471,6 +472,72 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
         &vg_spec,
         fullscreen.unwrap_or(false),
     )?)
+}
+
+/// Convert a Vega-Lite spec to self-contained HTML document using a particular
+/// version of the Vega-Lite JavaScript library.
+///
+/// Args:
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
+///     vl_version (str): Vega-Lite library version string (e.g. 'v5.15')
+///         (default to latest)
+///     bundle (bool): If True, bundle all dependencies in HTML file
+///         If False (default), HTML file will load dependencies from only CDN
+///     config (dict | None): Chart configuration object to apply during conversion
+///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
+///
+/// Returns:
+///     string: HTML document
+#[pyfunction]
+#[pyo3(text_signature = "(vl_spec, vl_version, bundle, config, theme)")]
+fn vegalite_to_html(
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    bundle: Option<bool>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+) -> PyResult<String> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    Ok(PYTHON_RUNTIME.block_on(converter.vegalite_to_html(
+        vl_spec,
+        VlOpts {
+            vl_version,
+            config,
+            theme,
+            show_warnings: false,
+        },
+        bundle.unwrap_or(false),
+    ))?)
+}
+
+/// Convert a Vega spec to a self-contained HTML document
+///
+/// Args:
+///     vg_spec (str | dict): Vega JSON specification string or dict
+///     bundle (bool): If True, bundle all dependencies in HTML file
+///         If False (default), HTML file will load dependencies from only CDN
+///
+/// Returns:
+///     string: HTML document
+#[pyfunction]
+#[pyo3(text_signature = "(vg_spec, bundle)")]
+fn vega_to_html(vg_spec: PyObject, bundle: Option<bool>) -> PyResult<String> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+    Ok(PYTHON_RUNTIME.block_on(converter.vega_to_html(vg_spec, bundle.unwrap_or(false)))?)
 }
 
 /// Convert an SVG image string to PNG image data
@@ -611,6 +678,43 @@ fn get_themes() -> PyResult<PyObject> {
     })
 }
 
+/// Create a JavaScript bundle containing the Vega Embed, Vega-Lite, and Vega libraries
+///
+/// Optionally, a JavaScript snippet may be provided that references Vega Embed
+/// as `vegaEmbed`, Vega-Lite as `vegaLite`, Vega and `vega`, and the lodash.debounce
+/// function as `lodashDebounce`.
+///
+/// The resulting string will include these JavaScript libraries and all of their dependencies.
+/// This bundle result is suitable for inclusion in an HTML <script> tag with no external
+/// dependencies required. The default snippet assigns `vegaEmbed`, `vegaLite`, and `vega`
+/// to the global window object, making them available globally to other script tags.
+///
+/// Args:
+///     snippet (str): An ES6 JavaScript snippet which includes no imports
+///     vl_version (str): Vega-Lite library version string (e.g. 'v5.15')
+///         (default to latest)
+/// Returns:
+///     str: Bundled snippet with all dependencies
+#[pyfunction]
+#[pyo3(text_signature = "(snippet, vl_version)")]
+fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyResult<String> {
+    // Default to snippet that assigns them to the global window
+    let snippet = snippet.unwrap_or(
+        r#"
+        window.vegaEmbed=vegaEmbed;
+        window.vega=vega;
+        window.vegaLite=vegaLite;
+    "#
+        .to_string(),
+    );
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    Ok(PYTHON_RUNTIME.block_on(bundle_vega_snippet(&snippet, vl_version))?)
+}
+
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -620,17 +724,20 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_url, m)?)?;
+    m.add_function(wrap_pyfunction!(vegalite_to_html, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_url, m)?)?;
+    m.add_function(wrap_pyfunction!(vega_to_html, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
+    m.add_function(wrap_pyfunction!(javascript_bundle, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
