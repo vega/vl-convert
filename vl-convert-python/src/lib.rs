@@ -681,7 +681,8 @@ fn get_themes() -> PyResult<PyObject> {
 /// Create a JavaScript bundle containing the Vega Embed, Vega-Lite, and Vega libraries
 ///
 /// Optionally, a JavaScript snippet may be provided that references Vega Embed
-/// as `vegaEmbed`, Vega-Lite as `vegaLite`, and Vega and `vega`.
+/// as `vegaEmbed`, Vega-Lite as `vegaLite`, Vega and `vega`, and the lodash.debounce
+/// function as `lodashDebounce`.
 ///
 /// The resulting string will include these JavaScript libraries and all of their dependencies.
 /// This bundle result is suitable for inclusion in an HTML <script> tag with no external
