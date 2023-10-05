@@ -32,9 +32,7 @@ use png::{PixelDimensions, Unit};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{TreeParsing, TreeTextToPath};
 
-use crate::html::{
-    build_bundled_html, build_cdn_html, bundle_index_js, get_vega_index_js, get_vegalite_index_js,
-};
+use crate::html::{bundle_vega_snippet, get_vega_script, get_vegalite_script};
 use image::io::Reader as ImageReader;
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
@@ -48,9 +46,6 @@ lazy_static! {
     static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> = Arc::new(Mutex::new(HashMap::new()));
     static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
-
-const BUNDLE_SPEC_MARKER: &str = "_$@vl-convert-spec$@_";
-const BUNDLE_OPTS_MARKER: &str = "_$@vl-convert-opts$@_";
 
 #[derive(Debug, Clone, Default)]
 pub struct VlOpts {
@@ -621,8 +616,7 @@ pub enum VlConvertCommand {
 pub struct VlConverter {
     sender: Sender<VlConvertCommand>,
     _handle: Arc<JoinHandle<Result<(), AnyError>>>,
-    _vegaembed_vegalite_bundle_templates: HashMap<VlVersion, String>,
-    _vegaembed_vega_bundle_template: Option<String>,
+    _vegaembed_bundles: HashMap<VlVersion, String>,
 }
 
 impl VlConverter {
@@ -676,8 +670,7 @@ impl VlConverter {
         Self {
             sender,
             _handle: handle,
-            _vegaembed_vegalite_bundle_templates: Default::default(),
-            _vegaembed_vega_bundle_template: None,
+            _vegaembed_bundles: Default::default(),
         }
     }
 
@@ -830,33 +823,14 @@ impl VlConverter {
         svg_to_pdf(&svg, scale)
     }
 
-    async fn vegaembed_vegalite_bundle_for_spec(
-        &mut self,
-        spec: serde_json::Value,
-        vl_opts: VlOpts,
-    ) -> Result<String, AnyError> {
-        let vl_version = vl_opts.vl_version;
-
-        let fill_bundled_html_template = |template: &str| -> Result<String, AnyError> {
-            let spec_str = serde_json::to_string(&spec)?;
-            let opts_str = serde_json::to_string(&vl_opts.to_embed_opts())?;
-            let bundle = template.replace(&format!("\"{BUNDLE_SPEC_MARKER}\""), &spec_str);
-            Ok(bundle.replace(&format!("\"{BUNDLE_OPTS_MARKER}\""), &opts_str))
-        };
-
-        let bundle = match self._vegaembed_vegalite_bundle_templates.entry(vl_version) {
-            Entry::Occupied(occupied) => fill_bundled_html_template(occupied.get())?,
+    async fn get_vegaembed_bundle(&mut self, vl_version: VlVersion) -> Result<String, AnyError> {
+        // TODO: return &str and avoid cloning
+        let bundle = match self._vegaembed_bundles.entry(vl_version) {
+            Entry::Occupied(occupied) => occupied.get().clone(),
             Entry::Vacant(vacant) => {
-                let inner_bundle_template = get_vegalite_index_js(
-                    serde_json::Value::String(BUNDLE_SPEC_MARKER.to_string()),
-                    serde_json::Value::String(BUNDLE_OPTS_MARKER.to_string()),
-                    true,
-                )?;
-                let inner_bundle_template =
-                    bundle_index_js(inner_bundle_template, vl_version).await?;
-
-                let bundle = fill_bundled_html_template(&inner_bundle_template)?;
-                vacant.insert(inner_bundle_template);
+                let bundle =
+                    bundle_vega_snippet("window.vegaEmbed = vegaEmbed;", vl_version).await?;
+                vacant.insert(bundle.clone());
                 bundle
             }
         };
@@ -864,32 +838,57 @@ impl VlConverter {
         Ok(bundle)
     }
 
-    async fn vegaembed_vega_bundle_for_spec(
+    async fn build_html(
         &mut self,
-        spec: serde_json::Value,
+        code: &str,
+        vl_version: VlVersion,
+        bundle: bool,
     ) -> Result<String, AnyError> {
-        let spec_str = serde_json::to_string(&spec)?;
-        let bundle = match &self._vegaembed_vega_bundle_template {
-            Some(inner_bundle_template) => {
-                inner_bundle_template.replace(&format!("\"{BUNDLE_SPEC_MARKER}\""), &spec_str)
-            }
-            None => {
-                let inner_bundle_template = get_vega_index_js(
-                    serde_json::Value::String(BUNDLE_SPEC_MARKER.to_string()),
-                    true,
-                )?;
-                let inner_bundle_template =
-                    bundle_index_js(inner_bundle_template, Default::default()).await?;
-
-                let bundle =
-                    inner_bundle_template.replace(&format!("\"{BUNDLE_SPEC_MARKER}\""), &spec_str);
-                self._vegaembed_vega_bundle_template
-                    .replace(inner_bundle_template);
-                bundle
-            }
+        let script_tags = if bundle {
+            format!(
+                r#"
+    <script type="text/javascript">{}</script>
+            "#,
+                self.get_vegaembed_bundle(vl_version).await?
+            )
+        } else {
+            format!(
+                r#"
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@{vl_ver}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+            "#,
+                vl_ver = vl_version.to_semver()
+            )
         };
 
-        Ok(bundle)
+        Ok(format!(
+            r#"<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+        vega-chart.vega-embed {{
+          width: 100%;
+          display: flex;
+        }}
+        vega-chart.vega-embed details,
+        vega-chart.vega-embed details summary {{
+          position: relative;
+        }}
+    </style>
+    <meta charset="UTF-8">
+    <title>Chart</title>
+{script_tags}
+  </head>
+  <body>
+    <div id="vega-chart"></div>
+    <script type="text/javascript">
+{code}
+    </script>
+  </body>
+</html>
+        "#
+        ))
     }
 
     pub async fn vegalite_to_html(
@@ -899,16 +898,8 @@ impl VlConverter {
         bundle: bool,
     ) -> Result<String, AnyError> {
         let vl_version = vl_opts.vl_version;
-        let html = if bundle {
-            let index_js = self
-                .vegaembed_vegalite_bundle_for_spec(vl_spec, vl_opts)
-                .await?;
-            build_bundled_html(index_js)
-        } else {
-            let index_js = get_vegalite_index_js(vl_spec, vl_opts.to_embed_opts(), false)?;
-            build_cdn_html(index_js, vl_version)
-        };
-        Ok(html)
+        let code = get_vegalite_script(vl_spec, vl_opts.to_embed_opts())?;
+        self.build_html(&code, vl_version, bundle).await
     }
 
     pub async fn vega_to_html(
@@ -916,14 +907,8 @@ impl VlConverter {
         vg_spec: serde_json::Value,
         bundle: bool,
     ) -> Result<String, AnyError> {
-        let html = if bundle {
-            let index_js = self.vegaembed_vega_bundle_for_spec(vg_spec).await?;
-            build_bundled_html(index_js)
-        } else {
-            let index_js = get_vega_index_js(vg_spec, false)?;
-            build_cdn_html(index_js, Default::default())
-        };
-        Ok(html)
+        let code = get_vega_script(vg_spec)?;
+        self.build_html(&code, Default::default(), bundle).await
     }
 
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {

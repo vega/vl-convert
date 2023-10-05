@@ -1,30 +1,21 @@
-use crate::module_loader::import_map::{SKYPACK_URL, VEGA_EMBED_PATH};
+use crate::module_loader::import_map::{SKYPACK_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
 use deno_core::error::AnyError;
 use deno_emit::{bundle, BundleOptions, BundleType, EmitOptions};
 use std::path::Path;
 
-pub fn get_vegalite_index_js(
+pub fn get_vegalite_script(
     spec: serde_json::Value,
     opts: serde_json::Value,
-    bundle: bool,
 ) -> Result<String, AnyError> {
     let chart_id = "vega-chart";
-
-    // import if bundled
-    let import_str = if bundle {
-        format!("import vegaEmbed from \"{SKYPACK_URL}{VEGA_EMBED_PATH}\"")
-    } else {
-        String::new()
-    };
 
     // Setup embed opts
     let opts = format!("const opts = {}", serde_json::to_string(&opts)?);
 
     let index_js = format!(
         r##"
-{import_str}
 {{
     const spec = {SPEC};
     {opts}
@@ -36,32 +27,26 @@ pub fn get_vegalite_index_js(
     Ok(index_js)
 }
 
-pub fn get_vega_index_js(spec: serde_json::Value, bundle: bool) -> Result<String, AnyError> {
+pub fn get_vega_script(spec: serde_json::Value) -> Result<String, AnyError> {
     let chart_id = "vega-chart";
-    // import if bundled
-    let import_str = if bundle {
-        format!("import vegaEmbed from \"{SKYPACK_URL}{VEGA_EMBED_PATH}\"")
-    } else {
-        String::new()
-    };
 
     let index_js = format!(
         r##"
-{import_str}
-const spec = {SPEC};
-vegaEmbed('#{chart_id}', spec);
+{{
+    const spec = {SPEC};
+    vegaEmbed('#{chart_id}', spec);
+}}
 "##,
         SPEC = serde_json::to_string(&spec)?
     );
     Ok(index_js)
 }
 
-pub async fn bundle_index_js(index_js: String, vl_version: VlVersion) -> Result<String, AnyError> {
+pub async fn bundle_script(script: String, vl_version: VlVersion) -> Result<String, AnyError> {
     // Bundle dependencies
     let bundle_entry_point =
-        deno_core::resolve_path("vl-convert-index.js", Path::new(env!("CARGO_MANIFEST_DIR")))
-            .unwrap();
-    let mut loader = VlConvertBundleLoader::new(index_js, vl_version);
+        deno_core::resolve_path("vl-convert-index.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
+    let mut loader = VlConvertBundleLoader::new(script, vl_version);
     let bundled = bundle(
         bundle_entry_point,
         &mut loader,
@@ -76,66 +61,21 @@ pub async fn bundle_index_js(index_js: String, vl_version: VlVersion) -> Result<
             emit_ignore_directives: false,
         },
     )
-    .await
-    .unwrap();
+    .await?;
     Ok(bundled.code)
 }
 
-pub fn build_bundled_html(code: String) -> String {
-    format!(
-        r#"<!DOCTYPE html>
-<head>
-    <style>
-        vega-chart.vega-embed {{
-          width: 100%;
-          display: flex;
-        }}
-        vega-chart.vega-embed details,
-        vega-chart.vega-embed details summary {{
-          position: relative;
-        }}
-    </style>
-    <meta charset="UTF-8">
-    <title>Chart</title>
-    <script type=module>{code}</script>
-</head>
-<body>
-    <div id="vega-chart"></div>
-</body>
-</html>
-        "#
-    )
-}
+/// Bundle a JavaScript snippet that may contain references to vegaEmbed, vegaLite, or vega
+pub async fn bundle_vega_snippet(snippet: &str, vl_version: VlVersion) -> Result<String, AnyError> {
+    let script = format!(
+        r#"
+import vegaEmbed from "{SKYPACK_URL}{VEGA_EMBED_PATH}"
+import vega from "{SKYPACK_URL}{VEGA_PATH}"
+import vegaLite from "{SKYPACK_URL}{VEGA_LITE_PATH}"
+{snippet}
+"#,
+        VEGA_LITE_PATH = vl_version.to_path()
+    );
 
-pub fn build_cdn_html(code: String, vl_version: VlVersion) -> String {
-    format!(
-        r#"<!DOCTYPE html>
-<html>
-  <head>
-    <style>
-        vega-chart.vega-embed {{
-          width: 100%;
-          display: flex;
-        }}
-        vega-chart.vega-embed details,
-        vega-chart.vega-embed details summary {{
-          position: relative;
-        }}
-    </style>
-    <meta charset="UTF-8">
-    <title>Chart</title>
-    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vega-lite@{vl_ver}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
-  </head>
-  <body>
-    <div id="vega-chart"></div>
-    <script type="text/javascript">
-{code}
-    </script>
-  </body>
-</html>
-        "#,
-        vl_ver = vl_version.to_semver()
-    )
+    bundle_script(script.to_string(), vl_version).await
 }
