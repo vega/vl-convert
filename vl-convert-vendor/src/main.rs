@@ -55,6 +55,8 @@ const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
 const VEGA_EMBED_PATH: &str =
     "/pin/vega-embed@v6.23.0-Fpmq39rehEH8HWtd6nzv/mode=imports,min/optimized/vega-embed.js";
+const DEBOUNCE_PATH: &str =
+    "/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js";
 
 // Example custom build script.
 fn main() {
@@ -102,12 +104,19 @@ fn main() {
     )
     .unwrap();
 
-    // Write VegaTooltip
+    // Write Vega Embed
     writeln!(
         imports,
-        "import * as vegEmbed from \"{SKYPACK_URL}{VEGA_TOOLTIP_PATH}\";",
+        "import * as vegaEmbed from \"{SKYPACK_URL}{VEGA_TOOLTIP_PATH}\";",
         SKYPACK_URL = SKYPACK_URL,
         VEGA_TOOLTIP_PATH = VEGA_EMBED_PATH
+    )
+    .unwrap();
+
+    // Write debounce
+    writeln!(
+        imports,
+        "import lodashDebounce from \"{SKYPACK_URL}{DEBOUNCE_PATH}\";",
     )
     .unwrap();
 
@@ -198,6 +207,7 @@ pub const SKYPACK_URL: &str = "{SKYPACK_URL}";
 pub const VEGA_PATH: &str = "{VEGA_PATH}";
 pub const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
 pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
+pub const DEBOUNCE_PATH: &str = "{DEBOUNCE_PATH}";
 
 pub fn url_for_path(path: &str) -> String {{
     format!("{{}}{{}}", SKYPACK_URL, path)
@@ -320,6 +330,12 @@ pub fn build_import_map() -> HashMap<String, String> {{
         content,
         "    m.insert(\"{VEGA_EMBED_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_EMBED_PATH}\").to_string());",
         VEGA_EMBED_PATH= VEGA_EMBED_PATH,
+    ).unwrap();
+
+    // Debounce
+    writeln!(
+        content,
+        "    m.insert(\"{DEBOUNCE_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{DEBOUNCE_PATH}\").to_string());",
     ).unwrap();
 
     content.push_str("    m\n}\n");
