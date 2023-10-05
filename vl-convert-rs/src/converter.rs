@@ -1136,8 +1136,6 @@ pub fn vega_to_url(vg_spec: &serde_json::Value, fullscreen: bool) -> Result<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-    use std::fs;
 
     #[tokio::test]
     async fn test_convert_context() {
