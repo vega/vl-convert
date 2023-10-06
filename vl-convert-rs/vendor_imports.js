@@ -12,3 +12,5 @@ import * as vega from "https://cdn.skypack.dev/pin/vega@v5.25.0-r16knbfAAfBFDoUv
 import * as vegaThemes from "https://cdn.skypack.dev/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
 import * as vegaEmbed from "https://cdn.skypack.dev/pin/vega-embed@v6.23.0-Fpmq39rehEH8HWtd6nzv/mode=imports,min/optimized/vega-embed.js";
 import lodashDebounce from "https://cdn.skypack.dev/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js";
+import vegaSchemaUrlParser from "https://cdn.skypack.dev/pin/vega-schema-url-parser@v2.2.0-YmXJGRcKOXOac3VG4xfw/mode=imports,min/optimized/vega-schema-url-parser.js";
+import * as arrow from "https://cdn.skypack.dev/pin/apache-arrow@v13.0.0-MxNe6rzoVb4I5ULOjvod/mode=imports,min/optimized/apache-arrow.js";

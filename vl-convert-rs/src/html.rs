@@ -1,4 +1,6 @@
-use crate::module_loader::import_map::{DEBOUNCE_PATH, SKYPACK_URL, VEGA_EMBED_PATH, VEGA_PATH};
+use crate::module_loader::import_map::{
+    ARROW_PATH, DEBOUNCE_PATH, SKYPACK_URL, VEGA_EMBED_PATH, VEGA_PATH, VEGA_SCHEMA_PATH,
+};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
 use deno_core::error::AnyError;
@@ -73,6 +75,8 @@ import vegaEmbed from "{SKYPACK_URL}{VEGA_EMBED_PATH}"
 import vega from "{SKYPACK_URL}{VEGA_PATH}"
 import vegaLite from "{SKYPACK_URL}{VEGA_LITE_PATH}"
 import lodashDebounce from "{SKYPACK_URL}{DEBOUNCE_PATH}"
+import vegaSchemaUrlParser from "{SKYPACK_URL}{VEGA_SCHEMA_PATH}"
+import * as arrow from "{SKYPACK_URL}{ARROW_PATH}"
 {snippet}
 "#,
         VEGA_LITE_PATH = vl_version.to_path()
