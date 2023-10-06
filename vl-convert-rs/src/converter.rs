@@ -149,23 +149,23 @@ import('{arrow_url}').then((imported) => {{
     arrow = imported;
 }})
 
-function base64ToBytes(base64) {{
-  const binString = atob(base64);
-  return Uint8Array.from(binString, (m) => m.codePointAt(0));
+async function base64ToArrayBuffer(b64) {{
+    const res = await fetch("data:application/vnd.apache.arrow.file;base64," + b64);
+    return await res.arrayBuffer();
 }}
 
-function deserializeArrowDatasets(spec) {{
+async function deserializeArrowDatasets(spec) {{
     // Handle data
     for (const dataset of spec.data || []) {{
          if (typeof dataset.values === "string") {{
-            dataset.values = arrow.tableFromIPC(base64ToBytes(dataset.values));
+            dataset.values = arrow.tableFromIPC(await base64ToArrayBuffer(dataset.values));
         }}
     }}
 
     // Handle group marks recursively
     for (const mark of spec.marks || []) {{
         if (mark.type === "group") {{
-            deserializeArrowDatasets(mark);
+            await deserializeArrowDatasets(mark);
         }}
     }}
 }}
@@ -249,12 +249,13 @@ import('{url}').then((sg) => {{
             // Create and initialize svg function string
             let function_str = r#"
 function vegaToSvg(vgSpec) {
-    deserializeArrowDatasets(vgSpec);
-    let runtime = vega.parse(vgSpec);
-    const baseURL = 'https://vega.github.io/vega-datasets/';
-    const loader = vega.loader({ mode: 'http', baseURL });
-    let view = new vega.View(runtime, {renderer: 'none', loader});
-    let svgPromise = view.toSVG().finally(() => { view.finalize() });
+    let svgPromise = deserializeArrowDatasets(vgSpec).then(() => {
+        let runtime = vega.parse(vgSpec);
+        const baseURL = 'https://vega.github.io/vega-datasets/';
+        const loader = vega.loader({ mode: 'http', baseURL });
+        let view = new vega.View(runtime, {renderer: 'none', loader});
+        return view.toSVG().finally(() => { view.finalize() });
+    });
     return svgPromise
 }
 "#;
