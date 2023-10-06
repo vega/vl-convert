@@ -1,4 +1,6 @@
-use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
+use crate::module_loader::import_map::{
+    url_for_path, vega_themes_url, vega_url, VlVersion, ARROW_PATH,
+};
 use crate::module_loader::{VlConvertModuleLoader, IMPORT_MAP};
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
@@ -141,9 +143,37 @@ var vegaThemes;
 import('{vega_themes_url}').then((imported) => {{
     vegaThemes = imported;
 }})
+
+var arrow;
+import('{arrow_url}').then((imported) => {{
+    arrow = imported;
+}})
+
+function base64ToBytes(base64) {{
+  const binString = atob(base64);
+  return Uint8Array.from(binString, (m) => m.codePointAt(0));
+}}
+
+function deserializeArrowDatasets(spec) {{
+    // Handle data
+    for (const dataset of spec.data || []) {{
+         if (typeof dataset.values === "string") {{
+            dataset.values = arrow.tableFromIPC(base64ToBytes(dataset.values));
+        }}
+    }}
+
+    // Handle group marks recursively
+    for (const mark of spec.marks || []) {{
+        if (mark.type === "group") {{
+            deserializeArrowDatasets(mark);
+        }}
+    }}
+}}
+
 "#,
                 vega_url = vega_url(),
                 vega_themes_url = vega_themes_url(),
+                arrow_url = url_for_path(ARROW_PATH),
             ));
 
             self.worker.execute_script("<anon>", import_code)?;
@@ -219,6 +249,7 @@ import('{url}').then((sg) => {{
             // Create and initialize svg function string
             let function_str = r#"
 function vegaToSvg(vgSpec) {
+    deserializeArrowDatasets(vgSpec);
     let runtime = vega.parse(vgSpec);
     const baseURL = 'https://vega.github.io/vega-datasets/';
     const loader = vega.loader({ mode: 'http', baseURL });
