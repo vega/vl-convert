@@ -149,16 +149,16 @@ import('{arrow_url}').then((imported) => {{
     arrow = imported;
 }})
 
-async function base64ToArrayBuffer(b64) {{
-    const res = await fetch("data:application/vnd.apache.arrow.file;base64," + b64);
+async function base64UrlToArrayBuffer(b64Url) {{
+    const res = await fetch(b64Url);
     return await res.arrayBuffer();
 }}
 
 async function deserializeArrowDatasets(spec) {{
     // Handle data
     for (const dataset of spec.data || []) {{
-         if (typeof dataset.values === "string") {{
-            dataset.values = arrow.tableFromIPC(await base64ToArrayBuffer(dataset.values));
+         if (typeof dataset.url === "string" && dataset.url.startsWith("data:application/vnd.apache.arrow.file;base64,")) {{
+            dataset.values = arrow.tableFromIPC(await base64UrlToArrayBuffer(dataset.url));
         }}
     }}
 
