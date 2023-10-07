@@ -410,6 +410,7 @@ mod test_png_no_theme {
 
     #[rstest(name, scale,
         case("circle_binned", 1.0),
+        case("circle_binned_b64", 1.0),
         case("circle_binned_base_url", 1.0),
         case("stacked_bar_h", 2.0),
         case("bar_chart_trellis_compact", 2.0),
