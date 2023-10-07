@@ -159,6 +159,7 @@ async function deserializeArrowDatasets(spec) {{
     for (const dataset of spec.data || []) {{
          if (typeof dataset.url === "string" && dataset.url.startsWith("data:application/vnd.apache.arrow.file;base64,")) {{
             dataset.values = arrow.tableFromIPC(await base64UrlToArrayBuffer(dataset.url));
+            delete dataset.url;
         }}
     }}
 
