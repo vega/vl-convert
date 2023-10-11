@@ -562,7 +562,10 @@ vegaToSvg(
         Ok(value)
     }
 
-    pub async fn vega_to_scenegraph(&mut self, vg_spec: &serde_json::Value) -> Result<serde_json::Value, AnyError> {
+    pub async fn vega_to_scenegraph(
+        &mut self,
+        vg_spec: &serde_json::Value,
+    ) -> Result<serde_json::Value, AnyError> {
         self.init_vega().await?;
 
         let arg_id = set_json_arg(vg_spec.clone())?;
@@ -728,7 +731,11 @@ impl VlConverter {
                             let svg_result = inner.vegalite_to_svg(&vl_spec, vl_opts).await;
                             responder.send(svg_result).ok();
                         }
-                        VlConvertCommand::VlToSg { vl_spec, vl_opts, responder } => {
+                        VlConvertCommand::VlToSg {
+                            vl_spec,
+                            vl_opts,
+                            responder,
+                        } => {
                             let sg_result = inner.vegalite_to_scenegraph(&vl_spec, vl_opts).await;
                             responder.send(sg_result).ok();
                         }
@@ -808,7 +815,10 @@ impl VlConverter {
         }
     }
 
-    pub async fn vega_to_scenegraph(&mut self, vg_spec: serde_json::Value) -> Result<serde_json::Value, AnyError> {
+    pub async fn vega_to_scenegraph(
+        &mut self,
+        vg_spec: serde_json::Value,
+    ) -> Result<serde_json::Value, AnyError> {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
         let cmd = VlConvertCommand::VgToSg {
             vg_spec,
@@ -821,7 +831,10 @@ impl VlConverter {
                 // All good
             }
             Err(err) => {
-                bail!("Failed to send Scenegraph conversion request: {}", err.to_string())
+                bail!(
+                    "Failed to send Scenegraph conversion request: {}",
+                    err.to_string()
+                )
             }
         }
 
@@ -879,7 +892,10 @@ impl VlConverter {
                 // All good
             }
             Err(err) => {
-                bail!("Failed to send Scenegraph conversion request: {}", err.to_string())
+                bail!(
+                    "Failed to send Scenegraph conversion request: {}",
+                    err.to_string()
+                )
             }
         }
 
