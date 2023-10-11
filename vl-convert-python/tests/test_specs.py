@@ -61,7 +61,6 @@ def load_expected_png(name, vl_version, theme=None):
     "vl_version",
     [
         "v4_17",
-        "v5_7",
         "v5_8",
         "v5_9",
         "v5_10",
@@ -70,6 +69,7 @@ def load_expected_png(name, vl_version, theme=None):
         "v5_13",
         "v5_14",
         "v5_15",
+        "v5_16",
     ],
 )
 @pytest.mark.parametrize("as_dict", [False, True])
@@ -93,7 +93,6 @@ def test_vega(name, vl_version, as_dict):
 @pytest.mark.parametrize(
     "vl_version",
     [
-        "5.7",
         "5.8",
         "5.9",
         "5.10",
@@ -102,6 +101,7 @@ def test_vega(name, vl_version, as_dict):
         "5.13",
         "5.14",
         "5.15",
+        "5.16",
     ],
 )
 def test_vegalite_to_html_no_bundle(name, vl_version):
@@ -129,7 +129,6 @@ def test_vegalite_to_html_no_bundle(name, vl_version):
 @pytest.mark.parametrize(
     "vl_version",
     [
-        "5.7",
         "5.8",
         "5.9",
         "5.10",
@@ -138,6 +137,7 @@ def test_vegalite_to_html_no_bundle(name, vl_version):
         "5.13",
         "5.14",
         "5.15",
+        "5.16",
     ],
 )
 def test_vegalite_to_html_bundle(name, vl_version):

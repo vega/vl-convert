@@ -106,7 +106,7 @@
       "value": {},
       "on": [
         {
-          "events": "mousemove",
+          "events": "pointermove",
           "update": "isTuple(group()) ? group() : unit"
         }
       ]
@@ -149,7 +149,7 @@
             {
               "events": {
                 "source": "scope",
-                "type": "mousedown",
+                "type": "pointerdown",
                 "filter": [
                   "!event.item || event.item.mark.name !== \"brush_brush\""
                 ]
@@ -159,19 +159,19 @@
             {
               "events": {
                 "source": "window",
-                "type": "mousemove",
+                "type": "pointermove",
                 "consume": true,
                 "between": [
                   {
                     "source": "scope",
-                    "type": "mousedown",
+                    "type": "pointerdown",
                     "filter": [
                       "!event.item || event.item.mark.name !== \"brush_brush\""
                     ]
                   },
                   {
                     "source": "window",
-                    "type": "mouseup"
+                    "type": "pointerup"
                   }
                 ]
               },
@@ -262,7 +262,7 @@
               "events": [
                 {
                   "source": "scope",
-                  "type": "mousedown",
+                  "type": "pointerdown",
                   "markname": "brush_brush"
                 }
               ],
@@ -278,17 +278,17 @@
               "events": [
                 {
                   "source": "window",
-                  "type": "mousemove",
+                  "type": "pointermove",
                   "consume": true,
                   "between": [
                     {
                       "source": "scope",
-                      "type": "mousedown",
+                      "type": "pointerdown",
                       "markname": "brush_brush"
                     },
                     {
                       "source": "window",
-                      "type": "mouseup"
+                      "type": "pointerup"
                     }
                   ]
                 }
@@ -518,6 +518,9 @@
           "tickCount": {
             "signal": "ceil(width/40)"
           },
+          "tickMinStep": {
+            "signal": "datetime(2001, 0, 2, 0, 0, 0, 0) - datetime(2001, 0, 1, 0, 0, 0, 0)"
+          },
           "domain": false,
           "labels": false,
           "aria": false,
@@ -552,6 +555,9 @@
           "labelOverlap": true,
           "tickCount": {
             "signal": "ceil(width/40)"
+          },
+          "tickMinStep": {
+            "signal": "datetime(2001, 0, 2, 0, 0, 0, 0) - datetime(2001, 0, 1, 0, 0, 0, 0)"
           },
           "zindex": 0
         },
