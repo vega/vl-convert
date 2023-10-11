@@ -269,8 +269,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
     visit_dirs(&vendor_path, &mut |f| {
         let p = f.path().canonicalize().unwrap();
         let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
-        if relative.starts_with(skypack_domain) {
-            let relative_sub = &relative[skypack_domain.len()..];
+        if let Some(relative_sub) = relative.strip_prefix(skypack_domain) {
             writeln!(
                 content,
                 "    m.insert(\"{relative_sub}\".to_string(), include_str!(\"../../vendor/{skypack_domain}{relative_sub}\").to_string());",
