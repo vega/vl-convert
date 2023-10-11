@@ -10,8 +10,8 @@ description = "Crate to convert SVG to PDF with embedded text"
 keywords = ["SVG", "PDF"]
 
 [dependencies]
-svg2pdf = "0.7.1"
-pdf-writer = "0.8.1"
+svg2pdf = "0.8.0"
+pdf-writer = "0.9.0"
 usvg = "0.35.0"
 anyhow = "1.0.71"
 ttf-parser = "0.19.2"
