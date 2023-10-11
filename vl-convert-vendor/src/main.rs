@@ -11,10 +11,6 @@ const VL_PATHS: &[(&str, &str)] = &[
         "4.17",
         "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js",
     ),
-    (
-        "5.7",
-        "/pin/vega-lite@v5.7.1-C1L95AD7TVhfiybpzZ1h/mode=imports,min/optimized/vega-lite.js",
-    ),
     // 5.8 is used by Altair 5.0 (keep forever)
     (
         "5.8",
@@ -49,6 +45,10 @@ const VL_PATHS: &[(&str, &str)] = &[
     (
         "5.15",
         "/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.16",
+        "/pin/vega-lite@v5.16.0-pocyasPYI8XbbobxDMkp/mode=imports,min/optimized/vega-lite.js",
     ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
