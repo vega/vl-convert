@@ -218,16 +218,27 @@ import('{url}').then((sg) => {{
 
             // Create and initialize svg function string
             let function_str = r#"
-function vegaToSvg(vgSpec) {
+function vegaToView(vgSpec) {
     let runtime = vega.parse(vgSpec);
     const baseURL = 'https://vega.github.io/vega-datasets/';
     const loader = vega.loader({ mode: 'http', baseURL });
-    let view = new vega.View(runtime, {renderer: 'none', loader});
+    return new vega.View(runtime, {renderer: 'none', loader});
+}
+
+function vegaToSvg(vgSpec) {
+    let view = vegaToView(vgSpec);
     let svgPromise = view.toSVG().finally(() => { view.finalize() });
     return svgPromise
 }
-"#;
 
+function vegaToScenegraph(vgSpec) {
+    let view = vegaToView(vgSpec);
+    let scenegraphPromise = view.runAsync().then(() => {
+        return JSON.parse(JSON.parse(vega.sceneToJSON(view.scenegraph())));
+    });
+    return scenegraphPromise
+}
+"#;
             self.worker
                 .execute_script("<anon>", deno_core::FastString::Static(function_str))?;
             self.worker.run_event_loop(false).await?;
@@ -279,23 +290,13 @@ function compileVegaLite_{ver_name}(vlSpec, config, theme, warnings) {{
 }}
 
 function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings) {{
-    let options = {{}};
-
-    // Handle config and theme
-    let usermetaTheme = ((vlSpec.usermeta ?? {{}}).embedOptions ?? {{}}).theme;
-    let namedTheme = theme ?? usermetaTheme;
-    if (namedTheme != null) {{
-        options["config"] = vega.mergeConfig(vegaThemes[namedTheme], config ?? {{}});
-    }} else if (config != null) {{
-        options["config"] = config;
-    }}
-
-    if (!warnings) {{
-        options["logger"] = new WarningCollector();
-    }}
-
-    let vgSpec = {ver_name}.compile(vlSpec, options).spec;
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
     return vegaToSvg(vgSpec)
+}}
+
+function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings) {{
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
+    return vegaToScenegraph(vgSpec)
 }}
 "#,
                 ver_name = format!("{:?}", vl_version),
@@ -498,6 +499,47 @@ vegaLiteToSvg_{ver_name:?}(
         Ok(value)
     }
 
+    pub async fn vegalite_to_scenegraph(
+        &mut self,
+        vl_spec: &serde_json::Value,
+        vl_opts: VlOpts,
+    ) -> Result<serde_json::Value, AnyError> {
+        self.init_vega().await?;
+        self.init_vl_version(&vl_opts.vl_version).await?;
+
+        let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
+        let spec_arg_id = set_json_arg(vl_spec.clone())?;
+        let config_arg_id = set_json_arg(config)?;
+        let theme_arg = match &vl_opts.theme {
+            None => "null".to_string(),
+            Some(s) => format!("'{}'", s),
+        };
+
+        let code = ModuleCode::from(format!(
+            r#"
+var sg;
+vegaLiteToScenegraph_{ver_name:?}(
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({spec_arg_id})),
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({config_arg_id})),
+    {theme_arg},
+    {show_warnings}
+).then((result) => {{
+    sg = result;
+}})
+"#,
+            ver_name = vl_opts.vl_version,
+            spec_arg_id = spec_arg_id,
+            config_arg_id = config_arg_id,
+            theme_arg = theme_arg,
+            show_warnings = vl_opts.show_warnings,
+        ));
+        self.worker.execute_script("<anon>", code)?;
+        self.worker.run_event_loop(false).await?;
+
+        let value = self.execute_script_to_json("sg").await?;
+        Ok(value)
+    }
+
     pub async fn vega_to_svg(&mut self, vg_spec: &serde_json::Value) -> Result<String, AnyError> {
         self.init_vega().await?;
 
@@ -517,6 +559,28 @@ vegaToSvg(
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
+        Ok(value)
+    }
+
+    pub async fn vega_to_scenegraph(&mut self, vg_spec: &serde_json::Value) -> Result<serde_json::Value, AnyError> {
+        self.init_vega().await?;
+
+        let arg_id = set_json_arg(vg_spec.clone())?;
+        let code = ModuleCode::from(format!(
+            r#"
+var sg;
+vegaToScenegraph(
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({arg_id}))
+).then((result) => {{
+    sg = result;
+}})
+"#,
+            arg_id = arg_id
+        ));
+        self.worker.execute_script("<anon>", code)?;
+        self.worker.run_event_loop(false).await?;
+
+        let value = self.execute_script_to_json("sg").await?;
         Ok(value)
     }
 
@@ -565,10 +629,19 @@ pub enum VlConvertCommand {
         vg_spec: serde_json::Value,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
+    VgToSg {
+        vg_spec: serde_json::Value,
+        responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
+    },
     VlToSvg {
         vl_spec: serde_json::Value,
         vl_opts: VlOpts,
         responder: oneshot::Sender<Result<String, AnyError>>,
+    },
+    VlToSg {
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+        responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     GetLocalTz {
         responder: oneshot::Sender<Result<Option<String>, AnyError>>,
@@ -643,6 +716,10 @@ impl VlConverter {
                             let svg_result = inner.vega_to_svg(&vg_spec).await;
                             responder.send(svg_result).ok();
                         }
+                        VlConvertCommand::VgToSg { vg_spec, responder } => {
+                            let sg_result = inner.vega_to_scenegraph(&vg_spec).await;
+                            responder.send(sg_result).ok();
+                        }
                         VlConvertCommand::VlToSvg {
                             vl_spec,
                             vl_opts,
@@ -650,6 +727,10 @@ impl VlConverter {
                         } => {
                             let svg_result = inner.vegalite_to_svg(&vl_spec, vl_opts).await;
                             responder.send(svg_result).ok();
+                        }
+                        VlConvertCommand::VlToSg { vl_spec, vl_opts, responder } => {
+                            let sg_result = inner.vegalite_to_scenegraph(&vl_spec, vl_opts).await;
+                            responder.send(sg_result).ok();
                         }
                         VlConvertCommand::GetLocalTz { responder } => {
                             let local_tz = inner.get_local_tz().await;
@@ -727,6 +808,30 @@ impl VlConverter {
         }
     }
 
+    pub async fn vega_to_scenegraph(&mut self, vg_spec: serde_json::Value) -> Result<serde_json::Value, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
+        let cmd = VlConvertCommand::VgToSg {
+            vg_spec,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send Scenegraph conversion request: {}", err.to_string())
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(svg_result) => svg_result,
+            Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+        }
+    }
+
     pub async fn vegalite_to_svg(
         &mut self,
         vl_spec: serde_json::Value,
@@ -746,6 +851,35 @@ impl VlConverter {
             }
             Err(err) => {
                 bail!("Failed to send SVG conversion request: {}", err.to_string())
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(svg_result) => svg_result,
+            Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+        }
+    }
+
+    pub async fn vegalite_to_scenegraph(
+        &mut self,
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+    ) -> Result<serde_json::Value, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
+        let cmd = VlConvertCommand::VlToSg {
+            vl_spec,
+            vl_opts,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send Scenegraph conversion request: {}", err.to_string())
             }
         }
 
