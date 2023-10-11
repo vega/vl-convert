@@ -106,6 +106,36 @@ fn vega_to_svg(vg_spec: PyObject) -> PyResult<String> {
     Ok(svg)
 }
 
+/// Convert a Vega spec to a Vega Scenegraph
+///
+/// Args:
+///     vg_spec (str | dict): Vega JSON specification string or dict
+///
+/// Returns:
+///     dict: scenegraph
+#[pyfunction]
+#[pyo3(text_signature = "(vg_spec)")]
+fn vega_to_scenegraph(vg_spec: PyObject) -> PyResult<PyObject> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    let sg = match PYTHON_RUNTIME.block_on(converter.vega_to_scenegraph(vg_spec)) {
+        Ok(vega_spec) => vega_spec,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "Vega to Scenegraph conversion failed:\n{}",
+                err
+            )))
+        }
+    };
+    Python::with_gil(|py| -> PyResult<PyObject> {
+        pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+    })
+}
+
 /// Convert a Vega-Lite spec to an SVG image string using a
 /// particular version of the Vega-Lite JavaScript library.
 ///
@@ -158,6 +188,62 @@ fn vegalite_to_svg(
         }
     };
     Ok(svg)
+}
+
+/// Convert a Vega-Lite spec to a Vega Scenegraph using a
+/// particular version of the Vega-Lite JavaScript library.
+///
+/// Args:
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
+///     vl_version (str | None): Vega-Lite library version string (e.g. 'v5.15')
+///         (default to latest)
+///     config (dict | None): Chart configuration object to apply during conversion
+///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
+///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+/// Returns:
+///     str: SVG image string
+#[pyfunction]
+#[pyo3(text_signature = "(vl_spec, vl_version, config, theme, show_warnings)")]
+fn vegalite_to_scenegraph(
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    show_warnings: Option<bool>,
+) -> PyResult<PyObject> {
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    let sg = match PYTHON_RUNTIME.block_on(converter.vegalite_to_scenegraph(
+        vl_spec,
+        VlOpts {
+            vl_version,
+            config,
+            theme,
+            show_warnings: show_warnings.unwrap_or(false),
+        },
+    )) {
+        Ok(vega_spec) => vega_spec,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "Vega-Lite to SVG conversion failed:\n{}",
+                err
+            )))
+        }
+    };
+    Python::with_gil(|py| -> PyResult<PyObject> {
+        pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+    })
 }
 
 /// Convert a Vega spec to PNG image data.
@@ -720,12 +806,14 @@ fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyRes
 fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
+    m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_url, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_html, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
+    m.add_function(wrap_pyfunction!(vega_to_scenegraph, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_pdf, m)?)?;
