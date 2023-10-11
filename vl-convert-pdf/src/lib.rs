@@ -1,5 +1,5 @@
 use anyhow::{bail, Error as AnyError};
-use pdf_writer::{Content, Filter, Finish, Name, PdfWriter, Rect, Ref, Str, TextStr};
+use pdf_writer::{Content, Filter, Finish, Name, Pdf, Rect, Ref, Str, TextStr};
 
 use itertools::Itertools;
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo, UnicodeCmap};
@@ -70,7 +70,7 @@ impl RefExt for Ref {
 }
 
 struct PdfContext {
-    writer: PdfWriter,
+    writer: Pdf,
     width: f32,
     height: f32,
     scale: f32,
@@ -98,7 +98,7 @@ impl PdfContext {
         let svg_id = Ref::new(1);
 
         Self {
-            writer: PdfWriter::new(),
+            writer: Pdf::new(),
             width,
             height,
             scale,
