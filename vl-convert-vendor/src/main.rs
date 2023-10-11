@@ -1,5 +1,7 @@
 use std::fmt::Write;
 use std::fs;
+use std::fs::DirEntry;
+use std::io;
 use std::path::Path;
 use std::process::Command;
 
@@ -8,10 +10,6 @@ const VL_PATHS: &[(&str, &str)] = &[
     (
         "4.17",
         "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
-        "5.7",
-        "/pin/vega-lite@v5.7.1-C1L95AD7TVhfiybpzZ1h/mode=imports,min/optimized/vega-lite.js",
     ),
     // 5.8 is used by Altair 5.0 (keep forever)
     (
@@ -48,6 +46,10 @@ const VL_PATHS: &[(&str, &str)] = &[
         "5.15",
         "/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js",
     ),
+    (
+        "5.16",
+        "/pin/vega-lite@v5.16.0-pocyasPYI8XbbobxDMkp/mode=imports,min/optimized/vega-lite.js",
+    ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 const VEGA_PATH: &str = "/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
@@ -63,7 +65,8 @@ fn main() {
     // Make sure vendor directory exists
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let vl_convert_rs_path = root_path.join("../").join("vl-convert-rs");
-    let vendor_path = vl_convert_rs_path.join("vendor");
+    let vendor_path = vl_convert_rs_path.join("vendor").canonicalize().unwrap();
+    let vendor_path_str = vendor_path.to_str().unwrap();
     if vendor_path.exists() {
         fs::remove_dir_all(&vendor_path).unwrap();
     }
@@ -79,9 +82,6 @@ fn main() {
         writeln!(
             imports,
             "import * as v_{ver_under} from \"{SKYPACK_URL}{path}\";",
-            ver_under = ver_under,
-            SKYPACK_URL = SKYPACK_URL,
-            path = path
         )
         .unwrap();
     }
@@ -90,8 +90,6 @@ fn main() {
     writeln!(
         imports,
         "import * as vega from \"{SKYPACK_URL}{VEGA_PATH}\";",
-        SKYPACK_URL = SKYPACK_URL,
-        VEGA_PATH = VEGA_PATH
     )
     .unwrap();
 
@@ -99,17 +97,13 @@ fn main() {
     writeln!(
         imports,
         "import * as vegaThemes from \"{SKYPACK_URL}{VEGA_THEMES_PATH}\";",
-        SKYPACK_URL = SKYPACK_URL,
-        VEGA_THEMES_PATH = VEGA_THEMES_PATH
     )
     .unwrap();
 
     // Write Vega Embed
     writeln!(
         imports,
-        "import * as vegaEmbed from \"{SKYPACK_URL}{VEGA_TOOLTIP_PATH}\";",
-        SKYPACK_URL = SKYPACK_URL,
-        VEGA_TOOLTIP_PATH = VEGA_EMBED_PATH
+        "import * as vegaEmbed from \"{SKYPACK_URL}{VEGA_EMBED_PATH}\";",
     )
     .unwrap();
 
@@ -132,20 +126,6 @@ fn main() {
     {
         panic!("Deno vendor command failed: {}", err);
     }
-
-    // Load vendored import_map
-    let import_map_path = vendor_path.join("import_map.json");
-    let import_map_str =
-        fs::read_to_string(import_map_path).expect("Unable to read import_map.json file");
-
-    let import_map: serde_json::Value =
-        serde_json::from_str(&import_map_str).expect("Unable to parse import_map.json file");
-
-    let import_map = import_map.as_object().expect("Invalid JSON format");
-    let scopes = import_map.get("scopes").unwrap();
-    let scopes = scopes.as_object().unwrap();
-    let skypack_obj = scopes.get("./cdn.skypack.dev/").unwrap();
-    let skypack_obj = skypack_obj.as_object().unwrap();
 
     // Write import_map.rs file
     // Build versions csv
@@ -283,60 +263,20 @@ pub fn build_import_map() -> HashMap<String, String> {{
         VEGA_EMBED_PATH = VEGA_EMBED_PATH,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
-    // Add packages
-    for (k, v) in skypack_obj {
-        // Strip trailing ? suffixes like ?from=vega
-        let k = if let Some(question_inex) = k.find('?') {
-            k[..question_inex].to_string()
-        } else {
-            k.clone()
-        };
 
-        let v = v.as_str().unwrap();
-        writeln!(
-            content,
-            "    m.insert(\"{}\".to_string(), include_str!(\"../../vendor/{}\").to_string());",
-            k, v
-        )
-        .unwrap();
-    }
-
-    // Add pinned packages
-    // Vega-Lite
-    for (_, vl_path) in VL_PATHS {
-        writeln!(
-            content,
-            "    m.insert(\"{vl_path}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{vl_path}\").to_string());",
-            vl_path=vl_path,
-        ).unwrap();
-    }
-
-    // Vega
-    writeln!(
-        content,
-        "    m.insert(\"{VEGA_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_PATH}\").to_string());",
-        VEGA_PATH=VEGA_PATH,
-    ).unwrap();
-
-    // Vega Themes
-    writeln!(
-        content,
-        "    m.insert(\"{VEGA_THEMES_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_THEMES_PATH}\").to_string());",
-        VEGA_THEMES_PATH=VEGA_THEMES_PATH,
-    ).unwrap();
-
-    // Vega Embed
-    writeln!(
-        content,
-        "    m.insert(\"{VEGA_EMBED_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{VEGA_EMBED_PATH}\").to_string());",
-        VEGA_EMBED_PATH= VEGA_EMBED_PATH,
-    ).unwrap();
-
-    // Debounce
-    writeln!(
-        content,
-        "    m.insert(\"{DEBOUNCE_PATH}\".to_string(), include_str!(\"../../vendor/cdn.skypack.dev{DEBOUNCE_PATH}\").to_string());",
-    ).unwrap();
+    // Write include_str! statements to inline source code in our executable
+    let skypack_domain = "cdn.skypack.dev";
+    visit_dirs(&vendor_path, &mut |f| {
+        let p = f.path().canonicalize().unwrap();
+        let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
+        if let Some(relative_sub) = relative.strip_prefix(skypack_domain) {
+            writeln!(
+                content,
+                "    m.insert(\"{relative_sub}\".to_string(), include_str!(\"../../vendor/{skypack_domain}{relative_sub}\").to_string());",
+            )
+                .unwrap();
+        }
+    }).unwrap();
 
     content.push_str("    m\n}\n");
 
@@ -357,4 +297,24 @@ pub fn build_import_map() -> HashMap<String, String> {{
     {
         panic!("rustfmt command failed: {}", err);
     }
+}
+
+fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&DirEntry)) -> io::Result<()> {
+    if dir.is_dir() {
+        let mut entries = fs::read_dir(dir)?
+            // .map(|res| res.map(|e| e.path()))
+            .collect::<Result<Vec<_>, io::Error>>()?;
+
+        entries.sort_by_key(|d| d.path());
+
+        for entry in entries {
+            let path = entry.path();
+            if path.is_dir() {
+                visit_dirs(&path, cb)?;
+            } else {
+                cb(&entry);
+            }
+        }
+    }
+    Ok(())
 }
