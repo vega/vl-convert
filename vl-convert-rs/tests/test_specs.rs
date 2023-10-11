@@ -101,9 +101,29 @@ fn make_expected_svg_path(name: &str, vl_version: VlVersion, theme: Option<&str>
         })
 }
 
+fn make_expected_scenegraph_path(name: &str, vl_version: VlVersion, theme: Option<&str>) -> PathBuf {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    root_path
+        .join("tests")
+        .join("vl-specs")
+        .join("expected")
+        .join(format!("{:?}", vl_version))
+        .join(if let Some(theme) = theme {
+            format!("{}-{}.sg.json", name, theme)
+        } else {
+            format!("{}.sg.json", name)
+        })
+}
+
 fn load_expected_svg(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Option<String> {
     let spec_path = make_expected_svg_path(name, vl_version, theme);
     fs::read_to_string(&spec_path).ok()
+}
+
+fn load_expected_scenegraph(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Option<Value> {
+    let spec_path = make_expected_scenegraph_path(name, vl_version, theme);
+    let Some(p) = fs::read_to_string(&spec_path).ok() else { return None };
+    serde_json::from_str(&p).ok()
 }
 
 fn write_failed_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) -> PathBuf {
@@ -127,12 +147,44 @@ fn write_failed_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img:
     return file_path;
 }
 
+fn write_failed_scenegraph(name: &str, vl_version: VlVersion, theme: Option<&str>, sg: &Value) -> PathBuf {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let failed_dir = root_path
+        .join("tests")
+        .join("vl-specs")
+        .join("failed")
+        .join(format!("{:?}", vl_version));
+
+    fs::create_dir_all(failed_dir.clone()).unwrap();
+
+    let file_path = failed_dir.join(if let Some(theme) = theme {
+        format!("{}-{}.sg.json", name, theme)
+    } else {
+        format!("{}.sg.json", name)
+    });
+
+    let mut file = fs::File::create(file_path.clone()).unwrap();
+    file.write_all(serde_json::to_string_pretty(sg).unwrap().as_bytes()).unwrap();
+    return file_path;
+}
+
 fn check_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) {
     let expected = load_expected_svg(name, vl_version, theme);
     if Some(img.to_string()) != expected {
         let path = write_failed_svg(name, vl_version, None, img);
         panic!(
             "Images don't match for {}.svg. Failed image written to {:?}",
+            name, path
+        )
+    }
+}
+
+fn check_scenegraph(name: &str, vl_version: VlVersion, theme: Option<&str>, sg: &Value) {
+    let expected = load_expected_scenegraph(name, vl_version, theme);
+    if Some(sg) != expected.as_ref() {
+        let path = write_failed_scenegraph(name, vl_version, theme, sg);
+        panic!(
+            "Specs don't match for {}.sg.json. Failed image written to {:?}",
             name, path
         )
     }
@@ -395,6 +447,47 @@ mod test_svg {
         // Convert directly to svg
         let svg = block_on(converter.vegalite_to_svg(vl_spec, VlOpts{vl_version, ..Default::default()})).unwrap();
         check_svg(name, vl_version, None, &svg);
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[rustfmt::skip]
+mod test_scenegraph {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::converter::VlOpts;
+    use vl_convert_rs::VlConverter;
+
+    #[rstest]
+    fn test(
+        #[values(
+            // This one has round-trip stable numeric values
+            "no_text_in_font_metrics"
+        )]
+        name: &str,
+    ) {
+        initialize();
+
+        let vl_version = VlVersion::v5_8;
+
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
+
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
+
+        // Convert to vega first
+        let vg_spec =
+            block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})).unwrap();
+
+        let sg = block_on(converter.vega_to_scenegraph(vg_spec)).unwrap();
+        check_scenegraph(name, vl_version, None, &sg);
+
+        // Convert directly to svg
+        let sg = block_on(converter.vegalite_to_scenegraph(vl_spec, VlOpts{vl_version, ..Default::default()})).unwrap();
+        check_scenegraph(name, vl_version, None, &sg);
     }
 
     #[test]
