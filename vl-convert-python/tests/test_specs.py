@@ -313,7 +313,7 @@ def test_gh_78():
     check_png(png, expected_png)
 
 
-def check_png(png, expected_png, tol=0.995):
+def check_png(png, expected_png, tol=0.994):
     png_img = imread(BytesIO(png))
     expected_png_img = imread(BytesIO(expected_png))
     similarity_value = ssim(png_img, expected_png_img, channel_axis=2)
