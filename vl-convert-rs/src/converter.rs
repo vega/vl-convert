@@ -225,7 +225,6 @@ import('{url}').then((sg) => {{
             // Create and initialize svg function string
             let function_str = r#"
 function vegaToView(vgSpec, allowedBaseUrls, errors) {
-    console.log('in vegaToView: ', allowedBaseUrls);
     let runtime = vega.parse(vgSpec);
     let baseURL = 'https://vega.github.io/vega-datasets/';
     const loader = vega.loader({ mode: 'http', baseURL });
@@ -234,7 +233,6 @@ function vegaToView(vgSpec, allowedBaseUrls, errors) {
     if (allowedBaseUrls != null) {
         loader.http = async (uri, options) => {
             const parsedUri = new URL(uri);
-            console.log(parsedUri);
             if (
                 allowedBaseUrls.every(
                     (allowedUrl) => !parsedUri.href.startsWith(allowedUrl),
@@ -519,7 +517,7 @@ vegaLiteToSvg_{ver_name:?}(
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
-        throw new Error(`Conversion errors: ${{errors}}`);
+        throw new Error(`${{errors}}`);
     }}
     svg = result;
 }});
@@ -565,7 +563,7 @@ vegaLiteToScenegraph_{ver_name:?}(
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
-        throw new Error(`Conversion errors: ${{errors}}`);
+        throw new Error(`${{errors}}`);
     }}
     sg = result;
 }})
@@ -603,7 +601,7 @@ vegaToSvg(
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
-        throw new Error(`Conversion errors: ${{errors}}`);
+        throw new Error(`${{errors}}`);
     }}
     svg = result;
 }})

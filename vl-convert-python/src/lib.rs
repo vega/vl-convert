@@ -4,7 +4,7 @@ use pyo3::types::{PyBytes, PyDict};
 use pythonize::{depythonize, pythonize};
 use std::str::FromStr;
 use std::sync::Mutex;
-use vl_convert_rs::converter::VlOpts;
+use vl_convert_rs::converter::{VgOpts, VlOpts};
 use vl_convert_rs::html::bundle_vega_snippet;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::serde_json;
@@ -63,6 +63,7 @@ fn vegalite_to_vega(
             config,
             theme,
             show_warnings: show_warnings.unwrap_or(false),
+            allowed_base_urls: None,
         },
     )) {
         Ok(vega_spec) => vega_spec,
@@ -82,19 +83,22 @@ fn vegalite_to_vega(
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
-///
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec)")]
-fn vega_to_svg(vg_spec: PyObject) -> PyResult<String> {
+#[pyo3(text_signature = "(vg_spec, allowed_base_urls)")]
+fn vega_to_svg(vg_spec: PyObject, allowed_base_urls: Option<Vec<String>>) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let svg = match PYTHON_RUNTIME.block_on(converter.vega_to_svg(vg_spec)) {
+    let svg = match PYTHON_RUNTIME
+        .block_on(converter.vega_to_svg(vg_spec, VgOpts { allowed_base_urls }))
+    {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -110,19 +114,25 @@ fn vega_to_svg(vg_spec: PyObject) -> PyResult<String> {
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
-///
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     dict: scenegraph
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec)")]
-fn vega_to_scenegraph(vg_spec: PyObject) -> PyResult<PyObject> {
+#[pyo3(text_signature = "(vg_spec, allowed_base_urls)")]
+fn vega_to_scenegraph(
+    vg_spec: PyObject,
+    allowed_base_urls: Option<Vec<String>>,
+) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let sg = match PYTHON_RUNTIME.block_on(converter.vega_to_scenegraph(vg_spec)) {
+    let sg = match PYTHON_RUNTIME
+        .block_on(converter.vega_to_scenegraph(vg_spec, VgOpts { allowed_base_urls }))
+    {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -146,16 +156,19 @@ fn vega_to_scenegraph(vg_spec: PyObject) -> PyResult<PyObject> {
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, config, theme, show_warnings)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls)")]
 fn vegalite_to_svg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> PyResult<String> {
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
@@ -177,6 +190,7 @@ fn vegalite_to_svg(
             config,
             theme,
             show_warnings: show_warnings.unwrap_or(false),
+            allowed_base_urls,
         },
     )) {
         Ok(vega_spec) => vega_spec,
@@ -200,16 +214,19 @@ fn vegalite_to_svg(
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, config, theme, show_warnings)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls)")]
 fn vegalite_to_scenegraph(
     vl_spec: PyObject,
     vl_version: Option<&str>,
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> PyResult<PyObject> {
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
@@ -231,6 +248,7 @@ fn vegalite_to_scenegraph(
             config,
             theme,
             show_warnings: show_warnings.unwrap_or(false),
+            allowed_base_urls,
         },
     )) {
         Ok(vega_spec) => vega_spec,
@@ -252,19 +270,30 @@ fn vegalite_to_scenegraph(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
 ///     ppi (float): Pixels per inch (default 72)
-///
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, scale, ppi)")]
-fn vega_to_png(vg_spec: PyObject, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
+#[pyo3(text_signature = "(vg_spec, scale, ppi, allowed_base_urls)")]
+fn vega_to_png(
+    vg_spec: PyObject,
+    scale: Option<f32>,
+    ppi: Option<f32>,
+    allowed_base_urls: Option<Vec<String>>,
+) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let png_data = match PYTHON_RUNTIME.block_on(converter.vega_to_png(vg_spec, scale, ppi)) {
+    let png_data = match PYTHON_RUNTIME.block_on(converter.vega_to_png(
+        vg_spec,
+        VgOpts { allowed_base_urls },
+        scale,
+        ppi,
+    )) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -291,10 +320,15 @@ fn vega_to_png(vg_spec: PyObject, scale: Option<f32>, ppi: Option<f32>) -> PyRes
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, scale, ppi, config, theme, show_warnings)")]
+#[pyo3(
+    text_signature = "(vl_spec, vl_version, scale, ppi, config, theme, show_warnings, allowed_base_urls)"
+)]
+#[allow(clippy::too_many_arguments)]
 fn vegalite_to_png(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -303,6 +337,7 @@ fn vegalite_to_png(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> PyResult<PyObject> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -323,6 +358,7 @@ fn vegalite_to_png(
             config,
             theme,
             show_warnings: show_warnings.unwrap_or(false),
+            allowed_base_urls,
         },
         scale,
         ppi,
@@ -347,19 +383,30 @@ fn vegalite_to_png(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
 ///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
-///
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, scale, quality)")]
-fn vega_to_jpeg(vg_spec: PyObject, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
+#[pyo3(text_signature = "(vg_spec, scale, quality, allowed_base_urls)")]
+fn vega_to_jpeg(
+    vg_spec: PyObject,
+    scale: Option<f32>,
+    quality: Option<u8>,
+    allowed_base_urls: Option<Vec<String>>,
+) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let jpeg_data = match PYTHON_RUNTIME.block_on(converter.vega_to_jpeg(vg_spec, scale, quality)) {
+    let jpeg_data = match PYTHON_RUNTIME.block_on(converter.vega_to_jpeg(
+        vg_spec,
+        VgOpts { allowed_base_urls },
+        scale,
+        quality,
+    )) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -386,10 +433,15 @@ fn vega_to_jpeg(vg_spec: PyObject, scale: Option<f32>, quality: Option<u8>) -> P
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, scale, quality, config, theme, show_warnings)")]
+#[pyo3(
+    text_signature = "(vl_spec, vl_version, scale, quality, config, theme, show_warnings, allowed_base_urls)"
+)]
+#[allow(clippy::too_many_arguments)]
 fn vegalite_to_jpeg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -398,6 +450,7 @@ fn vegalite_to_jpeg(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> PyResult<PyObject> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -418,6 +471,7 @@ fn vegalite_to_jpeg(
             config,
             theme,
             show_warnings: show_warnings.unwrap_or(false),
+            allowed_base_urls,
         },
         scale,
         quality,
@@ -441,19 +495,28 @@ fn vegalite_to_jpeg(
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
-///
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     bytes: PDF file bytes
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, scale)")]
-fn vega_to_pdf(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
+#[pyo3(text_signature = "(vg_spec, scale, allowed_base_urls)")]
+fn vega_to_pdf(
+    vg_spec: PyObject,
+    scale: Option<f32>,
+    allowed_base_urls: Option<Vec<String>>,
+) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
 
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let pdf_bytes = match PYTHON_RUNTIME.block_on(converter.vega_to_pdf(vg_spec, scale)) {
+    let pdf_bytes = match PYTHON_RUNTIME.block_on(converter.vega_to_pdf(
+        vg_spec,
+        VgOpts { allowed_base_urls },
+        scale,
+    )) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -477,11 +540,12 @@ fn vega_to_pdf(vg_spec: PyObject, scale: Option<f32>) -> PyResult<PyObject> {
 ///     scale (float): Image scale factor (default 1.0)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///
+///     allowed_base_urls (list of str): List of allowed base URLs for external
+///                                      data requests. Default allows any base URL
 /// Returns:
 ///     bytes: PDF image data
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, scale, config, theme)")]
+#[pyo3(text_signature = "(vl_spec, vl_version, scale, config, theme, allowed_base_urls)")]
 fn vegalite_to_pdf(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -489,6 +553,7 @@ fn vegalite_to_pdf(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> PyResult<PyObject> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -509,6 +574,7 @@ fn vegalite_to_pdf(
             config,
             theme,
             show_warnings: show_warnings.unwrap_or(false),
+            allowed_base_urls,
         },
         scale,
     )) {
@@ -602,6 +668,7 @@ fn vegalite_to_html(
             config,
             theme,
             show_warnings: false,
+            allowed_base_urls: None,
         },
         bundle.unwrap_or(false),
     ))?)
