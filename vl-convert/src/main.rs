@@ -4,7 +4,7 @@ use clap::{arg, Parser, Subcommand};
 use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
-use vl_convert_rs::converter::{vega_to_url, vegalite_to_url, VlConverter, VlOpts};
+use vl_convert_rs::converter::{vega_to_url, vegalite_to_url, VgOpts, VlConverter, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
@@ -84,6 +84,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external data requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert a Vega-Lite specification to an PNG image
@@ -124,6 +128,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external data requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert a Vega-Lite specification to an JPEG image
@@ -164,6 +172,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external data requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert a Vega-Lite specification to a PDF image
@@ -200,6 +212,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external data requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
@@ -257,6 +273,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external data requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert a Vega specification to an PNG image
@@ -281,6 +301,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external data requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert a Vega specification to an JPEG image
@@ -305,6 +329,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external data requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert a Vega specification to an PDF image
@@ -325,6 +353,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external data requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert a Vega specification to a URL that opens the chart in the Vega editor
@@ -468,9 +500,19 @@ async fn main() -> Result<(), anyhow::Error> {
             config,
             show_warnings,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
-            vl_2_svg(&input, &output, &vl_version, theme, config, show_warnings).await?
+            vl_2_svg(
+                &input,
+                &output,
+                &vl_version,
+                theme,
+                config,
+                show_warnings,
+                allowed_base_url,
+            )
+            .await?
         }
         Vl2png {
             input,
@@ -482,6 +524,7 @@ async fn main() -> Result<(), anyhow::Error> {
             ppi,
             show_warnings,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
             vl_2_png(
@@ -493,6 +536,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 scale,
                 ppi,
                 show_warnings,
+                allowed_base_url,
             )
             .await?
         }
@@ -506,6 +550,7 @@ async fn main() -> Result<(), anyhow::Error> {
             quality,
             show_warnings,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
             vl_2_jpeg(
@@ -517,6 +562,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 scale,
                 quality,
                 show_warnings,
+                allowed_base_url,
             )
             .await?
         }
@@ -529,6 +575,7 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             show_warnings,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
             vl_2_pdf(
@@ -539,6 +586,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 config,
                 scale,
                 show_warnings,
+                allowed_base_url,
             )
             .await?
         }
@@ -570,6 +618,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         theme,
                         vl_version,
                         show_warnings: false,
+                        allowed_base_urls: None,
                     },
                     bundle,
                 )
@@ -580,9 +629,10 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_svg(&input, &output).await?
+            vg_2_svg(&input, &output, allowed_base_url).await?
         }
         Vg2png {
             input,
@@ -590,9 +640,10 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             ppi,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_png(&input, &output, scale, ppi).await?
+            vg_2_png(&input, &output, scale, ppi, allowed_base_url).await?
         }
         Vg2jpeg {
             input,
@@ -600,18 +651,20 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             quality,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_jpeg(&input, &output, scale, quality).await?
+            vg_2_jpeg(&input, &output, scale, quality, allowed_base_url).await?
         }
         Vg2pdf {
             input,
             output,
             scale,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_pdf(&input, &output, scale).await?
+            vg_2_pdf(&input, &output, scale, allowed_base_url).await?
         }
         Vg2url { input, fullscreen } => {
             let vg_str = read_input_string(&input)?;
@@ -755,6 +808,7 @@ fn read_config_json(config: Option<String>) -> Result<Option<serde_json::Value>,
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn vl_2_vg(
     input: &str,
     output: &str,
@@ -788,6 +842,7 @@ async fn vl_2_vg(
                 theme,
                 config,
                 show_warnings,
+                allowed_base_urls: None,
             },
         )
         .await
@@ -818,7 +873,11 @@ async fn vl_2_vg(
     Ok(())
 }
 
-async fn vg_2_svg(input: &str, output: &str) -> Result<(), anyhow::Error> {
+async fn vg_2_svg(
+    input: &str,
+    output: &str,
+    allowed_base_urls: Option<Vec<String>>,
+) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
 
@@ -829,7 +888,10 @@ async fn vg_2_svg(input: &str, output: &str) -> Result<(), anyhow::Error> {
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let svg = match converter.vega_to_svg(vg_spec).await {
+    let svg = match converter
+        .vega_to_svg(vg_spec, VgOpts { allowed_base_urls })
+        .await
+    {
         Ok(svg) => svg,
         Err(err) => {
             bail!("Vega to SVG conversion failed: {}", err);
@@ -842,7 +904,13 @@ async fn vg_2_svg(input: &str, output: &str) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn vg_2_png(input: &str, output: &str, scale: f32, ppi: f32) -> Result<(), anyhow::Error> {
+async fn vg_2_png(
+    input: &str,
+    output: &str,
+    scale: f32,
+    ppi: f32,
+    allowed_base_urls: Option<Vec<String>>,
+) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
 
@@ -853,7 +921,15 @@ async fn vg_2_png(input: &str, output: &str, scale: f32, ppi: f32) -> Result<(),
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let png_data = match converter.vega_to_png(vg_spec, Some(scale), Some(ppi)).await {
+    let png_data = match converter
+        .vega_to_png(
+            vg_spec,
+            VgOpts { allowed_base_urls },
+            Some(scale),
+            Some(ppi),
+        )
+        .await
+    {
         Ok(png_data) => png_data,
         Err(err) => {
             bail!("Vega to PNG conversion failed: {}", err);
@@ -871,6 +947,7 @@ async fn vg_2_jpeg(
     output: &str,
     scale: f32,
     quality: u8,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -883,7 +960,12 @@ async fn vg_2_jpeg(
 
     // Perform conversion
     let jpeg_data = match converter
-        .vega_to_jpeg(vg_spec, Some(scale), Some(quality))
+        .vega_to_jpeg(
+            vg_spec,
+            VgOpts { allowed_base_urls },
+            Some(scale),
+            Some(quality),
+        )
         .await
     {
         Ok(jpeg_data) => jpeg_data,
@@ -898,7 +980,12 @@ async fn vg_2_jpeg(
     Ok(())
 }
 
-async fn vg_2_pdf(input: &str, output: &str, scale: f32) -> Result<(), anyhow::Error> {
+async fn vg_2_pdf(
+    input: &str,
+    output: &str,
+    scale: f32,
+    allowed_base_urls: Option<Vec<String>>,
+) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
 
@@ -909,7 +996,10 @@ async fn vg_2_pdf(input: &str, output: &str, scale: f32) -> Result<(), anyhow::E
     let mut converter = VlConverter::new();
 
     // Perform conversion
-    let pdf_data = match converter.vega_to_pdf(vg_spec, Some(scale)).await {
+    let pdf_data = match converter
+        .vega_to_pdf(vg_spec, VgOpts { allowed_base_urls }, Some(scale))
+        .await
+    {
         Ok(pdf_data) => pdf_data,
         Err(err) => {
             bail!("Vega to PDF conversion failed: {}", err);
@@ -922,6 +1012,7 @@ async fn vg_2_pdf(input: &str, output: &str, scale: f32) -> Result<(), anyhow::E
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn vl_2_svg(
     input: &str,
     output: &str,
@@ -929,6 +1020,7 @@ async fn vl_2_svg(
     theme: Option<String>,
     config: Option<String>,
     show_warnings: bool,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -954,6 +1046,7 @@ async fn vl_2_svg(
                 config,
                 theme,
                 show_warnings,
+                allowed_base_urls,
             },
         )
         .await
@@ -980,6 +1073,7 @@ async fn vl_2_png(
     scale: f32,
     ppi: f32,
     show_warnings: bool,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1005,6 +1099,7 @@ async fn vl_2_png(
                 config,
                 theme,
                 show_warnings,
+                allowed_base_urls,
             },
             Some(scale),
             Some(ppi),
@@ -1033,6 +1128,7 @@ async fn vl_2_jpeg(
     scale: f32,
     quality: u8,
     show_warnings: bool,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1058,6 +1154,7 @@ async fn vl_2_jpeg(
                 config,
                 theme,
                 show_warnings,
+                allowed_base_urls,
             },
             Some(scale),
             Some(quality),
@@ -1076,6 +1173,7 @@ async fn vl_2_jpeg(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn vl_2_pdf(
     input: &str,
     output: &str,
@@ -1084,6 +1182,7 @@ async fn vl_2_pdf(
     config: Option<String>,
     scale: f32,
     show_warnings: bool,
+    allowed_base_urls: Option<Vec<String>>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1109,6 +1208,7 @@ async fn vl_2_pdf(
                 config,
                 theme,
                 show_warnings,
+                allowed_base_urls,
             },
             Some(scale),
         )
