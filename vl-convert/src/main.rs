@@ -618,7 +618,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         theme,
                         vl_version,
                         show_warnings: false,
-                        allowed_base_urls: None
+                        allowed_base_urls: None,
                     },
                     bundle,
                 )
@@ -842,7 +842,7 @@ async fn vl_2_vg(
                 theme,
                 config,
                 show_warnings,
-                allowed_base_urls: None
+                allowed_base_urls: None,
             },
         )
         .await
