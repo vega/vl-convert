@@ -457,12 +457,98 @@ mod test_svg {
         let vg_spec =
             block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})).unwrap();
 
-        let svg = block_on(converter.vega_to_svg(vg_spec)).unwrap();
+        let svg = block_on(converter.vega_to_svg(vg_spec, Default::default())).unwrap();
         check_svg(name, vl_version, None, &svg);
 
         // Convert directly to svg
         let svg = block_on(converter.vegalite_to_svg(vl_spec, VlOpts{vl_version, ..Default::default()})).unwrap();
         check_svg(name, vl_version, None, &svg);
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[rustfmt::skip]
+mod test_svg_allowed_base_url {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::converter::{VgOpts, VlOpts};
+    use vl_convert_rs::VlConverter;
+
+    #[rstest]
+    fn test(#[values("circle_binned")] name: &str) {
+        initialize();
+
+        let vl_version = VlVersion::v5_8;
+
+        // Load example Vega-Lite spec
+        let vl_spec = load_vl_spec(name);
+
+        // Create Vega-Lite Converter and perform conversion
+        let mut converter = VlConverter::new();
+
+        // Convert to vega first
+        let vg_spec = block_on(converter.vegalite_to_vega(
+            vl_spec.clone(),
+            VlOpts {
+                vl_version,
+                ..Default::default()
+            },
+        ))
+        .unwrap();
+
+        // Check with matching base URL
+        let allowed_base_urls = Some(vec![
+            "https://raw.githubusercontent.com/vega/vega-datasets".to_string()
+        ]);
+        let svg = block_on(converter.vega_to_svg(
+            vg_spec.clone(),
+            VgOpts {
+                allowed_base_urls: allowed_base_urls.clone(),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
+        check_svg(name, vl_version, None, &svg);
+
+        // Convert directly to svg
+        let svg = block_on(converter.vegalite_to_svg(
+            vl_spec.clone(),
+            VlOpts {
+                vl_version,
+                allowed_base_urls,
+                ..Default::default()
+            },
+        ))
+        .unwrap();
+        check_svg(name, vl_version, None, &svg);
+
+        // Check for error with non-matching URL
+        let allowed_base_urls = Some(vec!["https://some-other-base".to_string()]);
+
+        let Err(result) = block_on(converter.vega_to_svg(
+            vg_spec,
+            VgOpts {
+                allowed_base_urls: allowed_base_urls.clone(),
+                ..Default::default()
+            },
+        )) else {
+            panic!("Expected error")
+        };
+        assert!(result.to_string().contains("External data url not allowed"));
+
+        let Err(result) = block_on(converter.vegalite_to_svg(
+            vl_spec,
+            VlOpts {
+                vl_version,
+                allowed_base_urls: allowed_base_urls.clone(),
+                ..Default::default()
+            },
+        )) else {
+            panic!("Expected error")
+        };
+        assert!(result.to_string().contains("External data url not allowed"));
     }
 
     #[test]
@@ -498,7 +584,7 @@ mod test_scenegraph {
         let vg_spec =
             block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})).unwrap();
 
-        let sg = block_on(converter.vega_to_scenegraph(vg_spec)).unwrap();
+        let sg = block_on(converter.vega_to_scenegraph(vg_spec, Default::default())).unwrap();
         check_scenegraph(name, vl_version, None, &sg);
 
         // Convert directly to svg
@@ -548,7 +634,7 @@ mod test_png_no_theme {
             converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})
         ).unwrap();
 
-        let png_data = block_on(converter.vega_to_png(vg_spec, Some(scale), None)).unwrap();
+        let png_data = block_on(converter.vega_to_png(vg_spec, Default::default(), Some(scale), None)).unwrap();
         check_png(name, vl_version, None, png_data.as_slice());
 
         // Convert directly to png
@@ -599,7 +685,8 @@ mod test_png_theme_config {
                     vl_version,
                     theme: Some(theme.to_string()),
                     config: Some(json!({"background": BACKGROUND_COLOR})),
-                    show_warnings: false
+                    show_warnings: false,
+                    allowed_base_urls: None,
                 },
                 Some(scale),
                 None
@@ -622,7 +709,8 @@ mod test_png_theme_config {
                     vl_version,
                     theme: None,
                     config: Some(json!({"background": BACKGROUND_COLOR})),
-                    show_warnings: false
+                    show_warnings: false,
+                    allowed_base_urls: None,
                 },
                 Some(scale),
                 None
@@ -696,7 +784,7 @@ mod test_jpeg {
         let vg_spec =
             block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})).unwrap();
 
-        let jpeg_bytes = block_on(converter.vega_to_jpeg(vg_spec, None, None)).unwrap();
+        let jpeg_bytes = block_on(converter.vega_to_jpeg(vg_spec, Default::default(), None, None)).unwrap();
 
         // Check for JPEG prefix
         assert_eq!(&jpeg_bytes.as_slice()[..10], b"\xff\xd8\xff\xe0\x00\x10JFIF");
