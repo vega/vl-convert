@@ -12,11 +12,11 @@ keywords = ["Visualization", "Vega", "Vega-Lite"]
 [dependencies]
 vl-convert-pdf = {path= "../vl-convert-pdf", version= "0.14.0" }
 
-# Deno 1.37.1. Before updating deno_runtime/deno_core, see note in DEVELOP.md
-deno_runtime = "0.128.0"
-deno_core = "0.218.0"
-deno_emit = "0.29.0"
-deno_graph = "0.56.1"
+# Deno 1.37.2. Before updating deno_runtime/deno_core, see note in DEVELOP.md
+deno_runtime = "0.129.0"
+deno_core = "0.222.0"
+deno_emit = "0.31.1"
+deno_graph = "0.59.1"
 serde_json = {version="1.0.106", features=["preserve_order"]}
 serde = {version="1.0.188", features=["derive"]}
 futures = "0.3.28"
@@ -24,11 +24,11 @@ futures-util = "0.3.28"
 tokio = { version= "1.32.0" }
 reqwest = {version="0.11.20", default-features=false, features=["rustls-tls"]}
 lazy_static = "1.4.0"
-usvg = "0.35.0"
-resvg = "0.35.0"
-tiny-skia = "0.10.0"
+usvg = "0.36.0"
+resvg = "0.36.0"
+tiny-skia = "0.11.2"
 png = "0.17.10"
-fontdb = {version= "0.14.1", features=["fontconfig"]}
+fontdb = {version= "0.15.0", features=["fontconfig"]}
 tempfile = "3.8.0"
 log = "0.4.20"
 env_logger = "0.10.0"

@@ -59,6 +59,7 @@ pub async fn bundle_script(script: String, vl_version: VlVersion) -> Result<Stri
                 ..Default::default()
             },
             emit_ignore_directives: false,
+            minify: true,
         },
     )
     .await?;
