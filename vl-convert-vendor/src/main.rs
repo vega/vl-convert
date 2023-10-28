@@ -280,6 +280,18 @@ pub fn build_import_map() -> HashMap<String, String> {{
 
     content.push_str("    m\n}\n");
 
+    // Overwrite with patched files
+    visit_dirs(&vendor_path, &mut |f| {
+        let p = f.path().canonicalize().unwrap();
+        let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
+        let patched_file_path = root_path.join("patched").join(relative);
+        if patched_file_path.exists() {
+            let vendored_file_path = vendor_path.join(relative);
+            fs::copy(patched_file_path, vendored_file_path).unwrap();
+        }
+    })
+    .unwrap();
+
     // Write to import_map.rs in vl-convert-rs crate
     let deno_deps_path = root_path
         .join("..")
