@@ -286,9 +286,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
         let patched_file_path = root_path.join("patched").join(relative);
         if patched_file_path.exists() {
-            println!("patching {:?}", patched_file_path);
             let vendored_file_path = vendor_path.join(relative);
-            println!("vendored_path: {:?}", vendored_file_path);
             fs::copy(patched_file_path, vendored_file_path).unwrap();
         }
     })
