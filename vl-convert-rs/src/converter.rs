@@ -377,6 +377,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
             stdio: Default::default(),
             should_wait_for_inspector_session: false,
             fs: Arc::new(RealFs),
+            feature_checker: Arc::new(Default::default()),
         };
 
         let main_module =
