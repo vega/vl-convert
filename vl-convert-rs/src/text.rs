@@ -164,9 +164,13 @@ impl TextInfo {
         )
     }
 
-    /// Strip potentially unsupported font properties and replace with a supported font
+    /// Strip potentially unsupported font properties, replace with a supported font,
+    /// replace text with zeros
     fn fallback(&self) -> Self {
         let mut new = self.clone();
+        new.text = new
+            .text
+            .map(|t| Value::String(String::from_utf8(vec![b'0'; t.to_string().len()]).unwrap()));
         new.style = None;
         new.family = Some("sans-serif".to_string());
         new.variant = None;
