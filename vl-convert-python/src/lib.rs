@@ -851,21 +851,20 @@ fn get_themes() -> PyResult<PyObject> {
 #[pyfunction]
 #[pyo3(text_signature = "(snippet, vl_version)")]
 fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyResult<String> {
-    // Default to snippet that assigns them to the global window
-    let snippet = snippet.unwrap_or(
-        r#"
-        window.vegaEmbed=vegaEmbed;
-        window.vega=vega;
-        window.vegaLite=vegaLite;
-    "#
-        .to_string(),
-    );
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
         Default::default()
     };
-    Ok(PYTHON_RUNTIME.block_on(bundle_vega_snippet(&snippet, vl_version))?)
+
+    if let Some(snippet) = &snippet {
+        Ok(PYTHON_RUNTIME.block_on(bundle_vega_snippet(&snippet, vl_version))?)
+    } else {
+        let mut converter = VL_CONVERTER
+            .lock()
+            .expect("Failed to acquire lock on Vega-Lite converter");
+        Ok(PYTHON_RUNTIME.block_on(converter.get_vegaembed_bundle(vl_version))?)
+    }
 }
 
 /// Convert Vega-Lite specifications to other formats
