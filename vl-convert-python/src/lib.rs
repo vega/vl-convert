@@ -858,7 +858,7 @@ fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyRes
     };
 
     if let Some(snippet) = &snippet {
-        Ok(PYTHON_RUNTIME.block_on(bundle_vega_snippet(&snippet, vl_version))?)
+        Ok(PYTHON_RUNTIME.block_on(bundle_vega_snippet(snippet, vl_version))?)
     } else {
         let mut converter = VL_CONVERTER
             .lock()
