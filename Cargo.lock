@@ -6487,7 +6487,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vl-convert"
-version = "1.0.1-rc1"
+version = "1.0.1"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -6504,7 +6504,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-pdf"
-version = "1.0.1-rc1"
+version = "1.0.1"
 dependencies = [
  "anyhow",
  "itertools 0.11.0",
@@ -6520,7 +6520,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-python"
-version = "1.0.1-rc1"
+version = "1.0.1"
 dependencies = [
  "futures",
  "lazy_static",
@@ -6532,7 +6532,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-rs"
-version = "1.0.1-rc1"
+version = "1.0.1"
 dependencies = [
  "deno_core",
  "deno_emit",
@@ -6564,7 +6564,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-vendor"
-version = "1.0.1-rc1"
+version = "1.0.1"
 dependencies = [
  "serde_json",
 ]
