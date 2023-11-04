@@ -1049,13 +1049,18 @@ impl VlConverter {
         svg_to_pdf(&svg, scale)
     }
 
-    async fn get_vegaembed_bundle(&mut self, vl_version: VlVersion) -> Result<String, AnyError> {
-        // TODO: return &str and avoid cloning
+    pub async fn get_vegaembed_bundle(
+        &mut self,
+        vl_version: VlVersion,
+    ) -> Result<String, AnyError> {
         let bundle = match self._vegaembed_bundles.entry(vl_version) {
             Entry::Occupied(occupied) => occupied.get().clone(),
             Entry::Vacant(vacant) => {
-                let bundle =
-                    bundle_vega_snippet("window.vegaEmbed = vegaEmbed;", vl_version).await?;
+                let bundle = bundle_vega_snippet(
+                    "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite;",
+                    vl_version,
+                )
+                .await?;
                 vacant.insert(bundle.clone());
                 bundle
             }
