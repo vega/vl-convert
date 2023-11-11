@@ -1,0 +1,14 @@
+{
+  "config": {"view": {"continuousWidth": 300, "continuousHeight": 300}},
+  "data": {
+    "url": "https://cdn.jsdelivr.net/npm/vega-datasets@v1.29.0/data/stocks.csv"
+  },
+  "mark": {"type": "area"},
+  "encoding": {
+    "color": {"field": "symbol", "type": "nominal"},
+    "x": {"field": "date", "type": "temporal"},
+    "y": {"axis": {"format": "$.0f"}, "field": "price", "type": "quantitative"}
+  },
+  "transform": [{"filter": "year(datum.date) == 2009"}],
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.15.1.json"
+}

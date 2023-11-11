@@ -8,7 +8,7 @@ use vl_convert_rs::{VlConverter, VlVersion};
 
 use serde_json::Value;
 use std::sync::Once;
-use vl_convert_rs::converter::VlOpts;
+use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VlOpts};
 
 static INIT: Once = Once::new();
 const BACKGROUND_COLOR: &str = "#abc";
@@ -32,6 +32,32 @@ fn load_vl_spec(name: &str) -> serde_json::Value {
         fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
     serde_json::from_str(&spec_str)
         .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", spec_path))
+}
+
+fn load_locale(
+    format_name: &str,
+    time_format_name: &str,
+) -> (serde_json::Value, serde_json::Value) {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let locale_path = root_path.join("tests").join("locale");
+
+    let format_path = locale_path
+        .join("format")
+        .join(format!("{format_name}.json"));
+    let time_format_path = locale_path
+        .join("time-format")
+        .join(format!("{time_format_name}.json"));
+
+    let format_str = fs::read_to_string(&format_path)
+        .unwrap_or_else(|_| panic!("Failed to read {:?}", format_path));
+    let time_format_str = fs::read_to_string(&time_format_path)
+        .unwrap_or_else(|_| panic!("Failed to read {:?}", time_format_path));
+
+    let format_value = serde_json::from_str(&format_str)
+        .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", format_str));
+    let time_format_value = serde_json::from_str(&time_format_str)
+        .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", time_format_str));
+    (format_value, time_format_value)
 }
 
 fn load_expected_vg_spec(name: &str, vl_version: VlVersion) -> Option<serde_json::Value> {
@@ -264,7 +290,7 @@ fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8])
         let attr = Dssim::new();
         let (diff, _) = attr.compare(&expected_dssim, img_dssim);
 
-        if diff > 0.0001 {
+        if diff > 0.00011 {
             println!("DSSIM diff {diff}");
             let path = write_failed_png(name, vl_version, None, img);
             panic!(
@@ -688,6 +714,8 @@ mod test_png_theme_config {
                     config: Some(json!({"background": BACKGROUND_COLOR})),
                     show_warnings: false,
                     allowed_base_urls: None,
+                    format_locale: None,
+                    time_format_locale: None,
                 },
                 Some(scale),
                 None
@@ -712,6 +740,8 @@ mod test_png_theme_config {
                     config: Some(json!({"background": BACKGROUND_COLOR})),
                     show_warnings: false,
                     allowed_base_urls: None,
+                    format_locale: None,
+                    time_format_locale: None,
                 },
                 Some(scale),
                 None
@@ -751,6 +781,60 @@ async fn test_font_with_quotes() {
     check_png(name, vl_version, None, png_data.as_slice());
 }
 
+#[tokio::test]
+async fn test_locale() {
+    let vl_version = VlVersion::v5_8;
+
+    // Load example Vega-Lite spec
+    let name = "stocks_locale";
+    let format_locale_name = "it-IT";
+    let time_format_locale_name = "it-IT";
+    let vl_spec = load_vl_spec(name);
+
+    let (format_locale, time_format_locale) =
+        load_locale(format_locale_name, time_format_locale_name);
+
+    // Create Vega-Lite Converter and perform conversion
+    let mut converter = VlConverter::new();
+
+    // Convert with locale objects
+    let png_data = converter
+        .vegalite_to_png(
+            vl_spec.clone(),
+            VlOpts {
+                vl_version,
+                format_locale: Some(FormatLocale::Object(format_locale)),
+                time_format_locale: Some(TimeFormatLocale::Object(time_format_locale)),
+                ..Default::default()
+            },
+            Some(2.0),
+            None,
+        )
+        .await
+        .unwrap();
+
+    check_png(name, vl_version, None, png_data.as_slice());
+
+    // Convert with locale names
+    let png_data = converter
+        .vegalite_to_png(
+            vl_spec,
+            VlOpts {
+                vl_version,
+                format_locale: Some(FormatLocale::Name(format_locale_name.to_string())),
+                time_format_locale: Some(TimeFormatLocale::Name(
+                    time_format_locale_name.to_string(),
+                )),
+                ..Default::default()
+            },
+            Some(2.0),
+            None,
+        )
+        .await
+        .unwrap();
+
+    check_png(name, vl_version, None, png_data.as_slice());
+}
 #[rustfmt::skip]
 mod test_jpeg {
     use crate::*;

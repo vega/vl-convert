@@ -1,5 +1,7 @@
 use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
-use crate::module_loader::{VlConvertModuleLoader, IMPORT_MAP};
+use crate::module_loader::{
+    VlConvertModuleLoader, FORMATE_LOCALE_MAP, IMPORT_MAP, TIME_FORMATE_LOCALE_MAP,
+};
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
@@ -32,7 +34,7 @@ use png::{PixelDimensions, Unit};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{TreeParsing, TreeTextToPath};
 
-use crate::html::{bundle_vega_snippet, get_vega_script, get_vegalite_script};
+use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::io::Reader as ImageReader;
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
@@ -50,6 +52,66 @@ lazy_static! {
 #[derive(Debug, Clone, Default)]
 pub struct VgOpts {
     pub allowed_base_urls: Option<Vec<String>>,
+    pub format_locale: Option<FormatLocale>,
+    pub time_format_locale: Option<TimeFormatLocale>,
+}
+
+impl VgOpts {
+    pub fn to_embed_opts(&self) -> Result<serde_json::Value, AnyError> {
+        let mut opts_map = serde_json::Map::new();
+
+        if let Some(format_locale) = &self.format_locale {
+            opts_map.insert("formatLocale".to_string(), format_locale.as_object()?);
+        }
+        if let Some(time_format_locale) = &self.time_format_locale {
+            opts_map.insert(
+                "timeFormatLocale".to_string(),
+                time_format_locale.as_object()?,
+            );
+        }
+
+        Ok(serde_json::Value::Object(opts_map))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum FormatLocale {
+    Name(String),
+    Object(serde_json::Value),
+}
+
+impl FormatLocale {
+    pub fn as_object(&self) -> Result<serde_json::Value, AnyError> {
+        match self {
+            FormatLocale::Name(name) => {
+                let Some(locale_str) = FORMATE_LOCALE_MAP.get(name) else {
+                    return Err(anyhow!("No built-in format locale named {}", name));
+                };
+                Ok(serde_json::from_str(locale_str)?)
+            }
+            FormatLocale::Object(object) => Ok(object.clone()),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TimeFormatLocale {
+    Name(String),
+    Object(serde_json::Value),
+}
+
+impl TimeFormatLocale {
+    pub fn as_object(&self) -> Result<serde_json::Value, AnyError> {
+        match self {
+            TimeFormatLocale::Name(name) => {
+                let Some(locale_str) = TIME_FORMATE_LOCALE_MAP.get(name) else {
+                    return Err(anyhow!("No built-in time format locale named {}", name));
+                };
+                Ok(serde_json::from_str(locale_str)?)
+            }
+            TimeFormatLocale::Object(object) => Ok(object.clone()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -59,10 +121,12 @@ pub struct VlOpts {
     pub vl_version: VlVersion,
     pub show_warnings: bool,
     pub allowed_base_urls: Option<Vec<String>>,
+    pub format_locale: Option<FormatLocale>,
+    pub time_format_locale: Option<TimeFormatLocale>,
 }
 
 impl VlOpts {
-    pub fn to_embed_opts(&self) -> serde_json::Value {
+    pub fn to_embed_opts(&self) -> Result<serde_json::Value, AnyError> {
         let mut opts_map = serde_json::Map::new();
 
         if let Some(theme) = &self.theme {
@@ -76,7 +140,17 @@ impl VlOpts {
             opts_map.insert("config".to_string(), config.clone());
         }
 
-        serde_json::Value::Object(opts_map)
+        if let Some(format_locale) = &self.format_locale {
+            opts_map.insert("formatLocale".to_string(), format_locale.as_object()?);
+        }
+        if let Some(time_format_locale) = &self.time_format_locale {
+            opts_map.insert(
+                "timeFormatLocale".to_string(),
+                time_format_locale.as_object()?,
+            );
+        }
+
+        Ok(serde_json::Value::Object(opts_map))
     }
 }
 
@@ -248,17 +322,35 @@ function vegaToView(vgSpec, allowedBaseUrls, errors) {
     return new vega.View(runtime, {renderer: 'none', loader});
 }
 
-function vegaToSvg(vgSpec, allowedBaseUrls, errors) {
+function vegaToSvg(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, errors) {
+    if (formatLocale != null) {
+        vega.formatLocale(formatLocale);
+    }
+    if (timeFormatLocale != null) {
+        vega.timeFormatLocale(timeFormatLocale);
+    }
     let view = vegaToView(vgSpec, allowedBaseUrls, errors);
-    let svgPromise = view.toSVG().finally(() => { view.finalize() });
+    let svgPromise = view.toSVG().finally(() => {
+        view.finalize();
+        vega.resetDefaultLocale();
+    });
     return svgPromise
 }
 
-function vegaToScenegraph(vgSpec, allowedBaseUrls, errors) {
+function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, errors) {
+    if (formatLocale != null) {
+        vega.formatLocale(formatLocale);
+    }
+    if (timeFormatLocale != null) {
+        vega.timeFormatLocale(timeFormatLocale);
+    }
     let view = vegaToView(vgSpec, allowedBaseUrls, errors);
     let scenegraphPromise = view.runAsync().then(() => {
         return JSON.parse(JSON.parse(vega.sceneToJSON(view.scenegraph())));
-    }).finally(() => { view.finalize() });
+    }).finally(() => {
+        view.finalize();
+        vega.resetDefaultLocale();
+    });
     return scenegraphPromise
 }
 "#;
@@ -312,14 +404,14 @@ function compileVegaLite_{ver_name}(vlSpec, config, theme, warnings) {{
     return {ver_name}.compile(vlSpec, options).spec
 }}
 
-function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings, allowedBaseUrls, errors) {{
+function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings, allowedBaseUrls, formatLocale, timeFormatLocale, errors) {{
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
-    return vegaToSvg(vgSpec, allowedBaseUrls, errors)
+    return vegaToSvg(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, errors)
 }}
 
-function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowedBaseUrls, errors) {{
+function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowedBaseUrls, formatLocale, timeFormatLocale, errors) {{
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
-    return vegaToScenegraph(vgSpec, allowedBaseUrls, errors)
+    return vegaToScenegraph(vgSpec, allowedBaseUrls,formatLocale, timeFormatLocale,  errors)
 }}
 "#,
                 ver_name = format!("{:?}", vl_version),
@@ -495,8 +587,22 @@ compileVegaLite_{ver_name:?}(
         self.init_vl_version(&vl_opts.vl_version).await?;
 
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
+
+        let format_locale = match vl_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vl_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
         let spec_arg_id = set_json_arg(vl_spec.clone())?;
         let config_arg_id = set_json_arg(config)?;
+        let format_locale_id = set_json_arg(format_locale)?;
+        let time_format_locale_id = set_json_arg(time_format_locale)?;
+
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
             Some(s) => format!("'{}'", s),
@@ -515,6 +621,8 @@ vegaLiteToSvg_{ver_name:?}(
     {theme_arg},
     {show_warnings},
     {allowed_base_urls},
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({format_locale_id})),
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({time_format_locale_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -524,9 +632,6 @@ vegaLiteToSvg_{ver_name:?}(
 }});
 "#,
             ver_name = vl_opts.vl_version,
-            spec_arg_id = spec_arg_id,
-            config_arg_id = config_arg_id,
-            theme_arg = theme_arg,
             show_warnings = vl_opts.show_warnings,
         ));
         self.worker.execute_script("<anon>", code)?;
@@ -545,12 +650,28 @@ vegaLiteToSvg_{ver_name:?}(
         self.init_vl_version(&vl_opts.vl_version).await?;
 
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
+        let format_locale = match vl_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vl_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
         let spec_arg_id = set_json_arg(vl_spec.clone())?;
         let config_arg_id = set_json_arg(config)?;
+        let format_locale_id = set_json_arg(format_locale)?;
+        let time_format_locale_id = set_json_arg(time_format_locale)?;
+
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
             Some(s) => format!("'{}'", s),
         };
+
+        let allowed_base_urls =
+            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
 
         let code = ModuleCode::from(format!(
             r#"
@@ -561,6 +682,9 @@ vegaLiteToScenegraph_{ver_name:?}(
     JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({config_arg_id})),
     {theme_arg},
     {show_warnings},
+    {allowed_base_urls},
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({format_locale_id})),
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({time_format_locale_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -570,9 +694,6 @@ vegaLiteToScenegraph_{ver_name:?}(
 }})
 "#,
             ver_name = vl_opts.vl_version,
-            spec_arg_id = spec_arg_id,
-            config_arg_id = config_arg_id,
-            theme_arg = theme_arg,
             show_warnings = vl_opts.show_warnings,
         ));
         self.worker.execute_script("<anon>", code)?;
@@ -591,7 +712,20 @@ vegaLiteToScenegraph_{ver_name:?}(
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
 
+        let format_locale = match vg_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vg_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
         let arg_id = set_json_arg(vg_spec.clone())?;
+        let format_locale_id = set_json_arg(format_locale)?;
+        let time_format_locale_id = set_json_arg(time_format_locale)?;
+
         let code = ModuleCode::from(format!(
             r#"
 var svg;
@@ -599,6 +733,8 @@ var errors = [];
 vegaToSvg(
     JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({arg_id})),
     {allowed_base_urls},
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({format_locale_id})),
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({time_format_locale_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -623,15 +759,34 @@ vegaToSvg(
         self.init_vega().await?;
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
+        let format_locale = match vg_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vg_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
 
         let arg_id = set_json_arg(vg_spec.clone())?;
+        let format_locale_id = set_json_arg(format_locale)?;
+        let time_format_locale_id = set_json_arg(time_format_locale)?;
+
         let code = ModuleCode::from(format!(
             r#"
 var sg;
+var errors = [];
 vegaToScenegraph(
     JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({arg_id})),
     {allowed_base_urls},
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({format_locale_id})),
+    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({time_format_locale_id})),
+    errors,
 ).then((result) => {{
+    if (errors != null && errors.length > 0) {{
+        throw new Error(`${{errors}}`);
+    }}
     sg = result;
 }})
 "#
@@ -1129,16 +1284,17 @@ impl VlConverter {
         bundle: bool,
     ) -> Result<String, AnyError> {
         let vl_version = vl_opts.vl_version;
-        let code = get_vegalite_script(vl_spec, vl_opts.to_embed_opts())?;
+        let code = get_vega_or_vegalite_script(vl_spec, vl_opts.to_embed_opts()?)?;
         self.build_html(&code, vl_version, bundle).await
     }
 
     pub async fn vega_to_html(
         &mut self,
         vg_spec: serde_json::Value,
+        vg_opts: VgOpts,
         bundle: bool,
     ) -> Result<String, AnyError> {
-        let code = get_vega_script(vg_spec)?;
+        let code = get_vega_or_vegalite_script(vg_spec, vg_opts.to_embed_opts()?)?;
         self.build_html(&code, Default::default(), bundle).await
     }
 

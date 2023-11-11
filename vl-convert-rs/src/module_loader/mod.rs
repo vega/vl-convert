@@ -1,6 +1,9 @@
 pub mod import_map;
 
-use crate::module_loader::import_map::{build_import_map, VEGA_PATH, VEGA_THEMES_PATH};
+use crate::module_loader::import_map::{
+    build_format_locale_map, build_import_map, build_time_format_locale_map, VEGA_PATH,
+    VEGA_THEMES_PATH,
+};
 use crate::VlVersion;
 use deno_core::{ModuleCode, ResolutionKind};
 use deno_emit::{CacheSetting, LoadFuture, Loader};
@@ -16,6 +19,9 @@ use std::pin::Pin;
 
 lazy_static! {
     pub static ref IMPORT_MAP: HashMap<String, String> = build_import_map();
+    pub static ref FORMATE_LOCALE_MAP: HashMap<String, String> = build_format_locale_map();
+    pub static ref TIME_FORMATE_LOCALE_MAP: HashMap<String, String> =
+        build_time_format_locale_map();
 }
 
 pub struct VlConvertModuleLoader;
