@@ -70,7 +70,7 @@ enum Commands {
         vl_version: String,
 
         /// Named theme provided by the vegaThemes package (e.g. "dark")
-        #[arg(short, long)]
+        #[arg(long)]
         theme: Option<String>,
 
         /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
@@ -88,6 +88,14 @@ enum Commands {
         /// Allowed base URL for external data requests. Default allows any base URL
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert a Vega-Lite specification to an PNG image
@@ -106,7 +114,7 @@ enum Commands {
         vl_version: String,
 
         /// Named theme provided by the vegaThemes package (e.g. "dark")
-        #[arg(short, long)]
+        #[arg(long)]
         theme: Option<String>,
 
         /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
@@ -132,6 +140,14 @@ enum Commands {
         /// Allowed base URL for external data requests. Default allows any base URL
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert a Vega-Lite specification to an JPEG image
@@ -150,7 +166,7 @@ enum Commands {
         vl_version: String,
 
         /// Named theme provided by the vegaThemes package (e.g. "dark")
-        #[arg(short, long)]
+        #[arg(long)]
         theme: Option<String>,
 
         /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
@@ -176,6 +192,14 @@ enum Commands {
         /// Allowed base URL for external data requests. Default allows any base URL
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert a Vega-Lite specification to a PDF image
@@ -194,7 +218,7 @@ enum Commands {
         vl_version: String,
 
         /// Named theme provided by the vegaThemes package (e.g. "dark")
-        #[arg(short, long)]
+        #[arg(long)]
         theme: Option<String>,
 
         /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
@@ -216,6 +240,14 @@ enum Commands {
         /// Allowed base URL for external data requests. Default allows any base URL
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
@@ -246,7 +278,7 @@ enum Commands {
         vl_version: String,
 
         /// Named theme provided by the vegaThemes package (e.g. "dark")
-        #[arg(short, long)]
+        #[arg(long)]
         theme: Option<String>,
 
         /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
@@ -257,6 +289,14 @@ enum Commands {
         /// instead of loading them from a CDN
         #[arg(short, long)]
         bundle: bool,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert a Vega specification to an SVG image
@@ -277,6 +317,14 @@ enum Commands {
         /// Allowed base URL for external data requests. Default allows any base URL
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert a Vega specification to an PNG image
@@ -305,6 +353,14 @@ enum Commands {
         /// Allowed base URL for external data requests. Default allows any base URL
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert a Vega specification to an JPEG image
@@ -333,6 +389,14 @@ enum Commands {
         /// Allowed base URL for external data requests. Default allows any base URL
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert a Vega specification to an PDF image
@@ -357,6 +421,14 @@ enum Commands {
         /// Allowed base URL for external data requests. Default allows any base URL
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert a Vega specification to a URL that opens the chart in the Vega editor
@@ -386,6 +458,14 @@ enum Commands {
         /// instead of loading them from a CDN
         #[arg(short, long)]
         bundle: bool,
+
+        /// d3-format locale JSON file
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale JSON file
+        #[arg(long)]
+        time_format_locale: Option<String>,
     },
 
     /// Convert an SVG image to a PNG image
@@ -501,6 +581,8 @@ async fn main() -> Result<(), anyhow::Error> {
             show_warnings,
             font_dir,
             allowed_base_url,
+            format_locale,
+            time_format_locale,
         } => {
             register_font_dir(font_dir)?;
             vl_2_svg(
@@ -511,6 +593,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config,
                 show_warnings,
                 allowed_base_url,
+                format_locale,
+                time_format_locale,
             )
             .await?
         }
@@ -525,6 +609,8 @@ async fn main() -> Result<(), anyhow::Error> {
             show_warnings,
             font_dir,
             allowed_base_url,
+            format_locale,
+            time_format_locale,
         } => {
             register_font_dir(font_dir)?;
             vl_2_png(
@@ -537,6 +623,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 ppi,
                 show_warnings,
                 allowed_base_url,
+                format_locale,
+                time_format_locale,
             )
             .await?
         }
@@ -551,6 +639,8 @@ async fn main() -> Result<(), anyhow::Error> {
             show_warnings,
             font_dir,
             allowed_base_url,
+            format_locale,
+            time_format_locale,
         } => {
             register_font_dir(font_dir)?;
             vl_2_jpeg(
@@ -563,6 +653,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 quality,
                 show_warnings,
                 allowed_base_url,
+                format_locale,
+                time_format_locale,
             )
             .await?
         }
@@ -576,6 +668,8 @@ async fn main() -> Result<(), anyhow::Error> {
             show_warnings,
             font_dir,
             allowed_base_url,
+            format_locale,
+            time_format_locale,
         } => {
             register_font_dir(font_dir)?;
             vl_2_pdf(
@@ -587,6 +681,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 scale,
                 show_warnings,
                 allowed_base_url,
+                format_locale,
+                time_format_locale,
             )
             .await?
         }
@@ -602,12 +698,23 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             bundle,
+            format_locale,
+            time_format_locale,
         } => {
             // Initialize converter
             let vl_str = read_input_string(&input)?;
             let vl_spec = serde_json::from_str(&vl_str)?;
             let config = read_config_json(config)?;
             let vl_version = parse_vl_version(&vl_version)?;
+            let format_locale = match &format_locale {
+                None => None,
+                Some(p) => Some(read_path_as_json(p)?),
+            };
+
+            let time_format_locale = match &time_format_locale {
+                None => None,
+                Some(p) => Some(read_path_as_json(p)?),
+            };
 
             let mut converter = VlConverter::new();
             let html = converter
@@ -619,6 +726,8 @@ async fn main() -> Result<(), anyhow::Error> {
                         vl_version,
                         show_warnings: false,
                         allowed_base_urls: None,
+                        format_locale,
+                        time_format_locale,
                     },
                     bundle,
                 )
@@ -630,9 +739,18 @@ async fn main() -> Result<(), anyhow::Error> {
             output,
             font_dir,
             allowed_base_url,
+            format_locale,
+            time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_svg(&input, &output, allowed_base_url).await?
+            vg_2_svg(
+                &input,
+                &output,
+                allowed_base_url,
+                format_locale,
+                time_format_locale,
+            )
+            .await?
         }
         Vg2png {
             input,
@@ -641,9 +759,20 @@ async fn main() -> Result<(), anyhow::Error> {
             ppi,
             font_dir,
             allowed_base_url,
+            format_locale,
+            time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_png(&input, &output, scale, ppi, allowed_base_url).await?
+            vg_2_png(
+                &input,
+                &output,
+                scale,
+                ppi,
+                allowed_base_url,
+                format_locale,
+                time_format_locale,
+            )
+            .await?
         }
         Vg2jpeg {
             input,
@@ -652,9 +781,20 @@ async fn main() -> Result<(), anyhow::Error> {
             quality,
             font_dir,
             allowed_base_url,
+            format_locale,
+            time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_jpeg(&input, &output, scale, quality, allowed_base_url).await?
+            vg_2_jpeg(
+                &input,
+                &output,
+                scale,
+                quality,
+                allowed_base_url,
+                format_locale,
+                time_format_locale,
+            )
+            .await?
         }
         Vg2pdf {
             input,
@@ -662,9 +802,19 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             font_dir,
             allowed_base_url,
+            format_locale,
+            time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            vg_2_pdf(&input, &output, scale, allowed_base_url).await?
+            vg_2_pdf(
+                &input,
+                &output,
+                scale,
+                allowed_base_url,
+                format_locale,
+                time_format_locale,
+            )
+            .await?
         }
         Vg2url { input, fullscreen } => {
             let vg_str = read_input_string(&input)?;
@@ -675,13 +825,35 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             bundle,
+            format_locale,
+            time_format_locale,
         } => {
             // Initialize converter
             let vg_str = read_input_string(&input)?;
             let vg_spec = serde_json::from_str(&vg_str)?;
 
+            let format_locale = match &format_locale {
+                None => None,
+                Some(p) => Some(read_path_as_json(p)?),
+            };
+
+            let time_format_locale = match &time_format_locale {
+                None => None,
+                Some(p) => Some(read_path_as_json(p)?),
+            };
+
             let mut converter = VlConverter::new();
-            let html = converter.vega_to_html(vg_spec, bundle).await?;
+            let html = converter
+                .vega_to_html(
+                    vg_spec,
+                    VgOpts {
+                        allowed_base_urls: None,
+                        format_locale,
+                        time_format_locale,
+                    },
+                    bundle,
+                )
+                .await?;
             write_output_string(&output, &html)?;
         }
         Svg2png {
@@ -757,6 +929,11 @@ fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow::Error> {
             bail!("Failed to parse input file as JSON: {}", err);
         }
     }
+}
+
+fn read_path_as_json(input: &str) -> Result<serde_json::Value, anyhow::Error> {
+    let s = read_input_string(input)?;
+    parse_as_json(&s)
 }
 
 fn write_output_string(output: &str, output_str: &str) -> Result<(), anyhow::Error> {
@@ -843,6 +1020,8 @@ async fn vl_2_vg(
                 config,
                 show_warnings,
                 allowed_base_urls: None,
+                format_locale: None,
+                time_format_locale: None,
             },
         )
         .await
@@ -877,6 +1056,8 @@ async fn vg_2_svg(
     input: &str,
     output: &str,
     allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -884,12 +1065,29 @@ async fn vg_2_svg(
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
+    let format_locale = match &format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
+    let time_format_locale = match &time_format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
     // Initialize converter
     let mut converter = VlConverter::new();
 
     // Perform conversion
     let svg = match converter
-        .vega_to_svg(vg_spec, VgOpts { allowed_base_urls })
+        .vega_to_svg(
+            vg_spec,
+            VgOpts {
+                allowed_base_urls,
+                format_locale,
+                time_format_locale,
+            },
+        )
         .await
     {
         Ok(svg) => svg,
@@ -910,12 +1108,24 @@ async fn vg_2_png(
     scale: f32,
     ppi: f32,
     allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
 
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
+
+    let format_locale = match &format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
+    let time_format_locale = match &time_format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
 
     // Initialize converter
     let mut converter = VlConverter::new();
@@ -924,7 +1134,11 @@ async fn vg_2_png(
     let png_data = match converter
         .vega_to_png(
             vg_spec,
-            VgOpts { allowed_base_urls },
+            VgOpts {
+                allowed_base_urls,
+                format_locale,
+                time_format_locale,
+            },
             Some(scale),
             Some(ppi),
         )
@@ -948,12 +1162,24 @@ async fn vg_2_jpeg(
     scale: f32,
     quality: u8,
     allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
 
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
+
+    let format_locale = match &format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
+    let time_format_locale = match &time_format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
 
     // Initialize converter
     let mut converter = VlConverter::new();
@@ -962,7 +1188,11 @@ async fn vg_2_jpeg(
     let jpeg_data = match converter
         .vega_to_jpeg(
             vg_spec,
-            VgOpts { allowed_base_urls },
+            VgOpts {
+                allowed_base_urls,
+                format_locale,
+                time_format_locale,
+            },
             Some(scale),
             Some(quality),
         )
@@ -985,6 +1215,8 @@ async fn vg_2_pdf(
     output: &str,
     scale: f32,
     allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -992,12 +1224,30 @@ async fn vg_2_pdf(
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
+    let format_locale = match &format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
+    let time_format_locale = match &time_format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
     // Initialize converter
     let mut converter = VlConverter::new();
 
     // Perform conversion
     let pdf_data = match converter
-        .vega_to_pdf(vg_spec, VgOpts { allowed_base_urls }, Some(scale))
+        .vega_to_pdf(
+            vg_spec,
+            VgOpts {
+                allowed_base_urls,
+                format_locale,
+                time_format_locale,
+            },
+            Some(scale),
+        )
         .await
     {
         Ok(pdf_data) => pdf_data,
@@ -1021,6 +1271,8 @@ async fn vl_2_svg(
     config: Option<String>,
     show_warnings: bool,
     allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1033,6 +1285,16 @@ async fn vl_2_svg(
 
     // Load config from file
     let config = read_config_json(config)?;
+
+    let format_locale = match &format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
+    let time_format_locale = match &time_format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
 
     // Initialize converter
     let mut converter = VlConverter::new();
@@ -1047,6 +1309,8 @@ async fn vl_2_svg(
                 theme,
                 show_warnings,
                 allowed_base_urls,
+                format_locale,
+                time_format_locale,
             },
         )
         .await
@@ -1074,6 +1338,8 @@ async fn vl_2_png(
     ppi: f32,
     show_warnings: bool,
     allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1086,6 +1352,16 @@ async fn vl_2_png(
 
     // Load config from file
     let config = read_config_json(config)?;
+
+    let format_locale = match &format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
+    let time_format_locale = match &time_format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
 
     // Initialize converter
     let mut converter = VlConverter::new();
@@ -1100,6 +1376,8 @@ async fn vl_2_png(
                 theme,
                 show_warnings,
                 allowed_base_urls,
+                format_locale,
+                time_format_locale,
             },
             Some(scale),
             Some(ppi),
@@ -1129,6 +1407,8 @@ async fn vl_2_jpeg(
     quality: u8,
     show_warnings: bool,
     allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1141,6 +1421,16 @@ async fn vl_2_jpeg(
 
     // Load config from file
     let config = read_config_json(config)?;
+
+    let format_locale = match &format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
+    let time_format_locale = match &time_format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
 
     // Initialize converter
     let mut converter = VlConverter::new();
@@ -1155,6 +1445,8 @@ async fn vl_2_jpeg(
                 theme,
                 show_warnings,
                 allowed_base_urls,
+                format_locale,
+                time_format_locale,
             },
             Some(scale),
             Some(quality),
@@ -1183,6 +1475,8 @@ async fn vl_2_pdf(
     scale: f32,
     show_warnings: bool,
     allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1195,6 +1489,16 @@ async fn vl_2_pdf(
 
     // Load config from file
     let config = read_config_json(config)?;
+
+    let format_locale = match &format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
+
+    let time_format_locale = match &time_format_locale {
+        None => None,
+        Some(p) => Some(read_path_as_json(p)?),
+    };
 
     // Initialize converter
     let mut converter = VlConverter::new();
@@ -1209,6 +1513,8 @@ async fn vl_2_pdf(
                 theme,
                 show_warnings,
                 allowed_base_urls,
+                format_locale,
+                time_format_locale,
             },
             Some(scale),
         )

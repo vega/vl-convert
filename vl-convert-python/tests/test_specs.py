@@ -17,6 +17,7 @@ tests_dir = Path(__file__).parent
 root_dir = tests_dir.parent.parent
 specs_dir = root_dir / "vl-convert-rs" / "tests" / "vl-specs"
 fonts_dir = root_dir / "vl-convert-rs" / "tests" / "fonts"
+locale_dir = root_dir / "vl-convert-rs" / "tests" / "locale"
 
 BACKGROUND_COLOR = "#abc"
 
@@ -30,6 +31,18 @@ def load_vl_spec(name):
     with open(spec_path, "rt") as f:
         spec_str = f.read()
     return spec_str
+
+
+def load_locales(format_name, time_format_name):
+    format_path = locale_dir / "format" / f"{format_name}.json"
+    with open(format_path, "rt") as f:
+        format_str = f.read()
+
+    time_format_path = locale_dir / "time-format" / f"{time_format_name}.json"
+    with open(time_format_path, "rt") as f:
+        time_format_str = f.read()
+
+    return (json.loads(format_str), json.loads(time_format_str))
 
 
 def load_expected_vg_spec(name, vl_version):
@@ -298,6 +311,24 @@ def test_pdf(name, scale, tol, as_dict):
     pdf = vlc.vegalite_to_pdf(vl_spec, vl_version=vl_version, scale=scale)
     png = pdf_to_png(pdf)
     check_png(png, expected_png, tol=tol)
+
+
+def test_locale():
+    vl_version = "v5_8"
+    name = "stocks_locale"
+    vl_spec = json.loads(load_vl_spec(name))
+    format_locale, time_format_locale = load_locales("it-IT", "it-IT")
+
+    png = vlc.vegalite_to_png(
+        vl_spec,
+        vl_version=vl_version,
+        scale=2,
+        format_locale=format_locale,
+        time_format_locale=time_format_locale,
+    )
+
+    expected_png = load_expected_png(name, vl_version)
+    check_png(png, expected_png)
 
 
 def test_gh_78():

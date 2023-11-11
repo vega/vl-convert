@@ -5,7 +5,7 @@ use deno_core::error::AnyError;
 use deno_emit::{bundle, BundleOptions, BundleType, EmitOptions};
 use std::path::Path;
 
-pub fn get_vegalite_script(
+pub fn get_vega_or_vegalite_script(
     spec: serde_json::Value,
     opts: serde_json::Value,
 ) -> Result<String, AnyError> {
@@ -20,21 +20,6 @@ pub fn get_vegalite_script(
     const spec = {SPEC};
     {opts}
     vegaEmbed('#{chart_id}', spec, opts).catch(console.error);
-}}
-"##,
-        SPEC = serde_json::to_string(&spec)?
-    );
-    Ok(index_js)
-}
-
-pub fn get_vega_script(spec: serde_json::Value) -> Result<String, AnyError> {
-    let chart_id = "vega-chart";
-
-    let index_js = format!(
-        r##"
-{{
-    const spec = {SPEC};
-    vegaEmbed('#{chart_id}', spec);
 }}
 "##,
         SPEC = serde_json::to_string(&spec)?

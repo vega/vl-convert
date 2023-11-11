@@ -34,6 +34,32 @@ fn load_vl_spec(name: &str) -> serde_json::Value {
         .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", spec_path))
 }
 
+fn load_locale(
+    format_name: &str,
+    time_format_name: &str,
+) -> (serde_json::Value, serde_json::Value) {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let locale_path = root_path.join("tests").join("locale");
+
+    let format_path = locale_path
+        .join("format")
+        .join(format!("{format_name}.json"));
+    let time_format_path = locale_path
+        .join("time-format")
+        .join(format!("{time_format_name}.json"));
+
+    let format_str = fs::read_to_string(&format_path)
+        .unwrap_or_else(|_| panic!("Failed to read {:?}", format_path));
+    let time_format_str = fs::read_to_string(&time_format_path)
+        .unwrap_or_else(|_| panic!("Failed to read {:?}", time_format_path));
+
+    let format_value = serde_json::from_str(&format_str)
+        .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", format_str));
+    let time_format_value = serde_json::from_str(&time_format_str)
+        .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", time_format_str));
+    (format_value, time_format_value)
+}
+
 fn load_expected_vg_spec(name: &str, vl_version: VlVersion) -> Option<serde_json::Value> {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let spec_path = root_path
@@ -688,6 +714,8 @@ mod test_png_theme_config {
                     config: Some(json!({"background": BACKGROUND_COLOR})),
                     show_warnings: false,
                     allowed_base_urls: None,
+                    format_locale: None,
+                    time_format_locale: None,
                 },
                 Some(scale),
                 None
@@ -712,6 +740,8 @@ mod test_png_theme_config {
                     config: Some(json!({"background": BACKGROUND_COLOR})),
                     show_warnings: false,
                     allowed_base_urls: None,
+                    format_locale: None,
+                    time_format_locale: None,
                 },
                 Some(scale),
                 None
@@ -751,6 +781,36 @@ async fn test_font_with_quotes() {
     check_png(name, vl_version, None, png_data.as_slice());
 }
 
+#[tokio::test]
+async fn test_locale() {
+    let vl_version = VlVersion::v5_8;
+
+    // Load example Vega-Lite spec
+    let name = "stocks_locale";
+    let vl_spec = load_vl_spec(name);
+
+    let (format_locale, time_format_locale) = load_locale("it-IT", "it-IT");
+
+    // Create Vega-Lite Converter and perform conversion
+    let mut converter = VlConverter::new();
+
+    let png_data = converter
+        .vegalite_to_png(
+            vl_spec,
+            VlOpts {
+                vl_version,
+                format_locale: Some(format_locale),
+                time_format_locale: Some(time_format_locale),
+                ..Default::default()
+            },
+            Some(2.0),
+            None,
+        )
+        .await
+        .unwrap();
+
+    check_png(name, vl_version, None, png_data.as_slice());
+}
 #[rustfmt::skip]
 mod test_jpeg {
     use crate::*;
