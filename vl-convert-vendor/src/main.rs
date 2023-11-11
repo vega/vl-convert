@@ -52,11 +52,11 @@ const VL_PATHS: &[(&str, &str)] = &[
     ),
     (
         "5.16",
-        "/pin/vega-lite@v5.16.1-q5OXwBBsYVZxkN0ArDu4/mode=imports,min/optimized/vega-lite.js",
+        "/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js",
     ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
-const VEGA_PATH: &str = "/pin/vega@v5.25.0-r16knbfAAfBFDoUvoc7K/mode=imports,min/optimized/vega.js";
+const VEGA_PATH: &str = "/pin/vega@v5.26.1-qzT1gQErRVzfnh254DSg/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
 const VEGA_EMBED_PATH: &str =
@@ -69,7 +69,7 @@ fn main() {
     // Make sure vendor directory exists
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let vl_convert_rs_path = root_path.join("../").join("vl-convert-rs");
-    let vendor_path = vl_convert_rs_path.join("vendor").canonicalize().unwrap();
+    let vendor_path = vl_convert_rs_path.canonicalize().unwrap().join("vendor");
     let format_locales_path = vl_convert_rs_path
         .join("locales")
         .join("format")
