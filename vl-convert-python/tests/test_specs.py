@@ -313,6 +313,7 @@ def test_pdf(name, scale, tol, as_dict):
     check_png(png, expected_png, tol=tol)
 
 
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="Font mismatch on windows")
 def test_locale():
     vl_version = "v5_8"
     name = "stocks_locale"
