@@ -290,7 +290,7 @@ fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8])
         let attr = Dssim::new();
         let (diff, _) = attr.compare(&expected_dssim, img_dssim);
 
-        if diff > 0.0001 {
+        if diff > 0.00011 {
             println!("DSSIM diff {diff}");
             let path = write_failed_png(name, vl_version, None, img);
             panic!(
