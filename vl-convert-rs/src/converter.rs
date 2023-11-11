@@ -1,5 +1,7 @@
 use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
-use crate::module_loader::{VlConvertModuleLoader, IMPORT_MAP};
+use crate::module_loader::{
+    VlConvertModuleLoader, FORMATE_LOCALE_MAP, IMPORT_MAP, TIME_FORMATE_LOCALE_MAP,
+};
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
@@ -50,22 +52,65 @@ lazy_static! {
 #[derive(Debug, Clone, Default)]
 pub struct VgOpts {
     pub allowed_base_urls: Option<Vec<String>>,
-    pub format_locale: Option<serde_json::Value>,
-    pub time_format_locale: Option<serde_json::Value>,
+    pub format_locale: Option<FormatLocale>,
+    pub time_format_locale: Option<TimeFormatLocale>,
 }
 
 impl VgOpts {
-    pub fn to_embed_opts(&self) -> serde_json::Value {
+    pub fn to_embed_opts(&self) -> Result<serde_json::Value, AnyError> {
         let mut opts_map = serde_json::Map::new();
 
         if let Some(format_locale) = &self.format_locale {
-            opts_map.insert("formatLocale".to_string(), format_locale.clone());
+            opts_map.insert("formatLocale".to_string(), format_locale.as_object()?);
         }
         if let Some(time_format_locale) = &self.time_format_locale {
-            opts_map.insert("timeFormatLocale".to_string(), time_format_locale.clone());
+            opts_map.insert(
+                "timeFormatLocale".to_string(),
+                time_format_locale.as_object()?,
+            );
         }
 
-        serde_json::Value::Object(opts_map)
+        Ok(serde_json::Value::Object(opts_map))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum FormatLocale {
+    Name(String),
+    Object(serde_json::Value),
+}
+
+impl FormatLocale {
+    pub fn as_object(&self) -> Result<serde_json::Value, AnyError> {
+        match self {
+            FormatLocale::Name(name) => {
+                let Some(locale_str) = FORMATE_LOCALE_MAP.get(name) else {
+                    return Err(anyhow!("No built-in format locale named {}", name));
+                };
+                Ok(serde_json::from_str(locale_str)?)
+            }
+            FormatLocale::Object(object) => Ok(object.clone()),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TimeFormatLocale {
+    Name(String),
+    Object(serde_json::Value),
+}
+
+impl TimeFormatLocale {
+    pub fn as_object(&self) -> Result<serde_json::Value, AnyError> {
+        match self {
+            TimeFormatLocale::Name(name) => {
+                let Some(locale_str) = TIME_FORMATE_LOCALE_MAP.get(name) else {
+                    return Err(anyhow!("No built-in time format locale named {}", name));
+                };
+                Ok(serde_json::from_str(locale_str)?)
+            }
+            TimeFormatLocale::Object(object) => Ok(object.clone()),
+        }
     }
 }
 
@@ -76,12 +121,12 @@ pub struct VlOpts {
     pub vl_version: VlVersion,
     pub show_warnings: bool,
     pub allowed_base_urls: Option<Vec<String>>,
-    pub format_locale: Option<serde_json::Value>,
-    pub time_format_locale: Option<serde_json::Value>,
+    pub format_locale: Option<FormatLocale>,
+    pub time_format_locale: Option<TimeFormatLocale>,
 }
 
 impl VlOpts {
-    pub fn to_embed_opts(&self) -> serde_json::Value {
+    pub fn to_embed_opts(&self) -> Result<serde_json::Value, AnyError> {
         let mut opts_map = serde_json::Map::new();
 
         if let Some(theme) = &self.theme {
@@ -96,13 +141,16 @@ impl VlOpts {
         }
 
         if let Some(format_locale) = &self.format_locale {
-            opts_map.insert("formatLocale".to_string(), format_locale.clone());
+            opts_map.insert("formatLocale".to_string(), format_locale.as_object()?);
         }
         if let Some(time_format_locale) = &self.time_format_locale {
-            opts_map.insert("timeFormatLocale".to_string(), time_format_locale.clone());
+            opts_map.insert(
+                "timeFormatLocale".to_string(),
+                time_format_locale.as_object()?,
+            );
         }
 
-        serde_json::Value::Object(opts_map)
+        Ok(serde_json::Value::Object(opts_map))
     }
 }
 
@@ -539,14 +587,16 @@ compileVegaLite_{ver_name:?}(
         self.init_vl_version(&vl_opts.vl_version).await?;
 
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
-        let format_locale = vl_opts
-            .format_locale
-            .clone()
-            .unwrap_or(serde_json::Value::Null);
-        let time_format_locale = vl_opts
-            .time_format_locale
-            .clone()
-            .unwrap_or(serde_json::Value::Null);
+
+        let format_locale = match vl_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vl_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
 
         let spec_arg_id = set_json_arg(vl_spec.clone())?;
         let config_arg_id = set_json_arg(config)?;
@@ -600,14 +650,15 @@ vegaLiteToSvg_{ver_name:?}(
         self.init_vl_version(&vl_opts.vl_version).await?;
 
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
-        let format_locale = vl_opts
-            .format_locale
-            .clone()
-            .unwrap_or(serde_json::Value::Null);
-        let time_format_locale = vl_opts
-            .time_format_locale
-            .clone()
-            .unwrap_or(serde_json::Value::Null);
+        let format_locale = match vl_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vl_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
 
         let spec_arg_id = set_json_arg(vl_spec.clone())?;
         let config_arg_id = set_json_arg(config)?;
@@ -660,14 +711,16 @@ vegaLiteToScenegraph_{ver_name:?}(
         self.init_vega().await?;
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
-        let format_locale = vg_opts
-            .format_locale
-            .clone()
-            .unwrap_or(serde_json::Value::Null);
-        let time_format_locale = vg_opts
-            .time_format_locale
-            .clone()
-            .unwrap_or(serde_json::Value::Null);
+
+        let format_locale = match vg_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vg_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
 
         let arg_id = set_json_arg(vg_spec.clone())?;
         let format_locale_id = set_json_arg(format_locale)?;
@@ -706,14 +759,15 @@ vegaToSvg(
         self.init_vega().await?;
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
-        let format_locale = vg_opts
-            .format_locale
-            .clone()
-            .unwrap_or(serde_json::Value::Null);
-        let time_format_locale = vg_opts
-            .time_format_locale
-            .clone()
-            .unwrap_or(serde_json::Value::Null);
+        let format_locale = match vg_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vg_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
 
         let arg_id = set_json_arg(vg_spec.clone())?;
         let format_locale_id = set_json_arg(format_locale)?;
@@ -1230,7 +1284,7 @@ impl VlConverter {
         bundle: bool,
     ) -> Result<String, AnyError> {
         let vl_version = vl_opts.vl_version;
-        let code = get_vega_or_vegalite_script(vl_spec, vl_opts.to_embed_opts())?;
+        let code = get_vega_or_vegalite_script(vl_spec, vl_opts.to_embed_opts()?)?;
         self.build_html(&code, vl_version, bundle).await
     }
 
@@ -1240,7 +1294,7 @@ impl VlConverter {
         vg_opts: VgOpts,
         bundle: bool,
     ) -> Result<String, AnyError> {
-        let code = get_vega_or_vegalite_script(vg_spec, vg_opts.to_embed_opts())?;
+        let code = get_vega_or_vegalite_script(vg_spec, vg_opts.to_embed_opts()?)?;
         self.build_html(&code, Default::default(), bundle).await
     }
 

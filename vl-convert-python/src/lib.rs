@@ -4,9 +4,10 @@ use pyo3::types::{PyBytes, PyDict};
 use pythonize::{depythonize, pythonize};
 use std::str::FromStr;
 use std::sync::Mutex;
-use vl_convert_rs::converter::{VgOpts, VlOpts};
+use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VgOpts, VlOpts};
 use vl_convert_rs::html::bundle_vega_snippet;
 use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
 use vl_convert_rs::VlConverter as VlConverterRs;
@@ -87,8 +88,8 @@ fn vegalite_to_vega(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
@@ -100,8 +101,8 @@ fn vega_to_svg(
     time_format_locale: Option<PyObject>,
 ) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -132,8 +133,8 @@ fn vega_to_svg(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     dict: scenegraph
 #[pyfunction]
@@ -145,8 +146,8 @@ fn vega_to_scenegraph(
     time_format_locale: Option<PyObject>,
 ) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -185,10 +186,11 @@ fn vega_to_scenegraph(
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
+#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
@@ -205,8 +207,8 @@ fn vegalite_to_svg(
 ) -> PyResult<String> {
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -253,10 +255,11 @@ fn vegalite_to_svg(
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
+#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
@@ -273,8 +276,8 @@ fn vegalite_to_scenegraph(
 ) -> PyResult<PyObject> {
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -319,8 +322,8 @@ fn vegalite_to_scenegraph(
 ///     ppi (float): Pixels per inch (default 72)
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
@@ -336,8 +339,8 @@ fn vega_to_png(
     time_format_locale: Option<PyObject>,
 ) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -381,8 +384,8 @@ fn vega_to_png(
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
@@ -409,8 +412,8 @@ fn vegalite_to_png(
     };
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -452,8 +455,8 @@ fn vegalite_to_png(
 ///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
@@ -469,8 +472,8 @@ fn vega_to_jpeg(
     time_format_locale: Option<PyObject>,
 ) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -514,8 +517,8 @@ fn vega_to_jpeg(
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
@@ -542,8 +545,8 @@ fn vegalite_to_jpeg(
     };
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -584,8 +587,8 @@ fn vegalite_to_jpeg(
 ///     scale (float): Image scale factor (default 1.0)
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PDF file bytes
 #[pyfunction]
@@ -598,8 +601,8 @@ fn vega_to_pdf(
     time_format_locale: Option<PyObject>,
 ) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -639,10 +642,11 @@ fn vega_to_pdf(
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     allowed_base_urls (list of str): List of allowed base URLs for external
 ///                                      data requests. Default allows any base URL
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PDF image data
+#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, scale, config, theme, allowed_base_urls, format_locale, time_format_locale)"
@@ -665,8 +669,8 @@ fn vegalite_to_pdf(
     };
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -744,8 +748,8 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
 ///         If False (default), HTML file will load dependencies from only CDN
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
@@ -768,8 +772,8 @@ fn vegalite_to_html(
     };
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -796,8 +800,8 @@ fn vegalite_to_html(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     bundle (bool): If True, bundle all dependencies in HTML file
 ///         If False (default), HTML file will load dependencies from only CDN
-///     format_locale (dict): d3-format locale dictionary
-///     time_format_locale (dict): d3-time-format locale dictionary
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
@@ -809,8 +813,8 @@ fn vega_to_html(
     time_format_locale: Option<PyObject>,
 ) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
-    let format_locale = format_locale.and_then(|v| parse_json_spec(v).ok());
-    let time_format_locale = time_format_locale.and_then(|v| parse_json_spec(v).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let mut converter = VL_CONVERTER
         .lock()
@@ -901,6 +905,75 @@ fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
     })
 }
 
+/// Helper function to parse an input Python string or dict as a FormatLocale
+fn parse_format_locale(v: PyObject) -> PyResult<FormatLocale> {
+    Python::with_gil(|py| -> PyResult<FormatLocale> {
+        if let Ok(name) = v.extract::<&str>(py) {
+            let format_locale = FormatLocale::Name(name.to_string());
+            if format_locale.as_object().is_err() {
+                Err(PyValueError::new_err(
+                    format!("Invalid format_locale name: {name}\nSee https://github.com/d3/d3-format/tree/main/locale for available names")
+                ))
+            } else {
+                Ok(format_locale)
+            }
+        } else if let Ok(obj) = v.downcast::<PyDict>(py) {
+            match depythonize(obj) {
+                Ok(obj) => Ok(FormatLocale::Object(obj)),
+                Err(err) => Err(PyValueError::new_err(format!(
+                    "Failed to parse format_locale dict as JSON: {}",
+                    err
+                ))),
+            }
+        } else {
+            Err(PyValueError::new_err(
+                "format_locale must be a string or dict",
+            ))
+        }
+    })
+}
+fn parse_option_format_locale(v: Option<PyObject>) -> PyResult<Option<FormatLocale>> {
+    match v {
+        None => Ok(None),
+        Some(v) => Ok(Some(parse_format_locale(v)?)),
+    }
+}
+
+/// Helper function to parse an input Python string or dict as a TimeFormatLocale
+fn parse_time_format_locale(v: PyObject) -> PyResult<TimeFormatLocale> {
+    Python::with_gil(|py| -> PyResult<TimeFormatLocale> {
+        if let Ok(name) = v.extract::<&str>(py) {
+            let time_format_locale = TimeFormatLocale::Name(name.to_string());
+            if time_format_locale.as_object().is_err() {
+                Err(PyValueError::new_err(
+                    format!("Invalid time_format_locale name: {name}\nSee https://github.com/d3/d3-time-format/tree/main/locale for available names")
+                ))
+            } else {
+                Ok(time_format_locale)
+            }
+        } else if let Ok(obj) = v.downcast::<PyDict>(py) {
+            match depythonize(obj) {
+                Ok(obj) => Ok(TimeFormatLocale::Object(obj)),
+                Err(err) => Err(PyValueError::new_err(format!(
+                    "Failed to parse time_format_locale dict as JSON: {}",
+                    err
+                ))),
+            }
+        } else {
+            Err(PyValueError::new_err(
+                "time_format_locale must be a string or dict",
+            ))
+        }
+    })
+}
+
+fn parse_option_time_format_locale(v: Option<PyObject>) -> PyResult<Option<TimeFormatLocale>> {
+    match v {
+        None => Ok(None),
+        Some(v) => Ok(Some(parse_time_format_locale(v)?)),
+    }
+}
+
 /// Register a directory of fonts for use in subsequent conversions
 ///
 /// Args:
@@ -964,6 +1037,64 @@ fn get_themes() -> PyResult<PyObject> {
     })
 }
 
+/// Get the d3-format locale dict for a named locale
+///
+/// See https://github.com/d3/d3-format/tree/main/locale for available names
+///
+/// Args:
+///     name (str): d3-format locale name (e.g. 'it-IT')
+///
+/// Returns:
+///     dict: d3-format locale dict
+#[pyfunction]
+#[pyo3(text_signature = "(name)")]
+fn get_format_locale(name: &str) -> PyResult<PyObject> {
+    match FORMATE_LOCALE_MAP.get(name) {
+        None => {
+            Err(PyValueError::new_err(format!(
+                "Invalid format locale name: {name}\nSee https://github.com/d3/d3-format/tree/main/locale for available names"
+            )))
+        }
+        Some(locale) => {
+            let locale: serde_json::Value = serde_json::from_str(locale).expect(
+                "Failed to parse internal format locale as JSON"
+            );
+            Python::with_gil(|py| -> PyResult<PyObject> {
+                pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string()))
+            })
+        }
+    }
+}
+
+/// Get the d3-time-format locale dict for a named locale
+///
+/// See https://github.com/d3/d3-time-format/tree/main/locale for available names
+///
+/// Args:
+///     name (str): d3-time-format locale name (e.g. 'it-IT')
+///
+/// Returns:
+///     dict: d3-time-format locale dict
+#[pyfunction]
+#[pyo3(text_signature = "(name)")]
+fn get_time_format_locale(name: &str) -> PyResult<PyObject> {
+    match TIME_FORMATE_LOCALE_MAP.get(name) {
+        None => {
+            Err(PyValueError::new_err(format!(
+                "Invalid time format locale name: {name}\nSee https://github.com/d3/d3-time-format/tree/main/locale for available names"
+            )))
+        }
+        Some(locale) => {
+            let locale: serde_json::Value = serde_json::from_str(locale).expect(
+                "Failed to parse internal time format locale as JSON"
+            );
+            Python::with_gil(|py| -> PyResult<PyObject> {
+                pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string()))
+            })
+        }
+    }
+}
+
 /// Create a JavaScript bundle containing the Vega Embed, Vega-Lite, and Vega libraries
 ///
 /// Optionally, a JavaScript snippet may be provided that references Vega Embed
@@ -1024,6 +1155,8 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
+    m.add_function(wrap_pyfunction!(get_format_locale, m)?)?;
+    m.add_function(wrap_pyfunction!(get_time_format_locale, m)?)?;
     m.add_function(wrap_pyfunction!(javascript_bundle, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

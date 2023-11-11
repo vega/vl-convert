@@ -1,9 +1,13 @@
+use anyhow::Error as AnyError;
+use dircpy::copy_dir;
 use std::fmt::Write;
 use std::fs;
 use std::fs::DirEntry;
 use std::io;
-use std::path::Path;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use tempfile::TempDir;
 
 const VL_PATHS: &[(&str, &str)] = &[
     // 4.17 is used by Altair 4.2 (keep forever)
@@ -66,10 +70,32 @@ fn main() {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let vl_convert_rs_path = root_path.join("../").join("vl-convert-rs");
     let vendor_path = vl_convert_rs_path.join("vendor").canonicalize().unwrap();
+    let format_locales_path = vl_convert_rs_path
+        .join("locales")
+        .join("format")
+        .canonicalize()
+        .unwrap();
+    let time_format_locales_path = vl_convert_rs_path
+        .join("locales")
+        .join("time-format")
+        .canonicalize()
+        .unwrap();
     let vendor_path_str = vendor_path.to_str().unwrap();
     if vendor_path.exists() {
         fs::remove_dir_all(&vendor_path).unwrap();
     }
+
+    // Download locales
+    download_locales(
+        "https://github.com/d3/d3-format/archive/refs/heads/main.zip",
+        &vl_convert_rs_path.join("locales").join("format"),
+    )
+    .unwrap();
+    download_locales(
+        "https://github.com/d3/d3-time-format/archive/refs/heads/main.zip",
+        &vl_convert_rs_path.join("locales").join("time-format"),
+    )
+    .unwrap();
 
     // Create main.js that includes the desired imports
     let importsjs_path = vl_convert_rs_path.join("vendor_imports.js");
@@ -292,6 +318,51 @@ pub fn build_import_map() -> HashMap<String, String> {{
     })
     .unwrap();
 
+    // Write locale maps
+    writeln!(
+        content,
+        "
+pub fn build_format_locale_map() -> HashMap<String, String> {{
+    let mut m: HashMap<String, String> = HashMap::new();"
+    )
+    .unwrap();
+
+    visit_dirs(&format_locales_path, &mut |f| {
+        let p = f.path().canonicalize().unwrap();
+        let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
+        if let Some(relative_sub) = relative.strip_prefix("/format/").and_then(|f| f.strip_suffix(".json")) {
+            writeln!(
+                content,
+                "    m.insert(\"{relative_sub}\".to_string(), include_str!(\"../../locales/format/{relative_sub}.json\").to_string());",
+            )
+                .unwrap();
+        }
+    }).unwrap();
+
+    content.push_str("    m\n}\n");
+
+    writeln!(
+        content,
+        "
+pub fn build_time_format_locale_map() -> HashMap<String, String> {{
+    let mut m: HashMap<String, String> = HashMap::new();"
+    )
+    .unwrap();
+
+    visit_dirs(&time_format_locales_path, &mut |f| {
+        let p = f.path().canonicalize().unwrap();
+        let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
+        if let Some(relative_sub) = relative.strip_prefix("/time-format/").and_then(|f| f.strip_suffix(".json")) {
+            writeln!(
+                content,
+                "    m.insert(\"{relative_sub}\".to_string(), include_str!(\"../../locales/time-format/{relative_sub}.json\").to_string());",
+            )
+                .unwrap();
+        }
+    }).unwrap();
+
+    content.push_str("    m\n}\n");
+
     // Write to import_map.rs in vl-convert-rs crate
     let deno_deps_path = root_path
         .join("..")
@@ -328,5 +399,19 @@ fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&DirEntry)) -> io::Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+fn download_locales(url: &str, output_dir: &PathBuf) -> Result<(), AnyError> {
+    let response = reqwest::blocking::get(url)?;
+    let archive_bytes = response.bytes().unwrap();
+
+    let temp_dir = TempDir::new()?;
+    let temp_path = temp_dir.into_path();
+    zip_extract::extract(Cursor::new(archive_bytes), &temp_path, true)?;
+
+    let temp_path_locale = temp_path.join("locale");
+    copy_dir(temp_path_locale, output_dir)?;
+
     Ok(())
 }

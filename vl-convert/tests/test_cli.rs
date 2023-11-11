@@ -478,7 +478,7 @@ mod test_vl2png_locale {
     use crate::*;
 
     #[rstest(name, scale,
-    case("stocks_locale", 2.0)
+        case("stocks_locale", 2.0)
     )]
     fn test(
         name: &str,
@@ -492,9 +492,10 @@ mod test_vl2png_locale {
         let vl_path = vl_spec_path(name);
         let output = output_path(&output_filename);
 
+        // Test with locale path
         let mut cmd = Command::cargo_bin("vl-convert")?;
         let cmd = cmd.arg("vl2png")
-            .arg("-i").arg(vl_path)
+            .arg("-i").arg(vl_path.clone())
             .arg("-o").arg(&output)
             .arg("--vl-version").arg(vl_version)
             .arg("--font-dir").arg(test_font_dir())
@@ -507,6 +508,34 @@ mod test_vl2png_locale {
         // Load expected
         let expected_png = load_expected_png(name, vl_version, None).unwrap();
 
+        // Load written spec
+        let output_png = dssim::load_image(&Dssim::new(), &output).unwrap();
+
+        let attr = Dssim::new();
+        let (diff, _) = attr.compare(&expected_png, output_png);
+
+        if diff > 0.0001 {
+            panic!(
+                "Images don't match for {}.png with diff {}",
+                name, diff
+            )
+        }
+
+        // Test with locale name
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let cmd = cmd.arg("vl2png")
+            .arg("-i").arg(vl_path)
+            .arg("-o").arg(&output)
+            .arg("--vl-version").arg(vl_version)
+            .arg("--font-dir").arg(test_font_dir())
+            .arg("--format-locale").arg("it-IT")
+            .arg("--time-format-locale").arg("it-IT")
+            .arg("--scale").arg(scale.to_string());
+
+        cmd.assert().success();
+
+        // Load expected
+        let expected_png = load_expected_png(name, vl_version, None).unwrap();
 
         // Load written spec
         let output_png = dssim::load_image(&Dssim::new(), &output).unwrap();

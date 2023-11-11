@@ -316,15 +316,32 @@ def test_pdf(name, scale, tol, as_dict):
 def test_locale():
     vl_version = "v5_8"
     name = "stocks_locale"
-    vl_spec = json.loads(load_vl_spec(name))
-    format_locale, time_format_locale = load_locales("it-IT", "it-IT")
+    format_locale_name = "it-IT"
+    time_format_locale_name = "it-IT"
 
+    # Test locale by dict
+    vl_spec = json.loads(load_vl_spec(name))
+    format_locale, time_format_locale = load_locales(
+        format_locale_name, time_format_locale_name
+    )
     png = vlc.vegalite_to_png(
         vl_spec,
         vl_version=vl_version,
         scale=2,
         format_locale=format_locale,
         time_format_locale=time_format_locale,
+    )
+
+    expected_png = load_expected_png(name, vl_version)
+    check_png(png, expected_png)
+
+    # Test locale by name
+    png = vlc.vegalite_to_png(
+        vl_spec,
+        vl_version=vl_version,
+        scale=2,
+        format_locale=format_locale_name + "bogus",
+        time_format_locale=time_format_locale_name,
     )
 
     expected_png = load_expected_png(name, vl_version)

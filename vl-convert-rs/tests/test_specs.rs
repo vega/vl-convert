@@ -8,7 +8,7 @@ use vl_convert_rs::{VlConverter, VlVersion};
 
 use serde_json::Value;
 use std::sync::Once;
-use vl_convert_rs::converter::VlOpts;
+use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VlOpts};
 
 static INIT: Once = Once::new();
 const BACKGROUND_COLOR: &str = "#abc";
@@ -787,20 +787,44 @@ async fn test_locale() {
 
     // Load example Vega-Lite spec
     let name = "stocks_locale";
+    let format_locale_name = "it-IT";
+    let time_format_locale_name = "it-IT";
     let vl_spec = load_vl_spec(name);
 
-    let (format_locale, time_format_locale) = load_locale("it-IT", "it-IT");
+    let (format_locale, time_format_locale) =
+        load_locale(format_locale_name, time_format_locale_name);
 
     // Create Vega-Lite Converter and perform conversion
     let mut converter = VlConverter::new();
 
+    // Convert with locale objects
+    let png_data = converter
+        .vegalite_to_png(
+            vl_spec.clone(),
+            VlOpts {
+                vl_version,
+                format_locale: Some(FormatLocale::Object(format_locale)),
+                time_format_locale: Some(TimeFormatLocale::Object(time_format_locale)),
+                ..Default::default()
+            },
+            Some(2.0),
+            None,
+        )
+        .await
+        .unwrap();
+
+    check_png(name, vl_version, None, png_data.as_slice());
+
+    // Convert with locale names
     let png_data = converter
         .vegalite_to_png(
             vl_spec,
             VlOpts {
                 vl_version,
-                format_locale: Some(format_locale),
-                time_format_locale: Some(time_format_locale),
+                format_locale: Some(FormatLocale::Name(format_locale_name.to_string())),
+                time_format_locale: Some(TimeFormatLocale::Name(
+                    time_format_locale_name.to_string(),
+                )),
                 ..Default::default()
             },
             Some(2.0),

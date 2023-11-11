@@ -4,12 +4,14 @@ use clap::{arg, Parser, Subcommand};
 use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
-use vl_convert_rs::converter::{vega_to_url, vegalite_to_url, VgOpts, VlConverter, VlOpts};
+use vl_convert_rs::converter::{
+    vega_to_url, vegalite_to_url, FormatLocale, TimeFormatLocale, VgOpts, VlConverter, VlOpts,
+};
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
-const DEFAULT_VL_VERSION: &str = "5.15";
+const DEFAULT_VL_VERSION: &str = "5.16";
 const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
 
 #[derive(Debug, Parser)] // requires `derive` feature
@@ -89,11 +91,11 @@ enum Commands {
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -141,11 +143,11 @@ enum Commands {
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -193,11 +195,11 @@ enum Commands {
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -241,11 +243,11 @@ enum Commands {
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -290,11 +292,11 @@ enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -318,11 +320,11 @@ enum Commands {
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -354,11 +356,11 @@ enum Commands {
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -390,11 +392,11 @@ enum Commands {
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -422,11 +424,11 @@ enum Commands {
         #[arg(short, long)]
         allowed_base_url: Option<Vec<String>>,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -459,11 +461,11 @@ enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
-        /// d3-format locale JSON file
+        /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale JSON file
+        /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
     },
@@ -708,12 +710,12 @@ async fn main() -> Result<(), anyhow::Error> {
             let vl_version = parse_vl_version(&vl_version)?;
             let format_locale = match &format_locale {
                 None => None,
-                Some(p) => Some(read_path_as_json(p)?),
+                Some(p) => Some(format_locale_from_str(p)?),
             };
 
             let time_format_locale = match &time_format_locale {
                 None => None,
-                Some(p) => Some(read_path_as_json(p)?),
+                Some(p) => Some(time_format_locale_from_str(p)?),
             };
 
             let mut converter = VlConverter::new();
@@ -834,12 +836,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
             let format_locale = match &format_locale {
                 None => None,
-                Some(p) => Some(read_path_as_json(p)?),
+                Some(p) => Some(format_locale_from_str(p)?),
             };
 
             let time_format_locale = match &time_format_locale {
                 None => None,
-                Some(p) => Some(read_path_as_json(p)?),
+                Some(p) => Some(time_format_locale_from_str(p)?),
             };
 
             let mut converter = VlConverter::new();
@@ -931,9 +933,22 @@ fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow::Error> {
     }
 }
 
-fn read_path_as_json(input: &str) -> Result<serde_json::Value, anyhow::Error> {
-    let s = read_input_string(input)?;
-    parse_as_json(&s)
+fn format_locale_from_str(s: &str) -> Result<FormatLocale, anyhow::Error> {
+    if s.ends_with(".json") {
+        let s = read_input_string(s)?;
+        Ok(FormatLocale::Object(parse_as_json(&s)?))
+    } else {
+        Ok(FormatLocale::Name(s.to_string()))
+    }
+}
+
+fn time_format_locale_from_str(s: &str) -> Result<TimeFormatLocale, anyhow::Error> {
+    if s.ends_with(".json") {
+        let s = read_input_string(s)?;
+        Ok(TimeFormatLocale::Object(parse_as_json(&s)?))
+    } else {
+        Ok(TimeFormatLocale::Name(s.to_string()))
+    }
 }
 
 fn write_output_string(output: &str, output_str: &str) -> Result<(), anyhow::Error> {
@@ -1067,12 +1082,12 @@ async fn vg_2_svg(
 
     let format_locale = match &format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(format_locale_from_str(p)?),
     };
 
     let time_format_locale = match &time_format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(time_format_locale_from_str(p)?),
     };
 
     // Initialize converter
@@ -1119,12 +1134,12 @@ async fn vg_2_png(
 
     let format_locale = match &format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(format_locale_from_str(p)?),
     };
 
     let time_format_locale = match &time_format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(time_format_locale_from_str(p)?),
     };
 
     // Initialize converter
@@ -1173,12 +1188,12 @@ async fn vg_2_jpeg(
 
     let format_locale = match &format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(format_locale_from_str(p)?),
     };
 
     let time_format_locale = match &time_format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(time_format_locale_from_str(p)?),
     };
 
     // Initialize converter
@@ -1226,12 +1241,12 @@ async fn vg_2_pdf(
 
     let format_locale = match &format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(format_locale_from_str(p)?),
     };
 
     let time_format_locale = match &time_format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(time_format_locale_from_str(p)?),
     };
 
     // Initialize converter
@@ -1288,12 +1303,12 @@ async fn vl_2_svg(
 
     let format_locale = match &format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(format_locale_from_str(p)?),
     };
 
     let time_format_locale = match &time_format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(time_format_locale_from_str(p)?),
     };
 
     // Initialize converter
@@ -1355,12 +1370,12 @@ async fn vl_2_png(
 
     let format_locale = match &format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(format_locale_from_str(p)?),
     };
 
     let time_format_locale = match &time_format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(time_format_locale_from_str(p)?),
     };
 
     // Initialize converter
@@ -1424,12 +1439,12 @@ async fn vl_2_jpeg(
 
     let format_locale = match &format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(format_locale_from_str(p)?),
     };
 
     let time_format_locale = match &time_format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(time_format_locale_from_str(p)?),
     };
 
     // Initialize converter
@@ -1492,12 +1507,12 @@ async fn vl_2_pdf(
 
     let format_locale = match &format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(format_locale_from_str(p)?),
     };
 
     let time_format_locale = match &time_format_locale {
         None => None,
-        Some(p) => Some(read_path_as_json(p)?),
+        Some(p) => Some(time_format_locale_from_str(p)?),
     };
 
     // Initialize converter

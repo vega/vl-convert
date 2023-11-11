@@ -48,7 +48,7 @@ Options:
 For example, convert a Vega-Lite specification file named `in.vl.json` into an SVG file named `out.svg`. Perform the conversion using version 5.5 of the Vega-Lite JavaScript library.
 
 ```plain
-$ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --vl-version 5.5
+$ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --vl-version 5.8
 ```
 
 ## Python
