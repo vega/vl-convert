@@ -1,8 +1,5 @@
 {
-  "config": {
-    "view": {"continuousWidth": 300, "continuousHeight": 300},
-    "font": "Liberation Sans"
-  },
+  "config": {"view": {"continuousWidth": 300, "continuousHeight": 300}},
   "data": {
     "url": "https://cdn.jsdelivr.net/npm/vega-datasets@v1.29.0/data/stocks.csv"
   },
