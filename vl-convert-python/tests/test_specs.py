@@ -340,7 +340,7 @@ def test_locale():
         vl_spec,
         vl_version=vl_version,
         scale=2,
-        format_locale=format_locale_name + "bogus",
+        format_locale=format_locale_name,
         time_format_locale=time_format_locale_name,
     )
 
