@@ -330,9 +330,20 @@ function vegaToSvg(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, erro
         vega.timeFormatLocale(timeFormatLocale);
     }
     let view = vegaToView(vgSpec, allowedBaseUrls, errors);
-    let svgPromise = view.toSVG().finally(() => {
-        view.finalize();
-        vega.resetDefaultLocale();
+    let svgPromise = view.runAsync().then(() => {
+        try {
+            // Workaround for https://github.com/vega/vega/issues/3481
+            view.signal("geo_interval_init_tick", {});
+        } catch (e) {
+            // No geo_interval_init_tick signal
+        }
+    }).then(() => {
+        return view.runAsync().then(
+            () => view.toSVG()
+        ).finally(() => {
+            view.finalize();
+            vega.resetDefaultLocale();
+        })
     });
     return svgPromise
 }
@@ -346,10 +357,19 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
     }
     let view = vegaToView(vgSpec, allowedBaseUrls, errors);
     let scenegraphPromise = view.runAsync().then(() => {
-        return JSON.parse(JSON.parse(vega.sceneToJSON(view.scenegraph())));
-    }).finally(() => {
-        view.finalize();
-        vega.resetDefaultLocale();
+        try {
+            // Workaround for https://github.com/vega/vega/issues/3481
+            view.signal("geo_interval_init_tick", {});
+        } catch (e) {
+            // No geo_interval_init_tick signal
+        }
+    }).then(() => {
+        return view.runAsync().then(
+            () => JSON.parse(JSON.parse(vega.sceneToJSON(view.scenegraph())))
+        ).finally(() => {
+            view.finalize();
+            vega.resetDefaultLocale();
+        })
     });
     return scenegraphPromise
 }
