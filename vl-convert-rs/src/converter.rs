@@ -15,7 +15,7 @@ use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8, Extension};
 
-use deno_core::{op, ModuleCode, Op};
+use deno_core::{op2, ModuleCode, Op};
 use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
 use deno_runtime::deno_core;
 use deno_runtime::deno_web::BlobStore;
@@ -40,6 +40,8 @@ use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::io::Reader as ImageReader;
 
 use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
+
+deno_core::extension!(vl_convert_converter_runtime, ops = [op_get_json_arg]);
 
 lazy_static! {
     pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime =
@@ -223,7 +225,8 @@ fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
     Ok(id)
 }
 
-#[op]
+#[op2]
+#[string]
 fn op_get_json_arg(arg_id: i32) -> Result<String, AnyError> {
     match JSON_ARGS.lock() {
         Ok(mut guard) => {
@@ -511,6 +514,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
             bootstrap: Default::default(),
             extensions: vec![ext],
             startup_snapshot: None,
+            skip_op_registration: false,
             create_params: None,
             unsafely_ignore_certificate_errors: None,
             root_cert_store_provider: None,
@@ -533,6 +537,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
             should_wait_for_inspector_session: false,
             fs: Arc::new(RealFs),
             feature_checker: Arc::new(Default::default()),
+            strace_ops: None,
         };
 
         let main_module =
