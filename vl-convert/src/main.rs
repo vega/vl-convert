@@ -5,7 +5,8 @@ use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
 use vl_convert_rs::converter::{
-    vega_to_url, vegalite_to_url, FormatLocale, TimeFormatLocale, VgOpts, VlConverter, VlOpts,
+    vega_to_url, vegalite_to_url, FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlConverter,
+    VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
@@ -299,6 +300,10 @@ enum Commands {
         /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
+
+        /// Vega renderer. One of 'svg' (default), 'canvas', or 'hybrid'
+        #[arg(long)]
+        renderer: Option<String>,
     },
 
     /// Convert a Vega specification to an SVG image
@@ -468,6 +473,10 @@ enum Commands {
         /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
+
+        /// Vega renderer. One of 'svg' (default), 'canvas', or 'hybrid'
+        #[arg(long)]
+        renderer: Option<String>,
     },
 
     /// Convert an SVG image to a PNG image
@@ -702,6 +711,7 @@ async fn main() -> Result<(), anyhow::Error> {
             bundle,
             format_locale,
             time_format_locale,
+            renderer,
         } => {
             // Initialize converter
             let vl_str = read_input_string(&input)?;
@@ -717,6 +727,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 None => None,
                 Some(p) => Some(time_format_locale_from_str(p)?),
             };
+            let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
             let mut converter = VlConverter::new();
             let html = converter
@@ -732,6 +743,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         time_format_locale,
                     },
                     bundle,
+                    Renderer::from_str(&renderer)?,
                 )
                 .await?;
             write_output_string(&output, &html)?;
@@ -829,6 +841,7 @@ async fn main() -> Result<(), anyhow::Error> {
             bundle,
             format_locale,
             time_format_locale,
+            renderer,
         } => {
             // Initialize converter
             let vg_str = read_input_string(&input)?;
@@ -844,6 +857,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 Some(p) => Some(time_format_locale_from_str(p)?),
             };
 
+            let renderer = renderer.unwrap_or_else(|| "svg".to_string());
+
             let mut converter = VlConverter::new();
             let html = converter
                 .vega_to_html(
@@ -854,6 +869,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         time_format_locale,
                     },
                     bundle,
+                    Renderer::from_str(&renderer)?,
                 )
                 .await?;
             write_output_string(&output, &html)?;

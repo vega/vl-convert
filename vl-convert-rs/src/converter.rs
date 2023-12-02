@@ -5,6 +5,7 @@ use crate::module_loader::{
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
+use std::fmt::{Debug, Display, Formatter};
 use std::io::Cursor;
 use std::path::Path;
 use std::rc::Rc;
@@ -24,6 +25,7 @@ use deno_runtime::worker::WorkerOptions;
 
 use deno_runtime::deno_fs::RealFs;
 use std::panic;
+use std::str::FromStr;
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -57,8 +59,13 @@ pub struct VgOpts {
 }
 
 impl VgOpts {
-    pub fn to_embed_opts(&self) -> Result<serde_json::Value, AnyError> {
+    pub fn to_embed_opts(&self, renderer: Renderer) -> Result<serde_json::Value, AnyError> {
         let mut opts_map = serde_json::Map::new();
+
+        opts_map.insert(
+            "renderer".to_string(),
+            serde_json::Value::String(renderer.to_string()),
+        );
 
         if let Some(format_locale) = &self.format_locale {
             opts_map.insert("formatLocale".to_string(), format_locale.as_object()?);
@@ -114,6 +121,37 @@ impl TimeFormatLocale {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Renderer {
+    Svg,
+    Canvas,
+    Hybrid,
+}
+
+impl Display for Renderer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let r = match self {
+            Renderer::Svg => "svg",
+            Renderer::Canvas => "canvas",
+            Renderer::Hybrid => "hybrid",
+        };
+        std::fmt::Display::fmt(r, f)
+    }
+}
+
+impl FromStr for Renderer {
+    type Err = AnyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "svg" => Self::Svg,
+            "canvas" => Self::Canvas,
+            "hybrid" => Self::Hybrid,
+            _ => return Err(anyhow!("Unsupported renderer: {}", s)),
+        })
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct VlOpts {
     pub config: Option<serde_json::Value>,
@@ -126,8 +164,13 @@ pub struct VlOpts {
 }
 
 impl VlOpts {
-    pub fn to_embed_opts(&self) -> Result<serde_json::Value, AnyError> {
+    pub fn to_embed_opts(&self, renderer: Renderer) -> Result<serde_json::Value, AnyError> {
         let mut opts_map = serde_json::Map::new();
+
+        opts_map.insert(
+            "renderer".to_string(),
+            serde_json::Value::String(renderer.to_string()),
+        );
 
         if let Some(theme) = &self.theme {
             opts_map.insert(
@@ -1302,9 +1345,10 @@ impl VlConverter {
         vl_spec: serde_json::Value,
         vl_opts: VlOpts,
         bundle: bool,
+        renderer: Renderer,
     ) -> Result<String, AnyError> {
         let vl_version = vl_opts.vl_version;
-        let code = get_vega_or_vegalite_script(vl_spec, vl_opts.to_embed_opts()?)?;
+        let code = get_vega_or_vegalite_script(vl_spec, vl_opts.to_embed_opts(renderer)?)?;
         self.build_html(&code, vl_version, bundle).await
     }
 
@@ -1313,8 +1357,9 @@ impl VlConverter {
         vg_spec: serde_json::Value,
         vg_opts: VgOpts,
         bundle: bool,
+        renderer: Renderer,
     ) -> Result<String, AnyError> {
-        let code = get_vega_or_vegalite_script(vg_spec, vg_opts.to_embed_opts()?)?;
+        let code = get_vega_or_vegalite_script(vg_spec, vg_opts.to_embed_opts(renderer)?)?;
         self.build_html(&code, Default::default(), bundle).await
     }
 

@@ -4,7 +4,7 @@ use pyo3::types::{PyBytes, PyDict};
 use pythonize::{depythonize, pythonize};
 use std::str::FromStr;
 use std::sync::Mutex;
-use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VgOpts, VlOpts};
+use vl_convert_rs::converter::{FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlOpts};
 use vl_convert_rs::html::bundle_vega_snippet;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
@@ -750,6 +750,8 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     renderer (str): Vega renderer. One of 'svg' (default), 'canvas',
+///         or 'hybrid' (where text is svg and other marks are canvas)
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
@@ -764,6 +766,7 @@ fn vegalite_to_html(
     theme: Option<String>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
+    renderer: Option<String>,
 ) -> PyResult<String> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -774,7 +777,7 @@ fn vegalite_to_html(
     let config = config.and_then(|c| parse_json_spec(c).ok());
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
-
+    let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
@@ -791,6 +794,7 @@ fn vegalite_to_html(
             time_format_locale,
         },
         bundle.unwrap_or(false),
+        Renderer::from_str(&renderer)?,
     ))?)
 }
 
@@ -802,6 +806,8 @@ fn vegalite_to_html(
 ///         If False (default), HTML file will load dependencies from only CDN
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     renderer (str): Vega renderer. One of 'svg' (default), 'canvas',
+///         or 'hybrid' (where text is svg and other marks are canvas)
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
@@ -811,11 +817,12 @@ fn vega_to_html(
     bundle: Option<bool>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
+    renderer: Option<String>,
 ) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
-
+    let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
@@ -827,6 +834,7 @@ fn vega_to_html(
             time_format_locale,
         },
         bundle.unwrap_or(false),
+        Renderer::from_str(&renderer)?,
     ))?)
 }
 
