@@ -1,10 +1,12 @@
 use anyhow::Error as AnyError;
 use dircpy::copy_dir;
+use semver::Version;
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::fs;
 use std::fs::DirEntry;
 use std::io;
-use std::io::Cursor;
+use std::io::{Cursor, Read, Write as IoWrite};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
@@ -290,6 +292,51 @@ pub fn build_import_map() -> HashMap<String, String> {{
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
 
+    // Collect info on transitive dependency packages
+    // We use this to detect and remove duplicate versions of transitive dependencies
+    let mut packages_info: HashMap<String, Vec<(Version, String)>> = HashMap::new();
+    visit_dirs(&vendor_path, &mut |f| {
+        let p = f.path().canonicalize().unwrap();
+        let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
+        if let Some(relative_sub) = relative.strip_prefix("cdn.skypack.dev/-/") {
+            if let Some((name, rest)) = relative_sub.split_once("@") {
+                if let Some((version_str, _)) = rest.strip_prefix("v").unwrap().split_once("-") {
+                    let version = Version::parse(version_str).unwrap();
+                    packages_info
+                        .entry(name.to_string())
+                        .or_default()
+                        .push((version, relative_sub.to_string()));
+                }
+            }
+        }
+    })
+    .unwrap();
+
+    let mut replacements: HashMap<String, String> = HashMap::new();
+    for (name, v) in packages_info.iter_mut() {
+        // Sort packages in descending order by version
+        v.sort_by(|a, b| b.0.cmp(&a.0));
+
+        // For packages other than vega-lite, if there are multiple versions of the same package
+        // delete the older ones and store the import string replacement to apply to other files
+        if name != "vega-lite" {
+            if v.len() > 1 {
+                for i in 1..v.len() {
+                    replacements.insert(v[i].1.clone(), v[0].1.clone());
+                    let file_path = format!("{vendor_path_str}/cdn.skypack.dev/-/{}", v[i].1);
+                    fs::remove_file(file_path).unwrap();
+                }
+            }
+        }
+    }
+
+    // Perform import replacements in remaining files
+    visit_dirs(&vendor_path, &mut |f| {
+        let p = f.path().canonicalize().unwrap();
+        replace_in_file(&p, &replacements).unwrap();
+    })
+    .unwrap();
+
     // Write include_str! statements to inline source code in our executable
     let skypack_domain = "cdn.skypack.dev";
     visit_dirs(&vendor_path, &mut |f| {
@@ -412,6 +459,23 @@ fn download_locales(url: &str, output_dir: &PathBuf) -> Result<(), AnyError> {
 
     let temp_path_locale = temp_path.join("locale");
     copy_dir(temp_path_locale, output_dir)?;
+
+    Ok(())
+}
+
+fn replace_in_file(file_path: &PathBuf, replacements: &HashMap<String, String>) -> io::Result<()> {
+    // Read the file content
+    let mut content = String::new();
+    fs::File::open(file_path)?.read_to_string(&mut content)?;
+
+    // Apply replacements
+    for (target, replacement) in replacements {
+        content = content.replace(target, replacement);
+    }
+
+    // Write the modified content back to the file
+    let mut file = fs::File::create(file_path)?;
+    file.write_all(content.as_bytes())?;
 
     Ok(())
 }
