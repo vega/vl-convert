@@ -356,7 +356,7 @@ mod test_vegalite_to_vega {
 mod test_vegalite_to_html_no_bundle {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::VlOpts;
+    use vl_convert_rs::converter::{Renderer, VlOpts};
     use vl_convert_rs::VlConverter;
 
     #[rstest]
@@ -386,7 +386,7 @@ mod test_vegalite_to_html_no_bundle {
         let mut converter = VlConverter::new();
 
         let html_result = block_on(
-            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, false)
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, false, Renderer::Canvas)
         ).unwrap();
 
         // Check for expected patterns
@@ -404,7 +404,7 @@ mod test_vegalite_to_html_no_bundle {
 mod test_vegalite_to_html_bundle {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::VlOpts;
+    use vl_convert_rs::converter::{Renderer, VlOpts};
     use vl_convert_rs::VlConverter;
 
     #[rstest]
@@ -434,7 +434,7 @@ mod test_vegalite_to_html_bundle {
         let mut converter = VlConverter::new();
 
         let html_result = block_on(
-            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, true)
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, true, Renderer::Svg)
         ).unwrap();
 
         // Check for expected patterns

@@ -1,10 +1,12 @@
+#![allow(clippy::too_many_arguments)]
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 use pythonize::{depythonize, pythonize};
 use std::str::FromStr;
 use std::sync::Mutex;
-use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VgOpts, VlOpts};
+use vl_convert_rs::converter::{FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlOpts};
 use vl_convert_rs::html::bundle_vega_snippet;
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
@@ -190,7 +192,6 @@ fn vega_to_scenegraph(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
-#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
@@ -259,7 +260,6 @@ fn vegalite_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
-#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
@@ -392,7 +392,6 @@ fn vega_to_png(
 #[pyo3(
     text_signature = "(vl_spec, vl_version, scale, ppi, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
 )]
-#[allow(clippy::too_many_arguments)]
 fn vegalite_to_png(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -525,7 +524,6 @@ fn vega_to_jpeg(
 #[pyo3(
     text_signature = "(vl_spec, vl_version, scale, quality, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
 )]
-#[allow(clippy::too_many_arguments)]
 fn vegalite_to_jpeg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -646,7 +644,6 @@ fn vega_to_pdf(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PDF image data
-#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, scale, config, theme, allowed_base_urls, format_locale, time_format_locale)"
@@ -750,11 +747,13 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     renderer (str): Vega renderer. One of 'svg' (default), 'canvas',
+///         or 'hybrid' (where text is svg and other marks are canvas)
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vl_spec, vl_version, bundle, config, theme, format_locale, time_format_locale)"
+    text_signature = "(vl_spec, vl_version, bundle, config, theme, format_locale, time_format_locale, renderer)"
 )]
 fn vegalite_to_html(
     vl_spec: PyObject,
@@ -764,6 +763,7 @@ fn vegalite_to_html(
     theme: Option<String>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
+    renderer: Option<String>,
 ) -> PyResult<String> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -774,7 +774,7 @@ fn vegalite_to_html(
     let config = config.and_then(|c| parse_json_spec(c).ok());
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
-
+    let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
@@ -791,6 +791,7 @@ fn vegalite_to_html(
             time_format_locale,
         },
         bundle.unwrap_or(false),
+        Renderer::from_str(&renderer)?,
     ))?)
 }
 
@@ -802,20 +803,23 @@ fn vegalite_to_html(
 ///         If False (default), HTML file will load dependencies from only CDN
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     renderer (str): Vega renderer. One of 'svg' (default), 'canvas',
+///         or 'hybrid' (where text is svg and other marks are canvas)
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, bundle, format_locale, time_format_locale)")]
+#[pyo3(text_signature = "(vg_spec, bundle, format_locale, time_format_locale, renderer)")]
 fn vega_to_html(
     vg_spec: PyObject,
     bundle: Option<bool>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
+    renderer: Option<String>,
 ) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
-
+    let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
@@ -827,6 +831,7 @@ fn vega_to_html(
             time_format_locale,
         },
         bundle.unwrap_or(false),
+        Renderer::from_str(&renderer)?,
     ))?)
 }
 
