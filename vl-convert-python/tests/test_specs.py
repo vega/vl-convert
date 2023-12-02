@@ -73,7 +73,6 @@ def load_expected_png(name, vl_version, theme=None):
 @pytest.mark.parametrize(
     "vl_version",
     [
-        "v4_17",
         "v5_8",
         "v5_9",
         "v5_10",

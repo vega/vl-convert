@@ -317,7 +317,6 @@ mod test_vegalite_to_vega {
     #[rstest]
     fn test(
         #[values(
-            VlVersion::v4_17,
             VlVersion::v5_8,
             VlVersion::v5_9,
             VlVersion::v5_10,

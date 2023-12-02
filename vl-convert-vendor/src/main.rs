@@ -12,12 +12,7 @@ use std::process::Command;
 use tempfile::TempDir;
 
 const VL_PATHS: &[(&str, &str)] = &[
-    // 4.17 is used by Altair 4.2 (keep forever)
-    (
-        "4.17",
-        "/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js",
-    ),
-    // 5.8 is used by Altair 5.0 (keep forever)
+    // 5.8 is used by Altair 5.0 (keep longer)
     (
         "5.8",
         "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
@@ -42,16 +37,17 @@ const VL_PATHS: &[(&str, &str)] = &[
         "5.13",
         "/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js",
     ),
-    // 5.14.1 is used by Altair 5.1.0 (keep forever)
+    // 5.14.1 is used by Altair 5.1.0 (keep longer)
     (
         "5.14",
         "/pin/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/mode=imports,min/optimized/vega-lite.js",
     ),
-    // 5.15.1 is used by Altair 5.1.1 (keep forever)
+    // 5.15.1 is used by Altair 5.1.1 (keep longer)
     (
         "5.15",
         "/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js",
     ),
+    // 5.16.3 is used by Altair 5.2.0 (keep longer)
     (
         "5.16",
         "/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js",
