@@ -2,13 +2,15 @@ use crate::anyhow;
 use crate::anyhow::{anyhow, bail};
 use crate::image_loading::custom_string_resolver;
 use deno_core::error::AnyError;
-use deno_core::op;
+use deno_core::op2;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use usvg::fontdb::Database;
 use usvg::{ImageHrefResolver, TreeParsing, TreeTextToPath};
+
+deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options> = Mutex::new(init_usvg_options());
@@ -179,8 +181,8 @@ impl TextInfo {
     }
 }
 
-#[op]
-pub fn op_text_width(text_info_str: String) -> Result<f64, AnyError> {
+#[op2(fast)]
+pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, AnyError> {
     let text_info = match serde_json::from_str::<TextInfo>(&text_info_str) {
         Ok(text_info) => text_info,
         Err(err) => bail!("Failed to deserialize text info: {}", err.to_string()),
