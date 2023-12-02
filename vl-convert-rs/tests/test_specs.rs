@@ -317,7 +317,6 @@ mod test_vegalite_to_vega {
     #[rstest]
     fn test(
         #[values(
-            VlVersion::v4_17,
             VlVersion::v5_8,
             VlVersion::v5_9,
             VlVersion::v5_10,
@@ -641,7 +640,8 @@ mod test_png_no_theme {
         case("no_text_in_font_metrics", 1.0),
         case("custom_projection", 1.0),
         case("long_legend_label", 1.0),
-        case("quakes_initial_selection", 1.0)
+        case("quakes_initial_selection", 1.0),
+        case("geoScale", 1.0),
     )]
     fn test(
         name: &str,

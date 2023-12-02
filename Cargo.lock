@@ -6761,6 +6761,7 @@ dependencies = [
  "anyhow",
  "dircpy",
  "reqwest",
+ "semver 1.0.20",
  "serde_json",
  "tempfile",
  "zip-extract",

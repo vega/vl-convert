@@ -1562,7 +1562,7 @@ mod tests {
             .vegalite_to_vega(
                 vl_spec,
                 VlOpts {
-                    vl_version: VlVersion::v4_17,
+                    vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
             )
@@ -1589,7 +1589,7 @@ mod tests {
             .vegalite_to_vega(
                 vl_spec.clone(),
                 VlOpts {
-                    vl_version: VlVersion::v4_17,
+                    vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
             )

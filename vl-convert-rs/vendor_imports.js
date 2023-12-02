@@ -1,4 +1,3 @@
-import * as v_4_17 from "https://cdn.skypack.dev/pin/vega-lite@v4.17.0-ycT3UrEO81NWOPVKlbjt/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_8 from "https://cdn.skypack.dev/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_9 from "https://cdn.skypack.dev/pin/vega-lite@v5.9.3-QyXScylQe0TTmb9DRCES/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_10 from "https://cdn.skypack.dev/pin/vega-lite@v5.10.0-Vm0dgr6cpOyUiTjlPzt9/mode=imports,min/optimized/vega-lite.js";
