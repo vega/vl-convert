@@ -299,8 +299,8 @@ pub fn build_import_map() -> HashMap<String, String> {{
         let p = f.path().canonicalize().unwrap();
         let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
         if let Some(relative_sub) = relative.strip_prefix("cdn.skypack.dev/-/") {
-            if let Some((name, rest)) = relative_sub.split_once("@") {
-                if let Some((version_str, _)) = rest.strip_prefix("v").unwrap().split_once("-") {
+            if let Some((name, rest)) = relative_sub.split_once('@') {
+                if let Some((version_str, _)) = rest.strip_prefix('v').unwrap().split_once('-') {
                     let version = Version::parse(version_str).unwrap();
                     packages_info
                         .entry(name.to_string())
@@ -319,13 +319,11 @@ pub fn build_import_map() -> HashMap<String, String> {{
 
         // For packages other than vega-lite, if there are multiple versions of the same package
         // delete the older ones and store the import string replacement to apply to other files
-        if name != "vega-lite" {
-            if v.len() > 1 {
-                for i in 1..v.len() {
-                    replacements.insert(v[i].1.clone(), v[0].1.clone());
-                    let file_path = format!("{vendor_path_str}/cdn.skypack.dev/-/{}", v[i].1);
-                    fs::remove_file(file_path).unwrap();
-                }
+        if name != "vega-lite" && v.len() > 1 {
+            for i in 1..v.len() {
+                replacements.insert(v[i].1.clone(), v[0].1.clone());
+                let file_path = format!("{vendor_path_str}/cdn.skypack.dev/-/{}", v[i].1);
+                fs::remove_file(file_path).unwrap();
             }
         }
     }
