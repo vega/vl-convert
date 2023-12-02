@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
@@ -190,7 +192,6 @@ fn vega_to_scenegraph(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
-#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
@@ -259,7 +260,6 @@ fn vegalite_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
-#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
@@ -392,7 +392,6 @@ fn vega_to_png(
 #[pyo3(
     text_signature = "(vl_spec, vl_version, scale, ppi, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
 )]
-#[allow(clippy::too_many_arguments)]
 fn vegalite_to_png(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -525,7 +524,6 @@ fn vega_to_jpeg(
 #[pyo3(
     text_signature = "(vl_spec, vl_version, scale, quality, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
 )]
-#[allow(clippy::too_many_arguments)]
 fn vegalite_to_jpeg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -646,7 +644,6 @@ fn vega_to_pdf(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PDF image data
-#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, scale, config, theme, allowed_base_urls, format_locale, time_format_locale)"
@@ -756,7 +753,7 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
 ///     string: HTML document
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vl_spec, vl_version, bundle, config, theme, format_locale, time_format_locale)"
+    text_signature = "(vl_spec, vl_version, bundle, config, theme, format_locale, time_format_locale, renderer)"
 )]
 fn vegalite_to_html(
     vl_spec: PyObject,
@@ -811,7 +808,7 @@ fn vegalite_to_html(
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, bundle, format_locale, time_format_locale)")]
+#[pyo3(text_signature = "(vg_spec, bundle, format_locale, time_format_locale, renderer)")]
 fn vega_to_html(
     vg_spec: PyObject,
     bundle: Option<bool>,
