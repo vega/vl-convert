@@ -7,7 +7,7 @@ import * as v_5_13 from "https://cdn.skypack.dev/pin/vega-lite@v5.13.0-GkFo6HVxf
 import * as v_5_14 from "https://cdn.skypack.dev/pin/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_15 from "https://cdn.skypack.dev/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_16 from "https://cdn.skypack.dev/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js";
-import * as vega from "https://cdn.skypack.dev/pin/vega@v5.26.1-qzT1gQErRVzfnh254DSg/mode=imports,min/optimized/vega.js";
+import * as vega from "https://cdn.skypack.dev/pin/vega@v5.27.0-6S239Sria1XovqGora8j/mode=imports,min/optimized/vega.js";
 import * as vegaThemes from "https://cdn.skypack.dev/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
-import * as vegaEmbed from "https://cdn.skypack.dev/pin/vega-embed@v6.23.0-Fpmq39rehEH8HWtd6nzv/mode=imports,min/optimized/vega-embed.js";
+import * as vegaEmbed from "https://cdn.skypack.dev/pin/vega-embed@v6.24.0-w7baSqpeCYEV2w1fHJn2/mode=imports,min/optimized/vega-embed.js";
 import lodashDebounce from "https://cdn.skypack.dev/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js";
