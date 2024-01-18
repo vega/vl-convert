@@ -394,6 +394,62 @@ function vegaToSvg(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, erro
     return svgPromise
 }
 
+function cloneScenegraph(obj) {
+    const keys = [
+      'marktype', 'name', 'role', 'interactive', 'clip', 'items', 'zindex',
+      'x', 'y', 'width', 'height', 'align', 'baseline',             // layout
+      'fill', 'fillOpacity', 'opacity', 'blend',                    // fill
+      'stroke', 'strokeOpacity', 'strokeWidth', 'strokeCap',
+      'strokeJoin',                                                 // stroke
+      'strokeDash', 'strokeDashOffset',                             // stroke dash
+      'strokeForeground', 'strokeOffset',                           // group
+      'startAngle', 'endAngle', 'innerRadius', 'outerRadius',       // arc
+      'cornerRadius', 'padAngle',                                   // arc, rect
+      'cornerRadiusTopLeft', 'cornerRadiusTopRight',                // rect, group
+      'cornerRadiusBottomLeft', 'cornerRadiusBottomRight',
+      'interpolate', 'tension', 'orient', 'defined',                // area, line
+      'url', 'aspect', 'smooth',                                    // image
+      'path', 'scaleX', 'scaleY',                                   // path
+      'x2', 'y2',                                                   // rule
+      'size', 'shape',                                              // symbol
+      'text', 'angle', 'theta', 'radius', 'dir', 'dx', 'dy',        // text
+      'ellipsis', 'limit', 'lineBreak', 'lineHeight',
+      'font', 'fontSize', 'fontWeight', 'fontStyle', 'fontVariant', // font
+      'description', 'aria', 'ariaRole', 'ariaRoleDescription'      // aria
+    ];
+
+    // Check if the input is an object (including an array) or null
+    if (typeof obj !== 'object' || obj === null) {
+        return obj;
+    }
+
+    // Initialize the clone as an array or object based on the input type
+    const clone = Array.isArray(obj) ? [] : {};
+
+    // If the object is an array, iterate over its elements
+    if (Array.isArray(obj)) {
+        for (let i = 0; i < obj.length; i++) {
+            // Apply the function recursively to each element
+            clone.push(cloneScenegraph(obj[i]));
+        }
+    } else {
+        // If the object is not an array, iterate over its keys
+        for (const key in obj) {
+            // Clone only the properties with specified keys
+            if (key === "shape" && typeof obj[key] === "function") {
+                // Convert path object to SVG path string.
+                // Initialize context. This is needed for obj.shape(obj) to work.
+                obj.shape.context();
+                clone["shape"] = obj.shape(obj);
+            } else if (keys.includes(key)) {
+                clone[key] = cloneScenegraph(obj[key]);
+            }
+        }
+    }
+
+    return clone;
+}
+
 function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, errors) {
     if (formatLocale != null) {
         vega.formatLocale(formatLocale);
@@ -411,7 +467,18 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
         }
     }).then(() => {
         return view.runAsync().then(
-            () => JSON.parse(JSON.parse(vega.sceneToJSON(view.scenegraph())))
+            () => {
+                let padding = view.padding();
+                return {
+                    width: Math.max(0, view._viewWidth + padding.left + padding.right),
+                    height: Math.max(0, view._viewHeight + padding.top + padding.bottom),
+                    origin: [
+                        padding.left + view._origin[0],
+                        padding.top + view._origin[1]
+                    ],
+                    scenegraph: cloneScenegraph(view.scenegraph().root)
+                }
+            }
         ).finally(() => {
             view.finalize();
             vega.resetDefaultLocale();
