@@ -591,7 +591,8 @@ mod test_scenegraph {
     fn test(
         #[values(
             // This one has round-trip stable numeric values
-            "no_text_in_font_metrics"
+            "no_text_in_font_metrics",
+            "geoScale",
         )]
         name: &str,
     ) {
