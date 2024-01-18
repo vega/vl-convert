@@ -440,7 +440,7 @@ function cloneScenegraph(obj) {
                 // Convert path object to SVG path string.
                 // Initialize context. This is needed for obj.shape(obj) to work.
                 obj.shape.context();
-                clone["shape"] = obj.shape(obj);
+                clone["shape"] = obj.shape(obj) ?? "";
             } else if (keys.includes(key)) {
                 clone[key] = cloneScenegraph(obj[key]);
             }
