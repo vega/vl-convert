@@ -154,12 +154,12 @@ fn load_expected_scenegraph(
     name: &str,
     vl_version: VlVersion,
     theme: Option<&str>,
-) -> Option<Value> {
+) -> Option<String> {
     let spec_path = make_expected_scenegraph_path(name, vl_version, theme);
     let Some(p) = fs::read_to_string(&spec_path).ok() else {
         return None;
     };
-    serde_json::from_str(&p).ok()
+    Some(p)
 }
 
 fn write_failed_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) -> PathBuf {
@@ -223,12 +223,16 @@ fn check_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) 
 
 fn check_scenegraph(name: &str, vl_version: VlVersion, theme: Option<&str>, sg: &Value) {
     let expected = load_expected_scenegraph(name, vl_version, theme);
-    if Some(sg) != expected.as_ref() {
-        let path = write_failed_scenegraph(name, vl_version, theme, sg);
-        panic!(
-            "Specs don't match for {}.sg.json. Failed image written to {:?}",
-            name, path
-        )
+    if let Some(expected) = &expected {
+        let result_pretty = serde_json::to_string_pretty(sg).unwrap();
+        if expected != &result_pretty {
+            let path = write_failed_scenegraph(name, vl_version, theme, sg);
+            println!(
+                "Scenegraphs don't match for {}.sg.json. Failed image written to {:?}",
+                name, path
+            );
+            assert_eq!(&result_pretty, expected)
+        }
     }
 }
 
@@ -590,9 +594,9 @@ mod test_scenegraph {
     #[rstest]
     fn test(
         #[values(
-            // This one has round-trip stable numeric values
             "no_text_in_font_metrics",
             "geoScale",
+            "table_heatmap",
         )]
         name: &str,
     ) {
@@ -643,6 +647,7 @@ mod test_png_no_theme {
         case("long_legend_label", 1.0),
         case("quakes_initial_selection", 1.0),
         case("geoScale", 1.0),
+        case("table_heatmap", 1.0),
     )]
     fn test(
         name: &str,

@@ -399,8 +399,9 @@ function cloneScenegraph(obj) {
       'marktype', 'name', 'role', 'interactive', 'clip', 'items', 'zindex',
       'x', 'y', 'width', 'height', 'align', 'baseline',             // layout
       'fill', 'fillOpacity', 'opacity', 'blend',                    // fill
-      'stroke', 'strokeOpacity', 'strokeWidth', 'strokeCap',
-      'strokeJoin',                                                 // stroke
+      'x1', 'y1', 'stops', 'offset', 'color',                       // gradient
+      'stroke', 'strokeOpacity', 'strokeWidth', 'strokeCap',        // stroke
+      'strokeJoin',
       'strokeDash', 'strokeDashOffset',                             // stroke dash
       'strokeForeground', 'strokeOffset',                           // group
       'startAngle', 'endAngle', 'innerRadius', 'outerRadius',       // arc
