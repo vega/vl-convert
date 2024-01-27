@@ -1,6 +1,6 @@
 [package]
 name = "vl-convert-rs"
-version = "1.2.2"
+version = "1.2.3"
 edition = "2021"
 license = "BSD-3-Clause"
 readme = "README.md"
@@ -10,7 +10,7 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-vl-convert-pdf = {path= "../vl-convert-pdf", version= "1.0.1-rc1" }
+vl-convert-pdf = {path= "../vl-convert-pdf", version= "1.2.3" }
 
 # Deno 1.38.4. Before updating deno_runtime/deno_core, see note in DEVELOP.md
 deno_runtime = "0.134.0"
