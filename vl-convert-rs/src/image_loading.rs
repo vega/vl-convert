@@ -1,8 +1,8 @@
 use http::StatusCode;
-use log::error;
 use reqwest::Client;
 use std::io::Write;
 use tokio::task;
+use tracing::error;
 use usvg::{ImageHrefResolver, ImageKind, Options};
 
 static VL_CONVERT_USER_AGENT: &str =

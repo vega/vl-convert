@@ -1047,9 +1047,6 @@ pub struct VlConverter {
 
 impl VlConverter {
     pub fn new() -> Self {
-        // Initialize environment logger
-        env_logger::try_init().ok();
-
         let (sender, mut receiver) = mpsc::channel::<VlConvertCommand>(32);
 
         let handle = Arc::new(thread::spawn(move || {
@@ -1120,6 +1117,7 @@ impl VlConverter {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vegalite_to_vega(
         &mut self,
         vl_spec: serde_json::Value,
@@ -1149,6 +1147,7 @@ impl VlConverter {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vega_to_svg(
         &mut self,
         vg_spec: serde_json::Value,
@@ -1178,6 +1177,7 @@ impl VlConverter {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vega_to_scenegraph(
         &mut self,
         vg_spec: serde_json::Value,
@@ -1210,6 +1210,7 @@ impl VlConverter {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vegalite_to_svg(
         &mut self,
         vl_spec: serde_json::Value,
@@ -1239,6 +1240,7 @@ impl VlConverter {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vegalite_to_scenegraph(
         &mut self,
         vl_spec: serde_json::Value,
@@ -1271,6 +1273,7 @@ impl VlConverter {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vega_to_png(
         &mut self,
         vg_spec: serde_json::Value,
@@ -1283,6 +1286,7 @@ impl VlConverter {
         svg_to_png(&svg, scale, ppi)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vegalite_to_png(
         &mut self,
         vl_spec: serde_json::Value,
@@ -1295,6 +1299,7 @@ impl VlConverter {
         svg_to_png(&svg, scale, ppi)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vega_to_jpeg(
         &mut self,
         vg_spec: serde_json::Value,
@@ -1307,6 +1312,7 @@ impl VlConverter {
         svg_to_jpeg(&svg, scale, quality)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vegalite_to_jpeg(
         &mut self,
         vl_spec: serde_json::Value,
@@ -1319,6 +1325,7 @@ impl VlConverter {
         svg_to_jpeg(&svg, scale, quality)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vega_to_pdf(
         &mut self,
         vg_spec: serde_json::Value,
@@ -1330,6 +1337,7 @@ impl VlConverter {
         svg_to_pdf(&svg, scale)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vegalite_to_pdf(
         &mut self,
         vl_spec: serde_json::Value,
@@ -1341,6 +1349,7 @@ impl VlConverter {
         svg_to_pdf(&svg, scale)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn get_vegaembed_bundle(
         &mut self,
         vl_version: VlVersion,
@@ -1414,6 +1423,7 @@ impl VlConverter {
         ))
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vegalite_to_html(
         &mut self,
         vl_spec: serde_json::Value,
@@ -1426,6 +1436,7 @@ impl VlConverter {
         self.build_html(&code, vl_version, bundle).await
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn vega_to_html(
         &mut self,
         vg_spec: serde_json::Value,
@@ -1437,6 +1448,7 @@ impl VlConverter {
         self.build_html(&code, Default::default(), bundle).await
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<Option<String>, AnyError>>();
         let cmd = VlConvertCommand::GetLocalTz { responder: resp_tx };
@@ -1461,6 +1473,7 @@ impl VlConverter {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn get_themes(&mut self) -> Result<serde_json::Value, AnyError> {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
         let cmd = VlConvertCommand::GetThemes { responder: resp_tx };
@@ -1532,6 +1545,7 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
     Ok(data)
 }
 
+#[tracing::instrument(skip_all)]
 pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
     // default ppi to 72
     let ppi = ppi.unwrap_or(72.0);
@@ -1569,6 +1583,7 @@ pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, An
     }
 }
 
+#[tracing::instrument(skip_all)]
 pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>, AnyError> {
     let png_bytes = svg_to_png(svg, scale, None)?;
     let img = ImageReader::new(Cursor::new(png_bytes))
@@ -1588,6 +1603,7 @@ pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>
     Ok(jpeg_bytes)
 }
 
+#[tracing::instrument(skip_all)]
 pub fn svg_to_pdf(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
     // Load system fonts
     let font_db = FONT_DB
@@ -1633,6 +1649,7 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
     Ok(usvg::Tree::from_xmltree(&doc, &opts)?)
 }
 
+#[tracing::instrument(skip_all)]
 pub fn vegalite_to_url(vl_spec: &serde_json::Value, fullscreen: bool) -> Result<String, AnyError> {
     let spec_str = serde_json::to_string(vl_spec)?;
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
@@ -1646,6 +1663,7 @@ pub fn vegalite_to_url(vl_spec: &serde_json::Value, fullscreen: bool) -> Result<
     ))
 }
 
+#[tracing::instrument(skip_all)]
 pub fn vega_to_url(vg_spec: &serde_json::Value, fullscreen: bool) -> Result<String, AnyError> {
     let spec_str = serde_json::to_string(vg_spec)?;
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);

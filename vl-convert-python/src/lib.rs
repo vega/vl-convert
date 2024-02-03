@@ -6,6 +6,7 @@ use pyo3::types::{PyBytes, PyDict};
 use pythonize::{depythonize, pythonize};
 use std::str::FromStr;
 use std::sync::Mutex;
+use tracing_subscriber::{fmt, fmt::format::FmtSpan, prelude::*, EnvFilter};
 use vl_convert_rs::converter::{FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlOpts};
 use vl_convert_rs::html::bundle_vega_snippet;
 use vl_convert_rs::module_loader::import_map::VlVersion;
@@ -139,6 +140,7 @@ fn vega_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     dict: scenegraph
+#[tracing::instrument(skip_all, name = "py_vega_to_scenegraph")]
 #[pyfunction]
 #[pyo3(text_signature = "(vg_spec, allowed_base_urls, format_locale, time_format_locale)")]
 fn vega_to_scenegraph(
@@ -171,8 +173,11 @@ fn vega_to_scenegraph(
             )))
         }
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+    let span = tracing::info_span!("pythonize");
+    span.in_scope(|| {
+        Python::with_gil(|py| -> PyResult<PyObject> {
+            pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+        })
     })
 }
 
@@ -260,6 +265,7 @@ fn vegalite_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
+#[tracing::instrument(skip_all, name = "py_vegalite_to_scenegraph")]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
@@ -309,8 +315,11 @@ fn vegalite_to_scenegraph(
             )))
         }
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+    let span = tracing::info_span!("pythonize");
+    span.in_scope(|| {
+        Python::with_gil(|py| -> PyResult<PyObject> {
+            pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+        })
     })
 }
 
@@ -1139,6 +1148,12 @@ fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyRes
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
+    // Initialize logging controlled by RUST_LOG environment variable
+    tracing_subscriber::registry()
+        .with(fmt::layer().with_span_events(FmtSpan::CLOSE))
+        .with(EnvFilter::from_default_env())
+        .init();
+
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;

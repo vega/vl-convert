@@ -4,6 +4,7 @@ use clap::{arg, Parser, Subcommand};
 use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
+use tracing_subscriber::{fmt, fmt::format::FmtSpan, prelude::*, EnvFilter};
 use vl_convert_rs::converter::{
     vega_to_url, vegalite_to_url, FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlConverter,
     VlOpts,
@@ -562,6 +563,13 @@ enum Commands {
 async fn main() -> Result<(), anyhow::Error> {
     let args = Cli::parse();
     use crate::Commands::*;
+
+    // Initialize logging controlled by RUST_LOG environment variable
+    tracing_subscriber::registry()
+        .with(fmt::layer().with_span_events(FmtSpan::CLOSE))
+        .with(EnvFilter::from_default_env())
+        .init();
+
     match args.command {
         Vl2vg {
             input: input_vegalite_file,
