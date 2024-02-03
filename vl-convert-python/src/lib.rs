@@ -140,6 +140,7 @@ fn vega_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     dict: scenegraph
+#[tracing::instrument(skip_all,name="py_vega_to_scenegraph")]
 #[pyfunction]
 #[pyo3(text_signature = "(vg_spec, allowed_base_urls, format_locale, time_format_locale)")]
 fn vega_to_scenegraph(
@@ -172,8 +173,11 @@ fn vega_to_scenegraph(
             )))
         }
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+    let span = tracing::info_span!("pythonize");
+    span.in_scope(|| {
+        Python::with_gil(|py| -> PyResult<PyObject> {
+            pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+        })
     })
 }
 
@@ -261,6 +265,7 @@ fn vegalite_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
+#[tracing::instrument(skip_all,name="py_vegalite_to_scenegraph")]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
@@ -310,8 +315,11 @@ fn vegalite_to_scenegraph(
             )))
         }
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+    let span = tracing::info_span!("pythonize");
+    span.in_scope(|| {
+        Python::with_gil(|py| -> PyResult<PyObject> {
+            pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+        })
     })
 }
 
