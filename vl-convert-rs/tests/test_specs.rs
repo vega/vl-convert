@@ -8,6 +8,7 @@ use vl_convert_rs::{VlConverter, VlVersion};
 
 use serde_json::Value;
 use std::sync::Once;
+use tracing_subscriber::{fmt, fmt::format::FmtSpan, prelude::*, EnvFilter};
 use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VlOpts};
 
 static INIT: Once = Once::new();
@@ -19,6 +20,11 @@ pub fn initialize() {
         let fonts_dir = root_path.join("tests").join("fonts");
         register_font_directory(fonts_dir.to_str().unwrap())
             .expect("Failed to register test font directory");
+
+        tracing_subscriber::registry()
+            .with(fmt::layer().with_span_events(FmtSpan::CLOSE))
+            .with(EnvFilter::from_default_env())
+            .init();
     });
 }
 

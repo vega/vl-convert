@@ -6,6 +6,7 @@ use pyo3::types::{PyBytes, PyDict};
 use pythonize::{depythonize, pythonize};
 use std::str::FromStr;
 use std::sync::Mutex;
+use tracing_subscriber::{fmt, fmt::format::FmtSpan, prelude::*, EnvFilter};
 use vl_convert_rs::converter::{FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlOpts};
 use vl_convert_rs::html::bundle_vega_snippet;
 use vl_convert_rs::module_loader::import_map::VlVersion;
@@ -1139,6 +1140,12 @@ fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyRes
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
+    // Initialize logging controlled by RUST_LOG environment variable
+    tracing_subscriber::registry()
+        .with(fmt::layer().with_span_events(FmtSpan::CLOSE))
+        .with(EnvFilter::from_default_env())
+        .init();
+
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;
