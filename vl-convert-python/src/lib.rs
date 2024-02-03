@@ -140,7 +140,7 @@ fn vega_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     dict: scenegraph
-#[tracing::instrument(skip_all,name="py_vega_to_scenegraph")]
+#[tracing::instrument(skip_all, name = "py_vega_to_scenegraph")]
 #[pyfunction]
 #[pyo3(text_signature = "(vg_spec, allowed_base_urls, format_locale, time_format_locale)")]
 fn vega_to_scenegraph(
@@ -265,7 +265,7 @@ fn vegalite_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
-#[tracing::instrument(skip_all,name="py_vegalite_to_scenegraph")]
+#[tracing::instrument(skip_all, name = "py_vegalite_to_scenegraph")]
 #[pyfunction]
 #[pyo3(
     text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"

@@ -6314,7 +6314,6 @@ dependencies = [
  "tiny-skia",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "usvg",
  "vl-convert-pdf",
 ]
