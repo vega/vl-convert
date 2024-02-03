@@ -6280,6 +6280,7 @@ dependencies = [
  "pyo3",
  "pythonize",
  "tokio",
+ "tracing",
  "tracing-subscriber",
  "vl-convert-rs",
 ]
