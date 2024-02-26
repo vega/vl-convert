@@ -648,6 +648,7 @@ mod test_png_no_theme {
         case("quakes_initial_selection", 1.0),
         case("geoScale", 1.0),
         case("table_heatmap", 1.0),
+        case("long_text_lable", 1.0),
     )]
     fn test(
         name: &str,

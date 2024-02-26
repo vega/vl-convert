@@ -331,7 +331,8 @@ import('{url}').then((sg) => {{
             style, variant, weight, size, family, text
         }}, null, 2);
 
-        return Deno[Deno.internal].core.ops.op_text_width(text_info)
+        let fullWidth = Deno[Deno.internal].core.ops.op_text_width(text_info);
+        return Math.min(fullWidth, item.limit ?? fullWidth)
     }};
 }})
 "#,
