@@ -5,17 +5,16 @@ use crate::module_loader::import_map::{
     VEGA_THEMES_PATH,
 };
 use crate::VlVersion;
-use deno_core::{ModuleCode, ResolutionKind};
-use deno_emit::{CacheSetting, LoadFuture, Loader};
-use deno_graph::source::LoadResponse;
+use deno_core::{ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind};
+use deno_emit::{LoadFuture, Loader};
+use deno_graph::source::{LoadOptions, LoadResponse};
 use deno_runtime::deno_core::anyhow::Error;
-use deno_runtime::deno_core::futures::FutureExt;
 use deno_runtime::deno_core::{
-    resolve_import, ModuleLoader, ModuleSource, ModuleSourceFuture, ModuleSpecifier, ModuleType,
+    resolve_import, ModuleLoader, ModuleSource, ModuleSpecifier, ModuleType,
 };
 use regex::Regex;
 use std::collections::HashMap;
-use std::pin::Pin;
+use std::sync::Arc;
 
 lazy_static! {
     pub static ref IMPORT_MAP: HashMap<String, String> = build_import_map();
@@ -48,7 +47,8 @@ impl ModuleLoader for VlConvertModuleLoader {
         module_specifier: &ModuleSpecifier,
         _maybe_referrer: Option<&ModuleSpecifier>,
         _is_dyn_import: bool,
-    ) -> Pin<Box<ModuleSourceFuture>> {
+        _requested_module_type: RequestedModuleType,
+    ) -> ModuleLoadResponse {
         let module_specifier = module_specifier.clone();
         let string_specifier = module_specifier.to_string();
         // println!("load: {}", string_specifier);
@@ -70,12 +70,11 @@ impl ModuleLoader for VlConvertModuleLoader {
                 .clone()
         };
 
-        futures::future::ready(Ok(ModuleSource::new(
+        ModuleLoadResponse::Sync(Ok(ModuleSource::new(
             ModuleType::JavaScript,
-            ModuleCode::from(code),
+            ModuleSourceCode::String(code.into()),
             &module_specifier,
         )))
-        .boxed_local()
     }
 }
 
@@ -115,12 +114,7 @@ impl VlConvertBundleLoader {
 }
 
 impl Loader for VlConvertBundleLoader {
-    fn load(
-        &mut self,
-        module_specifier: &ModuleSpecifier,
-        _is_dynamic: bool,
-        _cache_setting: CacheSetting,
-    ) -> LoadFuture {
+    fn load(&mut self, module_specifier: &ModuleSpecifier, _options: LoadOptions) -> LoadFuture {
         let module_specifier = module_specifier.clone();
         let last_path_part = module_specifier.path().split('/').next_back().unwrap();
         let code = if last_path_part == "vl-convert-index.js" {
@@ -163,11 +157,14 @@ impl Loader for VlConvertBundleLoader {
             src
         };
 
+        let code_bytes = code.into_bytes();
+        let content: Arc<[u8]> = code_bytes.into_boxed_slice().into();
+
         Box::pin(async move {
             Ok(Some(LoadResponse::Module {
                 specifier: module_specifier.clone(),
                 maybe_headers: None,
-                content: code.into(),
+                content,
             }))
         })
     }

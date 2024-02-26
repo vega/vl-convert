@@ -12,11 +12,11 @@ keywords = ["Visualization", "Vega", "Vega-Lite"]
 [dependencies]
 vl-convert-pdf = {path= "../vl-convert-pdf", version= "1.2.3" }
 
-# Deno 1.38.4. Before updating deno_runtime/deno_core, see note in DEVELOP.md
-deno_runtime = "0.134.0"
-deno_core = "0.232.0"
-deno_emit = "0.31.4"
-deno_graph = "0.61.1"
+# Deno 1.41.0. Before updating deno_runtime/deno_core, see note in DEVELOP.md
+deno_runtime = "0.147.0"
+deno_core = "0.264.0"
+deno_emit = "0.38.1"
+deno_graph = "0.69.0"
 serde_json = {version="1.0.106", features=["preserve_order"]}
 serde = {version="1.0.188", features=["derive"]}
 futures = "0.3.28"
