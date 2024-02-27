@@ -2,7 +2,15 @@ use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, 
 use crate::module_loader::{
     VlConvertModuleLoader, FORMATE_LOCALE_MAP, IMPORT_MAP, TIME_FORMATE_LOCALE_MAP,
 };
-use std::borrow::Cow;
+
+use deno_core::op2;
+use deno_runtime::deno_core;
+use deno_runtime::deno_core::anyhow::bail;
+use deno_runtime::deno_core::error::AnyError;
+use deno_runtime::deno_core::{serde_v8, v8};
+use deno_runtime::permissions::{Permissions, PermissionsContainer};
+use deno_runtime::worker::MainWorker;
+use deno_runtime::worker::WorkerOptions;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
@@ -11,19 +19,6 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use deno_runtime::deno_core::anyhow::bail;
-use deno_runtime::deno_core::error::AnyError;
-use deno_runtime::deno_core::{serde_v8, v8, Extension};
-
-use deno_core::{op2, Op};
-use deno_runtime::deno_broadcast_channel::InMemoryBroadcastChannel;
-use deno_runtime::deno_core;
-use deno_runtime::deno_web::BlobStore;
-use deno_runtime::permissions::{Permissions, PermissionsContainer};
-use deno_runtime::worker::MainWorker;
-use deno_runtime::worker::WorkerOptions;
-
-use deno_runtime::deno_fs::RealFs;
 use std::panic;
 use std::str::FromStr;
 use std::thread;
@@ -240,10 +235,6 @@ fn op_get_json_arg(arg_id: i32) -> Result<String, AnyError> {
             bail!("Failed to acquire lock: {}", err.to_string())
         }
     }
-}
-
-fn get_error_class_name(e: &AnyError) -> &'static str {
-    deno_runtime::errors::get_error_class_name(e).unwrap_or("Error")
 }
 
 /// Struct that interacts directly with the Deno JavaScript runtime. Not Sendable
