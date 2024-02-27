@@ -267,12 +267,19 @@ var vegaThemes;
 import('{vega_themes_url}').then((imported) => {{
     vegaThemes = imported;
 }})
+
+var op_text_width;
+var op_get_json_arg;
+import("ext:core/ops").then((imported) => {{
+    op_text_width = imported.op_text_width;
+    op_get_json_arg = imported.op_get_json_arg;
+}})
 "#,
                 vega_url = vega_url(),
                 vega_themes_url = vega_themes_url(),
             );
 
-            self.worker.execute_script("<anon>", import_code.into())?;
+            self.worker.execute_script("ext:<anon>", import_code.into())?;
 
             let logger_code = r#"""
 class WarningCollector {
@@ -307,7 +314,7 @@ class WarningCollector {
             """#
             .to_string();
 
-            self.worker.execute_script("<anon>", logger_code.into())?;
+            self.worker.execute_script("ext:<anon>", logger_code.into())?;
             self.worker.run_event_loop(false).await?;
 
             // Override text width measurement in vega-scenegraph
@@ -330,14 +337,14 @@ import('{url}').then((sg) => {{
             style, variant, weight, size, family, text
         }}, null, 2);
 
-        let fullWidth = Deno[Deno.internal].core.ops.op_text_width(text_info);
+        let fullWidth = op_text_width(text_info);
         return Math.min(fullWidth, item.limit ?? fullWidth)
     }};
 }})
 "#,
                         url = url_for_path(path)
                     );
-                    self.worker.execute_script("<anon>", script_code.into())?;
+                    self.worker.execute_script("ext:<anon>", script_code.into())?;
                     self.worker.run_event_loop(false).await?;
                 }
             }
@@ -490,7 +497,7 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
 }
 "#;
             self.worker
-                .execute_script("<anon>", deno_core::FastString::Static(function_str))?;
+                .execute_script("ext:<anon>", deno_core::FastString::Static(function_str))?;
             self.worker.run_event_loop(false).await?;
 
             self.vega_initialized = true;
@@ -513,7 +520,7 @@ import('{vl_url}').then((imported) => {{
                 vl_url = vl_version.to_url()
             );
 
-            self.worker.execute_script("<anon>", import_code.into())?;
+            self.worker.execute_script("ext:<anon>", import_code.into())?;
 
             self.worker.run_event_loop(false).await?;
 
@@ -552,7 +559,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
                 ver_name = format!("{:?}", vl_version),
             );
 
-            self.worker.execute_script("<anon>", function_code.into())?;
+            self.worker.execute_script("ext:<anon>", function_code.into())?;
 
             self.worker.run_event_loop(false).await?;
 
@@ -637,7 +644,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let res = self
             .worker
             .js_runtime
-            .execute_script("<anon>", code.into())?;
+            .execute_script("ext:<anon>", code.into())?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -660,7 +667,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let res = self
             .worker
             .js_runtime
-            .execute_script("<anon>", code.into())?;
+            .execute_script("ext:<anon>", code.into())?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -705,8 +712,8 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let code = format!(
             r#"
 compileVegaLite_{ver_name:?}(
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({spec_arg_id})),
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({config_arg_id})),
+    JSON.parse(op_get_json_arg({spec_arg_id})),
+    JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
     {show_warnings},
     {allowed_base_urls},
@@ -761,13 +768,13 @@ compileVegaLite_{ver_name:?}(
 var svg;
 var errors = [];
 vegaLiteToSvg_{ver_name:?}(
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({spec_arg_id})),
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({config_arg_id})),
+    JSON.parse(op_get_json_arg({spec_arg_id})),
+    JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
     {show_warnings},
     {allowed_base_urls},
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({format_locale_id})),
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({time_format_locale_id})),
+    JSON.parse(op_get_json_arg({format_locale_id})),
+    JSON.parse(op_get_json_arg({time_format_locale_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -779,7 +786,7 @@ vegaLiteToSvg_{ver_name:?}(
             ver_name = vl_opts.vl_version,
             show_warnings = vl_opts.show_warnings,
         );
-        self.worker.execute_script("<anon>", code.into())?;
+        self.worker.execute_script("ext:<anon>", code.into())?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
@@ -823,13 +830,13 @@ vegaLiteToSvg_{ver_name:?}(
 var sg;
 var errors = [];
 vegaLiteToScenegraph_{ver_name:?}(
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({spec_arg_id})),
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({config_arg_id})),
+    JSON.parse(op_get_json_arg({spec_arg_id})),
+    JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
     {show_warnings},
     {allowed_base_urls},
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({format_locale_id})),
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({time_format_locale_id})),
+    JSON.parse(op_get_json_arg({format_locale_id})),
+    JSON.parse(op_get_json_arg({time_format_locale_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -841,7 +848,7 @@ vegaLiteToScenegraph_{ver_name:?}(
             ver_name = vl_opts.vl_version,
             show_warnings = vl_opts.show_warnings,
         );
-        self.worker.execute_script("<anon>", code.into())?;
+        self.worker.execute_script("ext:<anon>", code.into())?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_json("sg").await?;
@@ -876,10 +883,10 @@ vegaLiteToScenegraph_{ver_name:?}(
 var svg;
 var errors = [];
 vegaToSvg(
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({arg_id})),
+    JSON.parse(op_get_json_arg({arg_id})),
     {allowed_base_urls},
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({format_locale_id})),
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({time_format_locale_id})),
+    JSON.parse(op_get_json_arg({format_locale_id})),
+    JSON.parse(op_get_json_arg({time_format_locale_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -889,7 +896,7 @@ vegaToSvg(
 }})
 "#
         );
-        self.worker.execute_script("<anon>", code.into())?;
+        self.worker.execute_script("ext:<anon>", code.into())?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("svg").await?;
@@ -923,10 +930,10 @@ vegaToSvg(
 var sg;
 var errors = [];
 vegaToScenegraph(
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({arg_id})),
+    JSON.parse(op_get_json_arg({arg_id})),
     {allowed_base_urls},
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({format_locale_id})),
-    JSON.parse(Deno[Deno.internal].core.ops.op_get_json_arg({time_format_locale_id})),
+    JSON.parse(op_get_json_arg({format_locale_id})),
+    JSON.parse(op_get_json_arg({time_format_locale_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -936,7 +943,7 @@ vegaToScenegraph(
 }})
 "#
         );
-        self.worker.execute_script("<anon>", code.into())?;
+        self.worker.execute_script("ext:<anon>", code.into())?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_json("sg").await?;
@@ -946,7 +953,7 @@ vegaToScenegraph(
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
         let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';"
             .to_string();
-        self.worker.execute_script("<anon>", code.into())?;
+        self.worker.execute_script("ext:<anon>", code.into())?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_string("localTz").await?;
@@ -967,7 +974,7 @@ delete themes.default
 "#
         .to_string();
 
-        self.worker.execute_script("<anon>", code.into())?;
+        self.worker.execute_script("ext:<anon>", code.into())?;
         self.worker.run_event_loop(false).await?;
 
         let value = self.execute_script_to_json("themes").await?;
