@@ -39,7 +39,7 @@ use usvg::{TreeParsing, TreeTextToPath};
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::io::Reader as ImageReader;
 
-use crate::text::{op_text_width, FONT_DB, USVG_OPTIONS};
+use crate::text::{vl_convert_text_runtime, FONT_DB, USVG_OPTIONS};
 
 deno_core::extension!(vl_convert_converter_runtime, ops = [op_get_json_arg]);
 
@@ -279,7 +279,8 @@ import("ext:core/ops").then((imported) => {{
                 vega_themes_url = vega_themes_url(),
             );
 
-            self.worker.execute_script("ext:<anon>", import_code.into())?;
+            self.worker
+                .execute_script("ext:<anon>", import_code.into())?;
 
             let logger_code = r#"""
 class WarningCollector {
@@ -314,7 +315,8 @@ class WarningCollector {
             """#
             .to_string();
 
-            self.worker.execute_script("ext:<anon>", logger_code.into())?;
+            self.worker
+                .execute_script("ext:<anon>", logger_code.into())?;
             self.worker.run_event_loop(false).await?;
 
             // Override text width measurement in vega-scenegraph
@@ -344,7 +346,8 @@ import('{url}').then((sg) => {{
 "#,
                         url = url_for_path(path)
                     );
-                    self.worker.execute_script("ext:<anon>", script_code.into())?;
+                    self.worker
+                        .execute_script("ext:<anon>", script_code.into())?;
                     self.worker.run_event_loop(false).await?;
                 }
             }
@@ -520,7 +523,8 @@ import('{vl_url}').then((imported) => {{
                 vl_url = vl_version.to_url()
             );
 
-            self.worker.execute_script("ext:<anon>", import_code.into())?;
+            self.worker
+                .execute_script("ext:<anon>", import_code.into())?;
 
             self.worker.run_event_loop(false).await?;
 
@@ -559,7 +563,8 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
                 ver_name = format!("{:?}", vl_version),
             );
 
-            self.worker.execute_script("ext:<anon>", function_code.into())?;
+            self.worker
+                .execute_script("ext:<anon>", function_code.into())?;
 
             self.worker.run_event_loop(false).await?;
 
@@ -571,49 +576,13 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
 
     pub async fn try_new() -> Result<Self, AnyError> {
         let module_loader = Rc::new(VlConvertModuleLoader);
-
-        let ext = Extension {
-            name: "vl_convert_extensions",
-            ops: Cow::Owned(vec![
-                // Op to measure text width with resvg,
-                op_text_width::DECL,
-                op_get_json_arg::DECL,
-            ]),
-            ..Default::default()
-        };
-
-        let create_web_worker_cb = Arc::new(|_| {
-            todo!("Web workers are not supported");
-        });
-
         let options = WorkerOptions {
-            bootstrap: Default::default(),
-            extensions: vec![ext],
-            startup_snapshot: None,
-            skip_op_registration: false,
-            create_params: None,
-            unsafely_ignore_certificate_errors: None,
-            root_cert_store_provider: None,
-            seed: None,
-            source_map_getter: None,
-            format_js_error_fn: None,
-            create_web_worker_cb,
-            maybe_inspector_server: None,
-            should_break_on_first_statement: false,
+            extensions: vec![
+                vl_convert_text_runtime::init_ops(),
+                vl_convert_converter_runtime::init_ops(),
+            ],
             module_loader: module_loader.clone(),
-            npm_resolver: None,
-            get_error_class_fn: Some(&get_error_class_name),
-            cache_storage_dir: None,
-            origin_storage_dir: None,
-            blob_store: Arc::new(BlobStore::default()),
-            broadcast_channel: InMemoryBroadcastChannel::default(),
-            shared_array_buffer_store: None,
-            compiled_wasm_module_store: None,
-            stdio: Default::default(),
-            should_wait_for_inspector_session: false,
-            fs: Arc::new(RealFs),
-            feature_checker: Arc::new(Default::default()),
-            strace_ops: None,
+            ..Default::default()
         };
 
         let main_module =
