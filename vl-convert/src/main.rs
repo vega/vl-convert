@@ -12,7 +12,7 @@ use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
-const DEFAULT_VL_VERSION: &str = "5.16";
+const DEFAULT_VL_VERSION: &str = "5.17";
 const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
 
 #[derive(Debug, Parser)] // requires `derive` feature
@@ -36,7 +36,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16
+        /// Vega-Lite Version. One of 5.8, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16, 5.17
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -68,7 +68,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16
+        /// Vega-Lite Version. One of 5.8, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16, 5.17
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -112,7 +112,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16
+        /// Vega-Lite Version. One of 5.8, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16, 5.17
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -164,7 +164,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16
+        /// Vega-Lite Version. One of 5.8, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16, 5.17
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -216,7 +216,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16
+        /// Vega-Lite Version. One of 5.8, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16, 5.17
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -276,7 +276,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16
+        /// Vega-Lite Version. One of 5.8, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16, 5.17
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
