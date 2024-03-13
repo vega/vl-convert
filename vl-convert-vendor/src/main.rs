@@ -18,10 +18,6 @@ const VL_PATHS: &[(&str, &str)] = &[
         "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
     ),
     (
-        "5.9",
-        "/pin/vega-lite@v5.9.3-QyXScylQe0TTmb9DRCES/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
         "5.10",
         "/pin/vega-lite@v5.10.0-Vm0dgr6cpOyUiTjlPzt9/mode=imports,min/optimized/vega-lite.js",
     ),
@@ -52,9 +48,14 @@ const VL_PATHS: &[(&str, &str)] = &[
         "5.16",
         "/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js",
     ),
+    // 5.17.0 is used by Altair 5.3.0 (keep longer)
+    (
+        "5.17",
+        "/pin/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/mode=imports,min/optimized/vega-lite.js",
+    ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
-const VEGA_PATH: &str = "/pin/vega@v5.27.0-6S239Sria1XovqGora8j/mode=imports,min/optimized/vega.js";
+const VEGA_PATH: &str = "/pin/vega@v5.28.0-apQC2txkSWyYRCV9ipfx/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
 const VEGA_EMBED_PATH: &str =
