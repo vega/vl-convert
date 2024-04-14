@@ -491,8 +491,10 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
     return scenegraphPromise
 }
 "#;
-            self.worker
-                .execute_script("ext:<anon>", deno_core::FastString::from_static(function_str))?;
+            self.worker.execute_script(
+                "ext:<anon>",
+                deno_core::FastString::from_static(function_str),
+            )?;
             self.worker.run_event_loop(false).await?;
 
             self.vega_initialized = true;
@@ -602,10 +604,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         script: &str,
     ) -> Result<serde_json::Value, AnyError> {
         let code = script.to_string();
-        let res = self
-            .worker
-            .js_runtime
-            .execute_script("ext:<anon>", code)?;
+        let res = self.worker.js_runtime.execute_script("ext:<anon>", code)?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -625,10 +624,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
 
     async fn execute_script_to_string(&mut self, script: &str) -> Result<String, AnyError> {
         let code = script.to_string();
-        let res = self
-            .worker
-            .js_runtime
-            .execute_script("ext:<anon>", code)?;
+        let res = self.worker.js_runtime.execute_script("ext:<anon>", code)?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -1554,9 +1550,7 @@ pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>
     }
 
     let mut jpeg_bytes: Vec<u8> = Vec::new();
-    img.write_with_encoder(
-        JpegEncoder::new_with_quality(&mut jpeg_bytes, quality),
-    )?;
+    img.write_with_encoder(JpegEncoder::new_with_quality(&mut jpeg_bytes, quality))?;
     Ok(jpeg_bytes)
 }
 
