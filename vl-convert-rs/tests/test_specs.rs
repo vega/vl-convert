@@ -641,6 +641,7 @@ mod test_png_no_theme {
         case("line_with_log_scale", 2.0),
         case("remote_images", 1.0),
         case("maptile_background", 1.0),
+        case("maptile_background_2", 1.0),
         case("float_font_size", 1.0),
         case("no_text_in_font_metrics", 1.0),
         case("custom_projection", 1.0),
