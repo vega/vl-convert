@@ -27,6 +27,7 @@ use std::thread::JoinHandle;
 use crate::anyhow::anyhow;
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
+use image::codecs::jpeg::JpegEncoder;
 use png::{PixelDimensions, Unit};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 use usvg::{TreeParsing, TreeTextToPath};
@@ -1553,9 +1554,8 @@ pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>
     }
 
     let mut jpeg_bytes: Vec<u8> = Vec::new();
-    img.write_to(
-        &mut Cursor::new(&mut jpeg_bytes),
-        image::ImageOutputFormat::Jpeg(quality),
+    img.write_with_encoder(
+        JpegEncoder::new_with_quality(&mut jpeg_bytes, quality),
     )?;
     Ok(jpeg_bytes)
 }

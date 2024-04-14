@@ -1028,7 +1028,7 @@ checksum = "55504917bffcae5a57b42e484f50372031b610cd06cee1aec15e3d26135e69ab"
 dependencies = [
  "deno_core",
  "deno_webgpu",
- "image",
+ "image 0.24.9",
  "serde",
  "tokio",
 ]
@@ -3060,6 +3060,19 @@ dependencies = [
  "jpeg-decoder",
  "num-traits",
  "png",
+]
+
+[[package]]
+name = "image"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd54d660e773627692c524beaad361aca785a4f9f5730ce91f42aabe5bce3d11"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "num-traits",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -5854,7 +5867,7 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a81da66842e426278f20062cd249779565e13f9ab4bfe0ac9e94eb476bc3a0f3"
 dependencies = [
- "image",
+ "image 0.24.9",
  "miniz_oxide",
  "once_cell",
  "pdf-writer",
@@ -7062,7 +7075,7 @@ dependencies = [
  "futures",
  "futures-util",
  "http 0.2.12",
- "image",
+ "image 0.25.1",
  "lazy_static",
  "log",
  "lz-str",
@@ -7733,4 +7746,19 @@ checksum = "c253a4914af5bafc8fa8c86ee400827e83cf6ec01195ec1f1ed8441bf00d65aa"
 dependencies = [
  "cc",
  "pkg-config",
+]
+
+[[package]]
+name = "zune-core"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f423a2c17029964870cfaabb1f13dfab7d092a62a29a89264f4d36990ca414a"
+
+[[package]]
+name = "zune-jpeg"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec866b44a2a1fd6133d363f073ca1b179f438f99e7e5bfb1e33f7181facfe448"
+dependencies = [
+ "zune-core",
 ]
