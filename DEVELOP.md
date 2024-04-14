@@ -57,7 +57,7 @@ Updating the CI build to use QEMU seems to have fixed the issue. Leaving this co
  > The Deno dependencies currently correspond to Deno 1.30.3. When updating to later versions, we've run into errors for packages cross compiled to Linux aarch64. See https://github.com/vega/vl-convert/issues/52. Be sure to test this scenario when updating Deno in the future.
 
 ## Debug Logging
-To enable logging, set the RUST_LOG environment variable to "vl_convert"
+To enable logging, set the RUST_LOG environment variable to info, warn, or error
 ```
-RUST_LOG=vl_convert
+RUST_LOG=info
 ```
