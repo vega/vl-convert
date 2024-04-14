@@ -491,7 +491,7 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
 }
 "#;
             self.worker
-                .execute_script("ext:<anon>", deno_core::FastString::Static(function_str))?;
+                .execute_script("ext:<anon>", deno_core::FastString::from_static(function_str))?;
             self.worker.run_event_loop(false).await?;
 
             self.vega_initialized = true;
@@ -604,7 +604,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let res = self
             .worker
             .js_runtime
-            .execute_script("ext:<anon>", code.into())?;
+            .execute_script("ext:<anon>", code)?;
 
         self.worker.run_event_loop(false).await?;
 
@@ -627,7 +627,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let res = self
             .worker
             .js_runtime
-            .execute_script("ext:<anon>", code.into())?;
+            .execute_script("ext:<anon>", code)?;
 
         self.worker.run_event_loop(false).await?;
 

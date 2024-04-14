@@ -74,6 +74,7 @@ impl ModuleLoader for VlConvertModuleLoader {
             ModuleType::JavaScript,
             ModuleSourceCode::String(code.into()),
             &module_specifier,
+            None,
         )))
     }
 }

@@ -2,7 +2,7 @@ use crate::module_loader::import_map::{DEBOUNCE_PATH, SKYPACK_URL, VEGA_EMBED_PA
 use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
 use deno_core::error::AnyError;
-use deno_emit::{bundle, BundleOptions, BundleType, EmitOptions};
+use deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use std::path::Path;
 
 pub fn get_vega_or_vegalite_script(
@@ -38,9 +38,9 @@ pub async fn bundle_script(script: String, vl_version: VlVersion) -> Result<Stri
         None,
         BundleOptions {
             bundle_type: BundleType::Module,
+            transpile_options: Default::default(),
             emit_options: EmitOptions {
-                source_map: false,
-                inline_source_map: false,
+                source_map: SourceMapOption::None,
                 ..Default::default()
             },
             emit_ignore_directives: false,
