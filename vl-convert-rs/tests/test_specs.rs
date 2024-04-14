@@ -77,7 +77,7 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion) -> Option<serde_json
     }
 }
 
-fn write_failed_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) {
+fn write_failed_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) -> String {
     if let Some(vg_spec) = vg_spec {
         let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
         let failed_dir = root_path
@@ -99,6 +99,8 @@ fn write_failed_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) {
         let mut file = fs::File::create(file_path.clone()).unwrap();
         file.write_all(serde_json::to_string_pretty(&vg_spec).unwrap().as_bytes())
             .unwrap();
+
+        file_path.to_str().unwrap().to_string()
     }
 }
 
@@ -147,7 +149,7 @@ fn make_expected_scenegraph_path(
 
 fn load_expected_svg(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Option<String> {
     let spec_path = make_expected_svg_path(name, vl_version, theme);
-    fs::read_to_string(&spec_path).ok()
+    fs::read_to_string(spec_path).ok()
 }
 
 fn load_expected_scenegraph(
