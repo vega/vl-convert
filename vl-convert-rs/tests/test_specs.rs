@@ -77,7 +77,7 @@ fn load_expected_vg_spec(name: &str, vl_version: VlVersion) -> Option<serde_json
     }
 }
 
-fn write_failed_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) -> String {
+fn write_failed_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) {
     if let Some(vg_spec) = vg_spec {
         let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
         let failed_dir = root_path
@@ -99,19 +99,14 @@ fn write_failed_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) ->
         let mut file = fs::File::create(file_path.clone()).unwrap();
         file.write_all(serde_json::to_string_pretty(&vg_spec).unwrap().as_bytes())
             .unwrap();
-
-        file_path.to_str().unwrap().to_string()
     }
 }
 
 fn check_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) {
     let expected = load_expected_vg_spec(name, vl_version);
     if vg_spec != expected {
-        let path = write_failed_vg(name, vl_version, vg_spec);
-        panic!(
-            "Images don't match for {}.svg. Failed image written to {:?}",
-            name, path
-        )
+        write_failed_vg(name, vl_version, vg_spec);
+        panic!("Vega conversions don't match for {}.vg.json", name)
     }
 }
 
