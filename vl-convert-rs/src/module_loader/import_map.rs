@@ -12,7 +12,7 @@ pub const VEGA_PATH: &str =
 pub const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
 pub const VEGA_EMBED_PATH: &str =
-    "/pin/vega-embed@v6.24.0-w7baSqpeCYEV2w1fHJn2/mode=imports,min/optimized/vega-embed.js";
+    "/pin/vega-embed@v6.25.0-3T3K5LYNFrLq0n1oBsLI/mode=imports,min/optimized/vega-embed.js";
 pub const DEBOUNCE_PATH: &str = "/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js";
 
 pub fn url_for_path(path: &str) -> String {
@@ -31,7 +31,6 @@ pub fn vega_themes_url() -> String {
 #[allow(non_camel_case_types)]
 pub enum VlVersion {
     v5_8,
-    v5_10,
     v5_11,
     v5_12,
     v5_13,
@@ -39,6 +38,7 @@ pub enum VlVersion {
     v5_15,
     v5_16,
     v5_17,
+    v5_18,
 }
 
 impl VlVersion {
@@ -46,14 +46,14 @@ impl VlVersion {
         use VlVersion::*;
         let path = match self {
             v5_8 => "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
-            v5_10 => "/pin/vega-lite@v5.10.0-Vm0dgr6cpOyUiTjlPzt9/mode=imports,min/optimized/vega-lite.js",
             v5_11 => "/pin/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/mode=imports,min/optimized/vega-lite.js",
             v5_12 => "/pin/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/mode=imports,min/optimized/vega-lite.js",
             v5_13 => "/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js",
             v5_14 => "/pin/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/mode=imports,min/optimized/vega-lite.js",
             v5_15 => "/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js",
             v5_16 => "/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js",
-            v5_17 => "/pin/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/mode=imports,min/optimized/vega-lite.js"
+            v5_17 => "/pin/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/mode=imports,min/optimized/vega-lite.js",
+            v5_18 => "/pin/vega-lite@v5.18.0-FtLrd9Ks5cFttxoTAph7/mode=imports,min/optimized/vega-lite.js"
         };
         path.to_string()
     }
@@ -66,7 +66,6 @@ impl VlVersion {
         use VlVersion::*;
         match self {
             v5_8 => "5.8",
-            v5_10 => "5.10",
             v5_11 => "5.11",
             v5_12 => "5.12",
             v5_13 => "5.13",
@@ -74,13 +73,14 @@ impl VlVersion {
             v5_15 => "5.15",
             v5_16 => "5.16",
             v5_17 => "5.17",
+            v5_18 => "5.18",
         }
     }
 }
 
 impl Default for VlVersion {
     fn default() -> Self {
-        VlVersion::from_str("5.17").unwrap()
+        VlVersion::from_str("5.18").unwrap()
     }
 }
 
@@ -90,7 +90,6 @@ impl FromStr for VlVersion {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "5.8" | "v5.8" | "5_8" | "v5_8" => Self::v5_8,
-            "5.10" | "v5.10" | "5_10" | "v5_10" => Self::v5_10,
             "5.11" | "v5.11" | "5_11" | "v5_11" => Self::v5_11,
             "5.12" | "v5.12" | "5_12" | "v5_12" => Self::v5_12,
             "5.13" | "v5.13" | "5_13" | "v5_13" => Self::v5_13,
@@ -98,6 +97,7 @@ impl FromStr for VlVersion {
             "5.15" | "v5.15" | "5_15" | "v5_15" => Self::v5_15,
             "5.16" | "v5.16" | "5_16" | "v5_16" => Self::v5_16,
             "5.17" | "v5.17" | "5_17" | "v5_17" => Self::v5_17,
+            "5.18" | "v5.18" | "5_18" | "v5_18" => Self::v5_18,
             _ => bail!("Unsupported Vega-Lite version string {}", s),
         })
     }
@@ -105,7 +105,6 @@ impl FromStr for VlVersion {
 
 pub const VL_VERSIONS: &[VlVersion] = &[
     VlVersion::v5_8,
-    VlVersion::v5_10,
     VlVersion::v5_11,
     VlVersion::v5_12,
     VlVersion::v5_13,
@@ -113,6 +112,7 @@ pub const VL_VERSIONS: &[VlVersion] = &[
     VlVersion::v5_15,
     VlVersion::v5_16,
     VlVersion::v5_17,
+    VlVersion::v5_18,
 ];
 
 pub fn build_import_map() -> HashMap<String, String> {
@@ -148,7 +148,7 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/vega-canvas@v1.2.7-hCEcvULuKIOqBVGX1Tn8/dist=es2020,mode=imports,min/optimized/vega-canvas.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-canvas@v1.2.7-hCEcvULuKIOqBVGX1Tn8/dist=es2020,mode=imports,min/optimized/vega-canvas.js").to_string());
     m.insert("/-/vega-crossfilter@v4.1.1-0AUAt51ACgvwsfDQr3R4/dist=es2020,mode=imports,min/optimized/vega-crossfilter.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-crossfilter@v4.1.1-0AUAt51ACgvwsfDQr3R4/dist=es2020,mode=imports,min/optimized/vega-crossfilter.js").to_string());
     m.insert("/-/vega-dataflow@v5.7.5-asKYS4gpPLMPf64pSozt/dist=es2020,mode=imports,min/optimized/vega-dataflow.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-dataflow@v5.7.5-asKYS4gpPLMPf64pSozt/dist=es2020,mode=imports,min/optimized/vega-dataflow.js").to_string());
-    m.insert("/-/vega-embed@v6.24.0-w7baSqpeCYEV2w1fHJn2/dist=es2020,mode=imports,min/optimized/vega-embed.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-embed@v6.24.0-w7baSqpeCYEV2w1fHJn2/dist=es2020,mode=imports,min/optimized/vega-embed.js").to_string());
+    m.insert("/-/vega-embed@v6.25.0-3T3K5LYNFrLq0n1oBsLI/dist=es2020,mode=imports,min/optimized/vega-embed.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-embed@v6.25.0-3T3K5LYNFrLq0n1oBsLI/dist=es2020,mode=imports,min/optimized/vega-embed.js").to_string());
     m.insert("/-/vega-encode@v4.9.2-73LzBc3ioSKmAYWtrrRd/dist=es2020,mode=imports,min/optimized/vega-encode.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-encode@v4.9.2-73LzBc3ioSKmAYWtrrRd/dist=es2020,mode=imports,min/optimized/vega-encode.js").to_string());
     m.insert("/-/vega-event-selector@v3.0.1-UgiEAWJA4WQL4DTKnV4R/dist=es2020,mode=imports,min/optimized/vega-event-selector.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-event-selector@v3.0.1-UgiEAWJA4WQL4DTKnV4R/dist=es2020,mode=imports,min/optimized/vega-event-selector.js").to_string());
     m.insert("/-/vega-expression@v5.1.0-2VnsdaYPtQ6Pi5w8JxN8/dist=es2020,mode=imports,min/optimized/vega-expression.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-expression@v5.1.0-2VnsdaYPtQ6Pi5w8JxN8/dist=es2020,mode=imports,min/optimized/vega-expression.js").to_string());
@@ -159,7 +159,6 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/vega-hierarchy@v4.1.1-UOm1ATDeVOQ6Lqji63hi/dist=es2020,mode=imports,min/optimized/vega-hierarchy.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-hierarchy@v4.1.1-UOm1ATDeVOQ6Lqji63hi/dist=es2020,mode=imports,min/optimized/vega-hierarchy.js").to_string());
     m.insert("/-/vega-interpreter@v1.0.5-xGayK8haM1EVgaoW7oOi/dist=es2020,mode=imports,min/optimized/vega-interpreter.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-interpreter@v1.0.5-xGayK8haM1EVgaoW7oOi/dist=es2020,mode=imports,min/optimized/vega-interpreter.js").to_string());
     m.insert("/-/vega-label@v1.2.1-hEHqe293fM7lKP2OHb0o/dist=es2020,mode=imports,min/optimized/vega-label.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-label@v1.2.1-hEHqe293fM7lKP2OHb0o/dist=es2020,mode=imports,min/optimized/vega-label.js").to_string());
-    m.insert("/-/vega-lite@v5.10.0-Vm0dgr6cpOyUiTjlPzt9/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.10.0-Vm0dgr6cpOyUiTjlPzt9/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
@@ -167,6 +166,7 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
+    m.insert("/-/vega-lite@v5.18.0-FtLrd9Ks5cFttxoTAph7/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.18.0-FtLrd9Ks5cFttxoTAph7/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-loader@v4.5.1-e2JpneCYErTzObWVOVxs/dist=es2020,mode=imports,min/optimized/vega-loader.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-loader@v4.5.1-e2JpneCYErTzObWVOVxs/dist=es2020,mode=imports,min/optimized/vega-loader.js").to_string());
     m.insert("/-/vega-parser@v6.3.0-LmHzQ5CDjQqCqdcg4N1t/dist=es2020,mode=imports,min/optimized/vega-parser.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-parser@v6.3.0-LmHzQ5CDjQqCqdcg4N1t/dist=es2020,mode=imports,min/optimized/vega-parser.js").to_string());
@@ -189,8 +189,7 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/vega-wordcloud@v4.1.4-J5ewLsaJzX7o65uuoGqD/dist=es2020,mode=imports,min/optimized/vega-wordcloud.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-wordcloud@v4.1.4-J5ewLsaJzX7o65uuoGqD/dist=es2020,mode=imports,min/optimized/vega-wordcloud.js").to_string());
     m.insert("/-/vega@v5.28.0-apQC2txkSWyYRCV9ipfx/dist=es2020,mode=imports,min/optimized/vega.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega@v5.28.0-apQC2txkSWyYRCV9ipfx/dist=es2020,mode=imports,min/optimized/vega.js").to_string());
     m.insert("/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js").to_string());
-    m.insert("/pin/vega-embed@v6.24.0-w7baSqpeCYEV2w1fHJn2/mode=imports,min/optimized/vega-embed.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-embed@v6.24.0-w7baSqpeCYEV2w1fHJn2/mode=imports,min/optimized/vega-embed.js").to_string());
-    m.insert("/pin/vega-lite@v5.10.0-Vm0dgr6cpOyUiTjlPzt9/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.10.0-Vm0dgr6cpOyUiTjlPzt9/mode=imports,min/optimized/vega-lite.js").to_string());
+    m.insert("/pin/vega-embed@v6.25.0-3T3K5LYNFrLq0n1oBsLI/mode=imports,min/optimized/vega-embed.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-embed@v6.25.0-3T3K5LYNFrLq0n1oBsLI/mode=imports,min/optimized/vega-embed.js").to_string());
     m.insert("/pin/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js").to_string());
@@ -198,6 +197,7 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/mode=imports,min/optimized/vega-lite.js").to_string());
+    m.insert("/pin/vega-lite@v5.18.0-FtLrd9Ks5cFttxoTAph7/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.18.0-FtLrd9Ks5cFttxoTAph7/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js").to_string());
     m.insert("/pin/vega@v5.28.0-apQC2txkSWyYRCV9ipfx/mode=imports,min/optimized/vega.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega@v5.28.0-apQC2txkSWyYRCV9ipfx/mode=imports,min/optimized/vega.js").to_string());

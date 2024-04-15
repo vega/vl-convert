@@ -1,6 +1,5 @@
-use http::StatusCode;
 use log::{error, info};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use std::io::Write;
 use tokio::task;
 use usvg::{ImageHrefResolver, ImageKind, Options};

@@ -105,11 +105,8 @@ fn write_failed_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) {
 fn check_vg(name: &str, vl_version: VlVersion, vg_spec: Option<Value>) {
     let expected = load_expected_vg_spec(name, vl_version);
     if vg_spec != expected {
-        let path = write_failed_vg(name, vl_version, vg_spec);
-        panic!(
-            "Images don't match for {}.svg. Failed image written to {:?}",
-            name, path
-        )
+        write_failed_vg(name, vl_version, vg_spec);
+        panic!("Vega conversions don't match for {}.vg.json", name)
     }
 }
 
@@ -147,7 +144,7 @@ fn make_expected_scenegraph_path(
 
 fn load_expected_svg(name: &str, vl_version: VlVersion, theme: Option<&str>) -> Option<String> {
     let spec_path = make_expected_svg_path(name, vl_version, theme);
-    fs::read_to_string(&spec_path).ok()
+    fs::read_to_string(spec_path).ok()
 }
 
 fn load_expected_scenegraph(
@@ -322,7 +319,6 @@ mod test_vegalite_to_vega {
     fn test(
         #[values(
             VlVersion::v5_8,
-            VlVersion::v5_10,
             VlVersion::v5_11,
             VlVersion::v5_12,
             VlVersion::v5_13,
@@ -330,6 +326,7 @@ mod test_vegalite_to_vega {
             VlVersion::v5_15,
             VlVersion::v5_16,
             VlVersion::v5_17,
+            VlVersion::v5_18,
         )]
         vl_version: VlVersion,
 
@@ -367,7 +364,6 @@ mod test_vegalite_to_html_no_bundle {
     fn test(
         #[values(
             VlVersion::v5_8,
-            VlVersion::v5_10,
             VlVersion::v5_11,
             VlVersion::v5_12,
             VlVersion::v5_13,
@@ -375,6 +371,7 @@ mod test_vegalite_to_html_no_bundle {
             VlVersion::v5_15,
             VlVersion::v5_16,
             VlVersion::v5_17,
+            VlVersion::v5_18,
         )]
         vl_version: VlVersion,
 
@@ -415,7 +412,6 @@ mod test_vegalite_to_html_bundle {
     fn test(
         #[values(
             VlVersion::v5_8,
-            VlVersion::v5_10,
             VlVersion::v5_11,
             VlVersion::v5_12,
             VlVersion::v5_13,
@@ -423,6 +419,7 @@ mod test_vegalite_to_html_bundle {
             VlVersion::v5_15,
             VlVersion::v5_16,
             VlVersion::v5_17,
+            VlVersion::v5_18,
         )]
         vl_version: VlVersion,
 
