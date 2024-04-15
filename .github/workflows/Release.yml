@@ -154,6 +154,38 @@ jobs:
           path: |
             vl-convert_osx-64.zip
 
+  build-cli-osx-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build vl-convert
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: -p vl-convert --release
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
+          zip -r vl-convert_osx-arm64.zip bin/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: vl-convert
+          path: |
+            vl-convert_osx-arm64.zip
+
   build-wheels-linux-x86_64:
     runs-on: ubuntu-20.04
     strategy:
@@ -248,6 +280,25 @@ jobs:
       with:
         name: wheels
         path: dist
+
+  build-wheels-osx-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Intel wheels
+        uses: messense/maturin-action@v1
+        with:
+          command: build
+          args: --release -m vl-convert-python/Cargo.toml -o dist --strip
+      - name: Upload wheels
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
 
   publish-pypi:
     name: Publish to PyPI
