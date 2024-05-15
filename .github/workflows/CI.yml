@@ -161,19 +161,34 @@ jobs:
       - name: Display rust version
         run: |
           rustc --version
-      - uses: getsentry/action-setup-venv@v2.1.0
-        id: venv
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.options[1] }}
-          install-cmd: pip install pytest maturin scikit-image pypdfium2
-      - name: Display rust version
+          cache: 'pip'
+      - name: Create Python Environment (Not Windows)
+        if: runner.os != 'Windows'
         run: |
-          rustc --version
-      - name: Build development wheel
-        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install pytest maturin scikit-image pypdfium2
           maturin develop --release -m vl-convert-python/Cargo.toml
-      - name: Run tests
+      - name: Create Python Environment (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python -m venv venv
+          venv\Scripts\activate
+          pip install pytest maturin scikit-image pypdfium2  
+          maturin develop --release -m vl-convert-python/Cargo.toml
+      - name: Run tests (Not Windows)
+        if: runner.os != 'Windows'
         working-directory: vl-convert-python/
         run: |
+          source venv/bin/activate
+          pytest tests/
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        working-directory: vl-convert-python/
+        run: |
+          venv\Scripts\activate
           pytest tests/
 
