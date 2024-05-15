@@ -6,7 +6,7 @@ use crate::module_loader::import_map::{
 };
 use crate::VlVersion;
 use deno_core::{ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind};
-use deno_emit::{LoadFuture, Loader, LoadOptions};
+use deno_emit::{LoadFuture, LoadOptions, Loader};
 use deno_graph::source::LoadResponse;
 use deno_runtime::deno_core::anyhow::Error;
 use deno_runtime::deno_core::{
