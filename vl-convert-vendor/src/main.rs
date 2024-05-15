@@ -51,11 +51,11 @@ const VL_PATHS: &[(&str, &str)] = &[
     ),
     (
         "5.18",
-        "/pin/vega-lite@v5.18.0-FtLrd9Ks5cFttxoTAph7/mode=imports,min/optimized/vega-lite.js",
+        "/pin/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/mode=imports,min/optimized/vega-lite.js",
     ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
-const VEGA_PATH: &str = "/pin/vega@v5.28.0-apQC2txkSWyYRCV9ipfx/mode=imports,min/optimized/vega.js";
+const VEGA_PATH: &str = "/pin/vega@v5.29.0-gABgAlTvpyWuLs0vmpeG/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
 const VEGA_EMBED_PATH: &str =
