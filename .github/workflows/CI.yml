@@ -170,7 +170,7 @@ jobs:
           python -m pip install pytest maturin scikit-image pypdfium2
       - name: Build development wheel
         run: |
-          maturin develop -m vl-convert-python/Cargo.toml
+          maturin develop --release -m vl-convert-python/Cargo.toml
       - name: Run tests
         working-directory: vl-convert-python/
         run: |
