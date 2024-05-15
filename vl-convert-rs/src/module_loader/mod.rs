@@ -6,8 +6,8 @@ use crate::module_loader::import_map::{
 };
 use crate::VlVersion;
 use deno_core::{ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind};
-use deno_emit::{LoadFuture, Loader};
-use deno_graph::source::{LoadOptions, LoadResponse};
+use deno_emit::{LoadFuture, Loader, LoadOptions};
+use deno_graph::source::LoadResponse;
 use deno_runtime::deno_core::anyhow::Error;
 use deno_runtime::deno_core::{
     resolve_import, ModuleLoader, ModuleSource, ModuleSpecifier, ModuleType,
@@ -115,7 +115,7 @@ impl VlConvertBundleLoader {
 }
 
 impl Loader for VlConvertBundleLoader {
-    fn load(&mut self, module_specifier: &ModuleSpecifier, _options: LoadOptions) -> LoadFuture {
+    fn load(&self, module_specifier: &ModuleSpecifier, _options: LoadOptions) -> LoadFuture {
         let module_specifier = module_specifier.clone();
         let last_path_part = module_specifier.path().split('/').next_back().unwrap();
         let code = if last_path_part == "vl-convert-index.js" {
