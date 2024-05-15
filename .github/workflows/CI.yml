@@ -147,6 +147,7 @@ jobs:
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
+          prefix-key: "v1-rust"
           cache-on-failure: True
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
@@ -157,9 +158,8 @@ jobs:
         run: |
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: actions/setup-python@v5
         with:
-          activate-environment: dev
           python-version: ${{ matrix.options[1] }}
       - name: install Python dependencies
         run: |
