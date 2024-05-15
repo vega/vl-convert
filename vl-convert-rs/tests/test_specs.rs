@@ -153,7 +153,7 @@ fn load_expected_scenegraph(
     theme: Option<&str>,
 ) -> Option<String> {
     let spec_path = make_expected_scenegraph_path(name, vl_version, theme);
-    let Some(p) = fs::read_to_string(&spec_path).ok() else {
+    let Some(p) = fs::read_to_string(spec_path).ok() else {
         return None;
     };
     Some(p)
@@ -177,7 +177,7 @@ fn write_failed_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img:
 
     let mut file = fs::File::create(file_path.clone()).unwrap();
     file.write_all(img.as_bytes()).unwrap();
-    return file_path;
+    file_path
 }
 
 fn write_failed_scenegraph(
@@ -204,7 +204,7 @@ fn write_failed_scenegraph(
     let mut file = fs::File::create(file_path.clone()).unwrap();
     file.write_all(serde_json::to_string_pretty(sg).unwrap().as_bytes())
         .unwrap();
-    return file_path;
+    file_path
 }
 
 fn check_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) {
@@ -280,7 +280,7 @@ fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img:
 
     let mut file = fs::File::create(file_path.clone()).unwrap();
     file.write_all(img).unwrap();
-    return file_path;
+    file_path
 }
 
 fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) {
