@@ -181,14 +181,12 @@ jobs:
           maturin develop --release -m vl-convert-python/Cargo.toml
       - name: Run tests (Not Windows)
         if: runner.os != 'Windows'
-        working-directory: vl-convert-python/
         run: |
           source venv/bin/activate
-          pytest tests/
+          pytest vl-convert-python/tests/
       - name: Run tests (Windows)
         if: runner.os == 'Windows'
-        working-directory: vl-convert-python/
         run: |
           venv\Scripts\activate
-          pytest tests/
+          pytest vl-convert-python/tests/
 
