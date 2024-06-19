@@ -598,6 +598,7 @@ fn vega_to_pdf(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
 ) -> PyResult<PyObject> {
+    warn_if_scale_not_one_for_pdf(scale)?;
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -613,7 +614,6 @@ fn vega_to_pdf(
             format_locale,
             time_format_locale,
         },
-        scale,
     )) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
@@ -654,11 +654,11 @@ fn vegalite_to_pdf(
     scale: Option<f32>,
     config: Option<PyObject>,
     theme: Option<String>,
-    show_warnings: Option<bool>,
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
 ) -> PyResult<PyObject> {
+    warn_if_scale_not_one_for_pdf(scale)?;
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -679,12 +679,11 @@ fn vegalite_to_pdf(
             vl_version,
             config,
             theme,
-            show_warnings: show_warnings.unwrap_or(false),
+            show_warnings: false,
             allowed_base_urls,
             format_locale,
             time_format_locale,
         },
-        scale,
     )) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
@@ -879,7 +878,8 @@ fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<P
 #[pyfunction]
 #[pyo3(text_signature = "(svg, scale)")]
 fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
-    let pdf_data = vl_convert_rs::converter::svg_to_pdf(svg, scale.unwrap_or(1.0))?;
+    warn_if_scale_not_one_for_pdf(scale)?;
+    let pdf_data = vl_convert_rs::converter::svg_to_pdf(svg)?; // Always pass 1.0 as scale
     Ok(Python::with_gil(|py| -> PyObject {
         PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
     }))
@@ -1164,5 +1164,20 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_time_format_locale, m)?)?;
     m.add_function(wrap_pyfunction!(javascript_bundle, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    Ok(())
+}
+
+// Utilities
+fn warn_if_scale_not_one_for_pdf(scale: Option<f32>) -> PyResult<()> {
+    if let Some(scale) = scale {
+        if scale != 1.0 {
+            Python::with_gil(|py| -> PyResult<()> {
+                let warning_message = "The scale argument is no longer supported for PDF export.";
+                let deprecation_warning = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
+                PyErr::warn(py, deprecation_warning, warning_message, 1)?;
+                Ok(())
+            })?;
+        }
+    }
     Ok(())
 }

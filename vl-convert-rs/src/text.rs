@@ -6,15 +6,17 @@ use deno_core::op2;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashSet;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use usvg::fontdb::Database;
-use usvg::{ImageHrefResolver, TreeParsing, TreeTextToPath};
+use usvg::{
+    FallbackSelectionFn, FontFamily, FontResolver, FontSelectionFn, FontStretch, FontStyle,
+    ImageHrefResolver,
+};
 
 deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
 
 lazy_static! {
-    pub static ref USVG_OPTIONS: Mutex<usvg::Options> = Mutex::new(init_usvg_options());
-    pub static ref FONT_DB: Mutex<Database> = Mutex::new(init_font_db());
+    pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -26,13 +28,21 @@ const LIBERATION_SANS_ITALIC: &[u8] =
 const LIBERATION_SANS_BOLDITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-BoldItalic.ttf");
 
-fn init_usvg_options() -> usvg::Options {
+fn init_usvg_options() -> usvg::Options<'static> {
     let image_href_resolver = ImageHrefResolver {
         resolve_string: custom_string_resolver(),
         ..Default::default()
     };
+
+    let font_resolver = FontResolver {
+        select_font: custom_font_selector(),
+        select_fallback: custom_fallback_selector(),
+    };
+
     usvg::Options {
         image_href_resolver,
+        fontdb: Arc::new(init_font_db()),
+        font_resolver,
         ..Default::default()
     }
 }
@@ -98,6 +108,141 @@ fn setup_default_fonts(fontdb: &mut Database) {
             break;
         }
     }
+}
+
+pub fn custom_font_selector() -> FontSelectionFn<'static> {
+    Box::new(move |font, fontdb| {
+        // First, try for exact match using fontdb's default font lookup
+        let mut name_list = Vec::new();
+        for family in font.families() {
+            name_list.push(match family {
+                FontFamily::Serif => fontdb::Family::Serif,
+                FontFamily::SansSerif => fontdb::Family::SansSerif,
+                FontFamily::Cursive => fontdb::Family::Cursive,
+                FontFamily::Fantasy => fontdb::Family::Fantasy,
+                FontFamily::Monospace => fontdb::Family::Monospace,
+                FontFamily::Named(s) => fontdb::Family::Name(s.as_str()),
+            });
+        }
+
+        let stretch = match font.stretch() {
+            FontStretch::UltraCondensed => fontdb::Stretch::UltraCondensed,
+            FontStretch::ExtraCondensed => fontdb::Stretch::ExtraCondensed,
+            FontStretch::Condensed => fontdb::Stretch::Condensed,
+            FontStretch::SemiCondensed => fontdb::Stretch::SemiCondensed,
+            FontStretch::Normal => fontdb::Stretch::Normal,
+            FontStretch::SemiExpanded => fontdb::Stretch::SemiExpanded,
+            FontStretch::Expanded => fontdb::Stretch::Expanded,
+            FontStretch::ExtraExpanded => fontdb::Stretch::ExtraExpanded,
+            FontStretch::UltraExpanded => fontdb::Stretch::UltraExpanded,
+        };
+
+        let style = match font.style() {
+            FontStyle::Normal => fontdb::Style::Normal,
+            FontStyle::Italic => fontdb::Style::Italic,
+            FontStyle::Oblique => fontdb::Style::Oblique,
+        };
+
+        let query = fontdb::Query {
+            families: &name_list,
+            weight: fontdb::Weight(font.weight()),
+            stretch,
+            style,
+        };
+
+        if let Some(id) = fontdb.query(&query) {
+            // fontdb found a match, use it
+            return Some(id);
+        }
+
+        // Next, try matching the family name against the post_script_name of each font face.
+        // For example, if the SVG font family is "Matter SemiBold", the logic above search for
+        // a font family with this name, which will not be found (because the family is Matter).
+        // The face's post_script_name for this face will be "Matter-SemiBold"
+        for family in &name_list {
+            let name = fontdb.family_name(family).replace('-', " ");
+            for face in fontdb.faces() {
+                if face.post_script_name.replace('-', " ") == name {
+                    return Some(face.id);
+                }
+            }
+        }
+
+        log::warn!(
+            "No match for '{}' font-family.",
+            font.families()
+                .iter()
+                .map(|f| f.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        None
+    })
+}
+
+/// Creates a default font fallback selection resolver.
+///
+/// The default implementation searches through the entire `fontdb`
+/// to find a font that has the correct style and supports the character.
+pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
+    Box::new(|c, exclude_fonts, fontdb| {
+        let base_font_id = exclude_fonts[0];
+
+        // Prevent fallback to fonts that won't work, like LastResort on macOS
+        let forbidden_fallback = ["LastResort"];
+
+        // Iterate over fonts and check if any of them support the specified char.
+        for face in fontdb.faces() {
+            // Ignore fonts, that were used for shaping already.
+            if exclude_fonts.contains(&face.id)
+                || forbidden_fallback.contains(&face.post_script_name.as_str())
+            {
+                continue;
+            }
+
+            // Check that the new face has the same style.
+            let base_face = fontdb.face(base_font_id)?;
+            if base_face.style != face.style
+                && base_face.weight != face.weight
+                && base_face.stretch != face.stretch
+            {
+                continue;
+            }
+
+            // has_char is private in fontdb
+            // if !fontdb.has_char(face.id, c) {
+            //     continue;
+            // }
+
+            // Implement `fontdb.has_char`, which is not public in fontdb
+            let res = fontdb.with_face_data(face.id, |font_data, face_index| -> Option<bool> {
+                let font = ttf_parser::Face::parse(font_data, face_index).ok()?;
+
+                font.glyph_index(c)?;
+                Some(true)
+            });
+            if res != Some(Some(true)) {
+                continue;
+            }
+
+            let base_family = base_face
+                .families
+                .iter()
+                .find(|f| f.1 == fontdb::Language::English_UnitedStates)
+                .unwrap_or(&base_face.families[0]);
+
+            let new_family = face
+                .families
+                .iter()
+                .find(|f| f.1 == fontdb::Language::English_UnitedStates)
+                .unwrap_or(&base_face.families[0]);
+
+            log::warn!("Fallback from {} to {}.", base_family.0, new_family.0);
+            return Some(face.id);
+        }
+
+        None
+    })
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -216,39 +361,43 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
     let opts = USVG_OPTIONS
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
-    let mut rtree = usvg::Tree::from_str(svg, &opts).expect("Failed to parse text SVG");
 
-    let font_database = FONT_DB
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+    let rtree = usvg::Tree::from_str(svg, &opts).expect("Failed to parse text SVG");
 
-    rtree.convert_text(&font_database);
-
-    for node in rtree.root.descendants() {
+    // Children instead of descendents ok?
+    for node in rtree.root().children() {
         // Text bboxes are different from path bboxes.
-        if let usvg::NodeKind::Path(ref path) = *node.borrow() {
-            if let Some(ref bbox) = path.text_bbox {
-                let width = bbox.right() - bbox.left();
-                let _height = bbox.bottom() - bbox.top();
-                return Ok(width as f64);
-            }
+        if let usvg::Node::Text(ref text) = node {
+            let bbox = text.bounding_box();
+            let width = bbox.right() - bbox.left();
+            let _height = bbox.bottom() - bbox.top();
+            return Ok(width as f64);
         }
     }
 
     let node_strs: Vec<_> = rtree
-        .root
-        .descendants()
+        .root()
+        .children()
+        .iter()
         .map(|node| format!("{:?}", node))
         .collect();
     bail!("Failed to locate text in SVG:\n{}\n{:?}", svg, node_strs)
 }
 
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
-    let mut font_database = FONT_DB
+    let mut opts = USVG_OPTIONS
         .lock()
-        .map_err(|err| anyhow!("Failed to acquire font_db lock: {}", err.to_string()))?;
-    font_database.load_fonts_dir(dir);
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
 
-    setup_default_fonts(&mut font_database);
+    // Get mutable reference to font_db. This should always be successful since
+    // we're holding the mutex on USVG_OPTIONS
+    let Some(font_db) = Arc::get_mut(&mut opts.fontdb) else {
+        return Err(anyhow!("Could not acquire font_db reference"));
+    };
+
+    // Load fonts
+    font_db.load_fonts_dir(dir);
+    setup_default_fonts(font_db);
+
     Ok(())
 }

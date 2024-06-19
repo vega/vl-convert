@@ -228,10 +228,6 @@ enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// Image scale factor
-        #[arg(long, default_value = "1.0")]
-        scale: f32,
-
         /// Whether to show Vega-Lite compilation warnings
         #[arg(long)]
         show_warnings: bool,
@@ -417,10 +413,6 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Image scale factor
-        #[arg(short, long, default_value = "1.0")]
-        scale: f32,
-
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
@@ -537,10 +529,6 @@ enum Commands {
         /// Path to output PDF file to be created
         #[arg(short, long)]
         output: String,
-
-        /// Image scale factor
-        #[arg(long, default_value = "1.0")]
-        scale: f32,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -675,7 +663,6 @@ async fn main() -> Result<(), anyhow::Error> {
             vl_version,
             theme,
             config,
-            scale,
             show_warnings,
             font_dir,
             allowed_base_url,
@@ -689,7 +676,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 &vl_version,
                 theme,
                 config,
-                scale,
                 show_warnings,
                 allowed_base_url,
                 format_locale,
@@ -813,7 +799,6 @@ async fn main() -> Result<(), anyhow::Error> {
         Vg2pdf {
             input,
             output,
-            scale,
             font_dir,
             allowed_base_url,
             format_locale,
@@ -823,7 +808,6 @@ async fn main() -> Result<(), anyhow::Error> {
             vg_2_pdf(
                 &input,
                 &output,
-                scale,
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
@@ -901,12 +885,11 @@ async fn main() -> Result<(), anyhow::Error> {
         Svg2pdf {
             input,
             output,
-            scale,
             font_dir,
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(&input)?;
-            let pdf_data = vl_convert_rs::converter::svg_to_pdf(&svg, scale)?;
+            let pdf_data = vl_convert_rs::converter::svg_to_pdf(&svg)?;
             write_output_binary(&output, &pdf_data)?;
         }
         LsThemes => list_themes().await?,
@@ -1244,7 +1227,6 @@ async fn vg_2_jpeg(
 async fn vg_2_pdf(
     input: &str,
     output: &str,
-    scale: f32,
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
@@ -1277,7 +1259,6 @@ async fn vg_2_pdf(
                 format_locale,
                 time_format_locale,
             },
-            Some(scale),
         )
         .await
     {
@@ -1503,7 +1484,6 @@ async fn vl_2_pdf(
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
-    scale: f32,
     show_warnings: bool,
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
@@ -1547,7 +1527,6 @@ async fn vl_2_pdf(
                 format_locale,
                 time_format_locale,
             },
-            Some(scale),
         )
         .await
     {

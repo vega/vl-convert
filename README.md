@@ -124,9 +124,6 @@ SVG text placement and PNG text rendering require that the fonts referenced by t
 
 A directory containing additional font files can registered with the VlConvert Python library using the `vl_convert.register_font_directory` function. Similarly, the `--font-dir` argument can be used to register custom fonts in the `vl-convert` CLI application.
 
-### Emoji support in PNG export
-The Altair [isotype emoji](https://altair-viz.github.io/gallery/isotype_emoji.html) gallery example does not currently convert property to PNG.
-
 ### Built-in Datasets
 The [Vega Editor](https://vega.github.io/editor/) supports referring to built-in datasets as if the exist under a `data/` directory (e.g. `data/cars.json`). This is not currently supporte by VlConvert. Instead an absolute URL must be used (e.g. `https://raw.githubusercontent.com/vega/vega-datasets/next/data/cars.json`).
 

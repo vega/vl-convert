@@ -10,8 +10,6 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-vl-convert-pdf = {path= "../vl-convert-pdf", version= "1.2.3" }
-
 # Deno 1.43.3. Before updating deno_runtime/deno_core, see note in DEVELOP.md
 deno_runtime = "0.159.0"
 deno_core = "0.280.0"
@@ -24,11 +22,14 @@ futures-util = "0.3.28"
 tokio = { version= "1.32.0" }
 reqwest = {version="0.11.20", default-features=false, features=["rustls-tls"]}
 lazy_static = "1.4.0"
-usvg = "0.36.0"
-resvg = "0.36.0"
-tiny-skia = "0.11.2"
+usvg = "0.42.0"
+resvg = "0.42.0"
+tiny-skia = "0.11.4"
+svg2pdf = "0.11.0"
+ttf-parser = "0.21.1"
+
 png = "0.17.10"
-fontdb = {version= "0.15.0", features=["fontconfig"]}
+fontdb = {version= "0.18.0", features=["fontconfig"]}
 tempfile = "3.8.0"
 log = "0.4.20"
 env_logger = "0.10.0"

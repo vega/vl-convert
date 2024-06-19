@@ -279,35 +279,35 @@ def test_jpeg(name, scale, as_dict):
     sys.platform.startswith("win"), reason="PDF tests not supported on windows"
 )
 @pytest.mark.parametrize(
-    "name,scale,tol",
+    "name,tol",
     [
-        ("circle_binned", 1.0, 0.97),
-        ("stacked_bar_h", 2.0, 0.98),
-        ("remote_images", 1.0, 0.98),
-        ("maptile_background", 1.0, 0.97),
-        ("no_text_in_font_metrics", 1.0, 0.94),
-        ("lookup_urls", 1.0, 0.99),
+        ("circle_binned", 0.97),
+        ("stacked_bar_h", 0.975),
+        ("remote_images", 0.98),
+        ("maptile_background", 0.97),
+        ("no_text_in_font_metrics", 0.94),
+        ("lookup_urls", 0.99),
     ],
 )
 @pytest.mark.parametrize("as_dict", [False])
-def test_pdf(name, scale, tol, as_dict):
+def test_pdf(name, tol, as_dict):
     vl_version = "v5_8"
     vl_spec = load_vl_spec(name)
 
     if as_dict:
         vl_spec = json.loads(vl_spec)
 
-    expected_png = load_expected_png(name, vl_version)
+    expected_png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version)
 
     # Convert to vega first
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
-    pdf = vlc.vega_to_pdf(vg_spec, scale=scale)
+    pdf = vlc.vega_to_pdf(vg_spec)
     png = pdf_to_png(pdf)
     # Lower tolerance because pdfium does its own text rendering, which won't be pixel identical to resvg
     check_png(png, expected_png, tol=tol)
 
     # Convert directly to image
-    pdf = vlc.vegalite_to_pdf(vl_spec, vl_version=vl_version, scale=scale)
+    pdf = vlc.vegalite_to_pdf(vl_spec, vl_version=vl_version)
     png = pdf_to_png(pdf)
     check_png(png, expected_png, tol=tol)
 
