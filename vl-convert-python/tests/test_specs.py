@@ -72,17 +72,7 @@ def load_expected_png(name, vl_version, theme=None):
 @pytest.mark.parametrize("name", ["circle_binned", "seattle-weather", "stacked_bar_h"])
 @pytest.mark.parametrize(
     "vl_version",
-    [
-        "v5_8",
-        "v5_12",
-        "v5_13",
-        "v5_14",
-        "v5_15",
-        "v5_16",
-        "v5_17",
-        "v5_18",
-        "v5_19"
-    ],
+    ["v5_8", "v5_12", "v5_13", "v5_14", "v5_15", "v5_16", "v5_17", "v5_18", "v5_19"],
 )
 @pytest.mark.parametrize("as_dict", [False, True])
 def test_vega(name, vl_version, as_dict):
