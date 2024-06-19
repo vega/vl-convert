@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use usvg::fontdb::Database;
-use usvg::{ImageHrefResolver, PostProcessingSteps, TreeParsing, TreePostProc};
+use usvg::{ImageHrefResolver, PostProcessingSteps};
 
 deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
 

@@ -29,7 +29,7 @@ use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
 use png::{PixelDimensions, Unit};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
-use usvg::{PostProcessingSteps, TreeParsing, TreePostProc};
+use usvg::PostProcessingSteps;
 
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::io::Reader as ImageReader;
