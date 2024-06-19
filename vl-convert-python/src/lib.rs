@@ -589,44 +589,44 @@ fn vegalite_to_jpeg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PDF file bytes
-// #[pyfunction]
-// #[pyo3(text_signature = "(vg_spec, scale, allowed_base_urls, format_locale, time_format_locale)")]
-// fn vega_to_pdf(
-//     vg_spec: PyObject,
-//     scale: Option<f32>,
-//     allowed_base_urls: Option<Vec<String>>,
-//     format_locale: Option<PyObject>,
-//     time_format_locale: Option<PyObject>,
-// ) -> PyResult<PyObject> {
-//     let vg_spec = parse_json_spec(vg_spec)?;
-//     let format_locale = parse_option_format_locale(format_locale)?;
-//     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
-//
-//     let mut converter = VL_CONVERTER
-//         .lock()
-//         .expect("Failed to acquire lock on Vega-Lite converter");
-//
-//     let pdf_bytes = match PYTHON_RUNTIME.block_on(converter.vega_to_pdf(
-//         vg_spec,
-//         VgOpts {
-//             allowed_base_urls,
-//             format_locale,
-//             time_format_locale,
-//         },
-//         scale,
-//     )) {
-//         Ok(vega_spec) => vega_spec,
-//         Err(err) => {
-//             return Err(PyValueError::new_err(format!(
-//                 "Vega to PDF conversion failed:\n{}",
-//                 err
-//             )))
-//         }
-//     };
-//     Ok(Python::with_gil(|py| -> PyObject {
-//         PyObject::from(PyBytes::new(py, pdf_bytes.as_slice()))
-//     }))
-// }
+#[pyfunction]
+#[pyo3(text_signature = "(vg_spec, scale, allowed_base_urls, format_locale, time_format_locale)")]
+fn vega_to_pdf(
+    vg_spec: PyObject,
+    scale: Option<f32>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<PyObject> {
+    warn_if_scale_not_one_for_pdf(scale)?;
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    let pdf_bytes = match PYTHON_RUNTIME.block_on(converter.vega_to_pdf(
+        vg_spec,
+        VgOpts {
+            allowed_base_urls,
+            format_locale,
+            time_format_locale,
+        },
+    )) {
+        Ok(vega_spec) => vega_spec,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "Vega to PDF conversion failed:\n{}",
+                err
+            )))
+        }
+    };
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, pdf_bytes.as_slice()))
+    }))
+}
 
 /// Convert a Vega-Lite spec to PDF image data using a particular
 /// version of the Vega-Lite JavaScript library.
@@ -644,61 +644,60 @@ fn vegalite_to_jpeg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PDF image data
-// #[pyfunction]
-// #[pyo3(
-//     text_signature = "(vl_spec, vl_version, scale, config, theme, allowed_base_urls, format_locale, time_format_locale)"
-// )]
-// fn vegalite_to_pdf(
-//     vl_spec: PyObject,
-//     vl_version: Option<&str>,
-//     scale: Option<f32>,
-//     config: Option<PyObject>,
-//     theme: Option<String>,
-//     show_warnings: Option<bool>,
-//     allowed_base_urls: Option<Vec<String>>,
-//     format_locale: Option<PyObject>,
-//     time_format_locale: Option<PyObject>,
-// ) -> PyResult<PyObject> {
-//     let vl_version = if let Some(vl_version) = vl_version {
-//         VlVersion::from_str(vl_version)?
-//     } else {
-//         Default::default()
-//     };
-//     let vl_spec = parse_json_spec(vl_spec)?;
-//     let config = config.and_then(|c| parse_json_spec(c).ok());
-//     let format_locale = parse_option_format_locale(format_locale)?;
-//     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
-//
-//     let mut converter = VL_CONVERTER
-//         .lock()
-//         .expect("Failed to acquire lock on Vega-Lite converter");
-//
-//     let pdf_data = match PYTHON_RUNTIME.block_on(converter.vegalite_to_pdf(
-//         vl_spec,
-//         VlOpts {
-//             vl_version,
-//             config,
-//             theme,
-//             show_warnings: show_warnings.unwrap_or(false),
-//             allowed_base_urls,
-//             format_locale,
-//             time_format_locale,
-//         },
-//         scale,
-//     )) {
-//         Ok(vega_spec) => vega_spec,
-//         Err(err) => {
-//             return Err(PyValueError::new_err(format!(
-//                 "Vega-Lite to PDF conversion failed:\n{}",
-//                 err
-//             )))
-//         }
-//     };
-//
-//     Ok(Python::with_gil(|py| -> PyObject {
-//         PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
-//     }))
-// }
+#[pyfunction]
+#[pyo3(
+    text_signature = "(vl_spec, vl_version, scale, config, theme, allowed_base_urls, format_locale, time_format_locale)"
+)]
+fn vegalite_to_pdf(
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    scale: Option<f32>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<PyObject> {
+    warn_if_scale_not_one_for_pdf(scale)?;
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+
+    let mut converter = VL_CONVERTER
+        .lock()
+        .expect("Failed to acquire lock on Vega-Lite converter");
+
+    let pdf_data = match PYTHON_RUNTIME.block_on(converter.vegalite_to_pdf(
+        vl_spec,
+        VlOpts {
+            vl_version,
+            config,
+            theme,
+            show_warnings: false,
+            allowed_base_urls,
+            format_locale,
+            time_format_locale,
+        },
+    )) {
+        Ok(vega_spec) => vega_spec,
+        Err(err) => {
+            return Err(PyValueError::new_err(format!(
+                "Vega-Lite to PDF conversion failed:\n{}",
+                err
+            )))
+        }
+    };
+
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
+    }))
+}
 
 /// Convert a Vega-Lite spec to a URL that opens the chart in the Vega editor
 ///
@@ -876,14 +875,15 @@ fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<P
 ///     scale (float): Image scale factor (default 1.0)
 /// Returns:
 ///     bytes: PDF document data
-// #[pyfunction]
-// #[pyo3(text_signature = "(svg, scale)")]
-// fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
-//     let pdf_data = vl_convert_rs::converter::svg_to_pdf(svg, scale.unwrap_or(1.0))?;
-//     Ok(Python::with_gil(|py| -> PyObject {
-//         PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
-//     }))
-// }
+#[pyfunction]
+#[pyo3(text_signature = "(svg, scale)")]
+fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
+    warn_if_scale_not_one_for_pdf(scale)?;
+    let pdf_data = vl_convert_rs::converter::svg_to_pdf(svg)?; // Always pass 1.0 as scale
+    Ok(Python::with_gil(|py| -> PyObject {
+        PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
+    }))
+}
 
 /// Helper function to parse an input Python string or dict as a serde_json::Value
 fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
@@ -1144,19 +1144,19 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_jpeg, m)?)?;
-    // m.add_function(wrap_pyfunction!(vegalite_to_pdf, m)?)?;
+    m.add_function(wrap_pyfunction!(vegalite_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_url, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_html, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_scenegraph, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_jpeg, m)?)?;
-    // m.add_function(wrap_pyfunction!(vega_to_pdf, m)?)?;
+    m.add_function(wrap_pyfunction!(vega_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_url, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_html, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
-    // m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
+    m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
@@ -1164,5 +1164,21 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_time_format_locale, m)?)?;
     m.add_function(wrap_pyfunction!(javascript_bundle, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    Ok(())
+}
+
+
+// Utilities
+fn warn_if_scale_not_one_for_pdf(scale: Option<f32>) -> PyResult<()> {
+    if let Some(scale) = scale {
+        if scale != 1.0 {
+            Python::with_gil(|py| -> PyResult<()> {
+                let warning_message = "The scale argument is no longer supported for PDF export.";
+                let deprecation_warning = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
+                PyErr::warn(py, deprecation_warning, warning_message, 1)?;
+                Ok(())
+            })?;
+        }
+    }
     Ok(())
 }

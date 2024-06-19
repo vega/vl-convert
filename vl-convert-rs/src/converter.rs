@@ -29,6 +29,7 @@ use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
 use png::{PixelDimensions, Unit};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
+use svg2pdf::{ConversionOptions, PageOptions};
 
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::io::Reader as ImageReader;
@@ -1287,27 +1288,23 @@ impl VlConverter {
         svg_to_jpeg(&svg, scale, quality)
     }
 
-    // pub async fn vega_to_pdf(
-    //     &mut self,
-    //     vg_spec: serde_json::Value,
-    //     vg_opts: VgOpts,
-    //     scale: Option<f32>,
-    // ) -> Result<Vec<u8>, AnyError> {
-    //     let scale = scale.unwrap_or(1.0);
-    //     let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-    //     svg_to_pdf(&svg, scale)
-    // }
+    pub async fn vega_to_pdf(
+        &mut self,
+        vg_spec: serde_json::Value,
+        vg_opts: VgOpts,
+    ) -> Result<Vec<u8>, AnyError> {
+        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
+        svg_to_pdf(&svg)
+    }
 
-    // pub async fn vegalite_to_pdf(
-    //     &mut self,
-    //     vl_spec: serde_json::Value,
-    //     vl_opts: VlOpts,
-    //     scale: Option<f32>,
-    // ) -> Result<Vec<u8>, AnyError> {
-    //     let scale = scale.unwrap_or(1.0);
-    //     let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-    //     svg_to_pdf(&svg, scale)
-    // }
+    pub async fn vegalite_to_pdf(
+        &mut self,
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+    ) -> Result<Vec<u8>, AnyError> {
+        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
+        svg_to_pdf(&svg)
+    }
 
     pub async fn get_vegaembed_bundle(
         &mut self,
@@ -1549,15 +1546,11 @@ pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>
     Ok(jpeg_bytes)
 }
 
-// pub fn svg_to_pdf(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
-//     // Load system fonts
-//     let font_db = FONT_DB
-//         .lock()
-//         .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
-//
-//     let tree = parse_svg(svg)?;
-//     vl_convert_pdf::svg_to_pdf(&tree, &font_db, scale)
-// }
+pub fn svg_to_pdf(svg: &str) -> Result<Vec<u8>, AnyError> {
+    let tree = parse_svg(svg)?;
+    let pdf = svg2pdf::to_pdf(&tree, ConversionOptions::default(), PageOptions::default());
+    Ok(pdf)
+}
 
 /// Helper to parse svg string to usvg Tree with more helpful error messages
 fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
