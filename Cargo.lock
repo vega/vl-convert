@@ -7051,6 +7051,7 @@ dependencies = [
  "tempfile",
  "tiny-skia",
  "tokio",
+ "ttf-parser",
  "usvg",
 ]
 

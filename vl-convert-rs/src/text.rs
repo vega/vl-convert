@@ -8,7 +8,10 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use usvg::fontdb::Database;
-use usvg::{FontFamily, FontResolver, FontSelectionFn, FontStretch, FontStyle, ImageHrefResolver};
+use usvg::{
+    FallbackSelectionFn, FontFamily, FontResolver, FontSelectionFn, FontStretch, FontStyle,
+    ImageHrefResolver,
+};
 
 deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
 
@@ -33,7 +36,7 @@ fn init_usvg_options() -> usvg::Options<'static> {
 
     let font_resolver = FontResolver {
         select_font: custom_font_selector(),
-        ..Default::default()
+        select_fallback: custom_fallback_selector(),
     };
 
     usvg::Options {
@@ -173,6 +176,71 @@ pub fn custom_font_selector() -> FontSelectionFn<'static> {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+        None
+    })
+}
+
+/// Creates a default font fallback selection resolver.
+///
+/// The default implementation searches through the entire `fontdb`
+/// to find a font that has the correct style and supports the character.
+pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
+    Box::new(|c, exclude_fonts, fontdb| {
+        let base_font_id = exclude_fonts[0];
+
+        // Prevent fallback to fonts that won't work, like LastResort on macOS
+        let forbidden_fallback = vec!["LastResort"];
+
+        // Iterate over fonts and check if any of them support the specified char.
+        for face in fontdb.faces() {
+            // Ignore fonts, that were used for shaping already.
+            if exclude_fonts.contains(&face.id)
+                || forbidden_fallback.contains(&face.post_script_name.as_str())
+            {
+                continue;
+            }
+
+            // Check that the new face has the same style.
+            let base_face = fontdb.face(base_font_id)?;
+            if base_face.style != face.style
+                && base_face.weight != face.weight
+                && base_face.stretch != face.stretch
+            {
+                continue;
+            }
+
+            // has_char is private in fontdb
+            // if !fontdb.has_char(face.id, c) {
+            //     continue;
+            // }
+
+            // Implement `fontdb.has_char`, which is not public in fontdb
+            let res = fontdb.with_face_data(face.id, |font_data, face_index| -> Option<bool> {
+                let font = ttf_parser::Face::parse(font_data, face_index).ok()?;
+
+                font.glyph_index(c)?;
+                Some(true)
+            });
+            if res != Some(Some(true)) {
+                continue;
+            }
+
+            let base_family = base_face
+                .families
+                .iter()
+                .find(|f| f.1 == fontdb::Language::English_UnitedStates)
+                .unwrap_or(&base_face.families[0]);
+
+            let new_family = face
+                .families
+                .iter()
+                .find(|f| f.1 == fontdb::Language::English_UnitedStates)
+                .unwrap_or(&base_face.families[0]);
+
+            log::warn!("Fallback from {} to {}.", base_family.0, new_family.0);
+            return Some(face.id);
+        }
+
         None
     })
 }
