@@ -1167,7 +1167,6 @@ fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-
 // Utilities
 fn warn_if_scale_not_one_for_pdf(scale: Option<f32>) -> PyResult<()> {
     if let Some(scale) = scale {

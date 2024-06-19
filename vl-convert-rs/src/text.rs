@@ -109,7 +109,6 @@ fn setup_default_fonts(fontdb: &mut Database) {
 
 pub fn custom_font_selector() -> FontSelectionFn<'static> {
     Box::new(move |font, fontdb| {
-
         // First, try for exact match using fontdb's default font lookup
         let mut name_list = Vec::new();
         for family in font.families() {
@@ -150,7 +149,7 @@ pub fn custom_font_selector() -> FontSelectionFn<'static> {
 
         if let Some(id) = fontdb.query(&query) {
             // fontdb found a match, use it
-            return Some(id)
+            return Some(id);
         }
 
         // Next, try matching the family name against the post_script_name of each font face.
@@ -161,7 +160,7 @@ pub fn custom_font_selector() -> FontSelectionFn<'static> {
             let name = fontdb.family_name(family).replace("-", " ");
             for face in fontdb.faces() {
                 if face.post_script_name.replace("-", " ") == name {
-                    return Some(face.id)
+                    return Some(face.id);
                 }
             }
         }
@@ -325,7 +324,7 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
     // Get mutable reference to font_db. This should always be successful since
     // we're holding the mutex on USVG_OPTIONS
     let Some(mut font_db) = Arc::get_mut(&mut opts.fontdb) else {
-        return Err(anyhow!("Could not acquire font_db reference"))
+        return Err(anyhow!("Could not acquire font_db reference"));
     };
 
     // Load fonts
