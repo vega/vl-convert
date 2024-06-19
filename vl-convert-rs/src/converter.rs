@@ -29,7 +29,6 @@ use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
 use png::{PixelDimensions, Unit};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
-use usvg::PostProcessingSteps;
 
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::io::Reader as ImageReader;
@@ -1505,25 +1504,18 @@ pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, An
     // default ppi to 72
     let ppi = ppi.unwrap_or(72.0);
     let scale = scale * ppi / 72.0;
-    let font_database = FONT_DB
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
 
     // catch_unwind so that we don't poison Mutexes
     // if usvg/resvg panics
     let response = panic::catch_unwind(|| {
-        let mut rtree = match parse_svg(svg) {
+        let rtree = match parse_svg(svg) {
             Ok(rtree) => rtree,
             Err(err) => return Err(err),
         };
-        rtree.postprocess(
-            PostProcessingSteps { convert_text_into_paths: true },
-            &font_database
-        );
 
         let mut pixmap = tiny_skia::Pixmap::new(
-            (rtree.size.width() * scale) as u32,
-            (rtree.size.height() * scale) as u32,
+            (rtree.size().width() * scale) as u32,
+            (rtree.size().height() * scale) as u32,
         )
         .unwrap();
 
@@ -1574,6 +1566,10 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
         ..Default::default()
     };
 
+    let font_database = FONT_DB
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+
     let opts = USVG_OPTIONS
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
@@ -1599,7 +1595,7 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
         }
     }
 
-    Ok(usvg::Tree::from_xmltree(&doc, &opts)?)
+    Ok(usvg::Tree::from_xmltree(&doc, &opts, &font_database)?)
 }
 
 pub fn vegalite_to_url(vl_spec: &serde_json::Value, fullscreen: bool) -> Result<String, AnyError> {

@@ -2,7 +2,7 @@ use log::{error, info};
 use reqwest::{Client, StatusCode};
 use std::io::Write;
 use tokio::task;
-use usvg::{ImageHrefResolver, ImageKind, Options};
+use usvg::{ImageHrefResolver, Options};
 
 static VL_CONVERT_USER_AGENT: &str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -19,15 +19,12 @@ lazy_static! {
         .expect("Failed to construct reqwest client");
 }
 
-/// A shorthand for [ImageHrefResolver]'s string function.
-/// This isn't exposed publicly by usvg, so copied here
-pub type ImageHrefStringResolverFn = Box<dyn Fn(&str, &Options) -> Option<ImageKind> + Send + Sync>;
-
 /// Custom image url string resolver that handles downloading remote files
 /// (The default usvg implementation only supports local image files)
-pub fn custom_string_resolver() -> ImageHrefStringResolverFn {
+pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn {
     let default_string_resolver = ImageHrefResolver::default_string_resolver();
-    Box::new(move |href: &str, opts: &Options| {
+
+    Box::new(move |href: &str, opts: &Options, font_database| {
         info!("Resolving image: {href}");
         if href.starts_with("http://") || href.starts_with("https://") {
             // Download image to temporary file with reqwest
@@ -95,7 +92,7 @@ pub fn custom_string_resolver() -> ImageHrefStringResolverFn {
                     if temp_file.write(bytes.as_ref()).ok().is_some() {
                         let temp_href = temp_file.path();
                         if let Some(temp_href) = temp_href.to_str() {
-                            return default_string_resolver(temp_href, opts);
+                            return default_string_resolver(temp_href, opts, &font_database);
                         }
                     }
                 }
@@ -103,6 +100,6 @@ pub fn custom_string_resolver() -> ImageHrefStringResolverFn {
         }
 
         // Delegate to default implementation
-        default_string_resolver(href, opts)
+        default_string_resolver(href, opts, &font_database)
     })
 }

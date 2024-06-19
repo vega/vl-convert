@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use usvg::fontdb::Database;
-use usvg::{ImageHrefResolver, PostProcessingSteps};
+use usvg::ImageHrefResolver;
 
 deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
 
@@ -216,32 +216,27 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
     let opts = USVG_OPTIONS
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
-    let mut rtree = usvg::Tree::from_str(svg, &opts).expect("Failed to parse text SVG");
 
     let font_database = FONT_DB
         .lock()
         .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
 
-    rtree.postprocess(
-        PostProcessingSteps { convert_text_into_paths: true },
-        &font_database
-    );
+    let rtree = usvg::Tree::from_str(svg, &opts, &font_database).expect("Failed to parse text SVG");
 
     // Children instead of descendents ok?
-    for node in &rtree.root.children {
+    for node in rtree.root().children() {
         // Text bboxes are different from path bboxes.
         if let usvg::Node::Text(ref text) = node {
-            if let Some(ref bbox) = text.bounding_box {
-                let width = bbox.right() - bbox.left();
-                let _height = bbox.bottom() - bbox.top();
-                return Ok(width as f64);
-            }
+            let bbox = text.bounding_box();
+            let width = bbox.right() - bbox.left();
+            let _height = bbox.bottom() - bbox.top();
+            return Ok(width as f64);
         }
     }
 
     let node_strs: Vec<_> = rtree
-        .root
-        .children
+        .root()
+        .children()
         .iter()
         .map(|node| format!("{:?}", node))
         .collect();
