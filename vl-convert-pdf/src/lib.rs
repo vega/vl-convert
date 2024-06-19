@@ -55,20 +55,6 @@ pub fn svg_to_pdf(tree: &Tree, font_db: &Database, scale: f32) -> Result<Vec<u8>
     Ok(ctx.writer.finish())
 }
 
-/// Additional methods for [`Ref`].
-trait RefExt {
-    /// Bump the reference up by one and return the previous one.
-    fn bump(&mut self) -> Self;
-}
-
-impl RefExt for Ref {
-    fn bump(&mut self) -> Self {
-        let prev = *self;
-        *self = Self::new(prev.get() + 1);
-        prev
-    }
-}
-
 struct PdfContext {
     writer: Pdf,
     width: f32,
