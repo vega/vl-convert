@@ -157,9 +157,9 @@ pub fn custom_font_selector() -> FontSelectionFn<'static> {
         // a font family with this name, which will not be found (because the family is Matter).
         // The face's post_script_name for this face will be "Matter-SemiBold"
         for family in &name_list {
-            let name = fontdb.family_name(family).replace("-", " ");
+            let name = fontdb.family_name(family).replace('-', " ");
             for face in fontdb.faces() {
-                if face.post_script_name.replace("-", " ") == name {
+                if face.post_script_name.replace('-', " ") == name {
                     return Some(face.id);
                 }
             }
@@ -323,13 +323,13 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
 
     // Get mutable reference to font_db. This should always be successful since
     // we're holding the mutex on USVG_OPTIONS
-    let Some(mut font_db) = Arc::get_mut(&mut opts.fontdb) else {
+    let Some(font_db) = Arc::get_mut(&mut opts.fontdb) else {
         return Err(anyhow!("Could not acquire font_db reference"));
     };
 
     // Load fonts
     font_db.load_fonts_dir(dir);
-    setup_default_fonts(&mut font_db);
+    setup_default_fonts(font_db);
 
     Ok(())
 }
