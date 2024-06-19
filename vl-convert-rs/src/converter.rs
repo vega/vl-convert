@@ -29,10 +29,11 @@ use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
 use png::{PixelDimensions, Unit};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
-use usvg::{TreeParsing, TreeTextToPath};
+use usvg::{PostProcessingSteps, TreeParsing, TreePostProc};
 
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::io::Reader as ImageReader;
+use resvg::render;
 
 use crate::text::{vl_convert_text_runtime, FONT_DB, USVG_OPTIONS};
 
@@ -1515,9 +1516,10 @@ pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, An
             Ok(rtree) => rtree,
             Err(err) => return Err(err),
         };
-        rtree.convert_text(&font_database);
-
-        let rtree = resvg::Tree::from_usvg(&rtree);
+        rtree.postprocess(
+            PostProcessingSteps { convert_text_into_paths: true },
+            &font_database
+        );
 
         let mut pixmap = tiny_skia::Pixmap::new(
             (rtree.size.width() * scale) as u32,
@@ -1526,8 +1528,7 @@ pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, An
         .unwrap();
 
         let transform = tiny_skia::Transform::from_scale(scale, scale);
-        resvg::Tree::render(&rtree, transform, &mut pixmap.as_mut());
-
+        render(&rtree, transform, &mut pixmap.as_mut());
         Ok(encode_png(pixmap, ppi))
     });
     match response {

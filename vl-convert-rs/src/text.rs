@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Mutex;
 use usvg::fontdb::Database;
-use usvg::{ImageHrefResolver, TreeParsing, TreeTextToPath};
+use usvg::{ImageHrefResolver, PostProcessingSteps, TreeParsing, TreePostProc};
 
 deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
 
@@ -222,11 +222,15 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
         .lock()
         .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
 
-    rtree.convert_text(&font_database);
+    rtree.postprocess(
+        PostProcessingSteps { convert_text_into_paths: true },
+        &font_database
+    );
 
-    for node in rtree.root.descendants() {
+    // Children instead of descendents ok?
+    for node in &rtree.root.children {
         // Text bboxes are different from path bboxes.
-        if let usvg::NodeKind::Text(ref text) = *node.borrow() {
+        if let usvg::Node::Text(ref text) = node {
             if let Some(ref bbox) = text.bounding_box {
                 let width = bbox.right() - bbox.left();
                 let _height = bbox.bottom() - bbox.top();
@@ -237,7 +241,8 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
 
     let node_strs: Vec<_> = rtree
         .root
-        .descendants()
+        .children
+        .iter()
         .map(|node| format!("{:?}", node))
         .collect();
     bail!("Failed to locate text in SVG:\n{}\n{:?}", svg, node_strs)

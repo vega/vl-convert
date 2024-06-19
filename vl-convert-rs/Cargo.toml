@@ -24,8 +24,8 @@ futures-util = "0.3.28"
 tokio = { version= "1.32.0" }
 reqwest = {version="0.11.20", default-features=false, features=["rustls-tls"]}
 lazy_static = "1.4.0"
-usvg = "0.37.0"
-resvg = "0.37.0"
+usvg = "0.38.0"
+resvg = "0.38.0"
 tiny-skia = "0.11.3"
 png = "0.17.10"
 fontdb = {version= "0.16.0", features=["fontconfig"]}
