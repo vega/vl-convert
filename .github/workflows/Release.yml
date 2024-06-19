@@ -123,7 +123,7 @@ jobs:
             vl-convert_win-64.zip
 
   build-cli-osx-64:
-    runs-on: macos-11
+    runs-on: macos-12
     steps:
       - uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
