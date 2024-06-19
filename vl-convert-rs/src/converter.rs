@@ -1287,27 +1287,27 @@ impl VlConverter {
         svg_to_jpeg(&svg, scale, quality)
     }
 
-    pub async fn vega_to_pdf(
-        &mut self,
-        vg_spec: serde_json::Value,
-        vg_opts: VgOpts,
-        scale: Option<f32>,
-    ) -> Result<Vec<u8>, AnyError> {
-        let scale = scale.unwrap_or(1.0);
-        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        svg_to_pdf(&svg, scale)
-    }
+    // pub async fn vega_to_pdf(
+    //     &mut self,
+    //     vg_spec: serde_json::Value,
+    //     vg_opts: VgOpts,
+    //     scale: Option<f32>,
+    // ) -> Result<Vec<u8>, AnyError> {
+    //     let scale = scale.unwrap_or(1.0);
+    //     let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
+    //     svg_to_pdf(&svg, scale)
+    // }
 
-    pub async fn vegalite_to_pdf(
-        &mut self,
-        vl_spec: serde_json::Value,
-        vl_opts: VlOpts,
-        scale: Option<f32>,
-    ) -> Result<Vec<u8>, AnyError> {
-        let scale = scale.unwrap_or(1.0);
-        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        svg_to_pdf(&svg, scale)
-    }
+    // pub async fn vegalite_to_pdf(
+    //     &mut self,
+    //     vl_spec: serde_json::Value,
+    //     vl_opts: VlOpts,
+    //     scale: Option<f32>,
+    // ) -> Result<Vec<u8>, AnyError> {
+    //     let scale = scale.unwrap_or(1.0);
+    //     let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
+    //     svg_to_pdf(&svg, scale)
+    // }
 
     pub async fn get_vegaembed_bundle(
         &mut self,
@@ -1556,15 +1556,15 @@ pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>
     Ok(jpeg_bytes)
 }
 
-pub fn svg_to_pdf(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
-    // Load system fonts
-    let font_db = FONT_DB
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
-
-    let tree = parse_svg(svg)?;
-    vl_convert_pdf::svg_to_pdf(&tree, &font_db, scale)
-}
+// pub fn svg_to_pdf(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
+//     // Load system fonts
+//     let font_db = FONT_DB
+//         .lock()
+//         .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
+//
+//     let tree = parse_svg(svg)?;
+//     vl_convert_pdf::svg_to_pdf(&tree, &font_db, scale)
+// }
 
 /// Helper to parse svg string to usvg Tree with more helpful error messages
 fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {

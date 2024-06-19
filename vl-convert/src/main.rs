@@ -205,53 +205,53 @@ enum Commands {
         time_format_locale: Option<String>,
     },
 
-    /// Convert a Vega-Lite specification to a PDF image
-    #[command(arg_required_else_help = true)]
-    Vl2pdf {
-        /// Path to input Vega-Lite file
-        #[arg(short, long)]
-        input: String,
-
-        /// Path to output PDF file to be created
-        #[arg(short, long)]
-        output: String,
-
-        /// Vega-Lite Version. One of 5.8, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16, 5.17, 5.18
-        #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
-        vl_version: String,
-
-        /// Named theme provided by the vegaThemes package (e.g. "dark")
-        #[arg(long)]
-        theme: Option<String>,
-
-        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
-        #[arg(short, long)]
-        config: Option<String>,
-
-        /// Image scale factor
-        #[arg(long, default_value = "1.0")]
-        scale: f32,
-
-        /// Whether to show Vega-Lite compilation warnings
-        #[arg(long)]
-        show_warnings: bool,
-
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
-
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
-
-        /// d3-format locale name or file with .json extension
-        #[arg(long)]
-        format_locale: Option<String>,
-
-        /// d3-time-format locale name or file with .json extension
-        #[arg(long)]
-        time_format_locale: Option<String>,
-    },
+    // /// Convert a Vega-Lite specification to a PDF image
+    // #[command(arg_required_else_help = true)]
+    // Vl2pdf {
+    //     /// Path to input Vega-Lite file
+    //     #[arg(short, long)]
+    //     input: String,
+    //
+    //     /// Path to output PDF file to be created
+    //     #[arg(short, long)]
+    //     output: String,
+    //
+    //     /// Vega-Lite Version. One of 5.8, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16, 5.17, 5.18
+    //     #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
+    //     vl_version: String,
+    //
+    //     /// Named theme provided by the vegaThemes package (e.g. "dark")
+    //     #[arg(long)]
+    //     theme: Option<String>,
+    //
+    //     /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+    //     #[arg(short, long)]
+    //     config: Option<String>,
+    //
+    //     /// Image scale factor
+    //     #[arg(long, default_value = "1.0")]
+    //     scale: f32,
+    //
+    //     /// Whether to show Vega-Lite compilation warnings
+    //     #[arg(long)]
+    //     show_warnings: bool,
+    //
+    //     /// Additional directory to search for fonts
+    //     #[arg(long)]
+    //     font_dir: Option<String>,
+    //
+    //     /// Allowed base URL for external data requests. Default allows any base URL
+    //     #[arg(short, long)]
+    //     allowed_base_url: Option<Vec<String>>,
+    //
+    //     /// d3-format locale name or file with .json extension
+    //     #[arg(long)]
+    //     format_locale: Option<String>,
+    //
+    //     /// d3-time-format locale name or file with .json extension
+    //     #[arg(long)]
+    //     time_format_locale: Option<String>,
+    // },
 
     /// Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
     #[command(arg_required_else_help = true)]
@@ -406,37 +406,37 @@ enum Commands {
         time_format_locale: Option<String>,
     },
 
-    /// Convert a Vega specification to an PDF image
-    #[command(arg_required_else_help = true)]
-    Vg2pdf {
-        /// Path to input Vega file
-        #[arg(short, long)]
-        input: String,
-
-        /// Path to output PDF file to be created
-        #[arg(short, long)]
-        output: String,
-
-        /// Image scale factor
-        #[arg(short, long, default_value = "1.0")]
-        scale: f32,
-
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
-
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
-
-        /// d3-format locale name or file with .json extension
-        #[arg(long)]
-        format_locale: Option<String>,
-
-        /// d3-time-format locale name or file with .json extension
-        #[arg(long)]
-        time_format_locale: Option<String>,
-    },
+    // /// Convert a Vega specification to an PDF image
+    // #[command(arg_required_else_help = true)]
+    // Vg2pdf {
+    //     /// Path to input Vega file
+    //     #[arg(short, long)]
+    //     input: String,
+    //
+    //     /// Path to output PDF file to be created
+    //     #[arg(short, long)]
+    //     output: String,
+    //
+    //     /// Image scale factor
+    //     #[arg(short, long, default_value = "1.0")]
+    //     scale: f32,
+    //
+    //     /// Additional directory to search for fonts
+    //     #[arg(long)]
+    //     font_dir: Option<String>,
+    //
+    //     /// Allowed base URL for external data requests. Default allows any base URL
+    //     #[arg(short, long)]
+    //     allowed_base_url: Option<Vec<String>>,
+    //
+    //     /// d3-format locale name or file with .json extension
+    //     #[arg(long)]
+    //     format_locale: Option<String>,
+    //
+    //     /// d3-time-format locale name or file with .json extension
+    //     #[arg(long)]
+    //     time_format_locale: Option<String>,
+    // },
 
     /// Convert a Vega specification to a URL that opens the chart in the Vega editor
     #[command(arg_required_else_help = true)]
@@ -527,25 +527,25 @@ enum Commands {
         font_dir: Option<String>,
     },
 
-    /// Convert an SVG image to a PDF image
-    #[command(arg_required_else_help = true)]
-    Svg2pdf {
-        /// Path to input SVG file
-        #[arg(short, long)]
-        input: String,
-
-        /// Path to output PDF file to be created
-        #[arg(short, long)]
-        output: String,
-
-        /// Image scale factor
-        #[arg(long, default_value = "1.0")]
-        scale: f32,
-
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
-    },
+    // /// Convert an SVG image to a PDF image
+    // #[command(arg_required_else_help = true)]
+    // Svg2pdf {
+    //     /// Path to input SVG file
+    //     #[arg(short, long)]
+    //     input: String,
+    //
+    //     /// Path to output PDF file to be created
+    //     #[arg(short, long)]
+    //     output: String,
+    //
+    //     /// Image scale factor
+    //     #[arg(long, default_value = "1.0")]
+    //     scale: f32,
+    //
+    //     /// Additional directory to search for fonts
+    //     #[arg(long)]
+    //     font_dir: Option<String>,
+    // },
 
     /// List available themes
     LsThemes,
@@ -669,34 +669,34 @@ async fn main() -> Result<(), anyhow::Error> {
             )
             .await?
         }
-        Vl2pdf {
-            input,
-            output,
-            vl_version,
-            theme,
-            config,
-            scale,
-            show_warnings,
-            font_dir,
-            allowed_base_url,
-            format_locale,
-            time_format_locale,
-        } => {
-            register_font_dir(font_dir)?;
-            vl_2_pdf(
-                &input,
-                &output,
-                &vl_version,
-                theme,
-                config,
-                scale,
-                show_warnings,
-                allowed_base_url,
-                format_locale,
-                time_format_locale,
-            )
-            .await?
-        }
+        // Vl2pdf {
+        //     input,
+        //     output,
+        //     vl_version,
+        //     theme,
+        //     config,
+        //     scale,
+        //     show_warnings,
+        //     font_dir,
+        //     allowed_base_url,
+        //     format_locale,
+        //     time_format_locale,
+        // } => {
+        //     register_font_dir(font_dir)?;
+        //     vl_2_pdf(
+        //         &input,
+        //         &output,
+        //         &vl_version,
+        //         theme,
+        //         config,
+        //         scale,
+        //         show_warnings,
+        //         allowed_base_url,
+        //         format_locale,
+        //         time_format_locale,
+        //     )
+        //     .await?
+        // }
         Vl2url { input, fullscreen } => {
             let vl_str = read_input_string(&input)?;
             let vl_spec = serde_json::from_str(&vl_str)?;
@@ -810,26 +810,26 @@ async fn main() -> Result<(), anyhow::Error> {
             )
             .await?
         }
-        Vg2pdf {
-            input,
-            output,
-            scale,
-            font_dir,
-            allowed_base_url,
-            format_locale,
-            time_format_locale,
-        } => {
-            register_font_dir(font_dir)?;
-            vg_2_pdf(
-                &input,
-                &output,
-                scale,
-                allowed_base_url,
-                format_locale,
-                time_format_locale,
-            )
-            .await?
-        }
+        // Vg2pdf {
+        //     input,
+        //     output,
+        //     scale,
+        //     font_dir,
+        //     allowed_base_url,
+        //     format_locale,
+        //     time_format_locale,
+        // } => {
+        //     register_font_dir(font_dir)?;
+        //     vg_2_pdf(
+        //         &input,
+        //         &output,
+        //         scale,
+        //         allowed_base_url,
+        //         format_locale,
+        //         time_format_locale,
+        //     )
+        //     .await?
+        // }
         Vg2url { input, fullscreen } => {
             let vg_str = read_input_string(&input)?;
             let vg_spec = serde_json::from_str(&vg_str)?;
@@ -898,17 +898,17 @@ async fn main() -> Result<(), anyhow::Error> {
             let jpeg_data = vl_convert_rs::converter::svg_to_jpeg(&svg, scale, Some(quality))?;
             write_output_binary(&output, &jpeg_data)?;
         }
-        Svg2pdf {
-            input,
-            output,
-            scale,
-            font_dir,
-        } => {
-            register_font_dir(font_dir)?;
-            let svg = read_input_string(&input)?;
-            let pdf_data = vl_convert_rs::converter::svg_to_pdf(&svg, scale)?;
-            write_output_binary(&output, &pdf_data)?;
-        }
+        // Svg2pdf {
+        //     input,
+        //     output,
+        //     scale,
+        //     font_dir,
+        // } => {
+        //     register_font_dir(font_dir)?;
+        //     let svg = read_input_string(&input)?;
+        //     let pdf_data = vl_convert_rs::converter::svg_to_pdf(&svg, scale)?;
+        //     write_output_binary(&output, &pdf_data)?;
+        // }
         LsThemes => list_themes().await?,
         CatTheme { theme } => cat_theme(&theme).await?,
     }
@@ -1241,57 +1241,57 @@ async fn vg_2_jpeg(
     Ok(())
 }
 
-async fn vg_2_pdf(
-    input: &str,
-    output: &str,
-    scale: f32,
-    allowed_base_urls: Option<Vec<String>>,
-    format_locale: Option<String>,
-    time_format_locale: Option<String>,
-) -> Result<(), anyhow::Error> {
-    // Read input file
-    let vega_str = read_input_string(input)?;
-
-    // Parse input as json
-    let vg_spec = parse_as_json(&vega_str)?;
-
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
-
-    // Initialize converter
-    let mut converter = VlConverter::new();
-
-    // Perform conversion
-    let pdf_data = match converter
-        .vega_to_pdf(
-            vg_spec,
-            VgOpts {
-                allowed_base_urls,
-                format_locale,
-                time_format_locale,
-            },
-            Some(scale),
-        )
-        .await
-    {
-        Ok(pdf_data) => pdf_data,
-        Err(err) => {
-            bail!("Vega to PDF conversion failed: {}", err);
-        }
-    };
-
-    // Write result
-    write_output_binary(output, &pdf_data)?;
-
-    Ok(())
-}
+// async fn vg_2_pdf(
+//     input: &str,
+//     output: &str,
+//     scale: f32,
+//     allowed_base_urls: Option<Vec<String>>,
+//     format_locale: Option<String>,
+//     time_format_locale: Option<String>,
+// ) -> Result<(), anyhow::Error> {
+//     // Read input file
+//     let vega_str = read_input_string(input)?;
+//
+//     // Parse input as json
+//     let vg_spec = parse_as_json(&vega_str)?;
+//
+//     let format_locale = match &format_locale {
+//         None => None,
+//         Some(p) => Some(format_locale_from_str(p)?),
+//     };
+//
+//     let time_format_locale = match &time_format_locale {
+//         None => None,
+//         Some(p) => Some(time_format_locale_from_str(p)?),
+//     };
+//
+//     // Initialize converter
+//     let mut converter = VlConverter::new();
+//
+//     // Perform conversion
+//     let pdf_data = match converter
+//         .vega_to_pdf(
+//             vg_spec,
+//             VgOpts {
+//                 allowed_base_urls,
+//                 format_locale,
+//                 time_format_locale,
+//             },
+//             Some(scale),
+//         )
+//         .await
+//     {
+//         Ok(pdf_data) => pdf_data,
+//         Err(err) => {
+//             bail!("Vega to PDF conversion failed: {}", err);
+//         }
+//     };
+//
+//     // Write result
+//     write_output_binary(output, &pdf_data)?;
+//
+//     Ok(())
+// }
 
 #[allow(clippy::too_many_arguments)]
 async fn vl_2_svg(
@@ -1496,72 +1496,72 @@ async fn vl_2_jpeg(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn vl_2_pdf(
-    input: &str,
-    output: &str,
-    vl_version: &str,
-    theme: Option<String>,
-    config: Option<String>,
-    scale: f32,
-    show_warnings: bool,
-    allowed_base_urls: Option<Vec<String>>,
-    format_locale: Option<String>,
-    time_format_locale: Option<String>,
-) -> Result<(), anyhow::Error> {
-    // Parse version
-    let vl_version = parse_vl_version(vl_version)?;
-
-    // Read input file
-    let vegalite_str = read_input_string(input)?;
-
-    // Parse input as json
-    let vl_spec = parse_as_json(&vegalite_str)?;
-
-    // Load config from file
-    let config = read_config_json(config)?;
-
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
-
-    // Initialize converter
-    let mut converter = VlConverter::new();
-
-    // Perform conversion
-    let pdf_data = match converter
-        .vegalite_to_pdf(
-            vl_spec,
-            VlOpts {
-                vl_version,
-                config,
-                theme,
-                show_warnings,
-                allowed_base_urls,
-                format_locale,
-                time_format_locale,
-            },
-            Some(scale),
-        )
-        .await
-    {
-        Ok(pdf_data) => pdf_data,
-        Err(err) => {
-            bail!("Vega-Lite to PDF conversion failed: {}", err);
-        }
-    };
-
-    // Write result
-    write_output_binary(output, &pdf_data)?;
-
-    Ok(())
-}
+// #[allow(clippy::too_many_arguments)]
+// async fn vl_2_pdf(
+//     input: &str,
+//     output: &str,
+//     vl_version: &str,
+//     theme: Option<String>,
+//     config: Option<String>,
+//     scale: f32,
+//     show_warnings: bool,
+//     allowed_base_urls: Option<Vec<String>>,
+//     format_locale: Option<String>,
+//     time_format_locale: Option<String>,
+// ) -> Result<(), anyhow::Error> {
+//     // Parse version
+//     let vl_version = parse_vl_version(vl_version)?;
+//
+//     // Read input file
+//     let vegalite_str = read_input_string(input)?;
+//
+//     // Parse input as json
+//     let vl_spec = parse_as_json(&vegalite_str)?;
+//
+//     // Load config from file
+//     let config = read_config_json(config)?;
+//
+//     let format_locale = match &format_locale {
+//         None => None,
+//         Some(p) => Some(format_locale_from_str(p)?),
+//     };
+//
+//     let time_format_locale = match &time_format_locale {
+//         None => None,
+//         Some(p) => Some(time_format_locale_from_str(p)?),
+//     };
+//
+//     // Initialize converter
+//     let mut converter = VlConverter::new();
+//
+//     // Perform conversion
+//     let pdf_data = match converter
+//         .vegalite_to_pdf(
+//             vl_spec,
+//             VlOpts {
+//                 vl_version,
+//                 config,
+//                 theme,
+//                 show_warnings,
+//                 allowed_base_urls,
+//                 format_locale,
+//                 time_format_locale,
+//             },
+//             Some(scale),
+//         )
+//         .await
+//     {
+//         Ok(pdf_data) => pdf_data,
+//         Err(err) => {
+//             bail!("Vega-Lite to PDF conversion failed: {}", err);
+//         }
+//     };
+//
+//     // Write result
+//     write_output_binary(output, &pdf_data)?;
+//
+//     Ok(())
+// }
 
 async fn list_themes() -> Result<(), anyhow::Error> {
     // Initialize converter

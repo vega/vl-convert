@@ -2303,7 +2303,7 @@ dependencies = [
  "memmap2 0.8.0",
  "slotmap",
  "tinyvec",
- "ttf-parser 0.19.2",
+ "ttf-parser",
 ]
 
 [[package]]
@@ -2557,16 +2557,6 @@ name = "gif"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80792593675e051cf94a4b111980da2ba60d4a83e43e0048c5693baab3977045"
-dependencies = [
- "color_quant",
- "weezl",
-]
-
-[[package]]
-name = "gif"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb2d69b19215e18bb912fa30f7ce15846e301408695e44e0ef719f1da9e19f2"
 dependencies = [
  "color_quant",
  "weezl",
@@ -3056,7 +3046,6 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "color_quant",
- "gif 0.13.1",
  "jpeg-decoder",
  "num-traits",
  "png",
@@ -4293,18 +4282,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pdf-writer"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "644b654f2de28457bf1e25a4905a76a563d1128a33ce60cf042f721f6818feaf"
-dependencies = [
- "bitflags 1.3.2",
- "itoa",
- "memchr",
- "ryu",
-]
-
-[[package]]
 name = "pem-rfc7468"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4368,7 +4345,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90fcb95eef784c2ac79119d1dd819e162b5da872ce6f3c3abe1e8ca1c082f72b"
 dependencies = [
- "siphasher 0.3.11",
+ "siphasher",
 ]
 
 [[package]]
@@ -5001,7 +4978,7 @@ version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc7980f653f9a7db31acff916a262c3b78c562919263edea29bf41a056e20497"
 dependencies = [
- "gif 0.12.0",
+ "gif",
  "jpeg-decoder",
  "log",
  "pico-args",
@@ -5276,7 +5253,7 @@ dependencies = [
  "bitflags 1.3.2",
  "bytemuck",
  "smallvec",
- "ttf-parser 0.19.2",
+ "ttf-parser",
  "unicode-bidi-mirroring",
  "unicode-ccc",
  "unicode-properties",
@@ -5647,12 +5624,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38b58827f4464d87d377d175e90bf58eb00fd8716ff0a62f80356b5e61555d0d"
 
 [[package]]
-name = "siphasher"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
-
-[[package]]
 name = "slab"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5837,29 +5808,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "subsetter"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09eab8a83bff89ba2200bd4c59be45c7c787f988431b936099a5a266c957f2f9"
-
-[[package]]
 name = "subtle"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
-
-[[package]]
-name = "svg2pdf"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a81da66842e426278f20062cd249779565e13f9ab4bfe0ac9e94eb476bc3a0f3"
-dependencies = [
- "image",
- "miniz_oxide",
- "once_cell",
- "pdf-writer",
- "usvg",
-]
 
 [[package]]
 name = "svgtypes"
@@ -5868,7 +5820,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d71499ff2d42f59d26edb21369a308ede691421f79ebc0f001e2b1fd3a7c9e52"
 dependencies = [
  "kurbo",
- "siphasher 0.3.11",
+ "siphasher",
 ]
 
 [[package]]
@@ -5943,7 +5895,7 @@ dependencies = [
  "once_cell",
  "rustc-hash",
  "serde",
- "siphasher 0.3.11",
+ "siphasher",
  "sourcemap 6.4.1",
  "swc_atoms",
  "swc_eq_ignore_macros",
@@ -6684,12 +6636,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49d64318d8311fc2668e48b63969f4343e0a85c4a109aa8460d6672e364b8bd1"
 
 [[package]]
-name = "ttf-parser"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17f77d76d837a7830fe1d4f12b7b4ba4192c1888001c7164257e4bc6d21d96b4"
-
-[[package]]
 name = "twox-hash"
 version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6909,7 +6855,7 @@ dependencies = [
  "log",
  "roxmltree 0.18.1",
  "simplecss",
- "siphasher 0.3.11",
+ "siphasher",
  "svgtypes",
  "usvg-tree",
 ]
@@ -7021,22 +6967,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vl-convert-pdf"
-version = "1.4.0"
-dependencies = [
- "anyhow",
- "itertools 0.12.1",
- "miniz_oxide",
- "pdf-writer",
- "siphasher 1.0.1",
- "subsetter",
- "svg2pdf",
- "ttf-parser 0.20.0",
- "unicode-bidi",
- "usvg",
-]
-
-[[package]]
 name = "vl-convert-python"
 version = "1.4.0"
 dependencies = [
@@ -7076,7 +7006,6 @@ dependencies = [
  "tiny-skia",
  "tokio",
  "usvg",
- "vl-convert-pdf",
 ]
 
 [[package]]
