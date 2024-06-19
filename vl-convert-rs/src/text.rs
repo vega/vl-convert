@@ -226,8 +226,8 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
 
     for node in rtree.root.descendants() {
         // Text bboxes are different from path bboxes.
-        if let usvg::NodeKind::Path(ref path) = *node.borrow() {
-            if let Some(ref bbox) = path.text_bbox {
+        if let usvg::NodeKind::Text(ref text) = *node.borrow() {
+            if let Some(ref bbox) = text.bounding_box {
                 let width = bbox.right() - bbox.left();
                 let _height = bbox.bottom() - bbox.top();
                 return Ok(width as f64);
