@@ -159,7 +159,6 @@ mod test_vl2vg {
     fn test(
         #[values(
             "v5_8",
-            "v5_11",
             "v5_12",
             "v5_13",
             "v5_14",
@@ -167,6 +166,7 @@ mod test_vl2vg {
             "v5_16",
             "v5_17",
             "v5_18",
+            "v5_19",
         )]
         vl_version: &str,
 
@@ -226,7 +226,6 @@ mod test_vl2html_no_bundle {
     fn test(
         #[values(
             "5.8",
-            "5.11",
             "5.12",
             "5.13",
             "5.14",
@@ -234,6 +233,7 @@ mod test_vl2html_no_bundle {
             "5.16",
             "5.17",
             "5.18",
+            "5.19",
         )]
         vl_version: &str,
 
@@ -277,7 +277,6 @@ mod test_vl2html_bundle {
     fn test(
         #[values(
             "5.8",
-            "5.11",
             "5.12",
             "5.13",
             "5.14",
@@ -285,6 +284,7 @@ mod test_vl2html_bundle {
             "5.16",
             "5.17",
             "5.18",
+            "5.19",
         )]
         vl_version: &str,
 

@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 pub const SKYPACK_URL: &str = "https://cdn.skypack.dev";
 pub const VEGA_PATH: &str =
-    "/pin/vega@v5.29.0-gABgAlTvpyWuLs0vmpeG/mode=imports,min/optimized/vega.js";
+    "/pin/vega@v5.30.0-fYDVG3pUN16BiGmbVNdw/mode=imports,min/optimized/vega.js";
 pub const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
 pub const VEGA_EMBED_PATH: &str =
@@ -31,7 +31,6 @@ pub fn vega_themes_url() -> String {
 #[allow(non_camel_case_types)]
 pub enum VlVersion {
     v5_8,
-    v5_11,
     v5_12,
     v5_13,
     v5_14,
@@ -39,6 +38,7 @@ pub enum VlVersion {
     v5_16,
     v5_17,
     v5_18,
+    v5_19,
 }
 
 impl VlVersion {
@@ -46,14 +46,14 @@ impl VlVersion {
         use VlVersion::*;
         let path = match self {
             v5_8 => "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
-            v5_11 => "/pin/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/mode=imports,min/optimized/vega-lite.js",
             v5_12 => "/pin/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/mode=imports,min/optimized/vega-lite.js",
             v5_13 => "/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js",
             v5_14 => "/pin/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/mode=imports,min/optimized/vega-lite.js",
             v5_15 => "/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js",
             v5_16 => "/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js",
             v5_17 => "/pin/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/mode=imports,min/optimized/vega-lite.js",
-            v5_18 => "/pin/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/mode=imports,min/optimized/vega-lite.js"
+            v5_18 => "/pin/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/mode=imports,min/optimized/vega-lite.js",
+            v5_19 => "/pin/vega-lite@v5.19.0-4m5nwXbwdKW9Bc7adV02/mode=imports,min/optimized/vega-lite.js"
         };
         path.to_string()
     }
@@ -66,7 +66,6 @@ impl VlVersion {
         use VlVersion::*;
         match self {
             v5_8 => "5.8",
-            v5_11 => "5.11",
             v5_12 => "5.12",
             v5_13 => "5.13",
             v5_14 => "5.14",
@@ -74,13 +73,14 @@ impl VlVersion {
             v5_16 => "5.16",
             v5_17 => "5.17",
             v5_18 => "5.18",
+            v5_19 => "5.19",
         }
     }
 }
 
 impl Default for VlVersion {
     fn default() -> Self {
-        VlVersion::from_str("5.18").unwrap()
+        VlVersion::from_str("5.19").unwrap()
     }
 }
 
@@ -90,7 +90,6 @@ impl FromStr for VlVersion {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "5.8" | "v5.8" | "5_8" | "v5_8" => Self::v5_8,
-            "5.11" | "v5.11" | "5_11" | "v5_11" => Self::v5_11,
             "5.12" | "v5.12" | "5_12" | "v5_12" => Self::v5_12,
             "5.13" | "v5.13" | "5_13" | "v5_13" => Self::v5_13,
             "5.14" | "v5.14" | "5_14" | "v5_14" => Self::v5_14,
@@ -98,6 +97,7 @@ impl FromStr for VlVersion {
             "5.16" | "v5.16" | "5_16" | "v5_16" => Self::v5_16,
             "5.17" | "v5.17" | "5_17" | "v5_17" => Self::v5_17,
             "5.18" | "v5.18" | "5_18" | "v5_18" => Self::v5_18,
+            "5.19" | "v5.19" | "5_19" | "v5_19" => Self::v5_19,
             _ => bail!("Unsupported Vega-Lite version string {}", s),
         })
     }
@@ -105,7 +105,6 @@ impl FromStr for VlVersion {
 
 pub const VL_VERSIONS: &[VlVersion] = &[
     VlVersion::v5_8,
-    VlVersion::v5_11,
     VlVersion::v5_12,
     VlVersion::v5_13,
     VlVersion::v5_14,
@@ -113,6 +112,7 @@ pub const VL_VERSIONS: &[VlVersion] = &[
     VlVersion::v5_16,
     VlVersion::v5_17,
     VlVersion::v5_18,
+    VlVersion::v5_19,
 ];
 
 pub fn build_import_map() -> HashMap<String, String> {
@@ -126,7 +126,7 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/d3-force@v3.0.0-cshj62qMoyIGNIXoil9u/dist=es2020,mode=imports,min/optimized/d3-force.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/d3-force@v3.0.0-cshj62qMoyIGNIXoil9u/dist=es2020,mode=imports,min/optimized/d3-force.js").to_string());
     m.insert("/-/d3-format@v3.1.0-D5wAD2odDPNNWsKloKgL/dist=es2020,mode=imports,min/optimized/d3-format.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/d3-format@v3.1.0-D5wAD2odDPNNWsKloKgL/dist=es2020,mode=imports,min/optimized/d3-format.js").to_string());
     m.insert("/-/d3-geo-projection@v4.0.0-5Hhxj2zKHEqWYAQIFo3r/dist=es2020,mode=imports,min/optimized/d3-geo-projection.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/d3-geo-projection@v4.0.0-5Hhxj2zKHEqWYAQIFo3r/dist=es2020,mode=imports,min/optimized/d3-geo-projection.js").to_string());
-    m.insert("/-/d3-geo@v3.1.0-6gCuCN3p6hXOeZDWcbjw/dist=es2020,mode=imports,min/optimized/d3-geo.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/d3-geo@v3.1.0-6gCuCN3p6hXOeZDWcbjw/dist=es2020,mode=imports,min/optimized/d3-geo.js").to_string());
+    m.insert("/-/d3-geo@v3.1.1-IFH102ROpDQE4rIMzW42/dist=es2020,mode=imports,min/optimized/d3-geo.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/d3-geo@v3.1.1-IFH102ROpDQE4rIMzW42/dist=es2020,mode=imports,min/optimized/d3-geo.js").to_string());
     m.insert("/-/d3-hierarchy@v3.1.2-wx7sW10pU4OkfBLgCDCU/dist=es2020,mode=imports,min/optimized/d3-hierarchy.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/d3-hierarchy@v3.1.2-wx7sW10pU4OkfBLgCDCU/dist=es2020,mode=imports,min/optimized/d3-hierarchy.js").to_string());
     m.insert("/-/d3-interpolate@v3.0.1-i9AsUdFHwyaukRBWNe8d/dist=es2020,mode=imports,min/optimized/d3-interpolate.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/d3-interpolate@v3.0.1-i9AsUdFHwyaukRBWNe8d/dist=es2020,mode=imports,min/optimized/d3-interpolate.js").to_string());
     m.insert("/-/d3-path@v3.1.0-nHaUoYzlRDYONpece9h0/dist=es2020,mode=imports,min/optimized/d3-path.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/d3-path@v3.1.0-nHaUoYzlRDYONpece9h0/dist=es2020,mode=imports,min/optimized/d3-path.js").to_string());
@@ -147,20 +147,19 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/robust-predicates@v3.0.1-4p4J15SSeLeNloSXgtZt/dist=es2020,mode=imports,min/optimized/robust-predicates.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/robust-predicates@v3.0.1-4p4J15SSeLeNloSXgtZt/dist=es2020,mode=imports,min/optimized/robust-predicates.js").to_string());
     m.insert("/-/topojson-client@v3.1.0-fyhI24JwGwsqazuuSEoq/dist=es2020,mode=imports,min/optimized/topojson-client.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/topojson-client@v3.1.0-fyhI24JwGwsqazuuSEoq/dist=es2020,mode=imports,min/optimized/topojson-client.js").to_string());
     m.insert("/-/vega-canvas@v1.2.7-hCEcvULuKIOqBVGX1Tn8/dist=es2020,mode=imports,min/optimized/vega-canvas.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-canvas@v1.2.7-hCEcvULuKIOqBVGX1Tn8/dist=es2020,mode=imports,min/optimized/vega-canvas.js").to_string());
-    m.insert("/-/vega-crossfilter@v4.1.1-0AUAt51ACgvwsfDQr3R4/dist=es2020,mode=imports,min/optimized/vega-crossfilter.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-crossfilter@v4.1.1-0AUAt51ACgvwsfDQr3R4/dist=es2020,mode=imports,min/optimized/vega-crossfilter.js").to_string());
-    m.insert("/-/vega-dataflow@v5.7.5-asKYS4gpPLMPf64pSozt/dist=es2020,mode=imports,min/optimized/vega-dataflow.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-dataflow@v5.7.5-asKYS4gpPLMPf64pSozt/dist=es2020,mode=imports,min/optimized/vega-dataflow.js").to_string());
+    m.insert("/-/vega-crossfilter@v4.1.2-4tsGV0HzWFU39iiKcBjX/dist=es2020,mode=imports,min/optimized/vega-crossfilter.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-crossfilter@v4.1.2-4tsGV0HzWFU39iiKcBjX/dist=es2020,mode=imports,min/optimized/vega-crossfilter.js").to_string());
+    m.insert("/-/vega-dataflow@v5.7.6-WDoszrJUyhTwz7sPwzda/dist=es2020,mode=imports,min/optimized/vega-dataflow.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-dataflow@v5.7.6-WDoszrJUyhTwz7sPwzda/dist=es2020,mode=imports,min/optimized/vega-dataflow.js").to_string());
     m.insert("/-/vega-embed@v6.25.0-3T3K5LYNFrLq0n1oBsLI/dist=es2020,mode=imports,min/optimized/vega-embed.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-embed@v6.25.0-3T3K5LYNFrLq0n1oBsLI/dist=es2020,mode=imports,min/optimized/vega-embed.js").to_string());
-    m.insert("/-/vega-encode@v4.10.0-yJSi7X9R48uBbncwkP6u/dist=es2020,mode=imports,min/optimized/vega-encode.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-encode@v4.10.0-yJSi7X9R48uBbncwkP6u/dist=es2020,mode=imports,min/optimized/vega-encode.js").to_string());
+    m.insert("/-/vega-encode@v4.10.1-Pg43i2sI9rM8xoeOkJ8i/dist=es2020,mode=imports,min/optimized/vega-encode.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-encode@v4.10.1-Pg43i2sI9rM8xoeOkJ8i/dist=es2020,mode=imports,min/optimized/vega-encode.js").to_string());
     m.insert("/-/vega-event-selector@v3.0.1-UgiEAWJA4WQL4DTKnV4R/dist=es2020,mode=imports,min/optimized/vega-event-selector.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-event-selector@v3.0.1-UgiEAWJA4WQL4DTKnV4R/dist=es2020,mode=imports,min/optimized/vega-event-selector.js").to_string());
-    m.insert("/-/vega-expression@v5.1.0-2VnsdaYPtQ6Pi5w8JxN8/dist=es2020,mode=imports,min/optimized/vega-expression.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-expression@v5.1.0-2VnsdaYPtQ6Pi5w8JxN8/dist=es2020,mode=imports,min/optimized/vega-expression.js").to_string());
-    m.insert("/-/vega-force@v4.2.0-CTEP5XRxhUGWUZM8MwQs/dist=es2020,mode=imports,min/optimized/vega-force.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-force@v4.2.0-CTEP5XRxhUGWUZM8MwQs/dist=es2020,mode=imports,min/optimized/vega-force.js").to_string());
-    m.insert("/-/vega-format@v1.1.1-MIkBcxVtnuOzCt2MeOxi/dist=es2020,mode=imports,min/optimized/vega-format.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-format@v1.1.1-MIkBcxVtnuOzCt2MeOxi/dist=es2020,mode=imports,min/optimized/vega-format.js").to_string());
-    m.insert("/-/vega-functions@v5.14.0-VEmryigAZ791DplLK2kn/dist=es2020,mode=imports,min/optimized/vega-functions.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-functions@v5.14.0-VEmryigAZ791DplLK2kn/dist=es2020,mode=imports,min/optimized/vega-functions.js").to_string());
-    m.insert("/-/vega-geo@v4.4.1-8TUdHGrJmGMaKM9x1bwB/dist=es2020,mode=imports,min/optimized/vega-geo.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-geo@v4.4.1-8TUdHGrJmGMaKM9x1bwB/dist=es2020,mode=imports,min/optimized/vega-geo.js").to_string());
-    m.insert("/-/vega-hierarchy@v4.1.1-UOm1ATDeVOQ6Lqji63hi/dist=es2020,mode=imports,min/optimized/vega-hierarchy.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-hierarchy@v4.1.1-UOm1ATDeVOQ6Lqji63hi/dist=es2020,mode=imports,min/optimized/vega-hierarchy.js").to_string());
+    m.insert("/-/vega-expression@v5.1.1-K4clrYr2THuj5KncykTn/dist=es2020,mode=imports,min/optimized/vega-expression.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-expression@v5.1.1-K4clrYr2THuj5KncykTn/dist=es2020,mode=imports,min/optimized/vega-expression.js").to_string());
+    m.insert("/-/vega-force@v4.2.1-a7V5XmM7au6PlfMbPpDy/dist=es2020,mode=imports,min/optimized/vega-force.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-force@v4.2.1-a7V5XmM7au6PlfMbPpDy/dist=es2020,mode=imports,min/optimized/vega-force.js").to_string());
+    m.insert("/-/vega-format@v1.1.2-rBsMjG1MOmb395qvySoI/dist=es2020,mode=imports,min/optimized/vega-format.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-format@v1.1.2-rBsMjG1MOmb395qvySoI/dist=es2020,mode=imports,min/optimized/vega-format.js").to_string());
+    m.insert("/-/vega-functions@v5.15.0-Bjrw9nnQutKMtsMi1DSI/dist=es2020,mode=imports,min/optimized/vega-functions.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-functions@v5.15.0-Bjrw9nnQutKMtsMi1DSI/dist=es2020,mode=imports,min/optimized/vega-functions.js").to_string());
+    m.insert("/-/vega-geo@v4.4.2-VUooSgw91eB4Vs4BcK3h/dist=es2020,mode=imports,min/optimized/vega-geo.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-geo@v4.4.2-VUooSgw91eB4Vs4BcK3h/dist=es2020,mode=imports,min/optimized/vega-geo.js").to_string());
+    m.insert("/-/vega-hierarchy@v4.1.2-3wVtPHq13u3t0KUNwYDf/dist=es2020,mode=imports,min/optimized/vega-hierarchy.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-hierarchy@v4.1.2-3wVtPHq13u3t0KUNwYDf/dist=es2020,mode=imports,min/optimized/vega-hierarchy.js").to_string());
     m.insert("/-/vega-interpreter@v1.0.5-xGayK8haM1EVgaoW7oOi/dist=es2020,mode=imports,min/optimized/vega-interpreter.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-interpreter@v1.0.5-xGayK8haM1EVgaoW7oOi/dist=es2020,mode=imports,min/optimized/vega-interpreter.js").to_string());
-    m.insert("/-/vega-label@v1.2.1-hEHqe293fM7lKP2OHb0o/dist=es2020,mode=imports,min/optimized/vega-label.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-label@v1.2.1-hEHqe293fM7lKP2OHb0o/dist=es2020,mode=imports,min/optimized/vega-label.js").to_string());
-    m.insert("/-/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
+    m.insert("/-/vega-label@v1.3.0-9aipnSY6IQFGc3Lm2JSc/dist=es2020,mode=imports,min/optimized/vega-label.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-label@v1.3.0-9aipnSY6IQFGc3Lm2JSc/dist=es2020,mode=imports,min/optimized/vega-label.js").to_string());
     m.insert("/-/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
@@ -169,30 +168,30 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/-/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.18.0-FtLrd9Ks5cFttxoTAph7/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.18.0-FtLrd9Ks5cFttxoTAph7/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
+    m.insert("/-/vega-lite@v5.19.0-4m5nwXbwdKW9Bc7adV02/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.19.0-4m5nwXbwdKW9Bc7adV02/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/-/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/dist=es2020,mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/dist=es2020,mode=imports,min/optimized/vega-lite.js").to_string());
-    m.insert("/-/vega-loader@v4.5.1-e2JpneCYErTzObWVOVxs/dist=es2020,mode=imports,min/optimized/vega-loader.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-loader@v4.5.1-e2JpneCYErTzObWVOVxs/dist=es2020,mode=imports,min/optimized/vega-loader.js").to_string());
-    m.insert("/-/vega-parser@v6.3.0-LmHzQ5CDjQqCqdcg4N1t/dist=es2020,mode=imports,min/optimized/vega-parser.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-parser@v6.3.0-LmHzQ5CDjQqCqdcg4N1t/dist=es2020,mode=imports,min/optimized/vega-parser.js").to_string());
-    m.insert("/-/vega-projection@v1.6.0-lGjH1T1qHepW8BpZZrrV/dist=es2020,mode=imports,min/optimized/vega-projection.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-projection@v1.6.0-lGjH1T1qHepW8BpZZrrV/dist=es2020,mode=imports,min/optimized/vega-projection.js").to_string());
-    m.insert("/-/vega-regression@v1.2.0-qmJkAzTyLtlu9jZBRY67/dist=es2020,mode=imports,min/optimized/vega-regression.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-regression@v1.2.0-qmJkAzTyLtlu9jZBRY67/dist=es2020,mode=imports,min/optimized/vega-regression.js").to_string());
-    m.insert("/-/vega-runtime@v6.1.4-aFKCWR0DKdVqzAheQZ7x/dist=es2020,mode=imports,min/optimized/vega-runtime.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-runtime@v6.1.4-aFKCWR0DKdVqzAheQZ7x/dist=es2020,mode=imports,min/optimized/vega-runtime.js").to_string());
-    m.insert("/-/vega-scale@v7.4.0-E7uTWSrTZRg6a4ynk0OL/dist=es2020,mode=imports,min/optimized/vega-scale.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-scale@v7.4.0-E7uTWSrTZRg6a4ynk0OL/dist=es2020,mode=imports,min/optimized/vega-scale.js").to_string());
-    m.insert("/-/vega-scenegraph@v4.12.0-L4RnNNRRqhpJi4com6ck/dist=es2020,mode=imports,min/optimized/vega-scenegraph.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-scenegraph@v4.12.0-L4RnNNRRqhpJi4com6ck/dist=es2020,mode=imports,min/optimized/vega-scenegraph.js").to_string());
+    m.insert("/-/vega-loader@v4.5.2-1ImBl2TigOVzvurACWyz/dist=es2020,mode=imports,min/optimized/vega-loader.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-loader@v4.5.2-1ImBl2TigOVzvurACWyz/dist=es2020,mode=imports,min/optimized/vega-loader.js").to_string());
+    m.insert("/-/vega-parser@v6.4.0-nwGMLAa2L4N1N7f1iRh9/dist=es2020,mode=imports,min/optimized/vega-parser.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-parser@v6.4.0-nwGMLAa2L4N1N7f1iRh9/dist=es2020,mode=imports,min/optimized/vega-parser.js").to_string());
+    m.insert("/-/vega-projection@v1.6.1-zBdxeV9K67u1hPOXPxMf/dist=es2020,mode=imports,min/optimized/vega-projection.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-projection@v1.6.1-zBdxeV9K67u1hPOXPxMf/dist=es2020,mode=imports,min/optimized/vega-projection.js").to_string());
+    m.insert("/-/vega-regression@v1.3.0-nz37hjrP5F5zaTiwVMMX/dist=es2020,mode=imports,min/optimized/vega-regression.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-regression@v1.3.0-nz37hjrP5F5zaTiwVMMX/dist=es2020,mode=imports,min/optimized/vega-regression.js").to_string());
+    m.insert("/-/vega-runtime@v6.2.0-6BElb2bSMc7jDTsbOGBN/dist=es2020,mode=imports,min/optimized/vega-runtime.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-runtime@v6.2.0-6BElb2bSMc7jDTsbOGBN/dist=es2020,mode=imports,min/optimized/vega-runtime.js").to_string());
+    m.insert("/-/vega-scale@v7.4.1-M0T9Gn9zHGGuV6XhZsTO/dist=es2020,mode=imports,min/optimized/vega-scale.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-scale@v7.4.1-M0T9Gn9zHGGuV6XhZsTO/dist=es2020,mode=imports,min/optimized/vega-scale.js").to_string());
+    m.insert("/-/vega-scenegraph@v4.13.0-kC2RziuM0eIjiq6SsQ1g/dist=es2020,mode=imports,min/optimized/vega-scenegraph.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-scenegraph@v4.13.0-kC2RziuM0eIjiq6SsQ1g/dist=es2020,mode=imports,min/optimized/vega-scenegraph.js").to_string());
     m.insert("/-/vega-schema-url-parser@v2.2.0-YmXJGRcKOXOac3VG4xfw/dist=es2020,mode=imports,min/optimized/vega-schema-url-parser.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-schema-url-parser@v2.2.0-YmXJGRcKOXOac3VG4xfw/dist=es2020,mode=imports,min/optimized/vega-schema-url-parser.js").to_string());
     m.insert("/-/vega-selections@v5.4.2-kOpqaoZxiZQE5rKxTnvY/dist=es2020,mode=imports,min/optimized/vega-selections.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-selections@v5.4.2-kOpqaoZxiZQE5rKxTnvY/dist=es2020,mode=imports,min/optimized/vega-selections.js").to_string());
     m.insert("/-/vega-statistics@v1.9.0-Qw8CjSQVQOg2M6VMgsme/dist=es2020,mode=imports,min/optimized/vega-statistics.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-statistics@v1.9.0-Qw8CjSQVQOg2M6VMgsme/dist=es2020,mode=imports,min/optimized/vega-statistics.js").to_string());
     m.insert("/-/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/dist=es2020,mode=imports,min/optimized/vega-themes.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/dist=es2020,mode=imports,min/optimized/vega-themes.js").to_string());
-    m.insert("/-/vega-time@v2.1.1-Q1TxQbneCNdh5ryZm2Gf/dist=es2020,mode=imports,min/optimized/vega-time.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-time@v2.1.1-Q1TxQbneCNdh5ryZm2Gf/dist=es2020,mode=imports,min/optimized/vega-time.js").to_string());
+    m.insert("/-/vega-time@v2.1.2-0zBPNlF5GMoxR6YChBaP/dist=es2020,mode=imports,min/optimized/vega-time.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-time@v2.1.2-0zBPNlF5GMoxR6YChBaP/dist=es2020,mode=imports,min/optimized/vega-time.js").to_string());
     m.insert("/-/vega-tooltip@v0.34.0-YVV3uKnnOnCt2kW7Vclb/dist=es2020,mode=imports,min/optimized/vega-tooltip.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-tooltip@v0.34.0-YVV3uKnnOnCt2kW7Vclb/dist=es2020,mode=imports,min/optimized/vega-tooltip.js").to_string());
-    m.insert("/-/vega-transforms@v4.11.1-RhFnNq7TnH1umseD2FsT/dist=es2020,mode=imports,min/optimized/vega-transforms.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-transforms@v4.11.1-RhFnNq7TnH1umseD2FsT/dist=es2020,mode=imports,min/optimized/vega-transforms.js").to_string());
+    m.insert("/-/vega-transforms@v4.12.0-yproJe1RDXbiUml7qQ0X/dist=es2020,mode=imports,min/optimized/vega-transforms.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-transforms@v4.12.0-yproJe1RDXbiUml7qQ0X/dist=es2020,mode=imports,min/optimized/vega-transforms.js").to_string());
     m.insert("/-/vega-util@v1.17.2-LUfkDhormMyfWqy3Ts6U/dist=es2020,mode=imports,min/optimized/vega-util.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-util@v1.17.2-LUfkDhormMyfWqy3Ts6U/dist=es2020,mode=imports,min/optimized/vega-util.js").to_string());
-    m.insert("/-/vega-view-transforms@v4.5.9-LiB26zIbxiHZW70fnrDI/dist=es2020,mode=imports,min/optimized/vega-view-transforms.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-view-transforms@v4.5.9-LiB26zIbxiHZW70fnrDI/dist=es2020,mode=imports,min/optimized/vega-view-transforms.js").to_string());
-    m.insert("/-/vega-view@v5.12.1-a4pniPVE0qikA9jC9IPC/dist=es2020,mode=imports,min/optimized/vega-view.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-view@v5.12.1-a4pniPVE0qikA9jC9IPC/dist=es2020,mode=imports,min/optimized/vega-view.js").to_string());
-    m.insert("/-/vega-voronoi@v4.2.2-oQ1o0oW6SZfwHLCCdDRf/dist=es2020,mode=imports,min/optimized/vega-voronoi.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-voronoi@v4.2.2-oQ1o0oW6SZfwHLCCdDRf/dist=es2020,mode=imports,min/optimized/vega-voronoi.js").to_string());
-    m.insert("/-/vega-wordcloud@v4.1.4-J5ewLsaJzX7o65uuoGqD/dist=es2020,mode=imports,min/optimized/vega-wordcloud.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-wordcloud@v4.1.4-J5ewLsaJzX7o65uuoGqD/dist=es2020,mode=imports,min/optimized/vega-wordcloud.js").to_string());
-    m.insert("/-/vega@v5.29.0-gABgAlTvpyWuLs0vmpeG/dist=es2020,mode=imports,min/optimized/vega.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega@v5.29.0-gABgAlTvpyWuLs0vmpeG/dist=es2020,mode=imports,min/optimized/vega.js").to_string());
+    m.insert("/-/vega-view-transforms@v4.6.0-xmN4bj51geArzzY2TWCo/dist=es2020,mode=imports,min/optimized/vega-view-transforms.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-view-transforms@v4.6.0-xmN4bj51geArzzY2TWCo/dist=es2020,mode=imports,min/optimized/vega-view-transforms.js").to_string());
+    m.insert("/-/vega-view@v5.13.0-kQxd3tMOiOBtyjX1ukMi/dist=es2020,mode=imports,min/optimized/vega-view.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-view@v5.13.0-kQxd3tMOiOBtyjX1ukMi/dist=es2020,mode=imports,min/optimized/vega-view.js").to_string());
+    m.insert("/-/vega-voronoi@v4.2.3-8V3D15dKJKAY9dyHESDq/dist=es2020,mode=imports,min/optimized/vega-voronoi.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-voronoi@v4.2.3-8V3D15dKJKAY9dyHESDq/dist=es2020,mode=imports,min/optimized/vega-voronoi.js").to_string());
+    m.insert("/-/vega-wordcloud@v4.1.5-5xdRMt86NkNNCDjMSy6z/dist=es2020,mode=imports,min/optimized/vega-wordcloud.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega-wordcloud@v4.1.5-5xdRMt86NkNNCDjMSy6z/dist=es2020,mode=imports,min/optimized/vega-wordcloud.js").to_string());
+    m.insert("/-/vega@v5.30.0-fYDVG3pUN16BiGmbVNdw/dist=es2020,mode=imports,min/optimized/vega.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/-/vega@v5.30.0-fYDVG3pUN16BiGmbVNdw/dist=es2020,mode=imports,min/optimized/vega.js").to_string());
     m.insert("/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js").to_string());
     m.insert("/pin/vega-embed@v6.25.0-3T3K5LYNFrLq0n1oBsLI/mode=imports,min/optimized/vega-embed.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-embed@v6.25.0-3T3K5LYNFrLq0n1oBsLI/mode=imports,min/optimized/vega-embed.js").to_string());
-    m.insert("/pin/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/mode=imports,min/optimized/vega-lite.js").to_string());
@@ -200,9 +199,10 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert("/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/mode=imports,min/optimized/vega-lite.js").to_string());
+    m.insert("/pin/vega-lite@v5.19.0-4m5nwXbwdKW9Bc7adV02/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.19.0-4m5nwXbwdKW9Bc7adV02/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js").to_string());
     m.insert("/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js").to_string());
-    m.insert("/pin/vega@v5.29.0-gABgAlTvpyWuLs0vmpeG/mode=imports,min/optimized/vega.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega@v5.29.0-gABgAlTvpyWuLs0vmpeG/mode=imports,min/optimized/vega.js").to_string());
+    m.insert("/pin/vega@v5.30.0-fYDVG3pUN16BiGmbVNdw/mode=imports,min/optimized/vega.js".to_string(), include_str!("../../vendor/cdn.skypack.dev/pin/vega@v5.30.0-fYDVG3pUN16BiGmbVNdw/mode=imports,min/optimized/vega.js").to_string());
     m
 }
 
