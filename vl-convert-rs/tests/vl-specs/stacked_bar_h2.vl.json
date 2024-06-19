@@ -1,0 +1,10 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/barley.json"},
+  "mark": "bar",
+  "encoding": {},
+  "title": "Figure & Title < ' >",
+  "config": {
+    "title": {"font": "Matter SemiBold"}
+  }
+}

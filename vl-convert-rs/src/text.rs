@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use usvg::fontdb::Database;
-use usvg::ImageHrefResolver;
+use usvg::{FontFamily, FontResolver, FontSelectionFn, FontStretch, FontStyle, ImageHrefResolver};
 
 deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
 
@@ -30,9 +30,16 @@ fn init_usvg_options() -> usvg::Options<'static> {
         resolve_string: custom_string_resolver(),
         ..Default::default()
     };
+
+    let font_resolver = FontResolver {
+        select_font: custom_font_selector(),
+        ..Default::default()
+    };
+
     usvg::Options {
         image_href_resolver,
         fontdb: Arc::new(init_font_db()),
+        font_resolver,
         ..Default::default()
     }
 }
@@ -98,6 +105,77 @@ fn setup_default_fonts(fontdb: &mut Database) {
             break;
         }
     }
+}
+
+pub fn custom_font_selector() -> FontSelectionFn<'static> {
+    Box::new(move |font, fontdb| {
+
+        // First, try for exact match using fontdb's default font lookup
+        let mut name_list = Vec::new();
+        for family in font.families() {
+            name_list.push(match family {
+                FontFamily::Serif => fontdb::Family::Serif,
+                FontFamily::SansSerif => fontdb::Family::SansSerif,
+                FontFamily::Cursive => fontdb::Family::Cursive,
+                FontFamily::Fantasy => fontdb::Family::Fantasy,
+                FontFamily::Monospace => fontdb::Family::Monospace,
+                FontFamily::Named(s) => fontdb::Family::Name(s.as_str()),
+            });
+        }
+
+        let stretch = match font.stretch() {
+            FontStretch::UltraCondensed => fontdb::Stretch::UltraCondensed,
+            FontStretch::ExtraCondensed => fontdb::Stretch::ExtraCondensed,
+            FontStretch::Condensed => fontdb::Stretch::Condensed,
+            FontStretch::SemiCondensed => fontdb::Stretch::SemiCondensed,
+            FontStretch::Normal => fontdb::Stretch::Normal,
+            FontStretch::SemiExpanded => fontdb::Stretch::SemiExpanded,
+            FontStretch::Expanded => fontdb::Stretch::Expanded,
+            FontStretch::ExtraExpanded => fontdb::Stretch::ExtraExpanded,
+            FontStretch::UltraExpanded => fontdb::Stretch::UltraExpanded,
+        };
+
+        let style = match font.style() {
+            FontStyle::Normal => fontdb::Style::Normal,
+            FontStyle::Italic => fontdb::Style::Italic,
+            FontStyle::Oblique => fontdb::Style::Oblique,
+        };
+
+        let query = fontdb::Query {
+            families: &name_list,
+            weight: fontdb::Weight(font.weight()),
+            stretch,
+            style,
+        };
+
+        if let Some(id) = fontdb.query(&query) {
+            // fontdb found a match, use it
+            return Some(id)
+        }
+
+        // Next, try matching the family name against the post_script_name of each font face.
+        // For example, if the SVG font family is "Matter SemiBold", the logic above search for
+        // a font family with this name, which will not be found (because the family is Matter).
+        // The face's post_script_name for this face will be "Matter-SemiBold"
+        for family in &name_list {
+            let name = fontdb.family_name(family).replace("-", " ");
+            for face in fontdb.faces() {
+                if face.post_script_name.replace("-", " ") == name {
+                    return Some(face.id)
+                }
+            }
+        }
+
+        log::warn!(
+            "No match for '{}' font-family.",
+            font.families()
+                .iter()
+                .map(|f| f.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        None
+    })
 }
 
 #[derive(Deserialize, Clone, Debug)]
