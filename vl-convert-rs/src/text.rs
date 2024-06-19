@@ -6,15 +6,14 @@ use deno_core::op2;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashSet;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use usvg::fontdb::Database;
 use usvg::ImageHrefResolver;
 
 deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
 
 lazy_static! {
-    pub static ref USVG_OPTIONS: Mutex<usvg::Options> = Mutex::new(init_usvg_options());
-    pub static ref FONT_DB: Mutex<Database> = Mutex::new(init_font_db());
+    pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -26,13 +25,14 @@ const LIBERATION_SANS_ITALIC: &[u8] =
 const LIBERATION_SANS_BOLDITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-BoldItalic.ttf");
 
-fn init_usvg_options() -> usvg::Options {
+fn init_usvg_options() -> usvg::Options<'static> {
     let image_href_resolver = ImageHrefResolver {
         resolve_string: custom_string_resolver(),
         ..Default::default()
     };
     usvg::Options {
         image_href_resolver,
+        fontdb: Arc::new(init_font_db()),
         ..Default::default()
     }
 }
@@ -217,11 +217,7 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
 
-    let font_database = FONT_DB
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
-
-    let rtree = usvg::Tree::from_str(svg, &opts, &font_database).expect("Failed to parse text SVG");
+    let rtree = usvg::Tree::from_str(svg, &opts).expect("Failed to parse text SVG");
 
     // Children instead of descendents ok?
     for node in rtree.root().children() {
@@ -244,11 +240,19 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
 }
 
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
-    let mut font_database = FONT_DB
+    let mut opts = USVG_OPTIONS
         .lock()
-        .map_err(|err| anyhow!("Failed to acquire font_db lock: {}", err.to_string()))?;
-    font_database.load_fonts_dir(dir);
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
 
-    setup_default_fonts(&mut font_database);
+    // Get mutable reference to font_db. This should always be successful since
+    // we're holding the mutex on USVG_OPTIONS
+    let Some(mut font_db) = Arc::get_mut(&mut opts.fontdb) else {
+        return Err(anyhow!("Could not acquire font_db reference"))
+    };
+
+    // Load fonts
+    font_db.load_fonts_dir(dir);
+    setup_default_fonts(&mut font_db);
+
     Ok(())
 }

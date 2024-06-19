@@ -34,7 +34,7 @@ use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::io::Reader as ImageReader;
 use resvg::render;
 
-use crate::text::{vl_convert_text_runtime, FONT_DB, USVG_OPTIONS};
+use crate::text::{vl_convert_text_runtime, USVG_OPTIONS};
 
 deno_core::extension!(vl_convert_converter_runtime, ops = [op_get_json_arg]);
 
@@ -1566,10 +1566,6 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
         ..Default::default()
     };
 
-    let font_database = FONT_DB
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
-
     let opts = USVG_OPTIONS
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
@@ -1595,7 +1591,7 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
         }
     }
 
-    Ok(usvg::Tree::from_xmltree(&doc, &opts, &font_database)?)
+    Ok(usvg::Tree::from_xmltree(&doc, &opts)?)
 }
 
 pub fn vegalite_to_url(vl_spec: &serde_json::Value, fullscreen: bool) -> Result<String, AnyError> {

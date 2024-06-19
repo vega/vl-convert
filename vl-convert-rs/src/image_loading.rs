@@ -21,10 +21,10 @@ lazy_static! {
 
 /// Custom image url string resolver that handles downloading remote files
 /// (The default usvg implementation only supports local image files)
-pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn {
+pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
     let default_string_resolver = ImageHrefResolver::default_string_resolver();
 
-    Box::new(move |href: &str, opts: &Options, font_database| {
+    Box::new(move |href: &str, opts: &Options| {
         info!("Resolving image: {href}");
         if href.starts_with("http://") || href.starts_with("https://") {
             // Download image to temporary file with reqwest
@@ -92,7 +92,7 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn {
                     if temp_file.write(bytes.as_ref()).ok().is_some() {
                         let temp_href = temp_file.path();
                         if let Some(temp_href) = temp_href.to_str() {
-                            return default_string_resolver(temp_href, opts, &font_database);
+                            return default_string_resolver(temp_href, opts);
                         }
                     }
                 }
@@ -100,6 +100,6 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn {
         }
 
         // Delegate to default implementation
-        default_string_resolver(href, opts, &font_database)
+        default_string_resolver(href, opts)
     })
 }
