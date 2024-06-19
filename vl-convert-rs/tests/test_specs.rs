@@ -153,10 +153,7 @@ fn load_expected_scenegraph(
     theme: Option<&str>,
 ) -> Option<String> {
     let spec_path = make_expected_scenegraph_path(name, vl_version, theme);
-    let Some(p) = fs::read_to_string(spec_path).ok() else {
-        return None;
-    };
-    Some(p)
+    fs::read_to_string(spec_path).ok()
 }
 
 fn write_failed_svg(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &str) -> PathBuf {
