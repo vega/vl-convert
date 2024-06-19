@@ -17,7 +17,7 @@ codegen-units = 1
 [workspace.dependencies]
 anyhow = "1.0"
 assert_cmd = "2.0"
-clap = { version = "4.4.2", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 
 # Deno crates that correspond to 1.44.4
 deno_core = "0.290.0"
@@ -38,8 +38,8 @@ log = "0.4.20"
 lz-str = "0.2.1"
 png = "0.17.10"
 predicates = "3.0.2"
-pyo3 = { version = "0.20.0", features = ["extension-module", "anyhow", "abi3-py37"] }
-pythonize = "0.20.0"
+pyo3 = { version = "0.21", features = ["extension-module", "anyhow", "abi3-py37"] }
+pythonize = "0.21"
 regex = "1"
 reqwest = { version = "0.11.20", default-features = false, features = ["rustls-tls"] }
 resvg = "0.42.0"
