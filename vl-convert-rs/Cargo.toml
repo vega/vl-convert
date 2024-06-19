@@ -10,34 +10,31 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-# Deno 1.43.3. Before updating deno_runtime/deno_core, see note in DEVELOP.md
-deno_runtime = "0.159.0"
-deno_core = "0.280.0"
-deno_emit = "0.40.2"
-deno_graph = "0.75.1"
-serde_json = {version="1.0.106", features=["preserve_order"]}
-serde = {version="1.0.188", features=["derive"]}
-futures = "0.3.28"
-futures-util = "0.3.28"
-tokio = { version= "1.32.0" }
-reqwest = {version="0.11.20", default-features=false, features=["rustls-tls"]}
-lazy_static = "1.4.0"
-usvg = "0.42.0"
-resvg = "0.42.0"
-tiny-skia = "0.11.4"
-svg2pdf = "0.11.0"
-ttf-parser = "0.21.1"
-
-png = "0.17.10"
-fontdb = {version= "0.18.0", features=["fontconfig"]}
-tempfile = "3.8.0"
-log = "0.4.20"
-env_logger = "0.10.0"
-image = {version= "0.24.7", default-features=false, features=["jpeg"]}
-lz-str = "0.2.1"
-regex = "1"
+deno_runtime = { workspace = true }
+deno_core = { workspace = true }
+deno_emit = { workspace = true }
+deno_graph = { workspace = true }
+serde = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+reqwest = { workspace = true }
+usvg = { workspace = true }
+resvg = { workspace = true }
+tiny-skia = { workspace = true }
+svg2pdf = { workspace = true }
+ttf-parser = { workspace = true }
+png = { workspace = true }
+fontdb = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+image = { workspace = true }
+lz-str = { workspace = true }
+regex = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+lazy_static = { workspace = true }
 
 [dev-dependencies]
-tokio = {version="1.32", features=["macros", "rt"]}
-rstest = "0.18.2"
-dssim = "3.2.4"
+rstest = { workspace = true }
+dssim = { workspace = true }

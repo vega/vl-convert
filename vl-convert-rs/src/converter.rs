@@ -8,7 +8,7 @@ use deno_runtime::deno_core;
 use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8};
-use deno_runtime::permissions::{Permissions, PermissionsContainer};
+use deno_runtime::deno_permissions::{Permissions, PermissionsContainer};
 use deno_runtime::worker::MainWorker;
 use deno_runtime::worker::WorkerOptions;
 use std::collections::hash_map::Entry;

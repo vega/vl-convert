@@ -3,7 +3,8 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
-use pythonize::{depythonize, pythonize};
+use pythonize::{depythonize_bound as depythonize, pythonize};
+use std::borrow::Cow;
 use std::str::FromStr;
 use std::sync::Mutex;
 use vl_convert_rs::converter::{FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlOpts};
@@ -366,7 +367,7 @@ fn vega_to_png(
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, png_data.as_slice()))
+        PyObject::from(PyBytes::new_bound(py, png_data.as_slice()))
     }))
 }
 
@@ -442,7 +443,7 @@ fn vegalite_to_png(
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, png_data.as_slice()))
+        PyObject::from(PyBytes::new_bound(py, png_data.as_slice()))
     }))
 }
 
@@ -498,7 +499,7 @@ fn vega_to_jpeg(
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, jpeg_data.as_slice()))
+        PyObject::from(PyBytes::new_bound(py, jpeg_data.as_slice()))
     }))
 }
 
@@ -574,7 +575,7 @@ fn vegalite_to_jpeg(
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, jpeg_data.as_slice()))
+        PyObject::from(PyBytes::new_bound(py, jpeg_data.as_slice()))
     }))
 }
 
@@ -624,7 +625,7 @@ fn vega_to_pdf(
         }
     };
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, pdf_bytes.as_slice()))
+        PyObject::from(PyBytes::new_bound(py, pdf_bytes.as_slice()))
     }))
 }
 
@@ -695,7 +696,7 @@ fn vegalite_to_pdf(
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
+        PyObject::from(PyBytes::new_bound(py, pdf_data.as_slice()))
     }))
 }
 
@@ -847,7 +848,7 @@ fn vega_to_html(
 fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
     let png_data = vl_convert_rs::converter::svg_to_png(svg, scale.unwrap_or(1.0), ppi)?;
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, png_data.as_slice()))
+        PyObject::from(PyBytes::new_bound(py, png_data.as_slice()))
     }))
 }
 
@@ -864,7 +865,7 @@ fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObj
 fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
     let jpeg_data = vl_convert_rs::converter::svg_to_jpeg(svg, scale.unwrap_or(1.0), quality)?;
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, jpeg_data.as_slice()))
+        PyObject::from(PyBytes::new_bound(py, jpeg_data.as_slice()))
     }))
 }
 
@@ -881,23 +882,23 @@ fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let pdf_data = vl_convert_rs::converter::svg_to_pdf(svg)?; // Always pass 1.0 as scale
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
+        PyObject::from(PyBytes::new_bound(py, pdf_data.as_slice()))
     }))
 }
 
 /// Helper function to parse an input Python string or dict as a serde_json::Value
 fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
     Python::with_gil(|py| -> PyResult<serde_json::Value> {
-        if let Ok(vl_spec) = vl_spec.extract::<&str>(py) {
-            match serde_json::from_str::<serde_json::Value>(vl_spec) {
+        if let Ok(vl_spec) = vl_spec.extract::<Cow<str>>(py) {
+            match serde_json::from_str::<serde_json::Value>(vl_spec.as_ref()) {
                 Ok(vl_spec) => Ok(vl_spec),
                 Err(err) => Err(PyValueError::new_err(format!(
                     "Failed to parse vl_spec string as JSON: {}",
                     err
                 ))),
             }
-        } else if let Ok(vl_spec) = vl_spec.downcast::<PyDict>(py) {
-            match depythonize(vl_spec) {
+        } else if let Ok(vl_spec) = vl_spec.downcast_bound::<PyDict>(py) {
+            match depythonize(vl_spec.as_any().clone()) {
                 Ok(vl_spec) => Ok(vl_spec),
                 Err(err) => Err(PyValueError::new_err(format!(
                     "Failed to parse vl_spec dict as JSON: {}",
@@ -913,8 +914,8 @@ fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
 /// Helper function to parse an input Python string or dict as a FormatLocale
 fn parse_format_locale(v: PyObject) -> PyResult<FormatLocale> {
     Python::with_gil(|py| -> PyResult<FormatLocale> {
-        if let Ok(name) = v.extract::<&str>(py) {
-            let format_locale = FormatLocale::Name(name.to_string());
+        if let Ok(name) = v.extract::<Cow<str>>(py) {
+            let format_locale = FormatLocale::Name(name.as_ref().to_string());
             if format_locale.as_object().is_err() {
                 Err(PyValueError::new_err(
                     format!("Invalid format_locale name: {name}\nSee https://github.com/d3/d3-format/tree/main/locale for available names")
@@ -922,8 +923,8 @@ fn parse_format_locale(v: PyObject) -> PyResult<FormatLocale> {
             } else {
                 Ok(format_locale)
             }
-        } else if let Ok(obj) = v.downcast::<PyDict>(py) {
-            match depythonize(obj) {
+        } else if let Ok(obj) = v.downcast_bound::<PyDict>(py) {
+            match depythonize(obj.as_any().clone()) {
                 Ok(obj) => Ok(FormatLocale::Object(obj)),
                 Err(err) => Err(PyValueError::new_err(format!(
                     "Failed to parse format_locale dict as JSON: {}",
@@ -947,8 +948,8 @@ fn parse_option_format_locale(v: Option<PyObject>) -> PyResult<Option<FormatLoca
 /// Helper function to parse an input Python string or dict as a TimeFormatLocale
 fn parse_time_format_locale(v: PyObject) -> PyResult<TimeFormatLocale> {
     Python::with_gil(|py| -> PyResult<TimeFormatLocale> {
-        if let Ok(name) = v.extract::<&str>(py) {
-            let time_format_locale = TimeFormatLocale::Name(name.to_string());
+        if let Ok(name) = v.extract::<Cow<str>>(py) {
+            let time_format_locale = TimeFormatLocale::Name(name.as_ref().to_string());
             if time_format_locale.as_object().is_err() {
                 Err(PyValueError::new_err(
                     format!("Invalid time_format_locale name: {name}\nSee https://github.com/d3/d3-time-format/tree/main/locale for available names")
@@ -956,8 +957,8 @@ fn parse_time_format_locale(v: PyObject) -> PyResult<TimeFormatLocale> {
             } else {
                 Ok(time_format_locale)
             }
-        } else if let Ok(obj) = v.downcast::<PyDict>(py) {
-            match depythonize(obj) {
+        } else if let Ok(obj) = v.downcast_bound::<PyDict>(py) {
+            match depythonize(obj.as_any().clone()) {
                 Ok(obj) => Ok(TimeFormatLocale::Object(obj)),
                 Err(err) => Err(PyValueError::new_err(format!(
                     "Failed to parse time_format_locale dict as JSON: {}",
@@ -1138,7 +1139,7 @@ fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyRes
 
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
-fn vl_convert(_py: Python, m: &PyModule) -> PyResult<()> {
+fn vl_convert(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;
@@ -1173,8 +1174,9 @@ fn warn_if_scale_not_one_for_pdf(scale: Option<f32>) -> PyResult<()> {
         if scale != 1.0 {
             Python::with_gil(|py| -> PyResult<()> {
                 let warning_message = "The scale argument is no longer supported for PDF export.";
-                let deprecation_warning = py.get_type::<pyo3::exceptions::PyDeprecationWarning>();
-                PyErr::warn(py, deprecation_warning, warning_message, 1)?;
+                let deprecation_warning =
+                    py.get_type_bound::<pyo3::exceptions::PyDeprecationWarning>();
+                PyErr::warn_bound(py, &deprecation_warning, warning_message, 1)?;
                 Ok(())
             })?;
         }

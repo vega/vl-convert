@@ -18,10 +18,6 @@ const VL_PATHS: &[(&str, &str)] = &[
         "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
     ),
     (
-        "5.11",
-        "/pin/vega-lite@v5.11.1-Q5Jhmb2acmWm03IObXvn/mode=imports,min/optimized/vega-lite.js",
-    ),
-    (
         "5.12",
         "/pin/vega-lite@v5.12.0-ujK64YZaLHcwzRN5lx1E/mode=imports,min/optimized/vega-lite.js",
     ),
@@ -53,9 +49,13 @@ const VL_PATHS: &[(&str, &str)] = &[
         "5.18",
         "/pin/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/mode=imports,min/optimized/vega-lite.js",
     ),
+    (
+        "5.19",
+        "/pin/vega-lite@v5.19.0-4m5nwXbwdKW9Bc7adV02/mode=imports,min/optimized/vega-lite.js",
+    ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
-const VEGA_PATH: &str = "/pin/vega@v5.29.0-gABgAlTvpyWuLs0vmpeG/mode=imports,min/optimized/vega.js";
+const VEGA_PATH: &str = "/pin/vega@v5.30.0-fYDVG3pUN16BiGmbVNdw/mode=imports,min/optimized/vega.js";
 const VEGA_THEMES_PATH: &str =
     "/pin/vega-themes@v2.14.0-RvUmNETlVH2y3yQM1y36/mode=imports,min/optimized/vega-themes.js";
 const VEGA_EMBED_PATH: &str =
