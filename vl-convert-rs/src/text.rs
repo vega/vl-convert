@@ -189,7 +189,7 @@ pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
         let base_font_id = exclude_fonts[0];
 
         // Prevent fallback to fonts that won't work, like LastResort on macOS
-        let forbidden_fallback = vec!["LastResort"];
+        let forbidden_fallback = ["LastResort"];
 
         // Iterate over fonts and check if any of them support the specified char.
         for face in fontdb.faces() {
