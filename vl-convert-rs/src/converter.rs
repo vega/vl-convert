@@ -28,13 +28,14 @@ use crate::anyhow::anyhow;
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
 use png::{PixelDimensions, Unit};
+use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
-use usvg::{TreeParsing, TreeTextToPath};
 
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::io::Reader as ImageReader;
+use resvg::render;
 
-use crate::text::{vl_convert_text_runtime, FONT_DB, USVG_OPTIONS};
+use crate::text::{vl_convert_text_runtime, USVG_OPTIONS};
 
 deno_core::extension!(vl_convert_converter_runtime, ops = [op_get_json_arg]);
 
@@ -1291,22 +1292,18 @@ impl VlConverter {
         &mut self,
         vg_spec: serde_json::Value,
         vg_opts: VgOpts,
-        scale: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
-        let scale = scale.unwrap_or(1.0);
         let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        svg_to_pdf(&svg, scale)
+        svg_to_pdf(&svg)
     }
 
     pub async fn vegalite_to_pdf(
         &mut self,
         vl_spec: serde_json::Value,
         vl_opts: VlOpts,
-        scale: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
-        let scale = scale.unwrap_or(1.0);
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        svg_to_pdf(&svg, scale)
+        svg_to_pdf(&svg)
     }
 
     pub async fn get_vegaembed_bundle(
@@ -1504,30 +1501,23 @@ pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, An
     // default ppi to 72
     let ppi = ppi.unwrap_or(72.0);
     let scale = scale * ppi / 72.0;
-    let font_database = FONT_DB
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
 
     // catch_unwind so that we don't poison Mutexes
     // if usvg/resvg panics
     let response = panic::catch_unwind(|| {
-        let mut rtree = match parse_svg(svg) {
+        let rtree = match parse_svg(svg) {
             Ok(rtree) => rtree,
             Err(err) => return Err(err),
         };
-        rtree.convert_text(&font_database);
-
-        let rtree = resvg::Tree::from_usvg(&rtree);
 
         let mut pixmap = tiny_skia::Pixmap::new(
-            (rtree.size.width() * scale) as u32,
-            (rtree.size.height() * scale) as u32,
+            (rtree.size().width() * scale) as u32,
+            (rtree.size().height() * scale) as u32,
         )
         .unwrap();
 
         let transform = tiny_skia::Transform::from_scale(scale, scale);
-        resvg::Tree::render(&rtree, transform, &mut pixmap.as_mut());
-
+        render(&rtree, transform, &mut pixmap.as_mut());
         Ok(encode_png(pixmap, ppi))
     });
     match response {
@@ -1556,14 +1546,10 @@ pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>
     Ok(jpeg_bytes)
 }
 
-pub fn svg_to_pdf(svg: &str, scale: f32) -> Result<Vec<u8>, AnyError> {
-    // Load system fonts
-    let font_db = FONT_DB
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire fontdb lock: {}", err.to_string()))?;
-
+pub fn svg_to_pdf(svg: &str) -> Result<Vec<u8>, AnyError> {
     let tree = parse_svg(svg)?;
-    vl_convert_pdf::svg_to_pdf(&tree, &font_db, scale)
+    let pdf = svg2pdf::to_pdf(&tree, ConversionOptions::default(), PageOptions::default());
+    Ok(pdf)
 }
 
 /// Helper to parse svg string to usvg Tree with more helpful error messages

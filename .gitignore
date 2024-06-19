@@ -17,3 +17,5 @@ __pycache__/
 .pixi/
 pixi.lock
 pixi.toml
+
+scratch/

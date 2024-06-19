@@ -2,7 +2,7 @@ use log::{error, info};
 use reqwest::{Client, StatusCode};
 use std::io::Write;
 use tokio::task;
-use usvg::{ImageHrefResolver, ImageKind, Options};
+use usvg::{ImageHrefResolver, Options};
 
 static VL_CONVERT_USER_AGENT: &str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
@@ -19,14 +19,11 @@ lazy_static! {
         .expect("Failed to construct reqwest client");
 }
 
-/// A shorthand for [ImageHrefResolver]'s string function.
-/// This isn't exposed publicly by usvg, so copied here
-pub type ImageHrefStringResolverFn = Box<dyn Fn(&str, &Options) -> Option<ImageKind> + Send + Sync>;
-
 /// Custom image url string resolver that handles downloading remote files
 /// (The default usvg implementation only supports local image files)
-pub fn custom_string_resolver() -> ImageHrefStringResolverFn {
+pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
     let default_string_resolver = ImageHrefResolver::default_string_resolver();
+
     Box::new(move |href: &str, opts: &Options| {
         info!("Resolving image: {href}");
         if href.starts_with("http://") || href.starts_with("https://") {
