@@ -1,0 +1,159 @@
+{
+  "config": {
+    "view": {"continuousWidth": 300, "continuousHeight": 300},
+    "legend": {"layout": {"expr": "{\"bottom\": {\"anchor\": \"middle\"}}"}},
+    "locale": {
+      "number": {
+        "decimal": ",",
+        "thousands": ".",
+        "grouping": [3],
+        "currency": ["", " €"]
+      }
+    }
+  },
+  "layer": [
+    {
+      "mark": {"type": "bar"},
+      "encoding": {
+        "color": {
+          "field": "Sexo",
+          "legend": {
+            "labelFontSize": 12,
+            "labelLimit": 0,
+            "labelOffset": 2,
+            "offset": 15,
+            "orient": "bottom",
+            "symbolSize": 50
+          },
+          "scale": {"range": ["#B07BD7", "#B1D6AF", "#BF9000"]},
+          "sort": null,
+          "title": null,
+          "type": "nominal"
+        },
+        "xOffset": {"field": "Sexo", "sort": null, "type": "nominal"},
+        "y": {
+          "axis": {
+            "domain": false,
+            "labelAngle": 0,
+            "labelExpr": "split(datum.label, '\\n')",
+            "labelFontSize": 12,
+            "labelLimit": 0,
+            "labelPadding": 8,
+            "ticks": false,
+            "titleFontSize": 12,
+            "titlePadding": 8
+          },
+          "field": "value",
+          "title": "Porcentaje",
+          "type": "quantitative"
+        }
+      },
+      "transform": [{"filter": "datum.Sexo != 'Diferencia'"}]
+    },
+    {
+      "mark": {"type": "line", "strokeWidth": 3},
+      "encoding": {
+        "color": {
+          "field": "Sexo",
+          "legend": {
+            "labelFontSize": 12,
+            "labelLimit": 0,
+            "labelOffset": 2,
+            "offset": 15,
+            "orient": "bottom",
+            "symbolSize": 50
+          },
+          "scale": {"range": ["#B07BD7", "#B1D6AF", "#BF9000"]},
+          "sort": null,
+          "title": null,
+          "type": "nominal"
+        },
+        "y": {
+          "axis": {
+            "domain": false,
+            "labelExpr": "split(datum.label, '\\n')",
+            "labelFontSize": 12,
+            "labelLimit": 0,
+            "labelPadding": 8,
+            "ticks": false,
+            "titleFontSize": 12,
+            "titlePadding": 8
+          },
+          "field": "value",
+          "title": "Brecha de género",
+          "type": "quantitative"
+        }
+      },
+      "transform": [{"filter": "datum.Sexo == 'Diferencia'"}]
+    },
+    {
+      "mark": {"type": "text", "dy": -11, "fontSize": 10.666666666666666},
+      "encoding": {
+        "text": {"field": "value", "format": ".1f", "type": "quantitative"},
+        "xOffset": {"field": "Sexo", "sort": null, "type": "nominal"},
+        "y": {
+          "axis": null,
+          "field": "value",
+          "title": null,
+          "type": "quantitative"
+        }
+      },
+      "transform": [{"filter": "datum.Sexo != 'Diferencia'"}]
+    }
+  ],
+  "data": {"name": "data-d9816b078d38723c826db8427f81174e"},
+  "encoding": {
+    "x": {
+      "axis": {
+        "domain": false,
+        "labelAngle": 0,
+        "labelExpr": "split(datum.label, '\\n')",
+        "labelFontSize": 12,
+        "labelLimit": 0,
+        "labelPadding": 8,
+        "ticks": false,
+        "titleFontSize": 12,
+        "titlePadding": 8
+      },
+      "field": "Categoría",
+      "sort": null,
+      "title": null,
+      "type": "nominal"
+    }
+  },
+  "height": 250,
+  "resolve": {"scale": {"y": "independent"}},
+  "width": 500,
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.17.0.json",
+  "datasets": {
+    "data-d9816b078d38723c826db8427f81174e": [
+      {"Categoría": "Mala", "Sexo": "Mujeres", "value": 4.888938288354638},
+      {"Categoría": "Regular", "Sexo": "Mujeres", "value": 17.20105746322346},
+      {"Categoría": "Buena", "Sexo": "Mujeres", "value": 47.73831733721285},
+      {"Categoría": "Muy buena", "Sexo": "Mujeres", "value": 22.48178472726535},
+      {"Categoría": "Excelente", "Sexo": "Mujeres", "value": 7.689902183943703},
+      {"Categoría": "Mala", "Sexo": "Hombres", "value": 3.290678903385191},
+      {"Categoría": "Regular", "Sexo": "Hombres", "value": 13.19356745004503},
+      {"Categoría": "Buena", "Sexo": "Hombres", "value": 45.60874073590572},
+      {"Categoría": "Muy buena", "Sexo": "Hombres", "value": 26.48511010933306},
+      {"Categoría": "Excelente", "Sexo": "Hombres", "value": 11.421902801331},
+      {"Categoría": "Mala", "Sexo": "Diferencia", "value": 1.598259384969446},
+      {
+        "Categoría": "Regular",
+        "Sexo": "Diferencia",
+        "value": 4.007490013178437
+      },
+      {"Categoría": "Buena", "Sexo": "Diferencia", "value": 2.129576601307129},
+      {
+        "Categoría": "Muy buena",
+        "Sexo": "Diferencia",
+        "value": -4.003325382067715
+      },
+      {
+        "Categoría": "Excelente",
+        "Sexo": "Diferencia",
+        "value": -3.732000617387293
+      }
+    ]
+  }
+}
