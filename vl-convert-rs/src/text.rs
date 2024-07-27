@@ -333,6 +333,11 @@ pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, AnyError> {
         Err(err) => bail!("Failed to deserialize text info: {}", err.to_string()),
     };
 
+    // Return width zero for text with non-positive size
+    if text_info.size <= 0.0 {
+        return Ok(0.0);
+    }
+
     // Return width zero for empty strings and missing text
     match &text_info.text {
         Some(Value::String(text)) => {

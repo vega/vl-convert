@@ -323,7 +323,7 @@ import('{url}').then((sg) => {{
 
         // weight may be string like "bold" or number like 600.
         // Convert number form to string
-        let weight = String(item.fontWeight);
+        let weight = item.fontWeight == null? null: String(item.fontWeight);
         let size = sg.fontSize(item);
         let family = sg.fontFamily(item);
 
@@ -332,7 +332,7 @@ import('{url}').then((sg) => {{
         }}, null, 2);
 
         let fullWidth = op_text_width(text_info);
-        return Math.min(fullWidth, item.limit ?? fullWidth)
+        return item.limit > 0? Math.min(fullWidth, item.limit): fullWidth
     }};
 }})
 "#,
