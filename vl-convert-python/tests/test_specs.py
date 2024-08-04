@@ -72,7 +72,7 @@ def load_expected_png(name, vl_version, theme=None):
 @pytest.mark.parametrize("name", ["circle_binned", "seattle-weather", "stacked_bar_h"])
 @pytest.mark.parametrize(
     "vl_version",
-    ["v5_8", "v5_12", "v5_13", "v5_14", "v5_15", "v5_16", "v5_17", "v5_18", "v5_19"],
+    ["v5_8", "v5_13", "v5_14", "v5_15", "v5_16", "v5_17", "v5_18", "v5_19", "v5_20"],
 )
 @pytest.mark.parametrize("as_dict", [False, True])
 def test_vega(name, vl_version, as_dict):
@@ -96,7 +96,6 @@ def test_vega(name, vl_version, as_dict):
     "vl_version",
     [
         "5.8",
-        "5.12",
         "5.13",
         "5.14",
         "5.15",
@@ -104,6 +103,7 @@ def test_vega(name, vl_version, as_dict):
         "5.17",
         "5.18",
         "5.19",
+        "5.20",
     ],
 )
 def test_vegalite_to_html_no_bundle(name, vl_version):
@@ -132,7 +132,6 @@ def test_vegalite_to_html_no_bundle(name, vl_version):
     "vl_version",
     [
         "5.8",
-        "5.12",
         "5.13",
         "5.14",
         "5.15",
@@ -140,6 +139,7 @@ def test_vegalite_to_html_no_bundle(name, vl_version):
         "5.17",
         "5.18",
         "5.19",
+        "5.20",
     ],
 )
 def test_vegalite_to_html_bundle(name, vl_version):

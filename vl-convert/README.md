@@ -56,7 +56,7 @@ Usage: vl-convert vl2vg [OPTIONS] --input <INPUT> --output <OUTPUT>
 Options:
   -i, --input <INPUT>            Path to input Vega-Lite file
   -o, --output <OUTPUT>          Path to output Vega file to be created
-  -v, --vl-version <VL_VERSION>  Vega-Lite Version. One of 4.17, 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16 [default: 5.16]
+  -v, --vl-version <VL_VERSION>  Vega-Lite Version. One of 4.17, 5.8, 5.9, 5.13, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20 [default: 5.20]
   -t, --theme <THEME>            Named theme provided by the vegaThemes package (e.g. "dark")
   -c, --config <CONFIG>          Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
   -p, --pretty                   Pretty-print JSON in output file
@@ -86,7 +86,7 @@ Options:
   -o, --output <OUTPUT>
           Path to output SVG file to be created
   -v, --vl-version <VL_VERSION>
-          Vega-Lite Version. One of 4.17, 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16 [default: 5.16]
+          Vega-Lite Version. One of 4.17, 5.8, 5.13, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20 [default: 5.20]
       --theme <THEME>
           Named theme provided by the vegaThemes package (e.g. "dark")
   -c, --config <CONFIG>
@@ -127,7 +127,7 @@ Options:
   -o, --output <OUTPUT>
           Path to output PNG file to be created
   -v, --vl-version <VL_VERSION>
-          Vega-Lite Version. One of 4.17, 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16 [default: 5.16]
+          Vega-Lite Version. One of 4.17, 5.8, 5.13, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20 [default: 5.20]
       --theme <THEME>
           Named theme provided by the vegaThemes package (e.g. "dark")
   -c, --config <CONFIG>
@@ -171,7 +171,7 @@ Options:
   -o, --output <OUTPUT>
           Path to output PDF file to be created
   -v, --vl-version <VL_VERSION>
-          Vega-Lite Version. One of 4.17, 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16 [default: 5.16]
+          Vega-Lite Version. One of 4.17, 5.8, 5.13, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20 [default: 5.20]
       --theme <THEME>
           Named theme provided by the vegaThemes package (e.g. "dark")
   -c, --config <CONFIG>
@@ -230,7 +230,7 @@ Options:
   -o, --output <OUTPUT>
           Path to output HTML file to be created
   -v, --vl-version <VL_VERSION>
-          Vega-Lite Version. One of 4.17, 5.8, 5.9, 5.10, 5.11, 5.12, 5.13, 5.14, 5.15, 5.16 [default: 5.16]
+          Vega-Lite Version. One of 4.17, 5.8, 5.13, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20 [default: 5.20]
       --theme <THEME>
           Named theme provided by the vegaThemes package (e.g. "dark")
   -c, --config <CONFIG>
