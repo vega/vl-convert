@@ -1,6 +1,6 @@
 [package]
 name = "vl-convert-vendor"
-version = "1.5.1"
+version = "1.6.0"
 edition = "2021"
 license = "BSD-3-Clause"
 readme = "README.md"
