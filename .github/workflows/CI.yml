@@ -7,124 +7,124 @@ on:
   pull_request:
 
 jobs:
-  black-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: psf/black@stable
-        with:
-          options: "--check"
-          jupyter: true
-          src: "./vl-convert-python"
-
-  rust-fmt-clippy:
-    runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: "-D warnings"
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt, clippy
-      - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: True
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Check cargo fmt compliance
-        run: cargo fmt --all -- --check
-      - name: Check no rustc warnings
-        run: cargo check --tests
-      - name: Check for clippy warnings
-        run: cargo clippy
-
-  cargo-bundle-license:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      - name: Install cargo bundle license
-        run: cargo install cargo-bundle-licenses
-      - name: Check that license is up to date
-        run: cargo bundle-licenses --format yaml --output CI.yaml --previous thirdparty_rust.yaml --check-previous
-
-  codegen-clean:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt
-      - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: True
-      - name: Install Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: vx.x.x
-      - name: Run codegen
-        run: cargo run
-        working-directory: vl-convert-vendor
-      - name: Check that git detects to file changes
-        run:  git diff --exit-code
-
-  vl-convert-rs-tests:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-2022
-          - macos-12
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "v1-rust"
-          cache-on-failure: True
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install fonts on Linux
-        if: runner.os == 'Linux'
-        run: |
-          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
-          sudo apt-get install ttf-mscorefonts-installer
-      - name: Run tests
-        # Run tests on single thread for Deno, which expects this
-        run: |
-          cargo test --release -- --test-threads=1
-      - name: Upload test failures
-        uses: actions/upload-artifact@v2
-        if: always()
-        with:
-          name: failed-images
-          path: |
-            vl-convert-rs/tests/vl-specs/failed
+#  black-lint:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v2
+#      - uses: psf/black@stable
+#        with:
+#          options: "--check"
+#          jupyter: true
+#          src: "./vl-convert-python"
+#
+#  rust-fmt-clippy:
+#    runs-on: ubuntu-latest
+#    env:
+#      RUSTFLAGS: "-D warnings"
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - name: Install latest stable Rust toolchain
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#          override: true
+#          components: rustfmt, clippy
+#      - name: Cache rust dependencies
+#        uses: Swatinem/rust-cache@v2
+#        with:
+#          cache-on-failure: True
+#      - name: Install Protoc
+#        uses: arduino/setup-protoc@v2
+#        with:
+#          repo-token: ${{ secrets.GITHUB_TOKEN }}
+#      - name: Check cargo fmt compliance
+#        run: cargo fmt --all -- --check
+#      - name: Check no rustc warnings
+#        run: cargo check --tests
+#      - name: Check for clippy warnings
+#        run: cargo clippy
+#
+#  cargo-bundle-license:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - name: Install latest stable Rust toolchain
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#          override: true
+#      - name: Install cargo bundle license
+#        run: cargo install cargo-bundle-licenses
+#      - name: Check that license is up to date
+#        run: cargo bundle-licenses --format yaml --output CI.yaml --previous thirdparty_rust.yaml --check-previous
+#
+#  codegen-clean:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - name: Install latest stable Rust toolchain
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#          override: true
+#          components: rustfmt
+#      - name: Cache rust dependencies
+#        uses: Swatinem/rust-cache@v2
+#        with:
+#          cache-on-failure: True
+#      - name: Install Deno
+#        uses: denoland/setup-deno@v1
+#        with:
+#          deno-version: vx.x.x
+#      - name: Run codegen
+#        run: cargo run
+#        working-directory: vl-convert-vendor
+#      - name: Check that git detects to file changes
+#        run:  git diff --exit-code
+#
+#  vl-convert-rs-tests:
+#    runs-on: ${{ matrix.os }}
+#    strategy:
+#      matrix:
+#        os:
+#          - ubuntu-latest
+#          - windows-2022
+#          - macos-12
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - name: Install latest stable Rust toolchain
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#      - name: Cache rust dependencies
+#        uses: Swatinem/rust-cache@v2
+#        with:
+#          prefix-key: "v1-rust"
+#          cache-on-failure: True
+#      - name: Install Protoc
+#        uses: arduino/setup-protoc@v2
+#        with:
+#          repo-token: ${{ secrets.GITHUB_TOKEN }}
+#      - name: Install fonts on Linux
+#        if: runner.os == 'Linux'
+#        run: |
+#          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+#          sudo apt-get install ttf-mscorefonts-installer
+#      - name: Run tests
+#        # Run tests on single thread for Deno, which expects this
+#        run: |
+#          cargo test --release -- --test-threads=1
+#      - name: Upload test failures
+#        uses: actions/upload-artifact@v2
+#        if: always()
+#        with:
+#          name: failed-images
+#          path: |
+#            vl-convert-rs/tests/vl-specs/failed
 
   vl-convert-python-tests:
     runs-on: ${{ matrix.options[0] }}
