@@ -204,7 +204,7 @@ def get_time_format_locale(name: TimeFormatLocaleName) -> dict[str, Any]:
     """
     ...
 
-def javascript_bundle(snippet: str, vl_version: str | None) -> str:
+def javascript_bundle(snippet: str, vl_version: str | None = None) -> str:
     """
     Create a JavaScript bundle containing the Vega Embed, Vega-Lite, and Vega libraries.
 
@@ -247,7 +247,9 @@ def register_font_directory(font_dir: str) -> bytes:
     """
     ...
 
-def svg_to_jpeg(svg: str, scale: float, quality: int | None) -> bytes:
+def svg_to_jpeg(
+    svg: str, scale: float | None = None, quality: int | None = None
+) -> bytes:
     """
     Convert an SVG image string to JPEG image data.
 
@@ -266,7 +268,7 @@ def svg_to_jpeg(svg: str, scale: float, quality: int | None) -> bytes:
     """
     ...
 
-def svg_to_pdf(svg: str, scale: float) -> bytes:
+def svg_to_pdf(svg: str, scale: float | None = None) -> bytes:
     """
     Convert an SVG image string to PDF document data.
 
@@ -283,7 +285,7 @@ def svg_to_pdf(svg: str, scale: float) -> bytes:
     """
     ...
 
-def svg_to_png(svg: str, scale: float, ppi: float | None) -> bytes:
+def svg_to_png(svg: str, scale: float | None = None, ppi: float | None = None) -> bytes:
     """
     Convert an SVG image string to PNG image data.
 
@@ -304,10 +306,10 @@ def svg_to_png(svg: str, scale: float, ppi: float | None) -> bytes:
 
 def vega_to_html(
     vg_spec: VlSpec,
-    bundle: bool | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
-    renderer: Renderer | None,
+    bundle: bool | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
+    renderer: Renderer | None = None,
 ) -> str:
     """
     Convert a Vega spec to a self-contained HTML document.
@@ -335,11 +337,11 @@ def vega_to_html(
 
 def vega_to_jpeg(
     vg_spec: VlSpec,
-    scale: float,
-    quality: int | None,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    scale: float | None = None,
+    quality: int | None = None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to JPEG image data.
@@ -368,10 +370,10 @@ def vega_to_jpeg(
 
 def vega_to_pdf(
     vg_spec: VlSpec,
-    scale: float,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    scale: float | None = None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to PDF format.
@@ -398,11 +400,11 @@ def vega_to_pdf(
 
 def vega_to_png(
     vg_spec: VlSpec,
-    scale: float,
-    ppi: float | None,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    scale: float | None = None,
+    ppi: float | None = None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to PNG image data.
@@ -431,9 +433,9 @@ def vega_to_png(
 
 def vega_to_scenegraph(
     vg_spec: VlSpec,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> dict[str, Any]:
     """
     Convert a Vega spec to a Vega Scenegraph.
@@ -458,9 +460,9 @@ def vega_to_scenegraph(
 
 def vega_to_svg(
     vg_spec: VlSpec,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> str:
     """
     Convert a Vega spec to an SVG image string.
@@ -483,7 +485,7 @@ def vega_to_svg(
     """
     ...
 
-def vega_to_url(vg_spec: VlSpec, fullscreen: bool | None) -> str:
+def vega_to_url(vg_spec: VlSpec, fullscreen: bool | None = None) -> str:
     """
     Convert a Vega spec to a URL that opens the chart in the Vega editor.
 
@@ -502,13 +504,13 @@ def vega_to_url(vg_spec: VlSpec, fullscreen: bool | None) -> str:
 
 def vegalite_to_html(
     vl_spec: VlSpec,
-    vl_version: str | None,
-    bundle: bool | None,
-    config: dict[str, Any] | None,
-    theme: VegaThemes | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
-    renderer: Renderer | None,
+    vl_version: str | None = None,
+    bundle: bool | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
+    renderer: Renderer | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to self-contained HTML document using a particular version of the Vega-Lite JavaScript library.
@@ -543,15 +545,15 @@ def vegalite_to_html(
 
 def vegalite_to_jpeg(
     vl_spec: VlSpec,
-    vl_version: str | None,
-    scale: float,
-    quality: int | None,
-    config: dict[str, Any] | None,
-    theme: VegaThemes | None,
-    show_warnings: bool | None,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    vl_version: str | None = None,
+    scale: float | None = None,
+    quality: int | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    show_warnings: bool | None = None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to JPEG image data using a particular version of the Vega-Lite JavaScript library.
@@ -589,13 +591,13 @@ def vegalite_to_jpeg(
 
 def vegalite_to_pdf(
     vl_spec: VlSpec,
-    vl_version: str | None,
-    scale: float,
-    config: dict[str, Any] | None,
-    theme: VegaThemes | None,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    vl_version: str | None = None,
+    scale: float | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to PDF image data using a particular version of the Vega-Lite JavaScript library.
@@ -629,15 +631,15 @@ def vegalite_to_pdf(
 
 def vegalite_to_png(
     vl_spec: VlSpec,
-    vl_version: str | None,
-    scale: float,
-    ppi: float | None,
-    config: dict[str, Any] | None,
-    theme: VegaThemes | None,
-    show_warnings: bool | None,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    vl_version: str | None = None,
+    scale: float | None = None,
+    ppi: float | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    show_warnings: bool | None = None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to PNG image data using a particular version of the Vega-Lite JavaScript library.
@@ -675,13 +677,13 @@ def vegalite_to_png(
 
 def vegalite_to_scenegraph(
     vl_spec: VlSpec,
-    vl_version: str | None,
-    config: dict[str, Any] | None,
-    theme: VegaThemes | None,
-    show_warnings: bool | None,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    vl_version: str | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    show_warnings: bool | None = None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to a Vega Scenegraph using a particular version of the Vega-Lite JavaScript library.
@@ -715,13 +717,13 @@ def vegalite_to_scenegraph(
 
 def vegalite_to_svg(
     vl_spec: VlSpec,
-    vl_version: str | None,
-    config: dict[str, Any] | None,
-    theme: VegaThemes | None,
-    show_warnings: bool | None,
-    allowed_base_urls: list[str] | None,
-    format_locale: FormatLocale | None,
-    time_format_locale: TimeFormatLocale | None,
+    vl_version: str | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    show_warnings: bool | None = None,
+    allowed_base_urls: list[str] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to an SVG image string using a particular version of the Vega-Lite JavaScript library.
@@ -753,7 +755,7 @@ def vegalite_to_svg(
     """
     ...
 
-def vegalite_to_url(vl_spec: VlSpec, fullscreen: bool | None) -> str:
+def vegalite_to_url(vl_spec: VlSpec, fullscreen: bool | None = None) -> str:
     """
     Convert a Vega-Lite spec to a URL that opens the chart in the Vega editor.
 
@@ -772,10 +774,10 @@ def vegalite_to_url(vl_spec: VlSpec, fullscreen: bool | None) -> str:
 
 def vegalite_to_vega(
     vl_spec: VlSpec,
-    vl_version: str | None,
-    config: dict[str, Any] | None,
-    theme: VegaThemes | None,
-    show_warnings: bool | None,
+    vl_version: str | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    show_warnings: bool | None = None,
 ) -> dict[str, Any]:
     """
     Convert a Vega-Lite spec to a Vega spec using a particular version of the Vega-Lite JavaScript library.
