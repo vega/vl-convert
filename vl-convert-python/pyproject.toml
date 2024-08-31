@@ -13,3 +13,72 @@ classifiers = [
 
 [tool.maturin]
 sdist-include = ["*_thirdparty.*"]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 88
+indent-width = 4
+exclude = []
+include = ["vl_convert.pyi"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = true
+line-ending = "lf"
+# https://docs.astral.sh/ruff/formatter/#docstring-formatting
+docstring-code-format = true
+docstring-code-line-length = 88
+
+[tool.ruff.lint]
+# https://docs.astral.sh/ruff/preview/
+preview = true
+
+# https://docs.astral.sh/ruff/settings/#lint_extend-safe-fixes
+extend-safe-fixes = [
+    # from __future__ import annotations #
+    # ---------------------------------- #
+    "UP006",
+    "UP007",
+    "UP008",
+    "TCH",
+    # unsorted-dunder-all
+    "RUF022",
+    # pydocstyle #
+    # ---------- #
+    # fits-on-one-line
+    "D200",
+    # escape-sequence-in-docstring
+    "D301",
+    # ends-in-period
+    "D400",
+]
+extend-select = [
+    "ANN",
+    "D",
+    "D213",
+    "D400",
+    "E",
+    "F",
+    "FA",
+    "I001",
+    "RUF",
+    "TCH",
+    "TID",
+    "UP",
+    "W", 
+]
+ignore = [
+    # indent-with-spaces
+    "D206",
+    # multi-line-summary-first-line ((D213) is the opposite of this)
+    "D212", 
+    # Line too long
+    "E501",
+]
+pydocstyle.convention = "numpy"
+isort.split-on-trailing-comma = false
+
+[tool.pyright]
+pythonPlatform="All"
+pythonVersion="3.8"
