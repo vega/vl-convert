@@ -1,7 +1,13 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Any, Literal, TypeAlias
+    import sys
+    from typing import Any, Literal
+
+    if sys.version_info >= (3, 10):
+        from typing import TypeAlias
+    else:
+        from typing_extensions import TypeAlias
 
     FormatLocaleName: TypeAlias = Literal[
         "ar-001",
@@ -232,7 +238,7 @@ def javascript_bundle(snippet: str, vl_version: str | None = None) -> str:
     """
     ...
 
-def register_font_directory(font_dir: str) -> bytes:
+def register_font_directory(font_dir: str) -> None:
     """
     Register a directory of fonts for use in subsequent conversions.
 
@@ -243,7 +249,7 @@ def register_font_directory(font_dir: str) -> bytes:
 
     Returns
     -------
-    PNG image data.
+    None
     """
     ...
 
@@ -312,7 +318,7 @@ def vega_to_html(
     renderer: Renderer | None = None,
 ) -> str:
     """
-    Convert a Vega spec to a self-contained HTML document.
+    Convert a Vega spec to an HTML document, optionally bundling dependencies.
 
     Parameters
     ----------
@@ -454,7 +460,7 @@ def vega_to_scenegraph(
 
     Returns
     -------
-    scenegraph.
+    scenegraph dictionary
     """
     ...
 
@@ -513,7 +519,7 @@ def vegalite_to_html(
     renderer: Renderer | None = None,
 ) -> str:
     """
-    Convert a Vega-Lite spec to self-contained HTML document using a particular version of the Vega-Lite JavaScript library.
+    Convert a Vega-Lite spec to an HTML document, optionally bundling dependencies.
 
     Parameters
     ----------
@@ -684,7 +690,7 @@ def vegalite_to_scenegraph(
     allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
-) -> str:
+) -> dict[str, Any]:
     """
     Convert a Vega-Lite spec to a Vega Scenegraph using a particular version of the Vega-Lite JavaScript library.
 
@@ -711,7 +717,7 @@ def vegalite_to_scenegraph(
 
     Returns
     -------
-    SVG image string.
+    scenegraph dictionary
     """
     ...
 
