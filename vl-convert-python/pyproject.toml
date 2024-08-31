@@ -15,7 +15,7 @@ classifiers = [
 sdist-include = ["*_thirdparty.*"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py38"
 line-length = 88
 indent-width = 4
 exclude = []
@@ -78,3 +78,7 @@ ignore = [
 ]
 pydocstyle.convention = "numpy"
 isort.split-on-trailing-comma = false
+
+[tool.pyright]
+pythonPlatform="All"
+pythonVersion="3.8"
