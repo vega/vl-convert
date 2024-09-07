@@ -13,7 +13,7 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           pixi-version: v0.28.2
-          cache: true
+
       - uses: actions/checkout@v2
       - name: Check cargo fmt compliance
         run: pixi run fmt-py-check
@@ -26,7 +26,7 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           pixi-version: v0.28.2
-          cache: true
+
       - name: Check out repository code
         uses: actions/checkout@v2
       - name: Cache rust dependencies
@@ -46,7 +46,7 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           pixi-version: v0.28.2
-          cache: true
+
       - name: Check out repository code
         uses: actions/checkout@v2
       - name: Check that license is up to date
@@ -60,7 +60,7 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           pixi-version: v0.28.2
-          cache: true
+
       - name: Check out repository code
         uses: actions/checkout@v2
       - name: Cache rust dependencies
@@ -84,7 +84,7 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           pixi-version: v0.28.2
-          cache: true
+
       - name: Check out repository code
         uses: actions/checkout@v2
       - name: Cache rust dependencies
@@ -124,7 +124,7 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           pixi-version: v0.28.2
-          cache: true
+
       - name: Check out repository code
         uses: actions/checkout@v2
       - name: Cache rust dependencies
