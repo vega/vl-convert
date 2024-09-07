@@ -10,11 +10,11 @@ jobs:
   python-fmt:
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
       - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           pixi-version: v0.28.2
-
-      - uses: actions/checkout@v2
       - name: Check cargo fmt compliance
         run: pixi run fmt-py-check
 
@@ -132,6 +132,8 @@ jobs:
         run: |
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
+      - name: Build package
+        run: pixi run dev-py
       - name: Run tests
         run: pixi run test-py
 
