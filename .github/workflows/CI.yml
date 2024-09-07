@@ -101,9 +101,10 @@ jobs:
           ldd --version
           ldd $(which rustc) | grep libc
       - name: Run tests
-        # Run tests on single thread for Deno, which expects this
-        run: |
-          pixi run test-rs
+        if: runner.os == 'Linux'
+        env:
+          RUSTFLAGS: "-C target-feature=-crt-static -C link-arg=-Wl,--no-as-needed -C link-arg=-ldl -C link-arg=-lrt"
+        run: pixi run test-rs
       - name: Upload test failures
         uses: actions/upload-artifact@v2
         if: always()
