@@ -1,0 +1,57 @@
+[project]
+name = "vl-convert"
+# This version is not used for publishing packages and doesn't need to be kept in sync
+version = "0.0.1"
+description = "Dependency free static image export for Vega and Vega-Lite"
+authors = ["Jon Mease <jonmmease@gmail.com>"]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "win-64", "linux-64"]
+
+[tasks]
+test-py = { cmd = ["pytest", "vl-convert-python/tests"]}
+test-cli = "cargo test -p vl-convert --release"
+test-rs = "cargo test -p vl-convert-rs --release -- --test-threads=1"
+
+fmt-py = "black vl-convert-python"
+fmt-py-check = "black vl-convert-python --check"
+
+fmt-rs = "cargo fmt --all"
+fmt-rs-check = "cargo fmt --all -- --check"
+
+check-rs = "cargo check --tests"
+clippy = "cargo clippy"
+
+build-py = { cmd = ["maturin", "build", "-m", "vl-convert-python/Cargo.toml", "--sdist", "--release"]}
+vendor = "cargo run -p vl-convert-vendor"
+bundle-licenses = """
+cargo install cargo-bundle-licenses &&
+cargo bundle-licenses --format yaml --output thirdparty_rust.yaml &&
+cp thirdparty_*.* vl-convert-python/ &&
+cp thirdparty_*.* vl-convert-rs/ &&
+cp thirdparty_*.* vl-convert/
+"""
+
+[pypi-dependencies]
+vl-convert-python = { path = "vl-convert-python", editable = true }
+pypdfium2 = ">=4.30.0, <5"
+
+# Development Dependencies
+[dependencies]
+python = "3.11.*"
+maturin = ">=1.4.0,<1.5"
+pytest = ">=8.2.2,<8.3"
+rust = ">=1.80.1,<2"
+scikit-image = ">=0.23.2,<0.24"
+deno = ">=1.45.5,<2"
+protobuf = ">=4.25.3,<5"
+black = ">=24.8.0,<25"
+
+# Dependencies not required for development or testing,
+# but useful when trying out vl-convert-python by hand
+altair = ">=5.3.0,<5.4"
+vega_datasets = ">=0.9.0,<0.10"
+altair_tiles = ">=0.3.0,<0.4"
+geopandas = ">=0.14.3,<0.15"
+jupyterlab = ">=4.0.11,<4.1"
+
+

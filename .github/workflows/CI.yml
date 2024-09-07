@@ -7,82 +7,69 @@ on:
   pull_request:
 
 jobs:
-  black-lint:
+  python-fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: psf/black@stable
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          options: "--check"
-          jupyter: true
-          src: "./vl-convert-python"
+          pixi-version: v0.28.2
+          cache: true
+      - uses: actions/checkout@v2
+      - name: Check cargo fmt compliance
+        run: pixi run fmt-py-check
 
   rust-fmt-clippy:
     runs-on: ubuntu-latest
     env:
       RUSTFLAGS: "-D warnings"
     steps:
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.28.2
+          cache: true
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt, clippy
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: True
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check cargo fmt compliance
-        run: cargo fmt --all -- --check
+        run: pixi run fmt-rs-check
       - name: Check no rustc warnings
-        run: cargo check --tests
+        run: pixi run check-rs
       - name: Check for clippy warnings
-        run: cargo clippy
+        run: pixi run clippy
 
   cargo-bundle-license:
     runs-on: ubuntu-latest
     steps:
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.28.2
+          cache: true
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      - name: Install cargo bundle license
-        run: cargo install cargo-bundle-licenses
       - name: Check that license is up to date
-        run: cargo bundle-licenses --format yaml --output CI.yaml --previous thirdparty_rust.yaml --check-previous
+        run: pixi run bundle-licenses
+      - name: Check that git detects no file changes
+        run:  git diff --exit-code
 
   codegen-clean:
     runs-on: ubuntu-latest
     steps:
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.28.2
+          cache: true
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: True
-      - name: Install Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: vx.x.x
       - name: Run codegen
-        run: cargo run
-        working-directory: vl-convert-vendor
-      - name: Check that git detects to file changes
+        run: pixi run vendor
+      - name: Check that git detects no file changes
         run:  git diff --exit-code
 
   vl-convert-rs-tests:
@@ -94,21 +81,17 @@ jobs:
           - windows-2022
           - macos-12
     steps:
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.28.2
+          cache: true
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
@@ -117,7 +100,7 @@ jobs:
       - name: Run tests
         # Run tests on single thread for Deno, which expects this
         run: |
-          cargo test --release -- --test-threads=1
+          pixi run test-rs
       - name: Upload test failures
         uses: actions/upload-artifact@v2
         if: always()
@@ -138,55 +121,22 @@ jobs:
           - [windows-2022, '3.10', "pwsh"]
           - [macos-12, '3.10', 'bash -l {0}']
     steps:
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.28.2
+          cache: true
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
-      - name: Display rust version
-        run: |
-          rustc --version
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.options[1] }}
-          cache: 'pip'
-      - name: Create Python Environment (Not Windows)
-        if: runner.os != 'Windows'
-        run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install pytest maturin scikit-image pypdfium2
-          maturin develop --release -m vl-convert-python/Cargo.toml
-      - name: Create Python Environment (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          python -m venv venv
-          venv\Scripts\activate
-          pip install pytest maturin scikit-image pypdfium2  
-          maturin develop --release -m vl-convert-python/Cargo.toml
-      - name: Run tests (Not Windows)
-        if: runner.os != 'Windows'
-        run: |
-          source venv/bin/activate
-          pytest vl-convert-python/tests/
-      - name: Run tests (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          venv\Scripts\activate
-          pytest vl-convert-python/tests/
+      - name: Run tests
+        run: pixi run test-py
 
