@@ -93,6 +93,13 @@ jobs:
         run: |
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
+      - name: Rustc info
+        run: pixi run "rustc -vV"
+      - name: Check glibc version
+        if: runner.os == 'Linux'
+        run: |
+          ldd --version
+          ldd $(which rustc) | grep libc
       - name: Run tests
         # Run tests on single thread for Deno, which expects this
         run: |
