@@ -60,4 +60,8 @@ altair_tiles = ">=0.3.0,<0.4"
 geopandas = ">=0.14.3,<0.15"
 jupyterlab = ">=4.0.11,<4.1"
 
-
+[target.linux-64.dependencies]
+kernel-headers_linux-64 = ">=3.10.0,<4"
+libgcc-ng = ">=14.1.0,<15"
+libffi = ">=3.4.2,<4"
+sqlite = ">=3.46.1,<4"
