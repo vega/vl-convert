@@ -13,8 +13,8 @@ macos = "12.0"
 [tasks]
 dev-py = "maturin develop -m vl-convert-python/Cargo.toml"
 test-py = { cmd = ["pytest", "vl-convert-python/tests"]}
-test-cli = "cargo test -p vl-convert --release"
-test-rs = "cargo test -p vl-convert-rs --release -- --test-threads=1"
+test-cli = "cargo test -p vl-convert"
+test-rs = "cargo test -p vl-convert-rs -- --test-threads=1"
 
 fmt-py = "black vl-convert-python"
 fmt-py-check = "black vl-convert-python --check"

@@ -100,10 +100,13 @@ jobs:
         run: |
           ldd --version
           ldd $(which rustc) | grep libc
-      - name: Run tests
+      - name: Run tests (Linux)
         if: runner.os == 'Linux'
         env:
           RUSTFLAGS: "-C target-feature=-crt-static -C link-arg=-Wl,--no-as-needed -C link-arg=-ldl -C link-arg=-lrt"
+        run: pixi run test-rs
+      - name: Run tests (Not Linux)
+        if: runner.os != 'Linux'
         run: pixi run test-rs
       - name: Upload test failures
         uses: actions/upload-artifact@v2
