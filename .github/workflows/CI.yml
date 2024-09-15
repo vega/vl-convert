@@ -7,15 +7,16 @@ on:
   pull_request:
 
 jobs:
-  black-lint:
+  python-fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: psf/black@stable
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          options: "--check"
-          jupyter: true
-          src: "./vl-convert-python"
+          pixi-version: v0.28.2
+      - name: Check cargo fmt compliance
+        run: pixi run fmt-py-check
 
   rust-fmt-clippy:
     runs-on: ubuntu-latest
@@ -24,75 +25,55 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          toolchain: stable
-          override: true
-          components: rustfmt, clippy
+          pixi-version: v0.28.2
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: True
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check cargo fmt compliance
-        run: cargo fmt --all -- --check
+        run: pixi run fmt-rs-check
       - name: Check no rustc warnings
-        run: cargo check --tests
+        run: pixi run check-rs
       - name: Check for clippy warnings
-        run: cargo clippy
+        run: pixi run clippy
 
   cargo-bundle-license:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          toolchain: stable
-          override: true
-      - name: Install cargo bundle license
-        run: cargo install cargo-bundle-licenses
+          pixi-version: v0.28.2
       - name: Check that license is up to date
-        run: cargo bundle-licenses --format yaml --output CI.yaml --previous thirdparty_rust.yaml --check-previous
+        run: pixi run bundle-licenses
+      - name: Check that git detects no file changes
+        run:  git diff --exit-code
 
   codegen-clean:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          toolchain: stable
-          override: true
-          components: rustfmt
+          pixi-version: v0.28.2
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: True
-      - name: Install Deno
-        uses: denoland/setup-deno@v1
-        with:
-          deno-version: vx.x.x
       - name: Run codegen
-        run: cargo run
-        working-directory: vl-convert-vendor
-      - name: Check that git detects to file changes
+        run: pixi run vendor
+      - name: Check that git detects no file changes
         run:  git diff --exit-code
 
-  vl-convert-rs-tests:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-2022
-          - macos-12
+  # Run linux tests without Pixi due to undiagnosed linker issues
+  #   - undefined reference to fcntl64
+  #   - undefined reference to memfd_create
+  vl-convert-rs-tests-linux:
+    runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
@@ -114,12 +95,48 @@ jobs:
         run: |
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
-      - name: Run tests
+      - name: Run rs tests
         # Run tests on single thread for Deno, which expects this
         run: |
-          cargo test --release -- --test-threads=1
+          cargo test -p vl-convert-rs -- --test-threads=1
+      - name: Run CLI tests
+        run: |
+          cargo test -p vl-convert -- --test-threads=1
       - name: Upload test failures
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: failed-images
+          path: |
+            vl-convert-rs/tests/vl-specs/failed
+
+  vl-convert-rs-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - windows-2022
+          - macos-12
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          pixi-version: v0.28.2
+      - name: Cache rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v1-rust"
+          cache-on-failure: True
+      - name: Install fonts on Linux
+        if: runner.os == 'Linux'
+        run: |
+          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+          sudo apt-get install ttf-mscorefonts-installer
+      - name: Run tests
+        run: pixi run test-rs
+      - name: Upload test failures
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: failed-images
@@ -140,53 +157,21 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          toolchain: stable
+          pixi-version: v0.28.2
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
-      - name: Display rust version
-        run: |
-          rustc --version
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.options[1] }}
-          cache: 'pip'
-      - name: Create Python Environment (Not Windows)
-        if: runner.os != 'Windows'
-        run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install pytest maturin scikit-image pypdfium2
-          maturin develop --release -m vl-convert-python/Cargo.toml
-      - name: Create Python Environment (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          python -m venv venv
-          venv\Scripts\activate
-          pip install pytest maturin scikit-image pypdfium2  
-          maturin develop --release -m vl-convert-python/Cargo.toml
-      - name: Run tests (Not Windows)
-        if: runner.os != 'Windows'
-        run: |
-          source venv/bin/activate
-          pytest vl-convert-python/tests/
-      - name: Run tests (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          venv\Scripts\activate
-          pytest vl-convert-python/tests/
+      - name: Build package
+        run: pixi run dev-py
+      - name: Run tests
+        run: pixi run test-py
 

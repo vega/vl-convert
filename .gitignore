@@ -15,7 +15,8 @@ __pycache__/
 /vl-convert-rs/tests/vl-specs/failed/
 
 .pixi/
-pixi.lock
-pixi.toml
 
 scratch/
+
+# File generated to check for
+CI.yaml
