@@ -69,12 +69,52 @@ jobs:
       - name: Check that git detects no file changes
         run:  git diff --exit-code
 
+  # Run linux tests without Pixi due to undiagnosed linker issues
+  #   - undefined reference to fcntl64
+  #   - undefined reference to memfd_create
+  vl-convert-rs-tests-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Cache rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v1-rust"
+          cache-on-failure: True
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install fonts on Linux
+        if: runner.os == 'Linux'
+        run: |
+          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+          sudo apt-get install ttf-mscorefonts-installer
+      - name: Run rs tests
+        # Run tests on single thread for Deno, which expects this
+        run: |
+          cargo test -p vl-convert-rs -- --test-threads=1
+      - name: Run CLI tests
+        run: |
+          cargo test -p vl-convert -- --test-threads=1
+      - name: Upload test failures
+        uses: actions/upload-artifact@v2
+        if: always()
+        with:
+          name: failed-images
+          path: |
+            vl-convert-rs/tests/vl-specs/failed
+
   vl-convert-rs-tests:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os:
-          - ubuntu-latest
           - windows-2022
           - macos-12
     steps:
