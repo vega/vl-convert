@@ -1,6 +1,6 @@
 [package]
 name = "vl-convert"
-version = "1.6.1"
+version = "1.6.2-a1"
 edition = "2021"
 license = "BSD-3-Clause"
 readme = "README.md"
@@ -10,7 +10,7 @@ description = "CLI application for converting Vega-Lite visualization specificat
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-vl-convert-rs = { path = "../vl-convert-rs", version = "1.2.3" }
+vl-convert-rs = { path = "../vl-convert-rs", version = "1.6.2-a1" }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 clap = { workspace = true }
