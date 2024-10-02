@@ -103,7 +103,7 @@ jobs:
         run: |
           cargo test -p vl-convert -- --test-threads=1
       - name: Upload test failures
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         if: always()
         with:
           name: failed-images
@@ -136,7 +136,7 @@ jobs:
       - name: Run tests
         run: pixi run test-rs
       - name: Upload test failures
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         if: always()
         with:
           name: failed-images
