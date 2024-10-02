@@ -335,7 +335,7 @@ fn vegalite_to_scenegraph(
 ///     bytes: PNG image data
 #[pyfunction]
 #[pyo3(
-    signature = (vg_spec, scale, ppi=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
+    signature = (vg_spec, scale=None, ppi=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
 )]
 fn vega_to_png(
     vg_spec: PyObject,
@@ -467,7 +467,7 @@ fn vegalite_to_png(
 ///     bytes: JPEG image data
 #[pyfunction]
 #[pyo3(
-    signature = (vg_spec, scale, quality, allowed_base_urls=None, format_locale=None, time_format_locale=None)
+    signature = (vg_spec, scale=None, quality=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
 )]
 fn vega_to_jpeg(
     vg_spec: PyObject,
@@ -597,7 +597,7 @@ fn vegalite_to_jpeg(
 /// Returns:
 ///     bytes: PDF file bytes
 #[pyfunction]
-#[pyo3(signature = (vg_spec, scale, allowed_base_urls=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vg_spec, scale=None, allowed_base_urls=None, format_locale=None, time_format_locale=None))]
 fn vega_to_pdf(
     vg_spec: PyObject,
     scale: Option<f32>,
@@ -994,7 +994,7 @@ fn parse_option_time_format_locale(v: Option<PyObject>) -> PyResult<Option<TimeF
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(text_signature = "(font_dir)")]
+#[pyo3(signature = (font_dir))]
 fn register_font_directory(font_dir: &str) -> PyResult<()> {
     register_font_directory_rs(font_dir).map_err(|err| {
         PyValueError::new_err(format!("Failed to register font directory: {}", err))
@@ -1008,7 +1008,7 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
 ///     str: Named local timezone (e.g. "America/New_York"),
 ///          or None if the local timezone cannot be determined
 #[pyfunction]
-#[pyo3(text_signature = "()")]
+#[pyo3(signature = ())]
 fn get_local_tz() -> PyResult<Option<String>> {
     let mut converter = VL_CONVERTER
         .lock()
@@ -1030,7 +1030,7 @@ fn get_local_tz() -> PyResult<Option<String>> {
 /// Returns:
 ///     dict: dict from theme name to config object
 #[pyfunction]
-#[pyo3(text_signature = "()")]
+#[pyo3(signature = ())]
 fn get_themes() -> PyResult<PyObject> {
     let mut converter = VL_CONVERTER
         .lock()
@@ -1061,7 +1061,7 @@ fn get_themes() -> PyResult<PyObject> {
 /// Returns:
 ///     dict: d3-format locale dict
 #[pyfunction]
-#[pyo3(text_signature = "(name)")]
+#[pyo3(signature = (name))]
 fn get_format_locale(name: &str) -> PyResult<PyObject> {
     match FORMATE_LOCALE_MAP.get(name) {
         None => {
@@ -1127,7 +1127,7 @@ fn get_time_format_locale(name: &str) -> PyResult<PyObject> {
 /// Returns:
 ///     str: Bundled snippet with all dependencies
 #[pyfunction]
-#[pyo3(signature = (snippet, vl_version))]
+#[pyo3(signature = (snippet=None, vl_version=None))]
 fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyResult<String> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
