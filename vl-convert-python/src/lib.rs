@@ -3,7 +3,7 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
-use pythonize::{depythonize_bound as depythonize, pythonize};
+use pythonize::{depythonize, pythonize};
 use std::borrow::Cow;
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -40,7 +40,7 @@ lazy_static! {
 /// Returns:
 ///     dict: Vega JSON specification dict
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, vl_version, config, theme, show_warnings)")]
+#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None))]
 fn vegalite_to_vega(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -81,7 +81,9 @@ fn vegalite_to_vega(
         }
     };
     Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &vega_spec).map_err(|err| PyValueError::new_err(err.to_string()))
+        pythonize(py, &vega_spec)
+            .map_err(|err| PyValueError::new_err(err.to_string()))
+            .map(|obj| obj.into())
     })
 }
 
@@ -96,7 +98,7 @@ fn vegalite_to_vega(
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, allowed_base_urls, format_locale, time_format_locale)")]
+#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None))]
 fn vega_to_svg(
     vg_spec: PyObject,
     allowed_base_urls: Option<Vec<String>>,
@@ -141,7 +143,7 @@ fn vega_to_svg(
 /// Returns:
 ///     dict: scenegraph
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, allowed_base_urls, format_locale, time_format_locale)")]
+#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None))]
 fn vega_to_scenegraph(
     vg_spec: PyObject,
     allowed_base_urls: Option<Vec<String>>,
@@ -173,7 +175,9 @@ fn vega_to_scenegraph(
         }
     };
     Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+        pythonize(py, &sg)
+            .map_err(|err| PyValueError::new_err(err.to_string()))
+            .map(|obj| obj.into())
     })
 }
 
@@ -195,7 +199,7 @@ fn vega_to_scenegraph(
 ///     str: SVG image string
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
 )]
 fn vegalite_to_svg(
     vl_spec: PyObject,
@@ -263,7 +267,7 @@ fn vegalite_to_svg(
 ///     str: SVG image string
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vl_spec, vl_version, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
 )]
 fn vegalite_to_scenegraph(
     vl_spec: PyObject,
@@ -311,7 +315,9 @@ fn vegalite_to_scenegraph(
         }
     };
     Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg).map_err(|err| PyValueError::new_err(err.to_string()))
+        pythonize(py, &sg)
+            .map_err(|err| PyValueError::new_err(err.to_string()))
+            .map(|obj| obj.into())
     })
 }
 
@@ -329,7 +335,7 @@ fn vegalite_to_scenegraph(
 ///     bytes: PNG image data
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vg_spec, scale, ppi, allowed_base_urls, format_locale, time_format_locale)"
+    signature = (vg_spec, scale=None, ppi=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
 )]
 fn vega_to_png(
     vg_spec: PyObject,
@@ -367,7 +373,7 @@ fn vega_to_png(
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new_bound(py, png_data.as_slice()))
+        PyBytes::new_bound(py, png_data.as_slice()).into()
     }))
 }
 
@@ -391,7 +397,7 @@ fn vega_to_png(
 ///     bytes: PNG image data
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vl_spec, vl_version, scale, ppi, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
+    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
 )]
 fn vegalite_to_png(
     vl_spec: PyObject,
@@ -443,7 +449,7 @@ fn vegalite_to_png(
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new_bound(py, png_data.as_slice()))
+        PyBytes::new_bound(py, png_data.as_slice()).into()
     }))
 }
 
@@ -461,7 +467,7 @@ fn vegalite_to_png(
 ///     bytes: JPEG image data
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vg_spec, scale, quality, allowed_base_urls, format_locale, time_format_locale)"
+    signature = (vg_spec, scale=None, quality=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
 )]
 fn vega_to_jpeg(
     vg_spec: PyObject,
@@ -499,7 +505,7 @@ fn vega_to_jpeg(
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new_bound(py, jpeg_data.as_slice()))
+        PyBytes::new_bound(py, jpeg_data.as_slice()).into()
     }))
 }
 
@@ -523,7 +529,7 @@ fn vega_to_jpeg(
 ///     bytes: JPEG image data
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vl_spec, vl_version, scale, quality, config, theme, show_warnings, allowed_base_urls, format_locale, time_format_locale)"
+    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
 )]
 fn vegalite_to_jpeg(
     vl_spec: PyObject,
@@ -575,7 +581,7 @@ fn vegalite_to_jpeg(
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new_bound(py, jpeg_data.as_slice()))
+        PyBytes::new_bound(py, jpeg_data.as_slice()).into()
     }))
 }
 
@@ -591,7 +597,7 @@ fn vegalite_to_jpeg(
 /// Returns:
 ///     bytes: PDF file bytes
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, scale, allowed_base_urls, format_locale, time_format_locale)")]
+#[pyo3(signature = (vg_spec, scale=None, allowed_base_urls=None, format_locale=None, time_format_locale=None))]
 fn vega_to_pdf(
     vg_spec: PyObject,
     scale: Option<f32>,
@@ -647,7 +653,7 @@ fn vega_to_pdf(
 ///     bytes: PDF image data
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vl_spec, vl_version, scale, config, theme, allowed_base_urls, format_locale, time_format_locale)"
+    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
 )]
 fn vegalite_to_pdf(
     vl_spec: PyObject,
@@ -708,7 +714,7 @@ fn vegalite_to_pdf(
 /// Returns:
 ///     str: URL string
 #[pyfunction]
-#[pyo3(text_signature = "(vl_spec, fullscreen)")]
+#[pyo3(signature = (vl_spec, fullscreen=None))]
 fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
     let vl_spec = parse_json_spec(vl_spec)?;
     Ok(vl_convert_rs::converter::vegalite_to_url(
@@ -725,7 +731,7 @@ fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<Stri
 /// Returns:
 ///     str: URL string
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, fullscreen)")]
+#[pyo3(signature = (vg_spec, fullscreen=None))]
 fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
     Ok(vl_convert_rs::converter::vega_to_url(
@@ -753,7 +759,7 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
 ///     string: HTML document
 #[pyfunction]
 #[pyo3(
-    text_signature = "(vl_spec, vl_version, bundle, config, theme, format_locale, time_format_locale, renderer)"
+    signature = (vl_spec, vl_version=None, bundle=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None)
 )]
 fn vegalite_to_html(
     vl_spec: PyObject,
@@ -808,7 +814,7 @@ fn vegalite_to_html(
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
-#[pyo3(text_signature = "(vg_spec, bundle, format_locale, time_format_locale, renderer)")]
+#[pyo3(signature = (vg_spec, bundle=None, format_locale=None, time_format_locale=None, renderer=None))]
 fn vega_to_html(
     vg_spec: PyObject,
     bundle: Option<bool>,
@@ -844,11 +850,11 @@ fn vega_to_html(
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(text_signature = "(svg, scale, ppi)")]
+#[pyo3(signature = (svg, scale=None, ppi=None))]
 fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
     let png_data = vl_convert_rs::converter::svg_to_png(svg, scale.unwrap_or(1.0), ppi)?;
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new_bound(py, png_data.as_slice()))
+        PyBytes::new_bound(py, png_data.as_slice()).into()
     }))
 }
 
@@ -861,11 +867,11 @@ fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObj
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(text_signature = "(svg, scale, quality)")]
+#[pyo3(signature = (svg, scale=None, quality=None))]
 fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
     let jpeg_data = vl_convert_rs::converter::svg_to_jpeg(svg, scale.unwrap_or(1.0), quality)?;
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new_bound(py, jpeg_data.as_slice()))
+        PyBytes::new_bound(py, jpeg_data.as_slice()).into()
     }))
 }
 
@@ -877,12 +883,12 @@ fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<P
 /// Returns:
 ///     bytes: PDF document data
 #[pyfunction]
-#[pyo3(text_signature = "(svg, scale)")]
+#[pyo3(signature = (svg, scale=None))]
 fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let pdf_data = vl_convert_rs::converter::svg_to_pdf(svg)?; // Always pass 1.0 as scale
     Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new_bound(py, pdf_data.as_slice()))
+        PyBytes::new_bound(py, pdf_data.as_slice()).into()
     }))
 }
 
@@ -898,7 +904,7 @@ fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
                 ))),
             }
         } else if let Ok(vl_spec) = vl_spec.downcast_bound::<PyDict>(py) {
-            match depythonize(vl_spec.as_any().clone()) {
+            match depythonize(vl_spec.as_any()) {
                 Ok(vl_spec) => Ok(vl_spec),
                 Err(err) => Err(PyValueError::new_err(format!(
                     "Failed to parse vl_spec dict as JSON: {}",
@@ -924,7 +930,7 @@ fn parse_format_locale(v: PyObject) -> PyResult<FormatLocale> {
                 Ok(format_locale)
             }
         } else if let Ok(obj) = v.downcast_bound::<PyDict>(py) {
-            match depythonize(obj.as_any().clone()) {
+            match depythonize(obj.as_any()) {
                 Ok(obj) => Ok(FormatLocale::Object(obj)),
                 Err(err) => Err(PyValueError::new_err(format!(
                     "Failed to parse format_locale dict as JSON: {}",
@@ -958,7 +964,7 @@ fn parse_time_format_locale(v: PyObject) -> PyResult<TimeFormatLocale> {
                 Ok(time_format_locale)
             }
         } else if let Ok(obj) = v.downcast_bound::<PyDict>(py) {
-            match depythonize(obj.as_any().clone()) {
+            match depythonize(obj.as_any()) {
                 Ok(obj) => Ok(TimeFormatLocale::Object(obj)),
                 Err(err) => Err(PyValueError::new_err(format!(
                     "Failed to parse time_format_locale dict as JSON: {}",
@@ -988,7 +994,7 @@ fn parse_option_time_format_locale(v: Option<PyObject>) -> PyResult<Option<TimeF
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(text_signature = "(font_dir)")]
+#[pyo3(signature = (font_dir))]
 fn register_font_directory(font_dir: &str) -> PyResult<()> {
     register_font_directory_rs(font_dir).map_err(|err| {
         PyValueError::new_err(format!("Failed to register font directory: {}", err))
@@ -1002,7 +1008,7 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
 ///     str: Named local timezone (e.g. "America/New_York"),
 ///          or None if the local timezone cannot be determined
 #[pyfunction]
-#[pyo3(text_signature = "()")]
+#[pyo3(signature = ())]
 fn get_local_tz() -> PyResult<Option<String>> {
     let mut converter = VL_CONVERTER
         .lock()
@@ -1024,7 +1030,7 @@ fn get_local_tz() -> PyResult<Option<String>> {
 /// Returns:
 ///     dict: dict from theme name to config object
 #[pyfunction]
-#[pyo3(text_signature = "()")]
+#[pyo3(signature = ())]
 fn get_themes() -> PyResult<PyObject> {
     let mut converter = VL_CONVERTER
         .lock()
@@ -1039,7 +1045,9 @@ fn get_themes() -> PyResult<PyObject> {
         }
     };
     Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &themes).map_err(|err| PyValueError::new_err(err.to_string()))
+        pythonize(py, &themes)
+            .map_err(|err| PyValueError::new_err(err.to_string()))
+            .map(|obj| obj.into())
     })
 }
 
@@ -1053,7 +1061,7 @@ fn get_themes() -> PyResult<PyObject> {
 /// Returns:
 ///     dict: d3-format locale dict
 #[pyfunction]
-#[pyo3(text_signature = "(name)")]
+#[pyo3(signature = (name))]
 fn get_format_locale(name: &str) -> PyResult<PyObject> {
     match FORMATE_LOCALE_MAP.get(name) {
         None => {
@@ -1066,7 +1074,7 @@ fn get_format_locale(name: &str) -> PyResult<PyObject> {
                 "Failed to parse internal format locale as JSON"
             );
             Python::with_gil(|py| -> PyResult<PyObject> {
-                pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string()))
+                pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string())).map(|obj| obj.into())
             })
         }
     }
@@ -1082,7 +1090,7 @@ fn get_format_locale(name: &str) -> PyResult<PyObject> {
 /// Returns:
 ///     dict: d3-time-format locale dict
 #[pyfunction]
-#[pyo3(text_signature = "(name)")]
+#[pyo3(signature = (name))]
 fn get_time_format_locale(name: &str) -> PyResult<PyObject> {
     match TIME_FORMATE_LOCALE_MAP.get(name) {
         None => {
@@ -1095,7 +1103,7 @@ fn get_time_format_locale(name: &str) -> PyResult<PyObject> {
                 "Failed to parse internal time format locale as JSON"
             );
             Python::with_gil(|py| -> PyResult<PyObject> {
-                pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string()))
+                pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string())).map(|obj| obj.into())
             })
         }
     }
@@ -1119,7 +1127,7 @@ fn get_time_format_locale(name: &str) -> PyResult<PyObject> {
 /// Returns:
 ///     str: Bundled snippet with all dependencies
 #[pyfunction]
-#[pyo3(text_signature = "(snippet, vl_version)")]
+#[pyo3(signature = (snippet=None, vl_version=None))]
 fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyResult<String> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?

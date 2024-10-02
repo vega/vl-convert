@@ -32,6 +32,7 @@ use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
+use image::codecs::jpeg::JpegEncoder;
 use image::io::Reader as ImageReader;
 use resvg::render;
 
@@ -1539,17 +1540,18 @@ pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>
     }
 
     let mut jpeg_bytes: Vec<u8> = Vec::new();
-    img.write_to(
-        &mut Cursor::new(&mut jpeg_bytes),
-        image::ImageOutputFormat::Jpeg(quality),
-    )?;
+    let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_bytes, quality);
+
+    // Encode the image
+    encoder.encode_image(&img)?;
+
     Ok(jpeg_bytes)
 }
 
 pub fn svg_to_pdf(svg: &str) -> Result<Vec<u8>, AnyError> {
     let tree = parse_svg(svg)?;
     let pdf = svg2pdf::to_pdf(&tree, ConversionOptions::default(), PageOptions::default());
-    Ok(pdf)
+    pdf.map_err(|err| anyhow!("Failed to convert SVG to PDF: {}", err))
 }
 
 /// Helper to parse svg string to usvg Tree with more helpful error messages
