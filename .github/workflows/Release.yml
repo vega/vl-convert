@@ -4,124 +4,122 @@ on:
   push:
     branches:
       - main
-  pull_request:
-
 jobs:
-  # build-cli-linux-x86:
-  #   runs-on: ubuntu-20.04
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Install latest stable Rust toolchain
-  #       uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: stable
-  #         override: true
-  #     - name: Install protoc
-  #       run: |
-  #         sudo apt-get update
-  #         sudo apt-get install protobuf-compiler
-  #     - name: Build vl-convert
-  #       uses: actions-rs/cargo@v1
-  #       with:
-  #         command: build
-  #         args: -p vl-convert --release
-  #     - name: Move executable to bin directory
-  #       run: |
-  #         mkdir -p bin
-  #         cp target/release/vl-convert bin/
-  #         cp LICENSE bin/
-  #         cp thirdparty_* bin/
-  #         zip -r vl-convert_linux-64.zip bin/
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v3
-  #       with:
-  #         name: vl-convert
-  #         path: |
-  #           vl-convert_linux-64.zip
+  build-cli-linux-x86:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+      - name: Build vl-convert
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: -p vl-convert --release
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
+          zip -r vl-convert_linux-64.zip bin/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: vl-convert
+          path: |
+            vl-convert_linux-64.zip
 
-  # build-cli-linux-aarch64:
-  #   runs-on: ubuntu-20.04
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Set up QEMU
-  #       uses: docker/setup-qemu-action@v1
-  #       with:
-  #         platforms: arm64
-  #     - name: Cache
-  #       uses: actions/cache@v3
-  #       with:
-  #         key: build-cli-linux-aarch64-${{ hashFiles('Cargo.lock') }}
-  #         path: |
-  #           cargo-arm64
-  #           target-arm64
-  #     - name: Build in Docker
-  #       run: |
-  #         docker run \
-  #           --rm \
-  #           -v $(pwd):/workspace \
-  #           -w /workspace \
-  #           --platform linux/arm64 \
-  #           --env CARGO_TARGET_DIR=/workspace/target-arm64 \
-  #           --env CARGO_HOME=/workspace/cargo-arm64 \
-  #           rust:1.78-slim-bullseye \
-  #           bash -c "\
-  #             uname -a && \
-  #             apt update -y && \
-  #             apt install cmake curl zip unzip -y && \
-  #             curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protoc-24.0-linux-aarch_64.zip && \
-  #             unzip protoc-24.0-linux-aarch_64.zip -d /usr/ && \
-  #             which protoc && \
-  #             cargo build --release -p vl-convert && \
-  #             rm -rf bin/ && \
-  #             rm -rf vl-convert_linux-aarch64.zip && \
-  #             mkdir -p bin/ && \
-  #             cp target-arm64/release/vl-convert bin/ && \
-  #             cp LICENSE bin/ && \
-  #             cp thirdparty_* bin/ && \
-  #             zip -r vl-convert_linux-aarch64.zip bin/
-  #           "
-  #     - name: Upload executable
-  #       uses: actions/upload-artifact@v3
-  #       with:
-  #         name: vl-convert
-  #         path: |
-  #           vl-convert_linux-aarch64.zip
+  build-cli-linux-aarch64:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+        with:
+          platforms: arm64
+      - name: Cache
+        uses: actions/cache@v3
+        with:
+          key: build-cli-linux-aarch64-${{ hashFiles('Cargo.lock') }}
+          path: |
+            cargo-arm64
+            target-arm64
+      - name: Build in Docker
+        run: |
+          docker run \
+            --rm \
+            -v $(pwd):/workspace \
+            -w /workspace \
+            --platform linux/arm64 \
+            --env CARGO_TARGET_DIR=/workspace/target-arm64 \
+            --env CARGO_HOME=/workspace/cargo-arm64 \
+            rust:1.78-slim-bullseye \
+            bash -c "\
+              uname -a && \
+              apt update -y && \
+              apt install cmake curl zip unzip -y && \
+              curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protoc-24.0-linux-aarch_64.zip && \
+              unzip protoc-24.0-linux-aarch_64.zip -d /usr/ && \
+              which protoc && \
+              cargo build --release -p vl-convert && \
+              rm -rf bin/ && \
+              rm -rf vl-convert_linux-aarch64.zip && \
+              mkdir -p bin/ && \
+              cp target-arm64/release/vl-convert bin/ && \
+              cp LICENSE bin/ && \
+              cp thirdparty_* bin/ && \
+              zip -r vl-convert_linux-aarch64.zip bin/
+            "
+      - name: Upload executable
+        uses: actions/upload-artifact@v3
+        with:
+          name: vl-convert
+          path: |
+            vl-convert_linux-aarch64.zip
 
-  # build-cli-win-64:
-  #   runs-on: windows-2022
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Install latest stable Rust toolchain
-  #       uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: stable
-  #         override: true
-  #     - name: Install Protoc
-  #       uses: arduino/setup-protoc@v2
-  #       with:
-  #         repo-token: ${{ secrets.GITHUB_TOKEN }}
-  #     - name: Build vl-convert
-  #       uses: actions-rs/cargo@v1
-  #       with:
-  #         command: build
-  #         args: -p vl-convert --release
-  #     - name: Move executable to bin directory
-  #       run: |
-  #         New-Item -Path "artifacts\bin" -ItemType Directory
-  #         Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
-  #         Copy-Item "LICENSE" -Destination "artifacts\bin"
-  #         Copy-Item "thirdparty_*" -Destination "artifacts\bin"
-  #     - name: zip executable
-  #       uses: papeloto/action-zip@v1
-  #       with:
-  #         files: artifacts/
-  #         dest: vl-convert_win-64.zip
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v3
-  #       with:
-  #         name: vl-convert
-  #         path: |
-  #           vl-convert_win-64.zip
+  build-cli-win-64:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install latest stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build vl-convert
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: -p vl-convert --release
+      - name: Move executable to bin directory
+        run: |
+          New-Item -Path "artifacts\bin" -ItemType Directory
+          Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
+          Copy-Item "LICENSE" -Destination "artifacts\bin"
+          Copy-Item "thirdparty_*" -Destination "artifacts\bin"
+      - name: zip executable
+        uses: papeloto/action-zip@v1
+        with:
+          files: artifacts/
+          dest: vl-convert_win-64.zip
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: vl-convert
+          path: |
+            vl-convert_win-64.zip
 
   build-cli-osx-64:
     runs-on: macos-12
@@ -187,81 +185,81 @@ jobs:
           path: |
             vl-convert_osx-arm64.zip
 
-  # build-wheels-linux-x86_64:
-  #   runs-on: ubuntu-20.04
-  #   strategy:
-  #     matrix:
-  #       arch:
-  #         - "x86_64-unknown-linux-gnu"
-  #   steps:
-  #   - uses: actions/checkout@v3
-  #   - uses: messense/maturin-action@v1
-  #     with:
-  #       manylinux: auto
-  #       target: ${{ matrix.arch }}
-  #       command: build
-  #       args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
-  #       before-script-linux: |
-  #         PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-  #         curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
-  #         unzip protoc-24.0-linux-x86_64.zip -d /usr/
-  #   - name: Upload wheels
-  #     uses: actions/upload-artifact@v3
-  #     with:
-  #       name: wheels
-  #       path: dist
+  build-wheels-linux-x86_64:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        arch:
+          - "x86_64-unknown-linux-gnu"
+    steps:
+    - uses: actions/checkout@v3
+    - uses: messense/maturin-action@v1
+      with:
+        manylinux: auto
+        target: ${{ matrix.arch }}
+        command: build
+        args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
+        before-script-linux: |
+          PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+          curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
+          unzip protoc-24.0-linux-x86_64.zip -d /usr/
+    - name: Upload wheels
+      uses: actions/upload-artifact@v3
+      with:
+        name: wheels
+        path: dist
 
-  # build-wheels-linux-aarch64:
-  #   runs-on: ubuntu-20.04
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - name: Setup QEMU
-  #       uses: docker/setup-qemu-action@v1
-  #     - uses: messense/maturin-action@v1
-  #       with:
-  #         manylinux: auto
-  #         container: quay.io/pypa/manylinux2014_aarch64
-  #         target: aarch64-unknown-linux-gnu
-  #         command: build
-  #         args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
-  #         before-script-linux: |
-  #           # Install protoc
-  #           echo $PATH
-  #           PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-  #           curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
-  #           unzip protoc-24.0-linux-aarch_64.zip -d /usr/
+  build-wheels-linux-aarch64:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v1
+      - uses: messense/maturin-action@v1
+        with:
+          manylinux: auto
+          container: quay.io/pypa/manylinux2014_aarch64
+          target: aarch64-unknown-linux-gnu
+          command: build
+          args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
+          before-script-linux: |
+            # Install protoc
+            echo $PATH
+            PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+            curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
+            unzip protoc-24.0-linux-aarch_64.zip -d /usr/
 
-  #     # Not sure why the compiled wheels end up with x86_64 in the file name,
-  #     # they are aarch64 and work properly after being renamed.
-  #     - name: Rename files
-  #       run: |
-  #         sudo apt-get update
-  #         sudo apt-get install rename
-  #         ls dist/
-  #         rename 's/x86_64/aarch64/g' dist/vl_convert_python-*.whl
-  #     - name: Upload wheels
-  #       uses: actions/upload-artifact@v3
-  #       with:
-  #         name: wheels
-  #         path: dist
+      # Not sure why the compiled wheels end up with x86_64 in the file name,
+      # they are aarch64 and work properly after being renamed.
+      - name: Rename files
+        run: |
+          sudo apt-get update
+          sudo apt-get install rename
+          ls dist/
+          rename 's/x86_64/aarch64/g' dist/vl_convert_python-*.whl
+      - name: Upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
 
-  # build-wheels-win-64:
-  #   runs-on: windows-latest
-  #   steps:
-  #   - uses: actions/checkout@v3
-  #   - name: Install Protoc
-  #     uses: arduino/setup-protoc@v2
-  #     with:
-  #       repo-token: ${{ secrets.GITHUB_TOKEN }}
-  #   - uses: messense/maturin-action@v1
-  #     with:
-  #       command: build
-  #       args: --release -m vl-convert-python/Cargo.toml -o dist --strip
-  #   - name: Upload wheels
-  #     uses: actions/upload-artifact@v3
-  #     with:
-  #       name: wheels
-  #       path: dist
+  build-wheels-win-64:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v2
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: messense/maturin-action@v1
+      with:
+        command: build
+        args: --release -m vl-convert-python/Cargo.toml -o dist --strip
+    - name: Upload wheels
+      uses: actions/upload-artifact@v3
+      with:
+        name: wheels
+        path: dist
 
   build-wheels-osx-64:
     runs-on: macos-12
@@ -310,20 +308,20 @@ jobs:
           name: wheels
           path: dist
 
-  # publish-pypi:
-  #   name: Publish to PyPI
-  #   environment: PyPI Upload
-  #   runs-on: ubuntu-latest
-  #   needs: [ build-wheels-linux-x86_64, build-wheels-linux-aarch64, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
-  #   steps:
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: wheels
-  #         path: dist/
-  #     - name: Publish to PyPI
-  #       uses: messense/maturin-action@v1
-  #       env:
-  #         MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-  #       with:
-  #         command: upload
-  #         args: --skip-existing dist/*
+  publish-pypi:
+    name: Publish to PyPI
+    environment: PyPI Upload
+    runs-on: ubuntu-latest
+    needs: [ build-wheels-linux-x86_64, build-wheels-linux-aarch64, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: wheels
+          path: dist/
+      - name: Publish to PyPI
+        uses: messense/maturin-action@v1
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          command: upload
+          args: --skip-existing dist/*
