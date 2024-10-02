@@ -1543,12 +1543,7 @@ pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>
     let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_bytes, quality);
 
     // Encode the image
-    encoder.encode(
-        img.as_bytes(),
-        img.width(),
-        img.height(),
-        img.color().into(),
-    )?;
+    encoder.encode_image(&img)?;
 
     Ok(jpeg_bytes)
 }
