@@ -9,7 +9,9 @@ use std::str::FromStr;
 use std::sync::Mutex;
 use vl_convert_rs::converter::{FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlOpts};
 use vl_convert_rs::html::bundle_vega_snippet;
-use vl_convert_rs::module_loader::import_map::{VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS};
+use vl_convert_rs::module_loader::import_map::{
+    VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
+};
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
@@ -1182,7 +1184,10 @@ fn get_vega_embed_version() -> String {
 #[pyfunction]
 #[pyo3(signature = ())]
 fn get_vegalite_versions() -> Vec<String> {
-    VL_VERSIONS.iter().map(|v| v.to_semver().to_string()).collect()
+    VL_VERSIONS
+        .iter()
+        .map(|v| v.to_semver().to_string())
+        .collect()
 }
 
 /// Convert Vega-Lite specifications to other formats

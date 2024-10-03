@@ -86,9 +86,27 @@ fn main() {
     }
 
     // extract vega version from url
-    let vega_version = VEGA_PATH.split("@v").nth(1).unwrap().split("-").nth(0).unwrap();
-    let vega_themes_version = VEGA_THEMES_PATH.split("@v").nth(1).unwrap().split("-").nth(0).unwrap();
-    let vega_embed_version = VEGA_EMBED_PATH.split("@v").nth(1).unwrap().split("-").nth(0).unwrap();
+    let vega_version = VEGA_PATH
+        .split("@v")
+        .nth(1)
+        .unwrap()
+        .split("-")
+        .nth(0)
+        .unwrap();
+    let vega_themes_version = VEGA_THEMES_PATH
+        .split("@v")
+        .nth(1)
+        .unwrap()
+        .split("-")
+        .nth(0)
+        .unwrap();
+    let vega_embed_version = VEGA_EMBED_PATH
+        .split("@v")
+        .nth(1)
+        .unwrap()
+        .split("-")
+        .nth(0)
+        .unwrap();
 
     // Download locales
     download_locales(
