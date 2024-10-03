@@ -15,6 +15,10 @@ pub const VEGA_EMBED_PATH: &str =
     "/pin/vega-embed@v6.26.0-0yAdpZbj3i4rRevkUMhK/mode=imports,min/optimized/vega-embed.js";
 pub const DEBOUNCE_PATH: &str = "/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js";
 
+pub const VEGA_VERSION: &str = "5.30.0";
+pub const VEGA_THEMES_VERSION: &str = "2.15.0";
+pub const VEGA_EMBED_VERSION: &str = "6.26.0";
+
 pub fn url_for_path(path: &str) -> String {
     format!("{}{}", SKYPACK_URL, path)
 }

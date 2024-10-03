@@ -85,6 +85,11 @@ fn main() {
         fs::remove_dir_all(&vendor_path).unwrap();
     }
 
+    // extract vega version from url
+    let vega_version = VEGA_PATH.split("@v").nth(1).unwrap().split("-").nth(0).unwrap();
+    let vega_themes_version = VEGA_THEMES_PATH.split("@v").nth(1).unwrap().split("-").nth(0).unwrap();
+    let vega_embed_version = VEGA_EMBED_PATH.split("@v").nth(1).unwrap().split("-").nth(0).unwrap();
+
     // Download locales
     download_locales(
         "https://github.com/d3/d3-format/archive/refs/heads/main.zip",
@@ -215,6 +220,10 @@ pub const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
 pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
 pub const DEBOUNCE_PATH: &str = "{DEBOUNCE_PATH}";
 
+pub const VEGA_VERSION: &str = "{VEGA_VERSION}";
+pub const VEGA_THEMES_VERSION: &str = "{VEGA_THEMES_VERSION}";
+pub const VEGA_EMBED_VERSION: &str = "{VEGA_EMBED_VERSION}";
+
 pub fn url_for_path(path: &str) -> String {{
     format!("{{}}{{}}", SKYPACK_URL, path)
 }}
@@ -285,6 +294,9 @@ pub fn build_import_map() -> HashMap<String, String> {{
         version_instances_csv = version_instances_csv,
         SKYPACK_URL = SKYPACK_URL,
         VEGA_PATH = VEGA_PATH,
+        VEGA_VERSION = vega_version,
+        VEGA_THEMES_VERSION = vega_themes_version,
+        VEGA_EMBED_VERSION = vega_embed_version,
         VEGA_THEMES_PATH = VEGA_THEMES_PATH,
         VEGA_EMBED_PATH = VEGA_EMBED_PATH,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0

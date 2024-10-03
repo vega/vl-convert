@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::Mutex;
 use vl_convert_rs::converter::{FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlOpts};
 use vl_convert_rs::html::bundle_vega_snippet;
-use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::module_loader::import_map::{VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS};
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
@@ -1145,6 +1145,46 @@ fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyRes
     }
 }
 
+/// Get the bundled version of Vega
+///
+/// Returns:
+///     str: Vega version string (e.g. "5.30.0")
+#[pyfunction]
+#[pyo3(signature = ())]
+fn get_vega_version() -> String {
+    VEGA_VERSION.to_string()
+}
+
+/// Get the bundled version of Vega-Themes
+///
+/// Returns:
+///     str: Vega-Themes version string (e.g. "2.14.0")
+#[pyfunction]
+#[pyo3(signature = ())]
+fn get_vega_themes_version() -> String {
+    VEGA_THEMES_VERSION.to_string()
+}
+
+/// Get the bundled version of Vega-Embed
+///
+/// Returns:
+///     str: Vega-Embed version string (e.g. "6.26.0")
+#[pyfunction]
+#[pyo3(signature = ())]
+fn get_vega_embed_version() -> String {
+    VEGA_EMBED_VERSION.to_string()
+}
+
+/// Get the bundled versions of Vega-Lite
+///
+/// Returns:
+///     list: Vega-Lite version strings (e.g. ["5.8", "5.9", ..., "5.21"])
+#[pyfunction]
+#[pyo3(signature = ())]
+fn get_vegalite_versions() -> Vec<String> {
+    VL_VERSIONS.iter().map(|v| v.to_semver().to_string()).collect()
+}
+
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1172,6 +1212,10 @@ fn vl_convert(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_format_locale, m)?)?;
     m.add_function(wrap_pyfunction!(get_time_format_locale, m)?)?;
     m.add_function(wrap_pyfunction!(javascript_bundle, m)?)?;
+    m.add_function(wrap_pyfunction!(get_vega_version, m)?)?;
+    m.add_function(wrap_pyfunction!(get_vega_themes_version, m)?)?;
+    m.add_function(wrap_pyfunction!(get_vega_embed_version, m)?)?;
+    m.add_function(wrap_pyfunction!(get_vegalite_versions, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

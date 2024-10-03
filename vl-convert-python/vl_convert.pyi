@@ -153,6 +153,10 @@ __all__ = [
     "vegalite_to_svg",
     "vegalite_to_url",
     "vegalite_to_vega",
+    "get_vega_version",
+    "get_vega_themes_version",
+    "get_vega_embed_version",
+    "get_vegalite_versions",
 ]
 
 def get_format_locale(name: FormatLocaleName) -> dict[str, Any]:
@@ -805,5 +809,45 @@ def vegalite_to_vega(
     Returns
     -------
     Vega JSON specification dict.
+    """
+    ...
+
+def get_vega_version() -> str:
+    """
+    Get the bundled version of Vega
+
+    Returns
+    -------
+    Vega version string (e.g. "5.30.0")
+    """
+    ...
+
+def get_vega_themes_version() -> str:
+    """
+    Get the bundled version of Vega-Themes
+
+    Returns
+    -------
+    Vega-Themes version string (e.g. "2.14.0")
+    """
+    ...
+
+def get_vega_embed_version() -> str:
+    """
+    Get the bundled version of Vega-Embed
+
+    Returns
+    -------
+    Vega-Embed version string (e.g. "6.26.0")
+    """
+    ...
+
+def get_vegalite_versions() -> list[str]:
+    """
+    Get the bundled versions of Vega-Lite
+
+    Returns
+    -------
+    Vega-Lite version strings (e.g. ["5.8", "5.9", ..., "5.21"])
     """
     ...
