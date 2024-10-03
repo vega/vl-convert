@@ -61,7 +61,7 @@ jobs:
             --platform linux/arm64 \
             --env CARGO_TARGET_DIR=/workspace/target-arm64 \
             --env CARGO_HOME=/workspace/cargo-arm64 \
-            rust:1.78-slim-bullseye \
+            rust:1.81-slim-bullseye \
             bash -c "\
               uname -a && \
               apt update -y && \
