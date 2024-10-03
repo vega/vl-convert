@@ -90,22 +90,19 @@ fn main() {
         .split("@v")
         .nth(1)
         .unwrap()
-        .split("-")
-        .nth(0)
+        .split("-").next()
         .unwrap();
     let vega_themes_version = VEGA_THEMES_PATH
         .split("@v")
         .nth(1)
         .unwrap()
-        .split("-")
-        .nth(0)
+        .split("-").next()
         .unwrap();
     let vega_embed_version = VEGA_EMBED_PATH
         .split("@v")
         .nth(1)
         .unwrap()
-        .split("-")
-        .nth(0)
+        .split("-").next()
         .unwrap();
 
     // Download locales
