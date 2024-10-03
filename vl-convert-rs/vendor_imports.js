@@ -1,5 +1,4 @@
 import * as v_5_8 from "https://cdn.skypack.dev/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js";
-import * as v_5_13 from "https://cdn.skypack.dev/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_14 from "https://cdn.skypack.dev/pin/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_15 from "https://cdn.skypack.dev/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_16 from "https://cdn.skypack.dev/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js";
@@ -7,6 +6,7 @@ import * as v_5_17 from "https://cdn.skypack.dev/pin/vega-lite@v5.17.0-jkfrfJOQ3
 import * as v_5_18 from "https://cdn.skypack.dev/pin/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_19 from "https://cdn.skypack.dev/pin/vega-lite@v5.19.0-4m5nwXbwdKW9Bc7adV02/mode=imports,min/optimized/vega-lite.js";
 import * as v_5_20 from "https://cdn.skypack.dev/pin/vega-lite@v5.20.1-5FloWSAHKfabpxOoogY3/mode=imports,min/optimized/vega-lite.js";
+import * as v_5_21 from "https://cdn.skypack.dev/pin/vega-lite@v5.21.0-FWbVtRVTj7vqBi6QZX8A/mode=imports,min/optimized/vega-lite.js";
 import * as vega from "https://cdn.skypack.dev/pin/vega@v5.30.0-fYDVG3pUN16BiGmbVNdw/mode=imports,min/optimized/vega.js";
 import * as vegaThemes from "https://cdn.skypack.dev/pin/vega-themes@v2.15.0-wV2Z38N5Dk8FL05cPDbE/mode=imports,min/optimized/vega-themes.js";
 import * as vegaEmbed from "https://cdn.skypack.dev/pin/vega-embed@v6.26.0-0yAdpZbj3i4rRevkUMhK/mode=imports,min/optimized/vega-embed.js";

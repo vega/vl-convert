@@ -17,10 +17,6 @@ const VL_PATHS: &[(&str, &str)] = &[
         "5.8",
         "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
     ),
-    (
-        "5.13",
-        "/pin/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/mode=imports,min/optimized/vega-lite.js",
-    ),
     // 5.14.1 is used by Altair 5.1.0 (keep longer)
     (
         "5.14",
@@ -49,9 +45,14 @@ const VL_PATHS: &[(&str, &str)] = &[
         "5.19",
         "/pin/vega-lite@v5.19.0-4m5nwXbwdKW9Bc7adV02/mode=imports,min/optimized/vega-lite.js",
     ),
+    // 5.20.1 is used by Altair 5.4.0 (keep longer)
     (
         "5.20",
         "/pin/vega-lite@v5.20.1-5FloWSAHKfabpxOoogY3/mode=imports,min/optimized/vega-lite.js",
+    ),
+    (
+        "5.21",
+        "/pin/vega-lite@v5.21.0-FWbVtRVTj7vqBi6QZX8A/mode=imports,min/optimized/vega-lite.js",
     ),
 ];
 const SKYPACK_URL: &str = "https://cdn.skypack.dev";
@@ -83,6 +84,29 @@ fn main() {
     if vendor_path.exists() {
         fs::remove_dir_all(&vendor_path).unwrap();
     }
+
+    // extract vega version from url
+    let vega_version = VEGA_PATH
+        .split("@v")
+        .nth(1)
+        .unwrap()
+        .split("-")
+        .next()
+        .unwrap();
+    let vega_themes_version = VEGA_THEMES_PATH
+        .split("@v")
+        .nth(1)
+        .unwrap()
+        .split("-")
+        .next()
+        .unwrap();
+    let vega_embed_version = VEGA_EMBED_PATH
+        .split("@v")
+        .nth(1)
+        .unwrap()
+        .split("-")
+        .next()
+        .unwrap();
 
     // Download locales
     download_locales(
@@ -214,6 +238,10 @@ pub const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
 pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
 pub const DEBOUNCE_PATH: &str = "{DEBOUNCE_PATH}";
 
+pub const VEGA_VERSION: &str = "{VEGA_VERSION}";
+pub const VEGA_THEMES_VERSION: &str = "{VEGA_THEMES_VERSION}";
+pub const VEGA_EMBED_VERSION: &str = "{VEGA_EMBED_VERSION}";
+
 pub fn url_for_path(path: &str) -> String {{
     format!("{{}}{{}}", SKYPACK_URL, path)
 }}
@@ -284,6 +312,9 @@ pub fn build_import_map() -> HashMap<String, String> {{
         version_instances_csv = version_instances_csv,
         SKYPACK_URL = SKYPACK_URL,
         VEGA_PATH = VEGA_PATH,
+        VEGA_VERSION = vega_version,
+        VEGA_THEMES_VERSION = vega_themes_version,
+        VEGA_EMBED_VERSION = vega_embed_version,
         VEGA_THEMES_PATH = VEGA_THEMES_PATH,
         VEGA_EMBED_PATH = VEGA_EMBED_PATH,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0

@@ -128,13 +128,13 @@
       "/-/vega-parser@v6.4.0-nwGMLAa2L4N1N7f1iRh9/dist=es2020,mode=imports,min/optimized/vega-parser.js": "./cdn.skypack.dev/-/vega-parser@v6.4.0-nwGMLAa2L4N1N7f1iRh9/dist=es2020,mode=imports,min/optimized/vega-parser.js",
       "/-/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/dist=es2020,mode=imports,min/optimized/lodash.debounce.js": "./cdn.skypack.dev/-/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/dist=es2020,mode=imports,min/optimized/lodash.debounce.js",
       "/-/vega-embed@v6.26.0-0yAdpZbj3i4rRevkUMhK/dist=es2020,mode=imports,min/optimized/vega-embed.js": "./cdn.skypack.dev/-/vega-embed@v6.26.0-0yAdpZbj3i4rRevkUMhK/dist=es2020,mode=imports,min/optimized/vega-embed.js",
-      "/-/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/dist=es2020,mode=imports,min/optimized/vega-lite.js": "./cdn.skypack.dev/-/vega-lite@v5.13.0-GkFo6HVxfKtvVL5RV8aE/dist=es2020,mode=imports,min/optimized/vega-lite.js",
       "/-/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/dist=es2020,mode=imports,min/optimized/vega-lite.js": "./cdn.skypack.dev/-/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/dist=es2020,mode=imports,min/optimized/vega-lite.js",
       "/-/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/dist=es2020,mode=imports,min/optimized/vega-lite.js": "./cdn.skypack.dev/-/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/dist=es2020,mode=imports,min/optimized/vega-lite.js",
       "/-/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/dist=es2020,mode=imports,min/optimized/vega-lite.js": "./cdn.skypack.dev/-/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/dist=es2020,mode=imports,min/optimized/vega-lite.js",
       "/-/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/dist=es2020,mode=imports,min/optimized/vega-lite.js": "./cdn.skypack.dev/-/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/dist=es2020,mode=imports,min/optimized/vega-lite.js",
       "/-/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/dist=es2020,mode=imports,min/optimized/vega-lite.js": "./cdn.skypack.dev/-/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/dist=es2020,mode=imports,min/optimized/vega-lite.js",
       "/-/vega-lite@v5.20.1-5FloWSAHKfabpxOoogY3/dist=es2020,mode=imports,min/optimized/vega-lite.js": "./cdn.skypack.dev/-/vega-lite@v5.20.1-5FloWSAHKfabpxOoogY3/dist=es2020,mode=imports,min/optimized/vega-lite.js",
+      "/-/vega-lite@v5.21.0-FWbVtRVTj7vqBi6QZX8A/dist=es2020,mode=imports,min/optimized/vega-lite.js": "./cdn.skypack.dev/-/vega-lite@v5.21.0-FWbVtRVTj7vqBi6QZX8A/dist=es2020,mode=imports,min/optimized/vega-lite.js",
       "/-/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/dist=es2020,mode=imports,min/optimized/vega-lite.js": "./cdn.skypack.dev/-/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/dist=es2020,mode=imports,min/optimized/vega-lite.js"
     }
   }

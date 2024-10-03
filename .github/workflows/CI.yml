@@ -134,7 +134,9 @@ jobs:
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
       - name: Run tests
-        run: pixi run test-rs
+        run: |
+          pixi run test-rs
+          pixi run test-cli
       - name: Upload test failures
         uses: actions/upload-artifact@v3
         if: always()

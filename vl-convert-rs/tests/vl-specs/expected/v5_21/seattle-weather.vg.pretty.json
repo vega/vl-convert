@@ -106,7 +106,7 @@
       "value": {},
       "on": [
         {
-          "events": "mousemove",
+          "events": "pointermove",
           "update": "isTuple(group()) ? group() : unit"
         }
       ]
@@ -149,7 +149,7 @@
             {
               "events": {
                 "source": "scope",
-                "type": "mousedown",
+                "type": "pointerdown",
                 "filter": [
                   "!event.item || event.item.mark.name !== \"brush_brush\""
                 ]
@@ -159,19 +159,19 @@
             {
               "events": {
                 "source": "window",
-                "type": "mousemove",
+                "type": "pointermove",
                 "consume": true,
                 "between": [
                   {
                     "source": "scope",
-                    "type": "mousedown",
+                    "type": "pointerdown",
                     "filter": [
                       "!event.item || event.item.mark.name !== \"brush_brush\""
                     ]
                   },
                   {
                     "source": "window",
-                    "type": "mouseup"
+                    "type": "pointerup"
                   }
                 ]
               },
@@ -262,7 +262,7 @@
               "events": [
                 {
                   "source": "scope",
-                  "type": "mousedown",
+                  "type": "pointerdown",
                   "markname": "brush_brush"
                 }
               ],
@@ -278,17 +278,17 @@
               "events": [
                 {
                   "source": "window",
-                  "type": "mousemove",
+                  "type": "pointermove",
                   "consume": true,
                   "between": [
                     {
                       "source": "scope",
-                      "type": "mousedown",
+                      "type": "pointerdown",
                       "markname": "brush_brush"
                     },
                     {
                       "source": "window",
-                      "type": "mouseup"
+                      "type": "pointerup"
                     }
                   ]
                 }
@@ -453,6 +453,9 @@
           "clip": true,
           "encode": {
             "enter": {
+              "cursor": {
+                "value": "move"
+              },
               "fill": {
                 "value": "transparent"
               }
@@ -773,7 +776,7 @@
         50
       ],
       "range": [
-        0,
+        4,
         361
       ],
       "zero": true
