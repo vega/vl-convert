@@ -16,7 +16,7 @@ name = "vl_convert"
 crate-type = ["cdylib"]
 
 [dependencies]
-vl-convert-rs = { path = "../vl-convert-rs", version = "1.6.2-a1" }
+vl-convert-rs = { path = "../vl-convert-rs", version = "1.7.0" }
 pyo3 = { workspace = true }
 lazy_static = { workspace = true }
 futures = { workspace = true }
