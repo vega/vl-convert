@@ -314,7 +314,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ build-wheels-linux-x86_64, build-wheels-linux-aarch64, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v3
         with:
           name: wheels
           path: dist/
