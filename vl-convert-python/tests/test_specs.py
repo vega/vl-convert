@@ -183,6 +183,40 @@ def test_svg(name, as_dict):
     check_svg(svg, expected_svg)
 
 
+def pythonw_func(name, as_dict, conn):
+    """Used by test_svg_pythonw."""
+    import traceback
+
+    try:
+        test_svg(name, as_dict)
+        conn.send("ok")
+    except Exception as e:
+        conn.send(traceback.format_exc())
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("win"), reason="pythonw test only applies on Windows"
+)
+@pytest.mark.parametrize("name", ["circle_binned"])
+@pytest.mark.parametrize("as_dict", [True])
+def test_svg_pythonw(name, as_dict):
+    import multiprocessing as mp
+    import os
+
+    # Force multiprocessing to use pythonw.exe to demonstrate the problem
+    mp.set_executable(os.path.join(os.path.dirname(sys.executable), "pythonw.exe"))
+
+    parent_conn, child_conn = mp.Pipe()
+    proc = mp.Process(target=pythonw_func, args=(name, as_dict, child_conn))
+
+    proc.start()
+    response = parent_conn.recv()
+    proc.join()
+
+    assert proc.exitcode == 0
+    assert response == "ok"
+
+
 @pytest.mark.parametrize(
     "name,scale",
     [
