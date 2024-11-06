@@ -8,7 +8,7 @@ jobs:
   build-cli-linux-x86:
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install latest stable Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -40,7 +40,7 @@ jobs:
   build-cli-linux-aarch64:
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
         with:
@@ -88,7 +88,7 @@ jobs:
   build-cli-win-64:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install latest stable Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -124,7 +124,7 @@ jobs:
   build-cli-osx-64:
     runs-on: macos-12
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install latest stable Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -156,7 +156,7 @@ jobs:
   build-cli-osx-arm64:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install latest stable Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -192,7 +192,7 @@ jobs:
         arch:
           - "x86_64-unknown-linux-gnu"
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - uses: messense/maturin-action@v1
       with:
         manylinux: auto
@@ -212,7 +212,7 @@ jobs:
   build-wheels-linux-aarch64:
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v1
       - uses: messense/maturin-action@v1
@@ -246,7 +246,7 @@ jobs:
   build-wheels-win-64:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Install Protoc
       uses: arduino/setup-protoc@v2
       with:
@@ -264,7 +264,7 @@ jobs:
   build-wheels-osx-64:
     runs-on: macos-12
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Install Protoc
       uses: arduino/setup-protoc@v2
       with:
@@ -288,7 +288,7 @@ jobs:
   build-wheels-osx-arm64:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
