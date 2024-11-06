@@ -31,7 +31,7 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_linux-64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vl-convert
           path: |
@@ -79,7 +79,7 @@ jobs:
               zip -r vl-convert_linux-aarch64.zip bin/
             "
       - name: Upload executable
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vl-convert
           path: |
@@ -314,7 +314,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ build-wheels-linux-x86_64, build-wheels-linux-aarch64, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: wheels
           path: dist/
