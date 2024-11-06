@@ -31,7 +31,7 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_linux-64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vl-convert
           path: |
@@ -79,7 +79,7 @@ jobs:
               zip -r vl-convert_linux-aarch64.zip bin/
             "
       - name: Upload executable
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vl-convert
           path: |
@@ -115,7 +115,7 @@ jobs:
           files: artifacts/
           dest: vl-convert_win-64.zip
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vl-convert
           path: |
@@ -147,7 +147,7 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_osx-64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vl-convert
           path: |
@@ -179,7 +179,7 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_osx-arm64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vl-convert
           path: |
@@ -204,7 +204,7 @@ jobs:
           curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
           unzip protoc-24.0-linux-x86_64.zip -d /usr/
     - name: Upload wheels
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wheels
         path: dist
@@ -238,7 +238,7 @@ jobs:
           ls dist/
           rename 's/x86_64/aarch64/g' dist/vl_convert_python-*.whl
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
@@ -256,7 +256,7 @@ jobs:
         command: build
         args: --release -m vl-convert-python/Cargo.toml -o dist --strip
     - name: Upload wheels
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wheels
         path: dist
@@ -280,7 +280,7 @@ jobs:
         args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
         target: x86_64-apple-darwin
     - name: Upload wheels
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: wheels
         path: dist
@@ -303,7 +303,7 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: dist
