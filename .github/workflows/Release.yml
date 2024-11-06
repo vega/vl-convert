@@ -46,7 +46,7 @@ jobs:
         with:
           platforms: arm64
       - name: Cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: build-cli-linux-aarch64-${{ hashFiles('Cargo.lock') }}
           path: |
