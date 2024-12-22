@@ -585,27 +585,27 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
 
         let fs = Arc::new(deno_runtime::deno_fs::RealFs);
         let permission_desc_parser =
-        Arc::new(deno_runtime::permissions::RuntimePermissionDescriptorParser::new(fs.clone()));
+            Arc::new(deno_runtime::permissions::RuntimePermissionDescriptorParser::new(fs.clone()));
 
-            let mut worker = MainWorker::bootstrap_from_options(
-                main_module.clone(),
-                deno_runtime::worker::WorkerServiceOptions {
-                  module_loader: module_loader,
-                  permissions: PermissionsContainer::allow_all(permission_desc_parser),
-                  blob_store: Default::default(),
-                  broadcast_channel: Default::default(),
-                  feature_checker: Default::default(),
-                  node_services: Default::default(),
-                  npm_process_state_provider: Default::default(),
-                  root_cert_store_provider: Default::default(),
-                  fetch_dns_resolver: Default::default(),
-                  shared_array_buffer_store: Default::default(),
-                  compiled_wasm_module_store: Default::default(),
-                  v8_code_cache: Default::default(),
-                  fs: Arc::new(deno_runtime::deno_fs::RealFs), //TODO MEGB: we don't want this
-                },
-                options,
-              );
+        let mut worker = MainWorker::bootstrap_from_options(
+            main_module.clone(),
+            deno_runtime::worker::WorkerServiceOptions {
+                module_loader: module_loader,
+                permissions: PermissionsContainer::allow_all(permission_desc_parser),
+                blob_store: Default::default(),
+                broadcast_channel: Default::default(),
+                feature_checker: Default::default(),
+                node_services: Default::default(),
+                npm_process_state_provider: Default::default(),
+                root_cert_store_provider: Default::default(),
+                fetch_dns_resolver: Default::default(),
+                shared_array_buffer_store: Default::default(),
+                compiled_wasm_module_store: Default::default(),
+                v8_code_cache: Default::default(),
+                fs: Arc::new(deno_runtime::deno_fs::RealFs), //TODO MEGB: we don't want this
+            },
+            options,
+        );
 
         worker.execute_main_module(&main_module).await?;
         worker.run_event_loop(false).await?;
