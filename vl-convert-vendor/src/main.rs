@@ -1,7 +1,7 @@
 use anyhow::Error as AnyError;
 use dircpy::copy_dir;
 use semver::Version;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 use std::fs;
 use std::fs::DirEntry;
@@ -84,6 +84,10 @@ fn main() {
     if vendor_path.exists() {
         fs::remove_dir_all(&vendor_path).unwrap();
     }
+    let deno_lock_path = vl_convert_rs_path.join("deno.lock");
+    if deno_lock_path.exists() {
+        fs::remove_file(&deno_lock_path).unwrap();
+    }
 
     // extract vega version from url
     let vega_version = VEGA_PATH
@@ -165,16 +169,93 @@ fn main() {
 
     fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
-    // Use deno vendor to download vega-lite and dependencies to the vendor directory
-    if let Err(err) = Command::new("deno")
+    // Use deno install to download vega-lite and dependencies to the vendor directory
+    let output = Command::new("deno")
         .current_dir(&vl_convert_rs_path)
-        .arg("vendor")
+        .arg("install")
+        .arg("--vendor=true")
+        .arg("--lock=deno.lock")
+        .arg("--allow-import=cdn.skypack.dev")
+        .arg("--entrypoint")
         .arg("vendor_imports.js")
-        .arg("--reload")
-        .output()
-    {
-        panic!("Deno vendor command failed: {}", err);
+        .output();
+
+    match output {
+        Ok(output) => {
+            if !output.status.success() {
+                panic!(
+                    "Deno vendor command failed with status {}: {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            } else {
+                println!(
+                    "Deno vendor command output: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                );
+            }
+        }
+        Err(err) => {
+            panic!("Deno vendor command failed: {}", err);
+        }
     }
+
+    let manifest_path = vendor_path.join("manifest.json");
+    let manifest = read_manifest(manifest_path).expect("Failed to parse manifest.json");
+
+    // Rewrite the vendored directories to use the correct paths
+    // for each of the folders in the manifest
+    for (import_url, path) in manifest.folders.iter() {
+        rename_path_to_match_import(&vendor_path, import_url, path);
+    }
+
+    // Read the deno.lock file
+    println!("Reading file at path: {:?}", deno_lock_path);
+    let lock_file_content = fs::read_to_string(&deno_lock_path).unwrap();
+    let lock_file = deno_lockfile::Lockfile::new(deno_lockfile::NewLockfileOptions {
+        file_path: deno_lock_path,
+        content: lock_file_content.as_str(),
+        overwrite: false,
+    })
+    .unwrap();
+    let hash_to_fullurl = swap_key_value(lock_file.remote().clone());
+
+    visit_dirs(&vendor_path, &mut |f| {
+        let p = f.path().canonicalize().unwrap();
+        let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
+
+        // We are in a file -> Hash it's contents and lookup the full url
+        // Calculate the sha256 hash of the file
+        println!("Processing file: {}", f.path().display());
+        let c = checksum(&fs::read(f.path()).unwrap());
+        if let Some(full_urls) = hash_to_fullurl.get(&c) {
+            let path_parts = prepare_path_parts(relative);
+
+            // find the longest partial match
+            let _results: Vec<_> = full_urls
+                .iter()
+                .map(|full_url| {
+                    let full_url_parts = prepare_import_url_parts(full_url);
+                    maximum_common_prefix_length(full_url_parts.clone(), path_parts.clone())
+                })
+                .collect();
+            // rename_path_to_match_import(&vendor_path, import_url.as_str(), path.as_str());
+
+            // If there is a _result that matches len of path_parts then we have a match and we are done
+            if _results.iter().any(|&len| len == path_parts.len()) {
+                return;
+            }
+
+            // If we don't have a match, we need to find the max in the _results and the corresponding full_url
+            let max_len = _results.iter().max().unwrap();
+
+            let max_index = _results.iter().position(|&len| len == *max_len).unwrap();
+            let full_url = &full_urls[max_index];
+
+            rename_path_to_match_import(&vendor_path, full_url.as_str(), relative);
+        }
+    })
+    .unwrap();
 
     // Write import_map.rs file
     // Build versions csv
@@ -317,6 +398,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         VEGA_EMBED_VERSION = vega_embed_version,
         VEGA_THEMES_PATH = VEGA_THEMES_PATH,
         VEGA_EMBED_PATH = VEGA_EMBED_PATH,
+        DEBOUNCE_PATH = DEBOUNCE_PATH,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
 
@@ -504,4 +586,101 @@ fn replace_in_file(file_path: &PathBuf, replacements: &HashMap<String, String>) 
     file.write_all(content.as_bytes())?;
 
     Ok(())
+}
+
+#[derive(serde::Deserialize)]
+#[allow(dead_code)]
+struct VendorManifest {
+    folders: std::collections::HashMap<String, String>,
+    modules: std::collections::HashMap<String, HashMap<String, String>>,
+}
+
+impl VendorManifest {
+    fn from_json(json_data: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json_data)
+    }
+}
+
+fn read_manifest(path: PathBuf) -> Result<VendorManifest, Box<dyn std::error::Error>> {
+    let json_data = std::fs::read_to_string(path)?;
+    let manifest: VendorManifest = VendorManifest::from_json(&json_data)?;
+    Ok(manifest)
+}
+
+fn prepare_import_url_parts(import_url: &str) -> Vec<String> {
+    // Remove the schema from the "import_url" and the trailing slash
+    import_url
+        .trim_start_matches("https://")
+        .trim_end_matches('/')
+        .split('/')
+        .map(String::from)
+        .collect()
+}
+
+fn prepare_path_parts(path: &str) -> Vec<String> {
+    // This is a path so we need to make sure that it is handled in a OS-independent way
+
+    Path::new(path)
+        .components()
+        .map(|c| c.as_os_str().to_str().unwrap().to_string())
+        .collect::<Vec<String>>()
+}
+
+fn maximum_common_prefix_length<T: PartialEq>(a: Vec<T>, b: Vec<T>) -> usize {
+    a.iter().zip(b.iter()).take_while(|(a, b)| a == b).count()
+}
+
+fn rename_path_to_match_import(vendor_path: &Path, import_url: &str, path: &str) {
+    let import_url_parts = prepare_import_url_parts(import_url);
+    let path_parts = prepare_path_parts(path);
+
+    if import_url_parts.len() != path_parts.len() {
+        panic!(
+            "import_url and path parts count do not match: {} ({}) vs {} ({})",
+            import_url,
+            import_url_parts.len(),
+            path,
+            path_parts.len()
+        );
+    }
+
+    for i in 0..import_url_parts.len() {
+        let import_url_part = &import_url_parts[i];
+        let path_part = &path_parts[i];
+
+        if import_url_part != path_part {
+            let import_path = import_url_parts[..=i].join("/");
+            let folder_path = path_parts[..=i]
+                .iter()
+                .collect::<PathBuf>()
+                .to_str()
+                .unwrap()
+                .to_string();
+
+            let folder_path = vendor_path.join(folder_path);
+            let new_folder_path = vendor_path.join(PathBuf::from(import_path));
+            println!(
+                "Renaming {} to {}",
+                folder_path.display(),
+                new_folder_path.display()
+            );
+            fs::rename(folder_path, new_folder_path).unwrap();
+        }
+    }
+}
+
+fn swap_key_value(map: BTreeMap<String, String>) -> BTreeMap<String, Vec<String>> {
+    let mut swapped = BTreeMap::new();
+    for (key, value) in map {
+        swapped.entry(value).or_insert_with(Vec::new).push(key);
+    }
+    swapped
+}
+pub fn checksum(v: &[u8]) -> String {
+    use sha2::Digest;
+    use sha2::Sha256;
+
+    let mut hasher = Sha256::new();
+    hasher.update(v);
+    format!("{:x}", hasher.finalize())
 }

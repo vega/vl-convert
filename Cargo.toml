@@ -24,6 +24,7 @@ deno_core = "0.326.0"
 deno_emit = "0.46.0"
 deno_graph = "0.82.3"
 deno_runtime = "0.192.0"
+deno_lockfile = "0.24.0"
 
 dircpy = "0.3"
 dssim = "3.2.4"
