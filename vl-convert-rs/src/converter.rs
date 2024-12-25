@@ -590,7 +590,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let mut worker = MainWorker::bootstrap_from_options(
             main_module.clone(),
             deno_runtime::worker::WorkerServiceOptions {
-                module_loader: module_loader,
+                module_loader,
                 permissions: PermissionsContainer::allow_all(permission_desc_parser),
                 blob_store: Default::default(),
                 broadcast_channel: Default::default(),
