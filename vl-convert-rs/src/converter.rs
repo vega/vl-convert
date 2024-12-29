@@ -8,7 +8,7 @@ use deno_runtime::deno_core;
 use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8};
-use deno_runtime::deno_permissions::PermissionsContainer;
+use deno_runtime::deno_permissions::{Permissions, PermissionsContainer, UnaryPermission};
 use deno_runtime::worker::MainWorker;
 use deno_runtime::worker::WorkerOptions;
 use std::collections::hash_map::Entry;
@@ -583,15 +583,28 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let main_module =
             deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
 
-        let fs = Arc::new(deno_runtime::deno_fs::RealFs);
+        let fs = Arc::new(deno_runtime::deno_fs::InMemoryFs::default());
         let permission_desc_parser =
             Arc::new(deno_runtime::permissions::RuntimePermissionDescriptorParser::new(fs.clone()));
+
+        let prompt = true;
+        let permissions = Permissions {
+            read: Permissions::new_unary(None, None, prompt),
+            write: Permissions::new_unary(None, None, prompt),
+            net: UnaryPermission::allow_all(),
+            env: Permissions::new_unary(None, None, prompt),
+            sys: Permissions::new_unary(None, None, prompt),
+            run: Permissions::new_unary(None, None, prompt),
+            ffi: Permissions::new_unary(None, None, prompt),
+            import: Permissions::new_unary(None, None, prompt),
+            all: Permissions::new_all(false),
+        };
 
         let mut worker = MainWorker::bootstrap_from_options(
             main_module.clone(),
             deno_runtime::worker::WorkerServiceOptions {
                 module_loader,
-                permissions: PermissionsContainer::allow_all(permission_desc_parser),
+                permissions: PermissionsContainer::new(permission_desc_parser, permissions),
                 blob_store: Default::default(),
                 broadcast_channel: Default::default(),
                 feature_checker: Default::default(),
@@ -602,7 +615,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
                 shared_array_buffer_store: Default::default(),
                 compiled_wasm_module_store: Default::default(),
                 v8_code_cache: Default::default(),
-                fs: Arc::new(deno_runtime::deno_fs::RealFs), //TODO MEGB: we don't want this
+                fs: fs.clone(),
             },
             options,
         );
