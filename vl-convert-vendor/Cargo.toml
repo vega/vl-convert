@@ -14,6 +14,7 @@ release = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+serde = {workspace = true}
 serde_json = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
 zip-extract = { workspace = true }
@@ -21,3 +22,5 @@ tempfile = { workspace = true }
 anyhow = { workspace = true }
 dircpy = { workspace = true }
 semver = { workspace = true }
+deno_lockfile = { workspace = true }
+sha2 = "0.10"
