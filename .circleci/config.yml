@@ -1,5 +1,3 @@
-version: 2.1
-
 jobs:
   vl-convert-rs-example2:
     runs-on: ubuntu-20.04
