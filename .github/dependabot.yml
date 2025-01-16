@@ -1,6 +1,38 @@
-version: 2
-updates:
-- package-ecosystem: github-actions
-  directory: "/"
-  schedule:
-    interval: monthly
+version: 2.1
+
+parameters:
+  elixir-image:
+    type: string
+    default: hexpm/elixir:1.17.3-erlang-27.0.1-debian-bookworm-20241202
+  ubuntu-image:
+    type: string
+    default: ubuntu:22.04
+
+executors:
+  test-container:
+    docker:
+      - image: << pipeline.parameters.ubuntu-image >>
+
+commands:
+  code-setup:
+    description: "Ensures code is checked out and basic tooling is ready"
+    steps:
+      - checkout
+      - run: apt-get update
+      - run: apt-get install -y git build-essential wget curl
+
+jobs:
+  vl-convert-rs-example2:
+    executor: test-container
+    steps:
+      - code-setup
+      - run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . "$HOME/.cargo/env"
+          cd vl-convert-rs
+          cargo run --example conversion_sequence
+
+workflows:
+  test-suite:
+    jobs:
+      - vl-convert-rs-example2
