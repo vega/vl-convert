@@ -1,0 +1,16 @@
+version: 2.1
+
+jobs:
+  vl-convert-rs-example2:
+    runs-on: ubuntu-20.04
+    container:
+      image: ubuntu:22.04
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          apt-get update
+          apt-get install -y git build-essential wget curl
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . "$HOME/.cargo/env"
+          cd vl-convert-rs
+          cargo run --example conversion_sequence
