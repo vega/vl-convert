@@ -949,7 +949,32 @@ delete themes.default
     }
 
     pub async fn does_it_crash(&mut self) -> Result<(), AnyError> {
-        self.init_vega().await?;
+        let import_code = format!(
+            r#"
+var vega;
+import('{vega_url}').then((imported) => {{
+    vega = imported;
+}})
+
+var vegaThemes;
+import('{vega_themes_url}').then((imported) => {{
+    vegaThemes = imported;
+}})
+
+var op_text_width;
+var op_get_json_arg;
+import("ext:core/ops").then((imported) => {{
+    op_text_width = imported.op_text_width;
+    op_get_json_arg = imported.op_get_json_arg;
+}})
+"#,
+            vega_url = vega_url(),
+            vega_themes_url = vega_themes_url(),
+        );
+
+        self.worker
+            .execute_script("ext:<anon>", import_code.into())?;
+
         Ok(())
     }
 }
