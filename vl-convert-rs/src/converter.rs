@@ -947,6 +947,11 @@ delete themes.default
         let value = self.execute_script_to_json("themes").await?;
         Ok(value)
     }
+
+    pub async fn does_it_crash(&mut self) -> Result<(), AnyError> {
+        self.init_vega().await?;
+        Ok(())
+    }
 }
 
 pub enum VlConvertCommand {
@@ -980,6 +985,9 @@ pub enum VlConvertCommand {
     },
     GetThemes {
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
+    },
+    DoesItCrash {
+        responder: oneshot::Sender<Result<(), AnyError>>,
     },
 }
 
@@ -1083,6 +1091,10 @@ impl VlConverter {
                         VlConvertCommand::GetThemes { responder } => {
                             let themes = inner.get_themes().await;
                             responder.send(themes).ok();
+                        }
+                        VlConvertCommand::DoesItCrash { responder } => {
+                            let res = inner.does_it_crash().await;
+                            let _ = responder.send(res);
                         }
                     }
                 }
@@ -1453,6 +1465,27 @@ impl VlConverter {
         // Wait for result
         match resp_rx.await {
             Ok(themes_result) => themes_result,
+            Err(err) => bail!("Failed to retrieve get_themes result: {}", err.to_string()),
+        }
+    }
+
+    pub async fn does_it_crash(&mut self) -> Result<(), AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<(), AnyError>>();
+        let cmd = VlConvertCommand::DoesItCrash { responder: resp_tx };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send get_themes request: {}", err.to_string())
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(result) => result,
             Err(err) => bail!("Failed to retrieve get_themes result: {}", err.to_string()),
         }
     }
