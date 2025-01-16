@@ -1,7 +1,9 @@
 use std::path::Path;
+use std::rc::Rc;
 use deno_runtime::deno_permissions::{Permissions, PermissionsContainer};
 use deno_runtime::worker::{MainWorker, WorkerOptions};
-
+use vl_convert_rs::module_loader::VlConvertModuleLoader;
+use vl_convert_rs::VlConverter;
 
 #[tokio::main]
 async fn main() {
@@ -13,12 +15,14 @@ async fn convert() {
 
     println!("convert()");
 
+    let module_loader = Rc::new(VlConvertModuleLoader);
     let options = WorkerOptions {
+        module_loader,
         ..Default::default()
     };
 
     let main_module =
-        deno_core::resolve_path("empty_main.js", Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
+        deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
 
     let permissions = PermissionsContainer::new(Permissions::allow_all());
 
@@ -32,9 +36,9 @@ async fn convert() {
     worker.execute_script("ext:<anon>", code.into()).unwrap();
 
     // println!("CARGO_MANIFEST_DIR: {:?}", env!("CARGO_MANIFEST_DIR"));
-    // let main_module =
-    //     deno_core::resolve_path("vendor_imports.js", Path::new(env!("CARGO_MANIFEST_DIR")))
-    //         .unwrap();
+    let main_module =
+        deno_core::resolve_path("vendor_imports.js", Path::new(env!("CARGO_MANIFEST_DIR")))
+            .unwrap();
 
     // println!("main_module: {:?}", main_module);
 
