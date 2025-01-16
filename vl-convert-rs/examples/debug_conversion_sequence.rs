@@ -39,6 +39,7 @@ async fn convert(vl_spec: serde_json::Value) {
     // println!("main_module: {:?}", main_module);
 
     let mut converter = VlConverter::new();
+    converter.get_themes().await.unwrap();
 
     // converter
     //     .vegalite_to_svg(
