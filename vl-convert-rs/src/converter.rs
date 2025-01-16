@@ -951,14 +951,13 @@ delete themes.default
     pub async fn does_it_crash(&mut self) -> Result<(), AnyError> {
         let import_code = format!(
             r#"
-var vega;
-import('{vega_url}').then((imported) => {{
-    vega = imported;
-}})
+1 + 1;
 "#,
-            vega_url = vega_url(),
         );
-
+        // var vega;
+        // import('{vega_url}').then((imported) => {{
+        //     vega = imported;
+        // }})
         // var vegaThemes;
         // import('{vega_themes_url}').then((imported) => {{
         //     vegaThemes = imported;
