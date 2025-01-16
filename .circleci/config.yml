@@ -30,7 +30,7 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           . "$HOME/.cargo/env"
           cd vl-convert-rs
-          cargo run --example conversion_sequence
+          cargo run --example debug_conversion_sequence
 
 workflows:
   test-suite:

@@ -595,7 +595,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         };
 
         let main_module =
-            deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
+            deno_core::resolve_path("vendor_imports.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
 
         let permissions = PermissionsContainer::new(Permissions::allow_all());
 
