@@ -246,6 +246,20 @@ struct InnerVlConverter {
     vega_initialized: bool,
 }
 
+impl Drop for InnerVlConverter {
+    fn drop(&mut self) {
+        if let Err(e) = self.worker.dispatch_unload_event() {
+            // Log error but continue cleanup
+            eprintln!("Error dispatching unload event during cleanup: {}", e);
+        }
+
+        // Explicitly dispatch process exit event
+        if let Err(e) = self.worker.dispatch_process_exit_event() {
+            eprintln!("Error dispatching process exit event during cleanup: {}", e);
+        }
+    }
+}
+
 impl InnerVlConverter {
     async fn init_vega(&mut self) -> Result<(), AnyError> {
         if !self.vega_initialized {
