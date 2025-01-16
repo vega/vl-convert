@@ -252,11 +252,6 @@ impl Drop for InnerVlConverter {
             // Log error but continue cleanup
             eprintln!("Error dispatching unload event during cleanup: {}", e);
         }
-
-        // Explicitly dispatch process exit event
-        if let Err(e) = self.worker.dispatch_process_exit_event() {
-            eprintln!("Error dispatching process exit event during cleanup: {}", e);
-        }
     }
 }
 
@@ -595,7 +590,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         };
 
         let main_module =
-            deno_core::resolve_path("vendor_imports.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
+            deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
 
         let permissions = PermissionsContainer::new(Permissions::allow_all());
 
