@@ -3,11 +3,13 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
+use deno_core::error::AnyError;
 use deno_runtime::deno_permissions::{Permissions, PermissionsContainer};
 use deno_runtime::worker::{MainWorker, WorkerOptions};
-use futures::channel::{mpsc, mpsc::Sender};
+use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
-use vl_convert_rs::converter::{VlConvertCommand, TOKIO_RUNTIME};
+use vl_convert_rs::anyhow::bail;
+use vl_convert_rs::converter::{VlConvertCommand, VlOpts, TOKIO_RUNTIME};
 use vl_convert_rs::module_loader::VlConvertModuleLoader;
 use vl_convert_rs::VlConverter;
 
@@ -22,14 +24,18 @@ async fn main() {
     convert3().await;
 }
 
+struct ConvertCommand {
+    responder: oneshot::Sender<Result<(), AnyError>>,
+}
+
 pub struct Converter {
-    sender: Sender<()>,
+    sender: Sender<ConvertCommand>,
     handle: Arc<JoinHandle<()>>
 }
 
 impl Converter {
     pub fn new() -> Self {
-        let (sender, mut receiver) = mpsc::channel::<()>(32);
+        let (sender, mut receiver) = mpsc::channel::<ConvertCommand>(32);
 
         println!("TOKIO_RUNTIME.block_on");
         let handle = Arc::new(thread::spawn(move || {
@@ -37,7 +43,9 @@ impl Converter {
                 println!("in block_on");
                 let mut inner = InnerConverter::new().await;
                 while let Some(cmd) = receiver.next().await {
-                    inner.convert()
+                    println!("receiver.next()");
+                    inner.convert();
+                    cmd.responder.send(Ok(())).unwrap()
                 }
             })
         }));
@@ -50,8 +58,26 @@ impl Converter {
 
     pub async fn convert(&mut self) {
         println!("Send convert");
+
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<(), AnyError>>();
+        let cmd = ConvertCommand { responder: resp_tx };
+
         // Send request
-        self.sender.send(()).await.unwrap();
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                panic!("Failed to send get_themes request: {}", err.to_string())
+            }
+        }
+
+        // Wait for result
+        resp_rx.await.unwrap().unwrap()
+
+        // // Send request
+        // let cmd = ConvertCommand { responder: () };
+        // self.sender.send(()).await.unwrap();
 
         // // Wait for result
         // match resp_rx.await {
@@ -89,6 +115,7 @@ impl InnerConverter {
     }
 
     fn convert(&mut self) {
+        println!("inner convert");
         let code = r"1 + 1".to_string();
         self.worker.execute_script("ext:<anon>", code.into()).unwrap();
     }
