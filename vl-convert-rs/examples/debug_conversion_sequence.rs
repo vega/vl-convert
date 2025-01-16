@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
@@ -8,18 +7,11 @@ use deno_runtime::deno_permissions::{Permissions, PermissionsContainer};
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
-use vl_convert_rs::anyhow::bail;
-use vl_convert_rs::converter::{VlConvertCommand, VlOpts, TOKIO_RUNTIME};
-use vl_convert_rs::module_loader::VlConvertModuleLoader;
-use vl_convert_rs::VlConverter;
+use vl_convert_rs::converter::{TOKIO_RUNTIME};
+// use vl_convert_rs::VlConverter;
 
 #[tokio::main]
 async fn main() {
-    // convert().await;
-    // convert().await;
-    // convert2();
-    // convert2();
-
     convert3().await;
     convert3().await;
 }
@@ -93,14 +85,12 @@ pub struct InnerConverter {
 impl InnerConverter {
     pub async fn new() -> Self {
         println!("build inner converter");
-        let module_loader = Rc::new(VlConvertModuleLoader);
         let options = WorkerOptions {
-            module_loader,
             ..Default::default()
         };
 
         let main_module =
-            deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
+            deno_core::resolve_path("empty_main.js", Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
 
         let permissions = PermissionsContainer::new(Permissions::allow_all());
 
@@ -130,14 +120,12 @@ fn convert2() {
     println!("convert2");
     let handle = Arc::new(thread::spawn(move || {
         TOKIO_RUNTIME.block_on(async {
-            let module_loader = Rc::new(VlConvertModuleLoader);
             let options = WorkerOptions {
-                module_loader,
                 ..Default::default()
             };
 
             let main_module =
-                deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
+                deno_core::resolve_path("empty_main.js", Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
 
             let permissions = PermissionsContainer::new(Permissions::allow_all());
 
@@ -184,10 +172,10 @@ async fn convert() {
 
     // println!("main_module: {:?}", main_module);
 
-    println!("VlConverter::new()");
-    let mut converter = VlConverter::new();
-    println!("converter.does_it_crash()");
-    converter.does_it_crash().await.unwrap();
+    // println!("VlConverter::new()");
+    // let mut converter = VlConverter::new();
+    // println!("converter.does_it_crash()");
+    // converter.does_it_crash().await.unwrap();
 
     // converter
     //     .vegalite_to_svg(
