@@ -19,7 +19,7 @@ commands:
     steps:
       - checkout
       - run: apt-get update
-      - run: apt-get install -y git build-essential wget curl lldb
+      - run: apt-get install -y git build-essential wget curl lldb python3
 
 jobs:
   vl-convert-rs-example2:
@@ -30,7 +30,8 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           . "$HOME/.cargo/env"
           cd vl-convert-rs
-          RUST_BACKTRACE=1 lldb -o "run" -o "bt all" -o "quit" -- cargo run --example debug_conversion_sequence > stacktrace.txt 2>&1 || true
+          cargo build --example debug_conversion_sequence
+          RUST_BACKTRACE=1 lldb ./target/debug/examples/debug_conversion_sequence -o "run" -o "bt all" -o "quit" > stacktrace.txt 2>&1
       - store_artifacts:
           path: vl-convert-rs/stacktrace.txt
           destination: stacktrace.txt
