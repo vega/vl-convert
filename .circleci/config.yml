@@ -19,7 +19,7 @@ commands:
     steps:
       - checkout
       - run: apt-get update
-      - run: apt-get install -y git build-essential wget curl lldb python3
+      - run: apt-get install -y git build-essential wget curl lldb python3 python3-lldb
 
 jobs:
   vl-convert-rs-example2:
