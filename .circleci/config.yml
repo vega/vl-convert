@@ -1,0 +1,42 @@
+version: 2.1
+
+parameters:
+  elixir-image:
+    type: string
+    default: hexpm/elixir:1.17.3-erlang-27.0.1-debian-bookworm-20241202
+  ubuntu-image:
+    type: string
+    default: ubuntu:22.04
+
+executors:
+  test-container:
+    docker:
+      - image: << pipeline.parameters.ubuntu-image >>
+
+commands:
+  code-setup:
+    description: "Ensures code is checked out and basic tooling is ready"
+    steps:
+      - checkout
+      - run: apt-get update
+      - run: apt-get install -y git build-essential wget curl lldb python3 python3-lldb
+
+jobs:
+  vl-convert-rs-example2:
+    executor: test-container
+    steps:
+      - code-setup
+      - run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . "$HOME/.cargo/env"
+          cd vl-convert-rs
+          cargo build --example debug_conversion_sequence
+          RUST_BACKTRACE=1 lldb ./target/debug/examples/debug_conversion_sequence -o "run" -o "bt all" -o "quit" > stacktrace.txt 2>&1
+      - store_artifacts:
+          path: vl-convert-rs/stacktrace.txt
+          destination: stacktrace.txt
+
+workflows:
+  test-suite:
+    jobs:
+      - vl-convert-rs-example2
