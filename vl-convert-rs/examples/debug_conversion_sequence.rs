@@ -18,10 +18,11 @@ async fn main() {
 
 struct ConvertCommand {
     responder: oneshot::Sender<Result<(), AnyError>>,
+    shutdown: bool,
 }
 
 pub struct Converter {
-    sender: Sender<ConvertCommand>,
+    sender: Option<Sender<ConvertCommand>>,
     handle: Arc<JoinHandle<()>>,
 }
 
@@ -42,23 +43,34 @@ impl Converter {
                 let mut inner = InnerConverter::new().await;
                 while let Some(cmd) = receiver.next().await {
                     println!("receiver.next()");
+                    if cmd.shutdown {
+                        cmd.responder.send(Ok(())).unwrap();
+                        break;
+                    }
                     inner.convert();
                     cmd.responder.send(Ok(())).unwrap()
                 }
+                println!("Worker thread shutting down");
             })
         }));
 
-        Self { sender, handle }
+        Self {
+            sender: Some(sender),
+            handle,
+        }
     }
 
     pub async fn convert(&mut self) {
         println!("Send convert");
 
         let (resp_tx, resp_rx) = oneshot::channel::<Result<(), AnyError>>();
-        let cmd = ConvertCommand { responder: resp_tx };
+        let cmd = ConvertCommand {
+            responder: resp_tx,
+            shutdown: false,
+        };
 
         // Send request
-        match self.sender.send(cmd).await {
+        match self.sender.as_mut().unwrap().send(cmd).await {
             Ok(_) => {
                 // All good
             }
@@ -71,6 +83,39 @@ impl Converter {
         resp_rx.await.unwrap().unwrap()
     }
 }
+
+impl Drop for Converter {
+    fn drop(&mut self) {
+        if let Some(mut sender) = self.sender.take() {
+            // Send shutdown command
+            let (resp_tx, resp_rx) = oneshot::channel::<Result<(), AnyError>>();
+            let cmd = ConvertCommand {
+                responder: resp_tx,
+                shutdown: true,
+            };
+
+            // Use std::sync channels for shutdown
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                futures::executor::block_on(async {
+                    sender.send(cmd).await.unwrap();
+                    resp_rx.await.unwrap().unwrap();
+                });
+                tx.send(()).unwrap();
+            });
+            rx.recv().unwrap();
+        }
+
+        // Wait for the thread to finish
+        if Arc::strong_count(&self.handle) == 1 {
+            let handle = std::mem::replace(&mut self.handle, Arc::new(thread::spawn(|| {})));
+            if let Ok(thread_handle) = Arc::try_unwrap(handle) {
+                thread_handle.join().unwrap();
+            }
+        }
+    }
+}
+
 pub struct InnerConverter {
     worker: MainWorker,
 }
