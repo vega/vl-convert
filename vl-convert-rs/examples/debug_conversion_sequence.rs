@@ -1,14 +1,14 @@
-use std::path::Path;
-use std::sync::Arc;
-use std::thread;
-use std::thread::JoinHandle;
 use deno_core::error::AnyError;
 use deno_runtime::deno_permissions::{Permissions, PermissionsContainer};
 use deno_runtime::worker::{MainWorker, WorkerOptions};
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
+use std::path::Path;
+use std::sync::Arc;
+use std::thread;
+use std::thread::JoinHandle;
 use tokio::io::AsyncWriteExt;
-use vl_convert_rs::converter::{TOKIO_RUNTIME};
+use vl_convert_rs::converter::TOKIO_RUNTIME;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -22,18 +22,16 @@ struct ConvertCommand {
 
 pub struct Converter {
     sender: Sender<ConvertCommand>,
-    handle: Arc<JoinHandle<()>>
+    handle: Arc<JoinHandle<()>>,
 }
 
 impl Converter {
     pub fn new() -> Self {
-
-        let tokio_runtime =
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
 
         let (sender, mut receiver) = mpsc::channel::<ConvertCommand>(32);
 
@@ -50,10 +48,7 @@ impl Converter {
             })
         }));
 
-        Self {
-            sender,
-            handle
-        }
+        Self { sender, handle }
     }
 
     pub async fn convert(&mut self) {
@@ -77,7 +72,7 @@ impl Converter {
     }
 }
 pub struct InnerConverter {
-    worker: MainWorker
+    worker: MainWorker,
 }
 
 impl InnerConverter {
@@ -88,7 +83,8 @@ impl InnerConverter {
         };
 
         let main_module =
-            deno_core::resolve_path("empty_main.js", Path::new(env!("CARGO_MANIFEST_DIR"))).unwrap();
+            deno_core::resolve_path("empty_main.js", Path::new(env!("CARGO_MANIFEST_DIR")))
+                .unwrap();
 
         let permissions = PermissionsContainer::new(Permissions::allow_all());
 
@@ -97,15 +93,15 @@ impl InnerConverter {
 
         worker.execute_main_module(&main_module).await.unwrap();
         worker.run_event_loop(false).await.unwrap();
-        Self {
-            worker
-        }
+        Self { worker }
     }
 
     fn convert(&mut self) {
         println!("inner convert");
         let code = r"1 + 1".to_string();
-        self.worker.execute_script("ext:<anon>", code.into()).unwrap();
+        self.worker
+            .execute_script("ext:<anon>", code.into())
+            .unwrap();
     }
 }
 
