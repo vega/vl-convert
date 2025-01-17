@@ -10,7 +10,7 @@ use std::thread::JoinHandle;
 use tokio::io::AsyncWriteExt;
 use vl_convert_rs::converter::TOKIO_RUNTIME;
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(flavor = "multi_thread", worker_threads = 1)]
 async fn main() {
     convert3().await;
     convert3().await;
