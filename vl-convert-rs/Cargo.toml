@@ -10,10 +10,20 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-deno_runtime = { workspace = true }
+sys_traits = { version="*" , features = ["memory"]}
+
+deno_runtime = { workspace = true, features = ["transpile"] }
 deno_core = { workspace = true }
 deno_emit = { workspace = true }
 deno_graph = { workspace = true }
+deno_error = { workspace = true }
+deno_resolver = { workspace = true }
+deno_snapshots = { workspace = true }
+
+# For use with deno_emit, which is on an old version of deno_graph.
+deno_graph_old = { package = "deno_graph", version = "0.82.3" }
+
+thiserror = { workspace = true }
 serde = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
@@ -38,3 +48,6 @@ lazy_static = { workspace = true }
 [dev-dependencies]
 rstest = { workspace = true }
 dssim = { workspace = true }
+
+[build-dependencies]
+deno_runtime = { workspace = true, features = ["include_js_files_for_snapshotting", "only_snapshotted_js_sources", "snapshot"] }

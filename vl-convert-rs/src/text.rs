@@ -1,7 +1,7 @@
-use crate::anyhow;
-use crate::anyhow::{anyhow, bail};
+use crate::error::VlConvertError;
 use crate::image_loading::custom_string_resolver;
-use deno_core::error::AnyError;
+use deno_core::anyhow;
+use deno_core::anyhow::anyhow;
 use deno_core::op2;
 use serde::Deserialize;
 use serde_json::Value;
@@ -326,11 +326,16 @@ impl TextInfo {
     }
 }
 
-#[op2(fast)]
-pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, AnyError> {
+#[op2(fast, stack_trace)]
+pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, VlConvertError> {
     let text_info = match serde_json::from_str::<TextInfo>(&text_info_str) {
         Ok(text_info) => text_info,
-        Err(err) => bail!("Failed to deserialize text info: {}", err.to_string()),
+        Err(err) => {
+            return Err(VlConvertError::TextMeasurementError(format!(
+                "Failed to deserialize text info: {}",
+                err
+            )))
+        }
     };
 
     // Return width zero for text with non-positive size
@@ -362,10 +367,13 @@ pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, AnyError> {
     }
 }
 
-fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
-    let opts = USVG_OPTIONS
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+fn extract_text_width(svg: &String) -> Result<f64, VlConvertError> {
+    let opts = USVG_OPTIONS.lock().map_err(|err| {
+        VlConvertError::TextMeasurementError(format!(
+            "Failed to acquire usvg options lock: {}",
+            err
+        ))
+    })?;
 
     let rtree = usvg::Tree::from_str(svg, &opts).expect("Failed to parse text SVG");
 
@@ -386,7 +394,11 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
         .iter()
         .map(|node| format!("{:?}", node))
         .collect();
-    bail!("Failed to locate text in SVG:\n{}\n{:?}", svg, node_strs)
+
+    Err(VlConvertError::TextMeasurementError(format!(
+        "Failed to locate text in SVG:\n{}\n{:?}",
+        svg, node_strs
+    )))
 }
 
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {

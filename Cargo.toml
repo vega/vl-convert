@@ -15,15 +15,22 @@ lto = true
 codegen-units = 1
 
 [workspace.dependencies]
-anyhow = "1.0"
+anyhow = "1.0.95"
 assert_cmd = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 
-# Deno crates that correspond to 1.46.3
-deno_core = "0.307.0"
-deno_emit = "0.44.0"
-deno_graph = "0.81.3"
-deno_runtime = "0.177.0"
+# Deno crates that correspond to 2.3.3
+deno_core = "0.347.0"
+deno_graph = "0.91.0"
+deno_runtime = "0.213.0"
+deno_error = "0.5.6"
+deno_resolver = "0.36.0"
+deno_snapshots = "0.20.0"
+
+# Older version, as deno_emit seems to not be updated with deno anymore
+deno_emit = "0.46.0"
+
+thiserror = "2.0.12"
 
 dircpy = "0.3"
 dssim = "3.2.4"
@@ -46,7 +53,8 @@ resvg = "0.43.0"
 rstest = "0.18.2"
 semver = "1.0.20"
 serde = { version = "1.0.188", features = ["derive"] }
-serde_json = "1.0.106"
+serde_json = "1.0.140"
+hash-value = "1.0.1"
 shellexpand = "3.1.0"
 svg2pdf = "0.12.0"
 tempfile = "3.8.0"

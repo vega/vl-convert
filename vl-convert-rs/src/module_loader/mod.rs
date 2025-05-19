@@ -6,12 +6,12 @@ use crate::module_loader::import_map::{
 };
 use crate::VlVersion;
 use deno_core::{ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind};
-use deno_emit::{LoadFuture, LoadOptions, Loader};
-use deno_graph::source::LoadResponse;
-use deno_runtime::deno_core::anyhow::Error;
+
+use deno_core::error::ModuleLoaderError;
 use deno_runtime::deno_core::{
     resolve_import, ModuleLoader, ModuleSource, ModuleSpecifier, ModuleType,
 };
+use futures_util::future;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -37,7 +37,7 @@ impl ModuleLoader for VlConvertModuleLoader {
         specifier: &str,
         referrer: &str,
         _kind: ResolutionKind,
-    ) -> Result<ModuleSpecifier, Error> {
+    ) -> Result<ModuleSpecifier, ModuleLoaderError> {
         let resolved = resolve_import(specifier, referrer).unwrap();
         Ok(resolved)
     }
@@ -112,10 +112,8 @@ impl VlConvertBundleLoader {
             embed_vl_version,
         }
     }
-}
 
-impl Loader for VlConvertBundleLoader {
-    fn load(&self, module_specifier: &ModuleSpecifier, _options: LoadOptions) -> LoadFuture {
+    fn perform_load(&self, module_specifier: &ModuleSpecifier) -> Arc<[u8]> {
         let module_specifier = module_specifier.clone();
         let last_path_part = module_specifier.path().split('/').next_back().unwrap();
         let code = if last_path_part == "vl-convert-index.js" {
@@ -160,13 +158,41 @@ impl Loader for VlConvertBundleLoader {
 
         let code_bytes = code.into_bytes();
         let content: Arc<[u8]> = code_bytes.into_boxed_slice().into();
+        content
+    }
+}
 
-        Box::pin(async move {
-            Ok(Some(LoadResponse::Module {
+impl deno_graph::source::Loader for VlConvertBundleLoader {
+    fn load(
+        &self,
+        module_specifier: &ModuleSpecifier,
+        _options: deno_graph::source::LoadOptions,
+    ) -> deno_graph::source::LoadFuture {
+        let content = self.perform_load(module_specifier);
+        Box::pin(future::ready(Ok(Some(
+            deno_graph::source::LoadResponse::Module {
                 specifier: module_specifier.clone(),
                 maybe_headers: None,
                 content,
-            }))
-        })
+            },
+        ))))
+    }
+}
+
+// deno_emit is using an old version of deno_graph, so we need to implement the loader separately
+impl deno_emit::Loader for VlConvertBundleLoader {
+    fn load(
+        &self,
+        specifier: &deno_emit::ModuleSpecifier,
+        _options: deno_emit::LoadOptions,
+    ) -> deno_emit::LoadFuture {
+        let content = self.perform_load(specifier);
+        Box::pin(future::ready(Ok(Some(
+            deno_graph_old::source::LoadResponse::Module {
+                specifier: specifier.clone(),
+                maybe_headers: None,
+                content,
+            },
+        ))))
     }
 }

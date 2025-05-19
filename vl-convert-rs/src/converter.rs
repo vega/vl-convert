@@ -4,13 +4,15 @@ use crate::module_loader::{
 };
 
 use deno_core::op2;
+use deno_resolver::npm::{DenoInNpmPackageChecker, NpmResolver};
 use deno_runtime::deno_core;
 use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 use deno_runtime::deno_core::{serde_v8, v8};
-use deno_runtime::deno_permissions::{Permissions, PermissionsContainer};
-use deno_runtime::worker::MainWorker;
+use deno_runtime::deno_permissions::PermissionsContainer;
 use deno_runtime::worker::WorkerOptions;
+use deno_runtime::worker::{MainWorker, WorkerServiceOptions};
+
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
@@ -19,24 +21,26 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
+use deno_core::anyhow::anyhow;
+use deno_runtime::deno_fs::RealFs;
+use deno_runtime::permissions::RuntimePermissionDescriptorParser;
+use futures::channel::{mpsc, mpsc::Sender, oneshot};
+use futures_util::{SinkExt, StreamExt};
+use png::{PixelDimensions, Unit};
 use std::panic;
 use std::str::FromStr;
 use std::thread;
 use std::thread::JoinHandle;
-
-use crate::anyhow::anyhow;
-use futures::channel::{mpsc, mpsc::Sender, oneshot};
-use futures_util::{SinkExt, StreamExt};
-use png::{PixelDimensions, Unit};
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
+use crate::error::VlConvertError;
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
+use crate::text::{vl_convert_text_runtime, USVG_OPTIONS};
 use image::codecs::jpeg::JpegEncoder;
 use image::io::Reader as ImageReader;
 use resvg::render;
-
-use crate::text::{vl_convert_text_runtime, USVG_OPTIONS};
+use sys_traits::impls::InMemorySys;
 
 deno_core::extension!(vl_convert_converter_runtime, ops = [op_get_json_arg]);
 
@@ -224,18 +228,19 @@ fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
 
 #[op2]
 #[string]
-fn op_get_json_arg(arg_id: i32) -> Result<String, AnyError> {
+fn op_get_json_arg(arg_id: i32) -> Result<String, VlConvertError> {
     match JSON_ARGS.lock() {
         Ok(mut guard) => {
             if let Some(arg) = guard.remove(&arg_id) {
                 Ok(arg)
             } else {
-                bail!("Arg id not found")
+                Err(VlConvertError::Internal("Arg id not found".to_string()))
             }
         }
-        Err(err) => {
-            bail!("Failed to acquire lock: {}", err.to_string())
-        }
+        Err(err) => Err(VlConvertError::Internal(format!(
+            "Failed to acquire lock: {}",
+            err
+        ))),
     }
 }
 
@@ -570,23 +575,52 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
     }
 
     pub async fn try_new() -> Result<Self, AnyError> {
+        // Module loader
         let module_loader = Rc::new(VlConvertModuleLoader);
+
+        // File system
+        let fs = Arc::new(RealFs);
+
+        // Permissions
+        let permission_desc_parser = Arc::new(RuntimePermissionDescriptorParser::new(
+            sys_traits::impls::RealSys,
+        ));
+        let permissions = PermissionsContainer::allow_all(permission_desc_parser);
+
+        // Options
         let options = WorkerOptions {
             extensions: vec![
-                vl_convert_text_runtime::init_ops(),
-                vl_convert_converter_runtime::init_ops(),
+                vl_convert_text_runtime::init(),
+                vl_convert_converter_runtime::init(),
             ],
-            module_loader: module_loader.clone(),
+            startup_snapshot: deno_snapshots::CLI_SNAPSHOT,
             ..Default::default()
+        };
+        let service_options = WorkerServiceOptions::<
+            DenoInNpmPackageChecker,
+            NpmResolver<InMemorySys>,
+            InMemorySys,
+        > {
+            module_loader,
+            permissions,
+            fs,
+            deno_rt_native_addon_loader: None,
+            blob_store: Default::default(),
+            broadcast_channel: Default::default(),
+            feature_checker: Default::default(),
+            node_services: Default::default(),
+            npm_process_state_provider: Default::default(),
+            root_cert_store_provider: Default::default(),
+            fetch_dns_resolver: Default::default(),
+            shared_array_buffer_store: Default::default(),
+            compiled_wasm_module_store: Default::default(),
+            v8_code_cache: Default::default(),
         };
 
         let main_module =
             deno_core::resolve_path("vl-convert-rs.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
 
-        let permissions = PermissionsContainer::new(Permissions::allow_all());
-
-        let mut worker =
-            MainWorker::bootstrap_from_options(main_module.clone(), permissions, options);
+        let mut worker = MainWorker::bootstrap_from_options(&main_module, service_options, options);
 
         worker.execute_main_module(&main_module).await?;
         worker.run_event_loop(false).await?;
