@@ -178,6 +178,9 @@ jobs:
             # Install clang/llvm 5.0 via llvm-toolset-7
             yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
 
+            # Update environment variables
+            source /opt/rh/llvm-toolset-7/enable
+
             # Verify clang version
             clang --version
 
@@ -217,6 +220,9 @@ jobs:
 
             # Install clang/llvm 5.0 via llvm-toolset-7
             yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
+
+            # Update environment variables
+            source /opt/rh/llvm-toolset-7/enable
 
             # Verify clang version
             clang --version
