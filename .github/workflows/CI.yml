@@ -168,10 +168,13 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install centos-release-scl to get access to Software Collections
-            yum install -y centos-release-scl
+            # Install yum-utils to add repositories
+            yum install -y yum-utils
 
-            # Install clang/llvm 5.0 via llvm-toolset-7 (part of SCL)
+            # Add SCL repository directly with a hardcoded URL instead of using mirrorlist
+            yum-config-manager --add-repo=http://mirror.centos.org/centos/7/sclo/x86_64/rh/
+
+            # Install clang/llvm 5.0 via llvm-toolset-7
             yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
 
             # Enable the llvm-toolset-7 collection for this session
@@ -207,10 +210,13 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install centos-release-scl to get access to Software Collections
-            yum install -y centos-release-scl
+            # Install yum-utils to add repositories
+            yum install -y yum-utils
 
-            # Install clang/llvm 5.0 via llvm-toolset-7 (part of SCL)
+            # Add SCL repository directly with a hardcoded URL instead of using mirrorlist
+            yum-config-manager --add-repo=http://mirror.centos.org/altarch/7/sclo/aarch64/rh/
+
+            # Install clang/llvm 5.0 via llvm-toolset-7
             yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
 
             # Enable the llvm-toolset-7 collection for this session
