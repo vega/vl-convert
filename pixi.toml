@@ -43,7 +43,7 @@ pypdfium2 = ">=4.30.0, <5"
 # Development Dependencies
 [dependencies]
 python = "3.11.*"
-maturin = ">=1.4.0,<1.5"
+maturin = ">=1.8.6,<1.9"
 pytest = ">=8.2.2,<8.3"
 rust = "=1.87.0"
 scikit-image = ">=0.23.2,<0.24"
