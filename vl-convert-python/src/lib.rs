@@ -82,11 +82,7 @@ fn vegalite_to_vega(
             )))
         }
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &vega_spec)
-            .map_err(|err| PyValueError::new_err(err.to_string()))
-            .map(|obj| obj.into())
-    })
+    Python::with_gil(|py| -> PyResult<PyObject> { Ok(pythonize(py, &vega_spec)?.to_object(py)) })
 }
 
 /// Convert a Vega spec to an SVG image string
@@ -176,11 +172,7 @@ fn vega_to_scenegraph(
             )))
         }
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg)
-            .map_err(|err| PyValueError::new_err(err.to_string()))
-            .map(|obj| obj.into())
-    })
+    Python::with_gil(|py| -> PyResult<PyObject> { Ok(pythonize(py, &sg)?.to_object(py)) })
 }
 
 /// Convert a Vega-Lite spec to an SVG image string using a
@@ -212,7 +204,7 @@ fn vegalite_to_svg(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
-) -> PyResult<String> {
+) -> PyResult<PyObject> {
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -248,7 +240,7 @@ fn vegalite_to_svg(
             )))
         }
     };
-    Ok(svg)
+    Python::with_gil(|py| -> PyResult<PyObject> { Ok(pythonize(py, &svg)?.to_object(py)) })
 }
 
 /// Convert a Vega-Lite spec to a Vega Scenegraph using a
@@ -316,11 +308,7 @@ fn vegalite_to_scenegraph(
             )))
         }
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg)
-            .map_err(|err| PyValueError::new_err(err.to_string()))
-            .map(|obj| obj.into())
-    })
+    Python::with_gil(|py| -> PyResult<PyObject> { Ok(pythonize(py, &sg)?.to_object(py)) })
 }
 
 /// Convert a Vega spec to PNG image data.
@@ -717,12 +705,10 @@ fn vegalite_to_pdf(
 ///     str: URL string
 #[pyfunction]
 #[pyo3(signature = (vl_spec, fullscreen=None))]
-fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
+fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<PyObject> {
     let vl_spec = parse_json_spec(vl_spec)?;
-    Ok(vl_convert_rs::converter::vegalite_to_url(
-        &vl_spec,
-        fullscreen.unwrap_or(false),
-    )?)
+    let url = vl_convert_rs::converter::vegalite_to_url(&vl_spec, fullscreen.unwrap_or(false))?;
+    Python::with_gil(|py| Ok(url.into_py(py)))
 }
 
 /// Convert a Vega spec to a URL that opens the chart in the Vega editor
@@ -734,12 +720,10 @@ fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<Stri
 ///     str: URL string
 #[pyfunction]
 #[pyo3(signature = (vg_spec, fullscreen=None))]
-fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
+fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
-    Ok(vl_convert_rs::converter::vega_to_url(
-        &vg_spec,
-        fullscreen.unwrap_or(false),
-    )?)
+    let url = vl_convert_rs::converter::vega_to_url(&vg_spec, fullscreen.unwrap_or(false))?;
+    Python::with_gil(|py| Ok(url.into_py(py)))
 }
 
 /// Convert a Vega-Lite spec to self-contained HTML document using a particular
@@ -772,7 +756,7 @@ fn vegalite_to_html(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     renderer: Option<String>,
-) -> PyResult<String> {
+) -> PyResult<PyObject> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -787,7 +771,7 @@ fn vegalite_to_html(
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    Ok(PYTHON_RUNTIME.block_on(converter.vegalite_to_html(
+    let html = PYTHON_RUNTIME.block_on(converter.vegalite_to_html(
         vl_spec,
         VlOpts {
             vl_version,
@@ -800,7 +784,8 @@ fn vegalite_to_html(
         },
         bundle.unwrap_or(false),
         Renderer::from_str(&renderer)?,
-    ))?)
+    ))?;
+    Python::with_gil(|py| Ok(html.into_py(py)))
 }
 
 /// Convert a Vega spec to a self-contained HTML document
@@ -823,7 +808,7 @@ fn vega_to_html(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     renderer: Option<String>,
-) -> PyResult<String> {
+) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -831,7 +816,7 @@ fn vega_to_html(
     let mut converter = VL_CONVERTER
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
-    Ok(PYTHON_RUNTIME.block_on(converter.vega_to_html(
+    let html = PYTHON_RUNTIME.block_on(converter.vega_to_html(
         vg_spec,
         VgOpts {
             allowed_base_urls: None,
@@ -840,7 +825,8 @@ fn vega_to_html(
         },
         bundle.unwrap_or(false),
         Renderer::from_str(&renderer)?,
-    ))?)
+    ))?;
+    Python::with_gil(|py| Ok(html.into_py(py)))
 }
 
 /// Convert an SVG image string to PNG image data
@@ -1046,11 +1032,7 @@ fn get_themes() -> PyResult<PyObject> {
             )))
         }
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &themes)
-            .map_err(|err| PyValueError::new_err(err.to_string()))
-            .map(|obj| obj.into())
-    })
+    Python::with_gil(|py| -> PyResult<PyObject> { Ok(pythonize(py, &themes)?.to_object(py)) })
 }
 
 /// Get the d3-format locale dict for a named locale
@@ -1076,7 +1058,7 @@ fn get_format_locale(name: &str) -> PyResult<PyObject> {
                 "Failed to parse internal format locale as JSON"
             );
             Python::with_gil(|py| -> PyResult<PyObject> {
-                pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string())).map(|obj| obj.into())
+                Ok(pythonize(py, &locale)?.to_object(py))
             })
         }
     }
@@ -1105,7 +1087,7 @@ fn get_time_format_locale(name: &str) -> PyResult<PyObject> {
                 "Failed to parse internal time format locale as JSON"
             );
             Python::with_gil(|py| -> PyResult<PyObject> {
-                pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string())).map(|obj| obj.into())
+                Ok(pythonize(py, &locale)?.to_object(py))
             })
         }
     }
@@ -1130,7 +1112,7 @@ fn get_time_format_locale(name: &str) -> PyResult<PyObject> {
 ///     str: Bundled snippet with all dependencies
 #[pyfunction]
 #[pyo3(signature = (snippet=None, vl_version=None))]
-fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyResult<String> {
+fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyResult<PyObject> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -1138,12 +1120,14 @@ fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyRes
     };
 
     if let Some(snippet) = &snippet {
-        Ok(PYTHON_RUNTIME.block_on(bundle_vega_snippet(snippet, vl_version))?)
+        let result = PYTHON_RUNTIME.block_on(bundle_vega_snippet(snippet, vl_version))?;
+        Python::with_gil(|py| Ok(result.into_py(py)))
     } else {
         let mut converter = VL_CONVERTER
             .lock()
             .expect("Failed to acquire lock on Vega-Lite converter");
-        Ok(PYTHON_RUNTIME.block_on(converter.get_vegaembed_bundle(vl_version))?)
+        let result = PYTHON_RUNTIME.block_on(converter.get_vegaembed_bundle(vl_version))?;
+        Python::with_gil(|py| Ok(result.into_py(py)))
     }
 }
 
