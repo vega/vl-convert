@@ -175,6 +175,9 @@ jobs:
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
             unzip protoc-24.0-linux-x86_64.zip -d /usr/
+        env:
+          LIBSQLITE3_SYS_BUNDLING: 1
+          LIBSQLITE3_SYS_USE_BINDGEN: 0
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -203,6 +206,9 @@ jobs:
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
             unzip protoc-24.0-linux-aarch_64.zip -d /usr/
+        env:
+          LIBSQLITE3_SYS_BUNDLING: 1
+          LIBSQLITE3_SYS_USE_BINDGEN: 0
 
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
@@ -305,6 +311,9 @@ jobs:
         with:
           command: build
           args: -p vl-convert --release
+        env:
+          LIBSQLITE3_SYS_BUNDLING: 1
+          LIBSQLITE3_SYS_USE_BINDGEN: 0
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
@@ -343,6 +352,8 @@ jobs:
             --platform linux/arm64 \
             --env CARGO_TARGET_DIR=/workspace/target-arm64 \
             --env CARGO_HOME=/workspace/cargo-arm64 \
+            --env LIBSQLITE3_SYS_BUNDLING=1 \
+            --env LIBSQLITE3_SYS_USE_BINDGEN=0 \
             rust:1.87-slim-bookworm \
             bash -c "\
               uname -a && \
