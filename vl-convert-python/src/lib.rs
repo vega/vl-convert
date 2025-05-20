@@ -1,4 +1,6 @@
 #![allow(clippy::too_many_arguments)]
+// https://github.com/rust-lang/rust-clippy/issues/14272
+#![allow(clippy::useless_conversion)]
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
