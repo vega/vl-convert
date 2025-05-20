@@ -163,23 +163,13 @@ jobs:
       - uses: actions/checkout@v3
       - uses: messense/maturin-action@v1
         with:
-          manylinux: auto
+          manylinux: 2_27
           target: ${{ matrix.arch }}
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Add SCL repositories directly with hardcoded URLs
-            yum-config-manager --add-repo=http://vault.centos.org/centos/7/sclo/x86_64/rh/
-            yum-config-manager --add-repo=http://vault.centos.org/centos/7/sclo/x86_64/sclo/
-
-            # Update repo metadata after adding new repos
-            yum makecache fast
-
-            # Install clang/llvm 5.0 via llvm-toolset-7
-            yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
-
-            # Update environment variables
-            source /opt/rh/llvm-toolset-7/enable
+            # Install clang
+            yum install -y clang clang-devel llvm-devel
 
             # Verify clang version
             clang --version
@@ -188,9 +178,7 @@ jobs:
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
             unzip protoc-24.0-linux-x86_64.zip -d /usr/
-        env:
-          LIBSQLITE3_SYS_BUNDLING: 1
-          LIBSQLITE3_SYS_USE_BINDGEN: 0
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -205,24 +193,14 @@ jobs:
         uses: docker/setup-qemu-action@v1
       - uses: messense/maturin-action@v1
         with:
-          manylinux: auto
+          manylinux: 2_27
           container: quay.io/pypa/manylinux2014_aarch64
           target: aarch64-unknown-linux-gnu
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Add SCL repositories directly with hardcoded URLs
-            yum-config-manager --add-repo=http://vault.centos.org/altarch/7/sclo/aarch64/rh/
-            yum-config-manager --add-repo=http://vault.centos.org/altarch/7/sclo/aarch64/sclo/
-
-            # Update repo metadata after adding new repos
-            yum makecache fast
-
-            # Install clang/llvm 5.0 via llvm-toolset-7
-            yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
-
-            # Update environment variables
-            source /opt/rh/llvm-toolset-7/enable
+            # Install clang
+            yum install -y clang clang-devel llvm-devel
 
             # Verify clang version
             clang --version
@@ -232,9 +210,6 @@ jobs:
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
             unzip protoc-24.0-linux-aarch_64.zip -d /usr/
-        env:
-          LIBSQLITE3_SYS_BUNDLING: 1
-          LIBSQLITE3_SYS_USE_BINDGEN: 0
 
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
@@ -329,13 +304,8 @@ jobs:
         run: |
           sudo apt-get install protobuf-compiler
       - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
-        env:
-          LIBSQLITE3_SYS_BUNDLING: 1
-          LIBSQLITE3_SYS_USE_BINDGEN: 0
+        run: |
+          cargo build --release -p vl-convert
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
@@ -414,10 +384,8 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
+        run: |
+          cargo build --release -p vl-convert
       - name: Move executable to bin directory
         run: |
           New-Item -Path "artifacts\bin" -ItemType Directory
@@ -450,10 +418,8 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
+        run: |
+          cargo build --release -p vl-convert
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
@@ -482,10 +448,8 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
+        run: |
+          cargo build --release -p vl-convert
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
