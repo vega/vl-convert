@@ -168,9 +168,14 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install clang directly without SCL
-            yum install -y epel-release
-            yum install -y clang clang-devel llvm-devel
+            # Install centos-release-scl to get access to Software Collections
+            yum install -y centos-release-scl
+
+            # Install clang/llvm 5.0 via llvm-toolset-7 (part of SCL)
+            yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
+
+            # Enable the llvm-toolset-7 collection for this session
+            source scl_source enable llvm-toolset-7
 
             # Verify clang version
             clang --version
@@ -202,9 +207,14 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install clang directly without SCL
-            yum install -y epel-release
-            yum install -y clang clang-devel llvm-devel
+            # Install centos-release-scl to get access to Software Collections
+            yum install -y centos-release-scl
+
+            # Install clang/llvm 5.0 via llvm-toolset-7 (part of SCL)
+            yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
+
+            # Enable the llvm-toolset-7 collection for this session
+            source scl_source enable llvm-toolset-7
 
             # Verify clang version
             clang --version
