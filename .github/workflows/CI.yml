@@ -154,7 +154,7 @@ jobs:
 
   # Wheel building jobs from Release.yml
   build-wheels-linux-x86_64:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         arch:
@@ -171,9 +171,6 @@ jobs:
             # Install clang for bindgen
             yum install -y clang-devel llvm-devel
 
-            # Install additional dependencies for ring crate
-            yum install -y pkg-config perl make gcc gcc-c++
-
             # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
@@ -181,9 +178,6 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
-          CARGO_FEATURE_FLAGS: "ring/use_heap"
-          CC: "gcc"
-          CXX: "g++"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -207,9 +201,6 @@ jobs:
             # Install clang for bindgen
             yum install -y clang-devel llvm-devel
 
-            # Install additional dependencies for ring crate
-            yum install -y pkg-config perl make gcc gcc-c++
-
             # Install protoc
             echo $PATH
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
@@ -218,9 +209,9 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
-          CARGO_FEATURE_FLAGS: "ring/use_heap"
-          CC: "gcc"
-          CXX: "g++"
+
+      # Not sure why the compiled wheels end up with x86_64 in the file name,
+      # they are aarch64 and work properly after being renamed.
       - name: Rename files
         run: |
           sudo apt-get update
@@ -300,7 +291,7 @@ jobs:
 
   # CLI building jobs from Release.yml
   build-cli-linux-x86:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
@@ -308,10 +299,6 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config perl make gcc g++ cmake clang libclang-dev llvm-dev
       - name: Install protoc
         run: |
           sudo apt-get install protobuf-compiler
@@ -323,10 +310,6 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
-          # Add flags for the ring crate
-          CARGO_FEATURE_FLAGS: "ring/use_heap"
-          CC: "gcc"
-          CXX: "g++"
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
@@ -367,9 +350,6 @@ jobs:
             --env CARGO_HOME=/workspace/cargo-arm64 \
             --env LIBSQLITE3_SYS_BUNDLING=1 \
             --env LIBSQLITE3_SYS_USE_BINDGEN=0 \
-            --env CARGO_FEATURE_FLAGS="ring/use_heap" \
-            --env CC=gcc \
-            --env CXX=g++ \
             rust:1.87-slim-bookworm \
             bash -c "\
               uname -a && \
