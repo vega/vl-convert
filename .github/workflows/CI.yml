@@ -154,7 +154,7 @@ jobs:
 
   # Wheel building jobs from Release.yml
   build-wheels-linux-x86_64:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         arch:
@@ -168,7 +168,7 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install a newer clang (5+) and dependencies
+            # Install a newer clang and dependencies
             yum install -y centos-release-scl
             yum install -y llvm-toolset-7-clang llvm-toolset-7-clang-devel
 
@@ -179,9 +179,6 @@ jobs:
 
             # Verify clang version
             clang --version
-
-            # Install additional dependencies for ring crate
-            yum install -y pkg-config perl make gcc gcc-c++
 
             # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
@@ -221,9 +218,6 @@ jobs:
 
             # Verify clang version
             clang --version
-
-            # Install additional dependencies for ring crate
-            yum install -y pkg-config perl make gcc gcc-c++
 
             # Install protoc
             echo $PATH
@@ -375,20 +369,22 @@ jobs:
             --env LIBSQLITE3_SYS_BUNDLING=1 \
             --env LIBSQLITE3_SYS_USE_BINDGEN=0 \
             rust:1.87-slim-bookworm \
-            bash -c '
-              # Install required dependencies
-              apt-get update && apt-get install -y pkg-config perl make gcc g++ cmake protobuf-compiler clang libclang-dev
-             
-              # Set up environment
-              export RUSTFLAGS="--cfg ring_use_dev_urandom" 
-              
-              # Build vl-convert
-              cargo build -p vl-convert --release
-              
-              # Move to output directory
-              mkdir -p /workspace/target/bin
-              cp /workspace/target-arm64/release/vl-convert /workspace/target/bin/vl-convert-linux-aarch64
-            '
+            bash -c "\
+              uname -a && \
+              apt update -y && \
+              apt install cmake curl zip unzip pkg-config perl make gcc g++ clang libclang-dev llvm-dev -y && \
+              curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protoc-24.0-linux-aarch_64.zip && \
+              unzip protoc-24.0-linux-aarch_64.zip -d /usr/ && \
+              which protoc && \
+              cargo build --release -p vl-convert && \
+              rm -rf bin/ && \
+              rm -rf vl-convert_linux-aarch64.zip && \
+              mkdir -p bin/ && \
+              cp target-arm64/release/vl-convert bin/ && \
+              cp LICENSE bin/ && \
+              cp thirdparty_* bin/ && \
+              zip -r vl-convert_linux-aarch64.zip bin/
+            "
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
