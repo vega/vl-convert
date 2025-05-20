@@ -23,8 +23,6 @@ fn create_cli_snapshot(snapshot_path: std::path::PathBuf) {
     deno_runtime::snapshot::create_runtime_snapshot(
         snapshot_path,
         snapshot_options,
-        vec![
-            vl_convert_runtime::init(),
-        ],
+        vec![vl_convert_runtime::init()],
     );
 }

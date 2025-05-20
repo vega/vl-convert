@@ -2,18 +2,18 @@ use crate::error::VlConvertError;
 use crate::image_loading::custom_string_resolver;
 use deno_core::anyhow;
 use deno_core::anyhow::anyhow;
+use deno_core::anyhow::bail;
+use deno_core::error::AnyError;
 use deno_core::op2;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-use deno_core::error::AnyError;
 use usvg::fontdb::Database;
 use usvg::{
     FallbackSelectionFn, FontFamily, FontResolver, FontSelectionFn, FontStretch, FontStyle,
     ImageHrefResolver,
 };
-use deno_core::anyhow::bail;
 
 deno_core::extension!(vl_convert_runtime, ops = [op_text_width, op_get_json_arg]);
 
@@ -382,7 +382,7 @@ pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, VlConvertEr
             return Err(VlConvertError::TextMeasurementError(format!(
                 "Failed to deserialize text info: {}",
                 err
-            )))
+            )));
         }
     };
 

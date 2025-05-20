@@ -35,11 +35,11 @@ use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
-use vl_convert_common::text::{USVG_OPTIONS, set_json_arg};
 use image::codecs::jpeg::JpegEncoder;
 use image::io::Reader as ImageReader;
 use resvg::render;
 use sys_traits::impls::InMemorySys;
+use vl_convert_common::text::{set_json_arg, USVG_OPTIONS};
 
 use vl_convert_common::ops::vl_convert_runtime;
 
@@ -547,9 +547,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
 
         // Options
         let options = WorkerOptions {
-            extensions: vec![
-                vl_convert_runtime::init(),
-            ],
+            extensions: vec![vl_convert_runtime::init()],
             startup_snapshot: CLI_SNAPSHOT,
             ..Default::default()
         };
