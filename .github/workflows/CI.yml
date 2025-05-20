@@ -168,6 +168,7 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
+            apt-get update && apt-get install -y libclang-dev
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
             unzip protoc-24.0-linux-x86_64.zip -d /usr/
@@ -193,6 +194,7 @@ jobs:
           before-script-linux: |
             # Install protoc
             echo $PATH
+            apt-get update && apt-get install -y libclang-dev
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
             unzip protoc-24.0-linux-aarch_64.zip -d /usr/
