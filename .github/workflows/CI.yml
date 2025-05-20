@@ -168,9 +168,8 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Skip bindgen for libsqlite3-sys
-            export LIBSQLITE3_SYS_BUNDLING=1
-            export LIBSQLITE3_SYS_USE_BINDGEN=0
+            # Install clang for bindgen
+            yum install -y clang-devel llvm-devel
 
             # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
@@ -196,9 +195,8 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Skip bindgen for libsqlite3-sys
-            export LIBSQLITE3_SYS_BUNDLING=1
-            export LIBSQLITE3_SYS_USE_BINDGEN=0
+            # Install clang for bindgen
+            yum install -y clang-devel llvm-devel
 
             # Install protoc
             echo $PATH
@@ -298,7 +296,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config perl make gcc g++ cmake
+          sudo apt-get install -y pkg-config perl make gcc g++ cmake clang libclang-dev llvm-dev
       - name: Install protoc
         run: |
           sudo apt-get install protobuf-compiler
@@ -349,7 +347,7 @@ jobs:
             bash -c "\
               uname -a && \
               apt update -y && \
-              apt install cmake curl zip unzip pkg-config perl make gcc g++ -y && \
+              apt install cmake curl zip unzip pkg-config perl make gcc g++ clang libclang-dev llvm-dev -y && \
               curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protoc-24.0-linux-aarch_64.zip && \
               unzip protoc-24.0-linux-aarch_64.zip -d /usr/ && \
               which protoc && \
