@@ -175,9 +175,7 @@ jobs:
             clang --version
 
             # Install protoc
-            PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-            curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
-            unzip protoc-24.0-linux-x86_64.zip -d /usr/
+            yum install -y protobuf-compiler protobuf-devel
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -206,10 +204,7 @@ jobs:
             clang --version
 
             # Install protoc
-            echo $PATH
-            PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-            curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
-            unzip protoc-24.0-linux-aarch_64.zip -d /usr/
+            yum install -y protobuf-compiler protobuf-devel
 
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
