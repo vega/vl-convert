@@ -168,8 +168,14 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install clang for bindgen
-            yum install -y clang-devel llvm-devel
+            # Install a newer clang (5+) and dependencies
+            yum install -y centos-release-scl
+            yum install -y llvm-toolset-7-clang llvm-toolset-7-clang-devel
+            source /opt/rh/llvm-toolset-7/enable
+            clang --version
+
+            # Install additional dependencies for ring crate
+            yum install -y pkg-config perl make gcc gcc-c++
 
             # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
@@ -198,8 +204,14 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install clang for bindgen
-            yum install -y clang-devel llvm-devel
+            # Install a newer clang (5+) and dependencies
+            yum install -y centos-release-scl
+            yum install -y llvm-toolset-7-clang llvm-toolset-7-clang-devel
+            source /opt/rh/llvm-toolset-7/enable
+            clang --version
+
+            # Install additional dependencies for ring crate
+            yum install -y pkg-config perl make gcc gcc-c++
 
             # Install protoc
             echo $PATH
@@ -209,9 +221,9 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
-
-      # Not sure why the compiled wheels end up with x86_64 in the file name,
-      # they are aarch64 and work properly after being renamed.
+          CARGO_FEATURE_FLAGS: "ring/use_heap"
+          CC: "clang"
+          CXX: "clang++"
       - name: Rename files
         run: |
           sudo apt-get update
@@ -291,7 +303,7 @@ jobs:
 
   # CLI building jobs from Release.yml
   build-cli-linux-x86:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v2
       - name: Install latest stable Rust toolchain
@@ -299,6 +311,17 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          # Install clang 9 (Ubuntu 22.04 has newer versions available)
+          sudo apt-get install -y clang-9 libclang-9-dev llvm-9-dev
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-9 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-9 100
+          clang --version
+
+          # Other dependencies
+          sudo apt-get install -y pkg-config perl make gcc g++ cmake
       - name: Install protoc
         run: |
           sudo apt-get install protobuf-compiler
@@ -310,6 +333,9 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
+          CARGO_FEATURE_FLAGS: "ring/use_heap"
+          CC: "clang"
+          CXX: "clang++"
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
@@ -350,11 +376,17 @@ jobs:
             --env CARGO_HOME=/workspace/cargo-arm64 \
             --env LIBSQLITE3_SYS_BUNDLING=1 \
             --env LIBSQLITE3_SYS_USE_BINDGEN=0 \
+            --env CARGO_FEATURE_FLAGS="ring/use_heap" \
+            --env CC=clang \
+            --env CXX=clang++ \
             rust:1.87-slim-bookworm \
             bash -c "\
               uname -a && \
               apt update -y && \
-              apt install cmake curl zip unzip pkg-config perl make gcc g++ clang libclang-dev llvm-dev -y && \
+              apt install cmake curl zip unzip pkg-config perl make gcc g++ -y && \
+              # Install newer clang
+              apt install -y clang libclang-dev llvm-dev && \
+              clang --version && \
               curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protoc-24.0-linux-aarch_64.zip && \
               unzip protoc-24.0-linux-aarch_64.zip -d /usr/ && \
               which protoc && \
