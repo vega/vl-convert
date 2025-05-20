@@ -1,5 +1,12 @@
 # Devlopment
-The vl-convert project consists of both Rust and Python components. The project uses [Pixi](https://pixi.sh/latest/) to manage the development environment. Pixi handles the installation of all the development dependencies including Python and Rust themselves. If you don't have Pixi installed, follow the instructions at https://pixi.sh/
+The vl-convert project consists of both Rust and Python components. The project uses [Pixi](https://pixi.sh/latest/) to manage the development environment. Pixi handles the installation of most of the development dependencies, including Python. If you don't have Pixi installed, follow the instructions at https://pixi.sh/
+
+# Install Rust
+Install the Rust toolchain using rustup. If you don't have rustup installed, follow the instructions at https://rustup.rs/
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
 # Running Rust tests
 Once pixi is installed, you can run the various test suites using Pixi commands.
