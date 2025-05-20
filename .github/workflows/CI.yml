@@ -171,6 +171,9 @@ jobs:
             # Install clang for bindgen
             yum install -y clang-devel llvm-devel
 
+            # Install additional dependencies for ring crate
+            yum install -y pkg-config perl make gcc gcc-c++
+
             # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
@@ -178,6 +181,9 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
+          CARGO_FEATURE_FLAGS: "ring/use_heap"
+          CC: "gcc"
+          CXX: "g++"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -201,6 +207,9 @@ jobs:
             # Install clang for bindgen
             yum install -y clang-devel llvm-devel
 
+            # Install additional dependencies for ring crate
+            yum install -y pkg-config perl make gcc gcc-c++
+
             # Install protoc
             echo $PATH
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
@@ -209,9 +218,9 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
-
-      # Not sure why the compiled wheels end up with x86_64 in the file name,
-      # they are aarch64 and work properly after being renamed.
+          CARGO_FEATURE_FLAGS: "ring/use_heap"
+          CC: "gcc"
+          CXX: "g++"
       - name: Rename files
         run: |
           sudo apt-get update
@@ -314,6 +323,10 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
+          # Add flags for the ring crate
+          CARGO_FEATURE_FLAGS: "ring/use_heap"
+          CC: "gcc"
+          CXX: "g++"
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
@@ -354,6 +367,9 @@ jobs:
             --env CARGO_HOME=/workspace/cargo-arm64 \
             --env LIBSQLITE3_SYS_BUNDLING=1 \
             --env LIBSQLITE3_SYS_USE_BINDGEN=0 \
+            --env CARGO_FEATURE_FLAGS="ring/use_heap" \
+            --env CC=gcc \
+            --env CXX=g++ \
             rust:1.87-slim-bookworm \
             bash -c "\
               uname -a && \
