@@ -34,10 +34,9 @@ jobs:
           cache-on-failure: True
       - name: Check cargo fmt compliance
         run: pixi run fmt-rs-check
-      - name: Check no rustc warnings
-        run: pixi run check-rs
       - name: Check for clippy warnings
         run: pixi run clippy
+
 
   cargo-bundle-license:
     runs-on: ubuntu-latest
