@@ -10,32 +10,25 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
+vl-convert-common = { path = "../vl-convert-common" }
 sys_traits = { version="*" , features = ["memory"]}
 
 deno_runtime = { workspace = true, features = ["transpile"] }
 deno_core = { workspace = true }
 deno_emit = { workspace = true }
 deno_graph = { workspace = true }
-deno_error = { workspace = true }
 deno_resolver = { workspace = true }
-deno_snapshots = { workspace = true }
 
 # For use with deno_emit, which is on an old version of deno_graph.
 deno_graph_old = { package = "deno_graph", version = "0.82.3" }
 
-thiserror = { workspace = true }
-serde = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
-reqwest = { workspace = true }
 usvg = { workspace = true }
 resvg = { workspace = true }
 tiny-skia = { workspace = true }
 svg2pdf = { workspace = true }
-ttf-parser = { workspace = true }
 png = { workspace = true }
-fontdb = { workspace = true }
-log = { workspace = true }
 env_logger = { workspace = true }
 image = { workspace = true }
 lz-str = { workspace = true }
@@ -50,4 +43,5 @@ rstest = { workspace = true }
 dssim = { workspace = true }
 
 [build-dependencies]
-deno_runtime = { workspace = true, features = ["include_js_files_for_snapshotting", "only_snapshotted_js_sources", "snapshot"] }
+deno_runtime = { workspace = true, features = ["snapshot"] }
+vl-convert-common = { path = "../vl-convert-common" }

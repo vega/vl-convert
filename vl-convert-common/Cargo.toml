@@ -1,0 +1,21 @@
+[package]
+name = "vl-convert-common"
+version = "1.7.0"
+edition = "2024"
+
+[dependencies]
+deno_core = { workspace = true }
+deno_error = { workspace = true }
+
+thiserror = { workspace = true }
+serde = { workspace = true }
+reqwest = { workspace = true }
+usvg = { workspace = true }
+ttf-parser = { workspace = true }
+fontdb = { workspace = true }
+log = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+lazy_static = { workspace = true }
+

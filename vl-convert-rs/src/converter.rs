@@ -34,15 +34,19 @@ use std::thread::JoinHandle;
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-use crate::error::VlConvertError;
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
-use crate::text::{vl_convert_text_runtime, USVG_OPTIONS};
+use vl_convert_common::text::{USVG_OPTIONS, set_json_arg};
 use image::codecs::jpeg::JpegEncoder;
 use image::io::Reader as ImageReader;
 use resvg::render;
 use sys_traits::impls::InMemorySys;
 
-deno_core::extension!(vl_convert_converter_runtime, ops = [op_get_json_arg]);
+use vl_convert_common::ops::vl_convert_runtime;
+
+pub static CLI_SNAPSHOT: Option<&[u8]> = Some(include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/CLI_SNAPSHOT.bin"
+)));
 
 lazy_static! {
     pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime =
@@ -50,8 +54,6 @@ lazy_static! {
             .enable_all()
             .build()
             .unwrap();
-    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> = Arc::new(Mutex::new(HashMap::new()));
-    static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
 #[derive(Debug, Clone, Default)]
@@ -197,50 +199,6 @@ impl VlOpts {
         }
 
         Ok(serde_json::Value::Object(opts_map))
-    }
-}
-
-fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
-    // Increment arg id
-    let id = match NEXT_ARG_ID.lock() {
-        Ok(mut guard) => {
-            let id = *guard;
-            *guard = (*guard + 1) % i32::MAX;
-            id
-        }
-        Err(err) => {
-            bail!("Failed to acquire lock: {}", err.to_string())
-        }
-    };
-
-    // Add Arg at id to args
-    match JSON_ARGS.lock() {
-        Ok(mut guard) => {
-            guard.insert(id, serde_json::to_string(&arg).unwrap());
-        }
-        Err(err) => {
-            bail!("Failed to acquire lock: {}", err.to_string())
-        }
-    }
-
-    Ok(id)
-}
-
-#[op2]
-#[string]
-fn op_get_json_arg(arg_id: i32) -> Result<String, VlConvertError> {
-    match JSON_ARGS.lock() {
-        Ok(mut guard) => {
-            if let Some(arg) = guard.remove(&arg_id) {
-                Ok(arg)
-            } else {
-                Err(VlConvertError::Internal("Arg id not found".to_string()))
-            }
-        }
-        Err(err) => Err(VlConvertError::Internal(format!(
-            "Failed to acquire lock: {}",
-            err
-        ))),
     }
 }
 
@@ -590,10 +548,9 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         // Options
         let options = WorkerOptions {
             extensions: vec![
-                vl_convert_text_runtime::init(),
-                vl_convert_converter_runtime::init(),
+                vl_convert_runtime::init(),
             ],
-            startup_snapshot: deno_snapshots::CLI_SNAPSHOT,
+            startup_snapshot: CLI_SNAPSHOT,
             ..Default::default()
         };
         let service_options = WorkerServiceOptions::<

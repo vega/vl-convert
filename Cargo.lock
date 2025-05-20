@@ -2388,15 +2388,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "deno_snapshots"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29660a0c5b2dd56ccdecd79269ed920b91c9a50627c30a390fb7fad0c4a1004d"
-dependencies = [
- "deno_runtime",
-]
-
-[[package]]
 name = "deno_telemetry"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9185,6 +9176,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "vl-convert-common"
+version = "1.7.0"
+dependencies = [
+ "deno_core",
+ "deno_error",
+ "fontdb",
+ "lazy_static",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "ttf-parser",
+ "usvg",
+]
+
+[[package]]
 name = "vl-convert-python"
 version = "1.7.0"
 dependencies = [
@@ -9202,36 +9212,29 @@ version = "1.7.0"
 dependencies = [
  "deno_core",
  "deno_emit",
- "deno_error",
  "deno_graph 0.82.3",
  "deno_graph 0.91.0",
  "deno_resolver",
  "deno_runtime",
- "deno_snapshots",
  "dssim",
  "env_logger",
- "fontdb",
  "futures",
  "futures-util",
  "image",
  "lazy_static",
- "log",
  "lz-str",
  "png",
  "regex",
- "reqwest",
  "resvg",
  "rstest",
- "serde",
  "serde_json",
  "svg2pdf",
  "sys_traits",
  "tempfile",
- "thiserror 2.0.12",
  "tiny-skia",
  "tokio",
- "ttf-parser",
  "usvg",
+ "vl-convert-common",
 ]
 
 [[package]]

@@ -1,6 +1,3 @@
-// use deno_core::thiserror;
-// use deno_error;
-
 #[derive(Debug, thiserror::Error, deno_error::JsError)]
 pub enum VlConvertError {
     #[class("Internal")]

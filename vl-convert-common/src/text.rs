@@ -5,18 +5,22 @@ use deno_core::anyhow::anyhow;
 use deno_core::op2;
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use deno_core::error::AnyError;
 use usvg::fontdb::Database;
 use usvg::{
     FallbackSelectionFn, FontFamily, FontResolver, FontSelectionFn, FontStretch, FontStyle,
     ImageHrefResolver,
 };
+use deno_core::anyhow::bail;
 
-deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
+deno_core::extension!(vl_convert_runtime, ops = [op_text_width, op_get_json_arg]);
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
+    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> = Arc::new(Mutex::new(HashMap::new()));
+    static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -27,6 +31,50 @@ const LIBERATION_SANS_ITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-Italic.ttf");
 const LIBERATION_SANS_BOLDITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-BoldItalic.ttf");
+
+#[op2]
+#[string]
+pub fn op_get_json_arg(arg_id: i32) -> Result<String, VlConvertError> {
+    match JSON_ARGS.lock() {
+        Ok(mut guard) => {
+            if let Some(arg) = guard.remove(&arg_id) {
+                Ok(arg)
+            } else {
+                Err(VlConvertError::Internal("Arg id not found".to_string()))
+            }
+        }
+        Err(err) => Err(VlConvertError::Internal(format!(
+            "Failed to acquire lock: {}",
+            err
+        ))),
+    }
+}
+
+pub fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
+    // Increment arg id
+    let id = match NEXT_ARG_ID.lock() {
+        Ok(mut guard) => {
+            let id = *guard;
+            *guard = (*guard + 1) % i32::MAX;
+            id
+        }
+        Err(err) => {
+            bail!("Failed to acquire lock: {}", err.to_string())
+        }
+    };
+
+    // Add Arg at id to args
+    match JSON_ARGS.lock() {
+        Ok(mut guard) => {
+            guard.insert(id, serde_json::to_string(&arg).unwrap());
+        }
+        Err(err) => {
+            bail!("Failed to acquire lock: {}", err.to_string())
+        }
+    }
+
+    Ok(id)
+}
 
 fn init_usvg_options() -> usvg::Options<'static> {
     let image_href_resolver = ImageHrefResolver {
@@ -380,7 +428,7 @@ fn extract_text_width(svg: &String) -> Result<f64, VlConvertError> {
     // Children instead of descendents ok?
     for node in rtree.root().children() {
         // Text bboxes are different from path bboxes.
-        if let usvg::Node::Text(ref text) = node {
+        if let usvg::Node::Text(text) = node {
             let bbox = text.bounding_box();
             let width = bbox.right() - bbox.left();
             let _height = bbox.bottom() - bbox.top();
