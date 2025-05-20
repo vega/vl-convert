@@ -3,7 +3,6 @@ use crate::module_loader::{
     VlConvertModuleLoader, FORMATE_LOCALE_MAP, IMPORT_MAP, TIME_FORMATE_LOCALE_MAP,
 };
 
-use deno_core::op2;
 use deno_resolver::npm::{DenoInNpmPackageChecker, NpmResolver};
 use deno_runtime::deno_core;
 use deno_runtime::deno_core::anyhow::bail;
@@ -19,7 +18,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::io::Cursor;
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use deno_core::anyhow::anyhow;
 use deno_runtime::deno_fs::RealFs;
