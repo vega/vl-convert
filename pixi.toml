@@ -21,7 +21,7 @@ fmt-py-check = "black vl-convert-python --check"
 fmt-rs = "cargo fmt --all"
 fmt-rs-check = "cargo fmt --all -- --check"
 
-check-rs = "cargo check --tests"
+check-rs = "cargo check --tests --workspace --exclude vl-convert-python"
 clippy = "cargo clippy"
 
 build-rs = "cargo build -p vl-convert-rs"
