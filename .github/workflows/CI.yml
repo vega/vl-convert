@@ -168,11 +168,12 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install yum-utils to add repositories
-            yum install -y yum-utils
+            # Add SCL repositories directly with hardcoded URLs
+            yum-config-manager --add-repo=http://vault.centos.org/centos/7/sclo/x86_64/rh/
+            yum-config-manager --add-repo=http://vault.centos.org/centos/7/sclo/x86_64/sclo/
 
-            # Add SCL repository directly with a hardcoded URL instead of using mirrorlist
-            yum-config-manager --add-repo=http://mirror.centos.org/centos/7/sclo/x86_64/rh/
+            # Update repo metadata after adding new repos
+            yum makecache fast
 
             # Install clang/llvm 5.0 via llvm-toolset-7
             yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
@@ -210,11 +211,12 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install yum-utils to add repositories
-            yum install -y yum-utils
+            # Add SCL repositories directly with hardcoded URLs
+            yum-config-manager --add-repo=http://vault.centos.org/altarch/7/sclo/aarch64/rh/
+            yum-config-manager --add-repo=http://vault.centos.org/altarch/7/sclo/aarch64/sclo/
 
-            # Add SCL repository directly with a hardcoded URL instead of using mirrorlist
-            yum-config-manager --add-repo=http://mirror.centos.org/altarch/7/sclo/aarch64/rh/
+            # Update repo metadata after adding new repos
+            yum makecache fast
 
             # Install clang/llvm 5.0 via llvm-toolset-7
             yum install -y llvm-toolset-7 llvm-toolset-7-clang llvm-toolset-7-clang-devel llvm-toolset-7-llvm-devel
