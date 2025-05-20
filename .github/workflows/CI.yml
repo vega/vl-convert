@@ -154,7 +154,7 @@ jobs:
 
   # Wheel building jobs from Release.yml
   build-wheels-linux-x86_64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         arch:
@@ -168,17 +168,15 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install a newer clang and dependencies
-            yum install -y centos-release-scl
-            yum install -y llvm-toolset-7-clang llvm-toolset-7-clang-devel
-
-            # Make llvm-toolset-7 available in the environment persistently
-            echo 'source /opt/rh/llvm-toolset-7/enable' >> /etc/profile.d/llvm-toolset-7.sh
-            chmod +x /etc/profile.d/llvm-toolset-7.sh
-            source /opt/rh/llvm-toolset-7/enable
+            # Install clang directly without SCL
+            yum install -y epel-release
+            yum install -y clang clang-devel llvm-devel
 
             # Verify clang version
             clang --version
+
+            # Install additional dependencies for ring crate
+            yum install -y pkg-config perl make gcc gcc-c++
 
             # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
@@ -187,6 +185,8 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
+          CARGO_FEATURE_RING_USE_HEAP: 1
+          RUSTFLAGS: "--cfg ring_use_dev_urandom"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -207,17 +207,15 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install a newer clang (5+) and dependencies
-            yum install -y centos-release-scl
-            yum install -y llvm-toolset-7-clang llvm-toolset-7-clang-devel
-
-            # Make llvm-toolset-7 available in the environment persistently
-            echo 'source /opt/rh/llvm-toolset-7/enable' >> /etc/profile.d/llvm-toolset-7.sh
-            chmod +x /etc/profile.d/llvm-toolset-7.sh
-            source /opt/rh/llvm-toolset-7/enable
+            # Install clang directly without SCL
+            yum install -y epel-release
+            yum install -y clang clang-devel llvm-devel
 
             # Verify clang version
             clang --version
+
+            # Install additional dependencies for ring crate
+            yum install -y pkg-config perl make gcc gcc-c++
 
             # Install protoc
             echo $PATH
@@ -227,6 +225,8 @@ jobs:
         env:
           LIBSQLITE3_SYS_BUNDLING: 1
           LIBSQLITE3_SYS_USE_BINDGEN: 0
+          CARGO_FEATURE_RING_USE_HEAP: 1
+          RUSTFLAGS: "--cfg ring_use_dev_urandom"
 
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
