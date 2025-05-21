@@ -12,9 +12,9 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Check cargo fmt compliance
         run: pixi run fmt-py-check
 
@@ -25,9 +25,9 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -44,9 +44,9 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Check that license is up to date
         run: pixi run bundle-licenses
       - name: Check that git detects no file changes
@@ -57,9 +57,9 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -120,9 +120,9 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -159,9 +159,9 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
