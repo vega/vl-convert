@@ -7,7 +7,6 @@ readme = "README.md"
 homepage = "https://github.com/jonmmease/vl-convert"
 repository = "https://github.com/jonmmease/vl-convert"
 publish = false
-dynamic = ["version"]
 
 [package.metadata.release]
 release = false
