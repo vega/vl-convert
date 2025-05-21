@@ -194,6 +194,7 @@ jobs:
       - uses: messense/maturin-action@v1
         with:
           manylinux: 2_28
+          container: quay.io/pypa/manylinux_2_28_aarch64
           target: aarch64-unknown-linux-gnu
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
