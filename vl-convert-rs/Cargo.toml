@@ -38,3 +38,7 @@ lazy_static = { workspace = true }
 [dev-dependencies]
 rstest = { workspace = true }
 dssim = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies.libffi]
+version = "*"
+features = ["system"]
