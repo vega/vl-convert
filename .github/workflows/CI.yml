@@ -163,7 +163,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: messense/maturin-action@v1
         with:
-          manylinux: 2_28
+          manylinux: 2_24
           target: ${{ matrix.arch }}
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
@@ -176,7 +176,9 @@ jobs:
 
             # Install protoc
             yum install -y protobuf-compiler protobuf-devel
-
+        env:
+          CARGO_FEATURE_RING_USE_HEAP: 1
+          RUSTFLAGS: "--cfg ring_use_dev_urandom"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -191,8 +193,8 @@ jobs:
         uses: docker/setup-qemu-action@v1
       - uses: messense/maturin-action@v1
         with:
-          manylinux: 2_28
-          container: quay.io/pypa/manylinux2014_aarch64
+          manylinux: 2_24
+          container: quay.io/pypa/manylinux_2_24_aarch64
           target: aarch64-unknown-linux-gnu
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
@@ -205,6 +207,9 @@ jobs:
 
             # Install protoc
             yum install -y protobuf-compiler protobuf-devel
+        env:
+          CARGO_FEATURE_RING_USE_HEAP: 1
+          RUSTFLAGS: "--cfg ring_use_dev_urandom"
 
       # Not sure why the compiled wheels end up with x86_64 in the file name,
       # they are aarch64 and work properly after being renamed.
