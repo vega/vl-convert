@@ -50,7 +50,7 @@ jobs:
       - name: Check that license is up to date
         run: pixi run bundle-licenses
       - name: Check that git detects no file changes
-        run:  git diff --exit-code
+        run: git diff --exit-code
 
   codegen-clean:
     runs-on: ubuntu-latest
@@ -67,7 +67,7 @@ jobs:
       - name: Run codegen
         run: pixi run vendor
       - name: Check that git detects no file changes
-        run:  git diff --exit-code
+        run: git diff --exit-code
 
   # Run linux tests without Pixi due to undiagnosed linker issues
   #   - undefined reference to fcntl64
@@ -103,10 +103,10 @@ jobs:
         run: |
           cargo test -p vl-convert -- --test-threads=1
       - name: Upload test failures
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: failed-images
+          name: failed-images-linux
           path: |
             vl-convert-rs/tests/vl-specs/failed
 
@@ -138,10 +138,10 @@ jobs:
           pixi run test-rs
           pixi run test-cli
       - name: Upload test failures
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: failed-images
+          name: failed-images-${{ matrix.os }}
           path: |
             vl-convert-rs/tests/vl-specs/failed
 
@@ -153,9 +153,9 @@ jobs:
     strategy:
       matrix:
         options:
-          - [ubuntu-latest, '3.10', 'bash -l {0}']
-          - [windows-2022, '3.10', "pwsh"]
-          - [macos-12, '3.10', 'bash -l {0}']
+          - [ubuntu-latest, "3.10", "bash -l {0}"]
+          - [windows-2022, "3.10", "pwsh"]
+          - [macos-12, "3.10", "bash -l {0}"]
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
@@ -176,4 +176,3 @@ jobs:
         run: pixi run dev-py
       - name: Run tests
         run: pixi run test-py
-

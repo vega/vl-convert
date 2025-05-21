@@ -31,9 +31,9 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_linux-64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: vl-convert
+          name: vl-convert-linux-x86
           path: |
             vl-convert_linux-64.zip
 
@@ -79,9 +79,9 @@ jobs:
               zip -r vl-convert_linux-aarch64.zip bin/
             "
       - name: Upload executable
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: vl-convert
+          name: vl-convert-linux-aarch64
           path: |
             vl-convert_linux-aarch64.zip
 
@@ -115,9 +115,9 @@ jobs:
           files: artifacts/
           dest: vl-convert_win-64.zip
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: vl-convert
+          name: vl-convert-win-64
           path: |
             vl-convert_win-64.zip
 
@@ -147,9 +147,9 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_osx-64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: vl-convert
+          name: vl-convert-osx-64
           path: |
             vl-convert_osx-64.zip
 
@@ -179,9 +179,9 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_osx-arm64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: vl-convert
+          name: vl-convert-osx-arm64
           path: |
             vl-convert_osx-arm64.zip
 
@@ -192,22 +192,22 @@ jobs:
         arch:
           - "x86_64-unknown-linux-gnu"
     steps:
-    - uses: actions/checkout@v3
-    - uses: messense/maturin-action@v1
-      with:
-        manylinux: auto
-        target: ${{ matrix.arch }}
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
-        before-script-linux: |
-          PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-          curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
-          unzip protoc-24.0-linux-x86_64.zip -d /usr/
-    - name: Upload wheels
-      uses: actions/upload-artifact@v3
-      with:
-        name: wheels
-        path: dist
+      - uses: actions/checkout@v3
+      - uses: messense/maturin-action@v1
+        with:
+          manylinux: auto
+          target: ${{ matrix.arch }}
+          command: build
+          args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
+          before-script-linux: |
+            PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+            curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
+            unzip protoc-24.0-linux-x86_64.zip -d /usr/
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-x86_64
+          path: dist
 
   build-wheels-linux-aarch64:
     runs-on: ubuntu-20.04
@@ -238,52 +238,52 @@ jobs:
           ls dist/
           rename 's/x86_64/aarch64/g' dist/vl_convert_python-*.whl
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-linux-aarch64
           path: dist
 
   build-wheels-win-64:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v2
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-    - uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml -o dist --strip
-    - name: Upload wheels
-      uses: actions/upload-artifact@v3
-      with:
-        name: wheels
-        path: dist
+      - uses: actions/checkout@v3
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: messense/maturin-action@v1
+        with:
+          command: build
+          args: --release -m vl-convert-python/Cargo.toml -o dist --strip
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-win-64
+          path: dist
 
   build-wheels-osx-64:
     runs-on: macos-12
     steps:
-    - uses: actions/checkout@v3
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v2
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-    - name: set up python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-    - name: Build Intel wheels
-      uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
-        target: x86_64-apple-darwin
-    - name: Upload wheels
-      uses: actions/upload-artifact@v3
-      with:
-        name: wheels
-        path: dist
+      - uses: actions/checkout@v3
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Build Intel wheels
+        uses: messense/maturin-action@v1
+        with:
+          command: build
+          args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
+          target: x86_64-apple-darwin
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-osx-64
+          path: dist
 
   build-wheels-osx-arm64:
     runs-on: macos-14
@@ -296,28 +296,36 @@ jobs:
       - name: set up python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
       - name: Build arm64 wheels
         uses: messense/maturin-action@v1
         with:
           command: build
           args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels-osx-arm64
           path: dist
 
   publish-pypi:
     name: Publish to PyPI
     environment: PyPI Upload
     runs-on: ubuntu-latest
-    needs: [ build-wheels-linux-x86_64, build-wheels-linux-aarch64, build-wheels-win-64, build-wheels-osx-64, build-wheels-osx-arm64 ]
+    needs:
+      [
+        build-wheels-linux-x86_64,
+        build-wheels-linux-aarch64,
+        build-wheels-win-64,
+        build-wheels-osx-64,
+        build-wheels-osx-arm64,
+      ]
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels-*
           path: dist/
+          merge-multiple: true
       - name: Publish to PyPI
         uses: messense/maturin-action@v1
         env:
