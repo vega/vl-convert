@@ -38,3 +38,17 @@ lazy_static = { workspace = true }
 [dev-dependencies]
 rstest = { workspace = true }
 dssim = { workspace = true }
+
+# For macOS 15 "Sequoia" with Xcode 16:
+# The version of libffi-rs that is pulled in by deno_core still pulls in
+# libffi-sys 2.3.0, whose AArch64 assembly triggers "invalid CFI
+# advance_loc expression” errors with Apple’s LLVM 17 assembler.
+# Upstream fixed the CFI directives in **libffi 3.4.7** (see libffi/libffi #852)
+# and the breakage is tracked in libffi-rs #109. But we can't update this without
+# updating deno_core. Instead, we link against a system
+# libffi (≥ 3.4.x) by enabling the `system` feature below.
+# This system version is installed using pixi.
+# [oai_citation:0‡GitHub](https://github.com/libffi/libffi/issues/852)
+[target.'cfg(target_os = "macos")'.dependencies.libffi]
+version = "*"
+features = ["system"]

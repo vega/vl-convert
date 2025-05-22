@@ -12,9 +12,9 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Check cargo fmt compliance
         run: pixi run fmt-py-check
 
@@ -25,9 +25,9 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -44,22 +44,22 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Check that license is up to date
         run: pixi run bundle-licenses
       - name: Check that git detects no file changes
-        run:  git diff --exit-code
+        run: git diff --exit-code
 
   codegen-clean:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -67,7 +67,7 @@ jobs:
       - name: Run codegen
         run: pixi run vendor
       - name: Check that git detects no file changes
-        run:  git diff --exit-code
+        run: git diff --exit-code
 
   # Run linux tests without Pixi due to undiagnosed linker issues
   #   - undefined reference to fcntl64
@@ -103,10 +103,10 @@ jobs:
         run: |
           cargo test -p vl-convert -- --test-threads=1
       - name: Upload test failures
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: failed-images
+          name: failed-images-linux
           path: |
             vl-convert-rs/tests/vl-specs/failed
 
@@ -116,13 +116,13 @@ jobs:
       matrix:
         os:
           - windows-2022
-          - macos-12
+          - macos-13
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -138,10 +138,10 @@ jobs:
           pixi run test-rs
           pixi run test-cli
       - name: Upload test failures
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: failed-images
+          name: failed-images-${{ matrix.os }}
           path: |
             vl-convert-rs/tests/vl-specs/failed
 
@@ -153,15 +153,15 @@ jobs:
     strategy:
       matrix:
         options:
-          - [ubuntu-latest, '3.10', 'bash -l {0}']
-          - [windows-2022, '3.10', "pwsh"]
-          - [macos-12, '3.10', 'bash -l {0}']
+          - [ubuntu-latest, "3.10", "bash -l {0}"]
+          - [windows-2022, "3.10", "pwsh"]
+          - [macos-13, "3.10", "bash -l {0}"]
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.8
         with:
-          pixi-version: v0.28.2
+          pixi-version: v0.47.0
       - name: Cache rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
@@ -176,4 +176,3 @@ jobs:
         run: pixi run dev-py
       - name: Run tests
         run: pixi run test-py
-

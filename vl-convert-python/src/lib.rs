@@ -1,4 +1,5 @@
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::useless_conversion)]
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
