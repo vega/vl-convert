@@ -15,54 +15,51 @@ const VL_PATHS: &[(&str, &str)] = &[
     // 5.8 is used by Altair 5.0 (keep longer)
     (
         "5.8",
-        "/pin/vega-lite@v5.8.0-4snbURNltT4se5LjMOKF/mode=imports,min/optimized/vega-lite.js",
+        "/npm/vega-lite@5.8.0/+esm.js",
     ),
     // 5.14.1 is used by Altair 5.1.0 (keep longer)
     (
         "5.14",
-        "/pin/vega-lite@v5.14.1-0IRM1VigcIVzRzBRoLFR/mode=imports,min/optimized/vega-lite.js",
+        "/npm/vega-lite@5.14.1/+esm.js",
     ),
     // 5.15.1 is used by Altair 5.1.1 (keep longer)
     (
         "5.15",
-        "/pin/vega-lite@v5.15.1-lQeQs8sDPgFa9d7Jm3sd/mode=imports,min/optimized/vega-lite.js",
+        "/npm/vega-lite@5.15.1/+esm.js",
     ),
     // 5.16.3 is used by Altair 5.2.0 (keep longer)
     (
         "5.16",
-        "/pin/vega-lite@v5.16.3-Hw7pZxUuaiVgThsNMjY9/mode=imports,min/optimized/vega-lite.js",
+        "/npm/vega-lite@5.16.3/+esm.js",
     ),
     // 5.17.0 is used by Altair 5.3.0 (keep longer)
     (
         "5.17",
-        "/pin/vega-lite@v5.17.0-jkfrfJOQ30TsVIlEEbKQ/mode=imports,min/optimized/vega-lite.js",
+        "/npm/vega-lite@5.17.0/+esm.js",
     ),
     (
         "5.18",
-        "/pin/vega-lite@v5.18.1-CIbWw1F4YnIlhO9UCtHA/mode=imports,min/optimized/vega-lite.js",
+        "/npm/vega-lite@5.18.1/+esm.js",
     ),
     (
         "5.19",
-        "/pin/vega-lite@v5.19.0-4m5nwXbwdKW9Bc7adV02/mode=imports,min/optimized/vega-lite.js",
+        "/npm/vega-lite@5.19.0/+esm.js",
     ),
     // 5.20.1 is used by Altair 5.4.0 (keep longer)
     (
         "5.20",
-        "/pin/vega-lite@v5.20.1-5FloWSAHKfabpxOoogY3/mode=imports,min/optimized/vega-lite.js",
+        "/npm/vega-lite@5.20.1/+esm.js",
     ),
     (
         "5.21",
-        "/pin/vega-lite@v5.21.0-FWbVtRVTj7vqBi6QZX8A/mode=imports,min/optimized/vega-lite.js",
+        "/npm/vega-lite@5.21.0/+esm.js",
     ),
 ];
-const SKYPACK_URL: &str = "https://cdn.skypack.dev";
-const VEGA_PATH: &str = "/pin/vega@v5.30.0-fYDVG3pUN16BiGmbVNdw/mode=imports,min/optimized/vega.js";
-const VEGA_THEMES_PATH: &str =
-    "/pin/vega-themes@v2.15.0-wV2Z38N5Dk8FL05cPDbE/mode=imports,min/optimized/vega-themes.js";
-const VEGA_EMBED_PATH: &str =
-    "/pin/vega-embed@v6.26.0-0yAdpZbj3i4rRevkUMhK/mode=imports,min/optimized/vega-embed.js";
-const DEBOUNCE_PATH: &str =
-    "/pin/lodash.debounce@v4.0.8-aOLIwnE2RethWPrEzTeR/mode=imports,min/optimized/lodash.debounce.js";
+const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
+const VEGA_PATH: &str = "/npm/vega@5.30.0/+esm.js";
+const VEGA_THEMES_PATH: &str = "/npm/vega-themes@2.15.0/+esm.js";
+const VEGA_EMBED_PATH: &str = "/npm/vega-embed@6.26.0/+esm.js";
+const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm.js";
 
 // Example custom build script.
 fn main() {
@@ -87,24 +84,24 @@ fn main() {
 
     // extract vega version from url
     let vega_version = VEGA_PATH
-        .split("@v")
+        .split("@")
         .nth(1)
         .unwrap()
-        .split("-")
+        .split("/")
         .next()
         .unwrap();
     let vega_themes_version = VEGA_THEMES_PATH
-        .split("@v")
+        .split("@")
         .nth(1)
         .unwrap()
-        .split("-")
+        .split("/")
         .next()
         .unwrap();
     let vega_embed_version = VEGA_EMBED_PATH
-        .split("@v")
+        .split("@")
         .nth(1)
         .unwrap()
-        .split("-")
+        .split("/")
         .next()
         .unwrap();
 
@@ -128,38 +125,44 @@ fn main() {
     // Write Vega-Lite
     for (ver, path) in VL_PATHS {
         let ver_under = ver.replace('.', "_");
+        // Extract package name and version from path for esm.run URL
+        let package_url = path.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
         writeln!(
             imports,
-            "import * as v_{ver_under} from \"{SKYPACK_URL}{path}\";",
+            "import * as v_{ver_under} from \"{JSDELIVR_URL}/npm/{package_url}/+esm\";",
         )
         .unwrap();
     }
 
     // Write Vega
+    let vega_package_url = VEGA_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
     writeln!(
         imports,
-        "import * as vega from \"{SKYPACK_URL}{VEGA_PATH}\";",
+        "import * as vega from \"{JSDELIVR_URL}/npm/{vega_package_url}/+esm\";",
     )
     .unwrap();
 
     // Write VegaThemes
+    let vega_themes_package_url = VEGA_THEMES_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
     writeln!(
         imports,
-        "import * as vegaThemes from \"{SKYPACK_URL}{VEGA_THEMES_PATH}\";",
+        "import * as vegaThemes from \"{JSDELIVR_URL}/npm/{vega_themes_package_url}/+esm\";",
     )
     .unwrap();
 
     // Write Vega Embed
+    let vega_embed_package_url = VEGA_EMBED_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
     writeln!(
         imports,
-        "import * as vegaEmbed from \"{SKYPACK_URL}{VEGA_EMBED_PATH}\";",
+        "import * as vegaEmbed from \"{JSDELIVR_URL}/npm/{vega_embed_package_url}/+esm\";",
     )
     .unwrap();
 
     // Write debounce
+    let debounce_package_url = DEBOUNCE_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
     writeln!(
         imports,
-        "import lodashDebounce from \"{SKYPACK_URL}{DEBOUNCE_PATH}\";",
+        "import lodashDebounce from \"{JSDELIVR_URL}/npm/{debounce_package_url}/+esm\";",
     )
     .unwrap();
 
@@ -232,7 +235,7 @@ use std::str::FromStr;
 use deno_runtime::deno_core::anyhow::bail;
 use deno_runtime::deno_core::error::AnyError;
 
-pub const SKYPACK_URL: &str = "{SKYPACK_URL}";
+pub const JSDELIVR_URL: &str = "{JSDELIVR_URL}";
 pub const VEGA_PATH: &str = "{VEGA_PATH}";
 pub const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
 pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
@@ -243,7 +246,7 @@ pub const VEGA_THEMES_VERSION: &str = "{VEGA_THEMES_VERSION}";
 pub const VEGA_EMBED_VERSION: &str = "{VEGA_EMBED_VERSION}";
 
 pub fn url_for_path(path: &str) -> String {{
-    format!("{{}}{{}}", SKYPACK_URL, path)
+    format!("{{}}{{}}", JSDELIVR_URL, path)
 }}
 
 pub fn vega_url() -> String {{
@@ -270,7 +273,7 @@ impl VlVersion {{
     }}
 
     pub fn to_url(self) -> String {{
-        format!("{{}}{{}}", SKYPACK_URL, self.to_path())
+        format!("{{}}{{}}", JSDELIVR_URL, self.to_path())
     }}
 
     pub fn to_semver(self) -> &'static str {{
@@ -310,7 +313,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         from_str_matches_csv = from_str_matches_csv,
         to_semver_match_csv = to_semver_match_csv,
         version_instances_csv = version_instances_csv,
-        SKYPACK_URL = SKYPACK_URL,
+        JSDELIVR_URL = JSDELIVR_URL,
         VEGA_PATH = VEGA_PATH,
         VEGA_VERSION = vega_version,
         VEGA_THEMES_VERSION = vega_themes_version,
@@ -326,14 +329,15 @@ pub fn build_import_map() -> HashMap<String, String> {{
     visit_dirs(&vendor_path, &mut |f| {
         let p = f.path().canonicalize().unwrap();
         let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
-        if let Some(relative_sub) = relative.strip_prefix("cdn.skypack.dev/-/") {
+        if let Some(relative_sub) = relative.strip_prefix("cdn.jsdelivr.net/npm/") {
             if let Some((name, rest)) = relative_sub.split_once('@') {
-                if let Some((version_str, _)) = rest.strip_prefix('v').unwrap().split_once('-') {
-                    let version = Version::parse(version_str).unwrap();
-                    packages_info
-                        .entry(name.to_string())
-                        .or_default()
-                        .push((version, relative_sub.to_string()));
+                if let Some((version_str, _)) = rest.split_once('/') {
+                    if let Ok(version) = Version::parse(version_str) {
+                        packages_info
+                            .entry(name.to_string())
+                            .or_default()
+                            .push((version, relative_sub.to_string()));
+                    }
                 }
             }
         }
@@ -350,8 +354,8 @@ pub fn build_import_map() -> HashMap<String, String> {{
         if name != "vega-lite" && v.len() > 1 {
             for i in 1..v.len() {
                 replacements.insert(v[i].1.clone(), v[0].1.clone());
-                let file_path = format!("{vendor_path_str}/cdn.skypack.dev/-/{}", v[i].1);
-                fs::remove_file(file_path).unwrap();
+                let file_path = format!("{vendor_path_str}/cdn.jsdelivr.net/npm/{}", v[i].1);
+                fs::remove_dir_all(file_path).unwrap_or(());
             }
         }
     }
@@ -364,14 +368,14 @@ pub fn build_import_map() -> HashMap<String, String> {{
     .unwrap();
 
     // Write include_str! statements to inline source code in our executable
-    let skypack_domain = "cdn.skypack.dev";
+    let esm_domain = "cdn.jsdelivr.net";
     visit_dirs(&vendor_path, &mut |f| {
         let p = f.path().canonicalize().unwrap();
         let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
-        if let Some(relative_sub) = relative.strip_prefix(skypack_domain) {
+        if let Some(relative_sub) = relative.strip_prefix(esm_domain) {
             writeln!(
                 content,
-                "    m.insert(\"{relative_sub}\".to_string(), include_str!(\"../../vendor/{skypack_domain}{relative_sub}\").to_string());",
+                "    m.insert(\"{relative_sub}\".to_string(), include_str!(\"../../vendor/{esm_domain}{relative_sub}\").to_string());",
             )
                 .unwrap();
         }

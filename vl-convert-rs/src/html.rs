@@ -1,4 +1,4 @@
-use crate::module_loader::import_map::{DEBOUNCE_PATH, SKYPACK_URL, VEGA_EMBED_PATH, VEGA_PATH};
+use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
 use deno_core::error::AnyError;
@@ -55,10 +55,10 @@ pub async fn bundle_script(script: String, vl_version: VlVersion) -> Result<Stri
 pub async fn bundle_vega_snippet(snippet: &str, vl_version: VlVersion) -> Result<String, AnyError> {
     let script = format!(
         r#"
-import vegaEmbed from "{SKYPACK_URL}{VEGA_EMBED_PATH}"
-import vega from "{SKYPACK_URL}{VEGA_PATH}"
-import vegaLite from "{SKYPACK_URL}{VEGA_LITE_PATH}"
-import lodashDebounce from "{SKYPACK_URL}{DEBOUNCE_PATH}"
+import vegaEmbed from "{JSDELIVR_URL}{VEGA_EMBED_PATH}"
+import vega from "{JSDELIVR_URL}{VEGA_PATH}"
+import vegaLite from "{JSDELIVR_URL}{VEGA_LITE_PATH}"
+import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}"
 {snippet}
 "#,
         VEGA_LITE_PATH = vl_version.to_path()

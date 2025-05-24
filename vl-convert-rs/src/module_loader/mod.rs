@@ -59,12 +59,21 @@ impl ModuleLoader for VlConvertModuleLoader {
             // run any code here
             "".to_string()
         } else {
+            let path = module_specifier.path();
             IMPORT_MAP
-                .get(module_specifier.path())
+                .get(path)
+                .or_else(|| {
+                    // Try with .js extension if not found
+                    if !path.ends_with(".js") {
+                        IMPORT_MAP.get(&format!("{}.js", path))
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or_else(|| {
                     panic!(
                         "Unexpected source file with path: {}",
-                        module_specifier.path()
+                        path
                     )
                 })
                 .clone()
@@ -121,12 +130,21 @@ impl Loader for VlConvertBundleLoader {
         let code = if last_path_part == "vl-convert-index.js" {
             self.index_js.clone()
         } else {
+            let path = module_specifier.path();
             let mut src = IMPORT_MAP
-                .get(module_specifier.path())
+                .get(path)
+                .or_else(|| {
+                    // Try with .js extension if not found
+                    if !path.ends_with(".js") {
+                        IMPORT_MAP.get(&format!("{}.js", path))
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or_else(|| {
                     panic!(
                         "Unexpected source file with path: {}",
-                        module_specifier.path()
+                        path
                     )
                 })
                 .clone();
