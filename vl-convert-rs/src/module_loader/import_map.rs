@@ -40,6 +40,7 @@ pub enum VlVersion {
     v5_19,
     v5_20,
     v5_21,
+    v6_1,
 }
 
 impl VlVersion {
@@ -55,6 +56,7 @@ impl VlVersion {
             v5_19 => "/npm/vega-lite@5.19.0/+esm.js",
             v5_20 => "/npm/vega-lite@5.20.1/+esm.js",
             v5_21 => "/npm/vega-lite@5.21.0/+esm.js",
+            v6_1 => "/npm/vega-lite@6.1.0/+esm.js",
         };
         path.to_string()
     }
@@ -75,13 +77,14 @@ impl VlVersion {
             v5_19 => "5.19",
             v5_20 => "5.20",
             v5_21 => "5.21",
+            v6_1 => "6.1",
         }
     }
 }
 
 impl Default for VlVersion {
     fn default() -> Self {
-        VlVersion::from_str("5.21").unwrap()
+        VlVersion::from_str("6.1").unwrap()
     }
 }
 
@@ -99,6 +102,7 @@ impl FromStr for VlVersion {
             "5.19" | "v5.19" | "5_19" | "v5_19" => Self::v5_19,
             "5.20" | "v5.20" | "5_20" | "v5_20" => Self::v5_20,
             "5.21" | "v5.21" | "5_21" | "v5_21" => Self::v5_21,
+            "6.1" | "v6.1" | "6_1" | "v6_1" => Self::v6_1,
             _ => bail!("Unsupported Vega-Lite version string {}", s),
         })
     }
@@ -114,6 +118,7 @@ pub const VL_VERSIONS: &[VlVersion] = &[
     VlVersion::v5_19,
     VlVersion::v5_20,
     VlVersion::v5_21,
+    VlVersion::v6_1,
 ];
 
 pub fn build_import_map() -> HashMap<String, String> {
@@ -201,8 +206,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-timer@3.0.1/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/delaunator@5.0.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/delaunator@5.0.0/+esm.js").to_string(),
+        "/npm/delaunator@5.0.1/+esm.js".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/delaunator@5.0.1/+esm.js").to_string(),
     );
     m.insert(
         "/npm/fast-deep-equal@3.1.3/+esm.js".to_string(),
@@ -233,8 +238,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/lodash.debounce@4.0.8/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/robust-predicates@3.0.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/robust-predicates@3.0.0/+esm.js")
+        "/npm/robust-predicates@3.0.2/+esm.js".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/robust-predicates@3.0.2/+esm.js")
             .to_string(),
     );
     m.insert(
