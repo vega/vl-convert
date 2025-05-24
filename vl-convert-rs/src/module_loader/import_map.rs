@@ -7,12 +7,12 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 pub const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
-pub const VEGA_PATH: &str = "/npm/vega@5.30.0/+esm.js";
+pub const VEGA_PATH: &str = "/npm/vega@6.0.0/+esm.js";
 pub const VEGA_THEMES_PATH: &str = "/npm/vega-themes@2.15.0/+esm.js";
 pub const VEGA_EMBED_PATH: &str = "/npm/vega-embed@6.26.0/+esm.js";
 pub const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm.js";
 
-pub const VEGA_VERSION: &str = "5.30.0";
+pub const VEGA_VERSION: &str = "6.0.0";
 pub const VEGA_THEMES_VERSION: &str = "2.15.0";
 pub const VEGA_EMBED_VERSION: &str = "6.26.0";
 
@@ -123,48 +123,12 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/clone@2.1.2/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/d3-array@3.0.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-array@3.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/d3-array@3.0.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-array@3.0.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/d3-array@3.0.4/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-array@3.0.4/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/d3-array@3.2.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-array@3.2.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/d3-array@3.2.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-array@3.2.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/d3-array@3.2.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-array@3.2.2/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/d3-array@3.2.3/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-array@3.2.3/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/d3-array@3.2.4/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-array@3.2.4/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/d3-color@3.0.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-color@3.0.1/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/d3-color@3.1.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-color@3.1.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/d3-delaunay@6.0.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-delaunay@6.0.2/+esm.js").to_string(),
     );
     m.insert(
         "/npm/d3-delaunay@6.0.4/+esm.js".to_string(),
@@ -183,10 +147,6 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-force@3.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/d3-format@3.0.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-format@3.0.1/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/d3-format@3.1.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-format@3.1.0/+esm.js").to_string(),
     );
@@ -194,14 +154,6 @@ pub fn build_import_map() -> HashMap<String, String> {
         "/npm/d3-geo-projection@4.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-geo-projection@4.0.0/+esm.js")
             .to_string(),
-    );
-    m.insert(
-        "/npm/d3-geo@3.0.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-geo@3.0.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/d3-geo@3.1.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-geo@3.1.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/d3-geo@3.1.1/+esm.js".to_string(),
@@ -237,16 +189,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-shape@3.2.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/d3-time-format@4.0.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-time-format@4.0.0/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/d3-time-format@4.1.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-time-format@4.1.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/d3-time@3.0.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-time@3.0.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/d3-time@3.1.0/+esm.js".to_string(),
@@ -274,14 +218,6 @@ pub fn build_import_map() -> HashMap<String, String> {
             .to_string(),
     );
     m.insert(
-        "/npm/internmap@2.0.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/internmap@2.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/internmap@2.0.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/internmap@2.0.1/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/internmap@2.0.3/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/internmap@2.0.3/+esm.js").to_string(),
     );
@@ -306,35 +242,13 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/topojson-client@3.1.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-canvas@1.2.7/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-canvas@1.2.7/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-canvas@2.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-canvas@2.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-crossfilter@4.1.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-crossfilter@4.1.1/+esm.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-crossfilter@4.1.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-crossfilter@4.1.2/+esm.js")
-            .to_string(),
     );
     m.insert(
         "/npm/vega-crossfilter@5.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-crossfilter@5.0.0/+esm.js")
             .to_string(),
-    );
-    m.insert(
-        "/npm/vega-dataflow@5.7.5/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-dataflow@5.7.5/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-dataflow@5.7.6/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-dataflow@5.7.6/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-dataflow@6.0.0/+esm.js".to_string(),
@@ -345,21 +259,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-embed@6.26.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-encode@4.10.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-encode@4.10.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-encode@4.9.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-encode@4.9.2/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-encode@5.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-encode@5.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-event-selector@3.0.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-event-selector@3.0.1/+esm.js")
-            .to_string(),
     );
     m.insert(
         "/npm/vega-event-selector@4.0.0/+esm.js".to_string(),
@@ -367,84 +268,24 @@ pub fn build_import_map() -> HashMap<String, String> {
             .to_string(),
     );
     m.insert(
-        "/npm/vega-expression@5.0.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-expression@5.0.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-expression@5.1.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-expression@5.1.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-expression@5.1.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-expression@5.1.1/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-expression@6.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-expression@6.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-force@4.2.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-force@4.2.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-force@4.2.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-force@4.2.1/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-force@5.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-force@5.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-format@1.1.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-format@1.1.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-format@1.1.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-format@1.1.2/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-format@2.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-format@2.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-functions@5.13.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-functions@5.13.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-functions@5.13.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-functions@5.13.2/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-functions@5.14.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-functions@5.14.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-functions@5.15.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-functions@5.15.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-functions@6.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-functions@6.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-geo@4.4.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-geo@4.4.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-geo@4.4.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-geo@4.4.2/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-geo@5.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-geo@5.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-hierarchy@4.1.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-hierarchy@4.1.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-hierarchy@4.1.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-hierarchy@4.1.2/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-hierarchy@5.0.0/+esm.js".to_string(),
@@ -454,14 +295,6 @@ pub fn build_import_map() -> HashMap<String, String> {
         "/npm/vega-interpreter@1.0.5/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-interpreter@1.0.5/+esm.js")
             .to_string(),
-    );
-    m.insert(
-        "/npm/vega-label@1.2.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-label@1.2.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-label@1.3.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-label@1.3.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-label@2.0.0/+esm.js".to_string(),
@@ -508,113 +341,28 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-lite@6.1.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-loader@4.5.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-loader@4.5.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-loader@4.5.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-loader@4.5.2/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-loader@5.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-loader@5.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-parser@6.2.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-parser@6.2.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-parser@6.2.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-parser@6.2.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-parser@6.3.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-parser@6.3.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-parser@6.4.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-parser@6.4.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-parser@7.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-parser@7.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-projection@1.6.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-projection@1.6.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-projection@1.6.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-projection@1.6.1/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-projection@2.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-projection@2.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-regression@1.2.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-regression@1.2.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-regression@1.3.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-regression@1.3.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-regression@2.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-regression@2.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-runtime@6.1.4/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-runtime@6.1.4/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-runtime@6.2.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-runtime@6.2.0/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-runtime@7.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-runtime@7.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-scale@7.3.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scale@7.3.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-scale@7.3.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scale@7.3.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-scale@7.4.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scale@7.4.1/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-scale@8.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scale@8.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-scenegraph@4.10.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scenegraph@4.10.2/+esm.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-scenegraph@4.11.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scenegraph@4.11.0/+esm.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-scenegraph@4.11.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scenegraph@4.11.1/+esm.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-scenegraph@4.11.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scenegraph@4.11.2/+esm.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-scenegraph@4.13.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scenegraph@4.13.0/+esm.js")
-            .to_string(),
     );
     m.insert(
         "/npm/vega-scenegraph@5.0.0/+esm.js".to_string(),
@@ -626,24 +374,8 @@ pub fn build_import_map() -> HashMap<String, String> {
             .to_string(),
     );
     m.insert(
-        "/npm/vega-selections@5.4.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-selections@5.4.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-selections@5.4.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-selections@5.4.2/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-selections@6.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-selections@6.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-statistics@1.8.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-statistics@1.8.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-statistics@1.9.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-statistics@1.9.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-statistics@2.0.0/+esm.js".to_string(),
@@ -654,14 +386,6 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-themes@2.15.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-time@2.1.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-time@2.1.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-time@2.1.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-time@2.1.2/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-time@3.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-time@3.0.0/+esm.js").to_string(),
     );
@@ -670,50 +394,12 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-tooltip@0.34.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-transforms@4.10.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-transforms@4.10.2/+esm.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-transforms@4.11.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-transforms@4.11.0/+esm.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-transforms@4.11.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-transforms@4.11.1/+esm.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-transforms@4.12.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-transforms@4.12.0/+esm.js")
-            .to_string(),
-    );
-    m.insert(
         "/npm/vega-transforms@5.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-transforms@5.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-util@1.17.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-util@1.17.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-util@1.17.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-util@1.17.2/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-util@2.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-util@2.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-view-transforms@4.5.9/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-view-transforms@4.5.9/+esm.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-view-transforms@4.6.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-view-transforms@4.6.0/+esm.js")
-            .to_string(),
     );
     m.insert(
         "/npm/vega-view-transforms@5.0.0/+esm.js".to_string(),
@@ -721,64 +407,16 @@ pub fn build_import_map() -> HashMap<String, String> {
             .to_string(),
     );
     m.insert(
-        "/npm/vega-view@5.11.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-view@5.11.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-view@5.12.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-view@5.12.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-view@5.13.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-view@5.13.0/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-view@6.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-view@6.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-voronoi@4.2.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-voronoi@4.2.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-voronoi@4.2.2/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-voronoi@4.2.2/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-voronoi@4.2.3/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-voronoi@4.2.3/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-voronoi@5.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-voronoi@5.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-wordcloud@4.1.4/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-wordcloud@4.1.4/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-wordcloud@4.1.5/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-wordcloud@4.1.5/+esm.js").to_string(),
-    );
-    m.insert(
         "/npm/vega-wordcloud@5.0.0/+esm.js".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-wordcloud@5.0.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega@5.25.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega@5.25.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega@5.26.1/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega@5.26.1/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega@5.28.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega@5.28.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega@5.30.0/+esm.js".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega@5.30.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega@6.0.0/+esm.js".to_string(),

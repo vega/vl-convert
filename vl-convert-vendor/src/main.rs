@@ -225,6 +225,66 @@ fn main() {
         .collect();
     let version_instances_csv = version_instances.join(",\n    ");
 
+    // Collect info on transitive dependency packages
+    // We use this to detect and remove duplicate versions of transitive dependencies
+    let mut packages_info: HashMap<String, Vec<(Version, String)>> = HashMap::new();
+    
+    // Scan for package directories in vendor/cdn.jsdelivr.net/npm/
+    let npm_vendor_path = vendor_path.join("cdn.jsdelivr.net").join("npm");
+    if npm_vendor_path.exists() {
+        for entry in fs::read_dir(&npm_vendor_path).unwrap() {
+            let entry = entry.unwrap();
+            if entry.path().is_dir() {
+                let dir_name = entry.file_name().to_string_lossy().to_string();
+                if let Some((name, rest)) = dir_name.split_once('@') {
+                    if let Ok(version) = Version::parse(rest) {
+                        packages_info
+                            .entry(name.to_string())
+                            .or_default()
+                            .push((version, dir_name.clone()));
+                    }
+                }
+            }
+        }
+    }
+
+    let mut replacements: HashMap<String, String> = HashMap::new();
+    let mut final_package_versions: HashMap<String, String> = HashMap::new();
+    
+    for (name, v) in packages_info.iter_mut() {
+        // Sort packages in descending order by version
+        v.sort_by(|a, b| b.0.cmp(&a.0));
+
+        // Store the final version that will be kept
+        if !v.is_empty() {
+            final_package_versions.insert(name.clone(), v[0].1.clone());
+        }
+
+        // For packages other than vega-lite, if there are multiple versions of the same package
+        // delete the older ones and store the import string replacement to apply to other files
+        if name != "vega-lite" && v.len() > 1 {
+            for i in 1..v.len() {
+                replacements.insert(v[i].1.clone(), v[0].1.clone());
+                let file_path = format!("{vendor_path_str}/cdn.jsdelivr.net/npm/{}", v[i].1);
+                fs::remove_dir_all(file_path).unwrap_or(());
+            }
+        }
+    }
+    
+    // Update version constants based on actual available packages
+    let actual_vega_version = final_package_versions.get("vega")
+        .map(|v| format!("/npm/{}/+esm.js", v))
+        .unwrap_or_else(|| VEGA_PATH.to_string());
+    let actual_vega_themes_version = final_package_versions.get("vega-themes")
+        .map(|v| format!("/npm/{}/+esm.js", v))
+        .unwrap_or_else(|| VEGA_THEMES_PATH.to_string());
+    let actual_vega_embed_version = final_package_versions.get("vega-embed")
+        .map(|v| format!("/npm/{}/+esm.js", v))
+        .unwrap_or_else(|| VEGA_EMBED_PATH.to_string());
+    let actual_debounce_version = final_package_versions.get("lodash.debounce")
+        .map(|v| format!("/npm/{}/+esm.js", v))
+        .unwrap_or_else(|| DEBOUNCE_PATH.to_string());
+
     let mut content = format!(
         r#"
 // *************************************************************************
@@ -314,51 +374,15 @@ pub fn build_import_map() -> HashMap<String, String> {{
         to_semver_match_csv = to_semver_match_csv,
         version_instances_csv = version_instances_csv,
         JSDELIVR_URL = JSDELIVR_URL,
-        VEGA_PATH = VEGA_PATH,
-        VEGA_VERSION = vega_version,
-        VEGA_THEMES_VERSION = vega_themes_version,
-        VEGA_EMBED_VERSION = vega_embed_version,
-        VEGA_THEMES_PATH = VEGA_THEMES_PATH,
-        VEGA_EMBED_PATH = VEGA_EMBED_PATH,
+        VEGA_PATH = actual_vega_version,
+        VEGA_VERSION = actual_vega_version.split("@").nth(1).unwrap().split("/").next().unwrap(),
+        VEGA_THEMES_VERSION = actual_vega_themes_version.split("@").nth(1).unwrap().split("/").next().unwrap(),
+        VEGA_EMBED_VERSION = actual_vega_embed_version.split("@").nth(1).unwrap().split("/").next().unwrap(),
+        VEGA_THEMES_PATH = actual_vega_themes_version,
+        VEGA_EMBED_PATH = actual_vega_embed_version,
+        DEBOUNCE_PATH = actual_debounce_version,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
-
-    // Collect info on transitive dependency packages
-    // We use this to detect and remove duplicate versions of transitive dependencies
-    let mut packages_info: HashMap<String, Vec<(Version, String)>> = HashMap::new();
-    visit_dirs(&vendor_path, &mut |f| {
-        let p = f.path().canonicalize().unwrap();
-        let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
-        if let Some(relative_sub) = relative.strip_prefix("cdn.jsdelivr.net/npm/") {
-            if let Some((name, rest)) = relative_sub.split_once('@') {
-                if let Some((version_str, _)) = rest.split_once('/') {
-                    if let Ok(version) = Version::parse(version_str) {
-                        packages_info
-                            .entry(name.to_string())
-                            .or_default()
-                            .push((version, relative_sub.to_string()));
-                    }
-                }
-            }
-        }
-    })
-    .unwrap();
-
-    let mut replacements: HashMap<String, String> = HashMap::new();
-    for (name, v) in packages_info.iter_mut() {
-        // Sort packages in descending order by version
-        v.sort_by(|a, b| b.0.cmp(&a.0));
-
-        // For packages other than vega-lite, if there are multiple versions of the same package
-        // delete the older ones and store the import string replacement to apply to other files
-        if name != "vega-lite" && v.len() > 1 {
-            for i in 1..v.len() {
-                replacements.insert(v[i].1.clone(), v[0].1.clone());
-                let file_path = format!("{vendor_path_str}/cdn.jsdelivr.net/npm/{}", v[i].1);
-                fs::remove_dir_all(file_path).unwrap_or(());
-            }
-        }
-    }
 
     // Perform import replacements in remaining files
     visit_dirs(&vendor_path, &mut |f| {
