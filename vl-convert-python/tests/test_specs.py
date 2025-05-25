@@ -145,7 +145,7 @@ def test_vegalite_to_html_bundle(name, vl_version):
     html = vlc.vegalite_to_html(vl_spec, vl_version=vl_version, bundle=True)
     assert html.startswith("<!DOCTYPE html>")
     assert vl_version in html
-    assert "<div id=\"vega-chart\">" in html
+    assert '<div id="vega-chart">' in html
 
     # Make sure themes aren't cached
     html = vlc.vegalite_to_html(

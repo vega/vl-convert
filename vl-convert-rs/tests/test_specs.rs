@@ -671,6 +671,7 @@ mod test_png_no_theme {
         case("table_heatmap", 1.0),
         case("long_text_lable", 1.0),
         case("gh_174", 1.0),
+        case("lookup_urls", 1.0),
     )]
     fn test(
         name: &str,
