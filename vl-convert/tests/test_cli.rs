@@ -258,7 +258,7 @@ mod test_vl2html_no_bundle {
         // Check for expected patterns
         assert!(html_result.starts_with("<!DOCTYPE html>"));
         assert!(html_result.contains(&format!("cdn.jsdelivr.net/npm/vega-lite@{vl_version}")));
-        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@5"));
+        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@6"));
         assert!(html_result.contains("cdn.jsdelivr.net/npm/vega-embed@6"));
 
         Ok(())
