@@ -52,6 +52,14 @@ protobuf = ">=4.25.3,<5"
 black = ">=24.8.0,<25"
 pip = ">=24.2,<25"
 
+# macOS 15.4 tightened the dynamic-loader rules and now rejects binaries
+# with duplicate LC_RPATH entries.  Older conda-forge builds of OpenBLAS /
+# libgfortran trigger this, which breaks NumPy & SciPy imports on Apple Silicon
+# (see prefix-dev/pixi#3479, conda-forge/libgfortran-feedstock#69,
+# conda-forge/openblas-feedstock#196).  Pinning libgfortran5 to ≥ 14 pulls in
+# the rebuilt runtime that removes the duplicate RPATH and fixes the error.
+libgfortran5 = ">=14.0.0"
+
 # Dependencies not required for development or testing,
 # but useful when trying out vl-convert-python by hand
 altair = ">=5.3.0,<5.4"
