@@ -163,9 +163,10 @@ impl Loader for VlConvertBundleLoader {
         let url = module_specifier.to_string();
         let url_no_js = url.strip_suffix(".js").unwrap_or(&url).to_string();
 
-        let return_specifier = Url::from_str(&format!("{}{}", url_no_js, ".js")).expect(&format!(
-            "Failed to parse module specifier {url_no_js} with .js extension"
-        ));
+        let return_specifier =
+            Url::from_str(&format!("{}{}", url_no_js, ".js")).unwrap_or_else(|_| {
+                panic!("Failed to parse module specifier {url_no_js} with .js extension")
+            });
 
         Box::pin(async move {
             Ok(Some(LoadResponse::Module {
