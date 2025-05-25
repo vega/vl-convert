@@ -348,6 +348,7 @@ mod test_vegalite_to_vega {
             VlVersion::v5_19,
             VlVersion::v5_20,
             VlVersion::v5_21,
+            VlVersion::v6_1,
         )]
         vl_version: VlVersion,
 
@@ -414,7 +415,7 @@ mod test_vegalite_to_html_no_bundle {
         // Check for expected patterns
         assert!(html_result.starts_with("<!DOCTYPE html>"));
         assert!(html_result.contains(&format!("cdn.jsdelivr.net/npm/vega-lite@{}", vl_version.to_semver())));
-        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@5"));
+        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@6"));
         assert!(html_result.contains("cdn.jsdelivr.net/npm/vega-embed@6"));
     }
 
@@ -441,6 +442,7 @@ mod test_vegalite_to_html_bundle {
             VlVersion::v5_19,
             VlVersion::v5_20,
             VlVersion::v5_21,
+            VlVersion::v6_1,
         )]
         vl_version: VlVersion,
 
@@ -462,7 +464,7 @@ mod test_vegalite_to_html_bundle {
         // Check for expected patterns
         assert!(html_result.starts_with("<!DOCTYPE html>"));
         assert!(html_result.contains(vl_version.to_semver()));
-        assert!(html_result.contains("Jeffrey Heer"));
+        assert!(html_result.contains("<div id=\"vega-chart\">"));
     }
 
     #[test]

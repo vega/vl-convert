@@ -1,9 +1,6 @@
 pub mod import_map;
 
-use crate::module_loader::import_map::{
-    build_format_locale_map, build_import_map, build_time_format_locale_map, VEGA_PATH,
-    VEGA_THEMES_PATH,
-};
+use crate::module_loader::import_map::{build_format_locale_map, build_import_map, build_time_format_locale_map, JSDELIVR_URL, VEGA_PATH, VEGA_THEMES_PATH};
 use crate::VlVersion;
 use deno_core::{ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind};
 use deno_emit::{LoadFuture, LoadOptions, Loader};
@@ -14,7 +11,9 @@ use deno_runtime::deno_core::{
 };
 use regex::Regex;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
+use deno_core::url::Url;
 
 lazy_static! {
     pub static ref IMPORT_MAP: HashMap<String, String> = build_import_map();
@@ -51,7 +50,6 @@ impl ModuleLoader for VlConvertModuleLoader {
     ) -> ModuleLoadResponse {
         let module_specifier = module_specifier.clone();
         let string_specifier = module_specifier.to_string();
-        // println!("load: {}", string_specifier);
 
         let code = if string_specifier.ends_with("vl-convert-rs.js") {
             // Load vl-convert-rs.js as an empty file
@@ -60,16 +58,11 @@ impl ModuleLoader for VlConvertModuleLoader {
             "".to_string()
         } else {
             let path = module_specifier.path();
+            let path = path.strip_prefix(JSDELIVR_URL).unwrap_or(path);
+            // strip the .js extension if it exists
+            let path = path.strip_suffix(".js").unwrap_or(path).to_string();
             IMPORT_MAP
-                .get(path)
-                .or_else(|| {
-                    // Try with .js extension if not found
-                    if !path.ends_with(".js") {
-                        IMPORT_MAP.get(&format!("{}.js", path))
-                    } else {
-                        None
-                    }
-                })
+                .get(&path)
                 .unwrap_or_else(|| {
                     panic!(
                         "Unexpected source file with path: {}",
@@ -107,11 +100,11 @@ pub struct VlConvertBundleLoader {
 impl VlConvertBundleLoader {
     pub fn new(index_js: String, embed_vl_version: VlVersion) -> Self {
         let name_version_re =
-            Regex::new(r"(?P<name>[^@]+)@v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)").unwrap();
-        let vegalite_re = Regex::new(r#"("/-/vega-lite@v[0-9]+\.[0-9]+\.[0-9]+-[^"]+")"#).unwrap();
-        let vega_re = Regex::new(r#"("/-/vega@v[0-9]+\.[0-9]+\.[0-9]+-[^"]+")"#).unwrap();
+            Regex::new(r"(?P<name>[^@]+)@(?P<version>[0-9]+\.[0-9]+\.[0-9]+)").unwrap();
+        let vegalite_re = Regex::new(r#"("/npm/vega-lite@[0-9]+\.[0-9]+\.[0-9]+/\+esm")"#).unwrap();
+        let vega_re = Regex::new(r#"("/npm/vega@[0-9]+\.[0-9]+\.[0-9]+/\+esm")"#).unwrap();
         let vega_themes_re =
-            Regex::new(r#"("/-/vega-themes@v[0-9]+\.[0-9]+\.[0-9]+-[^"]+")"#).unwrap();
+            Regex::new(r#"("/npm/vega-themes@[0-9]+\.[0-9]+\.[0-9]+/\+esm")"#).unwrap();
         Self {
             index_js,
             name_version_re,
@@ -127,20 +120,14 @@ impl Loader for VlConvertBundleLoader {
     fn load(&self, module_specifier: &ModuleSpecifier, _options: LoadOptions) -> LoadFuture {
         let module_specifier = module_specifier.clone();
         let last_path_part = module_specifier.path().split('/').next_back().unwrap();
+        let path = module_specifier.path();
+        let path_no_js = path.strip_suffix(".js").unwrap_or(path).to_string();
+
         let code = if last_path_part == "vl-convert-index.js" {
             self.index_js.clone()
         } else {
-            let path = module_specifier.path();
             let mut src = IMPORT_MAP
-                .get(path)
-                .or_else(|| {
-                    // Try with .js extension if not found
-                    if !path.ends_with(".js") {
-                        IMPORT_MAP.get(&format!("{}.js", path))
-                    } else {
-                        None
-                    }
-                })
+                .get(&path_no_js)
                 .unwrap_or_else(|| {
                     panic!(
                         "Unexpected source file with path: {}",
@@ -179,9 +166,16 @@ impl Loader for VlConvertBundleLoader {
         let code_bytes = code.into_bytes();
         let content: Arc<[u8]> = code_bytes.into_boxed_slice().into();
 
+        // Make new specifier with .js extension, so deno bundle knows the media type
+        let url = module_specifier.to_string();
+        let url_no_js = url.strip_suffix(".js").unwrap_or(&url).to_string();
+
+        let return_specifier = Url::from_str(&format!("{}{}", url_no_js, ".js"))
+            .expect(&format!("Failed to parse module specifier {url_no_js} with .js extension"));
+
         Box::pin(async move {
             Ok(Some(LoadResponse::Module {
-                specifier: module_specifier.clone(),
+                specifier: return_specifier,
                 maybe_headers: None,
                 content,
             }))

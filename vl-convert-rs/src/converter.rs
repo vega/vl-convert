@@ -1343,7 +1343,7 @@ impl VlConverter {
         } else {
             format!(
                 r#"
-    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega@6"></script>
     <script src="https://cdn.jsdelivr.net/npm/vega-lite@{vl_ver}"></script>
     <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
             "#,

@@ -55,10 +55,10 @@ pub async fn bundle_script(script: String, vl_version: VlVersion) -> Result<Stri
 pub async fn bundle_vega_snippet(snippet: &str, vl_version: VlVersion) -> Result<String, AnyError> {
     let script = format!(
         r#"
-import vegaEmbed from "{JSDELIVR_URL}{VEGA_EMBED_PATH}"
-import vega from "{JSDELIVR_URL}{VEGA_PATH}"
-import vegaLite from "{JSDELIVR_URL}{VEGA_LITE_PATH}"
-import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}"
+import vegaEmbed from "{JSDELIVR_URL}{VEGA_EMBED_PATH}.js"
+import vega from "{JSDELIVR_URL}{VEGA_PATH}.js"
+import vegaLite from "{JSDELIVR_URL}{VEGA_LITE_PATH}.js"
+import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
 {snippet}
 "#,
         VEGA_LITE_PATH = vl_version.to_path()

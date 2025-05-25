@@ -1,8 +1,8 @@
 {
-  "width": 292,
-  "height": 103,
+  "width": 356,
+  "height": 105,
   "origin": [
-    60,
+    75,
     10
   ],
   "scenegraph": {
@@ -327,7 +327,7 @@
                         "baseline": "top",
                         "text": "Cylinders",
                         "x": 50,
-                        "y": 16.5615234375
+                        "y": 19
                       }
                     ],
                     "marktype": "text",
@@ -485,7 +485,7 @@
                         "baseline": "bottom",
                         "text": "Origin",
                         "y": 30,
-                        "x": -43.24609375
+                        "x": -59
                       }
                     ],
                     "marktype": "text",
@@ -764,7 +764,7 @@
                 "orient": "right",
                 "x": 118,
                 "y": 0,
-                "width": 109,
+                "width": 158,
                 "height": 80
               }
             ],

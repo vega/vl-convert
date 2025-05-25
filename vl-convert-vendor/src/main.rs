@@ -15,55 +15,55 @@ const VL_PATHS: &[(&str, &str)] = &[
     // 5.8 is used by Altair 5.0 (keep longer)
     (
         "5.8",
-        "/npm/vega-lite@5.8.0/+esm.js",
+        "/npm/vega-lite@5.8.0/+esm",
     ),
     // 5.14.1 is used by Altair 5.1.0 (keep longer)
     (
         "5.14",
-        "/npm/vega-lite@5.14.1/+esm.js",
+        "/npm/vega-lite@5.14.1/+esm",
     ),
     // 5.15.1 is used by Altair 5.1.1 (keep longer)
     (
         "5.15",
-        "/npm/vega-lite@5.15.1/+esm.js",
+        "/npm/vega-lite@5.15.1/+esm",
     ),
     // 5.16.3 is used by Altair 5.2.0 (keep longer)
     (
         "5.16",
-        "/npm/vega-lite@5.16.3/+esm.js",
+        "/npm/vega-lite@5.16.3/+esm",
     ),
     // 5.17.0 is used by Altair 5.3.0 (keep longer)
     (
         "5.17",
-        "/npm/vega-lite@5.17.0/+esm.js",
+        "/npm/vega-lite@5.17.0/+esm",
     ),
     (
         "5.18",
-        "/npm/vega-lite@5.18.1/+esm.js",
+        "/npm/vega-lite@5.18.1/+esm",
     ),
     (
         "5.19",
-        "/npm/vega-lite@5.19.0/+esm.js",
+        "/npm/vega-lite@5.19.0/+esm",
     ),
     // 5.20.1 is used by Altair 5.4.0 (keep longer)
     (
         "5.20",
-        "/npm/vega-lite@5.20.1/+esm.js",
+        "/npm/vega-lite@5.20.1/+esm",
     ),
     (
         "5.21",
-        "/npm/vega-lite@5.21.0/+esm.js",
+        "/npm/vega-lite@5.21.0/+esm",
     ),
     (
         "6.1",
-        "/npm/vega-lite@6.1.0/+esm.js",
+        "/npm/vega-lite@6.1.0/+esm",
     ),
 ];
 const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
-const VEGA_PATH: &str = "/npm/vega@6.0.0/+esm.js";
-const VEGA_THEMES_PATH: &str = "/npm/vega-themes@2.15.0/+esm.js";
-const VEGA_EMBED_PATH: &str = "/npm/vega-embed@6.26.0/+esm.js";
-const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm.js";
+const VEGA_PATH: &str = "/npm/vega@6.0.0/+esm";
+const VEGA_THEMES_PATH: &str = "/npm/vega-themes@2.15.0/+esm";
+const VEGA_EMBED_PATH: &str = "/npm/vega-embed@6.26.0/+esm";
+const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
 
 // Example custom build script.
 fn main() {
@@ -86,29 +86,6 @@ fn main() {
         fs::remove_dir_all(&vendor_path).unwrap();
     }
 
-    // extract vega version from url
-    let vega_version = VEGA_PATH
-        .split("@")
-        .nth(1)
-        .unwrap()
-        .split("/")
-        .next()
-        .unwrap();
-    let vega_themes_version = VEGA_THEMES_PATH
-        .split("@")
-        .nth(1)
-        .unwrap()
-        .split("/")
-        .next()
-        .unwrap();
-    let vega_embed_version = VEGA_EMBED_PATH
-        .split("@")
-        .nth(1)
-        .unwrap()
-        .split("/")
-        .next()
-        .unwrap();
-
     // Download locales
     download_locales(
         "https://github.com/d3/d3-format/archive/refs/heads/main.zip",
@@ -130,7 +107,7 @@ fn main() {
     for (ver, path) in VL_PATHS {
         let ver_under = ver.replace('.', "_");
         // Extract package name and version from path for esm.run URL
-        let package_url = path.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
+        let package_url = path.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
         writeln!(
             imports,
             "import * as v_{ver_under} from \"{JSDELIVR_URL}/npm/{package_url}/+esm\";",
@@ -139,7 +116,7 @@ fn main() {
     }
 
     // Write Vega
-    let vega_package_url = VEGA_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
+    let vega_package_url = VEGA_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
     writeln!(
         imports,
         "import * as vega from \"{JSDELIVR_URL}/npm/{vega_package_url}/+esm\";",
@@ -147,7 +124,7 @@ fn main() {
     .unwrap();
 
     // Write VegaThemes
-    let vega_themes_package_url = VEGA_THEMES_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
+    let vega_themes_package_url = VEGA_THEMES_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
     writeln!(
         imports,
         "import * as vegaThemes from \"{JSDELIVR_URL}/npm/{vega_themes_package_url}/+esm\";",
@@ -155,7 +132,7 @@ fn main() {
     .unwrap();
 
     // Write Vega Embed
-    let vega_embed_package_url = VEGA_EMBED_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
+    let vega_embed_package_url = VEGA_EMBED_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
     writeln!(
         imports,
         "import * as vegaEmbed from \"{JSDELIVR_URL}/npm/{vega_embed_package_url}/+esm\";",
@@ -163,7 +140,7 @@ fn main() {
     .unwrap();
 
     // Write debounce
-    let debounce_package_url = DEBOUNCE_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm.js").unwrap();
+    let debounce_package_url = DEBOUNCE_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
     writeln!(
         imports,
         "import lodashDebounce from \"{JSDELIVR_URL}/npm/{debounce_package_url}/+esm\";",
@@ -173,14 +150,31 @@ fn main() {
     fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
     // Use deno vendor to download vega-lite and dependencies to the vendor directory
-    if let Err(err) = Command::new("deno")
+    let output = Command::new("deno")
         .current_dir(&vl_convert_rs_path)
         .arg("vendor")
         .arg("vendor_imports.js")
         .arg("--reload")
-        .output()
-    {
-        panic!("Deno vendor command failed: {}", err);
+        .output();
+    
+    match output {
+        Ok(output) => {
+            // Print stdout and stderr from deno command
+            if !output.stdout.is_empty() {
+                print!("{}", String::from_utf8_lossy(&output.stdout));
+            }
+            if !output.stderr.is_empty() {
+                eprint!("{}", String::from_utf8_lossy(&output.stderr));
+            }
+            
+            // Check if command was successful
+            if !output.status.success() {
+                panic!("Deno vendor command failed with exit code: {}", output.status);
+            }
+        }
+        Err(err) => {
+            panic!("Deno vendor command failed: {}", err);
+        }
     }
 
     // Write import_map.rs file
@@ -277,16 +271,16 @@ fn main() {
     
     // Update version constants based on actual available packages
     let actual_vega_version = final_package_versions.get("vega")
-        .map(|v| format!("/npm/{}/+esm.js", v))
+        .map(|v| format!("/npm/{}/+esm", v))
         .unwrap_or_else(|| VEGA_PATH.to_string());
     let actual_vega_themes_version = final_package_versions.get("vega-themes")
-        .map(|v| format!("/npm/{}/+esm.js", v))
+        .map(|v| format!("/npm/{}/+esm", v))
         .unwrap_or_else(|| VEGA_THEMES_PATH.to_string());
     let actual_vega_embed_version = final_package_versions.get("vega-embed")
-        .map(|v| format!("/npm/{}/+esm.js", v))
+        .map(|v| format!("/npm/{}/+esm", v))
         .unwrap_or_else(|| VEGA_EMBED_PATH.to_string());
     let actual_debounce_version = final_package_versions.get("lodash.debounce")
-        .map(|v| format!("/npm/{}/+esm.js", v))
+        .map(|v| format!("/npm/{}/+esm", v))
         .unwrap_or_else(|| DEBOUNCE_PATH.to_string());
 
     let mut content = format!(
@@ -401,9 +395,10 @@ pub fn build_import_map() -> HashMap<String, String> {{
         let p = f.path().canonicalize().unwrap();
         let relative = &p.to_str().unwrap()[(vendor_path_str.len() + 1)..];
         if let Some(relative_sub) = relative.strip_prefix(esm_domain) {
+            let key = relative_sub.strip_suffix(".js").unwrap_or(relative_sub);
             writeln!(
                 content,
-                "    m.insert(\"{relative_sub}\".to_string(), include_str!(\"../../vendor/{esm_domain}{relative_sub}\").to_string());",
+                "    m.insert(\"{key}\".to_string(), include_str!(\"../../vendor/{esm_domain}{relative_sub}\").to_string());",
             )
                 .unwrap();
         }
