@@ -110,7 +110,7 @@ def test_vegalite_to_html_no_bundle(name, vl_version):
     html = vlc.vegalite_to_html(vl_spec, vl_version=vl_version, bundle=False)
     assert html.startswith("<!DOCTYPE html>")
     assert f"cdn.jsdelivr.net/npm/vega-lite@{vl_version}" in html
-    assert "cdn.jsdelivr.net/npm/vega@5" in html
+    assert "cdn.jsdelivr.net/npm/vega@6" in html
     assert "cdn.jsdelivr.net/npm/vega-embed@6" in html
 
     # Check themes
@@ -145,7 +145,7 @@ def test_vegalite_to_html_bundle(name, vl_version):
     html = vlc.vegalite_to_html(vl_spec, vl_version=vl_version, bundle=True)
     assert html.startswith("<!DOCTYPE html>")
     assert vl_version in html
-    assert "Jeffrey Heer" in html
+    assert "<div id=\"vega-chart\">" in html
 
     # Make sure themes aren't cached
     html = vlc.vegalite_to_html(

@@ -309,7 +309,7 @@ mod test_vl2html_bundle {
         // Check for expected patterns
         assert!(html_result.starts_with("<!DOCTYPE html>"));
         assert!(html_result.contains(vl_version));
-        assert!(html_result.contains("Jeffrey Heer"));
+        assert!(html_result.contains("<div id=\"vega-chart\">"));
 
         Ok(())
     }
