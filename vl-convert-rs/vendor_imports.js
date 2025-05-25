@@ -3,7 +3,6 @@ import * as v_5_14 from "https://cdn.jsdelivr.net/npm/vega-lite@5.14.1/+esm";
 import * as v_5_15 from "https://cdn.jsdelivr.net/npm/vega-lite@5.15.1/+esm";
 import * as v_5_16 from "https://cdn.jsdelivr.net/npm/vega-lite@5.16.3/+esm";
 import * as v_5_17 from "https://cdn.jsdelivr.net/npm/vega-lite@5.17.0/+esm";
-import * as v_5_18 from "https://cdn.jsdelivr.net/npm/vega-lite@5.18.1/+esm";
 import * as v_5_19 from "https://cdn.jsdelivr.net/npm/vega-lite@5.19.0/+esm";
 import * as v_5_20 from "https://cdn.jsdelivr.net/npm/vega-lite@5.20.1/+esm";
 import * as v_5_21 from "https://cdn.jsdelivr.net/npm/vega-lite@5.21.0/+esm";

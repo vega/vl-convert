@@ -36,7 +36,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20, 5.21, 6.1
+        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.19, 5.20, 5.21, 6.1
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -68,7 +68,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20, 5.21, 6.1
+        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.19, 5.20, 5.21, 6.1
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -112,7 +112,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20, 5.21, 6.1
+        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.19, 5.20, 5.21, 6.1
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -164,7 +164,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20, 5.21, 6.1
+        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.19, 5.20, 5.21, 6.1
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -216,7 +216,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20, 5.21, 6.1
+        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.19, 5.20, 5.21, 6.1
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
@@ -272,7 +272,7 @@ enum Commands {
         #[arg(short, long)]
         output: String,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.18, 5.19, 5.20, 5.21, 6.1
+        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.19, 5.20, 5.21, 6.1
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 

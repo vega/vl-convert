@@ -36,7 +36,6 @@ pub enum VlVersion {
     v5_15,
     v5_16,
     v5_17,
-    v5_18,
     v5_19,
     v5_20,
     v5_21,
@@ -52,7 +51,6 @@ impl VlVersion {
             v5_15 => "/npm/vega-lite@5.15.1/+esm",
             v5_16 => "/npm/vega-lite@5.16.3/+esm",
             v5_17 => "/npm/vega-lite@5.17.0/+esm",
-            v5_18 => "/npm/vega-lite@5.18.1/+esm",
             v5_19 => "/npm/vega-lite@5.19.0/+esm",
             v5_20 => "/npm/vega-lite@5.20.1/+esm",
             v5_21 => "/npm/vega-lite@5.21.0/+esm",
@@ -73,7 +71,6 @@ impl VlVersion {
             v5_15 => "5.15",
             v5_16 => "5.16",
             v5_17 => "5.17",
-            v5_18 => "5.18",
             v5_19 => "5.19",
             v5_20 => "5.20",
             v5_21 => "5.21",
@@ -98,7 +95,6 @@ impl FromStr for VlVersion {
             "5.15" | "v5.15" | "5_15" | "v5_15" => Self::v5_15,
             "5.16" | "v5.16" | "5_16" | "v5_16" => Self::v5_16,
             "5.17" | "v5.17" | "5_17" | "v5_17" => Self::v5_17,
-            "5.18" | "v5.18" | "5_18" | "v5_18" => Self::v5_18,
             "5.19" | "v5.19" | "5_19" | "v5_19" => Self::v5_19,
             "5.20" | "v5.20" | "5_20" | "v5_20" => Self::v5_20,
             "5.21" | "v5.21" | "5_21" | "v5_21" => Self::v5_21,
@@ -114,7 +110,6 @@ pub const VL_VERSIONS: &[VlVersion] = &[
     VlVersion::v5_15,
     VlVersion::v5_16,
     VlVersion::v5_17,
-    VlVersion::v5_18,
     VlVersion::v5_19,
     VlVersion::v5_20,
     VlVersion::v5_21,
@@ -320,10 +315,6 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert(
         "/npm/vega-lite@5.17.0/+esm".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-lite@5.17.0/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/vega-lite@5.18.1/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-lite@5.18.1/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-lite@5.19.0/+esm".to_string(),

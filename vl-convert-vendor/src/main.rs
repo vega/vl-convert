@@ -38,10 +38,6 @@ const VL_PATHS: &[(&str, &str)] = &[
         "/npm/vega-lite@5.17.0/+esm",
     ),
     (
-        "5.18",
-        "/npm/vega-lite@5.18.1/+esm",
-    ),
-    (
         "5.19",
         "/npm/vega-lite@5.19.0/+esm",
     ),
