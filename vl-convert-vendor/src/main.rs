@@ -13,47 +13,20 @@ use tempfile::TempDir;
 
 const VL_PATHS: &[(&str, &str)] = &[
     // 5.8 is used by Altair 5.0 (keep longer)
-    (
-        "5.8",
-        "/npm/vega-lite@5.8.0/+esm",
-    ),
+    ("5.8", "/npm/vega-lite@5.8.0/+esm"),
     // 5.14.1 is used by Altair 5.1.0 (keep longer)
-    (
-        "5.14",
-        "/npm/vega-lite@5.14.1/+esm",
-    ),
+    ("5.14", "/npm/vega-lite@5.14.1/+esm"),
     // 5.15.1 is used by Altair 5.1.1 (keep longer)
-    (
-        "5.15",
-        "/npm/vega-lite@5.15.1/+esm",
-    ),
+    ("5.15", "/npm/vega-lite@5.15.1/+esm"),
     // 5.16.3 is used by Altair 5.2.0 (keep longer)
-    (
-        "5.16",
-        "/npm/vega-lite@5.16.3/+esm",
-    ),
+    ("5.16", "/npm/vega-lite@5.16.3/+esm"),
     // 5.17.0 is used by Altair 5.3.0 (keep longer)
-    (
-        "5.17",
-        "/npm/vega-lite@5.17.0/+esm",
-    ),
-    (
-        "5.19",
-        "/npm/vega-lite@5.19.0/+esm",
-    ),
+    ("5.17", "/npm/vega-lite@5.17.0/+esm"),
+    ("5.19", "/npm/vega-lite@5.19.0/+esm"),
     // 5.20.1 is used by Altair 5.4.0 (keep longer)
-    (
-        "5.20",
-        "/npm/vega-lite@5.20.1/+esm",
-    ),
-    (
-        "5.21",
-        "/npm/vega-lite@5.21.0/+esm",
-    ),
-    (
-        "6.1",
-        "/npm/vega-lite@6.1.0/+esm",
-    ),
+    ("5.20", "/npm/vega-lite@5.20.1/+esm"),
+    ("5.21", "/npm/vega-lite@5.21.0/+esm"),
+    ("6.1", "/npm/vega-lite@6.1.0/+esm"),
 ];
 const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
 const VEGA_PATH: &str = "/npm/vega@6.0.0/+esm";
@@ -103,7 +76,11 @@ fn main() {
     for (ver, path) in VL_PATHS {
         let ver_under = ver.replace('.', "_");
         // Extract package name and version from path for esm.run URL
-        let package_url = path.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
+        let package_url = path
+            .strip_prefix("/npm/")
+            .unwrap()
+            .strip_suffix("/+esm")
+            .unwrap();
         writeln!(
             imports,
             "import * as v_{ver_under} from \"{JSDELIVR_URL}/npm/{package_url}/+esm\";",
@@ -112,7 +89,11 @@ fn main() {
     }
 
     // Write Vega
-    let vega_package_url = VEGA_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
+    let vega_package_url = VEGA_PATH
+        .strip_prefix("/npm/")
+        .unwrap()
+        .strip_suffix("/+esm")
+        .unwrap();
     writeln!(
         imports,
         "import * as vega from \"{JSDELIVR_URL}/npm/{vega_package_url}/+esm\";",
@@ -120,7 +101,11 @@ fn main() {
     .unwrap();
 
     // Write VegaThemes
-    let vega_themes_package_url = VEGA_THEMES_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
+    let vega_themes_package_url = VEGA_THEMES_PATH
+        .strip_prefix("/npm/")
+        .unwrap()
+        .strip_suffix("/+esm")
+        .unwrap();
     writeln!(
         imports,
         "import * as vegaThemes from \"{JSDELIVR_URL}/npm/{vega_themes_package_url}/+esm\";",
@@ -128,7 +113,11 @@ fn main() {
     .unwrap();
 
     // Write Vega Embed
-    let vega_embed_package_url = VEGA_EMBED_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
+    let vega_embed_package_url = VEGA_EMBED_PATH
+        .strip_prefix("/npm/")
+        .unwrap()
+        .strip_suffix("/+esm")
+        .unwrap();
     writeln!(
         imports,
         "import * as vegaEmbed from \"{JSDELIVR_URL}/npm/{vega_embed_package_url}/+esm\";",
@@ -136,7 +125,11 @@ fn main() {
     .unwrap();
 
     // Write debounce
-    let debounce_package_url = DEBOUNCE_PATH.strip_prefix("/npm/").unwrap().strip_suffix("/+esm").unwrap();
+    let debounce_package_url = DEBOUNCE_PATH
+        .strip_prefix("/npm/")
+        .unwrap()
+        .strip_suffix("/+esm")
+        .unwrap();
     writeln!(
         imports,
         "import lodashDebounce from \"{JSDELIVR_URL}/npm/{debounce_package_url}/+esm\";",
@@ -152,7 +145,7 @@ fn main() {
         .arg("vendor_imports.js")
         .arg("--reload")
         .output();
-    
+
     match output {
         Ok(output) => {
             // Print stdout and stderr from deno command
@@ -162,10 +155,13 @@ fn main() {
             if !output.stderr.is_empty() {
                 eprint!("{}", String::from_utf8_lossy(&output.stderr));
             }
-            
+
             // Check if command was successful
             if !output.status.success() {
-                panic!("Deno vendor command failed with exit code: {}", output.status);
+                panic!(
+                    "Deno vendor command failed with exit code: {}",
+                    output.status
+                );
             }
         }
         Err(err) => {
@@ -222,7 +218,7 @@ fn main() {
     // Collect info on transitive dependency packages
     // We use this to detect and remove duplicate versions of transitive dependencies
     let mut packages_info: HashMap<String, Vec<(Version, String)>> = HashMap::new();
-    
+
     // Scan for package directories in vendor/cdn.jsdelivr.net/npm/
     let npm_vendor_path = vendor_path.join("cdn.jsdelivr.net").join("npm");
     if npm_vendor_path.exists() {
@@ -244,7 +240,7 @@ fn main() {
 
     let mut replacements: HashMap<String, String> = HashMap::new();
     let mut final_package_versions: HashMap<String, String> = HashMap::new();
-    
+
     for (name, v) in packages_info.iter_mut() {
         // Sort packages in descending order by version
         v.sort_by(|a, b| b.0.cmp(&a.0));
@@ -264,18 +260,22 @@ fn main() {
             }
         }
     }
-    
+
     // Update version constants based on actual available packages
-    let actual_vega_version = final_package_versions.get("vega")
+    let actual_vega_version = final_package_versions
+        .get("vega")
         .map(|v| format!("/npm/{}/+esm", v))
         .unwrap_or_else(|| VEGA_PATH.to_string());
-    let actual_vega_themes_version = final_package_versions.get("vega-themes")
+    let actual_vega_themes_version = final_package_versions
+        .get("vega-themes")
         .map(|v| format!("/npm/{}/+esm", v))
         .unwrap_or_else(|| VEGA_THEMES_PATH.to_string());
-    let actual_vega_embed_version = final_package_versions.get("vega-embed")
+    let actual_vega_embed_version = final_package_versions
+        .get("vega-embed")
         .map(|v| format!("/npm/{}/+esm", v))
         .unwrap_or_else(|| VEGA_EMBED_PATH.to_string());
-    let actual_debounce_version = final_package_versions.get("lodash.debounce")
+    let actual_debounce_version = final_package_versions
+        .get("lodash.debounce")
         .map(|v| format!("/npm/{}/+esm", v))
         .unwrap_or_else(|| DEBOUNCE_PATH.to_string());
 
@@ -369,9 +369,27 @@ pub fn build_import_map() -> HashMap<String, String> {{
         version_instances_csv = version_instances_csv,
         JSDELIVR_URL = JSDELIVR_URL,
         VEGA_PATH = actual_vega_version,
-        VEGA_VERSION = actual_vega_version.split("@").nth(1).unwrap().split("/").next().unwrap(),
-        VEGA_THEMES_VERSION = actual_vega_themes_version.split("@").nth(1).unwrap().split("/").next().unwrap(),
-        VEGA_EMBED_VERSION = actual_vega_embed_version.split("@").nth(1).unwrap().split("/").next().unwrap(),
+        VEGA_VERSION = actual_vega_version
+            .split("@")
+            .nth(1)
+            .unwrap()
+            .split("/")
+            .next()
+            .unwrap(),
+        VEGA_THEMES_VERSION = actual_vega_themes_version
+            .split("@")
+            .nth(1)
+            .unwrap()
+            .split("/")
+            .next()
+            .unwrap(),
+        VEGA_EMBED_VERSION = actual_vega_embed_version
+            .split("@")
+            .nth(1)
+            .unwrap()
+            .split("/")
+            .next()
+            .unwrap(),
         VEGA_THEMES_PATH = actual_vega_themes_version,
         VEGA_EMBED_PATH = actual_vega_embed_version,
         DEBOUNCE_PATH = actual_debounce_version,

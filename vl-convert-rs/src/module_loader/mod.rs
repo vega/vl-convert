@@ -1,7 +1,11 @@
 pub mod import_map;
 
-use crate::module_loader::import_map::{build_format_locale_map, build_import_map, build_time_format_locale_map, JSDELIVR_URL, VEGA_PATH, VEGA_THEMES_PATH};
+use crate::module_loader::import_map::{
+    build_format_locale_map, build_import_map, build_time_format_locale_map, JSDELIVR_URL,
+    VEGA_PATH, VEGA_THEMES_PATH,
+};
 use crate::VlVersion;
+use deno_core::url::Url;
 use deno_core::{ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind};
 use deno_emit::{LoadFuture, LoadOptions, Loader};
 use deno_graph::source::LoadResponse;
@@ -13,7 +17,6 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use deno_core::url::Url;
 
 lazy_static! {
     pub static ref IMPORT_MAP: HashMap<String, String> = build_import_map();
@@ -63,12 +66,7 @@ impl ModuleLoader for VlConvertModuleLoader {
             let path = path.strip_suffix(".js").unwrap_or(path).to_string();
             IMPORT_MAP
                 .get(&path)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Unexpected source file with path: {}",
-                        path
-                    )
-                })
+                .unwrap_or_else(|| panic!("Unexpected source file with path: {}", path))
                 .clone()
         };
 
@@ -128,12 +126,7 @@ impl Loader for VlConvertBundleLoader {
         } else {
             let mut src = IMPORT_MAP
                 .get(&path_no_js)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Unexpected source file with path: {}",
-                        path
-                    )
-                })
+                .unwrap_or_else(|| panic!("Unexpected source file with path: {}", path))
                 .clone();
 
             if let Some(caps) = self.name_version_re.captures(module_specifier.path()) {
@@ -170,8 +163,9 @@ impl Loader for VlConvertBundleLoader {
         let url = module_specifier.to_string();
         let url_no_js = url.strip_suffix(".js").unwrap_or(&url).to_string();
 
-        let return_specifier = Url::from_str(&format!("{}{}", url_no_js, ".js"))
-            .expect(&format!("Failed to parse module specifier {url_no_js} with .js extension"));
+        let return_specifier = Url::from_str(&format!("{}{}", url_no_js, ".js")).expect(&format!(
+            "Failed to parse module specifier {url_no_js} with .js extension"
+        ));
 
         Box::pin(async move {
             Ok(Some(LoadResponse::Module {

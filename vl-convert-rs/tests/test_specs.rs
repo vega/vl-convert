@@ -256,7 +256,8 @@ fn load_expected_png_dssim(
 fn to_dssim(img: &[u8]) -> Result<DssimImage<f32>, Box<dyn std::error::Error>> {
     let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
     tmpfile.write_all(img).unwrap();
-    dssim::load_image(&Dssim::new(), tmpfile.path()).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    dssim::load_image(&Dssim::new(), tmpfile.path())
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) -> PathBuf {
@@ -286,12 +287,13 @@ fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8])
         match to_dssim(img) {
             Ok(img_dssim) => {
                 let attr = Dssim::new();
-                
+
                 // Wrap the comparison in a panic-catching block to handle size mismatches
-                let comparison_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    attr.compare(&expected_dssim, img_dssim)
-                }));
-                
+                let comparison_result =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        attr.compare(&expected_dssim, img_dssim)
+                    }));
+
                 match comparison_result {
                     Ok((diff, _)) => {
                         if diff > 0.00011 {
