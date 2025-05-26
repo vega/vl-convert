@@ -201,8 +201,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-timer@3.0.1/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/delaunator@5.0.0/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/delaunator@5.0.0/+esm.js").to_string(),
+        "/npm/delaunator@5.0.1/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/delaunator@5.0.1/+esm.js").to_string(),
     );
     m.insert(
         "/npm/fast-deep-equal@3.1.3/+esm".to_string(),
@@ -229,8 +229,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/lodash.debounce@4.0.8/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/robust-predicates@3.0.0/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/robust-predicates@3.0.0/+esm.js")
+        "/npm/robust-predicates@3.0.2/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/robust-predicates@3.0.2/+esm.js")
             .to_string(),
     );
     m.insert(
