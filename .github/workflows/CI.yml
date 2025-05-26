@@ -52,23 +52,6 @@ jobs:
       - name: Check that git detects no file changes
         run: git diff --exit-code
 
-  codegen-clean:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.8
-        with:
-          pixi-version: v0.47.0
-      - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: True
-      - name: Run codegen
-        run: pixi run vendor
-      - name: Check that git detects no file changes
-        run: git diff --exit-code
-
   # Run linux tests without Pixi due to undiagnosed linker issues
   #   - undefined reference to fcntl64
   #   - undefined reference to memfd_create
