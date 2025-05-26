@@ -33,7 +33,7 @@ use tiny_skia::{Pixmap, PremultipliedColorU8};
 
 use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
 use image::codecs::jpeg::JpegEncoder;
-use image::io::Reader as ImageReader;
+use image::ImageReader;
 use resvg::render;
 
 use crate::text::{vl_convert_text_runtime, USVG_OPTIONS};
