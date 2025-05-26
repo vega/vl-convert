@@ -166,6 +166,7 @@ mod test_vl2vg {
             "v5_19",
             "v5_20",
             "v5_21",
+            "v6_1",
         )]
         vl_version: &str,
 
@@ -232,6 +233,7 @@ mod test_vl2html_no_bundle {
             "5.19",
             "5.20",
             "5.21",
+            "6.1",
         )]
         vl_version: &str,
 
@@ -282,6 +284,7 @@ mod test_vl2html_bundle {
             "5.19",
             "5.20",
             "5.21",
+            "6.1",
         )]
         vl_version: &str,
 
