@@ -253,10 +253,11 @@ fn load_expected_png_dssim(
     dssim::load_image(&Dssim::new(), spec_path).ok()
 }
 
-fn to_dssim(img: &[u8]) -> DssimImage<f32> {
+fn to_dssim(img: &[u8]) -> Result<DssimImage<f32>, Box<dyn std::error::Error>> {
     let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
     tmpfile.write_all(img).unwrap();
-    dssim::load_image(&Dssim::new(), tmpfile.path()).unwrap()
+    dssim::load_image(&Dssim::new(), tmpfile.path())
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) -> PathBuf {
@@ -283,18 +284,43 @@ fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img:
 fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) {
     let expected_dssim = load_expected_png_dssim(name, vl_version, theme);
     if let Some(expected_dssim) = expected_dssim {
-        let img_dssim = to_dssim(img);
+        match to_dssim(img) {
+            Ok(img_dssim) => {
+                let attr = Dssim::new();
 
-        let attr = Dssim::new();
-        let (diff, _) = attr.compare(&expected_dssim, img_dssim);
+                // Wrap the comparison in a panic-catching block to handle size mismatches
+                let comparison_result =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        attr.compare(&expected_dssim, img_dssim)
+                    }));
 
-        if diff > 0.00011 {
-            println!("DSSIM diff {diff}");
-            let path = write_failed_png(name, vl_version, None, img);
-            panic!(
-                "Images don't match for {}.png. Failed image written to {:?}",
-                name, path
-            )
+                match comparison_result {
+                    Ok((diff, _)) => {
+                        if diff > 0.00011 {
+                            println!("DSSIM diff {diff}");
+                            let path = write_failed_png(name, vl_version, None, img);
+                            panic!(
+                                "Images don't match for {}.png. Failed image written to {:?}",
+                                name, path
+                            )
+                        }
+                    }
+                    Err(_) => {
+                        let path = write_failed_png(name, vl_version, theme, img);
+                        panic!(
+                            "Image size mismatch for {}.png (cannot compare different sized images). Failed image written to {:?}",
+                            name, path
+                        )
+                    }
+                }
+            }
+            Err(e) => {
+                let path = write_failed_png(name, vl_version, theme, img);
+                panic!(
+                    "Failed to process image for {}.png: {}. Failed image written to {:?}",
+                    name, e, path
+                )
+            }
         }
     } else {
         let path = write_failed_png(name, vl_version, None, img);
@@ -320,10 +346,10 @@ mod test_vegalite_to_vega {
             VlVersion::v5_15,
             VlVersion::v5_16,
             VlVersion::v5_17,
-            VlVersion::v5_18,
             VlVersion::v5_19,
             VlVersion::v5_20,
             VlVersion::v5_21,
+            VlVersion::v6_1,
         )]
         vl_version: VlVersion,
 
@@ -365,10 +391,10 @@ mod test_vegalite_to_html_no_bundle {
             VlVersion::v5_15,
             VlVersion::v5_16,
             VlVersion::v5_17,
-            VlVersion::v5_18,
             VlVersion::v5_19,
             VlVersion::v5_20,
             VlVersion::v5_21,
+            VlVersion::v6_1,
         )]
         vl_version: VlVersion,
 
@@ -390,7 +416,7 @@ mod test_vegalite_to_html_no_bundle {
         // Check for expected patterns
         assert!(html_result.starts_with("<!DOCTYPE html>"));
         assert!(html_result.contains(&format!("cdn.jsdelivr.net/npm/vega-lite@{}", vl_version.to_semver())));
-        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@5"));
+        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@6"));
         assert!(html_result.contains("cdn.jsdelivr.net/npm/vega-embed@6"));
     }
 
@@ -413,10 +439,10 @@ mod test_vegalite_to_html_bundle {
             VlVersion::v5_15,
             VlVersion::v5_16,
             VlVersion::v5_17,
-            VlVersion::v5_18,
             VlVersion::v5_19,
             VlVersion::v5_20,
             VlVersion::v5_21,
+            VlVersion::v6_1,
         )]
         vl_version: VlVersion,
 
@@ -438,7 +464,7 @@ mod test_vegalite_to_html_bundle {
         // Check for expected patterns
         assert!(html_result.starts_with("<!DOCTYPE html>"));
         assert!(html_result.contains(vl_version.to_semver()));
-        assert!(html_result.contains("Jeffrey Heer"));
+        assert!(html_result.contains("<div id=\"vega-chart\">"));
     }
 
     #[test]
@@ -646,6 +672,7 @@ mod test_png_no_theme {
         case("table_heatmap", 1.0),
         case("long_text_lable", 1.0),
         case("gh_174", 1.0),
+        case("lookup_urls", 1.0),
     )]
     fn test(
         name: &str,

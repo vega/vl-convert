@@ -72,7 +72,7 @@ def load_expected_png(name, vl_version, theme=None):
 @pytest.mark.parametrize("name", ["circle_binned", "seattle-weather", "stacked_bar_h"])
 @pytest.mark.parametrize(
     "vl_version",
-    ["v5_8", "v5_14", "v5_15", "v5_16", "v5_17", "v5_18", "v5_19", "v5_20", "v5_21"],
+    ["v5_8", "v5_14", "v5_15", "v5_16", "v5_17", "v5_19", "v5_20", "v5_21", "v6_1"],
 )
 @pytest.mark.parametrize("as_dict", [False, True])
 def test_vega(name, vl_version, as_dict):
@@ -100,10 +100,10 @@ def test_vega(name, vl_version, as_dict):
         "5.15",
         "5.16",
         "5.17",
-        "5.18",
         "5.19",
         "5.20",
         "5.21",
+        "6.1",
     ],
 )
 def test_vegalite_to_html_no_bundle(name, vl_version):
@@ -111,7 +111,7 @@ def test_vegalite_to_html_no_bundle(name, vl_version):
     html = vlc.vegalite_to_html(vl_spec, vl_version=vl_version, bundle=False)
     assert html.startswith("<!DOCTYPE html>")
     assert f"cdn.jsdelivr.net/npm/vega-lite@{vl_version}" in html
-    assert "cdn.jsdelivr.net/npm/vega@5" in html
+    assert "cdn.jsdelivr.net/npm/vega@6" in html
     assert "cdn.jsdelivr.net/npm/vega-embed@6" in html
 
     # Check themes
@@ -136,10 +136,10 @@ def test_vegalite_to_html_no_bundle(name, vl_version):
         "5.15",
         "5.16",
         "5.17",
-        "5.18",
         "5.19",
         "5.20",
         "5.21",
+        "6.1",
     ],
 )
 def test_vegalite_to_html_bundle(name, vl_version):
@@ -147,7 +147,7 @@ def test_vegalite_to_html_bundle(name, vl_version):
     html = vlc.vegalite_to_html(vl_spec, vl_version=vl_version, bundle=True)
     assert html.startswith("<!DOCTYPE html>")
     assert vl_version in html
-    assert "Jeffrey Heer" in html
+    assert '<div id="vega-chart">' in html
 
     # Make sure themes aren't cached
     html = vlc.vegalite_to_html(

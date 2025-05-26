@@ -163,10 +163,10 @@ mod test_vl2vg {
             "v5_15",
             "v5_16",
             "v5_17",
-            "v5_18",
             "v5_19",
             "v5_20",
             "v5_21",
+            "v6_1",
         )]
         vl_version: &str,
 
@@ -230,10 +230,10 @@ mod test_vl2html_no_bundle {
             "5.15",
             "5.16",
             "5.17",
-            "5.18",
             "5.19",
             "5.20",
             "5.21",
+            "6.1",
         )]
         vl_version: &str,
 
@@ -260,7 +260,7 @@ mod test_vl2html_no_bundle {
         // Check for expected patterns
         assert!(html_result.starts_with("<!DOCTYPE html>"));
         assert!(html_result.contains(&format!("cdn.jsdelivr.net/npm/vega-lite@{vl_version}")));
-        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@5"));
+        assert!(html_result.contains("cdn.jsdelivr.net/npm/vega@6"));
         assert!(html_result.contains("cdn.jsdelivr.net/npm/vega-embed@6"));
 
         Ok(())
@@ -281,10 +281,10 @@ mod test_vl2html_bundle {
             "5.15",
             "5.16",
             "5.17",
-            "5.18",
             "5.19",
             "5.20",
             "5.21",
+            "6.1",
         )]
         vl_version: &str,
 
@@ -312,7 +312,7 @@ mod test_vl2html_bundle {
         // Check for expected patterns
         assert!(html_result.starts_with("<!DOCTYPE html>"));
         assert!(html_result.contains(vl_version));
-        assert!(html_result.contains("Jeffrey Heer"));
+        assert!(html_result.contains("<div id=\"vega-chart\">"));
 
         Ok(())
     }
