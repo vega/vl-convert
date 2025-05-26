@@ -1,8 +1,8 @@
 {
-  "width": 114,
+  "width": 93,
   "height": 237,
   "origin": [
-    51,
+    41,
     10
   ],
   "scenegraph": {
@@ -412,7 +412,7 @@
                         "baseline": "bottom",
                         "text": "previous_sum",
                         "y": 100,
-                        "x": -35
+                        "x": -24.9013671875
                       }
                     ],
                     "marktype": "text",

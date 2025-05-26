@@ -314,7 +314,7 @@ class WarningCollector {
 
             // Override text width measurement in vega-scenegraph
             for path in IMPORT_MAP.keys() {
-                if path.ends_with("vega-scenegraph.js") {
+                if path.contains("vega-scenegraph@") {
                     let script_code = format!(
                         r#"
 import('{url}').then((sg) => {{
