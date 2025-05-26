@@ -1232,7 +1232,10 @@ fn warn_if_scale_not_one_for_pdf(scale: Option<f32>) -> PyResult<()> {
         if scale != 1.0 {
             Python::with_gil(|py| -> PyResult<()> {
                 let warnings = py.import("warnings")?;
-                warnings.call_method1("warn", ("The scale argument is no longer supported for PDF export.",))?;
+                warnings.call_method1(
+                    "warn",
+                    ("The scale argument is no longer supported for PDF export.",),
+                )?;
                 Ok(())
             })?;
         }
