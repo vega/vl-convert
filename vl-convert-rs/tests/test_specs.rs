@@ -394,6 +394,7 @@ mod test_vegalite_to_html_no_bundle {
             VlVersion::v5_19,
             VlVersion::v5_20,
             VlVersion::v5_21,
+            VlVersion::v6_1,
         )]
         vl_version: VlVersion,
 
