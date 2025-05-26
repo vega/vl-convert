@@ -29,9 +29,9 @@ const VL_PATHS: &[(&str, &str)] = &[
     ("6.1", "/npm/vega-lite@6.1.0/+esm"),
 ];
 const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
-const VEGA_PATH: &str = "/npm/vega@6.0.0/+esm";
-const VEGA_THEMES_PATH: &str = "/npm/vega-themes@2.15.0/+esm";
-const VEGA_EMBED_PATH: &str = "/npm/vega-embed@6.26.0/+esm";
+const VEGA_PATH: &str = "/npm/vega@6.1.2/+esm";
+const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
+const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.0.2/+esm";
 const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
 
 // Example custom build script.

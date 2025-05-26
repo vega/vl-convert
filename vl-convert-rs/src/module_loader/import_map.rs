@@ -7,14 +7,14 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 pub const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
-pub const VEGA_PATH: &str = "/npm/vega@6.0.0/+esm";
-pub const VEGA_THEMES_PATH: &str = "/npm/vega-themes@2.15.0/+esm";
-pub const VEGA_EMBED_PATH: &str = "/npm/vega-embed@6.26.0/+esm";
+pub const VEGA_PATH: &str = "/npm/vega@6.1.2/+esm";
+pub const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
+pub const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.0.2/+esm";
 pub const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
 
-pub const VEGA_VERSION: &str = "6.0.0";
-pub const VEGA_THEMES_VERSION: &str = "2.15.0";
-pub const VEGA_EMBED_VERSION: &str = "6.26.0";
+pub const VEGA_VERSION: &str = "6.1.2";
+pub const VEGA_THEMES_VERSION: &str = "3.0.0";
+pub const VEGA_EMBED_VERSION: &str = "7.0.2";
 
 pub fn url_for_path(path: &str) -> String {
     format!("{}{}", JSDELIVR_URL, path)
@@ -201,16 +201,12 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/d3-timer@3.0.1/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/delaunator@5.0.1/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/delaunator@5.0.1/+esm.js").to_string(),
+        "/npm/delaunator@5.0.0/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/delaunator@5.0.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/fast-deep-equal@3.1.3/+esm".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/fast-deep-equal@3.1.3/+esm.js").to_string(),
-    );
-    m.insert(
-        "/npm/fast-json-patch@3.1.1/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/fast-json-patch@3.1.1/+esm.js").to_string(),
     );
     m.insert(
         "/npm/fast-json-stable-stringify@2.1.0/+esm".to_string(),
@@ -222,9 +218,9 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/internmap@2.0.3/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/json-stringify-pretty-compact@3.0.0/+esm".to_string(),
+        "/npm/json-stringify-pretty-compact@4.0.0/+esm".to_string(),
         include_str!(
-            "../../vendor/cdn.jsdelivr.net/npm/json-stringify-pretty-compact@3.0.0/+esm.js"
+            "../../vendor/cdn.jsdelivr.net/npm/json-stringify-pretty-compact@4.0.0/+esm.js"
         )
         .to_string(),
     );
@@ -233,8 +229,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/lodash.debounce@4.0.8/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/robust-predicates@3.0.2/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/robust-predicates@3.0.2/+esm.js")
+        "/npm/robust-predicates@3.0.0/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/robust-predicates@3.0.0/+esm.js")
             .to_string(),
     );
     m.insert(
@@ -255,8 +251,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-dataflow@6.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-embed@6.26.0/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-embed@6.26.0/+esm.js").to_string(),
+        "/npm/vega-embed@7.0.2/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-embed@7.0.2/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-encode@5.0.0/+esm".to_string(),
@@ -292,8 +288,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-hierarchy@5.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-interpreter@1.0.5/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-interpreter@1.0.5/+esm.js")
+        "/npm/vega-interpreter@2.0.0/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-interpreter@2.0.0/+esm.js")
             .to_string(),
     );
     m.insert(
@@ -365,8 +361,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-scenegraph@5.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-schema-url-parser@2.2.0/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-schema-url-parser@2.2.0/+esm.js")
+        "/npm/vega-schema-url-parser@3.0.2/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-schema-url-parser@3.0.2/+esm.js")
             .to_string(),
     );
     m.insert(
@@ -378,16 +374,16 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-statistics@2.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-themes@2.15.0/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-themes@2.15.0/+esm.js").to_string(),
+        "/npm/vega-themes@3.0.0/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-themes@3.0.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-time@3.0.0/+esm".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-time@3.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega-tooltip@0.34.0/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-tooltip@0.34.0/+esm.js").to_string(),
+        "/npm/vega-tooltip@1.0.0/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-tooltip@1.0.0/+esm.js").to_string(),
     );
     m.insert(
         "/npm/vega-transforms@5.0.0/+esm".to_string(),
@@ -415,8 +411,8 @@ pub fn build_import_map() -> HashMap<String, String> {
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-wordcloud@5.0.0/+esm.js").to_string(),
     );
     m.insert(
-        "/npm/vega@6.0.0/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega@6.0.0/+esm.js").to_string(),
+        "/npm/vega@6.1.2/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega@6.1.2/+esm.js").to_string(),
     );
     m
 }
