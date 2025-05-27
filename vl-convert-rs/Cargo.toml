@@ -50,5 +50,5 @@ dssim = { workspace = true }
 # This system version is installed using pixi.
 # [oai_citation:0‡GitHub](https://github.com/libffi/libffi/issues/852)
 [target.'cfg(target_os = "macos")'.dependencies.libffi]
-version = "*"
+version = "^3.2.0"
 features = ["system"]
