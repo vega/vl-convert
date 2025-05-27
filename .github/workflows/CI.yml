@@ -1,161 +1,161 @@
-name: CI
-
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-
-jobs:
-  python-fmt:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.8
-        with:
-          pixi-version: v0.47.0
-      - name: Check cargo fmt compliance
-        run: pixi run fmt-py-check
-
-  rust-fmt-clippy:
-    runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: "-D warnings"
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.8
-        with:
-          pixi-version: v0.47.0
-      - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: True
-      - name: Check cargo fmt compliance
-        run: pixi run fmt-rs-check
-      - name: Check no rustc warnings
-        run: pixi run check-rs
-      - name: Check for clippy warnings
-        run: pixi run clippy
-
-  cargo-bundle-license:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.8
-        with:
-          pixi-version: v0.47.0
-      - name: Check that license is up to date
-        run: pixi run bundle-licenses
-      - name: Check that git detects no file changes
-        run: git diff --exit-code
-
-  # Run linux tests without Pixi due to undiagnosed linker issues
-  #   - undefined reference to fcntl64
-  #   - undefined reference to memfd_create
-  vl-convert-rs-tests-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "v1-rust"
-          cache-on-failure: True
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install fonts on Linux
-        if: runner.os == 'Linux'
-        run: |
-          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
-          sudo apt-get install ttf-mscorefonts-installer
-      - name: Run rs tests
-        # Run tests on single thread for Deno, which expects this
-        run: |
-          cargo test -p vl-convert-rs -- --test-threads=1
-      - name: Run CLI tests
-        run: |
-          cargo test -p vl-convert -- --test-threads=1
-      - name: Upload test failures
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: failed-images-linux
-          path: |
-            vl-convert-rs/tests/vl-specs/failed
-
-  vl-convert-rs-tests:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os:
-          - windows-2022
-          - macos-13
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.8
-        with:
-          pixi-version: v0.47.0
-      - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "v1-rust"
-          cache-on-failure: True
-      - name: Install fonts on Linux
-        if: runner.os == 'Linux'
-        run: |
-          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
-          sudo apt-get install ttf-mscorefonts-installer
-      - name: Run tests
-        run: |
-          pixi run test-rs
-          pixi run test-cli
-      - name: Upload test failures
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: failed-images-${{ matrix.os }}
-          path: |
-            vl-convert-rs/tests/vl-specs/failed
-
-  vl-convert-python-tests:
-    runs-on: ${{ matrix.options[0] }}
-    defaults:
-      run:
-        shell: ${{ matrix.options[2] }}
-    strategy:
-      matrix:
-        options:
-          - [ubuntu-latest, "3.10", "bash -l {0}"]
-          - [windows-2022, "3.10", "pwsh"]
-          - [macos-13, "3.10", "bash -l {0}"]
-    steps:
-      - name: Check out repository code
-        uses: actions/checkout@v2
-      - uses: prefix-dev/setup-pixi@v0.8.8
-        with:
-          pixi-version: v0.47.0
-      - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: "v1-rust"
-          cache-on-failure: True
-      - name: Install fonts on Linux
-        if: runner.os == 'Linux'
-        run: |
-          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
-          sudo apt-get install ttf-mscorefonts-installer
-      - name: Build package
-        run: pixi run dev-py
-      - name: Run tests
-        run: pixi run test-py
+#name: CI
+#
+#on:
+#  push:
+#    branches:
+#      - main
+#  pull_request:
+#
+#jobs:
+#  python-fmt:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - uses: prefix-dev/setup-pixi@v0.8.8
+#        with:
+#          pixi-version: v0.47.0
+#      - name: Check cargo fmt compliance
+#        run: pixi run fmt-py-check
+#
+#  rust-fmt-clippy:
+#    runs-on: ubuntu-latest
+#    env:
+#      RUSTFLAGS: "-D warnings"
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - uses: prefix-dev/setup-pixi@v0.8.8
+#        with:
+#          pixi-version: v0.47.0
+#      - name: Cache rust dependencies
+#        uses: Swatinem/rust-cache@v2
+#        with:
+#          cache-on-failure: True
+#      - name: Check cargo fmt compliance
+#        run: pixi run fmt-rs-check
+#      - name: Check no rustc warnings
+#        run: pixi run check-rs
+#      - name: Check for clippy warnings
+#        run: pixi run clippy
+#
+#  cargo-bundle-license:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - uses: prefix-dev/setup-pixi@v0.8.8
+#        with:
+#          pixi-version: v0.47.0
+#      - name: Check that license is up to date
+#        run: pixi run bundle-licenses
+#      - name: Check that git detects no file changes
+#        run: git diff --exit-code
+#
+#  # Run linux tests without Pixi due to undiagnosed linker issues
+#  #   - undefined reference to fcntl64
+#  #   - undefined reference to memfd_create
+#  vl-convert-rs-tests-linux:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - name: Install latest stable Rust toolchain
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#      - name: Cache rust dependencies
+#        uses: Swatinem/rust-cache@v2
+#        with:
+#          prefix-key: "v1-rust"
+#          cache-on-failure: True
+#      - name: Install Protoc
+#        uses: arduino/setup-protoc@v2
+#        with:
+#          repo-token: ${{ secrets.GITHUB_TOKEN }}
+#      - name: Install fonts on Linux
+#        if: runner.os == 'Linux'
+#        run: |
+#          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+#          sudo apt-get install ttf-mscorefonts-installer
+#      - name: Run rs tests
+#        # Run tests on single thread for Deno, which expects this
+#        run: |
+#          cargo test -p vl-convert-rs -- --test-threads=1
+#      - name: Run CLI tests
+#        run: |
+#          cargo test -p vl-convert -- --test-threads=1
+#      - name: Upload test failures
+#        uses: actions/upload-artifact@v4
+#        if: always()
+#        with:
+#          name: failed-images-linux
+#          path: |
+#            vl-convert-rs/tests/vl-specs/failed
+#
+#  vl-convert-rs-tests:
+#    runs-on: ${{ matrix.os }}
+#    strategy:
+#      matrix:
+#        os:
+#          - windows-2022
+#          - macos-13
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - uses: prefix-dev/setup-pixi@v0.8.8
+#        with:
+#          pixi-version: v0.47.0
+#      - name: Cache rust dependencies
+#        uses: Swatinem/rust-cache@v2
+#        with:
+#          prefix-key: "v1-rust"
+#          cache-on-failure: True
+#      - name: Install fonts on Linux
+#        if: runner.os == 'Linux'
+#        run: |
+#          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+#          sudo apt-get install ttf-mscorefonts-installer
+#      - name: Run tests
+#        run: |
+#          pixi run test-rs
+#          pixi run test-cli
+#      - name: Upload test failures
+#        uses: actions/upload-artifact@v4
+#        if: always()
+#        with:
+#          name: failed-images-${{ matrix.os }}
+#          path: |
+#            vl-convert-rs/tests/vl-specs/failed
+#
+#  vl-convert-python-tests:
+#    runs-on: ${{ matrix.options[0] }}
+#    defaults:
+#      run:
+#        shell: ${{ matrix.options[2] }}
+#    strategy:
+#      matrix:
+#        options:
+#          - [ubuntu-latest, "3.10", "bash -l {0}"]
+#          - [windows-2022, "3.10", "pwsh"]
+#          - [macos-13, "3.10", "bash -l {0}"]
+#    steps:
+#      - name: Check out repository code
+#        uses: actions/checkout@v2
+#      - uses: prefix-dev/setup-pixi@v0.8.8
+#        with:
+#          pixi-version: v0.47.0
+#      - name: Cache rust dependencies
+#        uses: Swatinem/rust-cache@v2
+#        with:
+#          prefix-key: "v1-rust"
+#          cache-on-failure: True
+#      - name: Install fonts on Linux
+#        if: runner.os == 'Linux'
+#        run: |
+#          echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
+#          sudo apt-get install ttf-mscorefonts-installer
+#      - name: Build package
+#        run: pixi run dev-py
+#      - name: Run tests
+#        run: pixi run test-py

@@ -19,10 +19,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install protobuf-compiler
       - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
+        run: |
+          cargo build --release -p vl-convert
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
@@ -99,10 +97,8 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
+        run: |
+          cargo build --release -p vl-convert
       - name: Move executable to bin directory
         run: |
           New-Item -Path "artifacts\bin" -ItemType Directory
@@ -135,10 +131,8 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
+        run: |
+          cargo build --release -p vl-convert
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
@@ -167,10 +161,8 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: -p vl-convert --release
+        run: |
+          cargo build --release -p vl-convert
       - name: Move executable to bin directory
         run: |
           mkdir -p bin
