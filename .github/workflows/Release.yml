@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  pull_request:
 jobs:
   build-cli-linux-x86:
     runs-on: ubuntu-latest
