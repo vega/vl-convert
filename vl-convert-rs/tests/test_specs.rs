@@ -298,7 +298,7 @@ fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8])
                     Ok((diff, _)) => {
                         if diff > 0.00011 {
                             println!("DSSIM diff {diff}");
-                            let path = write_failed_png(name, vl_version, None, img);
+                            let path = write_failed_png(name, vl_version, theme, img);
                             panic!(
                                 "Images don't match for {}.png. Failed image written to {:?}",
                                 name, path
@@ -323,7 +323,7 @@ fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8])
             }
         }
     } else {
-        let path = write_failed_png(name, vl_version, None, img);
+        let path = write_failed_png(name, vl_version, theme, img);
         panic!(
             "Baseline image does not exist for {}.png. Failed image written to {:?}",
             name, path
