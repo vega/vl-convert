@@ -4,17 +4,15 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build-cli-linux-x86:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
       - name: Install protoc
         run: |
           sudo apt-get update
@@ -39,13 +37,13 @@ jobs:
   build-cli-linux-aarch64:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
       - name: Cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           key: build-cli-linux-aarch64-${{ hashFiles('Cargo.lock') }}
           path: |
@@ -60,7 +58,7 @@ jobs:
             --platform linux/arm64 \
             --env CARGO_TARGET_DIR=/workspace/target-arm64 \
             --env CARGO_HOME=/workspace/cargo-arm64 \
-            rust:1.81-slim-bullseye \
+            rust:1.87-slim-bullseye \
             bash -c "\
               uname -a && \
               apt update -y && \
@@ -87,12 +85,9 @@ jobs:
   build-cli-win-64:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
@@ -119,14 +114,11 @@ jobs:
             vl-convert_win-64.zip
 
   build-cli-osx-64:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
@@ -151,12 +143,9 @@ jobs:
   build-cli-osx-arm64:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install latest stable Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
@@ -185,7 +174,7 @@ jobs:
         arch:
           - "x86_64-unknown-linux-gnu"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: messense/maturin-action@v1
         with:
           manylinux: auto
@@ -205,9 +194,9 @@ jobs:
   build-wheels-linux-aarch64:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v3
       - uses: messense/maturin-action@v1
         with:
           manylinux: auto
@@ -239,7 +228,7 @@ jobs:
   build-wheels-win-64:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
@@ -255,9 +244,9 @@ jobs:
           path: dist
 
   build-wheels-osx-64:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
@@ -281,7 +270,7 @@ jobs:
   build-wheels-osx-arm64:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
