@@ -99,7 +99,7 @@ jobs:
       matrix:
         os:
           - windows-2022
-          - macos-14
+          - macos-15-intel
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
@@ -138,7 +138,7 @@ jobs:
         options:
           - [ubuntu-latest, "3.10", "bash -l {0}"]
           - [windows-2022, "3.10", "pwsh"]
-          - [macos-14, "3.10", "bash -l {0}"]
+          - [macos-15-intel, "3.10", "bash -l {0}"]
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
