@@ -13,7 +13,7 @@ Python bindings via PyO3 and maturin.
 ```bash
 pixi run dev-py    # Build in development mode
 pixi run test-py   # Run Python tests
-pixi run fmt-py    # Format with Black
+pixi run fmt-py    # Format with Ruff
 ```
 
 ## Type Stub Maintenance

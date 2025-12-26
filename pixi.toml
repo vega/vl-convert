@@ -16,8 +16,8 @@ test-py = { cmd = ["pytest", "vl-convert-python/tests"]}
 test-cli = "cargo test -p vl-convert"
 test-rs = "cargo test -p vl-convert-rs -- --test-threads=1"
 
-fmt-py = "black vl-convert-python"
-fmt-py-check = "black vl-convert-python --check"
+fmt-py = "ruff format vl-convert-python"
+fmt-py-check = "ruff format vl-convert-python --check"
 fmt-rs = "cargo fmt --all"
 fmt-rs-check = "cargo fmt --all -- --check"
 
@@ -49,7 +49,7 @@ rust = "1.87.*"
 scikit-image = ">=0.23.2,<0.24"
 deno = ">=1.46.3,<2"
 protobuf = ">=4.25.3,<5"
-black = ">=24.8.0,<25"
+ruff = ">=0.8,<1"
 pip = ">=24.2,<25"
 
 # macOS 15.4 tightened the dynamic-loader rules and now rejects binaries

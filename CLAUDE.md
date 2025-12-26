@@ -23,7 +23,7 @@ pixi run test-rs        # Rust tests (single-threaded, Deno requirement)
 pixi run test-cli       # CLI integration tests
 pixi run test-py        # Python tests
 pixi run fmt-rs         # Format Rust
-pixi run fmt-py         # Format Python (Black)
+pixi run fmt-py         # Format Python (Ruff)
 pixi run clippy         # Lint Rust (warnings = errors)
 pixi run vendor         # Regenerate vendored JavaScript
 pixi run bundle-licenses # Bundle Rust licenses for Python wheels
@@ -37,8 +37,7 @@ pixi run bundle-licenses # Bundle Rust licenses for Python wheels
 - Tests must be single-threaded: `cargo test -- --test-threads=1`
 
 ### Python
-- Format: Black (`pixi run fmt-py`)
-- Lint: Ruff
+- Format + Lint: Ruff (`pixi run fmt-py`)
 - Docstrings: NumPy convention
 - Type stubs: `vl_convert.pyi` must stay in sync with `lib.rs`
 
