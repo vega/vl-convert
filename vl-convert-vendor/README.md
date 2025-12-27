@@ -18,11 +18,14 @@ vl-convert inlines the source code of supported versions of Vega-Lite so that no
    - `vl-convert-rs/tests/test_specs.rs` (multiple test functions)
    - `vl-convert/tests/test_cli.rs` (multiple test functions)
    - `vl-convert-python/tests/test_specs.py` (multiple test functions)
-4. Run tests: `pixi run test-rs`. The new version tests will fail because expected output files don't exist yet.
-5. Create expected test outputs (see "Updating test snapshots" below).
-6. Optionally update `DEFAULT_VL_VERSION` in `vl-convert/src/main.rs` if this should become the new default.
-7. Run all tests to verify: `pixi run test-rs && pixi run test-cli`
-8. Commit updated files.
+4. Update CLI help text in:
+   - `vl-convert/src/main.rs` - Add the new version to help text version lists (6 occurrences of "One of 5.8, 5.14, ...")
+   - `vl-convert/README.md` - Update help text examples showing version lists
+5. Run tests: `pixi run test-rs`. The new version tests will fail because expected output files don't exist yet.
+6. Create expected test outputs (see "Updating test snapshots" below).
+7. Optionally update `DEFAULT_VL_VERSION` in `vl-convert/src/main.rs` if this should become the new default.
+8. Run all tests to verify: `pixi run test-rs && pixi run test-cli`
+9. Commit updated files.
 
 # Updating Vega version
 To update the Vega version:
@@ -40,8 +43,11 @@ When removing old versions (e.g., versions not used by any Altair release):
    - `vl-convert-rs/tests/test_specs.rs`
    - `vl-convert/tests/test_cli.rs`
    - `vl-convert-python/tests/test_specs.py`
-4. Remove the expected test output directory: `rm -rf vl-convert-rs/tests/vl-specs/expected/vX_Y`
-5. Run tests to verify: `pixi run test-rs && pixi run test-cli`
+4. Update CLI help text in:
+   - `vl-convert/src/main.rs` - Remove the version from help text version lists (6 occurrences)
+   - `vl-convert/README.md` - Update help text examples
+5. Remove the expected test output directory: `rm -rf vl-convert-rs/tests/vl-specs/expected/vX_Y`
+6. Run tests to verify: `pixi run test-rs && pixi run test-cli`
 
 # Updating test snapshots
 When tests fail due to missing or changed expected outputs:
