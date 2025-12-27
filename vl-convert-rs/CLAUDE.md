@@ -46,4 +46,4 @@ Enable logs via env var: `RUST_LOG=info` or `RUST_LOG=vl_convert_rs=debug`
 
 ## Supported Vega-Lite Versions
 
-5.8, 5.14, 5.15, 5.16, 5.17, 5.19, 5.20, 5.21, 6.1 (defined in VlVersion enum)
+5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4 (defined in VlVersion enum)

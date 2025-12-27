@@ -2,39 +2,20 @@
 
 Development utility for vendoring JavaScript dependencies. Not published to crates.io.
 
-## Purpose
+## Documentation
 
-Downloads Vega, Vega-Lite, and dependencies from CDN, deduplicates, patches, and generates `import_map.rs`.
-
-## When to Run
-
-```bash
-pixi run vendor
-```
-
-Run when:
-1. Adding new Vega-Lite version
-2. Updating dependency versions
-3. Applying patches to vendored JS
-4. CI codegen-clean job fails
-
-## Adding a New Vega-Lite Version
-
-1. Open `https://cdn.skypack.dev/vega-lite@X.Y.Z`
-2. Copy pinned URL from header comment
-3. Add to `VL_PATHS` in `src/main.rs`
-4. Run `pixi run vendor`
-5. Update `DEFAULT_VL_VERSION` in `vl-convert/src/main.rs`
-
-## Troubleshooting
-
-If vendoring produces different output:
-```bash
-rm -rf ~/.cache/deno/deps  # Clear Deno cache
-pixi run vendor
-```
+@README.md
 
 ## Key Files
 
-- `src/main.rs` - Vendoring logic
+- `src/main.rs` - Vendoring logic, `VL_PATHS` and `VEGA_PATH` constants
 - `patched/` - Patches applied to vendored files
+
+## Files to Update When Changing Versions
+
+When adding/removing Vega-Lite versions, update:
+1. `vl-convert-vendor/src/main.rs` - `VL_PATHS` array
+2. `vl-convert-rs/tests/test_specs.rs` - `VlVersion` test values (multiple places)
+3. `vl-convert/tests/test_cli.rs` - version test values (multiple places)
+4. `vl-convert-python/tests/test_specs.py` - version test values (multiple places)
+5. `vl-convert-rs/tests/vl-specs/expected/` - add/remove version directories
