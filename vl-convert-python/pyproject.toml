@@ -4,7 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "vl-convert-python"
-dynamic = ["version", "readme", "license"]
+version = "1.9.0.post1"
+dynamic = ["readme", "license"]
 requires-python = ">=3.7"
 description = "Convert Vega-Lite chart specifications to SVG, PNG, or Vega"
 classifiers = [
