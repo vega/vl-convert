@@ -52,13 +52,9 @@ jobs:
             bash -c '
               set -ex
 
-              # Install build dependencies
-              dnf install -y glib2-devel libffi-devel clang-devel
-
-              # Install protoc
-              PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-              curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
-              unzip protoc-24.0-linux-x86_64.zip -d /usr/
+              # Install build dependencies including protoc
+              dnf install -y glib2-devel libffi-devel clang-devel protobuf-compiler
+              protoc --version
 
               # Install Rust
               curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -168,10 +164,9 @@ jobs:
                 find /usr -name "*clang_rt*" 2>/dev/null || true
               fi
 
-              # Install protoc
-              PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-              curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
-              unzip protoc-24.0-linux-aarch_64.zip -d /usr/
+              # Install protoc - use dnf to avoid permission issues
+              dnf install -y protobuf-compiler
+              protoc --version
 
               # Install Rust
               curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y

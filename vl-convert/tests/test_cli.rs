@@ -1,3 +1,6 @@
+// Allow deprecated APIs (assert_cmd::cargo_bin is deprecated but still works)
+#![allow(deprecated)]
+
 use assert_cmd::prelude::*; // Add methods on commands
 use dssim::{Dssim, DssimImage};
 use predicates::prelude::*; // Used for writing assertions
@@ -595,7 +598,6 @@ mod test_vl2jpeg {
 
 #[test]
 fn test_ls_themes() -> Result<(), Box<dyn std::error::Error>> {
-    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin("vl-convert")?;
     let cmd = cmd.arg("ls-themes");
     cmd.assert().success();
@@ -609,7 +611,6 @@ fn test_ls_themes() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_cat_theme() -> Result<(), Box<dyn std::error::Error>> {
-    #[allow(deprecated)]
     let mut cmd = Command::cargo_bin("vl-convert")?;
     let cmd = cmd.arg("cat-theme").arg("dark");
     cmd.assert().success();

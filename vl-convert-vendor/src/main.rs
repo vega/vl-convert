@@ -516,14 +516,13 @@ fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&DirEntry)) -> io::Result<()> {
     Ok(())
 }
 
+#[allow(deprecated)] // tempfile::into_path and zip_extract::extract are deprecated but still work
 fn download_locales(url: &str, output_dir: &PathBuf) -> Result<(), AnyError> {
     let response = reqwest::blocking::get(url)?;
     let archive_bytes = response.bytes().unwrap();
 
     let temp_dir = TempDir::new()?;
-    #[allow(deprecated)]
     let temp_path = temp_dir.into_path();
-    #[allow(deprecated)]
     zip_extract::extract(Cursor::new(archive_bytes), &temp_path, true)?;
 
     let temp_path_locale = temp_path.join("locale");
