@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - deno-2-upgrade  # TODO: Remove before merging to main
   workflow_dispatch:
     inputs:
       force_rebuild:
