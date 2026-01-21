@@ -1,3 +1,6 @@
+// Allow uninlined format args in this dev utility
+#![allow(clippy::uninlined_format_args)]
+
 use anyhow::Error as AnyError;
 use dircpy::copy_dir;
 use semver::Version;
