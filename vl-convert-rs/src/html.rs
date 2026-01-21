@@ -1,9 +1,6 @@
-use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
-use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
+use deno_core::anyhow;
 use deno_core::error::AnyError;
-use deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
-use std::path::Path;
 
 pub fn get_vega_or_vegalite_script(
     spec: serde_json::Value,
@@ -27,42 +24,17 @@ pub fn get_vega_or_vegalite_script(
     Ok(index_js)
 }
 
-pub async fn bundle_script(script: String, vl_version: VlVersion) -> Result<String, AnyError> {
-    // Bundle dependencies
-    let bundle_entry_point =
-        deno_core::resolve_path("vl-convert-index.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
-    let mut loader = VlConvertBundleLoader::new(script, vl_version);
-    let bundled = bundle(
-        bundle_entry_point,
-        &mut loader,
-        None,
-        BundleOptions {
-            bundle_type: BundleType::Module,
-            transpile_options: Default::default(),
-            emit_options: EmitOptions {
-                source_map: SourceMapOption::None,
-                ..Default::default()
-            },
-            emit_ignore_directives: false,
-            minify: true,
-        },
-    )
-    .await?;
-    Ok(bundled.code)
+pub async fn bundle_script(_script: String, _vl_version: VlVersion) -> Result<String, AnyError> {
+    // TODO: Implement bundling without deno_emit
+    // deno_emit was deprecated and incompatible with newer Deno versions.
+    // For now, use bundle=false in HTML export to use CDN script tags instead.
+    Err(anyhow::anyhow!(
+        "JavaScript bundling is temporarily disabled. Use bundle=false for HTML export \
+         to load Vega libraries from CDN instead."
+    ))
 }
 
 /// Bundle a JavaScript snippet that may contain references to vegaEmbed, vegaLite, or vega
 pub async fn bundle_vega_snippet(snippet: &str, vl_version: VlVersion) -> Result<String, AnyError> {
-    let script = format!(
-        r#"
-import vegaEmbed from "{JSDELIVR_URL}{VEGA_EMBED_PATH}.js"
-import vega from "{JSDELIVR_URL}{VEGA_PATH}.js"
-import vegaLite from "{JSDELIVR_URL}{VEGA_LITE_PATH}.js"
-import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
-{snippet}
-"#,
-        VEGA_LITE_PATH = vl_version.to_path()
-    );
-
-    bundle_script(script.to_string(), vl_version).await
+    bundle_script(snippet.to_string(), vl_version).await
 }

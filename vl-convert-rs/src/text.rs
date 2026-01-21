@@ -3,6 +3,7 @@ use crate::anyhow::{anyhow, bail};
 use crate::image_loading::custom_string_resolver;
 use deno_core::error::AnyError;
 use deno_core::op2;
+use deno_error::JsErrorBox;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashSet;
@@ -13,7 +14,7 @@ use usvg::{
     ImageHrefResolver,
 };
 
-deno_core::extension!(vl_convert_text_runtime, ops = [op_text_width]);
+// op_text_width is exported and used in the combined vl_convert_runtime extension in converter.rs
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
@@ -327,10 +328,15 @@ impl TextInfo {
 }
 
 #[op2(fast)]
-pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, AnyError> {
+pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, JsErrorBox> {
     let text_info = match serde_json::from_str::<TextInfo>(&text_info_str) {
         Ok(text_info) => text_info,
-        Err(err) => bail!("Failed to deserialize text info: {}", err.to_string()),
+        Err(err) => {
+            return Err(JsErrorBox::generic(format!(
+                "Failed to deserialize text info: {}",
+                err
+            )))
+        }
     };
 
     // Return width zero for text with non-positive size
@@ -358,7 +364,7 @@ pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, AnyError> {
         // Try falling back to a supported text info
         let text_info = text_info.fallback();
         let svg = text_info.to_svg();
-        extract_text_width(&svg)
+        extract_text_width(&svg).map_err(|e| JsErrorBox::generic(e.to_string()))
     }
 }
 
