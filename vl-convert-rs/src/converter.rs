@@ -3,9 +3,9 @@ use crate::module_loader::{
     VlConvertModuleLoader, FORMATE_LOCALE_MAP, IMPORT_MAP, TIME_FORMATE_LOCALE_MAP,
 };
 
-use deno_core::op2;
-use deno_core::error::AnyError;
 use deno_core::anyhow::bail;
+use deno_core::error::AnyError;
+use deno_core::op2;
 use deno_core::{serde_v8, v8, JsRuntime, RuntimeOptions};
 use deno_error::JsErrorBox;
 use std::collections::hash_map::Entry;
@@ -55,9 +55,8 @@ deno_core::extension!(
     vl_convert_runtime,
     ops = [op_get_json_arg, op_text_width, op_fetch_url],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
-    esm = [
-        "ext:vl_convert_runtime/bootstrap.js" = {
-            source = r#"
+    esm = ["ext:vl_convert_runtime/bootstrap.js" = {
+        source = r#"
                 import { op_text_width, op_get_json_arg, op_structured_clone, op_fetch_url } from "ext:core/ops";
 
                 // Expose ops on globalThis so user code can access them
@@ -79,8 +78,7 @@ deno_core::extension!(
                     };
                 };
             "#
-        }
-    ],
+    }],
 );
 
 lazy_static! {
@@ -276,9 +274,10 @@ fn op_get_json_arg(arg_id: i32) -> Result<String, JsErrorBox> {
                 Err(JsErrorBox::generic("Arg id not found"))
             }
         }
-        Err(err) => {
-            Err(JsErrorBox::generic(format!("Failed to acquire lock: {}", err)))
-        }
+        Err(err) => Err(JsErrorBox::generic(format!(
+            "Failed to acquire lock: {}",
+            err
+        ))),
     }
 }
 
@@ -309,8 +308,7 @@ import('{vega_themes_url}').then((imported) => {{
                 vega_themes_url = vega_themes_url(),
             );
 
-            self.js_runtime
-                .execute_script("ext:<anon>", import_code)?;
+            self.js_runtime.execute_script("ext:<anon>", import_code)?;
 
             let logger_code = r#"""
 class WarningCollector {
@@ -376,8 +374,7 @@ import('{url}').then((sg) => {{
 "#,
                         url = url_for_path(path)
                     );
-                    self.js_runtime
-                        .execute_script("ext:<anon>", script_code)?;
+                    self.js_runtime.execute_script("ext:<anon>", script_code)?;
                     self.js_runtime.run_event_loop(Default::default()).await?;
                 }
             }
@@ -555,8 +552,7 @@ import('{vl_url}').then((imported) => {{
                 vl_url = vl_version.to_url()
             );
 
-            self.js_runtime
-                .execute_script("ext:<anon>", import_code)?;
+            self.js_runtime.execute_script("ext:<anon>", import_code)?;
 
             self.js_runtime.run_event_loop(Default::default()).await?;
 

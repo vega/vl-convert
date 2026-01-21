@@ -4,7 +4,7 @@ use crate::module_loader::import_map::{
     build_format_locale_map, build_import_map, build_time_format_locale_map, JSDELIVR_URL,
 };
 use deno_core::{
-    resolve_import, ModuleLoadResponse, ModuleLoadReferrer, ModuleLoader, ModuleSource,
+    resolve_import, ModuleLoadReferrer, ModuleLoadResponse, ModuleLoader, ModuleSource,
     ModuleSourceCode, ModuleSpecifier, ModuleType, RequestedModuleType, ResolutionKind,
 };
 use deno_error::JsErrorBox;
@@ -32,8 +32,8 @@ impl ModuleLoader for VlConvertModuleLoader {
         referrer: &str,
         _kind: ResolutionKind,
     ) -> Result<ModuleSpecifier, JsErrorBox> {
-        let resolved = resolve_import(specifier, referrer)
-            .map_err(|e| JsErrorBox::generic(e.to_string()))?;
+        let resolved =
+            resolve_import(specifier, referrer).map_err(|e| JsErrorBox::generic(e.to_string()))?;
         Ok(resolved)
     }
 

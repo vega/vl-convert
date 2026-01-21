@@ -10,9 +10,8 @@ extension!(
     test_extension,
     ops = [op_test_echo, op_test_double],
     esm_entry_point = "ext:test_extension/bootstrap.js",
-    esm = [
-        "ext:test_extension/bootstrap.js" = {
-            source = r#"
+    esm = ["ext:test_extension/bootstrap.js" = {
+        source = r#"
                 import { op_test_echo, op_test_double } from "ext:core/ops";
 
                 // Expose ops on globalThis so user code can access them
@@ -23,8 +22,7 @@ extension!(
 
                 console.log("[bootstrap.js] Test ops exposed on globalThis.testOps");
             "#
-        }
-    ],
+    }],
 );
 
 #[op2]
