@@ -121,66 +121,80 @@ jobs:
       - name: Build V8 from source
         if: steps.check-release.outputs.exists != 'true'
         run: |
+          set -ex
           mkdir -p v8-out
+
+          # Verify Docker is available
+          docker --version
+          docker info
+
+          # Pull the image first to ensure it's available
+          docker pull quay.io/pypa/manylinux_2_28_aarch64
+
+          # Write the build script to a file to avoid YAML escaping issues
+          cat > /tmp/build-v8.sh << 'SCRIPT'
+          set -ex
+
+          # Verify we're in the container
+          cat /etc/os-release
+
+          # Install build dependencies including full clang toolchain
+          dnf install -y glib2-devel libffi-devel clang clang-devel lld compiler-rt protobuf-compiler
+
+          # Verify clang is available
+          which clang++
+          clang++ --version
+          protoc --version
+
+          # V8 expects libclang_rt.builtins.a at a specific path based on CLANG_BASE_PATH
+          CLANG_VERSION=$(clang++ --version | grep -oP "clang version \K[0-9]+")
+          echo "Clang version: $CLANG_VERSION"
+
+          # Find the actual builtins library
+          BUILTINS_PATH=$(find /usr/lib*/clang -name "libclang_rt.builtins*.a" 2>/dev/null | head -1)
+          echo "Found builtins at: $BUILTINS_PATH"
+
+          # Create symlinks for expected versions
+          if [ -n "$BUILTINS_PATH" ]; then
+            for VER in $CLANG_VERSION 19 20 21 22; do
+              EXPECTED_DIR="/usr/lib/clang/${VER}/lib/aarch64-unknown-linux-gnu"
+              mkdir -p "$EXPECTED_DIR"
+              ln -sf "$BUILTINS_PATH" "$EXPECTED_DIR/libclang_rt.builtins.a"
+              echo "Created symlink: $EXPECTED_DIR/libclang_rt.builtins.a"
+            done
+          else
+            echo "ERROR: Could not find libclang_rt.builtins.a"
+            find /usr -name "*clang_rt*" 2>/dev/null || true
+            exit 1
+          fi
+
+          # Install Rust
+          curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
+
+          # Build vl-convert-python (this will compile V8)
+          cd /io
+          cargo build --release -p vl-convert-python
+
+          # Copy V8 artifact to output volume
+          find /io/target -name "librusty_v8.a" -type f 2>/dev/null | head -5
+          cp /io/target/release/gn_out/obj/librusty_v8.a /v8-out/librusty_v8-linux-aarch64.a
+          ls -la /v8-out/
+          SCRIPT
+
+          chmod +x /tmp/build-v8.sh
+
+          # Run Docker with the script
           docker run --rm \
             -v "${{ github.workspace }}:/io" \
             -v "${{ github.workspace }}/v8-out:/v8-out" \
+            -v "/tmp/build-v8.sh:/tmp/build-v8.sh:ro" \
             -w /io \
             -e V8_FROM_SOURCE=1 \
             -e "GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0" \
             -e CLANG_BASE_PATH=/usr \
             quay.io/pypa/manylinux_2_28_aarch64 \
-            bash -c '
-              set -ex
-
-              # Install build dependencies including full clang toolchain
-              # compiler-rt provides libclang_rt.builtins.a needed by V8
-              dnf install -y glib2-devel libffi-devel clang clang-devel lld compiler-rt
-
-              # Verify clang is available
-              which clang++
-              clang++ --version
-
-              # V8 expects libclang_rt.builtins.a at a specific path based on CLANG_BASE_PATH
-              # Find where compiler-rt actually installed it and create the expected directory structure
-              CLANG_VERSION=$(clang++ --version | grep -oP "clang version \K[0-9]+")
-              echo "Clang version: $CLANG_VERSION"
-
-              # Find the actual builtins library
-              BUILTINS_PATH=$(find /usr/lib*/clang -name "libclang_rt.builtins*.a" 2>/dev/null | head -1)
-              echo "Found builtins at: $BUILTINS_PATH"
-
-              # Create symlinks for both the detected version AND common V8 expected versions
-              # V8 may expect a different clang version than what's installed
-              if [ -n "$BUILTINS_PATH" ]; then
-                for VER in $CLANG_VERSION 19 20 21 22; do
-                  EXPECTED_DIR="/usr/lib/clang/${VER}/lib/aarch64-unknown-linux-gnu"
-                  mkdir -p "$EXPECTED_DIR"
-                  ln -sf "$BUILTINS_PATH" "$EXPECTED_DIR/libclang_rt.builtins.a"
-                  echo "Created symlink: $EXPECTED_DIR/libclang_rt.builtins.a"
-                done
-              else
-                echo "WARNING: Could not find libclang_rt.builtins.a"
-                find /usr -name "*clang_rt*" 2>/dev/null || true
-              fi
-
-              # Install protoc - use dnf to avoid permission issues
-              dnf install -y protobuf-compiler
-              protoc --version
-
-              # Install Rust
-              curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-              source "$HOME/.cargo/env"
-
-              # Build vl-convert-python (this will compile V8)
-              cd /io
-              cargo build --release -p vl-convert-python
-
-              # Copy V8 artifact to output volume
-              find /io/target -name "librusty_v8.a" -type f 2>/dev/null | head -5
-              cp /io/target/release/gn_out/obj/librusty_v8.a /v8-out/librusty_v8-linux-aarch64.a
-              ls -la /v8-out/
-            '
+            bash /tmp/build-v8.sh
 
       - name: Verify V8 artifact
         if: steps.check-release.outputs.exists != 'true'
