@@ -145,6 +145,26 @@ jobs:
               which clang++
               clang++ --version
 
+              # V8 expects libclang_rt.builtins.a at a specific path based on CLANG_BASE_PATH
+              # Find where compiler-rt actually installed it and create the expected directory structure
+              CLANG_VERSION=$(clang++ --version | grep -oP "clang version \K[0-9]+")
+              echo "Clang version: $CLANG_VERSION"
+
+              # Find the actual builtins library
+              BUILTINS_PATH=$(find /usr/lib*/clang -name "libclang_rt.builtins*.a" 2>/dev/null | head -1)
+              echo "Found builtins at: $BUILTINS_PATH"
+
+              # Create the expected directory and symlink
+              EXPECTED_DIR="/usr/lib/clang/${CLANG_VERSION}/lib/aarch64-unknown-linux-gnu"
+              mkdir -p "$EXPECTED_DIR"
+              if [ -n "$BUILTINS_PATH" ]; then
+                ln -sf "$BUILTINS_PATH" "$EXPECTED_DIR/libclang_rt.builtins.a"
+                echo "Created symlink: $EXPECTED_DIR/libclang_rt.builtins.a -> $BUILTINS_PATH"
+              else
+                echo "WARNING: Could not find libclang_rt.builtins.a"
+                find /usr -name "*clang_rt*" 2>/dev/null || true
+              fi
+
               # Install protoc
               PB_REL="https://github.com/protocolbuffers/protobuf/releases"
               curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
