@@ -1,3 +1,5 @@
+// Allow uninlined format args for cleaner bail!/anyhow! macros
+#![allow(clippy::uninlined_format_args)]
 #![doc = include_str!("../README.md")]
 
 pub mod converter;
