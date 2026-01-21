@@ -154,12 +154,15 @@ jobs:
               BUILTINS_PATH=$(find /usr/lib*/clang -name "libclang_rt.builtins*.a" 2>/dev/null | head -1)
               echo "Found builtins at: $BUILTINS_PATH"
 
-              # Create the expected directory and symlink
-              EXPECTED_DIR="/usr/lib/clang/${CLANG_VERSION}/lib/aarch64-unknown-linux-gnu"
-              mkdir -p "$EXPECTED_DIR"
+              # Create symlinks for both the detected version AND common V8 expected versions
+              # V8 may expect a different clang version than what's installed
               if [ -n "$BUILTINS_PATH" ]; then
-                ln -sf "$BUILTINS_PATH" "$EXPECTED_DIR/libclang_rt.builtins.a"
-                echo "Created symlink: $EXPECTED_DIR/libclang_rt.builtins.a -> $BUILTINS_PATH"
+                for VER in $CLANG_VERSION 19 20 21 22; do
+                  EXPECTED_DIR="/usr/lib/clang/${VER}/lib/aarch64-unknown-linux-gnu"
+                  mkdir -p "$EXPECTED_DIR"
+                  ln -sf "$BUILTINS_PATH" "$EXPECTED_DIR/libclang_rt.builtins.a"
+                  echo "Created symlink: $EXPECTED_DIR/libclang_rt.builtins.a"
+                done
               else
                 echo "WARNING: Could not find libclang_rt.builtins.a"
                 find /usr -name "*clang_rt*" 2>/dev/null || true
