@@ -132,12 +132,17 @@ jobs:
             -w /io \
             -e V8_FROM_SOURCE=1 \
             -e "GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0" \
+            -e CLANG_BASE_PATH=/usr \
             quay.io/pypa/manylinux_2_28_aarch64 \
             bash -c '
               set -ex
 
-              # Install build dependencies
-              dnf install -y glib2-devel libffi-devel clang-devel
+              # Install build dependencies including full clang toolchain
+              dnf install -y glib2-devel libffi-devel clang clang-devel lld
+
+              # Verify clang is available
+              which clang++
+              clang++ --version
 
               # Install protoc
               PB_REL="https://github.com/protocolbuffers/protobuf/releases"
