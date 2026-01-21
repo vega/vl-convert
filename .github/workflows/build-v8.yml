@@ -138,7 +138,8 @@ jobs:
               set -ex
 
               # Install build dependencies including full clang toolchain
-              dnf install -y glib2-devel libffi-devel clang clang-devel lld
+              # compiler-rt provides libclang_rt.builtins.a needed by V8
+              dnf install -y glib2-devel libffi-devel clang clang-devel lld compiler-rt
 
               # Verify clang is available
               which clang++
