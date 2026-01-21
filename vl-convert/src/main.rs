@@ -1056,10 +1056,7 @@ async fn vl_2_vg(
             write_output_string(output, &vega_str)?;
         }
         Err(err) => {
-            bail!(
-                "Failed to serialize Vega spec to JSON string: {}",
-                err.to_string()
-            )
+            bail!("Failed to serialize Vega spec to JSON string: {err}")
         }
     }
 

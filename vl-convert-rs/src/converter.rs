@@ -304,7 +304,7 @@ fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
             id
         }
         Err(err) => {
-            bail!("Failed to acquire lock: {}", err.to_string())
+            bail!("Failed to acquire lock: {err}")
         }
     };
 
@@ -314,7 +314,7 @@ fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
             guard.insert(id, serde_json::to_string(&arg).unwrap());
         }
         Err(err) => {
-            bail!("Failed to acquire lock: {}", err.to_string())
+            bail!("Failed to acquire lock: {err}")
         }
     }
 
@@ -695,10 +695,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         // in this case deserialize to a JSON `Value`.
         let deserialized_value = serde_v8::from_v8::<serde_json::Value>(scope, local);
         deserialized_value.map_err(|err| {
-            anyhow!(
-                "Failed to deserialize JavaScript value: {}",
-                err.to_string()
-            )
+            anyhow!("Failed to deserialize JavaScript value: {err}")
         })
     }
 
@@ -720,7 +717,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
                 let value = value.as_str();
                 value.unwrap().to_string()
             }
-            Err(err) => bail!("{}", err.to_string()),
+            Err(err) => bail!("{err}"),
         };
 
         Ok(value)
@@ -1187,14 +1184,14 @@ impl VlConverter {
                 // All good
             }
             Err(err) => {
-                bail!("Failed to send conversion request: {}", err.to_string())
+                bail!("Failed to send conversion request: {err}")
             }
         }
 
         // Wait for result
         match resp_rx.await {
             Ok(vega_spec_result) => vega_spec_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
         }
     }
 
@@ -1216,14 +1213,14 @@ impl VlConverter {
                 // All good
             }
             Err(err) => {
-                bail!("Failed to send SVG conversion request: {}", err.to_string())
+                bail!("Failed to send SVG conversion request: {err}")
             }
         }
 
         // Wait for result
         match resp_rx.await {
             Ok(svg_result) => svg_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
         }
     }
 
@@ -1245,17 +1242,14 @@ impl VlConverter {
                 // All good
             }
             Err(err) => {
-                bail!(
-                    "Failed to send Scenegraph conversion request: {}",
-                    err.to_string()
-                )
+                bail!("Failed to send Scenegraph conversion request: {err}")
             }
         }
 
         // Wait for result
         match resp_rx.await {
             Ok(svg_result) => svg_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
         }
     }
 
@@ -1277,14 +1271,14 @@ impl VlConverter {
                 // All good
             }
             Err(err) => {
-                bail!("Failed to send SVG conversion request: {}", err.to_string())
+                bail!("Failed to send SVG conversion request: {err}")
             }
         }
 
         // Wait for result
         match resp_rx.await {
             Ok(svg_result) => svg_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
         }
     }
 
@@ -1306,17 +1300,14 @@ impl VlConverter {
                 // All good
             }
             Err(err) => {
-                bail!(
-                    "Failed to send Scenegraph conversion request: {}",
-                    err.to_string()
-                )
+                bail!("Failed to send Scenegraph conversion request: {err}")
             }
         }
 
         // Wait for result
         match resp_rx.await {
             Ok(svg_result) => svg_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {}", err.to_string()),
+            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
         }
     }
 
@@ -1492,17 +1483,14 @@ impl VlConverter {
                 // All good
             }
             Err(err) => {
-                bail!("Failed to send get_local_tz request: {}", err.to_string())
+                bail!("Failed to send get_local_tz request: {err}")
             }
         }
 
         // Wait for result
         match resp_rx.await {
             Ok(local_tz_result) => local_tz_result,
-            Err(err) => bail!(
-                "Failed to retrieve get_local_tz result: {}",
-                err.to_string()
-            ),
+            Err(err) => bail!("Failed to retrieve get_local_tz result: {err}"),
         }
     }
 
@@ -1516,14 +1504,14 @@ impl VlConverter {
                 // All good
             }
             Err(err) => {
-                bail!("Failed to send get_themes request: {}", err.to_string())
+                bail!("Failed to send get_themes request: {err}")
             }
         }
 
         // Wait for result
         match resp_rx.await {
             Ok(themes_result) => themes_result,
-            Err(err) => bail!("Failed to retrieve get_themes result: {}", err.to_string()),
+            Err(err) => bail!("Failed to retrieve get_themes result: {err}"),
         }
     }
 }
@@ -1642,7 +1630,7 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
 
     let opts = USVG_OPTIONS
         .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
 
     let doc = usvg::roxmltree::Document::parse_with_options(svg, xml_opt)?;
 

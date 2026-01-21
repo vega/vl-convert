@@ -371,7 +371,7 @@ pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, JsErrorBox>
 fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
     let opts = USVG_OPTIONS
         .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
 
     let rtree = usvg::Tree::from_str(svg, &opts).expect("Failed to parse text SVG");
 
@@ -398,7 +398,7 @@ fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
     let mut opts = USVG_OPTIONS
         .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {}", err.to_string()))?;
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
 
     // Get mutable reference to font_db. This should always be successful since
     // we're holding the mutex on USVG_OPTIONS
