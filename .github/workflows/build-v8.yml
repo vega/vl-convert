@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - deno-2-upgrade
   workflow_dispatch:
     inputs:
       force_rebuild:
@@ -97,5 +96,86 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-  # TODO: Add build-v8-linux-aarch64 job when ready
-  # This would need native ARM64 runners or cross-compilation
+  build-v8-linux-aarch64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get V8 version from Cargo.lock
+        id: v8-version
+        run: |
+          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
+          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
+          echo "V8 version: $V8_VERSION"
+
+      - name: Check if release already exists
+        id: check-release
+        if: ${{ !inputs.force_rebuild }}
+        run: |
+          if gh release view "v8-${{ steps.v8-version.outputs.version }}" --json assets -q '.assets[].name' | grep -q "librusty_v8-linux-aarch64.a"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release with linux-aarch64 asset already exists, skipping build"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build V8 from source
+        if: steps.check-release.outputs.exists != 'true'
+        run: |
+          mkdir -p v8-out
+          docker run --rm \
+            -v "${{ github.workspace }}:/io" \
+            -v "${{ github.workspace }}/v8-out:/v8-out" \
+            -w /io \
+            -e V8_FROM_SOURCE=1 \
+            -e "GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0" \
+            quay.io/pypa/manylinux_2_28_aarch64 \
+            bash -c '
+              set -ex
+
+              # Install build dependencies
+              dnf install -y glib2-devel libffi-devel clang-devel
+
+              # Install protoc
+              PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+              curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
+              unzip protoc-24.0-linux-aarch_64.zip -d /usr/
+
+              # Install Rust
+              curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              source "$HOME/.cargo/env"
+
+              # Build vl-convert-python (this will compile V8)
+              cd /io
+              cargo build --release -p vl-convert-python
+
+              # Copy V8 artifact to output volume
+              find /io/target -name "librusty_v8.a" -type f 2>/dev/null | head -5
+              cp /io/target/release/gn_out/obj/librusty_v8.a /v8-out/librusty_v8-linux-aarch64.a
+              ls -la /v8-out/
+            '
+
+      - name: Verify V8 artifact
+        if: steps.check-release.outputs.exists != 'true'
+        run: |
+          ls -la v8-out/
+          file v8-out/librusty_v8-linux-aarch64.a
+
+      - name: Create or update release
+        if: steps.check-release.outputs.exists != 'true'
+        run: |
+          # Create release if it doesn't exist (may already exist from x86_64 job)
+          gh release create "v8-${{ steps.v8-version.outputs.version }}" \
+            --title "V8 ${{ steps.v8-version.outputs.version }} Pre-built Binaries" \
+            --notes "Pre-built V8 static libraries with PIC support for Python wheel builds." \
+            --prerelease \
+            2>/dev/null || true
+
+          # Upload the artifact
+          gh release upload "v8-${{ steps.v8-version.outputs.version }}" \
+            v8-out/librusty_v8-linux-aarch64.a \
+            --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
