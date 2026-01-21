@@ -4,12 +4,10 @@ use crate::module_loader::import_map::{
     build_format_locale_map, build_import_map, build_time_format_locale_map, JSDELIVR_URL,
 };
 use deno_core::{
-    ModuleLoadResponse, ModuleLoadReferrer, ModuleSourceCode, RequestedModuleType, ResolutionKind,
+    resolve_import, ModuleLoadResponse, ModuleLoadReferrer, ModuleLoader, ModuleSource,
+    ModuleSourceCode, ModuleSpecifier, ModuleType, RequestedModuleType, ResolutionKind,
 };
 use deno_error::JsErrorBox;
-use deno_runtime::deno_core::{
-    resolve_import, ModuleLoader, ModuleSource, ModuleSpecifier, ModuleType,
-};
 use std::collections::HashMap;
 
 lazy_static! {

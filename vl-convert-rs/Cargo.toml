@@ -10,11 +10,9 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-deno_runtime = { workspace = true }
 deno_core = { workspace = true }
 deno_error = { workspace = true }
 deno_graph = { workspace = true }
-deno_snapshots = { workspace = true }
 serde = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
@@ -35,8 +33,6 @@ tokio = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 lazy_static = { workspace = true }
-node_resolver = { workspace = true }
-sys_traits = { workspace = true }
 
 [dev-dependencies]
 rstest = { workspace = true }
