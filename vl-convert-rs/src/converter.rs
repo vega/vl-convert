@@ -694,9 +694,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         // Deserialize a `v8` object into a Rust type using `serde_v8`,
         // in this case deserialize to a JSON `Value`.
         let deserialized_value = serde_v8::from_v8::<serde_json::Value>(scope, local);
-        deserialized_value.map_err(|err| {
-            anyhow!("Failed to deserialize JavaScript value: {err}")
-        })
+        deserialized_value.map_err(|err| anyhow!("Failed to deserialize JavaScript value: {err}"))
     }
 
     async fn execute_script_to_string(&mut self, script: &str) -> Result<String, AnyError> {
