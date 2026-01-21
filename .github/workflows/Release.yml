@@ -178,15 +178,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: messense/maturin-action@v1
         with:
-          manylinux: auto
+          # Use manylinux_2_28 for GLIBC 2.28 (required by gn binary for V8 from source)
+          manylinux: 2_28
           target: ${{ matrix.arch }}
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           # Build V8 from source to fix fPIC relocation error (rusty_v8 #1706)
           docker-options: -e V8_FROM_SOURCE=1 -e GN_ARGS="v8_monolithic=true v8_monolithic_for_shared_library=true"
           before-script-linux: |
-            # Install V8 build dependencies
-            yum install -y glib2-devel libffi-devel
+            # Install V8 build dependencies (manylinux_2_28 uses dnf/yum)
+            dnf install -y glib2-devel libffi-devel || yum install -y glib2-devel libffi-devel
 
             # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
