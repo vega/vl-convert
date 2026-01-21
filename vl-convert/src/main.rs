@@ -1,3 +1,4 @@
+#![allow(clippy::uninlined_format_args)]
 #![doc = include_str!("../README.md")]
 
 use clap::{arg, Parser, Subcommand};
