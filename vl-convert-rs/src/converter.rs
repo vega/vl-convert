@@ -77,6 +77,64 @@ deno_core::extension!(
                         arrayBuffer: async () => new TextEncoder().encode(text).buffer,
                     };
                 };
+
+                // Minimal timer polyfills for Vega/d3 libraries
+                // Deno 2.x JsRuntime doesn't include timers by default
+                let _timerId = 0;
+                const _timeouts = new Map();
+                const _intervals = new Map();
+
+                globalThis.setTimeout = (callback, delay = 0, ...args) => {
+                    const id = ++_timerId;
+                    if (delay === 0) {
+                        queueMicrotask(() => {
+                            if (_timeouts.has(id)) {
+                                _timeouts.delete(id);
+                                callback(...args);
+                            }
+                        });
+                    } else {
+                        const start = Date.now();
+                        const poll = () => {
+                            if (!_timeouts.has(id)) return;
+                            if (Date.now() - start >= delay) {
+                                _timeouts.delete(id);
+                                callback(...args);
+                            } else {
+                                queueMicrotask(poll);
+                            }
+                        };
+                        queueMicrotask(poll);
+                    }
+                    _timeouts.set(id, true);
+                    return id;
+                };
+
+                globalThis.clearTimeout = (id) => {
+                    _timeouts.delete(id);
+                };
+
+                globalThis.setInterval = (callback, delay = 0, ...args) => {
+                    const id = ++_timerId;
+                    const start = Date.now();
+                    let count = 0;
+                    const poll = () => {
+                        if (!_intervals.has(id)) return;
+                        const elapsed = Date.now() - start;
+                        if (elapsed >= delay * (count + 1)) {
+                            count++;
+                            callback(...args);
+                        }
+                        queueMicrotask(poll);
+                    };
+                    _intervals.set(id, true);
+                    queueMicrotask(poll);
+                    return id;
+                };
+
+                globalThis.clearInterval = (id) => {
+                    _intervals.delete(id);
+                };
             "#
     }],
 );
