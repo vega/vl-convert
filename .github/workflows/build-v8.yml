@@ -40,34 +40,45 @@ jobs:
 
       - name: Build V8 from source
         if: steps.check-release.outputs.exists != 'true'
-        uses: messense/maturin-action@v1
-        with:
-          manylinux: 2_28
-          target: x86_64-unknown-linux-gnu
-          command: build
-          # We just need to trigger V8 build, not build the full wheel
-          # Use a minimal build that will compile V8
-          args: --release -m vl-convert-python/Cargo.toml -o /dev/null || true
-          docker-options: -e V8_FROM_SOURCE=1 -e "GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0" -v ${{ github.workspace }}/v8-out:/v8-out
-          before-script-linux: |
-            # Install build dependencies
-            dnf install -y glib2-devel libffi-devel clang-devel || yum install -y glib2-devel libffi-devel clang-devel
+        run: |
+          mkdir -p v8-out
+          docker run --rm \
+            -v "${{ github.workspace }}:/io" \
+            -v "${{ github.workspace }}/v8-out:/v8-out" \
+            -w /io \
+            -e V8_FROM_SOURCE=1 \
+            -e "GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0" \
+            quay.io/pypa/manylinux_2_28_x86_64 \
+            bash -c '
+              set -ex
 
-            # Install protoc
-            PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-            curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
-            unzip protoc-24.0-linux-x86_64.zip -d /usr/
+              # Install build dependencies
+              dnf install -y glib2-devel libffi-devel clang-devel
 
-      - name: Copy V8 artifact
+              # Install protoc
+              PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+              curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
+              unzip protoc-24.0-linux-x86_64.zip -d /usr/
+
+              # Install Rust
+              curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              source "$HOME/.cargo/env"
+
+              # Build vl-convert-python (this will compile V8)
+              cd /io
+              cargo build --release -p vl-convert-python
+
+              # Copy V8 artifact to output volume
+              find /io/target -name "librusty_v8.a" -type f 2>/dev/null | head -5
+              cp /io/target/release/gn_out/obj/librusty_v8.a /v8-out/librusty_v8-linux-x86_64.a
+              ls -la /v8-out/
+            '
+
+      - name: Verify V8 artifact
         if: steps.check-release.outputs.exists != 'true'
         run: |
-          # Find and copy the built V8 library
-          find . -name "librusty_v8.a" -type f 2>/dev/null | head -5
-          mkdir -p v8-out
-          cp target/x86_64-unknown-linux-gnu/release/gn_out/obj/librusty_v8.a v8-out/librusty_v8-linux-x86_64.a || \
-          cp target/release/gn_out/obj/librusty_v8.a v8-out/librusty_v8-linux-x86_64.a || \
-          echo "Could not find librusty_v8.a"
           ls -la v8-out/
+          file v8-out/librusty_v8-linux-x86_64.a
 
       - name: Create or update release
         if: steps.check-release.outputs.exists != 'true'
