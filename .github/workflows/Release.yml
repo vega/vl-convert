@@ -185,7 +185,7 @@ jobs:
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           # Build V8 from source to fix fPIC relocation error (rusty_v8 #1706)
           # v8_enable_temporal_support=false disables Temporal API, enable_rust=false disables Rust integration
-          docker-options: -e V8_FROM_SOURCE=1 -e "GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false use_custom_libcxx=false treat_warnings_as_errors=false symbol_level=0"
+          docker-options: -e V8_FROM_SOURCE=1 -e "GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0"
           before-script-linux: |
             # Install V8 build dependencies (manylinux_2_28 uses dnf/yum)
             dnf install -y glib2-devel libffi-devel || yum install -y glib2-devel libffi-devel
