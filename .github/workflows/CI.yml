@@ -121,10 +121,14 @@ jobs:
   vl-convert-rs-tests:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os:
           - windows-2022
           - macos-15-intel
+    # Windows needs larger stack for Deno runtime (default is 1MB vs 8MB on Linux/macOS)
+    env:
+      RUST_MIN_STACK: 8388608
     steps:
       - name: Enable long paths on Windows
         if: runner.os == 'Windows'
@@ -163,11 +167,15 @@ jobs:
       run:
         shell: ${{ matrix.options[2] }}
     strategy:
+      fail-fast: false
       matrix:
         options:
           - [ubuntu-latest, "3.10", "bash -l {0}"]
           - [windows-2022, "3.10", "pwsh"]
           - [macos-15-intel, "3.10", "bash -l {0}"]
+    # Windows needs larger stack for Deno runtime (default is 1MB vs 8MB on Linux/macOS)
+    env:
+      RUST_MIN_STACK: 8388608
     steps:
       - name: Enable long paths on Windows
         if: runner.os == 'Windows'
@@ -212,9 +220,14 @@ jobs:
             echo "Pre-built V8 not available"
           fi
 
-      - name: Build package
+      # Only set RUSTY_V8_ARCHIVE for Linux - an empty string causes issues on other platforms
+      - name: Build package (Linux with pre-built V8)
+        if: runner.os == 'Linux' && steps.download-v8.outputs.downloaded == 'true'
         env:
-          RUSTY_V8_ARCHIVE: ${{ runner.os == 'Linux' && steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
+          RUSTY_V8_ARCHIVE: ${{ format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) }}
+        run: pixi run dev-py
+      - name: Build package (other platforms)
+        if: runner.os != 'Linux' || steps.download-v8.outputs.downloaded != 'true'
         run: pixi run dev-py
       - name: Run tests
         run: pixi run test-py
