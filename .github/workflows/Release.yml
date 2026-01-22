@@ -220,6 +220,11 @@ jobs:
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
             unzip protoc-24.0-linux-x86_64.zip -d /usr/
+      - name: Test wheel
+        run: |
+          pip install dist/*.whl
+          python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
