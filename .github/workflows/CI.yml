@@ -125,6 +125,9 @@ jobs:
           - windows-2022
           - macos-15-intel
     steps:
+      - name: Enable long paths on Windows
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
       - name: Check out repository code
         uses: actions/checkout@v4
       - uses: prefix-dev/setup-pixi@v0.8.8
@@ -164,6 +167,9 @@ jobs:
           - [windows-2022, "3.10", "pwsh"]
           - [macos-15-intel, "3.10", "bash -l {0}"]
     steps:
+      - name: Enable long paths on Windows
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
       - name: Check out repository code
         uses: actions/checkout@v4
       - uses: prefix-dev/setup-pixi@v0.8.8
