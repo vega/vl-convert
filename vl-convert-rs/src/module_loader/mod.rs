@@ -4,8 +4,8 @@ use crate::module_loader::import_map::{
     build_format_locale_map, build_import_map, build_time_format_locale_map, JSDELIVR_URL,
 };
 use deno_core::{
-    resolve_import, ModuleLoadReferrer, ModuleLoadResponse, ModuleLoader, ModuleSource,
-    ModuleSourceCode, ModuleSpecifier, ModuleType, RequestedModuleType, ResolutionKind,
+    resolve_import, ModuleLoadOptions, ModuleLoadReferrer, ModuleLoadResponse, ModuleLoader,
+    ModuleSource, ModuleSourceCode, ModuleSpecifier, ModuleType, ResolutionKind,
 };
 use deno_error::JsErrorBox;
 use std::collections::HashMap;
@@ -41,8 +41,7 @@ impl ModuleLoader for VlConvertModuleLoader {
         &self,
         module_specifier: &ModuleSpecifier,
         _maybe_referrer: Option<&ModuleLoadReferrer>,
-        _is_dyn_import: bool,
-        _requested_module_type: RequestedModuleType,
+        _options: ModuleLoadOptions,
     ) -> ModuleLoadResponse {
         let module_specifier = module_specifier.clone();
         let string_specifier = module_specifier.to_string();

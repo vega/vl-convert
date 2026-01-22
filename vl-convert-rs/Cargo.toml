@@ -10,9 +10,16 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
+# Deno runtime - provides MainWorker with all Web APIs
+deno_runtime = { workspace = true }
+# deno_core needed explicitly for op2 and extension! macros
 deno_core = { workspace = true }
+# deno_error for JsErrorBox
 deno_error = { workspace = true }
-deno_graph = { workspace = true }
+# For stub type implementations
+node_resolver = { workspace = true }
+sys_traits = { workspace = true }
+deno_semver = { workspace = true }
 serde = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }

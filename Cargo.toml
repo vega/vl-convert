@@ -20,11 +20,20 @@ anyhow = "1.0"
 assert_cmd = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 
-# Deno crates that correspond to Deno 2.5.6
-# Using deno_core only (not deno_runtime) to avoid heavy dependencies like rusqlite/libclang.
-deno_core = "0.363.0"
-deno_error = "0.7.0"
-deno_graph = "0.103.1"
+# Deno runtime - unified crate that handles all Web APIs and extensions
+# Using git source from denoland/deno
+# The "hmr" feature enables include_js_files_for_snapshotting and transpile so TypeScript
+# extension code can run without requiring a pre-built snapshot
+deno_runtime = { git = "https://github.com/denoland/deno", features = ["hmr"] }
+# deno_core needed explicitly for op2 and extension! macros which look for deno_core at crate root
+# Must use the same version (0.380.0) as deno_runtime's dependency
+deno_core = "0.380.0"
+# deno_error for JsErrorBox - must match version used by deno_runtime
+deno_error = "0.7.1"
+# For stub type implementations
+node_resolver = { git = "https://github.com/denoland/deno" }
+sys_traits = { version = "0.1.22", features = ["real", "libc"] }
+deno_semver = "0.9.1"
 
 dircpy = "0.3"
 dssim = "3.2.4"
@@ -56,3 +65,5 @@ tokio = { version = "1.36", features = ["macros", "rt-multi-thread"] }
 ttf-parser = "0.25.1"
 usvg = "0.45.1"
 zip-extract = "0.4.0"
+
+# No patches needed - using git deps directly from denoland/deno

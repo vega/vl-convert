@@ -1,3 +1,4 @@
+use crate::deno_stubs::{NoOpInNpmPackageChecker, NoOpNpmPackageFolderResolver, VlConvertNodeSys};
 use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
 use crate::module_loader::{
     VlConvertModuleLoader, FORMATE_LOCALE_MAP, IMPORT_MAP, TIME_FORMATE_LOCALE_MAP,
@@ -6,8 +7,13 @@ use crate::module_loader::{
 use deno_core::anyhow::bail;
 use deno_core::error::AnyError;
 use deno_core::op2;
-use deno_core::{serde_v8, v8, JsRuntime, RuntimeOptions};
+use deno_core::{serde_v8, v8, ModuleSpecifier};
 use deno_error::JsErrorBox;
+use deno_runtime::deno_fs::RealFs;
+use deno_runtime::deno_web::{BlobStore, InMemoryBroadcastChannel};
+use deno_runtime::deno_permissions::{PermissionsContainer, RuntimePermissionDescriptorParser};
+use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
+use deno_runtime::FeatureChecker;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
@@ -20,7 +26,7 @@ use std::str::FromStr;
 use std::thread;
 use std::thread::JoinHandle;
 
-use crate::anyhow::anyhow;
+use deno_core::anyhow::anyhow;
 use futures::channel::{mpsc, mpsc::Sender, oneshot};
 use futures_util::{SinkExt, StreamExt};
 use png::{PixelDimensions, Unit};
@@ -34,107 +40,19 @@ use resvg::render;
 
 use crate::text::{op_text_width, USVG_OPTIONS};
 
-// Simple fetch op for URL data loading
-#[op2(async)]
-#[string]
-async fn op_fetch_url(#[string] url: String) -> Result<String, JsErrorBox> {
-    let response = reqwest::get(&url)
-        .await
-        .map_err(|e| JsErrorBox::generic(format!("Fetch error: {}", e)))?;
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| JsErrorBox::generic(format!("Failed to read response: {}", e)))?;
-
-    Ok(text)
-}
-
-// Combined extension with ops and ESM to expose them on globalThis
+// Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
+// We only need to expose op_text_width and op_get_json_arg on globalThis
 deno_core::extension!(
     vl_convert_runtime,
-    ops = [op_get_json_arg, op_text_width, op_fetch_url],
+    ops = [op_get_json_arg, op_text_width],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
     esm = ["ext:vl_convert_runtime/bootstrap.js" = {
         source = r#"
-                import { op_text_width, op_get_json_arg, op_structured_clone, op_fetch_url } from "ext:core/ops";
+                import { op_text_width, op_get_json_arg } from "ext:core/ops";
 
-                // Expose ops on globalThis so user code can access them
+                // Expose our custom ops on globalThis for vega-scenegraph text measurement
                 globalThis.op_text_width = op_text_width;
                 globalThis.op_get_json_arg = op_get_json_arg;
-
-                // Expose structuredClone which is needed by Vega-Lite
-                globalThis.structuredClone = (value) => op_structured_clone(value);
-
-                // Minimal fetch implementation for Vega data loading
-                globalThis.fetch = async (url, options) => {
-                    const text = await op_fetch_url(url.toString());
-                    return {
-                        ok: true,
-                        status: 200,
-                        text: async () => text,
-                        json: async () => JSON.parse(text),
-                        arrayBuffer: async () => new TextEncoder().encode(text).buffer,
-                    };
-                };
-
-                // Minimal timer polyfills for Vega/d3 libraries
-                // Deno 2.x JsRuntime doesn't include timers by default
-                let _timerId = 0;
-                const _timeouts = new Map();
-                const _intervals = new Map();
-
-                globalThis.setTimeout = (callback, delay = 0, ...args) => {
-                    const id = ++_timerId;
-                    if (delay === 0) {
-                        queueMicrotask(() => {
-                            if (_timeouts.has(id)) {
-                                _timeouts.delete(id);
-                                callback(...args);
-                            }
-                        });
-                    } else {
-                        const start = Date.now();
-                        const poll = () => {
-                            if (!_timeouts.has(id)) return;
-                            if (Date.now() - start >= delay) {
-                                _timeouts.delete(id);
-                                callback(...args);
-                            } else {
-                                queueMicrotask(poll);
-                            }
-                        };
-                        queueMicrotask(poll);
-                    }
-                    _timeouts.set(id, true);
-                    return id;
-                };
-
-                globalThis.clearTimeout = (id) => {
-                    _timeouts.delete(id);
-                };
-
-                globalThis.setInterval = (callback, delay = 0, ...args) => {
-                    const id = ++_timerId;
-                    const start = Date.now();
-                    let count = 0;
-                    const poll = () => {
-                        if (!_intervals.has(id)) return;
-                        const elapsed = Date.now() - start;
-                        if (elapsed >= delay * (count + 1)) {
-                            count++;
-                            callback(...args);
-                        }
-                        queueMicrotask(poll);
-                    };
-                    _intervals.set(id, true);
-                    queueMicrotask(poll);
-                    return id;
-                };
-
-                globalThis.clearInterval = (id) => {
-                    _intervals.delete(id);
-                };
             "#
     }],
 );
@@ -341,7 +259,7 @@ fn op_get_json_arg(arg_id: i32) -> Result<String, JsErrorBox> {
 
 /// Struct that interacts directly with the Deno JavaScript runtime. Not Sendable
 struct InnerVlConverter {
-    js_runtime: JsRuntime,
+    worker: MainWorker,
     initialized_vl_versions: HashSet<VlVersion>,
     vega_initialized: bool,
 }
@@ -366,7 +284,7 @@ import('{vega_themes_url}').then((imported) => {{
                 vega_themes_url = vega_themes_url(),
             );
 
-            self.js_runtime.execute_script("ext:<anon>", import_code)?;
+            self.worker.js_runtime.execute_script("ext:<anon>", import_code)?;
 
             let logger_code = r#"""
 class WarningCollector {
@@ -401,9 +319,9 @@ class WarningCollector {
             """#
             .to_string();
 
-            self.js_runtime
+            self.worker.js_runtime
                 .execute_script("ext:<anon>", logger_code.to_string())?;
-            self.js_runtime.run_event_loop(Default::default()).await?;
+            self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
             // Override text width measurement in vega-scenegraph
             for path in IMPORT_MAP.keys() {
@@ -432,8 +350,8 @@ import('{url}').then((sg) => {{
 "#,
                         url = url_for_path(path)
                     );
-                    self.js_runtime.execute_script("ext:<anon>", script_code)?;
-                    self.js_runtime.run_event_loop(Default::default()).await?;
+                    self.worker.js_runtime.execute_script("ext:<anon>", script_code)?;
+                    self.worker.js_runtime.run_event_loop(Default::default()).await?;
                 }
             }
 
@@ -585,11 +503,11 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
     return scenegraphPromise
 }
 "#;
-            self.js_runtime.execute_script(
+            self.worker.js_runtime.execute_script(
                 "ext:<anon>",
                 deno_core::FastString::from_static(function_str),
             )?;
-            self.js_runtime.run_event_loop(Default::default()).await?;
+            self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
             self.vega_initialized = true;
         }
@@ -611,9 +529,9 @@ import('{vl_url}').then((imported) => {{
                 vl_url = vl_version.to_url()
             );
 
-            self.js_runtime.execute_script("ext:<anon>", import_code)?;
+            self.worker.js_runtime.execute_script("ext:<anon>", import_code)?;
 
-            self.js_runtime.run_event_loop(Default::default()).await?;
+            self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
             // Create and initialize function string
             let function_code = format!(
@@ -650,10 +568,10 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
                 ver_name = format!("{:?}", vl_version),
             );
 
-            self.js_runtime
+            self.worker.js_runtime
                 .execute_script("ext:<anon>", function_code)?;
 
-            self.js_runtime.run_event_loop(Default::default()).await?;
+            self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
             // Register that this Vega-Lite version has been initialized
             self.initialized_vl_versions.insert(*vl_version);
@@ -662,17 +580,56 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
     }
 
     pub async fn try_new() -> Result<Self, AnyError> {
+        // Install rustls crypto provider (required for TLS/HTTPS operations)
+        // Using aws_lc_rs as the default provider (same as Deno)
+        let _ = deno_runtime::deno_tls::rustls::crypto::aws_lc_rs::default_provider()
+            .install_default();
+
         let module_loader = Rc::new(VlConvertModuleLoader);
 
-        // Create JsRuntime directly with our extension (which includes ESM that exposes ops)
-        let js_runtime = JsRuntime::new(RuntimeOptions {
-            module_loader: Some(module_loader),
+        // Create a dummy main module specifier for the worker
+        let main_module = ModuleSpecifier::parse("ext:vl_convert/main.js")
+            .expect("Failed to parse main module specifier");
+
+        // Create permission descriptor parser using RealSys
+        let descriptor_parser = Arc::new(RuntimePermissionDescriptorParser::new(
+            VlConvertNodeSys,
+        ));
+
+        // Configure WorkerServiceOptions with stub types for npm resolution (not used by vl-convert)
+        let services = WorkerServiceOptions::<
+            NoOpInNpmPackageChecker,
+            NoOpNpmPackageFolderResolver,
+            VlConvertNodeSys,
+        > {
+            blob_store: Arc::new(BlobStore::default()),
+            broadcast_channel: InMemoryBroadcastChannel::default(),
+            deno_rt_native_addon_loader: None,
+            feature_checker: Arc::new(FeatureChecker::default()),
+            fs: Arc::new(RealFs),
+            module_loader,
+            node_services: None, // vl-convert doesn't need Node.js compatibility
+            npm_process_state_provider: None,
+            permissions: PermissionsContainer::allow_all(descriptor_parser),
+            root_cert_store_provider: None,
+            fetch_dns_resolver: Default::default(),
+            shared_array_buffer_store: None,
+            compiled_wasm_module_store: None,
+            v8_code_cache: None,
+            bundle_provider: None,
+        };
+
+        // Configure WorkerOptions with our custom extension
+        let options = WorkerOptions {
             extensions: vec![vl_convert_runtime::init()],
             ..Default::default()
-        });
+        };
+
+        // Create the MainWorker with full Web API support
+        let worker = MainWorker::bootstrap_from_options(&main_module, services, options);
 
         let this = Self {
-            js_runtime,
+            worker,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
         };
@@ -685,11 +642,11 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         script: &str,
     ) -> Result<serde_json::Value, AnyError> {
         let code = script.to_string();
-        let res = self.js_runtime.execute_script("ext:<anon>", code)?;
+        let res = self.worker.js_runtime.execute_script("ext:<anon>", code)?;
 
-        self.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
-        deno_core::scope!(scope, &mut self.js_runtime);
+        deno_core::scope!(scope, self.worker.js_runtime);
         let local = v8::Local::new(scope, res);
 
         // Deserialize a `v8` object into a Rust type using `serde_v8`,
@@ -700,11 +657,11 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
 
     async fn execute_script_to_string(&mut self, script: &str) -> Result<String, AnyError> {
         let code = script.to_string();
-        let res = self.js_runtime.execute_script("ext:<anon>", code)?;
+        let res = self.worker.js_runtime.execute_script("ext:<anon>", code)?;
 
-        self.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
-        deno_core::scope!(scope, &mut self.js_runtime);
+        deno_core::scope!(scope, self.worker.js_runtime);
         let local = v8::Local::new(scope, res);
 
         // Deserialize a `v8` object into a Rust type using `serde_v8`,
@@ -819,8 +776,8 @@ vegaLiteToSvg_{ver_name:?}(
             ver_name = vl_opts.vl_version,
             show_warnings = vl_opts.show_warnings,
         );
-        self.js_runtime.execute_script("ext:<anon>", code)?;
-        self.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
@@ -881,8 +838,8 @@ vegaLiteToScenegraph_{ver_name:?}(
             ver_name = vl_opts.vl_version,
             show_warnings = vl_opts.show_warnings,
         );
-        self.js_runtime.execute_script("ext:<anon>", code)?;
-        self.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
         let value = self.execute_script_to_json("sg").await?;
         Ok(value)
@@ -929,8 +886,8 @@ vegaToSvg(
 }})
 "#
         );
-        self.js_runtime.execute_script("ext:<anon>", code)?;
-        self.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
@@ -976,8 +933,8 @@ vegaToScenegraph(
 }})
 "#
         );
-        self.js_runtime.execute_script("ext:<anon>", code)?;
-        self.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
         let value = self.execute_script_to_json("sg").await?;
         Ok(value)
@@ -986,8 +943,8 @@ vegaToScenegraph(
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
         let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';"
             .to_string();
-        self.js_runtime.execute_script("ext:<anon>", code)?;
-        self.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
         let value = self.execute_script_to_string("localTz").await?;
         if value == "undefined" {
@@ -1007,8 +964,8 @@ delete themes.default
 "#
         .to_string();
 
-        self.js_runtime.execute_script("ext:<anon>", code)?;
-        self.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker.js_runtime.run_event_loop(Default::default()).await?;
 
         let value = self.execute_script_to_json("themes").await?;
         Ok(value)

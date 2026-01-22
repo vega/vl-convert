@@ -3,6 +3,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod converter;
+pub mod deno_stubs;
 pub mod html;
 pub mod image_loading;
 pub mod module_loader;
@@ -10,6 +11,9 @@ pub mod text;
 
 #[macro_use]
 extern crate lazy_static;
+
+// extern crate deno_core makes it available at crate root for op2 and extension! macros
+extern crate deno_core;
 
 pub use converter::VlConverter;
 pub use deno_core::anyhow;
