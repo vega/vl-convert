@@ -20,27 +20,24 @@ anyhow = "1.0"
 assert_cmd = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 
-# Deno runtime - unified crate that handles all Web APIs and extensions
-# Using git source from denoland/deno
-# The "hmr" feature enables include_js_files_for_snapshotting and transpile so TypeScript
-# extension code can run without requiring a pre-built snapshot
-deno_runtime = { git = "https://github.com/denoland/deno", features = ["hmr"] }
-# deno_core needed explicitly for op2 and extension! macros which look for deno_core at crate root
-# Must use the same version (0.380.0) as deno_runtime's dependency
-deno_core = "0.380.0"
-# deno_error for JsErrorBox - must match version used by deno_runtime
-deno_error = "0.7.1"
-# For stub type implementations
-node_resolver = { git = "https://github.com/denoland/deno" }
+# Deno dependencies
+#
+# We use git dependencies because:
+# 1. deno_runtime 0.235.0 on crates.io depends on fqdn ^0.4.6, which has been yanked
+# 2. node_resolver 0.65.0 on crates.io requires sys_traits =0.1.17, but deno_runtime
+#    git requires sys_traits 0.1.22 - they must come from the same commit to be compatible
+deno_runtime = { git = "https://github.com/denoland/deno", rev = "7046dc85c45ab809267d715dc72250ead11705a7", features = ["hmr"] }
+node_resolver = { git = "https://github.com/denoland/deno", rev = "7046dc85c45ab809267d715dc72250ead11705a7" }
+
+# Crates.io dependencies - versions must match deno_runtime's expectations
+deno_core = "0.380.0"          # For op2 and extension! macros
+deno_error = "0.7.1"           # For JsErrorBox
+deno_graph = { version = "=0.106.0", default-features = false, features = ["swc"] }  # Module graph for bundler
+deno_ast = { version = "=0.52.0", features = ["bundler", "codegen", "transforms", "transpiling"] }  # SWC bundler
+
+# Other Deno ecosystem crates
 sys_traits = { version = "0.1.22", features = ["real", "libc"] }
 deno_semver = "0.9.1"
-# deno_graph for module graph building (used by bundler)
-# Version must match deno_runtime's dependency
-# "swc" feature enables built-in module analyzer for parsing imports
-deno_graph = { version = "=0.106.0", default-features = false, features = ["swc"] }
-# deno_ast for transpilation and SWC bundler integration (used by bundler)
-# Version must match deno_runtime's dependency
-deno_ast = { version = "=0.52.0", features = ["bundler", "codegen", "transforms", "transpiling"] }
 
 dircpy = "0.3"
 dssim = "3.2.4"
@@ -72,5 +69,3 @@ tokio = { version = "1.36", features = ["macros", "rt-multi-thread"] }
 ttf-parser = "0.25.1"
 usvg = "0.45.1"
 zip-extract = "0.4.0"
-
-# No patches needed - using git deps directly from denoland/deno
