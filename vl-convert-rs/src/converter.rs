@@ -447,10 +447,11 @@ function vegaToView(vgSpec, allowedBaseUrls, errors) {
 
     if (allowedBaseUrls != null) {
         loader.http = async (uri, options) => {
-            const parsedUri = new URL(uri);
+            // Note: We use uri.startsWith() directly instead of new URL(uri).href
+            // because the URL constructor is not available in deno_core without deno_url extension
             if (
                 allowedBaseUrls.every(
-                    (allowedUrl) => !parsedUri.href.startsWith(allowedUrl),
+                    (allowedUrl) => !uri.startsWith(allowedUrl),
                 )
             ) {
                 errors.push(`External data url not allowed: ${uri}`);
