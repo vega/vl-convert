@@ -20,6 +20,9 @@ deno_error = { workspace = true }
 node_resolver = { workspace = true }
 sys_traits = { workspace = true }
 deno_semver = { workspace = true }
+# For bundler module
+deno_graph = { workspace = true }
+deno_ast = { workspace = true }
 serde = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }

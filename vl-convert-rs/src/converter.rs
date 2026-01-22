@@ -10,8 +10,8 @@ use deno_core::op2;
 use deno_core::{serde_v8, v8, ModuleSpecifier};
 use deno_error::JsErrorBox;
 use deno_runtime::deno_fs::RealFs;
-use deno_runtime::deno_web::{BlobStore, InMemoryBroadcastChannel};
 use deno_runtime::deno_permissions::{PermissionsContainer, RuntimePermissionDescriptorParser};
+use deno_runtime::deno_web::{BlobStore, InMemoryBroadcastChannel};
 use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
 use deno_runtime::FeatureChecker;
 use std::collections::hash_map::Entry;
@@ -284,7 +284,9 @@ import('{vega_themes_url}').then((imported) => {{
                 vega_themes_url = vega_themes_url(),
             );
 
-            self.worker.js_runtime.execute_script("ext:<anon>", import_code)?;
+            self.worker
+                .js_runtime
+                .execute_script("ext:<anon>", import_code)?;
 
             let logger_code = r#"""
 class WarningCollector {
@@ -319,9 +321,13 @@ class WarningCollector {
             """#
             .to_string();
 
-            self.worker.js_runtime
+            self.worker
+                .js_runtime
                 .execute_script("ext:<anon>", logger_code.to_string())?;
-            self.worker.js_runtime.run_event_loop(Default::default()).await?;
+            self.worker
+                .js_runtime
+                .run_event_loop(Default::default())
+                .await?;
 
             // Override text width measurement in vega-scenegraph
             for path in IMPORT_MAP.keys() {
@@ -350,8 +356,13 @@ import('{url}').then((sg) => {{
 "#,
                         url = url_for_path(path)
                     );
-                    self.worker.js_runtime.execute_script("ext:<anon>", script_code)?;
-                    self.worker.js_runtime.run_event_loop(Default::default()).await?;
+                    self.worker
+                        .js_runtime
+                        .execute_script("ext:<anon>", script_code)?;
+                    self.worker
+                        .js_runtime
+                        .run_event_loop(Default::default())
+                        .await?;
                 }
             }
 
@@ -507,7 +518,10 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
                 "ext:<anon>",
                 deno_core::FastString::from_static(function_str),
             )?;
-            self.worker.js_runtime.run_event_loop(Default::default()).await?;
+            self.worker
+                .js_runtime
+                .run_event_loop(Default::default())
+                .await?;
 
             self.vega_initialized = true;
         }
@@ -529,9 +543,14 @@ import('{vl_url}').then((imported) => {{
                 vl_url = vl_version.to_url()
             );
 
-            self.worker.js_runtime.execute_script("ext:<anon>", import_code)?;
+            self.worker
+                .js_runtime
+                .execute_script("ext:<anon>", import_code)?;
 
-            self.worker.js_runtime.run_event_loop(Default::default()).await?;
+            self.worker
+                .js_runtime
+                .run_event_loop(Default::default())
+                .await?;
 
             // Create and initialize function string
             let function_code = format!(
@@ -568,10 +587,14 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
                 ver_name = format!("{:?}", vl_version),
             );
 
-            self.worker.js_runtime
+            self.worker
+                .js_runtime
                 .execute_script("ext:<anon>", function_code)?;
 
-            self.worker.js_runtime.run_event_loop(Default::default()).await?;
+            self.worker
+                .js_runtime
+                .run_event_loop(Default::default())
+                .await?;
 
             // Register that this Vega-Lite version has been initialized
             self.initialized_vl_versions.insert(*vl_version);
@@ -582,8 +605,8 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
     pub async fn try_new() -> Result<Self, AnyError> {
         // Install rustls crypto provider (required for TLS/HTTPS operations)
         // Using aws_lc_rs as the default provider (same as Deno)
-        let _ = deno_runtime::deno_tls::rustls::crypto::aws_lc_rs::default_provider()
-            .install_default();
+        let _ =
+            deno_runtime::deno_tls::rustls::crypto::aws_lc_rs::default_provider().install_default();
 
         let module_loader = Rc::new(VlConvertModuleLoader);
 
@@ -592,9 +615,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
             .expect("Failed to parse main module specifier");
 
         // Create permission descriptor parser using RealSys
-        let descriptor_parser = Arc::new(RuntimePermissionDescriptorParser::new(
-            VlConvertNodeSys,
-        ));
+        let descriptor_parser = Arc::new(RuntimePermissionDescriptorParser::new(VlConvertNodeSys));
 
         // Configure WorkerServiceOptions with stub types for npm resolution (not used by vl-convert)
         let services = WorkerServiceOptions::<
@@ -644,7 +665,10 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let code = script.to_string();
         let res = self.worker.js_runtime.execute_script("ext:<anon>", code)?;
 
-        self.worker.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
 
         deno_core::scope!(scope, self.worker.js_runtime);
         let local = v8::Local::new(scope, res);
@@ -659,7 +683,10 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let code = script.to_string();
         let res = self.worker.js_runtime.execute_script("ext:<anon>", code)?;
 
-        self.worker.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
 
         deno_core::scope!(scope, self.worker.js_runtime);
         let local = v8::Local::new(scope, res);
@@ -777,7 +804,10 @@ vegaLiteToSvg_{ver_name:?}(
             show_warnings = vl_opts.show_warnings,
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
-        self.worker.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
 
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
@@ -839,7 +869,10 @@ vegaLiteToScenegraph_{ver_name:?}(
             show_warnings = vl_opts.show_warnings,
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
-        self.worker.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
 
         let value = self.execute_script_to_json("sg").await?;
         Ok(value)
@@ -887,7 +920,10 @@ vegaToSvg(
 "#
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
-        self.worker.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
 
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
@@ -934,7 +970,10 @@ vegaToScenegraph(
 "#
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
-        self.worker.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
 
         let value = self.execute_script_to_json("sg").await?;
         Ok(value)
@@ -944,7 +983,10 @@ vegaToScenegraph(
         let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';"
             .to_string();
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
-        self.worker.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
 
         let value = self.execute_script_to_string("localTz").await?;
         if value == "undefined" {
@@ -965,7 +1007,10 @@ delete themes.default
         .to_string();
 
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
-        self.worker.js_runtime.run_event_loop(Default::default()).await?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
 
         let value = self.execute_script_to_json("themes").await?;
         Ok(value)
@@ -1049,8 +1094,13 @@ pub struct VlConverter {
 
 impl VlConverter {
     pub fn new() -> Self {
-        // Initialize environment logger
-        env_logger::try_init().ok();
+        // Initialize environment logger with filter to suppress noisy SWC tree-shaker spans
+        // The swc_ecma_transforms_optimization module logs tracing spans at ERROR level
+        // which are not actual errors - just instrumentation.
+        env_logger::Builder::from_env(env_logger::Env::default())
+            .filter_module("swc_ecma_transforms_optimization", log::LevelFilter::Off)
+            .try_init()
+            .ok();
 
         let (sender, mut receiver) = mpsc::channel::<VlConvertCommand>(32);
 

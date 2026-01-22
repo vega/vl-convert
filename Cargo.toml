@@ -34,6 +34,13 @@ deno_error = "0.7.1"
 node_resolver = { git = "https://github.com/denoland/deno" }
 sys_traits = { version = "0.1.22", features = ["real", "libc"] }
 deno_semver = "0.9.1"
+# deno_graph for module graph building (used by bundler)
+# Version must match deno_runtime's dependency
+# "swc" feature enables built-in module analyzer for parsing imports
+deno_graph = { version = "=0.106.0", default-features = false, features = ["swc"] }
+# deno_ast for transpilation and SWC bundler integration (used by bundler)
+# Version must match deno_runtime's dependency
+deno_ast = { version = "=0.52.0", features = ["bundler", "codegen", "transforms", "transpiling"] }
 
 dircpy = "0.3"
 dssim = "3.2.4"

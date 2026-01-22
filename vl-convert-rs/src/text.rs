@@ -1,9 +1,9 @@
 use crate::anyhow;
 use crate::anyhow::{anyhow, bail};
 use crate::image_loading::custom_string_resolver;
-use deno_error::JsErrorBox;
 use deno_core::error::AnyError;
 use deno_core::op2;
+use deno_error::JsErrorBox;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashSet;

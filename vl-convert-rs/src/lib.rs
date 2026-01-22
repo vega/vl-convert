@@ -2,6 +2,7 @@
 #![allow(clippy::uninlined_format_args)]
 #![doc = include_str!("../README.md")]
 
+pub mod bundler;
 pub mod converter;
 pub mod deno_stubs;
 pub mod html;
