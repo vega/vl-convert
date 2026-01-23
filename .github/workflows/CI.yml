@@ -503,7 +503,7 @@ jobs:
             -v $(pwd)/test-output:/test-output \
             -v $(pwd)/generate_images.py:/generate_images.py \
             -e RUST_BACKTRACE=1 \
-            python:3.11-slim \
+            python:3.11-bookworm \
             bash -c "
               # Install MS TrueType core fonts for consistent font metrics
               apt-get update &&
