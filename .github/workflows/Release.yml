@@ -7,145 +7,150 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Temporarily commented out to focus on wheel builds
-  # build-cli-linux-x86:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install latest stable Rust toolchain
-  #       uses: dtolnay/rust-toolchain@stable
-  #     - name: Install protoc
-  #       run: |
-  #         sudo apt-get update
-  #         sudo apt-get install protobuf-compiler
-  #     - name: Build vl-convert
-  #       run: |
-  #         cargo build --release -p vl-convert
-  #     - name: Move executable to bin directory
-  #       run: |
-  #         mkdir -p bin
-  #         cp target/release/vl-convert bin/
-  #         cp LICENSE bin/
-  #         cp thirdparty_* bin/
-  #         zip -r vl-convert_linux-64.zip bin/
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: vl-convert-linux-x86
-  #         path: |
-  #           vl-convert_linux-64.zip
+  build-cli-linux-x86:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install latest stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+      - name: Build vl-convert
+        run: |
+          cargo build --release -p vl-convert
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
+          zip -r vl-convert_linux-64.zip bin/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vl-convert-linux-x86
+          path: |
+            vl-convert_linux-64.zip
 
-  # build-cli-linux-aarch64:
-  #   runs-on: ubuntu-24.04-arm
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install latest stable Rust toolchain
-  #       uses: dtolnay/rust-toolchain@stable
-  #     - name: Install protoc
-  #       run: |
-  #         sudo apt-get update
-  #         sudo apt-get install protobuf-compiler
-  #     - name: Build vl-convert
-  #       run: |
-  #         cargo build --release -p vl-convert
-  #     - name: Move executable to bin directory
-  #       run: |
-  #         mkdir -p bin
-  #         cp target/release/vl-convert bin/
-  #         cp LICENSE bin/
-  #         cp thirdparty_* bin/
-  #         zip -r vl-convert_linux-aarch64.zip bin/
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: vl-convert-linux-aarch64
-  #         path: |
-  #           vl-convert_linux-aarch64.zip
+  build-cli-linux-aarch64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install latest stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+      - name: Build vl-convert
+        run: |
+          cargo build --release -p vl-convert
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
+          zip -r vl-convert_linux-aarch64.zip bin/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vl-convert-linux-aarch64
+          path: |
+            vl-convert_linux-aarch64.zip
 
-  # build-cli-win-64:
-  #   runs-on: windows-2022
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install latest stable Rust toolchain
-  #       uses: dtolnay/rust-toolchain@stable
-  #     - name: Install Protoc
-  #       uses: arduino/setup-protoc@v2
-  #       with:
-  #         repo-token: ${{ secrets.GITHUB_TOKEN }}
-  #     - name: Build vl-convert
-  #       run: |
-  #         cargo build --release -p vl-convert
-  #     - name: Move executable to bin directory
-  #       run: |
-  #         New-Item -Path "artifacts\bin" -ItemType Directory
-  #         Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
-  #         Copy-Item "LICENSE" -Destination "artifacts\bin"
-  #         Copy-Item "thirdparty_*" -Destination "artifacts\bin"
-  #     - name: zip executable
-  #       uses: papeloto/action-zip@v1
-  #       with:
-  #         files: artifacts/
-  #         dest: vl-convert_win-64.zip
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: vl-convert-win-64
-  #         path: |
-  #           vl-convert_win-64.zip
+  build-cli-win-64:
+    runs-on: windows-2022
+    env:
+      RUST_MIN_STACK: 8388608
+    steps:
+      - name: Enable long paths
+        run: git config --system core.longpaths true
+      - uses: actions/checkout@v4
+      - name: Install latest stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install NASM
+        uses: ilammy/setup-nasm@v1
+      - name: Build vl-convert
+        run: |
+          cargo build --release -p vl-convert
+      - name: Move executable to bin directory
+        run: |
+          New-Item -Path "artifacts\bin" -ItemType Directory
+          Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
+          Copy-Item "LICENSE" -Destination "artifacts\bin"
+          Copy-Item "thirdparty_*" -Destination "artifacts\bin"
+      - name: zip executable
+        uses: papeloto/action-zip@v1
+        with:
+          files: artifacts/
+          dest: vl-convert_win-64.zip
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vl-convert-win-64
+          path: |
+            vl-convert_win-64.zip
 
-  # build-cli-osx-64:
-  #   runs-on: macos-15-intel
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install latest stable Rust toolchain
-  #       uses: dtolnay/rust-toolchain@stable
-  #     - name: Install Protoc
-  #       uses: arduino/setup-protoc@v2
-  #       with:
-  #         repo-token: ${{ secrets.GITHUB_TOKEN }}
-  #     - name: Build vl-convert
-  #       run: |
-  #         cargo build --release -p vl-convert
-  #     - name: Move executable to bin directory
-  #       run: |
-  #         mkdir -p bin
-  #         cp target/release/vl-convert bin/
-  #         cp LICENSE bin/
-  #         cp thirdparty_* bin/
-  #         zip -r vl-convert_osx-64.zip bin/
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: vl-convert-osx-64
-  #         path: |
-  #           vl-convert_osx-64.zip
+  build-cli-osx-64:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install latest stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build vl-convert
+        run: |
+          cargo build --release -p vl-convert
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
+          zip -r vl-convert_osx-64.zip bin/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vl-convert-osx-64
+          path: |
+            vl-convert_osx-64.zip
 
-  # build-cli-osx-arm64:
-  #   runs-on: macos-14
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install latest stable Rust toolchain
-  #       uses: dtolnay/rust-toolchain@stable
-  #     - name: Install Protoc
-  #       uses: arduino/setup-protoc@v2
-  #       with:
-  #         repo-token: ${{ secrets.GITHUB_TOKEN }}
-  #     - name: Build vl-convert
-  #       run: |
-  #         cargo build --release -p vl-convert
-  #     - name: Move executable to bin directory
-  #       run: |
-  #         mkdir -p bin
-  #         cp target/release/vl-convert bin/
-  #         cp LICENSE bin/
-  #         cp thirdparty_* bin/
-  #         zip -r vl-convert_osx-arm64.zip bin/
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: vl-convert-osx-arm64
-  #         path: |
-  #           vl-convert_osx-arm64.zip
+  build-cli-osx-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install latest stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build vl-convert
+        run: |
+          cargo build --release -p vl-convert
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
+          zip -r vl-convert_osx-arm64.zip bin/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vl-convert-osx-arm64
+          path: |
+            vl-convert_osx-arm64.zip
 
   build-wheels-linux-x86_64:
     runs-on: ubuntu-latest
