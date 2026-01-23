@@ -95,36 +95,28 @@ These settings cause the TLS/PIC issues described above when linking into a Pyth
 
 ## Pre-built V8 Workflow
 
-To avoid 1+ hour V8 builds on every CI run, we maintain pre-built V8 binaries:
+To avoid 1+ hour V8 builds on every CI run, we maintain pre-built V8 binaries in GitHub Releases (tagged `v8-{version}`).
 
-1. **`build-v8.yml`**: Manually triggered workflow that builds V8 from source and uploads `librusty_v8-{platform}.a` to GitHub Releases (tagged `v8-{version}`)
+### How It Works
 
-2. **`Release.yml`**: Downloads pre-built V8 from releases if available, falls back to from-source build otherwise
+V8 build jobs are part of `CI.yml` and run on every PR:
 
-The V8 version is determined from `Cargo.lock` (the `v8` crate version).
+1. **Check for existing build**: The job checks if `librusty_v8-{platform}.a` already exists in GitHub Releases for the current V8 version (determined from `Cargo.lock`)
+2. **Skip if exists**: If the artifact exists, the job completes in seconds
+3. **Build if needed**: If no artifact exists (e.g., V8 version changed), the job builds V8 from source (~1 hour) and uploads to releases
 
-### Triggering a V8 Build
+Linux test jobs depend on these V8 build jobs, ensuring the pre-built binary is available before tests run.
 
-When updating the Deno/V8 version:
+### Updating Deno/V8
 
-1. Update dependencies in `Cargo.toml`
-2. Run `cargo update` to update `Cargo.lock`
-3. Merge to `main` - the workflow runs automatically and checks if a pre-built V8 exists
-4. If no pre-built exists for the new version, V8 builds from source (~1 hour) and uploads to releases
+When a PR updates the Deno version and changes the V8 version in `Cargo.lock`:
 
-To trigger manually (e.g., to force a rebuild):
+1. The V8 build jobs detect no pre-built artifact exists for the new version
+2. V8 builds from source automatically (~1 hour)
+3. The artifact is uploaded to GitHub Releases
+4. Subsequent CI runs (and the Release workflow) use the pre-built artifact
 
-**Via CLI:**
-```bash
-gh workflow run build-v8.yml
-gh workflow run build-v8.yml -f force_rebuild=true  # rebuild even if release exists
-```
-
-**Via Web UI:**
-1. Go to Actions → "Build V8" workflow
-2. Click "Run workflow" dropdown
-3. Optionally check "Force rebuild even if release exists"
-4. Click "Run workflow"
+No manual intervention is required—the PR that updates Deno will trigger the V8 builds if the V8 version changed.
 
 ## References
 
