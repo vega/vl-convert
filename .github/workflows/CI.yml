@@ -475,11 +475,11 @@ jobs:
         run: |
           docker run --rm \
             -v $(pwd)/dist:/dist \
-            -v $(pwd)/vl-convert-python:/vl-convert-python \
+            -v $(pwd):/workspace \
             -e RUST_BACKTRACE=1 \
             python:3.11-slim \
             bash -c "
               pip install /dist/*aarch64*.whl pytest scikit-image pypdfium2 &&
-              cd /vl-convert-python &&
+              cd /workspace/vl-convert-python &&
               pytest
             "
