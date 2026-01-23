@@ -640,20 +640,12 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
             bundle_provider: None,
         };
 
-        // Configure WorkerOptions with our custom extension and optional snapshot
-        // When using a snapshot, the ESM is pre-compiled in the snapshot but ops still
-        // need to be registered. We use init() in both cases but with the snapshot
-        // the ESM won't be re-evaluated since it's already in the snapshot.
-        #[cfg(feature = "snapshot")]
+        // Configure WorkerOptions with our custom extension and V8 snapshot.
+        // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
+        // This is required for container compatibility (manylinux, slim images).
         let options = WorkerOptions {
             extensions: vec![vl_convert_runtime::init()],
             startup_snapshot: Some(crate::VL_CONVERT_SNAPSHOT),
-            ..Default::default()
-        };
-
-        #[cfg(not(feature = "snapshot"))]
-        let options = WorkerOptions {
-            extensions: vec![vl_convert_runtime::init()],
             ..Default::default()
         };
 

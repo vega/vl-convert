@@ -9,14 +9,6 @@ repository = "https://github.com/jonmmease/vl-convert"
 description = "Library for converting Vega-Lite visualization specifications to Vega specifications"
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
-[features]
-# The snapshot feature enables build-time V8 snapshot generation.
-# This creates a snapshot containing all deno_runtime extensions plus our
-# vl_convert_runtime extension, eliminating runtime JavaScript compilation
-# and improving startup performance, especially in minimal container environments.
-default = ["snapshot"]
-snapshot = []
-
 [dependencies]
 # Deno runtime - provides MainWorker with all Web APIs
 deno_runtime = { workspace = true }
@@ -61,5 +53,6 @@ deno_core = { workspace = true }
 deno_error = { workspace = true }
 # Need "snapshot" feature to access deno_runtime::snapshot::create_runtime_snapshot
 deno_runtime = { workspace = true, features = ["snapshot"] }
+# Note: V8 snapshot generation is always enabled - it's required for container compatibility
 
 # Note: Deno 2.5+ uses libffi-sys 3.x which should not require the macOS system libffi workaround.

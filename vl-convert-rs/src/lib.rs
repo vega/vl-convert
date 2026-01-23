@@ -21,8 +21,8 @@ pub use deno_core::anyhow;
 pub use module_loader::import_map::VlVersion;
 pub use serde_json;
 
-/// V8 snapshot containing the pre-compiled vl_convert_runtime extension.
-/// This is generated at build time when the `snapshot` feature is enabled.
-#[cfg(feature = "snapshot")]
+/// V8 snapshot containing the pre-compiled deno_runtime extensions plus our
+/// vl_convert_runtime extension. Generated at build time for container
+/// compatibility and faster startup.
 pub static VL_CONVERT_SNAPSHOT: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/VL_CONVERT_SNAPSHOT.bin"));
