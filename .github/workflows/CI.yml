@@ -208,17 +208,21 @@ jobs:
           else
             echo "downloaded=false" >> $GITHUB_OUTPUT
           fi
-      - name: Install Python dependencies
+      - name: Create virtualenv and install dependencies
         run: |
+          python -m venv .venv
+          source .venv/bin/activate
           pip install maturin pytest scikit-image pypdfium2
       - name: Build and install package
         env:
           RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
         run: |
+          source .venv/bin/activate
           cd vl-convert-python
           maturin develop --release
       - name: Run tests
         run: |
+          source .venv/bin/activate
           cd vl-convert-python
           pytest
 

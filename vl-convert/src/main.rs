@@ -1,7 +1,7 @@
 #![allow(clippy::uninlined_format_args)]
 #![doc = include_str!("../README.md")]
 
-use clap::{arg, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
