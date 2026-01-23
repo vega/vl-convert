@@ -471,6 +471,29 @@ jobs:
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
             unzip protoc-24.0-linux-aarch_64.zip -d /usr/
 
+      - name: Create image generation script
+        run: |
+          cat > generate_images.py << 'PYSCRIPT'
+          import vl_convert as vlc
+          from pathlib import Path
+
+          output_dir = Path("/test-output")
+          specs_dir = Path("/workspace/vl-convert-rs/tests/vl-specs")
+
+          vlc.register_font_directory(str(Path("/workspace/vl-convert-rs/tests/fonts")))
+
+          for name in ["circle_binned", "stacked_bar_h", "seattle-weather"]:
+              spec_path = specs_dir / f"{name}.vl.json"
+              if spec_path.exists():
+                  with open(spec_path) as f:
+                      spec = f.read()
+                  svg = vlc.vegalite_to_svg(spec, vl_version="v5_8")
+                  (output_dir / f"{name}.svg").write_text(svg)
+                  png = vlc.vegalite_to_png(spec, vl_version="v5_8")
+                  (output_dir / f"{name}.png").write_bytes(png)
+                  print(f"Generated {name}.svg and {name}.png")
+          PYSCRIPT
+
       - name: Install wheel and run tests
         run: |
           mkdir -p test-output
@@ -478,43 +501,13 @@ jobs:
             -v $(pwd)/dist:/dist \
             -v $(pwd):/workspace \
             -v $(pwd)/test-output:/test-output \
+            -v $(pwd)/generate_images.py:/generate_images.py \
             -e RUST_BACKTRACE=1 \
             python:3.11-slim \
             bash -c "
               pip install /dist/*aarch64*.whl pytest scikit-image pypdfium2 &&
               cd /workspace/vl-convert-python &&
-
-              # Generate sample images for visual inspection before running tests
-              python -c '
-import vl_convert as vlc
-import json
-from pathlib import Path
-
-output_dir = Path(\"/test-output\")
-specs_dir = Path(\"/workspace/vl-convert-rs/tests/vl-specs\")
-
-# Register fonts
-vlc.register_font_directory(str(Path(\"/workspace/vl-convert-rs/tests/fonts\")))
-
-# Generate images for key test specs
-for name in [\"circle_binned\", \"stacked_bar_h\", \"seattle-weather\"]:
-    spec_path = specs_dir / f\"{name}.vl.json\"
-    if spec_path.exists():
-        with open(spec_path) as f:
-            spec = f.read()
-
-        # Generate SVG
-        svg = vlc.vegalite_to_svg(spec, vl_version=\"v5_8\")
-        (output_dir / f\"{name}.svg\").write_text(svg)
-
-        # Generate PNG
-        png = vlc.vegalite_to_png(spec, vl_version=\"v5_8\")
-        (output_dir / f\"{name}.png\").write_bytes(png)
-
-        print(f\"Generated {name}.svg and {name}.png\")
-' &&
-
-              # Run actual tests (may fail on image comparison)
+              python /generate_images.py &&
               pytest -v || true
             "
 
