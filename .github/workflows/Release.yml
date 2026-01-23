@@ -194,7 +194,7 @@ jobs:
 
       - name: Test wheel
         run: |
-          docker run --rm -v $(pwd)/dist:/dist python:3.11-slim \
+          docker run --rm -v $(pwd)/dist:/dist -e RUST_BACKTRACE=1 python:3.11-slim \
             bash -c "pip install /dist/*x86_64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
 
       - name: Upload wheels
@@ -250,7 +250,7 @@ jobs:
 
       - name: Test wheel
         run: |
-          docker run --rm -v $(pwd)/dist:/dist python:3.11-slim \
+          docker run --rm -v $(pwd)/dist:/dist -e RUST_BACKTRACE=1 python:3.11-slim \
             bash -c "pip install /dist/*aarch64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
 
       - name: Upload wheels
