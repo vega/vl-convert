@@ -194,8 +194,8 @@ jobs:
 
       - name: Test wheel
         run: |
-          docker run --rm -v $(pwd)/dist:/dist quay.io/pypa/manylinux_2_28_x86_64 \
-            bash -c "/opt/python/cp311-cp311/bin/pip install /dist/*.whl && /opt/python/cp311-cp311/bin/python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
+          docker run --rm -v $(pwd)/dist:/dist python:3.11-slim \
+            bash -c "pip install /dist/*x86_64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -250,8 +250,8 @@ jobs:
 
       - name: Test wheel
         run: |
-          docker run --rm -v $(pwd)/dist:/dist quay.io/pypa/manylinux_2_28_aarch64 \
-            bash -c "/opt/python/cp311-cp311/bin/pip install /dist/*.whl && /opt/python/cp311-cp311/bin/python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
+          docker run --rm -v $(pwd)/dist:/dist python:3.11-slim \
+            bash -c "pip install /dist/*aarch64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
