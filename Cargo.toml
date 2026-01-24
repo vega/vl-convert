@@ -5,7 +5,8 @@ members = [
     "vl-convert-rs",
     "vl-convert",
     "vl-convert-python",
-    "vl-convert-vendor"
+    "vl-convert-vendor",
+    "vl-convert-canvas2d"
 ]
 
 [profile.release]

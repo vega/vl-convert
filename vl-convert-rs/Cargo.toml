@@ -10,6 +10,8 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
+vl-convert-canvas2d = { path = "../vl-convert-canvas2d" }
+
 deno_runtime = { workspace = true }
 deno_core = { workspace = true }
 deno_error = { workspace = true }
