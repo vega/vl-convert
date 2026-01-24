@@ -43,6 +43,8 @@ tokio = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 lazy_static = { workspace = true }
+base64 = "0.22.1"
+escape8259 = "0.5.3"
 
 [dev-dependencies]
 rstest = { workspace = true }
