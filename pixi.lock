@@ -70,6 +70,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/debugpy-1.8.5-py311hfdbb021_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/decorator-5.1.1-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/defusedxml-0.7.1-pyhd8ed1ab_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/deno-2.3.4-hbf66b88_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/entrypoints-0.4-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.2.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.1.0-pyhd8ed1ab_0.conda
@@ -415,6 +416,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/debugpy-1.8.5-py311hd89902b_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/decorator-5.1.1-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/defusedxml-0.7.1-pyhd8ed1ab_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/deno-2.3.4-hf23d6f5_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/entrypoints-0.4-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.2.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.1.0-pyhd8ed1ab_0.conda
@@ -739,6 +741,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/debugpy-1.8.5-py311h3f08180_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/decorator-5.1.1-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/defusedxml-0.7.1-pyhd8ed1ab_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/deno-2.3.4-hfb52844_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/entrypoints-0.4-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.2.0-pyhd8ed1ab_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.1.0-pyhd8ed1ab_0.conda
@@ -855,7 +858,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libxcb-1.15-hf346824_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libxml2-2.12.7-ha661575_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libzip-1.10.1-ha0bc3c6_3.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libzlib-1.2.13-h53f4e23_5.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libzlib-1.3.1-h8359307_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/libzopfli-1.0.3-h9f76cd9_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/llvm-openmp-18.1.8-hde57baf_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/lz4-c-1.9.4-hb7217d7_0.conda
@@ -985,7 +988,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zeromq-4.3.5-hcc0f68c_4.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zfp-1.0.1-ha84d530_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-3.20.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.2.13-h53f4e23_5.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.1-h8359307_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.0.7-h1a8c8d9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstandard-0.23.0-py311ha60cc69_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.6-hb46c0d2_0.conda
@@ -1051,6 +1054,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/win-64/debugpy-1.8.5-py311hda3d55a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/decorator-5.1.1-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/defusedxml-0.7.1-pyhd8ed1ab_0.tar.bz2
+      - conda: https://conda.anaconda.org/conda-forge/win-64/deno-2.3.4-hf25ef54_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/entrypoints-0.4-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/exceptiongroup-1.2.2-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/executing-2.1.0-pyhd8ed1ab_0.conda
@@ -3593,6 +3597,58 @@ packages:
   - pkg:pypi/defusedxml?source=hash-mapping
   size: 24062
   timestamp: 1615232388757
+- conda: https://conda.anaconda.org/conda-forge/linux-64/deno-2.3.4-hbf66b88_0.conda
+  sha256: 0eeb404964f43181c29f08c42b17253f06c00012c5f6fcb41f51664f9d39026a
+  md5: 75146d6c8da1e8edf779cc2c620baaec
+  depends:
+  - __glibc >=2.28,<3.0.a0
+  - libgcc >=12
+  - libzlib >=1.3.1,<2.0a0
+  constrains:
+  - __glibc >=2.17
+  license: MIT
+  license_family: MIT
+  purls: []
+  size: 72681764
+  timestamp: 1748623038571
+- conda: https://conda.anaconda.org/conda-forge/osx-64/deno-2.3.4-hf23d6f5_0.conda
+  sha256: 4a08a9a160c13da418f59293a749e41cc5dee6a794a70b99f0d853b3cf93a4e1
+  md5: 31d9c2312a61be846f0555f766478e50
+  depends:
+  - __osx >=11.0
+  - libzlib >=1.3.1,<2.0a0
+  constrains:
+  - __osx >=10.13
+  license: MIT
+  license_family: MIT
+  purls: []
+  size: 40534213
+  timestamp: 1748622405389
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/deno-2.3.4-hfb52844_0.conda
+  sha256: 3bbb98617ff8ff75f39b64ff755aeae4be08cf0ef42600498bf4567778832cbe
+  md5: c3f5afe7b3aa4a8ac0c86c194297e6e9
+  depends:
+  - libzlib >=1.3.1,<2.0a0
+  constrains:
+  - __osx >=11.0
+  license: MIT
+  license_family: MIT
+  purls: []
+  size: 30551510
+  timestamp: 1748620228357
+- conda: https://conda.anaconda.org/conda-forge/win-64/deno-2.3.4-hf25ef54_0.conda
+  sha256: 9739f1d2f86a9e82d45983ea5b74af8a9b8ac24b53648bf61c4b4bc1d7d84f0e
+  md5: ba1e17f3475bcafbe5fc00d7ffc65f26
+  depends:
+  - libzlib >=1.3.1,<2.0a0
+  - ucrt >=10.0.20348.0
+  - vc >=14.2,<15
+  - vc14_runtime >=14.29.30139
+  license: MIT
+  license_family: MIT
+  purls: []
+  size: 40877841
+  timestamp: 1748623519390
 - conda: https://conda.anaconda.org/conda-forge/noarch/entrypoints-0.4-pyhd8ed1ab_0.tar.bz2
   sha256: 2ec4a0900a4a9f42615fc04d0fb3286b796abe56590e8e042f6ec25e102dd5af
   md5: 3cf04868fee0a029769bd41f4b2fbf2d
@@ -9183,16 +9239,18 @@ packages:
   purls: []
   size: 57372
   timestamp: 1716874211519
-- conda: https://conda.anaconda.org/conda-forge/osx-arm64/libzlib-1.2.13-h53f4e23_5.conda
-  sha256: ab1c8aefa2d54322a63aaeeefe9cf877411851738616c4068e0dccc66b9c758a
-  md5: 1a47f5236db2e06a320ffa0392f81bd8
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/libzlib-1.3.1-h8359307_2.conda
+  sha256: ce34669eadaba351cd54910743e6a2261b67009624dbc7daeeafdef93616711b
+  md5: 369964e85dc26bfe78f41399b366c435
+  depends:
+  - __osx >=11.0
   constrains:
-  - zlib 1.2.13 *_5
+  - zlib 1.3.1 *_2
   license: Zlib
   license_family: Other
   purls: []
-  size: 48102
-  timestamp: 1686575426584
+  size: 46438
+  timestamp: 1727963202283
 - conda: https://conda.anaconda.org/conda-forge/win-64/libzlib-1.3.1-h2466b09_1.conda
   sha256: b13846a54a15243e15f96fec06b526d8155adc6a1ac2b6ed47a88f6a71a94b68
   md5: d4483ca8afc57ddf1f6dded53b36c17f
@@ -13826,16 +13884,17 @@ packages:
   purls: []
   size: 88782
   timestamp: 1716874245467
-- conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.2.13-h53f4e23_5.conda
-  sha256: de0ee1e24aa6867058d3b852a15c8d7f49f262f5828772700c647186d4a96bbe
-  md5: a08383f223b10b71492d27566fafbf6c
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.1-h8359307_2.conda
+  sha256: 58f8860756680a4831c1bf4f294e2354d187f2e999791d53b1941834c4b37430
+  md5: e3170d898ca6cb48f1bb567afb92f775
   depends:
-  - libzlib 1.2.13 h53f4e23_5
+  - __osx >=11.0
+  - libzlib 1.3.1 h8359307_2
   license: Zlib
   license_family: Other
   purls: []
-  size: 79577
-  timestamp: 1686575471024
+  size: 77606
+  timestamp: 1727963209370
 - conda: https://conda.anaconda.org/conda-forge/win-64/zlib-1.3.1-h2466b09_1.conda
   sha256: 76409556e6c7cb91991cd94d7fc853c9272c2872bd7e3573ff35eb33d6fca5be
   md5: f8e0a35bf6df768ad87ed7bbbc36ab04
