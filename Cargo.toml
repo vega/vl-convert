@@ -20,17 +20,11 @@ anyhow = "1.0"
 assert_cmd = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 
-# Deno dependencies
-#
-# We use git dependencies because:
-# 1. deno_runtime 0.235.0 on crates.io depends on fqdn ^0.4.6, which has been yanked
-# 2. node_resolver 0.65.0 on crates.io requires sys_traits =0.1.17, but deno_runtime
-#    git requires sys_traits 0.1.22 - they must come from the same commit to be compatible
-deno_runtime = { git = "https://github.com/denoland/deno", rev = "7046dc85c45ab809267d715dc72250ead11705a7", features = ["hmr"] }
-node_resolver = { git = "https://github.com/denoland/deno", rev = "7046dc85c45ab809267d715dc72250ead11705a7" }
-
-# Crates.io dependencies - versions must match deno_runtime's expectations
-deno_core = "0.380.0"          # For op2 and extension! macros
+# Deno dependencies (from crates.io)
+# deno_runtime 0.236.0 includes the fqdn 0.5 fix (previously yanked 0.4.6)
+deno_runtime = { version = "0.236.0", features = ["hmr"] }
+node_resolver = "0.66.0"
+deno_core = "0.380.0"
 deno_error = "0.7.1"           # For JsErrorBox
 deno_graph = { version = "=0.106.0", default-features = false, features = ["swc"] }  # Module graph for bundler
 deno_ast = { version = "=0.52.0", features = ["bundler", "codegen", "transforms", "transpiling"] }  # SWC bundler
