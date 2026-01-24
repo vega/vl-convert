@@ -20,18 +20,15 @@ anyhow = "1.0"
 assert_cmd = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 
-# Deno dependencies (from crates.io)
-# deno_runtime 0.236.0 includes the fqdn 0.5 fix (previously yanked 0.4.6)
+# Deno dependencies - versions correspond to Deno v2.6.6
 deno_runtime = { version = "0.236.0", features = ["hmr"] }
 node_resolver = "0.66.0"
-deno_core = "0.380.0"
-deno_error = "0.7.1"           # For JsErrorBox
-deno_graph = { version = "=0.106.0", default-features = false, features = ["swc"] }  # Module graph for bundler
-deno_ast = { version = "=0.52.0", features = ["bundler", "codegen", "transforms", "transpiling"] }  # SWC bundler
-
-# Other Deno ecosystem crates
-sys_traits = { version = "0.1.22", features = ["real", "libc"] }
+deno_core = "0.380.1"
+deno_error = "0.7.1"
+deno_graph = { version = "=0.106.0", default-features = false, features = ["swc"] }
+deno_ast = { version = "=0.52.0", features = ["bundler", "codegen", "transforms", "transpiling"] }
 deno_semver = "0.9.1"
+sys_traits = { version = "0.1.22", features = ["real", "libc"] }
 
 dircpy = "0.3"
 dssim = "3.2.4"
