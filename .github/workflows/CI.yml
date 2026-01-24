@@ -282,6 +282,59 @@ jobs:
           RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
         run: |
           cargo test -p vl-convert -- --test-threads=1
+
+      # HTML bundle validation with Chrome headless
+      - name: Build CLI for HTML validation
+        env:
+          RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
+        run: cargo build --release -p vl-convert
+
+      - name: Generate HTML files (bundled and unbundled)
+        run: |
+          mkdir -p html-validation
+          # Generate bundled HTML
+          ./target/release/vl-convert vl2html \
+            -i vl-convert-rs/tests/vl-specs/circle_binned.vl.json \
+            -o html-validation/circle_binned_bundled.html \
+            --bundle
+          ./target/release/vl-convert vl2html \
+            -i vl-convert-rs/tests/vl-specs/stacked_bar_h.vl.json \
+            -o html-validation/stacked_bar_bundled.html \
+            --bundle
+          # Generate unbundled HTML (uses CDN)
+          ./target/release/vl-convert vl2html \
+            -i vl-convert-rs/tests/vl-specs/circle_binned.vl.json \
+            -o html-validation/circle_binned_cdn.html
+          echo "Generated HTML files:"
+          ls -la html-validation/
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Puppeteer
+        run: npm install puppeteer
+
+      - name: Validate bundled HTML files with Chrome headless
+        run: |
+          mkdir -p html-validation/screenshots
+          # Validate bundled HTML files (these should work offline)
+          node scripts/validate-html.mjs \
+            html-validation/circle_binned_bundled.html \
+            html-validation/screenshots/circle_binned_bundled.png
+          node scripts/validate-html.mjs \
+            html-validation/stacked_bar_bundled.html \
+            html-validation/screenshots/stacked_bar_bundled.png
+          echo "All bundled HTML files validated successfully"
+
+      - name: Upload HTML validation screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: html-validation-screenshots
+          path: html-validation/
+
       - name: Upload test failures
         uses: actions/upload-artifact@v4
         if: always()
