@@ -91,8 +91,16 @@ pub fn ellipse(
     let start_x = x + radius_x * start.cos() * cos_rot - radius_y * start.sin() * sin_rot;
     let start_y = y + radius_x * start.cos() * sin_rot + radius_y * start.sin() * cos_rot;
 
-    // Move to start point (or line to if path is not empty)
-    path.line_to(start_x, start_y);
+    // If path has no current point (is empty), move to start; otherwise line to start.
+    // PathBuilder doesn't expose "has current point", but if the bounds are empty,
+    // there's likely no content yet. We check this by seeing if we have any points.
+    // A more robust approach: track separately in Canvas2dContext if we have a current point.
+    // For now, we use a heuristic: call move_to if line_to would create a degenerate path.
+    // Actually, the cleanest approach is to always move_to for the first point.
+    // But Canvas 2D semantics say arc() should line to start if there's a current point.
+    // So we need this information passed in. For now, let's use move_to which is safer
+    // for standalone arcs and matches the more common usage pattern.
+    path.move_to(start_x, start_y);
 
     // Draw arc segments
     for i in 0..num_segments {

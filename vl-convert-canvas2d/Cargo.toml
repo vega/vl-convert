@@ -28,3 +28,8 @@ thiserror = "2"
 [dev-dependencies]
 # For testing
 rstest = { workspace = true }
+
+# For image comparison tests
+image = "0.25"
+pixelmatch = "0.1.0"
+tempfile = "3"
