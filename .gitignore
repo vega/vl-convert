@@ -1,6 +1,7 @@
 /.idea
 /target
 /vl-convert-rs/tests/output/
+/vl-convert-canvas2d/test_output/
 
 __pycache__/
 .pytest_cache/
