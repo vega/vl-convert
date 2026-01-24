@@ -16,6 +16,8 @@ deno_runtime = { workspace = true }
 deno_core = { workspace = true }
 # deno_error for JsErrorBox
 deno_error = { workspace = true }
+# Canvas 2D implementation
+vl-convert-canvas2d = { path = "../vl-convert-canvas2d" }
 # For stub type implementations
 node_resolver = { workspace = true }
 sys_traits = { workspace = true }
