@@ -4,10 +4,11 @@
  * checking for console errors, and taking screenshots.
  *
  * Usage: node validate-html.mjs <html-file> <output-png>
+ *
+ * Set CHROME_PATH environment variable to specify Chrome executable path.
  */
 
-import puppeteer from 'puppeteer';
-import { fileURLToPath } from 'url';
+import puppeteer from 'puppeteer-core';
 import path from 'path';
 
 const args = process.argv.slice(2);
@@ -19,11 +20,16 @@ if (args.length < 2) {
 const htmlFile = args[0];
 const outputPng = args[1];
 
+// Find Chrome executable
+const chromePath = process.env.CHROME_PATH || '/usr/bin/google-chrome-stable';
+console.log(`Using Chrome at: ${chromePath}`);
+
 const errors = [];
 
 async function main() {
     const browser = await puppeteer.launch({
         headless: true,
+        executablePath: chromePath,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 

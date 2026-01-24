@@ -314,11 +314,12 @@ jobs:
           node-version: '20'
 
       - name: Install Puppeteer
-        run: npm install puppeteer
+        run: npm install puppeteer-core
 
       - name: Validate bundled HTML files with Chrome headless
         run: |
           mkdir -p html-validation/screenshots
+          export CHROME_PATH=$(which google-chrome-stable || which chromium-browser || which chromium)
           # Validate bundled HTML files (these should work offline)
           node scripts/validate-html.mjs \
             html-validation/circle_binned_bundled.html \
