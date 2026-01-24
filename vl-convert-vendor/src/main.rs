@@ -139,12 +139,18 @@ fn main() {
     )
     .unwrap();
 
-    fs::write(importsjs_path, imports).expect("Failed to write vendor_imports.js");
+    fs::write(&importsjs_path, imports).expect("Failed to write vendor_imports.js");
 
-    // Use deno vendor to download vega-lite and dependencies to the vendor directory
+    // Create deno.json with vendor: true for Deno 2.x
+    let deno_json_path = vl_convert_rs_path.join("deno.json");
+    fs::write(&deno_json_path, r#"{ "vendor": true }"#).expect("Failed to write deno.json");
+
+    // Use deno install to download dependencies to the vendor directory (Deno 2.x approach)
+    // This replaces the deprecated `deno vendor` command
     let output = Command::new("deno")
         .current_dir(&vl_convert_rs_path)
-        .arg("vendor")
+        .arg("install")
+        .arg("--entrypoint")
         .arg("vendor_imports.js")
         .arg("--reload")
         .output();
@@ -162,15 +168,18 @@ fn main() {
             // Check if command was successful
             if !output.status.success() {
                 panic!(
-                    "Deno vendor command failed with exit code: {}",
+                    "Deno install command failed with exit code: {}",
                     output.status
                 );
             }
         }
         Err(err) => {
-            panic!("Deno vendor command failed: {}", err);
+            panic!("Deno install command failed: {}", err);
         }
     }
+
+    // Clean up temporary deno.json
+    fs::remove_file(&deno_json_path).ok();
 
     // Write import_map.rs file
     // Build versions csv
