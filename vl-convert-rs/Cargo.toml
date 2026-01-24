@@ -10,10 +10,19 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
+# Deno runtime - provides MainWorker with all Web APIs
 deno_runtime = { workspace = true }
+# deno_core needed explicitly for op2 and extension! macros
 deno_core = { workspace = true }
-deno_emit = { workspace = true }
+# deno_error for JsErrorBox
+deno_error = { workspace = true }
+# For stub type implementations
+node_resolver = { workspace = true }
+sys_traits = { workspace = true }
+deno_semver = { workspace = true }
+# For bundler module
 deno_graph = { workspace = true }
+deno_ast = { workspace = true }
 serde = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
@@ -34,21 +43,18 @@ tokio = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 lazy_static = { workspace = true }
+base64 = "0.22.1"
+escape8259 = "0.5.3"
 
 [dev-dependencies]
 rstest = { workspace = true }
 dssim = { workspace = true }
 
-# For macOS 15 "Sequoia" with Xcode 16:
-# The version of libffi-rs that is pulled in by deno_core still pulls in
-# libffi-sys 2.3.0, whose AArch64 assembly triggers "invalid CFI
-# advance_loc expression” errors with Apple’s LLVM 17 assembler.
-# Upstream fixed the CFI directives in **libffi 3.4.7** (see libffi/libffi #852)
-# and the breakage is tracked in libffi-rs #109. But we can't update this without
-# updating deno_core. Instead, we link against a system
-# libffi (≥ 3.4.x) by enabling the `system` feature below.
-# This system version is installed using pixi.
-# [oai_citation:0‡GitHub](https://github.com/libffi/libffi/issues/852)
-[target.'cfg(target_os = "macos")'.dependencies.libffi]
-version = "^3.2.0"
-features = ["system"]
+[build-dependencies]
+deno_core = { workspace = true }
+deno_error = { workspace = true }
+# Need "snapshot" feature to access deno_runtime::snapshot::create_runtime_snapshot
+deno_runtime = { workspace = true, features = ["snapshot"] }
+# Note: V8 snapshot generation is always enabled - it's required for container compatibility
+
+# Note: Deno 2.5+ uses libffi-sys 3.x which should not require the macOS system libffi workaround.

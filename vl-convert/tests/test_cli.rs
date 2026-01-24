@@ -1,3 +1,6 @@
+// Allow deprecated APIs (assert_cmd::cargo_bin is deprecated but still works)
+#![allow(deprecated)]
+
 use assert_cmd::prelude::*; // Add methods on commands
 use dssim::{Dssim, DssimImage};
 use predicates::prelude::*; // Used for writing assertions

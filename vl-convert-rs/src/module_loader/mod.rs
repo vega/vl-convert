@@ -1,18 +1,18 @@
 pub mod import_map;
 
+use crate::deno_emit::{LoadFuture, LoadOptions, Loader};
 use crate::module_loader::import_map::{
     build_format_locale_map, build_import_map, build_time_format_locale_map, JSDELIVR_URL,
     VEGA_PATH, VEGA_THEMES_PATH,
 };
 use crate::VlVersion;
 use deno_core::url::Url;
-use deno_core::{ModuleLoadResponse, ModuleSourceCode, RequestedModuleType, ResolutionKind};
-use deno_emit::{LoadFuture, LoadOptions, Loader};
-use deno_graph::source::LoadResponse;
-use deno_runtime::deno_core::anyhow::Error;
-use deno_runtime::deno_core::{
-    resolve_import, ModuleLoader, ModuleSource, ModuleSpecifier, ModuleType,
+use deno_core::{
+    resolve_import, ModuleLoadOptions, ModuleLoadReferrer, ModuleLoadResponse, ModuleLoader,
+    ModuleSource, ModuleSourceCode, ModuleSpecifier, ModuleType, ResolutionKind,
 };
+use deno_error::JsErrorBox;
+use deno_graph::source::LoadResponse;
 use regex::Regex;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -39,17 +39,17 @@ impl ModuleLoader for VlConvertModuleLoader {
         specifier: &str,
         referrer: &str,
         _kind: ResolutionKind,
-    ) -> Result<ModuleSpecifier, Error> {
-        let resolved = resolve_import(specifier, referrer).unwrap();
+    ) -> Result<ModuleSpecifier, JsErrorBox> {
+        let resolved =
+            resolve_import(specifier, referrer).map_err(|e| JsErrorBox::generic(e.to_string()))?;
         Ok(resolved)
     }
 
     fn load(
         &self,
         module_specifier: &ModuleSpecifier,
-        _maybe_referrer: Option<&ModuleSpecifier>,
-        _is_dyn_import: bool,
-        _requested_module_type: RequestedModuleType,
+        _maybe_referrer: Option<&ModuleLoadReferrer>,
+        _options: ModuleLoadOptions,
     ) -> ModuleLoadResponse {
         let module_specifier = module_specifier.clone();
         let string_specifier = module_specifier.to_string();
@@ -79,13 +79,8 @@ impl ModuleLoader for VlConvertModuleLoader {
     }
 }
 
-/// Loader implementation used by deno_emit to bundle Vega and dependencies
-///
-/// The loader has some special logic for vega-embed. When vega-embed is vendored from
-/// skypack, it has references to the latest versions of vega, vega-lite, and vega-themes that
-/// existed at the time that version was published. The bundle loader overrides the vega and
-/// vega-themes versions to match what's used in the rest of vl-convert, and it overrides the
-/// vega-lite version with a version passed to the constructor.
+/// Loader for bundling JavaScript with deno_emit.
+/// Serves vendored modules from IMPORT_MAP and handles version substitution.
 pub struct VlConvertBundleLoader {
     pub index_js: String,
     pub name_version_re: Regex,
@@ -117,8 +112,14 @@ impl VlConvertBundleLoader {
 impl Loader for VlConvertBundleLoader {
     fn load(&self, module_specifier: &ModuleSpecifier, _options: LoadOptions) -> LoadFuture {
         let module_specifier = module_specifier.clone();
-        let last_path_part = module_specifier.path().split('/').next_back().unwrap();
         let path = module_specifier.path();
+
+        // Skip source map files - return None to indicate not found
+        if path.ends_with(".map") || path.starts_with("/sm/") {
+            return Box::pin(async move { Ok(None) });
+        }
+
+        let last_path_part = path.split('/').next_back().unwrap();
         let path_no_js = path.strip_suffix(".js").unwrap_or(path).to_string();
 
         let code = if last_path_part == "vl-convert-index.js" {
@@ -173,6 +174,7 @@ impl Loader for VlConvertBundleLoader {
                 specifier: return_specifier,
                 maybe_headers: None,
                 content,
+                mtime: None,
             }))
         })
     }

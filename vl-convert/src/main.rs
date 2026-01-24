@@ -1,6 +1,7 @@
+#![allow(clippy::uninlined_format_args)]
 #![doc = include_str!("../README.md")]
 
-use clap::{arg, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use itertools::Itertools;
 use std::path::Path;
 use std::str::FromStr;
@@ -1056,10 +1057,7 @@ async fn vl_2_vg(
             write_output_string(output, &vega_str)?;
         }
         Err(err) => {
-            bail!(
-                "Failed to serialize Vega spec to JSON string: {}",
-                err.to_string()
-            )
+            bail!("Failed to serialize Vega spec to JSON string: {err}")
         }
     }
 
