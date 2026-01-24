@@ -249,10 +249,11 @@ fn main() {
                         let parts: Vec<&str> = actual_path.split('/').collect();
                         if parts.len() >= 3 {
                             let dir_name = parts[2].to_string(); // e.g., "vega@6.2.0" or "#fast-json-stable-str_a4987"
-                            packages_info
-                                .entry(name.to_string())
-                                .or_default()
-                                .push((version, dir_name, pkg_name_ver.to_string()));
+                            packages_info.entry(name.to_string()).or_default().push((
+                                version,
+                                dir_name,
+                                pkg_name_ver.to_string(),
+                            ));
                         }
                     }
                 }
