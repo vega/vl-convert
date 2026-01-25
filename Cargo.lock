@@ -9620,6 +9620,7 @@ dependencies = [
  "csscolorparser",
  "deno_core",
  "deno_error",
+ "fontdb",
  "tiny-skia",
  "vl-convert-canvas2d",
 ]
