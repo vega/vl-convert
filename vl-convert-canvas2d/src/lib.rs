@@ -33,6 +33,7 @@ pub use context::{Canvas2dContext, Canvas2dContextBuilder, DOMMatrix, DrawingSta
 pub use error::{Canvas2dError, Canvas2dResult};
 pub use gradient::{CanvasGradient, GradientStop};
 pub use path2d::Path2D;
+pub use pattern::{CanvasPattern, Repetition};
 pub use style::{
     CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
 };

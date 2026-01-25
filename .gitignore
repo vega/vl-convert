@@ -21,3 +21,4 @@ scratch/
 
 # File generated to check for
 CI.yaml
+.agent-ask-threads/

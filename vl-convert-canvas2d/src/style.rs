@@ -1,6 +1,8 @@
 //! Style types and enums for Canvas 2D operations.
 
 use crate::gradient::CanvasGradient;
+use crate::pattern::CanvasPattern;
+use std::sync::Arc;
 
 /// Fill style for Canvas 2D operations.
 #[derive(Debug, Clone)]
@@ -11,8 +13,8 @@ pub enum FillStyle {
     LinearGradient(CanvasGradient),
     /// Radial gradient fill.
     RadialGradient(CanvasGradient),
-    /// Pattern fill (not yet implemented).
-    Pattern,
+    /// Pattern fill.
+    Pattern(Arc<CanvasPattern>),
 }
 
 impl Default for FillStyle {
@@ -136,7 +138,8 @@ pub enum ImageSmoothingQuality {
 impl From<ImageSmoothingQuality> for tiny_skia::FilterQuality {
     fn from(quality: ImageSmoothingQuality) -> Self {
         match quality {
-            ImageSmoothingQuality::Low => tiny_skia::FilterQuality::Bilinear,
+            // Low uses Nearest for actual performance benefit
+            ImageSmoothingQuality::Low => tiny_skia::FilterQuality::Nearest,
             ImageSmoothingQuality::Medium => tiny_skia::FilterQuality::Bilinear,
             ImageSmoothingQuality::High => tiny_skia::FilterQuality::Bicubic,
         }

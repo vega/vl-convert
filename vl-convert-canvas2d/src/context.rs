@@ -4,11 +4,13 @@ use crate::error::{Canvas2dError, Canvas2dResult};
 use crate::font_parser::{parse_font, ParsedFont};
 use crate::gradient::{CanvasGradient, GradientType};
 use crate::path2d::Path2D;
+use crate::pattern::{CanvasPattern, Repetition};
 use crate::style::{
     CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
 };
 use crate::text::TextMetrics;
 use cosmic_text::{Attrs, Buffer, Command, Family, FontSystem, Metrics, Shaping, SwashCache};
+use std::sync::Arc;
 use tiny_skia::{Pixmap, Transform};
 
 /// Maximum canvas dimension (same as Chrome).
@@ -444,6 +446,48 @@ impl Canvas2dContext {
         }
     }
 
+    // --- Patterns ---
+
+    /// Create a pattern from RGBA pixel data.
+    ///
+    /// # Arguments
+    /// * `data` - RGBA pixel data (4 bytes per pixel, non-premultiplied)
+    /// * `width` - Image width in pixels
+    /// * `height` - Image height in pixels
+    /// * `repetition` - Repetition mode string: "repeat", "repeat-x", "repeat-y", or "no-repeat"
+    pub fn create_pattern(
+        &self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        repetition: &str,
+    ) -> Canvas2dResult<Arc<CanvasPattern>> {
+        let rep = repetition.parse::<Repetition>()?;
+        let pattern = CanvasPattern::new(data, width, height, rep)?;
+        Ok(Arc::new(pattern))
+    }
+
+    /// Create a pattern from an existing canvas (pixmap reference).
+    pub fn create_pattern_from_canvas(
+        &self,
+        pixmap: tiny_skia::PixmapRef,
+        repetition: &str,
+    ) -> Canvas2dResult<Arc<CanvasPattern>> {
+        let rep = repetition.parse::<Repetition>()?;
+        let pattern = CanvasPattern::from_pixmap_ref(pixmap, rep)?;
+        Ok(Arc::new(pattern))
+    }
+
+    /// Set the fill style to a pattern.
+    pub fn set_fill_style_pattern(&mut self, pattern: Arc<CanvasPattern>) {
+        self.state.fill_style = FillStyle::Pattern(pattern);
+    }
+
+    /// Set the stroke style to a pattern.
+    pub fn set_stroke_style_pattern(&mut self, pattern: Arc<CanvasPattern>) {
+        self.state.stroke_style = FillStyle::Pattern(pattern);
+    }
+
     // --- Font and text ---
 
     /// Set the font from a CSS font string.
@@ -479,16 +523,39 @@ impl Canvas2dContext {
 
     /// Fill text at the specified position.
     pub fn fill_text(&mut self, text: &str, x: f32, y: f32) {
-        self.render_text(text, x, y, true);
+        self.render_text_impl(text, x, y, None, true);
+    }
+
+    /// Fill text at the specified position with a maximum width.
+    ///
+    /// If the text width exceeds max_width, the text is horizontally scaled to fit.
+    /// If max_width is <= 0, NaN, or the text would be scaled below 0.1%, nothing is rendered.
+    pub fn fill_text_max_width(&mut self, text: &str, x: f32, y: f32, max_width: f32) {
+        self.render_text_impl(text, x, y, Some(max_width), true);
     }
 
     /// Stroke text at the specified position.
     pub fn stroke_text(&mut self, text: &str, x: f32, y: f32) {
-        self.render_text(text, x, y, false);
+        self.render_text_impl(text, x, y, None, false);
+    }
+
+    /// Stroke text at the specified position with a maximum width.
+    ///
+    /// If the text width exceeds max_width, the text is horizontally scaled to fit.
+    /// If max_width is <= 0, NaN, or the text would be scaled below 0.1%, nothing is rendered.
+    pub fn stroke_text_max_width(&mut self, text: &str, x: f32, y: f32, max_width: f32) {
+        self.render_text_impl(text, x, y, Some(max_width), false);
     }
 
     /// Internal text rendering using vector glyph paths (used by fillText and strokeText).
-    fn render_text(&mut self, text: &str, x: f32, y: f32, fill: bool) {
+    fn render_text_impl(&mut self, text: &str, x: f32, y: f32, max_width: Option<f32>, fill: bool) {
+        // Handle max_width edge cases: if <= 0 or NaN, don't render
+        if let Some(mw) = max_width {
+            if mw <= 0.0 || mw.is_nan() {
+                return;
+            }
+        }
+
         let font = &self.state.font;
         let metrics = Metrics::new(font.size_px, font.size_px * 1.2);
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
@@ -517,8 +584,28 @@ impl Canvas2dContext {
             text_width = text_width.max(run.line_w);
         }
 
-        // Calculate alignment offset
-        let x_offset = crate::text::calculate_text_x_offset(text_width, self.state.text_align);
+        // Calculate horizontal scale factor for maxWidth
+        let scale_x = if let Some(mw) = max_width {
+            if mw.is_infinite() || text_width <= mw {
+                // Infinity or text fits: no scaling needed
+                1.0
+            } else {
+                // Text is too wide: calculate scale factor
+                let scale = mw / text_width;
+                // Don't render if scale would be too small (< 0.1%)
+                if scale < 0.001 {
+                    return;
+                }
+                scale
+            }
+        } else {
+            1.0
+        };
+
+        // Calculate alignment offset (using scaled text width for alignment when maxWidth applies)
+        let scaled_text_width = text_width * scale_x;
+        let x_offset =
+            crate::text::calculate_text_x_offset(scaled_text_width, self.state.text_align);
 
         // Calculate baseline offset
         let y_offset = crate::text::calculate_text_y_offset(font.size_px, self.state.text_baseline);
@@ -534,11 +621,28 @@ impl Canvas2dContext {
         };
 
         // Calculate base position with alignment offsets
+        // Note: We use (x, y) as the anchor point, x_offset adjusts for alignment
         let base_x = x + x_offset;
         let base_y = y + y_offset;
 
         // Get the current transform
         let transform = self.state.transform;
+
+        // For maxWidth scaling, we need to scale around the text anchor point (x position).
+        // Build a combined transform that:
+        // 1. Translates to put the anchor at origin
+        // 2. Scales horizontally
+        // 3. Translates back
+        // 4. Applies global transform
+        let scale_transform = if scale_x != 1.0 {
+            // Scale around the x anchor point (keeping y unchanged)
+            Transform::from_translate(x, 0.0)
+                .pre_scale(scale_x, 1.0)
+                .pre_translate(-x, 0.0)
+                .post_concat(transform)
+        } else {
+            transform
+        };
 
         // Render each glyph as a vector path
         for run in buffer.layout_runs() {
@@ -571,12 +675,11 @@ impl Canvas2dContext {
                     if let Some(path) = path_builder.finish() {
                         // Create a transform that positions the glyph correctly
                         // The outline commands are already scaled to pixel size
-                        // We translate to the glyph's physical position
                         let glyph_transform = Transform::from_translate(
                             physical_glyph.x as f32,
                             physical_glyph.y as f32,
                         )
-                        .post_concat(transform);
+                        .post_concat(scale_transform);
 
                         // Fill the glyph path
                         self.pixmap.fill_path(
@@ -651,14 +754,7 @@ impl Canvas2dContext {
     ///
     /// The radii array specifies the corner radii in order:
     /// `[top-left, top-right, bottom-right, bottom-left]`
-    pub fn round_rect_radii(
-        &mut self,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        radii: [f32; 4],
-    ) {
+    pub fn round_rect_radii(&mut self, x: f32, y: f32, width: f32, height: f32, radii: [f32; 4]) {
         // Handle negative dimensions by adjusting position
         let (x, width) = if width < 0.0 {
             (x + width, -width)
@@ -811,15 +907,6 @@ impl Canvas2dContext {
         if let Some(path) = path {
             self.state.clip_path = Some(path);
         }
-    }
-
-    /// Check if a point is inside the current path.
-    /// Note: This is a simplified implementation - full implementation would need
-    /// proper point-in-polygon testing.
-    pub fn is_point_in_path(&self, _x: f32, _y: f32) -> bool {
-        // tiny_skia doesn't have built-in hit testing, so we return false as a placeholder
-        // Full implementation would require point-in-polygon algorithm
-        false
     }
 
     // --- Drawing operations ---
@@ -1168,6 +1255,130 @@ impl Canvas2dContext {
         data
     }
 
+    /// Write image data to the canvas at the specified position.
+    ///
+    /// The data must be in non-premultiplied RGBA format (standard ImageData format).
+    /// This bypasses compositing operations and writes pixels directly.
+    ///
+    /// # Arguments
+    /// * `data` - RGBA pixel data (4 bytes per pixel, non-premultiplied alpha)
+    /// * `width` - Width of the image data
+    /// * `height` - Height of the image data
+    /// * `dx` - Destination x coordinate
+    /// * `dy` - Destination y coordinate
+    pub fn put_image_data(&mut self, data: &[u8], width: u32, height: u32, dx: i32, dy: i32) {
+        self.put_image_data_dirty(
+            data,
+            width,
+            height,
+            dx,
+            dy,
+            0,
+            0,
+            width as i32,
+            height as i32,
+        );
+    }
+
+    /// Write a portion of image data to the canvas.
+    ///
+    /// The dirty rectangle specifies which portion of the source data to write.
+    /// Pixels outside the canvas bounds are silently ignored.
+    ///
+    /// # Arguments
+    /// * `data` - RGBA pixel data (4 bytes per pixel, non-premultiplied alpha)
+    /// * `width` - Width of the image data
+    /// * `height` - Height of the image data
+    /// * `dx` - Destination x coordinate
+    /// * `dy` - Destination y coordinate
+    /// * `dirty_x` - X offset into the source data
+    /// * `dirty_y` - Y offset into the source data
+    /// * `dirty_width` - Width of region to copy
+    /// * `dirty_height` - Height of region to copy
+    #[allow(clippy::too_many_arguments)]
+    pub fn put_image_data_dirty(
+        &mut self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        dx: i32,
+        dy: i32,
+        dirty_x: i32,
+        dirty_y: i32,
+        dirty_width: i32,
+        dirty_height: i32,
+    ) {
+        // Clamp dirty rect to source image bounds
+        let dirty_x = dirty_x.max(0).min(width as i32);
+        let dirty_y = dirty_y.max(0).min(height as i32);
+        let dirty_width = dirty_width.max(0).min(width as i32 - dirty_x);
+        let dirty_height = dirty_height.max(0).min(height as i32 - dirty_y);
+
+        if dirty_width <= 0 || dirty_height <= 0 {
+            return; // Nothing to draw
+        }
+
+        // Calculate destination coordinates for the dirty region
+        let dest_x = dx + dirty_x;
+        let dest_y = dy + dirty_y;
+
+        // Get mutable access to pixmap data
+        let canvas_width = self.width as i32;
+        let canvas_height = self.height as i32;
+        let pixmap_data = self.pixmap.data_mut();
+
+        for sy in 0..dirty_height {
+            let src_row = dirty_y + sy;
+            let dst_row = dest_y + sy;
+
+            // Skip if destination row is out of bounds
+            if dst_row < 0 || dst_row >= canvas_height {
+                continue;
+            }
+
+            for sx in 0..dirty_width {
+                let src_col = dirty_x + sx;
+                let dst_col = dest_x + sx;
+
+                // Skip if destination column is out of bounds
+                if dst_col < 0 || dst_col >= canvas_width {
+                    continue;
+                }
+
+                // Calculate source and destination indices
+                let src_idx = ((src_row as u32 * width + src_col as u32) * 4) as usize;
+                let dst_idx = ((dst_row as u32 * self.width + dst_col as u32) * 4) as usize;
+
+                // Read source pixel (non-premultiplied RGBA)
+                let r = data[src_idx];
+                let g = data[src_idx + 1];
+                let b = data[src_idx + 2];
+                let a = data[src_idx + 3];
+
+                // Convert to premultiplied alpha using integer math
+                // Formula: (color * alpha + 127) / 255 for proper rounding
+                let (pr, pg, pb) = if a == 255 {
+                    (r, g, b) // No conversion needed for fully opaque
+                } else if a == 0 {
+                    (0, 0, 0) // Fully transparent
+                } else {
+                    let a16 = a as u16;
+                    (
+                        ((r as u16 * a16 + 127) / 255) as u8,
+                        ((g as u16 * a16 + 127) / 255) as u8,
+                        ((b as u16 * a16 + 127) / 255) as u8,
+                    )
+                };
+
+                // Write to destination (bypasses compositing - direct pixel write)
+                pixmap_data[dst_idx] = pr;
+                pixmap_data[dst_idx + 1] = pg;
+                pixmap_data[dst_idx + 2] = pb;
+                pixmap_data[dst_idx + 3] = a;
+            }
+        }
+    }
+
     /// Export the canvas as PNG data.
     pub fn to_png(&self) -> Canvas2dResult<Vec<u8>> {
         let mut buf = Vec::new();
@@ -1240,9 +1451,14 @@ impl Canvas2dContext {
                 paint.shader = shader;
                 Some(paint)
             }
-            FillStyle::Pattern => {
-                // Pattern not implemented yet
-                None
+            FillStyle::Pattern(pattern) => {
+                let shader = pattern.create_shader(
+                    self.pixmap.width(),
+                    self.pixmap.height(),
+                    self.state.transform,
+                )?;
+                paint.shader = shader;
+                Some(paint)
             }
         }
     }

@@ -1938,3 +1938,626 @@ ctx.restore();
     };
     run_comparison_test(&test).expect("path2d_reuse comparison failed");
 }
+
+// =============================================================================
+// Image Smoothing Tests
+// =============================================================================
+
+#[test]
+fn test_image_smoothing_disabled_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "image_smoothing_disabled",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Create a small checkerboard pattern
+const patternCanvas = require('canvas').createCanvas(4, 4);
+const patternCtx = patternCanvas.getContext('2d');
+patternCtx.fillStyle = '#ff0000';
+patternCtx.fillRect(0, 0, 2, 2);
+patternCtx.fillRect(2, 2, 2, 2);
+patternCtx.fillStyle = '#0000ff';
+patternCtx.fillRect(2, 0, 2, 2);
+patternCtx.fillRect(0, 2, 2, 2);
+
+// Disable image smoothing
+ctx.imageSmoothingEnabled = false;
+
+// Scale the small pattern up - should show sharp pixels
+ctx.drawImage(patternCanvas, 0, 0, 100, 100);
+"#,
+        rust_fn: |ctx| {
+            // Create a small 4x4 checkerboard pattern
+            let mut pattern_ctx = Canvas2dContext::new(4, 4).unwrap();
+            pattern_ctx.set_fill_style("#ff0000").unwrap();
+            pattern_ctx.fill_rect(0.0, 0.0, 2.0, 2.0);
+            pattern_ctx.fill_rect(2.0, 2.0, 2.0, 2.0);
+            pattern_ctx.set_fill_style("#0000ff").unwrap();
+            pattern_ctx.fill_rect(2.0, 0.0, 2.0, 2.0);
+            pattern_ctx.fill_rect(0.0, 2.0, 2.0, 2.0);
+
+            // Disable image smoothing
+            ctx.set_image_smoothing_enabled(false);
+
+            // Scale the small pattern up - should show sharp pixels
+            ctx.draw_image_scaled(pattern_ctx.pixmap().as_ref(), 0.0, 0.0, 100.0, 100.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("image_smoothing_disabled comparison failed");
+}
+
+#[test]
+fn test_image_smoothing_quality_high_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "image_smoothing_quality_high",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Create a small gradient pattern
+const patternCanvas = require('canvas').createCanvas(10, 10);
+const patternCtx = patternCanvas.getContext('2d');
+const gradient = patternCtx.createLinearGradient(0, 0, 10, 10);
+gradient.addColorStop(0, '#ff0000');
+gradient.addColorStop(1, '#0000ff');
+patternCtx.fillStyle = gradient;
+patternCtx.fillRect(0, 0, 10, 10);
+
+// Enable high quality smoothing
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high';
+
+// Scale up
+ctx.drawImage(patternCanvas, 0, 0, 100, 100);
+"#,
+        rust_fn: |ctx| {
+            // Create a small 10x10 gradient pattern
+            let mut pattern_ctx = Canvas2dContext::new(10, 10).unwrap();
+            let mut gradient = pattern_ctx.create_linear_gradient(0.0, 0.0, 10.0, 10.0);
+            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            pattern_ctx.set_fill_style_gradient(gradient);
+            pattern_ctx.fill_rect(0.0, 0.0, 10.0, 10.0);
+
+            // Enable high quality smoothing
+            ctx.set_image_smoothing_enabled(true);
+            ctx.set_image_smoothing_quality(vl_convert_canvas2d::ImageSmoothingQuality::High);
+
+            // Scale up
+            ctx.draw_image_scaled(pattern_ctx.pixmap().as_ref(), 0.0, 0.0, 100.0, 100.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 3.0, // Higher tolerance for interpolation differences
+    };
+    run_comparison_test(&test).expect("image_smoothing_quality_high comparison failed");
+}
+
+// =============================================================================
+// putImageData Tests
+// =============================================================================
+
+#[test]
+fn test_put_image_data_basic_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "put_image_data_basic",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Create image data with a colored block
+const imageData = ctx.createImageData(50, 50);
+for (let i = 0; i < imageData.data.length; i += 4) {
+    imageData.data[i] = 255;     // R
+    imageData.data[i + 1] = 0;   // G
+    imageData.data[i + 2] = 0;   // B
+    imageData.data[i + 3] = 255; // A
+}
+
+// Put it at offset
+ctx.putImageData(imageData, 25, 25);
+"#,
+        rust_fn: |ctx| {
+            // Create image data with a red block (non-premultiplied RGBA)
+            let mut data = vec![0u8; 50 * 50 * 4];
+            for i in (0..data.len()).step_by(4) {
+                data[i] = 255; // R
+                data[i + 1] = 0; // G
+                data[i + 2] = 0; // B
+                data[i + 3] = 255; // A
+            }
+
+            ctx.put_image_data(&data, 50, 50, 25, 25);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("put_image_data_basic comparison failed");
+}
+
+#[test]
+fn test_put_image_data_alpha_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "put_image_data_alpha",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Draw a blue background first
+ctx.fillStyle = '#0000ff';
+ctx.fillRect(0, 0, 100, 100);
+
+// Create image data with semi-transparent red
+const imageData = ctx.createImageData(50, 50);
+for (let i = 0; i < imageData.data.length; i += 4) {
+    imageData.data[i] = 255;     // R
+    imageData.data[i + 1] = 0;   // G
+    imageData.data[i + 2] = 0;   // B
+    imageData.data[i + 3] = 128; // A (50% opacity)
+}
+
+// Put it - should NOT blend with background (putImageData bypasses compositing)
+ctx.putImageData(imageData, 25, 25);
+"#,
+        rust_fn: |ctx| {
+            // Draw a blue background first
+            ctx.set_fill_style("#0000ff").unwrap();
+            ctx.fill_rect(0.0, 0.0, 100.0, 100.0);
+
+            // Create image data with semi-transparent red
+            let mut data = vec![0u8; 50 * 50 * 4];
+            for i in (0..data.len()).step_by(4) {
+                data[i] = 255; // R
+                data[i + 1] = 0; // G
+                data[i + 2] = 0; // B
+                data[i + 3] = 128; // A (50% opacity)
+            }
+
+            // Put it - should NOT blend with background (putImageData bypasses compositing)
+            ctx.put_image_data(&data, 50, 50, 25, 25);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("put_image_data_alpha comparison failed");
+}
+
+#[test]
+fn test_put_image_data_dirty_rect_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "put_image_data_dirty_rect",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Create a larger image with different colored quadrants
+const imageData = ctx.createImageData(60, 60);
+for (let y = 0; y < 60; y++) {
+    for (let x = 0; x < 60; x++) {
+        const i = (y * 60 + x) * 4;
+        if (x < 30 && y < 30) {
+            // Top-left: Red
+            imageData.data[i] = 255;
+            imageData.data[i + 1] = 0;
+            imageData.data[i + 2] = 0;
+        } else if (x >= 30 && y < 30) {
+            // Top-right: Green
+            imageData.data[i] = 0;
+            imageData.data[i + 1] = 255;
+            imageData.data[i + 2] = 0;
+        } else if (x < 30 && y >= 30) {
+            // Bottom-left: Blue
+            imageData.data[i] = 0;
+            imageData.data[i + 1] = 0;
+            imageData.data[i + 2] = 255;
+        } else {
+            // Bottom-right: Yellow
+            imageData.data[i] = 255;
+            imageData.data[i + 1] = 255;
+            imageData.data[i + 2] = 0;
+        }
+        imageData.data[i + 3] = 255;
+    }
+}
+
+// Only put the bottom-right quadrant (yellow) using dirty rect
+ctx.putImageData(imageData, 20, 20, 30, 30, 30, 30);
+"#,
+        rust_fn: |ctx| {
+            // Create a larger image with different colored quadrants
+            let mut data = vec![0u8; 60 * 60 * 4];
+            for y in 0..60 {
+                for x in 0..60 {
+                    let i = (y * 60 + x) * 4;
+                    if x < 30 && y < 30 {
+                        // Top-left: Red
+                        data[i] = 255;
+                        data[i + 1] = 0;
+                        data[i + 2] = 0;
+                    } else if x >= 30 && y < 30 {
+                        // Top-right: Green
+                        data[i] = 0;
+                        data[i + 1] = 255;
+                        data[i + 2] = 0;
+                    } else if x < 30 && y >= 30 {
+                        // Bottom-left: Blue
+                        data[i] = 0;
+                        data[i + 1] = 0;
+                        data[i + 2] = 255;
+                    } else {
+                        // Bottom-right: Yellow
+                        data[i] = 255;
+                        data[i + 1] = 255;
+                        data[i + 2] = 0;
+                    }
+                    data[i + 3] = 255;
+                }
+            }
+
+            // Only put the bottom-right quadrant (yellow) using dirty rect
+            ctx.put_image_data_dirty(&data, 60, 60, 20, 20, 30, 30, 30, 30);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("put_image_data_dirty_rect comparison failed");
+}
+
+#[test]
+fn test_put_image_data_round_trip() {
+    // This is a unit test (not comparison) to verify alpha conversion precision
+    let mut ctx = Canvas2dContext::new(10, 10).unwrap();
+
+    // Create test data with various alpha values
+    let original_data: Vec<u8> = vec![
+        255, 0, 0, 255, // Fully opaque red
+        0, 255, 0, 128, // Semi-transparent green
+        0, 0, 255, 64, // Low-alpha blue
+        255, 255, 0, 0, // Fully transparent yellow
+        128, 128, 128, 200, // Gray with high alpha
+    ];
+
+    // Put the data (this will convert non-premultiplied to premultiplied)
+    ctx.put_image_data(&original_data, 5, 1, 0, 0);
+
+    // Get it back (this converts premultiplied back to non-premultiplied)
+    let retrieved_data = ctx.get_image_data(0, 0, 5, 1);
+
+    // Check that values are close (some precision loss is expected)
+    for i in (0..original_data.len()).step_by(4) {
+        let pixel_idx = i / 4;
+        let orig_a = original_data[i + 3];
+        let ret_a = retrieved_data[i + 3];
+
+        // Alpha should be exact
+        assert_eq!(
+            orig_a, ret_a,
+            "Alpha mismatch at pixel {}: expected {}, got {}",
+            pixel_idx, orig_a, ret_a
+        );
+
+        // For non-zero alpha, RGB values should be within tolerance
+        if orig_a > 0 {
+            for c in 0..3 {
+                let orig = original_data[i + c] as i32;
+                let ret = retrieved_data[i + c] as i32;
+                let diff = (orig - ret).abs();
+                // Allow up to 2 units of error due to rounding in conversions
+                assert!(
+                    diff <= 2,
+                    "Color mismatch at pixel {} channel {}: expected {}, got {} (diff {})",
+                    pixel_idx,
+                    c,
+                    orig,
+                    ret,
+                    diff
+                );
+            }
+        }
+    }
+}
+
+// =============================================================================
+// maxWidth Text Scaling Tests
+// =============================================================================
+
+#[test]
+fn test_fill_text_max_width_scaled() {
+    skip_if_no_node_canvas!();
+    // Test text that needs scaling - text is wider than maxWidth
+    let test = CanvasTestCase {
+        name: "fill_text_max_width_scaled",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '24px Helvetica';
+// "Hello World" is wider than 50px, so it should be horizontally scaled
+ctx.fillText('Hello World', 20, 50, 50);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("24px Helvetica").unwrap();
+            ctx.fill_text_max_width("Hello World", 20.0, 50.0, 50.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("fill_text_max_width_scaled comparison failed");
+}
+
+#[test]
+fn test_fill_text_max_width_fits() {
+    skip_if_no_node_canvas!();
+    // Test text that fits within maxWidth - no scaling needed
+    let test = CanvasTestCase {
+        name: "fill_text_max_width_fits",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '24px Helvetica';
+// "Hi" fits within 200px, so no scaling
+ctx.fillText('Hi', 20, 50, 200);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("24px Helvetica").unwrap();
+            ctx.fill_text_max_width("Hi", 20.0, 50.0, 200.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("fill_text_max_width_fits comparison failed");
+}
+
+#[test]
+fn test_fill_text_max_width_extreme_scale() {
+    skip_if_no_node_canvas!();
+    // Test extreme scaling - text compressed significantly
+    let test = CanvasTestCase {
+        name: "fill_text_max_width_extreme",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '24px Helvetica';
+// Very narrow maxWidth forces extreme horizontal compression
+ctx.fillText('ABCDEFGHIJ', 10, 50, 30);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("24px Helvetica").unwrap();
+            ctx.fill_text_max_width("ABCDEFGHIJ", 10.0, 50.0, 30.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: 5.0, // Higher tolerance for extreme scaling
+    };
+    run_comparison_test(&test).expect("fill_text_max_width_extreme comparison failed");
+}
+
+#[test]
+fn test_stroke_text_max_width_scaled() {
+    skip_if_no_node_canvas!();
+    // Test strokeText with maxWidth
+    let test = CanvasTestCase {
+        name: "stroke_text_max_width_scaled",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.strokeStyle = '#ff0000';
+ctx.lineWidth = 1;
+ctx.font = '24px Helvetica';
+ctx.strokeText('Wide Text', 20, 50, 40);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_stroke_style("#ff0000").unwrap();
+            ctx.set_line_width(1.0);
+            ctx.set_font("24px Helvetica").unwrap();
+            ctx.stroke_text_max_width("Wide Text", 20.0, 50.0, 40.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: 5.0, // Higher tolerance: strokeText renders as filled
+    };
+    run_comparison_test(&test).expect("stroke_text_max_width_scaled comparison failed");
+}
+
+#[test]
+fn test_fill_text_max_width_with_alignment() {
+    skip_if_no_node_canvas!();
+    // Test maxWidth with center alignment
+    let test = CanvasTestCase {
+        name: "fill_text_max_width_center",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '24px Helvetica';
+ctx.textAlign = 'center';
+ctx.fillText('Centered Text', 100, 50, 60);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("24px Helvetica").unwrap();
+            ctx.set_text_align(TextAlign::Center);
+            ctx.fill_text_max_width("Centered Text", 100.0, 50.0, 60.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: 4.0, // Higher tolerance for scaled+aligned text
+    };
+    run_comparison_test(&test).expect("fill_text_max_width_center comparison failed");
+}
+
+// =============================================================================
+// Pattern Tests
+// =============================================================================
+
+#[test]
+fn test_pattern_repeat() {
+    skip_if_no_node_canvas!();
+    // Test basic repeat pattern
+    let test = CanvasTestCase {
+        name: "pattern_repeat",
+        width: 200,
+        height: 200,
+        js_code: r#"
+// Create a small pattern: 20x20 checkerboard
+const patternCanvas = createCanvas(20, 20);
+const pctx = patternCanvas.getContext('2d');
+pctx.fillStyle = '#ff0000';
+pctx.fillRect(0, 0, 10, 10);
+pctx.fillRect(10, 10, 10, 10);
+pctx.fillStyle = '#0000ff';
+pctx.fillRect(10, 0, 10, 10);
+pctx.fillRect(0, 10, 10, 10);
+
+const pattern = ctx.createPattern(patternCanvas, 'repeat');
+ctx.fillStyle = pattern;
+ctx.fillRect(0, 0, 200, 200);
+"#,
+        rust_fn: |ctx| {
+            // Create a 20x20 checkerboard pattern
+            let mut pattern_ctx = vl_convert_canvas2d::Canvas2dContext::new(20, 20).unwrap();
+            pattern_ctx.set_fill_style("#ff0000").unwrap();
+            pattern_ctx.fill_rect(0.0, 0.0, 10.0, 10.0);
+            pattern_ctx.fill_rect(10.0, 10.0, 10.0, 10.0);
+            pattern_ctx.set_fill_style("#0000ff").unwrap();
+            pattern_ctx.fill_rect(10.0, 0.0, 10.0, 10.0);
+            pattern_ctx.fill_rect(0.0, 10.0, 10.0, 10.0);
+
+            let pattern = ctx
+                .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "repeat")
+                .unwrap();
+            ctx.set_fill_style_pattern(pattern);
+            ctx.fill_rect(0.0, 0.0, 200.0, 200.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("pattern_repeat comparison failed");
+}
+
+#[test]
+fn test_pattern_no_repeat() {
+    skip_if_no_node_canvas!();
+    // Test no-repeat pattern - pattern should only appear once
+    let test = CanvasTestCase {
+        name: "pattern_no_repeat",
+        width: 200,
+        height: 200,
+        js_code: r#"
+// Create a 50x50 colored square pattern
+const patternCanvas = require('canvas').createCanvas(50, 50);
+const pctx = patternCanvas.getContext('2d');
+pctx.fillStyle = '#00ff00';
+pctx.fillRect(0, 0, 50, 50);
+
+const pattern = ctx.createPattern(patternCanvas, 'no-repeat');
+ctx.fillStyle = pattern;
+ctx.fillRect(0, 0, 200, 200);
+"#,
+        rust_fn: |ctx| {
+            // Create a 50x50 green square pattern
+            let mut pattern_ctx = vl_convert_canvas2d::Canvas2dContext::new(50, 50).unwrap();
+            pattern_ctx.set_fill_style("#00ff00").unwrap();
+            pattern_ctx.fill_rect(0.0, 0.0, 50.0, 50.0);
+
+            let pattern = ctx
+                .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "no-repeat")
+                .unwrap();
+            ctx.set_fill_style_pattern(pattern);
+            ctx.fill_rect(0.0, 0.0, 200.0, 200.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("pattern_no_repeat comparison failed");
+}
+
+#[test]
+fn test_pattern_repeat_x() {
+    skip_if_no_node_canvas!();
+    // Test repeat-x pattern - pattern should repeat horizontally only
+    let test = CanvasTestCase {
+        name: "pattern_repeat_x",
+        width: 200,
+        height: 200,
+        js_code: r#"
+// Create a 30x30 gradient pattern
+const patternCanvas = require('canvas').createCanvas(30, 30);
+const pctx = patternCanvas.getContext('2d');
+const grad = pctx.createLinearGradient(0, 0, 30, 0);
+grad.addColorStop(0, '#ff0000');
+grad.addColorStop(1, '#ffff00');
+pctx.fillStyle = grad;
+pctx.fillRect(0, 0, 30, 30);
+
+const pattern = ctx.createPattern(patternCanvas, 'repeat-x');
+ctx.fillStyle = pattern;
+ctx.fillRect(0, 0, 200, 200);
+"#,
+        rust_fn: |ctx| {
+            // Create a 30x30 gradient pattern
+            let mut pattern_ctx = vl_convert_canvas2d::Canvas2dContext::new(30, 30).unwrap();
+            let mut grad = vl_convert_canvas2d::CanvasGradient::new_linear(0.0, 0.0, 30.0, 0.0);
+            grad.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            grad.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
+            pattern_ctx.set_fill_style_gradient(grad);
+            pattern_ctx.fill_rect(0.0, 0.0, 30.0, 30.0);
+
+            let pattern = ctx
+                .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "repeat-x")
+                .unwrap();
+            ctx.set_fill_style_pattern(pattern);
+            ctx.fill_rect(0.0, 0.0, 200.0, 200.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 3.0, // Slightly higher tolerance for repeat-x edge handling
+    };
+    run_comparison_test(&test).expect("pattern_repeat_x comparison failed");
+}
+
+#[test]
+fn test_pattern_repeat_y() {
+    skip_if_no_node_canvas!();
+    // Test repeat-y pattern - pattern should repeat vertically only
+    let test = CanvasTestCase {
+        name: "pattern_repeat_y",
+        width: 200,
+        height: 200,
+        js_code: r#"
+// Create a 30x30 gradient pattern
+const patternCanvas = require('canvas').createCanvas(30, 30);
+const pctx = patternCanvas.getContext('2d');
+const grad = pctx.createLinearGradient(0, 0, 0, 30);
+grad.addColorStop(0, '#0000ff');
+grad.addColorStop(1, '#00ffff');
+pctx.fillStyle = grad;
+pctx.fillRect(0, 0, 30, 30);
+
+const pattern = ctx.createPattern(patternCanvas, 'repeat-y');
+ctx.fillStyle = pattern;
+ctx.fillRect(0, 0, 200, 200);
+"#,
+        rust_fn: |ctx| {
+            // Create a 30x30 gradient pattern
+            let mut pattern_ctx = vl_convert_canvas2d::Canvas2dContext::new(30, 30).unwrap();
+            let mut grad = vl_convert_canvas2d::CanvasGradient::new_linear(0.0, 0.0, 0.0, 30.0);
+            grad.add_color_stop(0.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            grad.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 255, 255, 255));
+            pattern_ctx.set_fill_style_gradient(grad);
+            pattern_ctx.fill_rect(0.0, 0.0, 30.0, 30.0);
+
+            let pattern = ctx
+                .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "repeat-y")
+                .unwrap();
+            ctx.set_fill_style_pattern(pattern);
+            ctx.fill_rect(0.0, 0.0, 200.0, 200.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 3.0, // Slightly higher tolerance for repeat-y edge handling
+    };
+    run_comparison_test(&test).expect("pattern_repeat_y comparison failed");
+}
