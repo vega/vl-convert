@@ -602,10 +602,10 @@ impl Canvas2dContext {
             1.0
         };
 
-        // Calculate alignment offset (using scaled text width for alignment when maxWidth applies)
-        let scaled_text_width = text_width * scale_x;
-        let x_offset =
-            crate::text::calculate_text_x_offset(scaled_text_width, self.state.text_align);
+        // Calculate alignment offset using ORIGINAL text width.
+        // The scale transform (applied around x) will handle making the scaled text
+        // properly aligned - if we used scaled_text_width here, we'd double-adjust.
+        let x_offset = crate::text::calculate_text_x_offset(text_width, self.state.text_align);
 
         // Calculate baseline offset
         let y_offset = crate::text::calculate_text_y_offset(font.size_px, self.state.text_baseline);
@@ -681,14 +681,39 @@ impl Canvas2dContext {
                         )
                         .post_concat(scale_transform);
 
-                        // Fill the glyph path
-                        self.pixmap.fill_path(
-                            &path,
-                            &paint,
-                            tiny_skia::FillRule::Winding,
-                            glyph_transform,
-                            None,
-                        );
+                        if fill {
+                            // Fill the glyph path
+                            self.pixmap.fill_path(
+                                &path,
+                                &paint,
+                                tiny_skia::FillRule::Winding,
+                                glyph_transform,
+                                None,
+                            );
+                        } else {
+                            // Stroke the glyph path
+                            let stroke = tiny_skia::Stroke {
+                                width: self.state.line_width,
+                                line_cap: self.state.line_cap.into(),
+                                line_join: self.state.line_join.into(),
+                                miter_limit: self.state.miter_limit,
+                                dash: if self.state.line_dash.is_empty() {
+                                    None
+                                } else {
+                                    tiny_skia::StrokeDash::new(
+                                        self.state.line_dash.clone(),
+                                        self.state.line_dash_offset,
+                                    )
+                                },
+                            };
+                            self.pixmap.stroke_path(
+                                &path,
+                                &paint,
+                                &stroke,
+                                glyph_transform,
+                                None,
+                            );
+                        }
                     }
                 }
             }

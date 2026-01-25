@@ -2385,7 +2385,7 @@ ctx.fillText('Centered Text', 100, 50, 60);
             ctx.fill_text_max_width("Centered Text", 100.0, 50.0, 60.0);
         },
         threshold: TEXT_THRESHOLD,
-        max_diff_percent: 4.0, // Higher tolerance for scaled+aligned text
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
     };
     run_comparison_test(&test).expect("fill_text_max_width_center comparison failed");
 }
