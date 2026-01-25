@@ -15,12 +15,13 @@
 //! If node-canvas is not available, tests will be skipped.
 
 use pixelmatch::pixelmatch;
+use std::f32::consts::PI;
 use std::fs::File;
 use std::io::BufReader;
 use std::process::Command;
 use std::sync::OnceLock;
 use tempfile::TempDir;
-use vl_convert_canvas2d::Canvas2dContext;
+use vl_convert_canvas2d::{Canvas2dContext, TextAlign, TextBaseline};
 
 /// Get path to node_modules for canvas tests.
 fn get_node_modules_path() -> std::path::PathBuf {
@@ -61,11 +62,11 @@ macro_rules! skip_if_no_node_canvas {
 /// Threshold for pixel comparison (0-255). Higher values allow more difference.
 /// Text rendering typically needs higher tolerance due to font differences.
 const DEFAULT_THRESHOLD: u8 = 20;
-const TEXT_THRESHOLD: u8 = 50;
+const TEXT_THRESHOLD: u8 = 30;
 
 /// Maximum percentage of pixels that can differ before test fails.
 const MAX_DIFF_PERCENT: f64 = 1.0;
-const TEXT_MAX_DIFF_PERCENT: f64 = 5.0;
+const TEXT_MAX_DIFF_PERCENT: f64 = 2.0;
 
 /// Test case definition for canvas comparison.
 struct CanvasTestCase {
@@ -119,7 +120,9 @@ fn run_comparison_test(test: &CanvasTestCase) -> Result<(), String> {
     let mut ctx = Canvas2dContext::new(test.width, test.height)
         .map_err(|e| format!("Failed to create canvas: {}", e))?;
     (test.rust_fn)(&mut ctx);
-    let rust_png = ctx.to_png().map_err(|e| format!("Failed to export PNG: {}", e))?;
+    let rust_png = ctx
+        .to_png()
+        .map_err(|e| format!("Failed to export PNG: {}", e))?;
     std::fs::write(&rust_png_path, &rust_png)
         .map_err(|e| format!("Failed to write Rust PNG: {}", e))?;
 
@@ -829,25 +832,22 @@ ctx.fill();
     run_comparison_test(&test).expect("complex_path comparison failed");
 }
 
-// Text tests are currently placeholder implementations (rectangles instead of glyphs).
-// Skip comparison tests for now - text measurement tests in integration_tests.rs verify
-// the text metrics work correctly, which is what Vega's label transform needs.
 #[test]
-#[ignore = "Text rendering is placeholder (rectangles); proper glyph rasterization not yet implemented"]
 fn test_fill_text_comparison() {
     skip_if_no_node_canvas!();
+    // Use Helvetica explicitly to ensure both implementations use the same font
     let test = CanvasTestCase {
         name: "fill_text",
         width: 200,
         height: 100,
         js_code: r#"
 ctx.fillStyle = '#000000';
-ctx.font = '24px sans-serif';
+ctx.font = '24px Helvetica';
 ctx.fillText('Hello', 20, 50);
 "#,
         rust_fn: |ctx| {
             ctx.set_fill_style("#000000").unwrap();
-            ctx.set_font("24px sans-serif").unwrap();
+            ctx.set_font("24px Helvetica").unwrap();
             ctx.fill_text("Hello", 20.0, 50.0);
         },
         threshold: TEXT_THRESHOLD,
@@ -856,8 +856,9 @@ ctx.fillText('Hello', 20, 50);
     run_comparison_test(&test).expect("fill_text comparison failed");
 }
 
+// Note: strokeText currently renders as filled text (limitation - proper stroke
+// would require glyph outline extraction). Higher tolerance to account for this.
 #[test]
-#[ignore = "Text rendering is placeholder (rectangles); proper glyph rasterization not yet implemented"]
 fn test_stroke_text_comparison() {
     skip_if_no_node_canvas!();
     let test = CanvasTestCase {
@@ -867,17 +868,377 @@ fn test_stroke_text_comparison() {
         js_code: r#"
 ctx.strokeStyle = '#ff0000';
 ctx.lineWidth = 1;
-ctx.font = '32px sans-serif';
+ctx.font = '32px Helvetica';
 ctx.strokeText('Test', 20, 60);
 "#,
         rust_fn: |ctx| {
             ctx.set_stroke_style("#ff0000").unwrap();
             ctx.set_line_width(1.0);
-            ctx.set_font("32px sans-serif").unwrap();
+            ctx.set_font("32px Helvetica").unwrap();
             ctx.stroke_text("Test", 20.0, 60.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: 5.0, // Higher tolerance: strokeText renders as filled
+    };
+    run_comparison_test(&test).expect("stroke_text comparison failed");
+}
+
+// --- Rotated text tests ---
+
+#[test]
+fn test_text_rotate_45_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_rotate_45",
+        width: 200,
+        height: 150,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '20px Helvetica';
+ctx.translate(100, 75);
+ctx.rotate(Math.PI / 4);
+ctx.fillText('Rotated 45°', 0, 0);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("20px Helvetica").unwrap();
+            ctx.translate(100.0, 75.0);
+            ctx.rotate(PI / 4.0);
+            ctx.fill_text("Rotated 45°", 0.0, 0.0);
         },
         threshold: TEXT_THRESHOLD,
         max_diff_percent: TEXT_MAX_DIFF_PERCENT,
     };
-    run_comparison_test(&test).expect("stroke_text comparison failed");
+    run_comparison_test(&test).expect("text_rotate_45 comparison failed");
+}
+
+#[test]
+fn test_text_rotate_90_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_rotate_90",
+        width: 150,
+        height: 200,
+        js_code: r#"
+ctx.fillStyle = '#0000ff';
+ctx.font = '18px Helvetica';
+ctx.translate(75, 100);
+ctx.rotate(Math.PI / 2);
+ctx.fillText('Vertical', 0, 0);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#0000ff").unwrap();
+            ctx.set_font("18px Helvetica").unwrap();
+            ctx.translate(75.0, 100.0);
+            ctx.rotate(PI / 2.0);
+            ctx.fill_text("Vertical", 0.0, 0.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("text_rotate_90 comparison failed");
+}
+
+#[test]
+fn test_text_rotate_negative_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_rotate_negative",
+        width: 200,
+        height: 150,
+        js_code: r#"
+ctx.fillStyle = '#008000';
+ctx.font = '16px Helvetica';
+ctx.translate(100, 100);
+ctx.rotate(-Math.PI / 6);
+ctx.fillText('Tilted -30°', 0, 0);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#008000").unwrap();
+            ctx.set_font("16px Helvetica").unwrap();
+            ctx.translate(100.0, 100.0);
+            ctx.rotate(-PI / 6.0);
+            ctx.fill_text("Tilted -30°", 0.0, 0.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("text_rotate_negative comparison failed");
+}
+
+// --- textAlign tests ---
+
+#[test]
+fn test_text_align_left_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_align_left",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '20px Helvetica';
+ctx.textAlign = 'left';
+// Draw reference line at x=100
+ctx.strokeStyle = '#ff0000';
+ctx.beginPath();
+ctx.moveTo(100, 0);
+ctx.lineTo(100, 100);
+ctx.stroke();
+// Draw text
+ctx.fillText('Left', 100, 50);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("20px Helvetica").unwrap();
+            ctx.set_text_align(TextAlign::Left);
+            // Draw reference line
+            ctx.set_stroke_style("#ff0000").unwrap();
+            ctx.begin_path();
+            ctx.move_to(100.0, 0.0);
+            ctx.line_to(100.0, 100.0);
+            ctx.stroke();
+            // Draw text
+            ctx.fill_text("Left", 100.0, 50.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("text_align_left comparison failed");
+}
+
+#[test]
+fn test_text_align_center_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_align_center",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '20px Helvetica';
+ctx.textAlign = 'center';
+// Draw reference line at x=100
+ctx.strokeStyle = '#ff0000';
+ctx.beginPath();
+ctx.moveTo(100, 0);
+ctx.lineTo(100, 100);
+ctx.stroke();
+// Draw text
+ctx.fillText('Center', 100, 50);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("20px Helvetica").unwrap();
+            ctx.set_text_align(TextAlign::Center);
+            // Draw reference line
+            ctx.set_stroke_style("#ff0000").unwrap();
+            ctx.begin_path();
+            ctx.move_to(100.0, 0.0);
+            ctx.line_to(100.0, 100.0);
+            ctx.stroke();
+            // Draw text
+            ctx.fill_text("Center", 100.0, 50.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("text_align_center comparison failed");
+}
+
+#[test]
+fn test_text_align_right_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_align_right",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '20px Helvetica';
+ctx.textAlign = 'right';
+// Draw reference line at x=100
+ctx.strokeStyle = '#ff0000';
+ctx.beginPath();
+ctx.moveTo(100, 0);
+ctx.lineTo(100, 100);
+ctx.stroke();
+// Draw text
+ctx.fillText('Right', 100, 50);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("20px Helvetica").unwrap();
+            ctx.set_text_align(TextAlign::Right);
+            // Draw reference line
+            ctx.set_stroke_style("#ff0000").unwrap();
+            ctx.begin_path();
+            ctx.move_to(100.0, 0.0);
+            ctx.line_to(100.0, 100.0);
+            ctx.stroke();
+            // Draw text
+            ctx.fill_text("Right", 100.0, 50.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("text_align_right comparison failed");
+}
+
+// --- textBaseline tests ---
+
+#[test]
+fn test_text_baseline_top_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_baseline_top",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '24px Helvetica';
+ctx.textBaseline = 'top';
+// Draw reference line at y=50
+ctx.strokeStyle = '#ff0000';
+ctx.beginPath();
+ctx.moveTo(0, 50);
+ctx.lineTo(200, 50);
+ctx.stroke();
+// Draw text
+ctx.fillText('Top', 20, 50);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("24px Helvetica").unwrap();
+            ctx.set_text_baseline(TextBaseline::Top);
+            // Draw reference line
+            ctx.set_stroke_style("#ff0000").unwrap();
+            ctx.begin_path();
+            ctx.move_to(0.0, 50.0);
+            ctx.line_to(200.0, 50.0);
+            ctx.stroke();
+            // Draw text
+            ctx.fill_text("Top", 20.0, 50.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("text_baseline_top comparison failed");
+}
+
+#[test]
+fn test_text_baseline_middle_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_baseline_middle",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '24px Helvetica';
+ctx.textBaseline = 'middle';
+// Draw reference line at y=50
+ctx.strokeStyle = '#ff0000';
+ctx.beginPath();
+ctx.moveTo(0, 50);
+ctx.lineTo(200, 50);
+ctx.stroke();
+// Draw text
+ctx.fillText('Middle', 20, 50);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("24px Helvetica").unwrap();
+            ctx.set_text_baseline(TextBaseline::Middle);
+            // Draw reference line
+            ctx.set_stroke_style("#ff0000").unwrap();
+            ctx.begin_path();
+            ctx.move_to(0.0, 50.0);
+            ctx.line_to(200.0, 50.0);
+            ctx.stroke();
+            // Draw text
+            ctx.fill_text("Middle", 20.0, 50.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("text_baseline_middle comparison failed");
+}
+
+#[test]
+fn test_text_baseline_bottom_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_baseline_bottom",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '24px Helvetica';
+ctx.textBaseline = 'bottom';
+// Draw reference line at y=50
+ctx.strokeStyle = '#ff0000';
+ctx.beginPath();
+ctx.moveTo(0, 50);
+ctx.lineTo(200, 50);
+ctx.stroke();
+// Draw text
+ctx.fillText('Bottom', 20, 50);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("24px Helvetica").unwrap();
+            ctx.set_text_baseline(TextBaseline::Bottom);
+            // Draw reference line
+            ctx.set_stroke_style("#ff0000").unwrap();
+            ctx.begin_path();
+            ctx.move_to(0.0, 50.0);
+            ctx.line_to(200.0, 50.0);
+            ctx.stroke();
+            // Draw text
+            ctx.fill_text("Bottom", 20.0, 50.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("text_baseline_bottom comparison failed");
+}
+
+#[test]
+fn test_text_baseline_alphabetic_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "text_baseline_alphabetic",
+        width: 200,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#000000';
+ctx.font = '24px Helvetica';
+ctx.textBaseline = 'alphabetic';
+// Draw reference line at y=50
+ctx.strokeStyle = '#ff0000';
+ctx.beginPath();
+ctx.moveTo(0, 50);
+ctx.lineTo(200, 50);
+ctx.stroke();
+// Draw text with descender
+ctx.fillText('Apgy', 20, 50);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#000000").unwrap();
+            ctx.set_font("24px Helvetica").unwrap();
+            ctx.set_text_baseline(TextBaseline::Alphabetic);
+            // Draw reference line
+            ctx.set_stroke_style("#ff0000").unwrap();
+            ctx.begin_path();
+            ctx.move_to(0.0, 50.0);
+            ctx.line_to(200.0, 50.0);
+            ctx.stroke();
+            // Draw text with descender
+            ctx.fill_text("Apgy", 20.0, 50.0);
+        },
+        threshold: TEXT_THRESHOLD,
+        max_diff_percent: TEXT_MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("text_baseline_alphabetic comparison failed");
 }
