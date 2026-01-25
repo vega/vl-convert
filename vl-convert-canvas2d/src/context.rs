@@ -5,34 +5,8 @@ use crate::font_parser::{parse_font, ParsedFont};
 use crate::gradient::{CanvasGradient, GradientType};
 use crate::style::{FillStyle, LineCap, LineJoin, TextAlign, TextBaseline};
 use crate::text::TextMetrics;
-use cosmic_text::{
-    Attrs, Buffer, Color as CosmicColor, Family, FontSystem, Metrics, Shaping, SwashCache,
-};
+use cosmic_text::{Attrs, Buffer, Command, Family, FontSystem, Metrics, Shaping, SwashCache};
 use tiny_skia::{Pixmap, Transform};
-
-/// Blend a single pixel using source-over compositing.
-/// This is a free function to avoid borrow conflicts with SwashCache.
-fn blend_pixel_data(data: &mut [u8], idx: usize, color: CosmicColor) {
-    let src_a = color.a();
-    if src_a == 0 {
-        return;
-    }
-
-    let src_r = color.r();
-    let src_g = color.g();
-    let src_b = color.b();
-
-    let dst_r = data[idx];
-    let dst_g = data[idx + 1];
-    let dst_b = data[idx + 2];
-    let dst_a = data[idx + 3];
-
-    let inv_src_a = 255 - src_a;
-    data[idx] = src_r.saturating_add((dst_r as u16 * inv_src_a as u16 / 255) as u8);
-    data[idx + 1] = src_g.saturating_add((dst_g as u16 * inv_src_a as u16 / 255) as u8);
-    data[idx + 2] = src_b.saturating_add((dst_b as u16 * inv_src_a as u16 / 255) as u8);
-    data[idx + 3] = src_a.saturating_add((dst_a as u16 * inv_src_a as u16 / 255) as u8);
-}
 
 /// Maximum canvas dimension (same as Chrome).
 const MAX_DIMENSION: u32 = 32767;
@@ -398,7 +372,7 @@ impl Canvas2dContext {
         self.render_text(text, x, y, false);
     }
 
-    /// Internal text rendering (used by fillText and strokeText).
+    /// Internal text rendering using vector glyph paths (used by fillText and strokeText).
     fn render_text(&mut self, text: &str, x: f32, y: f32, fill: bool) {
         let font = &self.state.font;
         let metrics = Metrics::new(font.size_px, font.size_px * 1.2);
@@ -419,12 +393,10 @@ impl Canvas2dContext {
         buffer.set_text(&mut self.font_system, text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(&mut self.font_system, false);
 
-        // Get text dimensions for alignment and temp buffer sizing
+        // Get text dimensions for alignment
         let mut text_width: f32 = 0.0;
-        let mut text_height: f32 = 0.0;
         for run in buffer.layout_runs() {
             text_width = text_width.max(run.line_w);
-            text_height = text_height.max(run.line_height);
         }
 
         // Calculate alignment offset
@@ -433,205 +405,72 @@ impl Canvas2dContext {
         // Calculate baseline offset
         let y_offset = crate::text::calculate_text_y_offset(font.size_px, self.state.text_baseline);
 
-        // Get the text color from fill/stroke style
-        let text_color = if fill {
-            self.get_style_color(&self.state.fill_style)
+        // Get the paint for rendering text
+        let style = if fill {
+            self.state.fill_style.clone()
         } else {
-            self.get_style_color(&self.state.stroke_style)
+            self.state.stroke_style.clone()
+        };
+        let Some(paint) = self.create_paint_from_style(&style) else {
+            return; // Could not create paint
         };
 
-        let Some(text_color) = text_color else {
-            return; // Gradients/patterns not supported for text yet
-        };
+        // Calculate base position with alignment offsets
+        let base_x = x + x_offset;
+        let base_y = y + y_offset;
 
-        // Convert to cosmic-text color
-        let cosmic_color = CosmicColor::rgba(
-            (text_color.red() * 255.0) as u8,
-            (text_color.green() * 255.0) as u8,
-            (text_color.blue() * 255.0) as u8,
-            ((text_color.alpha() * self.state.global_alpha) * 255.0) as u8,
-        );
-
-        // Check if we have a non-trivial transform (rotation, skew, or non-uniform scale)
+        // Get the current transform
         let transform = self.state.transform;
-        let has_rotation = transform.kx != 0.0 || transform.ky != 0.0;
 
-        if has_rotation {
-            // Render to temporary buffer and composite with transform for smooth rotation
-            self.render_text_with_transform(
-                &mut buffer,
-                x,
-                y,
-                x_offset,
-                y_offset,
-                text_width,
-                text_height,
-                cosmic_color,
-                transform,
-            );
-        } else {
-            // Direct rendering for identity or translation-only transforms (faster)
-            self.render_text_direct(
-                &mut buffer,
-                x,
-                y,
-                x_offset,
-                y_offset,
-                cosmic_color,
-                transform,
-            );
-        }
-    }
-
-    /// Render text directly to the canvas (for non-rotated text).
-    fn render_text_direct(
-        &mut self,
-        buffer: &mut Buffer,
-        x: f32,
-        y: f32,
-        x_offset: f32,
-        y_offset: f32,
-        cosmic_color: CosmicColor,
-        transform: Transform,
-    ) {
-        // Calculate final position with transform translation
-        let final_x = x + x_offset + transform.tx;
-        let final_y = y + y_offset + transform.ty;
-
-        let width = self.width;
-        let height = self.height;
-
-        // Collect all pixels first to avoid borrow conflicts
-        let mut pixels: Vec<(i32, i32, CosmicColor)> = Vec::new();
-
-        // Render each glyph using SwashCache
+        // Render each glyph as a vector path
         for run in buffer.layout_runs() {
             for glyph in run.glyphs.iter() {
-                let physical_glyph = glyph.physical((final_x, final_y), 1.0);
+                let physical_glyph = glyph.physical((base_x, base_y), 1.0);
 
-                self.swash_cache.with_pixels(
-                    &mut self.font_system,
-                    physical_glyph.cache_key,
-                    cosmic_color,
-                    |px, py, color| {
-                        let pixel_x = physical_glyph.x + px;
-                        let pixel_y = physical_glyph.y + py;
-
-                        if pixel_x >= 0
-                            && pixel_x < width as i32
-                            && pixel_y >= 0
-                            && pixel_y < height as i32
-                        {
-                            pixels.push((pixel_x, pixel_y, color));
+                // Get outline commands for this glyph
+                if let Some(commands) = self
+                    .swash_cache
+                    .get_outline_commands(&mut self.font_system, physical_glyph.cache_key)
+                {
+                    // Build a path from the outline commands
+                    // Note: Font outlines have Y pointing up, screen has Y pointing down
+                    // so we negate Y coordinates during path building
+                    let mut path_builder = tiny_skia::PathBuilder::new();
+                    for cmd in commands {
+                        match cmd {
+                            Command::MoveTo(p) => path_builder.move_to(p.x, -p.y),
+                            Command::LineTo(p) => path_builder.line_to(p.x, -p.y),
+                            Command::QuadTo(ctrl, end) => {
+                                path_builder.quad_to(ctrl.x, -ctrl.y, end.x, -end.y)
+                            }
+                            Command::CurveTo(c1, c2, end) => {
+                                path_builder.cubic_to(c1.x, -c1.y, c2.x, -c2.y, end.x, -end.y)
+                            }
+                            Command::Close => path_builder.close(),
                         }
-                    },
-                );
+                    }
+
+                    if let Some(path) = path_builder.finish() {
+                        // Create a transform that positions the glyph correctly
+                        // The outline commands are already scaled to pixel size
+                        // We translate to the glyph's physical position
+                        let glyph_transform = Transform::from_translate(
+                            physical_glyph.x as f32,
+                            physical_glyph.y as f32,
+                        )
+                        .post_concat(transform);
+
+                        // Fill the glyph path
+                        self.pixmap.fill_path(
+                            &path,
+                            &paint,
+                            tiny_skia::FillRule::Winding,
+                            glyph_transform,
+                            None,
+                        );
+                    }
+                }
             }
-        }
-
-        // Now blend all collected pixels
-        let pixmap_data = self.pixmap.data_mut();
-        for (pixel_x, pixel_y, color) in pixels {
-            let idx = (pixel_y as u32 * width + pixel_x as u32) as usize * 4;
-            blend_pixel_data(pixmap_data, idx, color);
-        }
-    }
-
-    /// Render text with rotation/skew transform using temporary buffer and bicubic filtering.
-    #[allow(clippy::too_many_arguments)]
-    fn render_text_with_transform(
-        &mut self,
-        buffer: &mut Buffer,
-        x: f32,
-        y: f32,
-        x_offset: f32,
-        y_offset: f32,
-        text_width: f32,
-        text_height: f32,
-        cosmic_color: CosmicColor,
-        transform: Transform,
-    ) {
-        // Calculate temp buffer size with padding for ascenders/descenders
-        let padding = text_height;
-        let temp_width = (text_width + padding * 2.0).ceil() as u32;
-        let temp_height = (text_height * 2.0 + padding * 2.0).ceil() as u32;
-
-        if temp_width == 0 || temp_height == 0 {
-            return;
-        }
-
-        // Create temporary pixmap for text rendering
-        let Some(mut temp_pixmap) = Pixmap::new(temp_width, temp_height) else {
-            return;
-        };
-
-        // Render text to temp buffer at origin with offset for alignment
-        // Position text so baseline is in the middle of the temp buffer
-        let temp_x = padding + x_offset;
-        let temp_y = padding + text_height + y_offset;
-
-        // Collect pixels first to avoid borrow conflicts
-        let mut pixels: Vec<(i32, i32, CosmicColor)> = Vec::new();
-
-        for run in buffer.layout_runs() {
-            for glyph in run.glyphs.iter() {
-                let physical_glyph = glyph.physical((temp_x, temp_y), 1.0);
-
-                self.swash_cache.with_pixels(
-                    &mut self.font_system,
-                    physical_glyph.cache_key,
-                    cosmic_color,
-                    |px, py, color| {
-                        let pixel_x = physical_glyph.x + px;
-                        let pixel_y = physical_glyph.y + py;
-
-                        if pixel_x >= 0
-                            && pixel_x < temp_width as i32
-                            && pixel_y >= 0
-                            && pixel_y < temp_height as i32
-                        {
-                            pixels.push((pixel_x, pixel_y, color));
-                        }
-                    },
-                );
-            }
-        }
-
-        // Write collected pixels to temp buffer
-        let temp_data = temp_pixmap.data_mut();
-        for (pixel_x, pixel_y, color) in pixels {
-            let idx = (pixel_y as u32 * temp_width + pixel_x as u32) as usize * 4;
-            // Direct write (temp buffer starts empty)
-            temp_data[idx] = color.r();
-            temp_data[idx + 1] = color.g();
-            temp_data[idx + 2] = color.b();
-            temp_data[idx + 3] = color.a();
-        }
-
-        // Calculate the transform for drawing the temp pixmap
-        // The temp pixmap origin needs to map to (x - padding, y - padding - text_height)
-        let draw_x = x - padding;
-        let draw_y = y - padding - text_height;
-
-        // Create transform that positions the temp buffer correctly
-        let draw_transform = Transform::from_translate(draw_x, draw_y).post_concat(transform);
-
-        // Draw the temp pixmap with bicubic filtering for smooth rotation
-        let paint = tiny_skia::PixmapPaint {
-            opacity: 1.0,
-            blend_mode: tiny_skia::BlendMode::SourceOver,
-            quality: tiny_skia::FilterQuality::Bicubic,
-        };
-
-        self.pixmap
-            .draw_pixmap(0, 0, temp_pixmap.as_ref(), &paint, draw_transform, None);
-    }
-
-    /// Get a solid color from a fill style (returns None for gradients/patterns).
-    fn get_style_color(&self, style: &FillStyle) -> Option<tiny_skia::Color> {
-        match style {
-            FillStyle::Color(color) => Some(*color),
-            _ => None,
         }
     }
 
