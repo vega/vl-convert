@@ -1,8 +1,6 @@
 use crate::deno_stubs::{NoOpInNpmPackageChecker, NoOpNpmPackageFolderResolver, VlConvertNodeSys};
-use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
-use crate::module_loader::{
-    VlConvertModuleLoader, FORMATE_LOCALE_MAP, IMPORT_MAP, TIME_FORMATE_LOCALE_MAP,
-};
+use crate::module_loader::import_map::{vega_themes_url, vega_url, VlVersion};
+use crate::module_loader::{VlConvertModuleLoader, FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 
 use deno_core::anyhow::bail;
 use deno_core::error::AnyError;
@@ -38,7 +36,7 @@ use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::text::{op_text_width, USVG_OPTIONS};
+use crate::text::USVG_OPTIONS;
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
 // Canvas 2D ops are now in the separate vl_convert_canvas2d extension from vl-convert-canvas2d-deno
@@ -46,7 +44,6 @@ deno_core::extension!(
     vl_convert_runtime,
     ops = [
         op_get_json_arg,
-        op_text_width,
     ],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
     esm = [
@@ -326,43 +323,6 @@ class WarningCollector {
                 .js_runtime
                 .run_event_loop(Default::default())
                 .await?;
-
-            // Override text width measurement in vega-scenegraph
-            for path in IMPORT_MAP.keys() {
-                if path.contains("vega-scenegraph@") {
-                    let script_code = format!(
-                        r#"
-import('{url}').then((sg) => {{
-    sg.textMetrics.width = (item, text) => {{
-        let style = item.fontStyle;
-        let variant = item.fontVariant;
-
-        // weight may be string like "bold" or number like 600.
-        // Convert number form to string
-        let weight = item.fontWeight == null? null: String(item.fontWeight);
-        let size = sg.fontSize(item);
-        let family = sg.fontFamily(item);
-
-        let text_info = JSON.stringify({{
-            style, variant, weight, size, family, text
-        }}, null, 2);
-
-        let fullWidth = op_text_width(text_info);
-        return item.limit > 0? Math.min(fullWidth, item.limit): fullWidth
-    }};
-}})
-"#,
-                        url = url_for_path(path)
-                    );
-                    self.worker
-                        .js_runtime
-                        .execute_script("ext:<anon>", script_code)?;
-                    self.worker
-                        .js_runtime
-                        .run_event_loop(Default::default())
-                        .await?;
-                }
-            }
 
             // Create and initialize svg function string
             let function_str = r#"
@@ -651,6 +611,15 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
 
         // Create the MainWorker with full Web API support
         let worker = MainWorker::bootstrap_from_options(&main_module, services, options);
+
+        // Add shared fontdb to OpState so canvas contexts use the same fonts as SVG rendering
+        {
+            let opts = USVG_OPTIONS.lock().map_err(|e| {
+                anyhow!("Failed to acquire USVG_OPTIONS lock: {}", e)
+            })?;
+            let shared_fontdb = vl_convert_canvas2d_deno::SharedFontDb::from_arc(opts.fontdb.clone());
+            worker.js_runtime.op_state().borrow_mut().put(shared_fontdb);
+        }
 
         let this = Self {
             worker,

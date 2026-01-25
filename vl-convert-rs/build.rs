@@ -31,20 +31,12 @@ fn op_get_json_arg(_arg_id: i32) -> Result<String, JsErrorBox> {
     ))
 }
 
-#[op2(fast)]
-fn op_text_width(#[string] _text_info_str: String) -> Result<f64, JsErrorBox> {
-    Err(JsErrorBox::generic(
-        "op_text_width stub called during snapshot creation",
-    ))
-}
-
 // Define the extension with lazy_init for snapshot creation
 // This must match the extension defined in converter.rs
 extension!(
     vl_convert_runtime,
     ops = [
         op_get_json_arg,
-        op_text_width,
     ],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
     esm = [

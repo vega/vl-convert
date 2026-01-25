@@ -225,11 +225,15 @@ impl Canvas2dContext {
             Pixmap::new(width, height).ok_or(Canvas2dError::InvalidDimensions { width, height })?;
 
         // Create font system
-        let font_system = if let Some(db) = font_db {
+        let mut font_system = if let Some(db) = font_db {
             FontSystem::new_with_locale_and_db("en".to_string(), db)
         } else {
             FontSystem::new()
         };
+
+        // Configure default font families to match browser behavior
+        // This ensures "sans-serif" resolves to Arial/Helvetica like in browsers
+        Self::setup_default_fonts(&mut font_system);
 
         // Create swash cache for glyph rasterization
         let swash_cache = SwashCache::new();
@@ -248,6 +252,60 @@ impl Canvas2dContext {
             subpath_start_x: 0.0,
             subpath_start_y: 0.0,
         })
+    }
+
+    /// Configure default font families to match browser behavior.
+    /// This ensures generic families like "sans-serif" resolve to
+    /// Arial/Helvetica, matching what browsers and node-canvas do.
+    fn setup_default_fonts(font_system: &mut FontSystem) {
+        use std::collections::HashSet;
+
+        // Collect available font families
+        let families: HashSet<String> = font_system
+            .db()
+            .faces()
+            .flat_map(|face| {
+                face.families
+                    .iter()
+                    .map(|(fam, _lang)| fam.clone())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        // Set sans-serif to Arial, Helvetica, or Liberation Sans (in order of preference)
+        // This matches browser behavior and node-canvas
+        for family in ["Arial", "Helvetica", "Liberation Sans"] {
+            if families.contains(family) {
+                font_system.db_mut().set_sans_serif_family(family);
+                break;
+            }
+        }
+
+        // Set monospace family
+        for family in [
+            "Courier New",
+            "Courier",
+            "Liberation Mono",
+            "DejaVu Sans Mono",
+        ] {
+            if families.contains(family) {
+                font_system.db_mut().set_monospace_family(family);
+                break;
+            }
+        }
+
+        // Set serif family
+        for family in [
+            "Times New Roman",
+            "Times",
+            "Liberation Serif",
+            "DejaVu Serif",
+        ] {
+            if families.contains(family) {
+                font_system.db_mut().set_serif_family(family);
+                break;
+            }
+        }
     }
 
     /// Get canvas width.

@@ -12,8 +12,25 @@
 mod ops;
 mod resource;
 
+use std::sync::Arc;
+
 pub use ops::*;
 pub use resource::{CanvasResource, Path2DResource};
+
+/// Shared font database for canvas contexts.
+/// This allows vl-convert-rs to pass its configured fontdb to canvas contexts.
+#[derive(Clone)]
+pub struct SharedFontDb(pub Arc<fontdb::Database>);
+
+impl SharedFontDb {
+    pub fn new(db: fontdb::Database) -> Self {
+        Self(Arc::new(db))
+    }
+
+    pub fn from_arc(db: Arc<fontdb::Database>) -> Self {
+        Self(db)
+    }
+}
 
 // Define the extension with ops and ESM files
 deno_core::extension!(

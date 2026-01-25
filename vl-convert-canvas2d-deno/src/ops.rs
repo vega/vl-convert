@@ -3,19 +3,32 @@
 //! These ops wrap the vl-convert-canvas2d crate and expose the Canvas 2D API
 //! to JavaScript code running in Deno.
 
-use crate::CanvasResource;
+use crate::{CanvasResource, SharedFontDb};
 use deno_core::op2;
 use deno_core::{OpState, ResourceId};
 use deno_error::JsErrorBox;
-use vl_convert_canvas2d::{Canvas2dContext, LineCap, LineJoin, TextAlign, TextBaseline};
+use vl_convert_canvas2d::{Canvas2dContext, Canvas2dContextBuilder, LineCap, LineJoin, TextAlign, TextBaseline};
 
 // --- Canvas creation and lifecycle ---
 
 /// Create a new canvas with the given dimensions.
+/// If a SharedFontDb is available in OpState, it will be used for the canvas.
 #[op2(fast)]
 pub fn op_canvas_create(state: &mut OpState, width: u32, height: u32) -> Result<u32, JsErrorBox> {
-    let ctx = Canvas2dContext::new(width, height)
-        .map_err(|e| JsErrorBox::generic(format!("Failed to create canvas: {}", e)))?;
+    // Check if a shared fontdb is available
+    let ctx = if let Some(shared_db) = state.try_borrow::<SharedFontDb>() {
+        // Clone the Arc and unwrap to get the inner Database
+        // We need to clone the database since Canvas2dContextBuilder takes ownership
+        let db = (*shared_db.0).clone();
+        Canvas2dContextBuilder::new(width, height)
+            .with_font_db(db)
+            .build()
+            .map_err(|e| JsErrorBox::generic(format!("Failed to create canvas: {}", e)))?
+    } else {
+        // No shared fontdb, use default
+        Canvas2dContext::new(width, height)
+            .map_err(|e| JsErrorBox::generic(format!("Failed to create canvas: {}", e)))?
+    };
 
     let resource = CanvasResource::new(ctx);
     let rid = state.resource_table.add(resource);

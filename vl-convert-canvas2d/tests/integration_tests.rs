@@ -318,3 +318,102 @@ fn test_ellipse() {
     let idx = (50 * 100 + 50) * 4;
     assert_eq!(data[idx + 1], 255); // G
 }
+
+/// Test post_script_name fallback lookup for custom fonts like "Matter SemiBold".
+/// When the font family name doesn't directly match (e.g., "Matter SemiBold" != "Matter"),
+/// we should fall back to searching by post_script_name (e.g., "Matter-SemiBold").
+#[test]
+fn test_postscript_name_fallback() {
+    // Load the Matter font from the test fonts directory
+    let mut db = fontdb::Database::new();
+    let matter_font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("vl-convert-rs/tests/fonts/matter/Matter-SemiBold.ttf");
+
+    if !matter_font_path.exists() {
+        println!("Skipping test - Matter font not found at {:?}", matter_font_path);
+        return;
+    }
+
+    db.load_font_file(&matter_font_path).expect("Failed to load Matter font");
+
+    // Debug: Print all faces and their properties
+    println!("\nFaces in fontdb after loading Matter font:");
+    for face in db.faces() {
+        println!("  - family: {:?}", face.families);
+        println!("    post_script_name: {}", face.post_script_name);
+        println!("    weight: {:?}, style: {:?}", face.weight, face.style);
+    }
+
+    // Create canvas with the font database
+    let mut ctx = Canvas2dContextBuilder::new(100, 100)
+        .with_font_db(db)
+        .build()
+        .unwrap();
+
+    // Try setting font as "Matter SemiBold" (CSS-style name)
+    // This should find the font via post_script_name lookup
+    ctx.set_font("12px Matter SemiBold").unwrap();
+
+    let metrics = ctx.measure_text("Test").unwrap();
+    println!("Measured text 'Test' with 'Matter SemiBold': width = {}", metrics.width);
+
+    // Also try with the actual family name + weight
+    ctx.set_font("600 12px Matter").unwrap();
+    let metrics2 = ctx.measure_text("Test").unwrap();
+    println!("Measured text 'Test' with 'Matter' (weight 600): width = {}", metrics2.width);
+
+    // The width should be positive and reasonable
+    assert!(metrics.width > 0.0, "Width should be positive");
+}
+
+/// Test text measurement comparison with node-canvas.
+/// node-canvas measurements (using system fonts on macOS):
+///   "11px sans-serif" + "Count of Records" = 85.60546875
+///   "bold 11px sans-serif" + "Count of Records" = 92.2822265625 (Vega legend title)
+///   "11px sans-serif" + "IMDB Rating (binned)" = 105.775390625
+///   "11px sans-serif" + "Rotten Tomatoes Rating (binned)" = 161.2431640625
+#[test]
+fn test_measure_text_vs_node_canvas() {
+    let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+
+    // Test cases: (font, text, node_canvas_width)
+    // Note: Vega uses "bold 11px sans-serif" for legend titles like "Count of Records"
+    let test_cases = [
+        ("11px sans-serif", "Count of Records", 85.60546875),
+        ("bold 11px sans-serif", "Count of Records", 92.2822265625), // Vega legend title
+        ("11px Arial", "Count of Records", 85.60546875),
+        ("bold 11px Arial", "Count of Records", 92.2822265625),
+        ("11px Helvetica", "Count of Records", 85.60546875),
+        ("bold 11px Helvetica", "Count of Records", 92.2822265625),
+        ("11px sans-serif", "IMDB Rating (binned)", 105.775390625),
+        ("11px sans-serif", "Rotten Tomatoes Rating (binned)", 161.2431640625),
+        ("10px sans-serif", "Count of Records", 77.8173828125),
+        ("12px sans-serif", "Count of Records", 93.380859375),
+    ];
+
+    println!("\nText measurement comparison (cosmic_text vs node-canvas):");
+    println!("=========================================================");
+
+    for (font, text, node_canvas_width) in test_cases {
+        ctx.set_font(font).unwrap();
+        let metrics = ctx.measure_text(text).unwrap();
+        let diff = metrics.width as f64 - node_canvas_width;
+        let diff_pct = (diff / node_canvas_width) * 100.0;
+
+        println!("font: \"{}\"", font);
+        println!("  text: \"{}\"", text);
+        println!("  cosmic_text: {:.4}", metrics.width);
+        println!("  node-canvas: {:.4}", node_canvas_width);
+        println!("  diff: {:.4} ({:.2}%)", diff, diff_pct);
+        println!();
+    }
+
+    // For now, just ensure measurements are positive and in a reasonable range
+    // The actual values will differ between cosmic_text and node-canvas
+    ctx.set_font("11px sans-serif").unwrap();
+    let metrics = ctx.measure_text("Count of Records").unwrap();
+    assert!(metrics.width > 70.0, "Width should be > 70");
+    assert!(metrics.width < 120.0, "Width should be < 120");
+}
