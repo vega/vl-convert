@@ -1670,3 +1670,271 @@ ctx.stroke();
     };
     run_comparison_test(&test).expect("clip_with_transform comparison failed");
 }
+
+// =============================================================================
+// Phase 1 Feature Tests - fill(fillRule), roundRect, Path2D, etc.
+// =============================================================================
+
+#[test]
+fn test_fill_evenodd_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "fill_evenodd",
+        width: 150,
+        height: 150,
+        js_code: r#"
+// Draw a star with overlapping paths - evenodd creates a hole in the center
+ctx.fillStyle = '#0000ff';
+ctx.beginPath();
+// Outer pentagon
+const cx = 75, cy = 75, r = 60;
+for (let i = 0; i < 5; i++) {
+    const angle = (i * 4 * Math.PI / 5) - Math.PI / 2;
+    const x = cx + r * Math.cos(angle);
+    const y = cy + r * Math.sin(angle);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+}
+ctx.closePath();
+ctx.fill('evenodd');
+"#,
+        rust_fn: |ctx| {
+            use vl_convert_canvas2d::CanvasFillRule;
+            ctx.set_fill_style("#0000ff").unwrap();
+            ctx.begin_path();
+            // Draw star polygon
+            let cx = 75.0_f32;
+            let cy = 75.0_f32;
+            let r = 60.0_f32;
+            for i in 0..5 {
+                let angle = (i as f32 * 4.0 * PI / 5.0) - PI / 2.0;
+                let x = cx + r * angle.cos();
+                let y = cy + r * angle.sin();
+                if i == 0 {
+                    ctx.move_to(x, y);
+                } else {
+                    ctx.line_to(x, y);
+                }
+            }
+            ctx.close_path();
+            ctx.fill_with_rule(CanvasFillRule::EvenOdd);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("fill_evenodd comparison failed");
+}
+
+#[test]
+fn test_round_rect_uniform_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "round_rect_uniform",
+        width: 150,
+        height: 150,
+        js_code: r#"
+ctx.fillStyle = '#4488ff';
+ctx.beginPath();
+ctx.roundRect(20, 20, 110, 110, 15);
+ctx.fill();
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#4488ff").unwrap();
+            ctx.begin_path();
+            ctx.round_rect(20.0, 20.0, 110.0, 110.0, 15.0);
+            ctx.fill();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("round_rect_uniform comparison failed");
+}
+
+#[test]
+fn test_round_rect_different_radii_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "round_rect_different_radii",
+        width: 150,
+        height: 150,
+        js_code: r#"
+ctx.fillStyle = '#ff8844';
+ctx.beginPath();
+// Different radius for each corner: [top-left, top-right, bottom-right, bottom-left]
+ctx.roundRect(20, 20, 110, 110, [5, 15, 25, 35]);
+ctx.fill();
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#ff8844").unwrap();
+            ctx.begin_path();
+            ctx.round_rect_radii(20.0, 20.0, 110.0, 110.0, [5.0, 15.0, 25.0, 35.0]);
+            ctx.fill();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("round_rect_different_radii comparison failed");
+}
+
+#[test]
+fn test_round_rect_stroke_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "round_rect_stroke",
+        width: 150,
+        height: 150,
+        js_code: r#"
+ctx.strokeStyle = '#00aa00';
+ctx.lineWidth = 4;
+ctx.beginPath();
+ctx.roundRect(25, 25, 100, 100, 20);
+ctx.stroke();
+"#,
+        rust_fn: |ctx| {
+            ctx.set_stroke_style("#00aa00").unwrap();
+            ctx.set_line_width(4.0);
+            ctx.begin_path();
+            ctx.round_rect(25.0, 25.0, 100.0, 100.0, 20.0);
+            ctx.stroke();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("round_rect_stroke comparison failed");
+}
+
+#[test]
+fn test_path2d_fill_comparison() {
+    skip_if_no_node_canvas!();
+    // Node-canvas doesn't support Path2D, so we use equivalent context path operations
+    // The Rust side uses Path2D to verify it produces the same output
+    let test = CanvasTestCase {
+        name: "path2d_fill",
+        width: 150,
+        height: 150,
+        js_code: r#"
+// Draw two rectangles (what Path2D would produce)
+ctx.fillStyle = '#9933ff';
+ctx.beginPath();
+ctx.rect(20, 20, 50, 50);
+ctx.rect(80, 80, 50, 50);
+ctx.fill();
+"#,
+        rust_fn: |ctx| {
+            use vl_convert_canvas2d::Path2D;
+            let mut path = Path2D::new();
+            path.rect(20.0, 20.0, 50.0, 50.0);
+            path.rect(80.0, 80.0, 50.0, 50.0);
+
+            ctx.set_fill_style("#9933ff").unwrap();
+            ctx.fill_path2d(&mut path);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("path2d_fill comparison failed");
+}
+
+#[test]
+fn test_path2d_stroke_comparison() {
+    skip_if_no_node_canvas!();
+    // Node-canvas doesn't support Path2D, so we use equivalent context path operations
+    let test = CanvasTestCase {
+        name: "path2d_stroke",
+        width: 150,
+        height: 150,
+        js_code: r#"
+ctx.strokeStyle = '#ff0066';
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.moveTo(20, 75);
+ctx.lineTo(75, 20);
+ctx.lineTo(130, 75);
+ctx.lineTo(75, 130);
+ctx.closePath();
+ctx.stroke();
+"#,
+        rust_fn: |ctx| {
+            use vl_convert_canvas2d::Path2D;
+            let mut path = Path2D::new();
+            path.move_to(20.0, 75.0);
+            path.line_to(75.0, 20.0);
+            path.line_to(130.0, 75.0);
+            path.line_to(75.0, 130.0);
+            path.close_path();
+
+            ctx.set_stroke_style("#ff0066").unwrap();
+            ctx.set_line_width(3.0);
+            ctx.stroke_path2d(&mut path);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("path2d_stroke comparison failed");
+}
+
+#[test]
+fn test_path2d_reuse_comparison() {
+    skip_if_no_node_canvas!();
+    // Node-canvas doesn't support Path2D, so we manually draw the same shapes
+    // The Rust side uses Path2D to verify path reuse works correctly
+    let test = CanvasTestCase {
+        name: "path2d_reuse",
+        width: 150,
+        height: 150,
+        js_code: r#"
+// Helper function to draw a circle at origin
+function drawCircle() {
+    ctx.beginPath();
+    ctx.arc(0, 0, 20, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+// Draw in multiple positions
+ctx.fillStyle = '#ff0000';
+ctx.save();
+ctx.translate(40, 40);
+drawCircle();
+ctx.restore();
+
+ctx.fillStyle = '#00ff00';
+ctx.save();
+ctx.translate(110, 40);
+drawCircle();
+ctx.restore();
+
+ctx.fillStyle = '#0000ff';
+ctx.save();
+ctx.translate(75, 110);
+drawCircle();
+ctx.restore();
+"#,
+        rust_fn: |ctx| {
+            use vl_convert_canvas2d::Path2D;
+            let mut path = Path2D::new();
+            path.arc(0.0, 0.0, 20.0, 0.0, 2.0 * PI, false);
+
+            // Draw in multiple positions - reusing the same path
+            ctx.set_fill_style("#ff0000").unwrap();
+            ctx.save();
+            ctx.translate(40.0, 40.0);
+            ctx.fill_path2d(&mut path);
+            ctx.restore();
+
+            ctx.set_fill_style("#00ff00").unwrap();
+            ctx.save();
+            ctx.translate(110.0, 40.0);
+            ctx.fill_path2d(&mut path);
+            ctx.restore();
+
+            ctx.set_fill_style("#0000ff").unwrap();
+            ctx.save();
+            ctx.translate(75.0, 110.0);
+            ctx.fill_path2d(&mut path);
+            ctx.restore();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("path2d_reuse comparison failed");
+}

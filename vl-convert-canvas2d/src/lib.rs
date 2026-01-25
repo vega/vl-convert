@@ -23,12 +23,16 @@ mod error;
 mod font_parser;
 mod gradient;
 mod path;
+mod path2d;
 mod pattern;
 mod style;
 mod text;
 
 // Re-export public API
-pub use context::{Canvas2dContext, Canvas2dContextBuilder, DrawingState};
+pub use context::{Canvas2dContext, Canvas2dContextBuilder, DOMMatrix, DrawingState};
 pub use error::{Canvas2dError, Canvas2dResult};
 pub use gradient::{CanvasGradient, GradientStop};
-pub use style::{FillStyle, LineCap, LineJoin, TextAlign, TextBaseline};
+pub use path2d::Path2D;
+pub use style::{
+    CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
+};
