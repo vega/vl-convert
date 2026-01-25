@@ -3,6 +3,7 @@
 //! Path2D allows creating path objects that can be reused across multiple
 //! fill, stroke, or clip operations.
 
+use crate::error::{Canvas2dError, Canvas2dResult};
 use tiny_skia::PathBuilder;
 
 /// A reusable path object that can be used with fill, stroke, and clip operations.
@@ -42,6 +43,51 @@ impl Path2D {
     /// Create a copy of another Path2D.
     pub fn from_path(other: &Path2D) -> Self {
         other.clone()
+    }
+
+    /// Create a Path2D from SVG path data string.
+    ///
+    /// Supports all SVG path commands (M, L, H, V, Q, T, C, S, A, Z).
+    /// Arc commands are automatically converted to cubic Bezier curves.
+    ///
+    /// # Example
+    /// ```
+    /// use vl_convert_canvas2d::Path2D;
+    ///
+    /// let path = Path2D::from_svg_path_data("M10,10 L50,50 A10,10 0 0 1 100,100 Z").unwrap();
+    /// ```
+    pub fn from_svg_path_data(path_data: &str) -> Canvas2dResult<Self> {
+        let mut path = Path2D::new();
+
+        for segment in svgtypes::SimplifyingPathParser::from(path_data) {
+            let segment = segment.map_err(|e| {
+                Canvas2dError::InvalidArgument(format!("Invalid SVG path data: {:?}", e))
+            })?;
+
+            match segment {
+                svgtypes::SimplePathSegment::MoveTo { x, y } => {
+                    path.move_to(x as f32, y as f32);
+                }
+                svgtypes::SimplePathSegment::LineTo { x, y } => {
+                    path.line_to(x as f32, y as f32);
+                }
+                svgtypes::SimplePathSegment::Quadratic { x1, y1, x, y } => {
+                    path.quadratic_curve_to(x1 as f32, y1 as f32, x as f32, y as f32);
+                }
+                svgtypes::SimplePathSegment::CurveTo { x1, y1, x2, y2, x, y } => {
+                    path.bezier_curve_to(
+                        x1 as f32, y1 as f32,
+                        x2 as f32, y2 as f32,
+                        x as f32, y as f32,
+                    );
+                }
+                svgtypes::SimplePathSegment::ClosePath => {
+                    path.close_path();
+                }
+            }
+        }
+
+        Ok(path)
     }
 
     /// Invalidate the cached path (called when path is modified).
@@ -268,5 +314,46 @@ mod tests {
         path1.rect(10.0, 10.0, 50.0, 50.0);
         let path2 = Path2D::from_path(&path1);
         assert!(path2.path.is_none()); // Clone doesn't copy cached path
+    }
+
+    #[test]
+    fn test_path2d_from_svg_simple() {
+        let mut path = Path2D::from_svg_path_data("M10,10 L50,50 Z").unwrap();
+        assert!(path.get_path().is_some());
+    }
+
+    #[test]
+    fn test_path2d_from_svg_curves() {
+        // Test quadratic and cubic curves
+        let mut path = Path2D::from_svg_path_data("M0,0 Q50,50,100,0 C150,50,200,50,250,0").unwrap();
+        assert!(path.get_path().is_some());
+    }
+
+    #[test]
+    fn test_path2d_from_svg_arc() {
+        // Test arc (gets converted to cubic beziers)
+        let mut path = Path2D::from_svg_path_data("M10,10 A20,20 0 0 1 50,50").unwrap();
+        assert!(path.get_path().is_some());
+    }
+
+    #[test]
+    fn test_path2d_from_svg_invalid() {
+        // Test invalid path data
+        let result = Path2D::from_svg_path_data("not valid path data");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_path2d_from_svg_empty() {
+        // Empty path data should succeed but produce empty path
+        let mut path = Path2D::from_svg_path_data("").unwrap();
+        assert!(path.get_path().is_none()); // Empty path
+    }
+
+    #[test]
+    fn test_path2d_from_svg_relative_commands() {
+        // Test relative commands (lowercase)
+        let mut path = Path2D::from_svg_path_data("M10,10 l40,40 z").unwrap();
+        assert!(path.get_path().is_some());
     }
 }

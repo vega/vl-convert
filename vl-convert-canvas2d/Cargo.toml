@@ -22,6 +22,9 @@ png = { workspace = true }
 # CSS color parsing
 csscolorparser = "0.7"
 
+# SVG path parsing (for Path2D from SVG string)
+svgtypes = "0.16"
+
 # Error handling
 thiserror = "2"
 
