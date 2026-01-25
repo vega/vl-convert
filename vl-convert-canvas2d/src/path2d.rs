@@ -107,14 +107,7 @@ impl Path2D {
     }
 
     /// Add a rounded rectangle to the path with individual corner radii.
-    pub fn round_rect_radii(
-        &mut self,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        radii: [f32; 4],
-    ) {
+    pub fn round_rect_radii(&mut self, x: f32, y: f32, width: f32, height: f32, radii: [f32; 4]) {
         self.invalidate();
 
         // Handle negative dimensions

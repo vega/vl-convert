@@ -35,6 +35,10 @@ pub enum Canvas2dError {
     /// Text rendering error.
     #[error("Text rendering error: {0}")]
     TextError(String),
+
+    /// Invalid argument error.
+    #[error("Invalid argument: {0}")]
+    InvalidArgument(String),
 }
 
 impl From<png::EncodingError> for Canvas2dError {
