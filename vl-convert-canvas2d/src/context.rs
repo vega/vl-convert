@@ -666,8 +666,9 @@ impl Canvas2dContext {
     pub fn fill_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
         if let Some(rect) = tiny_skia::Rect::from_xywh(x, y, width, height) {
             if let Some(paint) = self.create_fill_paint() {
+                let clip_mask = self.create_clip_mask();
                 self.pixmap
-                    .fill_rect(rect, &paint, self.state.transform, None);
+                    .fill_rect(rect, &paint, self.state.transform, clip_mask.as_ref());
             }
         }
     }
@@ -686,8 +687,9 @@ impl Canvas2dContext {
                 blend_mode: tiny_skia::BlendMode::Clear,
                 ..Default::default()
             };
+            let clip_mask = self.create_clip_mask();
             self.pixmap
-                .fill_rect(rect, &paint, self.state.transform, None);
+                .fill_rect(rect, &paint, self.state.transform, clip_mask.as_ref());
         }
     }
 
@@ -883,15 +885,14 @@ impl Canvas2dContext {
                 y1,
                 r1,
             } => {
-                // Note: tiny_skia's RadialGradient is center-based, not two-point
-                // We use the outer circle (x1, y1, r1) as the gradient basis
-                // r0 (inner radius) is not directly supported by tiny_skia
+                // tiny_skia's RadialGradient::new(start, end, radius, ...)
+                // - start: where gradient originates (inner circle center)
+                // - end: outer circle center
+                // - radius: outer circle radius
+                // Note: r0 (inner radius) is not directly supported by tiny_skia
                 tiny_skia::RadialGradient::new(
+                    tiny_skia::Point { x: *x0, y: *y0 },
                     tiny_skia::Point { x: *x1, y: *y1 },
-                    tiny_skia::Point {
-                        x: *x0 - *x1,
-                        y: *y0 - *y1,
-                    },
                     *r1,
                     stops,
                     tiny_skia::SpreadMode::Pad,

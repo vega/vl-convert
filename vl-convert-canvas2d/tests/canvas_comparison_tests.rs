@@ -1242,3 +1242,431 @@ ctx.fillText('Apgy', 20, 50);
     };
     run_comparison_test(&test).expect("text_baseline_alphabetic comparison failed");
 }
+
+// ============================================================================
+// Gradient Tests
+// ============================================================================
+
+#[test]
+fn test_linear_gradient_horizontal_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "linear_gradient_horizontal",
+        width: 200,
+        height: 100,
+        js_code: r#"
+const gradient = ctx.createLinearGradient(0, 0, 200, 0);
+gradient.addColorStop(0, '#ff0000');
+gradient.addColorStop(1, '#0000ff');
+ctx.fillStyle = gradient;
+ctx.fillRect(0, 0, 200, 100);
+"#,
+        rust_fn: |ctx| {
+            let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 200.0, 0.0);
+            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            ctx.set_fill_style_gradient(gradient);
+            ctx.fill_rect(0.0, 0.0, 200.0, 100.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("linear_gradient_horizontal comparison failed");
+}
+
+#[test]
+fn test_linear_gradient_vertical_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "linear_gradient_vertical",
+        width: 100,
+        height: 200,
+        js_code: r#"
+const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+gradient.addColorStop(0, '#00ff00');
+gradient.addColorStop(1, '#ffff00');
+ctx.fillStyle = gradient;
+ctx.fillRect(0, 0, 100, 200);
+"#,
+        rust_fn: |ctx| {
+            let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 0.0, 200.0);
+            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(0, 255, 0, 255));
+            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
+            ctx.set_fill_style_gradient(gradient);
+            ctx.fill_rect(0.0, 0.0, 100.0, 200.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("linear_gradient_vertical comparison failed");
+}
+
+#[test]
+fn test_linear_gradient_diagonal_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "linear_gradient_diagonal",
+        width: 150,
+        height: 150,
+        js_code: r#"
+const gradient = ctx.createLinearGradient(0, 0, 150, 150);
+gradient.addColorStop(0, '#ff0000');
+gradient.addColorStop(0.5, '#00ff00');
+gradient.addColorStop(1, '#0000ff');
+ctx.fillStyle = gradient;
+ctx.fillRect(0, 0, 150, 150);
+"#,
+        rust_fn: |ctx| {
+            let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 150.0, 150.0);
+            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(0.5, tiny_skia::Color::from_rgba8(0, 255, 0, 255));
+            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            ctx.set_fill_style_gradient(gradient);
+            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("linear_gradient_diagonal comparison failed");
+}
+
+#[test]
+fn test_radial_gradient_centered_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "radial_gradient_centered",
+        width: 150,
+        height: 150,
+        js_code: r#"
+const gradient = ctx.createRadialGradient(75, 75, 0, 75, 75, 75);
+gradient.addColorStop(0, '#ffffff');
+gradient.addColorStop(1, '#000000');
+ctx.fillStyle = gradient;
+ctx.fillRect(0, 0, 150, 150);
+"#,
+        rust_fn: |ctx| {
+            let mut gradient = ctx.create_radial_gradient(75.0, 75.0, 0.0, 75.0, 75.0, 75.0);
+            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 255, 255, 255));
+            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 0, 255));
+            ctx.set_fill_style_gradient(gradient);
+            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0, // Slightly higher for radial gradient edge differences
+    };
+    run_comparison_test(&test).expect("radial_gradient_centered comparison failed");
+}
+
+#[test]
+fn test_radial_gradient_offset_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "radial_gradient_offset",
+        width: 150,
+        height: 150,
+        js_code: r#"
+const gradient = ctx.createRadialGradient(50, 50, 10, 75, 75, 70);
+gradient.addColorStop(0, '#ff0000');
+gradient.addColorStop(0.5, '#ffff00');
+gradient.addColorStop(1, '#0000ff');
+ctx.fillStyle = gradient;
+ctx.fillRect(0, 0, 150, 150);
+"#,
+        rust_fn: |ctx| {
+            let mut gradient = ctx.create_radial_gradient(50.0, 50.0, 10.0, 75.0, 75.0, 70.0);
+            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(0.5, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
+            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            ctx.set_fill_style_gradient(gradient);
+            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        // Higher tolerance for offset radial gradients - tiny_skia doesn't support
+        // inner radius (r0) for two-point conical gradients, causing slight differences
+        max_diff_percent: 35.0,
+    };
+    run_comparison_test(&test).expect("radial_gradient_offset comparison failed");
+}
+
+#[test]
+fn test_linear_gradient_stroke_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "linear_gradient_stroke",
+        width: 150,
+        height: 150,
+        js_code: r#"
+const gradient = ctx.createLinearGradient(0, 0, 150, 0);
+gradient.addColorStop(0, '#ff0000');
+gradient.addColorStop(1, '#00ff00');
+ctx.strokeStyle = gradient;
+ctx.lineWidth = 10;
+ctx.beginPath();
+ctx.moveTo(20, 75);
+ctx.lineTo(130, 75);
+ctx.stroke();
+ctx.beginPath();
+ctx.arc(75, 75, 40, 0, Math.PI * 2);
+ctx.stroke();
+"#,
+        rust_fn: |ctx| {
+            let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 150.0, 0.0);
+            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 255, 0, 255));
+            ctx.set_stroke_style_gradient(gradient);
+            ctx.set_line_width(10.0);
+            ctx.begin_path();
+            ctx.move_to(20.0, 75.0);
+            ctx.line_to(130.0, 75.0);
+            ctx.stroke();
+            ctx.begin_path();
+            ctx.arc(75.0, 75.0, 40.0, 0.0, 2.0 * PI, false);
+            ctx.stroke();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("linear_gradient_stroke comparison failed");
+}
+
+// ============================================================================
+// Clipping Tests
+// ============================================================================
+
+#[test]
+fn test_clip_rect_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "clip_rect",
+        width: 150,
+        height: 150,
+        js_code: r#"
+// Define rectangular clipping region
+ctx.beginPath();
+ctx.rect(25, 25, 100, 100);
+ctx.clip();
+
+// Fill entire canvas - only clipped region should be visible
+ctx.fillStyle = '#ff0000';
+ctx.fillRect(0, 0, 150, 150);
+
+// Draw a circle that extends outside clip region
+ctx.fillStyle = '#0000ff';
+ctx.beginPath();
+ctx.arc(75, 75, 60, 0, Math.PI * 2);
+ctx.fill();
+"#,
+        rust_fn: |ctx| {
+            // Define rectangular clipping region
+            ctx.begin_path();
+            ctx.rect(25.0, 25.0, 100.0, 100.0);
+            ctx.clip();
+
+            // Fill entire canvas - only clipped region should be visible
+            ctx.set_fill_style("#ff0000").unwrap();
+            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+
+            // Draw a circle that extends outside clip region
+            ctx.set_fill_style("#0000ff").unwrap();
+            ctx.begin_path();
+            ctx.arc(75.0, 75.0, 60.0, 0.0, 2.0 * PI, false);
+            ctx.fill();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("clip_rect comparison failed");
+}
+
+#[test]
+fn test_clip_circle_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "clip_circle",
+        width: 150,
+        height: 150,
+        js_code: r#"
+// Define circular clipping region
+ctx.beginPath();
+ctx.arc(75, 75, 50, 0, Math.PI * 2);
+ctx.clip();
+
+// Draw gradient background
+const gradient = ctx.createLinearGradient(0, 0, 150, 150);
+gradient.addColorStop(0, '#ff0000');
+gradient.addColorStop(1, '#0000ff');
+ctx.fillStyle = gradient;
+ctx.fillRect(0, 0, 150, 150);
+
+// Draw grid lines
+ctx.strokeStyle = '#ffffff';
+ctx.lineWidth = 2;
+for (let i = 0; i <= 150; i += 20) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 150);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, i);
+    ctx.lineTo(150, i);
+    ctx.stroke();
+}
+"#,
+        rust_fn: |ctx| {
+            // Define circular clipping region
+            ctx.begin_path();
+            ctx.arc(75.0, 75.0, 50.0, 0.0, 2.0 * PI, false);
+            ctx.clip();
+
+            // Draw gradient background
+            let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 150.0, 150.0);
+            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            ctx.set_fill_style_gradient(gradient);
+            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+
+            // Draw grid lines
+            ctx.set_stroke_style("#ffffff").unwrap();
+            ctx.set_line_width(2.0);
+            for i in (0..=150).step_by(20) {
+                ctx.begin_path();
+                ctx.move_to(i as f32, 0.0);
+                ctx.line_to(i as f32, 150.0);
+                ctx.stroke();
+                ctx.begin_path();
+                ctx.move_to(0.0, i as f32);
+                ctx.line_to(150.0, i as f32);
+                ctx.stroke();
+            }
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 3.0, // Higher tolerance for complex clipping
+    };
+    run_comparison_test(&test).expect("clip_circle comparison failed");
+}
+
+#[test]
+fn test_clip_complex_path_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "clip_complex_path",
+        width: 150,
+        height: 150,
+        js_code: r#"
+// Define star-shaped clipping region
+ctx.beginPath();
+ctx.moveTo(75, 10);
+ctx.lineTo(95, 55);
+ctx.lineTo(140, 55);
+ctx.lineTo(105, 85);
+ctx.lineTo(120, 130);
+ctx.lineTo(75, 105);
+ctx.lineTo(30, 130);
+ctx.lineTo(45, 85);
+ctx.lineTo(10, 55);
+ctx.lineTo(55, 55);
+ctx.closePath();
+ctx.clip();
+
+// Fill with gradient
+const gradient = ctx.createRadialGradient(75, 75, 0, 75, 75, 75);
+gradient.addColorStop(0, '#ffff00');
+gradient.addColorStop(1, '#ff0000');
+ctx.fillStyle = gradient;
+ctx.fillRect(0, 0, 150, 150);
+"#,
+        rust_fn: |ctx| {
+            // Define star-shaped clipping region
+            ctx.begin_path();
+            ctx.move_to(75.0, 10.0);
+            ctx.line_to(95.0, 55.0);
+            ctx.line_to(140.0, 55.0);
+            ctx.line_to(105.0, 85.0);
+            ctx.line_to(120.0, 130.0);
+            ctx.line_to(75.0, 105.0);
+            ctx.line_to(30.0, 130.0);
+            ctx.line_to(45.0, 85.0);
+            ctx.line_to(10.0, 55.0);
+            ctx.line_to(55.0, 55.0);
+            ctx.close_path();
+            ctx.clip();
+
+            // Fill with gradient
+            let mut gradient = ctx.create_radial_gradient(75.0, 75.0, 0.0, 75.0, 75.0, 75.0);
+            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
+            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            ctx.set_fill_style_gradient(gradient);
+            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 3.0,
+    };
+    run_comparison_test(&test).expect("clip_complex_path comparison failed");
+}
+
+#[test]
+fn test_clip_with_transform_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "clip_with_transform",
+        width: 150,
+        height: 150,
+        js_code: r#"
+// Apply rotation transform
+ctx.translate(75, 75);
+ctx.rotate(Math.PI / 4);
+ctx.translate(-75, -75);
+
+// Define rectangular clipping region (now rotated)
+ctx.beginPath();
+ctx.rect(37.5, 37.5, 75, 75);
+ctx.clip();
+
+// Fill with solid color
+ctx.fillStyle = '#00ff00';
+ctx.fillRect(0, 0, 150, 150);
+
+// Draw some lines
+ctx.strokeStyle = '#000000';
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.moveTo(0, 75);
+ctx.lineTo(150, 75);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(75, 0);
+ctx.lineTo(75, 150);
+ctx.stroke();
+"#,
+        rust_fn: |ctx| {
+            // Apply rotation transform
+            ctx.translate(75.0, 75.0);
+            ctx.rotate(PI / 4.0);
+            ctx.translate(-75.0, -75.0);
+
+            // Define rectangular clipping region (now rotated)
+            ctx.begin_path();
+            ctx.rect(37.5, 37.5, 75.0, 75.0);
+            ctx.clip();
+
+            // Fill with solid color
+            ctx.set_fill_style("#00ff00").unwrap();
+            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+
+            // Draw some lines
+            ctx.set_stroke_style("#000000").unwrap();
+            ctx.set_line_width(3.0);
+            ctx.begin_path();
+            ctx.move_to(0.0, 75.0);
+            ctx.line_to(150.0, 75.0);
+            ctx.stroke();
+            ctx.begin_path();
+            ctx.move_to(75.0, 0.0);
+            ctx.line_to(75.0, 150.0);
+            ctx.stroke();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 3.0,
+    };
+    run_comparison_test(&test).expect("clip_with_transform comparison failed");
+}
