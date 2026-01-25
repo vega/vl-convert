@@ -728,13 +728,8 @@ impl Canvas2dContext {
                                     )
                                 },
                             };
-                            self.pixmap.stroke_path(
-                                &path,
-                                &paint,
-                                &stroke,
-                                glyph_transform,
-                                None,
-                            );
+                            self.pixmap
+                                .stroke_path(&path, &paint, &stroke, glyph_transform, None);
                         }
                     }
                 }
