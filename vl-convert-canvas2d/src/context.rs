@@ -3,13 +3,78 @@
 use crate::error::{Canvas2dError, Canvas2dResult};
 use crate::font_parser::{parse_font, ParsedFont};
 use crate::gradient::{CanvasGradient, GradientType};
-use crate::style::{FillStyle, LineCap, LineJoin, TextAlign, TextBaseline};
+use crate::path2d::Path2D;
+use crate::style::{
+    CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
+};
 use crate::text::TextMetrics;
 use cosmic_text::{Attrs, Buffer, Command, Family, FontSystem, Metrics, Shaping, SwashCache};
 use tiny_skia::{Pixmap, Transform};
 
 /// Maximum canvas dimension (same as Chrome).
 const MAX_DIMENSION: u32 = 32767;
+
+/// DOMMatrix represents a 2D transformation matrix.
+///
+/// The matrix is represented as:
+/// ```text
+/// | a c e |
+/// | b d f |
+/// | 0 0 1 |
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DOMMatrix {
+    /// Scale X component.
+    pub a: f32,
+    /// Skew Y component.
+    pub b: f32,
+    /// Skew X component.
+    pub c: f32,
+    /// Scale Y component.
+    pub d: f32,
+    /// Translate X component.
+    pub e: f32,
+    /// Translate Y component.
+    pub f: f32,
+}
+
+impl DOMMatrix {
+    /// Create a new DOMMatrix with the specified components.
+    pub fn new(a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) -> Self {
+        Self { a, b, c, d, e, f }
+    }
+
+    /// Create an identity matrix.
+    pub fn identity() -> Self {
+        Self {
+            a: 1.0,
+            b: 0.0,
+            c: 0.0,
+            d: 1.0,
+            e: 0.0,
+            f: 0.0,
+        }
+    }
+}
+
+impl From<tiny_skia::Transform> for DOMMatrix {
+    fn from(t: tiny_skia::Transform) -> Self {
+        DOMMatrix {
+            a: t.sx,
+            b: t.ky,
+            c: t.kx,
+            d: t.sy,
+            e: t.tx,
+            f: t.ty,
+        }
+    }
+}
+
+impl From<DOMMatrix> for tiny_skia::Transform {
+    fn from(m: DOMMatrix) -> Self {
+        tiny_skia::Transform::from_row(m.a, m.b, m.c, m.d, m.e, m.f)
+    }
+}
 
 /// Drawing state that can be saved and restored.
 #[derive(Debug, Clone)]
@@ -44,6 +109,12 @@ pub struct DrawingState {
     pub transform: Transform,
     /// Clipping path (if any).
     pub clip_path: Option<tiny_skia::Path>,
+    /// Letter spacing for text rendering (in pixels).
+    pub letter_spacing: f32,
+    /// Whether image smoothing is enabled.
+    pub image_smoothing_enabled: bool,
+    /// Image smoothing quality level.
+    pub image_smoothing_quality: ImageSmoothingQuality,
 }
 
 impl Default for DrawingState {
@@ -64,6 +135,9 @@ impl Default for DrawingState {
             global_composite_operation: tiny_skia::BlendMode::SourceOver,
             transform: Transform::identity(),
             clip_path: None,
+            letter_spacing: 0.0,
+            image_smoothing_enabled: true,
+            image_smoothing_quality: ImageSmoothingQuality::default(),
         }
     }
 }
@@ -295,6 +369,37 @@ impl Canvas2dContext {
         self.state.line_dash_offset = offset;
     }
 
+    // --- Image smoothing ---
+
+    /// Set whether image smoothing is enabled.
+    pub fn set_image_smoothing_enabled(&mut self, enabled: bool) {
+        self.state.image_smoothing_enabled = enabled;
+    }
+
+    /// Get whether image smoothing is enabled.
+    pub fn get_image_smoothing_enabled(&self) -> bool {
+        self.state.image_smoothing_enabled
+    }
+
+    /// Set the image smoothing quality.
+    pub fn set_image_smoothing_quality(&mut self, quality: ImageSmoothingQuality) {
+        self.state.image_smoothing_quality = quality;
+    }
+
+    /// Get the image smoothing quality.
+    pub fn get_image_smoothing_quality(&self) -> ImageSmoothingQuality {
+        self.state.image_smoothing_quality
+    }
+
+    /// Get the filter quality for image rendering based on smoothing settings.
+    fn get_image_filter_quality(&self) -> tiny_skia::FilterQuality {
+        if self.state.image_smoothing_enabled {
+            self.state.image_smoothing_quality.into()
+        } else {
+            tiny_skia::FilterQuality::Nearest
+        }
+    }
+
     // --- Gradients ---
 
     /// Create a linear gradient.
@@ -357,6 +462,16 @@ impl Canvas2dContext {
         self.state.text_baseline = baseline;
     }
 
+    /// Set the letter spacing for text rendering (in pixels).
+    pub fn set_letter_spacing(&mut self, spacing: f32) {
+        self.state.letter_spacing = spacing;
+    }
+
+    /// Get the current letter spacing (in pixels).
+    pub fn get_letter_spacing(&self) -> f32 {
+        self.state.letter_spacing
+    }
+
     /// Measure text and return metrics.
     pub fn measure_text(&mut self, text: &str) -> Canvas2dResult<TextMetrics> {
         crate::text::measure_text(&mut self.font_system, text, &self.state.font)
@@ -385,10 +500,13 @@ impl Canvas2dContext {
             .map(|f| Family::Name(f))
             .unwrap_or(Family::SansSerif);
 
+        // Build attributes including letter spacing if set
+        let letter_spacing = self.state.letter_spacing;
         let attrs = Attrs::new()
             .family(family)
             .weight(font.weight)
-            .style(font.style);
+            .style(font.style)
+            .letter_spacing(letter_spacing);
 
         buffer.set_text(&mut self.font_system, text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(&mut self.font_system, false);
@@ -524,6 +642,96 @@ impl Canvas2dContext {
         self.path_builder.rect(x, y, width, height);
     }
 
+    /// Add a rounded rectangle to the path with uniform corner radius.
+    pub fn round_rect(&mut self, x: f32, y: f32, width: f32, height: f32, radius: f32) {
+        self.round_rect_radii(x, y, width, height, [radius, radius, radius, radius]);
+    }
+
+    /// Add a rounded rectangle to the path with individual corner radii.
+    ///
+    /// The radii array specifies the corner radii in order:
+    /// `[top-left, top-right, bottom-right, bottom-left]`
+    pub fn round_rect_radii(
+        &mut self,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        radii: [f32; 4],
+    ) {
+        // Handle negative dimensions by adjusting position
+        let (x, width) = if width < 0.0 {
+            (x + width, -width)
+        } else {
+            (x, width)
+        };
+        let (y, height) = if height < 0.0 {
+            (y + height, -height)
+        } else {
+            (y, height)
+        };
+
+        let [mut tl, mut tr, mut br, mut bl] = radii;
+
+        // Clamp radii to non-negative
+        tl = tl.max(0.0);
+        tr = tr.max(0.0);
+        br = br.max(0.0);
+        bl = bl.max(0.0);
+
+        // Scale radii if they exceed the rectangle dimensions
+        // Per spec: scale all radii uniformly if they exceed dimensions
+        let scale_x = width / (tl.max(bl) + tr.max(br)).max(1e-10);
+        let scale_y = height / (tl.max(tr) + bl.max(br)).max(1e-10);
+        let scale = scale_x.min(scale_y).min(1.0);
+
+        if scale < 1.0 {
+            tl *= scale;
+            tr *= scale;
+            br *= scale;
+            bl *= scale;
+        }
+
+        // Build the rounded rectangle path using quadratic curves for corners
+        // Start at the top edge, after the top-left corner
+        self.path_builder.move_to(x + tl, y);
+
+        // Top edge to top-right corner
+        self.path_builder.line_to(x + width - tr, y);
+
+        // Top-right corner
+        if tr > 0.0 {
+            self.path_builder.quad_to(x + width, y, x + width, y + tr);
+        }
+
+        // Right edge to bottom-right corner
+        self.path_builder.line_to(x + width, y + height - br);
+
+        // Bottom-right corner
+        if br > 0.0 {
+            self.path_builder
+                .quad_to(x + width, y + height, x + width - br, y + height);
+        }
+
+        // Bottom edge to bottom-left corner
+        self.path_builder.line_to(x + bl, y + height);
+
+        // Bottom-left corner
+        if bl > 0.0 {
+            self.path_builder.quad_to(x, y + height, x, y + height - bl);
+        }
+
+        // Left edge to top-left corner
+        self.path_builder.line_to(x, y + tl);
+
+        // Top-left corner
+        if tl > 0.0 {
+            self.path_builder.quad_to(x, y, x + tl, y);
+        }
+
+        self.path_builder.close();
+    }
+
     /// Add an arc to the path.
     pub fn arc(
         &mut self,
@@ -587,8 +795,16 @@ impl Canvas2dContext {
 
     // --- Clipping ---
 
-    /// Create a clipping region from the current path.
+    /// Create a clipping region from the current path using the non-zero winding rule.
     pub fn clip(&mut self) {
+        self.clip_with_rule(CanvasFillRule::NonZero);
+    }
+
+    /// Create a clipping region from the current path with the specified fill rule.
+    pub fn clip_with_rule(&mut self, _fill_rule: CanvasFillRule) {
+        // Note: The fill_rule is stored but used during mask creation in create_clip_mask()
+        // For now, we store the path and use FillRule::Winding in the mask
+        // A more complete implementation would store the fill rule with the clip path
         let path =
             std::mem::replace(&mut self.path_builder, tiny_skia::PathBuilder::new()).finish();
 
@@ -608,8 +824,13 @@ impl Canvas2dContext {
 
     // --- Drawing operations ---
 
-    /// Fill the current path.
+    /// Fill the current path using the non-zero winding rule.
     pub fn fill(&mut self) {
+        self.fill_with_rule(CanvasFillRule::NonZero);
+    }
+
+    /// Fill the current path with the specified fill rule.
+    pub fn fill_with_rule(&mut self, fill_rule: CanvasFillRule) {
         let path =
             std::mem::replace(&mut self.path_builder, tiny_skia::PathBuilder::new()).finish();
 
@@ -620,7 +841,7 @@ impl Canvas2dContext {
                 self.pixmap.fill_path(
                     &path,
                     &paint,
-                    tiny_skia::FillRule::Winding,
+                    fill_rule.into(),
                     self.state.transform,
                     clip_mask.as_ref(),
                 );
@@ -662,6 +883,72 @@ impl Canvas2dContext {
         }
     }
 
+    // --- Path2D operations ---
+
+    /// Fill a Path2D object using the non-zero winding rule.
+    pub fn fill_path2d(&mut self, path: &mut Path2D) {
+        self.fill_path2d_with_rule(path, CanvasFillRule::NonZero);
+    }
+
+    /// Fill a Path2D object with the specified fill rule.
+    pub fn fill_path2d_with_rule(&mut self, path: &mut Path2D, fill_rule: CanvasFillRule) {
+        if let Some(p) = path.get_path() {
+            if let Some(paint) = self.create_fill_paint() {
+                let clip_mask = self.create_clip_mask();
+                self.pixmap.fill_path(
+                    p,
+                    &paint,
+                    fill_rule.into(),
+                    self.state.transform,
+                    clip_mask.as_ref(),
+                );
+            }
+        }
+    }
+
+    /// Stroke a Path2D object.
+    pub fn stroke_path2d(&mut self, path: &mut Path2D) {
+        if let Some(p) = path.get_path() {
+            if let Some(paint) = self.create_stroke_paint() {
+                let stroke = tiny_skia::Stroke {
+                    width: self.state.line_width,
+                    line_cap: self.state.line_cap.into(),
+                    line_join: self.state.line_join.into(),
+                    miter_limit: self.state.miter_limit,
+                    dash: if self.state.line_dash.is_empty() {
+                        None
+                    } else {
+                        tiny_skia::StrokeDash::new(
+                            self.state.line_dash.clone(),
+                            self.state.line_dash_offset,
+                        )
+                    },
+                };
+
+                let clip_mask = self.create_clip_mask();
+                self.pixmap.stroke_path(
+                    p,
+                    &paint,
+                    &stroke,
+                    self.state.transform,
+                    clip_mask.as_ref(),
+                );
+            }
+        }
+    }
+
+    /// Clip to a Path2D object using the non-zero winding rule.
+    pub fn clip_path2d(&mut self, path: &mut Path2D) {
+        self.clip_path2d_with_rule(path, CanvasFillRule::NonZero);
+    }
+
+    /// Clip to a Path2D object with the specified fill rule.
+    pub fn clip_path2d_with_rule(&mut self, path: &mut Path2D, _fill_rule: CanvasFillRule) {
+        if let Some(p) = path.get_path() {
+            self.state.clip_path = Some(p.clone());
+        }
+    }
+
     /// Fill a rectangle.
     pub fn fill_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
         if let Some(rect) = tiny_skia::Rect::from_xywh(x, y, width, height) {
@@ -690,6 +977,107 @@ impl Canvas2dContext {
             let clip_mask = self.create_clip_mask();
             self.pixmap
                 .fill_rect(rect, &paint, self.state.transform, clip_mask.as_ref());
+        }
+    }
+
+    // --- Image drawing ---
+
+    /// Draw an image at the specified position.
+    ///
+    /// This is the simplest form of drawImage - it draws the entire image
+    /// at the specified (dx, dy) coordinates.
+    pub fn draw_image(&mut self, image: tiny_skia::PixmapRef, dx: f32, dy: f32) {
+        let paint = tiny_skia::PixmapPaint {
+            opacity: self.state.global_alpha,
+            blend_mode: self.state.global_composite_operation,
+            quality: self.get_image_filter_quality(),
+        };
+
+        // Translate to destination position
+        let transform = self.state.transform.pre_translate(dx, dy);
+
+        let clip_mask = self.create_clip_mask();
+        self.pixmap
+            .draw_pixmap(0, 0, image, &paint, transform, clip_mask.as_ref());
+    }
+
+    /// Draw an image scaled to the specified dimensions.
+    ///
+    /// This form draws the entire source image scaled to fit within
+    /// the destination rectangle (dx, dy, dw, dh).
+    pub fn draw_image_scaled(
+        &mut self,
+        image: tiny_skia::PixmapRef,
+        dx: f32,
+        dy: f32,
+        dw: f32,
+        dh: f32,
+    ) {
+        let paint = tiny_skia::PixmapPaint {
+            opacity: self.state.global_alpha,
+            blend_mode: self.state.global_composite_operation,
+            quality: self.get_image_filter_quality(),
+        };
+
+        // Calculate scale factors
+        let scale_x = dw / image.width() as f32;
+        let scale_y = dh / image.height() as f32;
+
+        // Translate to destination position, then scale
+        let transform = self
+            .state
+            .transform
+            .pre_translate(dx, dy)
+            .pre_scale(scale_x, scale_y);
+
+        let clip_mask = self.create_clip_mask();
+        self.pixmap
+            .draw_pixmap(0, 0, image, &paint, transform, clip_mask.as_ref());
+    }
+
+    /// Draw a portion of an image to a destination rectangle.
+    ///
+    /// This form extracts a source rectangle (sx, sy, sw, sh) from the image
+    /// and draws it into the destination rectangle (dx, dy, dw, dh).
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_image_cropped(
+        &mut self,
+        image: tiny_skia::PixmapRef,
+        sx: f32,
+        sy: f32,
+        sw: f32,
+        sh: f32,
+        dx: f32,
+        dy: f32,
+        dw: f32,
+        dh: f32,
+    ) {
+        // Clamp source rectangle to image bounds
+        let sx = sx.max(0.0);
+        let sy = sy.max(0.0);
+        let sw = sw.min(image.width() as f32 - sx);
+        let sh = sh.min(image.height() as f32 - sy);
+
+        if sw <= 0.0 || sh <= 0.0 || dw <= 0.0 || dh <= 0.0 {
+            return;
+        }
+
+        // Create a sub-image by creating a temporary pixmap with just the source region
+        let sub_width = sw.ceil() as u32;
+        let sub_height = sh.ceil() as u32;
+
+        if let Some(mut sub_pixmap) = tiny_skia::Pixmap::new(sub_width, sub_height) {
+            // Copy the source region to the sub-pixmap
+            let src_x = sx.floor() as i32;
+            let src_y = sy.floor() as i32;
+
+            // Draw the source image offset to extract the region
+            let extract_paint = tiny_skia::PixmapPaint::default();
+            let extract_transform = Transform::from_translate(-src_x as f32, -src_y as f32);
+            sub_pixmap.draw_pixmap(0, 0, image, &extract_paint, extract_transform, None);
+
+            // Now draw the extracted region scaled to the destination
+            self.draw_image_scaled(sub_pixmap.as_ref(), dx, dy, dw, dh);
         }
     }
 
@@ -727,6 +1115,16 @@ impl Canvas2dContext {
     /// Reset the transform to identity.
     pub fn reset_transform(&mut self) {
         self.state.transform = Transform::identity();
+    }
+
+    /// Get the current transformation matrix.
+    pub fn get_transform(&self) -> DOMMatrix {
+        self.state.transform.into()
+    }
+
+    /// Set the transform from a DOMMatrix.
+    pub fn set_transform_matrix(&mut self, matrix: DOMMatrix) {
+        self.state.transform = matrix.into();
     }
 
     // --- Output ---

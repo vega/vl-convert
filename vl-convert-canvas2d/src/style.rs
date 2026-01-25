@@ -99,3 +99,46 @@ pub enum TextBaseline {
     /// Bottom of the em square.
     Bottom,
 }
+
+/// Fill rule for path operations.
+///
+/// Determines how the interior of a path is calculated when filling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CanvasFillRule {
+    /// Non-zero winding rule (default).
+    #[default]
+    NonZero,
+    /// Even-odd rule.
+    EvenOdd,
+}
+
+impl From<CanvasFillRule> for tiny_skia::FillRule {
+    fn from(rule: CanvasFillRule) -> Self {
+        match rule {
+            CanvasFillRule::NonZero => tiny_skia::FillRule::Winding,
+            CanvasFillRule::EvenOdd => tiny_skia::FillRule::EvenOdd,
+        }
+    }
+}
+
+/// Image smoothing quality levels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImageSmoothingQuality {
+    /// Low quality (fastest).
+    Low,
+    /// Medium quality (balanced).
+    #[default]
+    Medium,
+    /// High quality (slowest).
+    High,
+}
+
+impl From<ImageSmoothingQuality> for tiny_skia::FilterQuality {
+    fn from(quality: ImageSmoothingQuality) -> Self {
+        match quality {
+            ImageSmoothingQuality::Low => tiny_skia::FilterQuality::Bilinear,
+            ImageSmoothingQuality::Medium => tiny_skia::FilterQuality::Bilinear,
+            ImageSmoothingQuality::High => tiny_skia::FilterQuality::Bicubic,
+        }
+    }
+}
