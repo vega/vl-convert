@@ -272,6 +272,28 @@ impl Canvas2dContext {
         }
     }
 
+    /// Reset the rendering context to its default state.
+    ///
+    /// This clears the canvas to transparent, resets all drawing state
+    /// (fill/stroke style, transforms, etc.), and empties the state stack.
+    pub fn reset(&mut self) {
+        // Clear the canvas to transparent
+        self.pixmap.fill(tiny_skia::Color::TRANSPARENT);
+
+        // Reset state to defaults
+        self.state = DrawingState::default();
+
+        // Clear saved states
+        self.state_stack.clear();
+
+        // Reset path
+        self.path_builder = tiny_skia::PathBuilder::new();
+        self.current_x = 0.0;
+        self.current_y = 0.0;
+        self.subpath_start_x = 0.0;
+        self.subpath_start_y = 0.0;
+    }
+
     // --- Style setters ---
 
     /// Set the fill style from a CSS color string.
@@ -1241,6 +1263,14 @@ impl Canvas2dContext {
 
     // --- Output ---
 
+    /// Create a new ImageData with the specified dimensions.
+    ///
+    /// Returns a Vec<u8> filled with transparent black (all zeros).
+    /// The data is in RGBA format with 4 bytes per pixel.
+    pub fn create_image_data(&self, width: u32, height: u32) -> Vec<u8> {
+        vec![0u8; (width * height * 4) as usize]
+    }
+
     /// Get image data for a region of the canvas.
     pub fn get_image_data(&self, x: i32, y: i32, width: u32, height: u32) -> Vec<u8> {
         let mut data = vec![0u8; (width * height * 4) as usize];
@@ -1584,5 +1614,59 @@ mod tests {
         ctx.fill_rect(10.0, 10.0, 50.0, 50.0);
         // Verify the pixmap has non-zero data
         assert!(ctx.pixmap().data().iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn test_reset() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+
+        // Modify state
+        ctx.set_fill_style("#ff0000").unwrap();
+        ctx.set_line_width(5.0);
+        ctx.translate(10.0, 10.0);
+        ctx.save();
+        ctx.fill_rect(0.0, 0.0, 100.0, 100.0);
+
+        // Verify pixmap has data
+        assert!(ctx.pixmap().data().iter().any(|&b| b != 0));
+
+        // Reset
+        ctx.reset();
+
+        // Verify canvas is clear (all transparent)
+        assert!(ctx.pixmap().data().iter().all(|&b| b == 0));
+
+        // Verify state is reset to defaults (line width should be 1.0)
+        // We can't directly access line_width, but we can check transform is identity
+        let transform = ctx.get_transform();
+        assert_eq!(transform.a, 1.0);
+        assert_eq!(transform.d, 1.0);
+        assert_eq!(transform.e, 0.0);
+        assert_eq!(transform.f, 0.0);
+    }
+
+    #[test]
+    fn test_create_image_data() {
+        let ctx = Canvas2dContext::new(100, 100).unwrap();
+
+        // Create image data
+        let data = ctx.create_image_data(50, 30);
+
+        // Verify correct size (50 * 30 * 4 = 6000 bytes)
+        assert_eq!(data.len(), 6000);
+
+        // Verify all zeros (transparent black)
+        assert!(data.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_create_image_data_large() {
+        let ctx = Canvas2dContext::new(100, 100).unwrap();
+
+        // Create larger image data
+        let data = ctx.create_image_data(1000, 1000);
+
+        // Verify correct size
+        assert_eq!(data.len(), 1000 * 1000 * 4);
     }
 }

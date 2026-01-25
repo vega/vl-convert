@@ -36,7 +36,7 @@ let png_data = ctx.to_png()?;
 |---------|--------|-----|
 | save() | ✅ | `save()` |
 | restore() | ✅ | `restore()` |
-| reset() | ❌ | - |
+| reset() | ✅ | `reset()` |
 
 ### Transformations
 
@@ -201,7 +201,7 @@ let png_data = ctx.to_png()?;
 | getImageData() | ✅ | `get_image_data(x, y, w, h)` - returns Vec<u8> RGBA |
 | putImageData(data, dx, dy) | ✅ | `put_image_data(data, w, h, dx, dy)` |
 | putImageData(data, dx, dy, dirty) | ✅ | `put_image_data_dirty(data, w, h, dx, dy, dirty_x, dirty_y, dirty_w, dirty_h)` |
-| createImageData() | ❌ | - |
+| createImageData() | ✅ | `create_image_data(width, height)` |
 
 ### Path2D
 
@@ -209,7 +209,7 @@ let png_data = ctx.to_png()?;
 |---------|--------|-----|
 | Path2D() | ✅ | `Path2D::new()` |
 | Path2D(path) | ✅ | `Path2D::from_path(other)` |
-| Path2D(svgPath) | ❌ | - |
+| Path2D(svgPath) | ✅ | `Path2D::from_svg_path_data(d)` |
 | All path methods | ✅ | Same as context path methods |
 | addPath() | ❌ | - |
 
