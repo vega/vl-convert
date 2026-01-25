@@ -38,68 +38,19 @@ use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::canvas2d::*;
 use crate::text::{op_text_width, USVG_OPTIONS};
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
-// We expose op_text_width, op_get_json_arg, and canvas2d ops on globalThis
+// Canvas 2D ops are now in the separate vl_convert_canvas2d extension from vl-convert-canvas2d-deno
 deno_core::extension!(
     vl_convert_runtime,
     ops = [
         op_get_json_arg,
         op_text_width,
-        // Canvas 2D ops
-        op_canvas_create,
-        op_canvas_destroy,
-        op_canvas_save,
-        op_canvas_restore,
-        op_canvas_set_fill_style,
-        op_canvas_set_stroke_style,
-        op_canvas_set_line_width,
-        op_canvas_set_line_cap,
-        op_canvas_set_line_join,
-        op_canvas_set_miter_limit,
-        op_canvas_set_global_alpha,
-        op_canvas_set_global_composite_operation,
-        op_canvas_set_font,
-        op_canvas_set_text_align,
-        op_canvas_set_text_baseline,
-        op_canvas_measure_text,
-        op_canvas_fill_text,
-        op_canvas_stroke_text,
-        op_canvas_begin_path,
-        op_canvas_move_to,
-        op_canvas_line_to,
-        op_canvas_close_path,
-        op_canvas_bezier_curve_to,
-        op_canvas_quadratic_curve_to,
-        op_canvas_rect,
-        op_canvas_arc,
-        op_canvas_arc_to,
-        op_canvas_ellipse,
-        op_canvas_fill,
-        op_canvas_stroke,
-        op_canvas_fill_rect,
-        op_canvas_stroke_rect,
-        op_canvas_clear_rect,
-        op_canvas_clip,
-        op_canvas_translate,
-        op_canvas_rotate,
-        op_canvas_scale,
-        op_canvas_transform,
-        op_canvas_set_transform,
-        op_canvas_reset_transform,
-        op_canvas_set_line_dash,
-        op_canvas_set_line_dash_offset,
-        op_canvas_get_image_data,
-        op_canvas_to_png,
-        op_canvas_width,
-        op_canvas_height,
     ],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
     esm = [
         dir "src/js",
-        "canvas_polyfill.js",
         "bootstrap.js",
     ],
 );
@@ -684,11 +635,16 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
             bundle_provider: None,
         };
 
-        // Configure WorkerOptions with our custom extension and V8 snapshot.
+        // Configure WorkerOptions with our custom extensions and V8 snapshot.
         // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
         // This is required for container compatibility (manylinux, slim images).
         let options = WorkerOptions {
-            extensions: vec![vl_convert_runtime::init()],
+            extensions: vec![
+                // Canvas 2D extension from vl-convert-canvas2d-deno crate
+                vl_convert_canvas2d_deno::vl_convert_canvas2d::init(),
+                // Our runtime extension (text width, JSON args)
+                vl_convert_runtime::init(),
+            ],
             startup_snapshot: Some(crate::VL_CONVERT_SNAPSHOT),
             ..Default::default()
         };

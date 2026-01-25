@@ -74,11 +74,16 @@ impl Path2D {
                 svgtypes::SimplePathSegment::Quadratic { x1, y1, x, y } => {
                     path.quadratic_curve_to(x1 as f32, y1 as f32, x as f32, y as f32);
                 }
-                svgtypes::SimplePathSegment::CurveTo { x1, y1, x2, y2, x, y } => {
+                svgtypes::SimplePathSegment::CurveTo {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    x,
+                    y,
+                } => {
                     path.bezier_curve_to(
-                        x1 as f32, y1 as f32,
-                        x2 as f32, y2 as f32,
-                        x as f32, y as f32,
+                        x1 as f32, y1 as f32, x2 as f32, y2 as f32, x as f32, y as f32,
                     );
                 }
                 svgtypes::SimplePathSegment::ClosePath => {
@@ -325,7 +330,8 @@ mod tests {
     #[test]
     fn test_path2d_from_svg_curves() {
         // Test quadratic and cubic curves
-        let mut path = Path2D::from_svg_path_data("M0,0 Q50,50,100,0 C150,50,200,50,250,0").unwrap();
+        let mut path =
+            Path2D::from_svg_path_data("M0,0 Q50,50,100,0 C150,50,200,50,250,0").unwrap();
         assert!(path.get_path().is_some());
     }
 

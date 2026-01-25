@@ -2017,9 +2017,9 @@ ctx.stroke();
 "#,
         rust_fn: |ctx| {
             use vl_convert_canvas2d::Path2D;
-            let mut path = Path2D::from_svg_path_data(
-                "M20,75 C20,20 130,20 130,75 C130,130 20,130 20,75"
-            ).unwrap();
+            let mut path =
+                Path2D::from_svg_path_data("M20,75 C20,20 130,20 130,75 C130,130 20,130 20,75")
+                    .unwrap();
             ctx.set_stroke_style("#66cc33").unwrap();
             ctx.set_line_width(3.0);
             ctx.stroke_path2d(&mut path);
@@ -2055,9 +2055,9 @@ ctx.fill();
             use vl_convert_canvas2d::Path2D;
             // SVG arc: A rx ry x-axis-rotation large-arc-flag sweep-flag x y
             // A45,45 0 0 1 120,75 draws an arc with rx=45, ry=45 to point (120,75)
-            let mut path = Path2D::from_svg_path_data(
-                "M30,75 A45,45 0 0 1 120,75 L120,120 L30,120 Z"
-            ).unwrap();
+            let mut path =
+                Path2D::from_svg_path_data("M30,75 A45,45 0 0 1 120,75 L120,120 L30,120 Z")
+                    .unwrap();
             ctx.set_fill_style("#9966cc").unwrap();
             ctx.fill_path2d(&mut path);
         },
@@ -2102,8 +2102,9 @@ ctx.fill();
             use vl_convert_canvas2d::Path2D;
             // Using relative commands: m, l, z
             let mut path = Path2D::from_svg_path_data(
-                "m10,10 l50,0 l0,50 l-50,0 z m70,70 l60,0 l0,60 l-60,0 z"
-            ).unwrap();
+                "m10,10 l50,0 l0,50 l-50,0 z m70,70 l60,0 l0,60 l-60,0 z",
+            )
+            .unwrap();
             ctx.set_fill_style("#cc9933").unwrap();
             ctx.fill_path2d(&mut path);
         },
@@ -2141,8 +2142,9 @@ ctx.fill();
         rust_fn: |ctx| {
             use vl_convert_canvas2d::Path2D;
             let mut path = Path2D::from_svg_path_data(
-                "M75,10 L90,55 L140,55 L100,85 L115,130 L75,100 L35,130 L50,85 L10,55 L60,55 Z"
-            ).unwrap();
+                "M75,10 L90,55 L140,55 L100,85 L115,130 L75,100 L35,130 L50,85 L10,55 L60,55 Z",
+            )
+            .unwrap();
             ctx.set_fill_style("#ff6600").unwrap();
             ctx.fill_path2d(&mut path);
         },
@@ -2180,8 +2182,9 @@ ctx.fill();
         rust_fn: |ctx| {
             use vl_convert_canvas2d::Path2D;
             let mut path = Path2D::from_svg_path_data(
-                "M10,10 L60,10 L60,60 L10,60 Z M90,90 L140,90 L140,140 L90,140 Z"
-            ).unwrap();
+                "M10,10 L60,10 L60,60 L10,60 Z M90,90 L140,90 L140,140 L90,140 Z",
+            )
+            .unwrap();
             ctx.set_fill_style("#339966").unwrap();
             ctx.fill_path2d(&mut path);
         },

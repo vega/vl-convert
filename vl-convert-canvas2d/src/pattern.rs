@@ -36,7 +36,10 @@ impl Hash for PixmapCacheKey {
 static PIXMAP_CACHE: Mutex<Option<HashMap<PixmapCacheKey, &'static Pixmap>>> = Mutex::new(None);
 
 /// Get or create a cached leaked pixmap.
-fn get_or_leak_pixmap(key: PixmapCacheKey, create_fn: impl FnOnce() -> Option<Pixmap>) -> Option<&'static Pixmap> {
+fn get_or_leak_pixmap(
+    key: PixmapCacheKey,
+    create_fn: impl FnOnce() -> Option<Pixmap>,
+) -> Option<&'static Pixmap> {
     let mut cache_guard = PIXMAP_CACHE.lock().ok()?;
     let cache = cache_guard.get_or_insert_with(HashMap::new);
 

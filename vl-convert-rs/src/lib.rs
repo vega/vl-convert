@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-pub mod canvas2d;
 pub mod converter;
 pub mod deno_emit;
 pub mod deno_stubs;

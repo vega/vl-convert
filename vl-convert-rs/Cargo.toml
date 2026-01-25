@@ -11,6 +11,7 @@ keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
 vl-convert-canvas2d = { path = "../vl-convert-canvas2d" }
+vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno" }
 
 deno_runtime = { workspace = true }
 deno_core = { workspace = true }

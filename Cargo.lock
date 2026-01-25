@@ -9614,6 +9614,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "vl-convert-canvas2d-deno"
+version = "0.1.0"
+dependencies = [
+ "csscolorparser",
+ "deno_core",
+ "deno_error",
+ "tiny-skia",
+ "vl-convert-canvas2d",
+]
+
+[[package]]
 name = "vl-convert-python"
 version = "1.9.0"
 dependencies = [
@@ -9662,6 +9673,7 @@ dependencies = [
  "ttf-parser",
  "usvg",
  "vl-convert-canvas2d",
+ "vl-convert-canvas2d-deno",
 ]
 
 [[package]]
