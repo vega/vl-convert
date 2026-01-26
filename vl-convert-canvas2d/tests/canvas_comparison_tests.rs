@@ -2816,3 +2816,549 @@ ctx.fillRect(0, 0, 200, 200);
     };
     run_comparison_test(&test).expect("pattern_repeat_y comparison failed");
 }
+
+// ============================================================================
+// getImageData / putImageData Edge Case Tests
+// ============================================================================
+
+#[test]
+fn test_get_image_data_partial_bounds_comparison() {
+    skip_if_no_node_canvas!();
+    // Test getImageData with a region that extends outside canvas bounds
+    let test = CanvasTestCase {
+        name: "get_image_data_partial_bounds",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Draw a red rectangle
+ctx.fillStyle = '#ff0000';
+ctx.fillRect(10, 10, 80, 80);
+
+// Get image data that partially extends outside canvas
+const imageData = ctx.getImageData(80, 80, 40, 40);
+
+// Clear canvas
+ctx.clearRect(0, 0, 100, 100);
+
+// Put the image data at a new location
+ctx.putImageData(imageData, 0, 0);
+"#,
+        rust_fn: |ctx| {
+            // Draw a red rectangle
+            ctx.set_fill_style("#ff0000").unwrap();
+            ctx.fill_rect(10.0, 10.0, 80.0, 80.0);
+
+            // Get image data that partially extends outside canvas
+            let image_data = ctx.get_image_data(80, 80, 40, 40);
+
+            // Clear canvas
+            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+
+            // Put the image data at a new location
+            ctx.put_image_data(&image_data, 40, 40, 0, 0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("get_image_data_partial_bounds comparison failed");
+}
+
+/// Note: This test doesn't compare against node-canvas because node-canvas has a bug
+/// where getImageData with negative coords returns clipped dimensions instead of
+/// the requested dimensions with transparent padding (as per HTML Canvas spec).
+/// Our Rust implementation correctly follows the spec.
+#[test]
+fn test_get_image_data_negative_coords() {
+    // Test getImageData with negative coordinates - Rust-only unit test
+    let mut ctx = vl_convert_canvas2d::Canvas2dContext::new(100, 100).unwrap();
+
+    // Draw a blue rectangle in corner
+    ctx.set_fill_style("#0000ff").unwrap();
+    ctx.fill_rect(0.0, 0.0, 40.0, 40.0);
+
+    // Get image data starting at negative coordinates
+    // This should return 30x30 with transparent pixels for out-of-bounds areas
+    let image_data = ctx.get_image_data(-10, -10, 30, 30);
+
+    // Verify dimensions: should be 30*30*4 = 3600 bytes
+    assert_eq!(image_data.len(), 30 * 30 * 4);
+
+    // Pixels at (0,0) to (9,9) should be transparent (out of canvas bounds)
+    let idx_0_0 = 0;
+    assert_eq!(
+        &image_data[idx_0_0..idx_0_0 + 4],
+        &[0, 0, 0, 0],
+        "Pixel at (0,0) should be transparent"
+    );
+
+    // Pixels at (10,10) should be blue (maps to canvas (0,0))
+    let idx_10_10 = (10 * 30 + 10) * 4;
+    assert_eq!(
+        image_data[idx_10_10 + 2],
+        255,
+        "Pixel at (10,10) should be blue"
+    );
+    assert_eq!(
+        image_data[idx_10_10 + 3],
+        255,
+        "Pixel at (10,10) should be opaque"
+    );
+
+    // Pixels at (29,29) should be blue (maps to canvas (19,19))
+    let idx_29_29 = (29 * 30 + 29) * 4;
+    assert_eq!(
+        image_data[idx_29_29 + 2],
+        255,
+        "Pixel at (29,29) should be blue"
+    );
+}
+
+#[test]
+fn test_get_image_data_after_transform_comparison() {
+    skip_if_no_node_canvas!();
+    // Test that transforms don't affect getImageData pixel coordinates
+    let test = CanvasTestCase {
+        name: "get_image_data_after_transform",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Draw a green rectangle
+ctx.fillStyle = '#00ff00';
+ctx.fillRect(20, 20, 40, 40);
+
+// Apply a transform
+ctx.translate(50, 0);
+ctx.rotate(Math.PI / 4);
+
+// getImageData should still use original pixel coordinates, not transformed ones
+const imageData = ctx.getImageData(20, 20, 40, 40);
+
+// Reset transform
+ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+// Clear and put image data
+ctx.clearRect(0, 0, 100, 100);
+ctx.putImageData(imageData, 50, 50);
+"#,
+        rust_fn: |ctx| {
+            // Draw a green rectangle
+            ctx.set_fill_style("#00ff00").unwrap();
+            ctx.fill_rect(20.0, 20.0, 40.0, 40.0);
+
+            // Apply a transform
+            ctx.translate(50.0, 0.0);
+            ctx.rotate(PI / 4.0);
+
+            // getImageData should still use original pixel coordinates
+            let image_data = ctx.get_image_data(20, 20, 40, 40);
+
+            // Reset transform
+            ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+
+            // Clear and put image data
+            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.put_image_data(&image_data, 40, 40, 50, 50);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("get_image_data_after_transform comparison failed");
+}
+
+#[test]
+fn test_get_image_data_alpha_values_comparison() {
+    skip_if_no_node_canvas!();
+    // Test that alpha channel is correctly preserved
+    let test = CanvasTestCase {
+        name: "get_image_data_alpha_values",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Draw semi-transparent rectangles
+ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+ctx.fillRect(10, 10, 40, 40);
+
+ctx.fillStyle = 'rgba(0, 0, 255, 0.25)';
+ctx.fillRect(30, 30, 40, 40);
+
+// Get image data
+const imageData = ctx.getImageData(10, 10, 60, 60);
+
+// Clear and put at new position
+ctx.clearRect(0, 0, 100, 100);
+ctx.putImageData(imageData, 30, 30);
+"#,
+        rust_fn: |ctx| {
+            // Draw semi-transparent rectangles
+            ctx.set_fill_style("rgba(255, 0, 0, 0.5)").unwrap();
+            ctx.fill_rect(10.0, 10.0, 40.0, 40.0);
+
+            ctx.set_fill_style("rgba(0, 0, 255, 0.25)").unwrap();
+            ctx.fill_rect(30.0, 30.0, 40.0, 40.0);
+
+            // Get image data
+            let image_data = ctx.get_image_data(10, 10, 60, 60);
+
+            // Clear and put at new position
+            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.put_image_data(&image_data, 60, 60, 30, 30);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0, // Slightly higher for alpha compositing differences
+    };
+    run_comparison_test(&test).expect("get_image_data_alpha_values comparison failed");
+}
+
+#[test]
+fn test_put_image_data_outside_bounds_comparison() {
+    skip_if_no_node_canvas!();
+    // Test putImageData with destination partially outside canvas
+    let test = CanvasTestCase {
+        name: "put_image_data_outside_bounds",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Draw a red rectangle
+ctx.fillStyle = '#ff0000';
+ctx.fillRect(0, 0, 50, 50);
+
+// Get image data
+const imageData = ctx.getImageData(0, 0, 50, 50);
+
+// Clear canvas
+ctx.clearRect(0, 0, 100, 100);
+
+// Put image data with part outside canvas bounds
+ctx.putImageData(imageData, 70, 70);
+"#,
+        rust_fn: |ctx| {
+            // Draw a red rectangle
+            ctx.set_fill_style("#ff0000").unwrap();
+            ctx.fill_rect(0.0, 0.0, 50.0, 50.0);
+
+            // Get image data
+            let image_data = ctx.get_image_data(0, 0, 50, 50);
+
+            // Clear canvas
+            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+
+            // Put image data with part outside canvas bounds
+            ctx.put_image_data(&image_data, 50, 50, 70, 70);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("put_image_data_outside_bounds comparison failed");
+}
+
+#[test]
+fn test_put_image_data_roundtrip_comparison() {
+    skip_if_no_node_canvas!();
+    // Test that get then put preserves pixels exactly
+    let test = CanvasTestCase {
+        name: "put_image_data_roundtrip",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Draw complex pattern
+ctx.fillStyle = '#ff0000';
+ctx.fillRect(10, 10, 30, 30);
+ctx.fillStyle = '#00ff00';
+ctx.fillRect(30, 30, 30, 30);
+ctx.fillStyle = '#0000ff';
+ctx.fillRect(50, 50, 30, 30);
+
+// Draw a circle
+ctx.fillStyle = '#ffff00';
+ctx.beginPath();
+ctx.arc(50, 50, 20, 0, Math.PI * 2);
+ctx.fill();
+
+// Get entire image data
+const imageData = ctx.getImageData(0, 0, 100, 100);
+
+// Clear and put back - should look identical
+ctx.clearRect(0, 0, 100, 100);
+ctx.putImageData(imageData, 0, 0);
+"#,
+        rust_fn: |ctx| {
+            // Draw complex pattern
+            ctx.set_fill_style("#ff0000").unwrap();
+            ctx.fill_rect(10.0, 10.0, 30.0, 30.0);
+            ctx.set_fill_style("#00ff00").unwrap();
+            ctx.fill_rect(30.0, 30.0, 30.0, 30.0);
+            ctx.set_fill_style("#0000ff").unwrap();
+            ctx.fill_rect(50.0, 50.0, 30.0, 30.0);
+
+            // Draw a circle
+            ctx.set_fill_style("#ffff00").unwrap();
+            ctx.begin_path();
+            ctx.arc(50.0, 50.0, 20.0, 0.0, 2.0 * PI, false);
+            ctx.fill();
+
+            // Get entire image data
+            let image_data = ctx.get_image_data(0, 0, 100, 100);
+
+            // Clear and put back
+            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.put_image_data(&image_data, 100, 100, 0, 0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("put_image_data_roundtrip comparison failed");
+}
+
+// ============================================================================
+// Fractional Coordinate / Subpixel Tests
+// ============================================================================
+
+#[test]
+fn test_fractional_fill_rect_comparison() {
+    skip_if_no_node_canvas!();
+    // Test fillRect at fractional coordinates
+    let test = CanvasTestCase {
+        name: "fractional_fill_rect",
+        width: 100,
+        height: 100,
+        js_code: r#"
+ctx.fillStyle = '#ff0000';
+ctx.fillRect(10.5, 10.5, 30.0, 30.0);
+
+ctx.fillStyle = '#00ff00';
+ctx.fillRect(50.25, 50.75, 25.5, 25.5);
+
+ctx.fillStyle = '#0000ff';
+ctx.fillRect(20.9, 60.1, 20.0, 20.0);
+"#,
+        rust_fn: |ctx| {
+            ctx.set_fill_style("#ff0000").unwrap();
+            ctx.fill_rect(10.5, 10.5, 30.0, 30.0);
+
+            ctx.set_fill_style("#00ff00").unwrap();
+            ctx.fill_rect(50.25, 50.75, 25.5, 25.5);
+
+            ctx.set_fill_style("#0000ff").unwrap();
+            ctx.fill_rect(20.9, 60.1, 20.0, 20.0);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: MAX_DIFF_PERCENT,
+    };
+    run_comparison_test(&test).expect("fractional_fill_rect comparison failed");
+}
+
+#[test]
+fn test_subpixel_line_positioning_comparison() {
+    skip_if_no_node_canvas!();
+    // Test lines at fractional coordinates
+    let test = CanvasTestCase {
+        name: "subpixel_line_positioning",
+        width: 100,
+        height: 100,
+        js_code: r#"
+ctx.strokeStyle = '#000000';
+ctx.lineWidth = 1;
+
+// Line at integer coordinates
+ctx.beginPath();
+ctx.moveTo(10, 20);
+ctx.lineTo(90, 20);
+ctx.stroke();
+
+// Line at .5 offset (should be crisp on most renderers)
+ctx.beginPath();
+ctx.moveTo(10.5, 40.5);
+ctx.lineTo(90.5, 40.5);
+ctx.stroke();
+
+// Line at fractional coordinates
+ctx.beginPath();
+ctx.moveTo(10.25, 60.75);
+ctx.lineTo(90.25, 60.75);
+ctx.stroke();
+
+// Vertical lines with subpixel positioning
+ctx.beginPath();
+ctx.moveTo(30, 10);
+ctx.lineTo(30, 90);
+ctx.stroke();
+
+ctx.beginPath();
+ctx.moveTo(50.5, 10.5);
+ctx.lineTo(50.5, 90.5);
+ctx.stroke();
+"#,
+        rust_fn: |ctx| {
+            ctx.set_stroke_style("#000000").unwrap();
+            ctx.set_line_width(1.0);
+
+            // Line at integer coordinates
+            ctx.begin_path();
+            ctx.move_to(10.0, 20.0);
+            ctx.line_to(90.0, 20.0);
+            ctx.stroke();
+
+            // Line at .5 offset (should be crisp on most renderers)
+            ctx.begin_path();
+            ctx.move_to(10.5, 40.5);
+            ctx.line_to(90.5, 40.5);
+            ctx.stroke();
+
+            // Line at fractional coordinates
+            ctx.begin_path();
+            ctx.move_to(10.25, 60.75);
+            ctx.line_to(90.25, 60.75);
+            ctx.stroke();
+
+            // Vertical lines with subpixel positioning
+            ctx.begin_path();
+            ctx.move_to(30.0, 10.0);
+            ctx.line_to(30.0, 90.0);
+            ctx.stroke();
+
+            ctx.begin_path();
+            ctx.move_to(50.5, 10.5);
+            ctx.line_to(50.5, 90.5);
+            ctx.stroke();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 3.0, // Subpixel rendering may differ between implementations
+    };
+    run_comparison_test(&test).expect("subpixel_line_positioning comparison failed");
+}
+
+#[test]
+fn test_fill_rect_with_transform_comparison() {
+    skip_if_no_node_canvas!();
+    // Test fillRect behavior after various transforms
+    let test = CanvasTestCase {
+        name: "fill_rect_with_transform",
+        width: 150,
+        height: 150,
+        js_code: r#"
+// Original rectangle for reference
+ctx.fillStyle = '#cccccc';
+ctx.fillRect(10, 10, 30, 30);
+
+// Translated rectangle
+ctx.save();
+ctx.translate(50, 0);
+ctx.fillStyle = '#ff0000';
+ctx.fillRect(10, 10, 30, 30);
+ctx.restore();
+
+// Scaled rectangle
+ctx.save();
+ctx.translate(0, 50);
+ctx.scale(1.5, 1.5);
+ctx.fillStyle = '#00ff00';
+ctx.fillRect(10, 10, 20, 20);
+ctx.restore();
+
+// Rotated rectangle
+ctx.save();
+ctx.translate(100, 100);
+ctx.rotate(Math.PI / 6);
+ctx.fillStyle = '#0000ff';
+ctx.fillRect(-15, -15, 30, 30);
+ctx.restore();
+
+// Combined transforms
+ctx.save();
+ctx.translate(50, 100);
+ctx.scale(0.8, 1.2);
+ctx.rotate(-Math.PI / 8);
+ctx.fillStyle = '#ff00ff';
+ctx.fillRect(-10, -10, 20, 20);
+ctx.restore();
+"#,
+        rust_fn: |ctx| {
+            // Original rectangle for reference
+            ctx.set_fill_style("#cccccc").unwrap();
+            ctx.fill_rect(10.0, 10.0, 30.0, 30.0);
+
+            // Translated rectangle
+            ctx.save();
+            ctx.translate(50.0, 0.0);
+            ctx.set_fill_style("#ff0000").unwrap();
+            ctx.fill_rect(10.0, 10.0, 30.0, 30.0);
+            ctx.restore();
+
+            // Scaled rectangle
+            ctx.save();
+            ctx.translate(0.0, 50.0);
+            ctx.scale(1.5, 1.5);
+            ctx.set_fill_style("#00ff00").unwrap();
+            ctx.fill_rect(10.0, 10.0, 20.0, 20.0);
+            ctx.restore();
+
+            // Rotated rectangle
+            ctx.save();
+            ctx.translate(100.0, 100.0);
+            ctx.rotate(PI / 6.0);
+            ctx.set_fill_style("#0000ff").unwrap();
+            ctx.fill_rect(-15.0, -15.0, 30.0, 30.0);
+            ctx.restore();
+
+            // Combined transforms
+            ctx.save();
+            ctx.translate(50.0, 100.0);
+            ctx.scale(0.8, 1.2);
+            ctx.rotate(-PI / 8.0);
+            ctx.set_fill_style("#ff00ff").unwrap();
+            ctx.fill_rect(-10.0, -10.0, 20.0, 20.0);
+            ctx.restore();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("fill_rect_with_transform comparison failed");
+}
+
+#[test]
+fn test_get_image_data_rotated_content_comparison() {
+    skip_if_no_node_canvas!();
+    // Test that rotation affects rendering but not getImageData coordinates
+    let test = CanvasTestCase {
+        name: "get_image_data_rotated_content",
+        width: 100,
+        height: 100,
+        js_code: r#"
+// Draw rotated content
+ctx.translate(50, 50);
+ctx.rotate(Math.PI / 4);
+ctx.fillStyle = '#ff0000';
+ctx.fillRect(-20, -20, 40, 40);
+
+// Reset transform for getImageData
+ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+// Get image data from a specific area (should get actual rendered pixels)
+const imageData = ctx.getImageData(30, 30, 40, 40);
+
+// Clear and show what we captured
+ctx.clearRect(0, 0, 100, 100);
+ctx.putImageData(imageData, 5, 5);
+"#,
+        rust_fn: |ctx| {
+            // Draw rotated content
+            ctx.translate(50.0, 50.0);
+            ctx.rotate(PI / 4.0);
+            ctx.set_fill_style("#ff0000").unwrap();
+            ctx.fill_rect(-20.0, -20.0, 40.0, 40.0);
+
+            // Reset transform for getImageData
+            ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+
+            // Get image data from a specific area
+            let image_data = ctx.get_image_data(30, 30, 40, 40);
+
+            // Clear and show what we captured
+            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.put_image_data(&image_data, 40, 40, 5, 5);
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("get_image_data_rotated_content comparison failed");
+}
