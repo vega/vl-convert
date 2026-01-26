@@ -19,7 +19,7 @@ deno_error = { workspace = true }
 # Canvas 2D implementation
 vl-convert-canvas2d = { path = "../vl-convert-canvas2d" }
 # Canvas 2D Deno extension (ops + polyfill)
-vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno" }
+vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", features = ["svg"] }
 # For stub type implementations
 node_resolver = { workspace = true }
 sys_traits = { workspace = true }
@@ -60,7 +60,7 @@ deno_error = { workspace = true }
 # Need "snapshot" feature to access deno_runtime::snapshot::create_runtime_snapshot
 deno_runtime = { workspace = true, features = ["snapshot"] }
 # Canvas 2D Deno extension - used in snapshot creation
-vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno" }
+vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", features = ["svg"] }
 # Note: V8 snapshot generation is always enabled - it's required for container compatibility
 
 # Note: Deno 2.5+ uses libffi-sys 3.x which should not require the macOS system libffi workaround.

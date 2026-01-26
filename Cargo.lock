@@ -9622,8 +9622,11 @@ dependencies = [
  "deno_error",
  "fontdb",
  "image 0.25.9",
+ "log",
+ "resvg",
  "serde",
  "tiny-skia",
+ "usvg",
  "vl-convert-canvas2d",
 ]
 

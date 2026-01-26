@@ -2155,7 +2155,41 @@ pub struct DecodedImage {
     height: u32,
 }
 
-/// Decode image bytes (PNG, JPEG, GIF, WebP) into RGBA pixel data.
+/// Information about an image (for SVG detection and native size).
+#[derive(Serialize)]
+pub struct ImageInfo {
+    pub is_svg: bool,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Get image info - checks if SVG and returns native dimensions without full decode.
+#[op2]
+#[serde]
+pub fn op_canvas_get_image_info(#[buffer] bytes: &[u8]) -> Result<ImageInfo, JsErrorBox> {
+    #[cfg(feature = "svg")]
+    if is_svg(bytes) {
+        let (width, height) = get_svg_native_size(bytes)?;
+        return Ok(ImageInfo {
+            is_svg: true,
+            width,
+            height,
+        });
+    }
+
+    // For raster images, decode to get dimensions
+    let img = image::load_from_memory(bytes)
+        .map_err(|e| JsErrorBox::generic(format!("Failed to decode image: {}", e)))?;
+
+    Ok(ImageInfo {
+        is_svg: false,
+        width: img.width(),
+        height: img.height(),
+    })
+}
+
+/// Decode raster image bytes (PNG, JPEG, GIF, WebP) into RGBA pixel data.
+/// For SVG images, use op_canvas_decode_svg_at_size instead.
 #[op2]
 #[serde]
 pub fn op_canvas_decode_image(
@@ -2164,17 +2198,112 @@ pub fn op_canvas_decode_image(
     // Use the image crate to decode the image
     let img = image::load_from_memory(bytes)
         .map_err(|e| JsErrorBox::generic(format!("Failed to decode image: {}", e)))?;
-    
+
     let width = img.width();
     let height = img.height();
-    
+
     // Convert to RGBA8
     let rgba = img.to_rgba8();
     let data = rgba.into_raw();
-    
+
     Ok(DecodedImage {
         data,
         width,
         height,
     })
+}
+
+/// Decode SVG at a specific target size with 2x supersampling for quality.
+#[cfg(feature = "svg")]
+#[op2]
+#[serde]
+pub fn op_canvas_decode_svg_at_size(
+    #[buffer] bytes: &[u8],
+    target_width: u32,
+    target_height: u32,
+) -> Result<DecodedImage, JsErrorBox> {
+    use resvg::tiny_skia::Pixmap;
+    use usvg::{Options, Tree};
+
+    let svg_str = std::str::from_utf8(bytes)
+        .map_err(|e| JsErrorBox::generic(format!("Invalid UTF-8 in SVG: {}", e)))?;
+
+    let opt = Options::default();
+    let tree = Tree::from_str(svg_str, &opt)
+        .map_err(|e| JsErrorBox::generic(format!("Failed to parse SVG: {}", e)))?;
+
+    // Render at 2x the target size for quality, then downsample
+    let render_width = target_width * 2;
+    let render_height = target_height * 2;
+
+    let mut pixmap = Pixmap::new(render_width, render_height)
+        .ok_or_else(|| JsErrorBox::generic("Failed to create pixmap for SVG"))?;
+
+    // Calculate scale to fit SVG into render size
+    let svg_size = tree.size();
+    let scale_x = render_width as f32 / svg_size.width();
+    let scale_y = render_height as f32 / svg_size.height();
+    let transform = usvg::Transform::from_scale(scale_x, scale_y);
+
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    // Convert from premultiplied RGBA to straight RGBA
+    let data = unpremultiply_alpha(pixmap.take());
+
+    Ok(DecodedImage {
+        data,
+        width: render_width,
+        height: render_height,
+    })
+}
+
+#[cfg(feature = "svg")]
+fn is_svg(bytes: &[u8]) -> bool {
+    let s = std::str::from_utf8(bytes).unwrap_or("");
+    let trimmed = s.trim_start();
+    trimmed.starts_with("<?xml") || trimmed.starts_with("<svg") || trimmed.starts_with("<!DOCTYPE svg")
+}
+
+#[cfg(feature = "svg")]
+fn get_svg_native_size(bytes: &[u8]) -> Result<(u32, u32), JsErrorBox> {
+    use usvg::{Options, Tree};
+
+    let svg_str = std::str::from_utf8(bytes)
+        .map_err(|e| JsErrorBox::generic(format!("Invalid UTF-8 in SVG: {}", e)))?;
+
+    let opt = Options::default();
+    let tree = Tree::from_str(svg_str, &opt)
+        .map_err(|e| JsErrorBox::generic(format!("Failed to parse SVG: {}", e)))?;
+
+    let size = tree.size();
+    let width = size.width().round() as u32;
+    let height = size.height().round() as u32;
+
+    Ok((width, height))
+}
+
+#[cfg(feature = "svg")]
+fn unpremultiply_alpha(mut data: Vec<u8>) -> Vec<u8> {
+    // Convert from premultiplied RGBA to straight RGBA
+    for chunk in data.chunks_exact_mut(4) {
+        let a = chunk[3] as f32;
+        if a > 0.0 && a < 255.0 {
+            let alpha_factor = 255.0 / a;
+            chunk[0] = (chunk[0] as f32 * alpha_factor).min(255.0) as u8;
+            chunk[1] = (chunk[1] as f32 * alpha_factor).min(255.0) as u8;
+            chunk[2] = (chunk[2] as f32 * alpha_factor).min(255.0) as u8;
+        }
+    }
+    data
+}
+
+// --- Logging ---
+
+/// Log a debug message from JavaScript using the Rust log infrastructure.
+/// Controlled by RUST_LOG environment variable (e.g., RUST_LOG=canvas=debug).
+#[op2(fast)]
+pub fn op_canvas_log(state: &mut OpState, #[string] message: String) -> Result<(), JsErrorBox> {
+    let _ = state;
+    log::debug!(target: "canvas", "{}", message);
+    Ok(())
 }

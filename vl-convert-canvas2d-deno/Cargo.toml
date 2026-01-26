@@ -6,6 +6,10 @@ description = "Deno extension for Canvas 2D API wrapping vl-convert-canvas2d"
 license = "BSD-3-Clause"
 repository = "https://github.com/vega/vl-convert"
 
+[features]
+default = []
+svg = ["dep:resvg", "dep:usvg"]
+
 [dependencies]
 # Deno runtime for ops and extension macro
 deno_core = { workspace = true }
@@ -28,3 +32,10 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 
 # For serialization
 serde = { version = "1.0", features = ["derive"] }
+
+# For logging
+log = { workspace = true }
+
+# For SVG image decoding (optional)
+resvg = { workspace = true, optional = true }
+usvg = { workspace = true, optional = true }

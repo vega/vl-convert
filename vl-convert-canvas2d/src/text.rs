@@ -60,16 +60,16 @@ fn resolve_family_by_postscript_name(
 }
 
 /// Result of family resolution with optional weight override.
-struct FamilyResolution<'a> {
-    family: Family<'a>,
-    weight_override: Option<Weight>,
+pub struct FamilyResolution<'a> {
+    pub family: Family<'a>,
+    pub weight_override: Option<Weight>,
 }
 
 /// Get the Family enum for a font, with post_script_name fallback lookup.
 /// When a font is found via post_script_name, also returns the font's actual weight
 /// to override any weight parsed from the CSS font string (e.g., "bold 13px Matter SemiBold"
 /// should use weight 600 from "Matter-SemiBold", not weight 700 from "bold").
-fn get_family_with_fallback<'a>(
+pub fn get_family_with_fallback<'a>(
     font_system: &FontSystem,
     family: &'a str,
     resolved_name: &'a mut Option<String>,
