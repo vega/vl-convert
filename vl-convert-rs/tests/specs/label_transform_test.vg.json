@@ -41,7 +41,7 @@
           "type": "label",
           "avoidMarks": ["symbols"],
           "anchor": ["top", "bottom", "right", "left"],
-          "offset": [1],
+          "offset": [8],
           "size": {"signal": "[width, height]"}
         }
       ]
