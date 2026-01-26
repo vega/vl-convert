@@ -28,6 +28,9 @@ svgtypes = "0.16"
 # Error handling
 thiserror = "2"
 
+# Logging
+log = { workspace = true }
+
 [dev-dependencies]
 # For testing
 rstest = { workspace = true }

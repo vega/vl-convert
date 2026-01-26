@@ -112,14 +112,7 @@ import {
   op_canvas_decode_image,
   op_canvas_get_image_info,
   op_canvas_decode_svg_at_size,
-  // Logging
-  op_canvas_log,
 } from "ext:core/ops";
-
-// Debug logging - controlled by RUST_LOG=canvas=debug
-function log(...args) {
-  op_canvas_log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
-}
 
 /**
  * ImageData class for getImageData results
@@ -208,7 +201,6 @@ class Image {
   }
 
   async #loadImage(url) {
-    log('Image loading:', url);
     try {
       // Fetch the image
       const response = await fetch(url);
@@ -247,14 +239,11 @@ class Image {
 
       this.#complete = true;
 
-      log('Image loaded:', url, this.#width, 'x', this.#height);
-
       // Call onload callback
       if (this.onload) {
         this.onload();
       }
     } catch (error) {
-      log('Image error:', url, error);
       this.#complete = false;
       if (this.onerror) {
         this.onerror(error);
@@ -592,12 +581,10 @@ class CanvasRenderingContext2D {
   // --- State ---
 
   save() {
-    log('save');
     op_canvas_save(this.#rid);
   }
 
   restore() {
-    log('restore');
     op_canvas_restore(this.#rid);
   }
 
@@ -625,38 +612,31 @@ class CanvasRenderingContext2D {
   // --- Transforms ---
 
   translate(x, y) {
-    log('translate', x, y);
     op_canvas_translate(this.#rid, x, y);
   }
 
   rotate(angle) {
-    log('rotate', angle);
     op_canvas_rotate(this.#rid, angle);
   }
 
   scale(x, y) {
-    log('scale', x, y);
     op_canvas_scale(this.#rid, x, y);
   }
 
   transform(a, b, c, d, e, f) {
-    log('transform', a, b, c, d, e, f);
     op_canvas_transform(this.#rid, a, b, c, d, e, f);
   }
 
   setTransform(a, b, c, d, e, f) {
     if (typeof a === "object") {
       // DOMMatrix form
-      log('setTransform (DOMMatrix)', a.a, a.b, a.c, a.d, a.e, a.f);
       op_canvas_set_transform(this.#rid, a.a, a.b, a.c, a.d, a.e, a.f);
     } else {
-      log('setTransform', a, b, c, d, e, f);
       op_canvas_set_transform(this.#rid, a, b, c, d, e, f);
     }
   }
 
   resetTransform() {
-    log('resetTransform');
     op_canvas_reset_transform(this.#rid);
   }
 
@@ -669,57 +649,46 @@ class CanvasRenderingContext2D {
   // --- Paths ---
 
   beginPath() {
-    log('beginPath');
     op_canvas_begin_path(this.#rid);
   }
 
   moveTo(x, y) {
-    log('moveTo', x, y);
     op_canvas_move_to(this.#rid, x, y);
   }
 
   lineTo(x, y) {
-    log('lineTo', x, y);
     op_canvas_line_to(this.#rid, x, y);
   }
 
   closePath() {
-    log('closePath');
     op_canvas_close_path(this.#rid);
   }
 
   bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y) {
-    log('bezierCurveTo', cp1x, cp1y, cp2x, cp2y, x, y);
     op_canvas_bezier_curve_to(this.#rid, cp1x, cp1y, cp2x, cp2y, x, y);
   }
 
   quadraticCurveTo(cpx, cpy, x, y) {
-    log('quadraticCurveTo', cpx, cpy, x, y);
     op_canvas_quadratic_curve_to(this.#rid, cpx, cpy, x, y);
   }
 
   rect(x, y, width, height) {
-    log('rect', x, y, width, height);
     op_canvas_rect(this.#rid, x, y, width, height);
   }
 
   arc(x, y, radius, startAngle, endAngle, anticlockwise = false) {
-    log('arc', x, y, radius, startAngle, endAngle, anticlockwise);
     op_canvas_arc(this.#rid, x, y, radius, startAngle, endAngle, anticlockwise);
   }
 
   arcTo(x1, y1, x2, y2, radius) {
-    log('arcTo', x1, y1, x2, y2, radius);
     op_canvas_arc_to(this.#rid, x1, y1, x2, y2, radius);
   }
 
   ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise = false) {
-    log('ellipse', x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise);
     op_canvas_ellipse(this.#rid, x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise);
   }
 
   roundRect(x, y, width, height, radii = 0) {
-    log('roundRect', x, y, width, height, radii);
     if (typeof radii === "number") {
       op_canvas_round_rect(this.#rid, x, y, width, height, radii);
     } else if (Array.isArray(radii)) {
@@ -732,7 +701,6 @@ class CanvasRenderingContext2D {
   // --- Drawing ---
 
   fill(pathOrFillRule, fillRule) {
-    log('fill', pathOrFillRule instanceof Path2D ? 'Path2D' : pathOrFillRule, fillRule);
     if (pathOrFillRule instanceof Path2D) {
       // fill(path) or fill(path, fillRule)
       if (fillRule) {
@@ -750,7 +718,6 @@ class CanvasRenderingContext2D {
   }
 
   stroke(path) {
-    log('stroke', path instanceof Path2D ? 'Path2D' : path);
     if (path instanceof Path2D) {
       op_canvas_stroke_path2d(this.#rid, path._getPathId());
     } else {
@@ -759,17 +726,14 @@ class CanvasRenderingContext2D {
   }
 
   fillRect(x, y, width, height) {
-    log('fillRect', x, y, width, height);
     op_canvas_fill_rect(this.#rid, x, y, width, height);
   }
 
   strokeRect(x, y, width, height) {
-    log('strokeRect', x, y, width, height);
     op_canvas_stroke_rect(this.#rid, x, y, width, height);
   }
 
   clearRect(x, y, width, height) {
-    log('clearRect', x, y, width, height);
     op_canvas_clear_rect(this.#rid, x, y, width, height);
   }
 
@@ -953,7 +917,6 @@ class CanvasRenderingContext2D {
   // --- drawImage ---
 
   drawImage(source, ...args) {
-    log('drawImage', source?.constructor?.name, source, args);
     // Handle different source types
     if (source instanceof HTMLCanvasElement) {
       const sourceCtx = source.getContext("2d");
@@ -975,8 +938,6 @@ class CanvasRenderingContext2D {
       }
     } else if (source instanceof Image) {
       // Image (HTMLImageElement) source
-      log('drawImage: Image instance, complete:', source.complete, 'src:', source.src, 'isSvg:', source._isSvg);
-
       if (source._isSvg && source._rawBytes) {
         // SVG image - decode at target size for quality
         // Determine target dimensions
@@ -1012,9 +973,7 @@ class CanvasRenderingContext2D {
       } else {
         // Raster image - use pre-decoded image data
         const imageData = source._imageData;
-        log('drawImage: imageData:', imageData ? `${imageData.width}x${imageData.height}` : 'null');
         if (!imageData) {
-          log('drawImage: Image not loaded yet');
           return;
         }
         const data = imageData.data;
