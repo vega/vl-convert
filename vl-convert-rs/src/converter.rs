@@ -469,6 +469,39 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
     });
     return scenegraphPromise
 }
+
+function vegaToViewCanvas(vgSpec, allowedBaseUrls, errors) {
+    // Use the same view setup as vegaToView, since toCanvas() creates its own renderer
+    return vegaToView(vgSpec, allowedBaseUrls, errors);
+}
+
+function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, scale, errors) {
+    if (formatLocale != null) {
+        vega.formatLocale(formatLocale);
+    }
+    if (timeFormatLocale != null) {
+        vega.timeFormatLocale(timeFormatLocale);
+    }
+
+    let view = vegaToViewCanvas(vgSpec, allowedBaseUrls, errors);
+    let canvasPromise = view.runAsync().then(() => {
+        try {
+            // Workaround for https://github.com/vega/vega/issues/3481
+            view.signal("geo_interval_init_tick", {});
+        } catch (e) {
+            // No geo_interval_init_tick signal
+        }
+    }).then(() => {
+        return view.runAsync().then(
+            // Pass scale factor to toCanvas
+            () => view.toCanvas(scale)
+        ).finally(() => {
+            view.finalize();
+            vega.resetDefaultLocale();
+        })
+    });
+    return canvasPromise;
+}
 "#;
             self.worker.js_runtime.execute_script(
                 "ext:<anon>",
@@ -538,6 +571,11 @@ function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings, allowedBaseUr
 function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowedBaseUrls, formatLocale, timeFormatLocale, errors) {{
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
     return vegaToScenegraph(vgSpec, allowedBaseUrls,formatLocale, timeFormatLocale,  errors)
+}}
+
+function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBaseUrls, formatLocale, timeFormatLocale, scale, errors) {{
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
+    return vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, scale, errors)
 }}
 "#,
                 ver_name = format!("{:?}", vl_version),
@@ -987,6 +1025,160 @@ delete themes.default
         let value = self.execute_script_to_json("themes").await?;
         Ok(value)
     }
+
+    async fn execute_script_to_bytes(&mut self, script: &str) -> Result<Vec<u8>, AnyError> {
+        let code = script.to_string();
+        let res = self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
+
+        deno_core::scope!(scope, self.worker.js_runtime);
+        let local = v8::Local::new(scope, res);
+
+        // The result should be a JSON array of bytes
+        let deserialized_value = serde_v8::from_v8::<serde_json::Value>(scope, local)?;
+
+        match deserialized_value {
+            serde_json::Value::Array(arr) => {
+                let bytes: Result<Vec<u8>, _> = arr
+                    .into_iter()
+                    .map(|v| {
+                        v.as_u64()
+                            .and_then(|n| u8::try_from(n).ok())
+                            .ok_or_else(|| anyhow!("Invalid byte value in PNG data"))
+                    })
+                    .collect();
+                bytes
+            }
+            _ => Err(anyhow!("Expected array of bytes for PNG data")),
+        }
+    }
+
+    pub async fn vega_to_canvas_png(
+        &mut self,
+        vg_spec: &serde_json::Value,
+        vg_opts: VgOpts,
+        scale: f32,
+        ppi: f32,
+    ) -> Result<Vec<u8>, AnyError> {
+        self.init_vega().await?;
+        let allowed_base_urls =
+            serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
+
+        let format_locale = match vg_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vg_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let arg_id = set_json_arg(vg_spec.clone())?;
+        let format_locale_id = set_json_arg(format_locale)?;
+        let time_format_locale_id = set_json_arg(time_format_locale)?;
+
+        let code = format!(
+            r#"
+var canvasPngData;
+var errors = [];
+vegaToCanvas(
+    JSON.parse(op_get_json_arg({arg_id})),
+    {allowed_base_urls},
+    JSON.parse(op_get_json_arg({format_locale_id})),
+    JSON.parse(op_get_json_arg({time_format_locale_id})),
+    {scale},
+    errors,
+).then((canvas) => {{
+    if (errors != null && errors.length > 0) {{
+        throw new Error(`${{errors}}`);
+    }}
+    canvasPngData = canvas._toPngWithPpi({ppi});
+}})
+"#
+        );
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
+
+        let png_data = self.execute_script_to_bytes("canvasPngData").await?;
+        Ok(png_data)
+    }
+
+    pub async fn vegalite_to_canvas_png(
+        &mut self,
+        vl_spec: &serde_json::Value,
+        vl_opts: VlOpts,
+        scale: f32,
+        ppi: f32,
+    ) -> Result<Vec<u8>, AnyError> {
+        self.init_vega().await?;
+        self.init_vl_version(&vl_opts.vl_version).await?;
+
+        let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
+
+        let format_locale = match vl_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vl_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let spec_arg_id = set_json_arg(vl_spec.clone())?;
+        let config_arg_id = set_json_arg(config)?;
+        let format_locale_id = set_json_arg(format_locale)?;
+        let time_format_locale_id = set_json_arg(time_format_locale)?;
+
+        let theme_arg = match &vl_opts.theme {
+            None => "null".to_string(),
+            Some(s) => format!("'{}'", s),
+        };
+
+        let allowed_base_urls =
+            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
+
+        let code = format!(
+            r#"
+var canvasPngData;
+var errors = [];
+vegaLiteToCanvas_{ver_name:?}(
+    JSON.parse(op_get_json_arg({spec_arg_id})),
+    JSON.parse(op_get_json_arg({config_arg_id})),
+    {theme_arg},
+    {show_warnings},
+    {allowed_base_urls},
+    JSON.parse(op_get_json_arg({format_locale_id})),
+    JSON.parse(op_get_json_arg({time_format_locale_id})),
+    {scale},
+    errors,
+).then((canvas) => {{
+    if (errors != null && errors.length > 0) {{
+        throw new Error(`${{errors}}`);
+    }}
+    canvasPngData = canvas._toPngWithPpi({ppi});
+}})
+"#,
+            ver_name = vl_opts.vl_version,
+            show_warnings = vl_opts.show_warnings,
+        );
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
+
+        let png_data = self.execute_script_to_bytes("canvasPngData").await?;
+        Ok(png_data)
+    }
 }
 
 pub enum VlConvertCommand {
@@ -1014,6 +1206,20 @@ pub enum VlConvertCommand {
         vl_spec: serde_json::Value,
         vl_opts: VlOpts,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
+    },
+    VgToCanvasPng {
+        vg_spec: serde_json::Value,
+        vg_opts: VgOpts,
+        scale: f32,
+        ppi: f32,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    VlToCanvasPng {
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+        scale: f32,
+        ppi: f32,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     GetLocalTz {
         responder: oneshot::Sender<Result<Option<String>, AnyError>>,
@@ -1120,6 +1326,26 @@ impl VlConverter {
                         } => {
                             let sg_result = inner.vegalite_to_scenegraph(&vl_spec, vl_opts).await;
                             responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VgToCanvasPng {
+                            vg_spec,
+                            vg_opts,
+                            scale,
+                            ppi,
+                            responder,
+                        } => {
+                            let png_result = inner.vega_to_canvas_png(&vg_spec, vg_opts, scale, ppi).await;
+                            responder.send(png_result).ok();
+                        }
+                        VlConvertCommand::VlToCanvasPng {
+                            vl_spec,
+                            vl_opts,
+                            scale,
+                            ppi,
+                            responder,
+                        } => {
+                            let png_result = inner.vegalite_to_canvas_png(&vl_spec, vl_opts, scale, ppi).await;
+                            responder.send(png_result).ok();
                         }
                         VlConvertCommand::GetLocalTz { responder } => {
                             let local_tz = inner.get_local_tz().await;
@@ -1297,8 +1523,34 @@ impl VlConverter {
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
-        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        svg_to_png(&svg, scale, ppi)
+        let ppi = ppi.unwrap_or(72.0);
+        // Calculate effective scale: combine user scale with ppi adjustment
+        let effective_scale = scale * ppi / 72.0;
+
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
+        let cmd = VlConvertCommand::VgToCanvasPng {
+            vg_spec,
+            vg_opts,
+            scale: effective_scale,
+            ppi,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send PNG conversion request: {err}")
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(png_result) => png_result,
+            Err(err) => bail!("Failed to retrieve PNG conversion result: {err}"),
+        }
     }
 
     pub async fn vegalite_to_png(
@@ -1309,8 +1561,34 @@ impl VlConverter {
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
-        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        svg_to_png(&svg, scale, ppi)
+        let ppi = ppi.unwrap_or(72.0);
+        // Calculate effective scale: combine user scale with ppi adjustment
+        let effective_scale = scale * ppi / 72.0;
+
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
+        let cmd = VlConvertCommand::VlToCanvasPng {
+            vl_spec,
+            vl_opts,
+            scale: effective_scale,
+            ppi,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send PNG conversion request: {err}")
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(png_result) => png_result,
+            Err(err) => bail!("Failed to retrieve PNG conversion result: {err}"),
+        }
     }
 
     pub async fn vega_to_jpeg(

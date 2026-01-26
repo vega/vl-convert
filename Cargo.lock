@@ -9621,6 +9621,8 @@ dependencies = [
  "deno_core",
  "deno_error",
  "fontdb",
+ "image 0.25.9",
+ "serde",
  "tiny-skia",
  "vl-convert-canvas2d",
 ]

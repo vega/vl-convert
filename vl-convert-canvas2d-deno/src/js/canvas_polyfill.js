@@ -1,6 +1,12 @@
 // Canvas 2D polyfill for vl-convert
 // Provides HTMLCanvasElement and CanvasRenderingContext2D that use Rust ops
 
+// Debug logging - set to true to trace all canvas calls
+const DEBUG_CANVAS = false;
+function log(...args) {
+  if (DEBUG_CANVAS) console.log('[canvas]', ...args);
+}
+
 import {
   op_canvas_create,
   op_canvas_destroy,
@@ -108,6 +114,8 @@ import {
   op_canvas_get_transform,
   op_path2d_round_rect,
   op_path2d_round_rect_radii,
+  // Image decoding
+  op_canvas_decode_image,
 } from "ext:core/ops";
 
 /**
@@ -121,6 +129,117 @@ class ImageData {
     this.colorSpace = "srgb";
   }
 }
+
+/**
+ * Image (HTMLImageElement) polyfill for loading remote images
+ * Used by Vega's ResourceLoader to load images for image marks
+ */
+class Image {
+  #src = "";
+  #width = 0;
+  #height = 0;
+  #complete = false;
+  #imageData = null;
+
+  constructor(width, height) {
+    if (width !== undefined) this.#width = width;
+    if (height !== undefined) this.#height = height;
+    this.crossOrigin = null;
+    this.onload = null;
+    this.onerror = null;
+  }
+
+  get src() {
+    return this.#src;
+  }
+
+  set src(url) {
+    this.#src = url;
+    this.#complete = false;
+    this.#loadImage(url);
+  }
+
+  get width() {
+    return this.#width;
+  }
+
+  set width(value) {
+    this.#width = value;
+  }
+
+  get height() {
+    return this.#height;
+  }
+
+  set height(value) {
+    this.#height = value;
+  }
+
+  get complete() {
+    return this.#complete;
+  }
+
+  get naturalWidth() {
+    return this.#width;
+  }
+
+  get naturalHeight() {
+    return this.#height;
+  }
+
+  // Internal: get decoded image data for drawImage
+  get _imageData() {
+    return this.#imageData;
+  }
+
+  async #loadImage(url) {
+    log('Image loading:', url);
+    try {
+      // Fetch the image
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
+
+      // Get image data as ArrayBuffer
+      const arrayBuffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+
+      // Decode the image to get RGBA pixel data
+      // We need a Deno op for this - for now use a simple decode op
+      const decoded = op_canvas_decode_image(bytes);
+
+      this.#width = decoded.width;
+      this.#height = decoded.height;
+      // Convert data to Uint8Array (it comes back as a regular Array from serde)
+      const pixelData = decoded.data instanceof Uint8Array
+        ? decoded.data
+        : new Uint8Array(decoded.data);
+      this.#imageData = {
+        data: pixelData,
+        width: decoded.width,
+        height: decoded.height,
+      };
+      this.#complete = true;
+
+      log('Image loaded:', url, this.#width, 'x', this.#height);
+
+      // Call onload callback
+      if (this.onload) {
+        this.onload();
+      }
+    } catch (error) {
+      log('Image error:', url, error);
+      this.#complete = false;
+      if (this.onerror) {
+        this.onerror(error);
+      }
+    }
+  }
+}
+
+// Alias for HTMLImageElement
+const HTMLImageElement = Image;
 
 /**
  * TextMetrics class for measureText results
@@ -311,6 +430,11 @@ class CanvasRenderingContext2D {
     return this.#rid;
   }
 
+  // Internal method to update the resource ID (used when canvas is resized)
+  _setRid(rid) {
+    this.#rid = rid;
+  }
+
   // --- Style properties ---
 
   get fillStyle() {
@@ -443,10 +567,12 @@ class CanvasRenderingContext2D {
   // --- State ---
 
   save() {
+    log('save');
     op_canvas_save(this.#rid);
   }
 
   restore() {
+    log('restore');
     op_canvas_restore(this.#rid);
   }
 
@@ -474,31 +600,38 @@ class CanvasRenderingContext2D {
   // --- Transforms ---
 
   translate(x, y) {
+    log('translate', x, y);
     op_canvas_translate(this.#rid, x, y);
   }
 
   rotate(angle) {
+    log('rotate', angle);
     op_canvas_rotate(this.#rid, angle);
   }
 
   scale(x, y) {
+    log('scale', x, y);
     op_canvas_scale(this.#rid, x, y);
   }
 
   transform(a, b, c, d, e, f) {
+    log('transform', a, b, c, d, e, f);
     op_canvas_transform(this.#rid, a, b, c, d, e, f);
   }
 
   setTransform(a, b, c, d, e, f) {
     if (typeof a === "object") {
       // DOMMatrix form
+      log('setTransform (DOMMatrix)', a.a, a.b, a.c, a.d, a.e, a.f);
       op_canvas_set_transform(this.#rid, a.a, a.b, a.c, a.d, a.e, a.f);
     } else {
+      log('setTransform', a, b, c, d, e, f);
       op_canvas_set_transform(this.#rid, a, b, c, d, e, f);
     }
   }
 
   resetTransform() {
+    log('resetTransform');
     op_canvas_reset_transform(this.#rid);
   }
 
@@ -511,46 +644,57 @@ class CanvasRenderingContext2D {
   // --- Paths ---
 
   beginPath() {
+    log('beginPath');
     op_canvas_begin_path(this.#rid);
   }
 
   moveTo(x, y) {
+    log('moveTo', x, y);
     op_canvas_move_to(this.#rid, x, y);
   }
 
   lineTo(x, y) {
+    log('lineTo', x, y);
     op_canvas_line_to(this.#rid, x, y);
   }
 
   closePath() {
+    log('closePath');
     op_canvas_close_path(this.#rid);
   }
 
   bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y) {
+    log('bezierCurveTo', cp1x, cp1y, cp2x, cp2y, x, y);
     op_canvas_bezier_curve_to(this.#rid, cp1x, cp1y, cp2x, cp2y, x, y);
   }
 
   quadraticCurveTo(cpx, cpy, x, y) {
+    log('quadraticCurveTo', cpx, cpy, x, y);
     op_canvas_quadratic_curve_to(this.#rid, cpx, cpy, x, y);
   }
 
   rect(x, y, width, height) {
+    log('rect', x, y, width, height);
     op_canvas_rect(this.#rid, x, y, width, height);
   }
 
   arc(x, y, radius, startAngle, endAngle, anticlockwise = false) {
+    log('arc', x, y, radius, startAngle, endAngle, anticlockwise);
     op_canvas_arc(this.#rid, x, y, radius, startAngle, endAngle, anticlockwise);
   }
 
   arcTo(x1, y1, x2, y2, radius) {
+    log('arcTo', x1, y1, x2, y2, radius);
     op_canvas_arc_to(this.#rid, x1, y1, x2, y2, radius);
   }
 
   ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise = false) {
+    log('ellipse', x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise);
     op_canvas_ellipse(this.#rid, x, y, radiusX, radiusY, rotation, startAngle, endAngle, anticlockwise);
   }
 
   roundRect(x, y, width, height, radii = 0) {
+    log('roundRect', x, y, width, height, radii);
     if (typeof radii === "number") {
       op_canvas_round_rect(this.#rid, x, y, width, height, radii);
     } else if (Array.isArray(radii)) {
@@ -563,6 +707,7 @@ class CanvasRenderingContext2D {
   // --- Drawing ---
 
   fill(pathOrFillRule, fillRule) {
+    log('fill', pathOrFillRule instanceof Path2D ? 'Path2D' : pathOrFillRule, fillRule);
     if (pathOrFillRule instanceof Path2D) {
       // fill(path) or fill(path, fillRule)
       if (fillRule) {
@@ -580,6 +725,7 @@ class CanvasRenderingContext2D {
   }
 
   stroke(path) {
+    log('stroke', path instanceof Path2D ? 'Path2D' : path);
     if (path instanceof Path2D) {
       op_canvas_stroke_path2d(this.#rid, path._getPathId());
     } else {
@@ -588,14 +734,17 @@ class CanvasRenderingContext2D {
   }
 
   fillRect(x, y, width, height) {
+    log('fillRect', x, y, width, height);
     op_canvas_fill_rect(this.#rid, x, y, width, height);
   }
 
   strokeRect(x, y, width, height) {
+    log('strokeRect', x, y, width, height);
     op_canvas_stroke_rect(this.#rid, x, y, width, height);
   }
 
   clearRect(x, y, width, height) {
+    log('clearRect', x, y, width, height);
     op_canvas_clear_rect(this.#rid, x, y, width, height);
   }
 
@@ -779,6 +928,7 @@ class CanvasRenderingContext2D {
   // --- drawImage ---
 
   drawImage(source, ...args) {
+    log('drawImage', source?.constructor?.name, source, args);
     // Handle different source types
     if (source instanceof HTMLCanvasElement) {
       const sourceCtx = source.getContext("2d");
@@ -797,6 +947,32 @@ class CanvasRenderingContext2D {
         // drawImage(canvas, sx, sy, sw, sh, dx, dy, dw, dh)
         const [sx, sy, sw, sh, dx, dy, dw, dh] = args;
         op_canvas_draw_canvas_cropped(this.#rid, sourceRid, sx, sy, sw, sh, dx, dy, dw, dh);
+      }
+    } else if (source instanceof Image) {
+      // Image (HTMLImageElement) source - use decoded image data
+      log('drawImage: Image instance, complete:', source.complete, 'src:', source.src);
+      const imageData = source._imageData;
+      log('drawImage: imageData:', imageData ? `${imageData.width}x${imageData.height}` : 'null');
+      if (!imageData) {
+        log('drawImage: Image not loaded yet');
+        return;
+      }
+      const data = imageData.data;
+      const imgWidth = imageData.width;
+      const imgHeight = imageData.height;
+
+      if (args.length === 2) {
+        // drawImage(image, dx, dy)
+        const [dx, dy] = args;
+        op_canvas_draw_image(this.#rid, data, imgWidth, imgHeight, dx, dy);
+      } else if (args.length === 4) {
+        // drawImage(image, dx, dy, dw, dh)
+        const [dx, dy, dw, dh] = args;
+        op_canvas_draw_image_scaled(this.#rid, data, imgWidth, imgHeight, dx, dy, dw, dh);
+      } else if (args.length === 8) {
+        // drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)
+        const [sx, sy, sw, sh, dx, dy, dw, dh] = args;
+        op_canvas_draw_image_cropped(this.#rid, data, imgWidth, imgHeight, sx, sy, sw, sh, dx, dy, dw, dh);
       }
     } else if (source instanceof ImageData || (source && source.data && source.width && source.height)) {
       // ImageData source - extract RGBA data
@@ -818,7 +994,7 @@ class CanvasRenderingContext2D {
         op_canvas_draw_image_cropped(this.#rid, data, imgWidth, imgHeight, sx, sy, sw, sh, dx, dy, dw, dh);
       }
     }
-    // Other source types (Image, etc.) are not supported in this polyfill
+    // Other source types are not supported in this polyfill
   }
 
   // --- Other stubs ---
@@ -842,6 +1018,11 @@ class HTMLCanvasElement {
     this.#context = null;
   }
 
+  // Internal getter for resource ID (used by Rust ops)
+  get _rid() {
+    return this.#rid;
+  }
+
   get width() {
     return this.#width;
   }
@@ -853,7 +1034,8 @@ class HTMLCanvasElement {
       op_canvas_destroy(this.#rid);
       this.#rid = op_canvas_create(this.#width, this.#height);
       if (this.#context) {
-        this.#context = new CanvasRenderingContext2D(this.#rid, this);
+        // Update the existing context's resource ID instead of creating a new context
+        this.#context._setRid(this.#rid);
       }
     }
   }
@@ -869,7 +1051,8 @@ class HTMLCanvasElement {
       op_canvas_destroy(this.#rid);
       this.#rid = op_canvas_create(this.#width, this.#height);
       if (this.#context) {
-        this.#context = new CanvasRenderingContext2D(this.#rid, this);
+        // Update the existing context's resource ID instead of creating a new context
+        this.#context._setRid(this.#rid);
       }
     }
   }
@@ -892,7 +1075,7 @@ class HTMLCanvasElement {
       // Empty canvas
       return "data:,";
     }
-    const pngData = op_canvas_to_png(this.#rid);
+    const pngData = op_canvas_to_png(this.#rid, null);
     const base64 = btoa(String.fromCharCode(...pngData));
     return `data:image/png;base64,${base64}`;
   }
@@ -902,9 +1085,17 @@ class HTMLCanvasElement {
       callback(null);
       return;
     }
-    const pngData = op_canvas_to_png(this.#rid);
+    const pngData = op_canvas_to_png(this.#rid, null);
     const blob = new Blob([new Uint8Array(pngData)], { type: "image/png" });
     callback(blob);
+  }
+
+  // Internal method to export as PNG with PPI metadata
+  _toPngWithPpi(ppi) {
+    if (this.#rid === null) {
+      return null;
+    }
+    return op_canvas_to_png(this.#rid, ppi);
   }
 }
 
@@ -917,7 +1108,7 @@ function createCanvas(width, height) {
 }
 
 // Export for module usage
-export { HTMLCanvasElement, CanvasRenderingContext2D, ImageData, TextMetrics, CanvasGradient, CanvasPattern, Path2D, createCanvas };
+export { HTMLCanvasElement, CanvasRenderingContext2D, ImageData, TextMetrics, CanvasGradient, CanvasPattern, Path2D, createCanvas, Image, HTMLImageElement };
 
 // Install on globalThis
 globalThis.HTMLCanvasElement = HTMLCanvasElement;
@@ -926,6 +1117,8 @@ globalThis.ImageData = ImageData;
 globalThis.CanvasGradient = CanvasGradient;
 globalThis.CanvasPattern = CanvasPattern;
 globalThis.Path2D = Path2D;
+globalThis.Image = Image;
+globalThis.HTMLImageElement = HTMLImageElement;
 
 // Provide document.createElement for vega-canvas compatibility
 if (typeof globalThis.document === "undefined") {
