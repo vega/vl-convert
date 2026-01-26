@@ -153,7 +153,7 @@ fn test_png_export() {
     ctx.set_fill_style("#0000ff").unwrap();
     ctx.fill_rect(0.0, 0.0, 50.0, 50.0);
 
-    let png_data = ctx.to_png().unwrap();
+    let png_data = ctx.to_png(None).unwrap();
 
     // Check PNG header
     assert_eq!(&png_data[0..8], b"\x89PNG\r\n\x1a\n");

@@ -142,6 +142,8 @@ deno_core::extension!(
         op_canvas_get_transform,
         op_path2d_round_rect,
         op_path2d_round_rect_radii,
+        // Image decoding
+        op_canvas_decode_image,
     ],
     esm_entry_point = "ext:vl_convert_canvas2d/canvas_polyfill.js",
     esm = [

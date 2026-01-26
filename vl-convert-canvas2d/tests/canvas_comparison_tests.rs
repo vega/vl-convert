@@ -121,7 +121,7 @@ fn run_comparison_test(test: &CanvasTestCase) -> Result<(), String> {
         .map_err(|e| format!("Failed to create canvas: {}", e))?;
     (test.rust_fn)(&mut ctx);
     let rust_png = ctx
-        .to_png()
+        .to_png(None)
         .map_err(|e| format!("Failed to export PNG: {}", e))?;
     std::fs::write(&rust_png_path, &rust_png)
         .map_err(|e| format!("Failed to write Rust PNG: {}", e))?;

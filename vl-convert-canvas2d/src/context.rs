@@ -9,7 +9,7 @@ use crate::style::{
     CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
 };
 use crate::text::TextMetrics;
-use cosmic_text::{Attrs, Buffer, Command, Family, FontSystem, Metrics, Shaping, SwashCache};
+use cosmic_text::{Attrs, Buffer, CacheKeyFlags, Command, Family, FontSystem, Metrics, Shaping, SwashCache};
 use std::sync::Arc;
 use tiny_skia::{Pixmap, Transform};
 
@@ -641,19 +641,26 @@ impl Canvas2dContext {
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
 
         // Build attributes from parsed font
-        let family = font
-            .families
-            .first()
-            .map(|f| Family::Name(f))
-            .unwrap_or(Family::SansSerif);
+        // Handle generic family names correctly (same logic as measure_text)
+        let family_str = font.families.first().map(|s| s.as_str()).unwrap_or("sans-serif");
+        let family = match family_str.to_lowercase().as_str() {
+            "sans-serif" => Family::SansSerif,
+            "serif" => Family::Serif,
+            "monospace" => Family::Monospace,
+            "cursive" => Family::Cursive,
+            "fantasy" => Family::Fantasy,
+            _ => Family::Name(family_str),
+        };
 
         // Build attributes including letter spacing if set
+        // Disable hinting to match SVG text rendering (usvg doesn't apply hinting)
         let letter_spacing = self.state.letter_spacing;
         let attrs = Attrs::new()
             .family(family)
             .weight(font.weight)
             .style(font.style)
-            .letter_spacing(letter_spacing);
+            .letter_spacing(letter_spacing)
+            .cache_key_flags(CacheKeyFlags::DISABLE_HINTING);
 
         buffer.set_text(&mut self.font_system, text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(&mut self.font_system, false);
@@ -727,7 +734,13 @@ impl Canvas2dContext {
         // Render each glyph as a vector path
         for run in buffer.layout_runs() {
             for glyph in run.glyphs.iter() {
+                // Get the cache key for outline retrieval (physical() provides this)
                 let physical_glyph = glyph.physical((base_x, base_y), 1.0);
+
+                // Calculate floating-point glyph position for sub-pixel precision
+                // (matching how usvg/resvg positions glyphs)
+                let glyph_x = base_x + glyph.x + glyph.font_size * glyph.x_offset;
+                let glyph_y = base_y + glyph.y - glyph.font_size * glyph.y_offset;
 
                 // Get outline commands for this glyph
                 if let Some(commands) = self
@@ -754,12 +767,9 @@ impl Canvas2dContext {
 
                     if let Some(path) = path_builder.finish() {
                         // Create a transform that positions the glyph correctly
-                        // The outline commands are already scaled to pixel size
-                        let glyph_transform = Transform::from_translate(
-                            physical_glyph.x as f32,
-                            physical_glyph.y as f32,
-                        )
-                        .post_concat(scale_transform);
+                        // Using floating-point position for sub-pixel precision
+                        let glyph_transform = Transform::from_translate(glyph_x, glyph_y)
+                            .post_concat(scale_transform);
 
                         if fill {
                             // Fill the glyph path
@@ -802,20 +812,32 @@ impl Canvas2dContext {
         self.path_builder = tiny_skia::PathBuilder::new();
     }
 
+    /// Transform a point by the current transformation matrix.
+    /// Canvas 2D spec requires path coordinates to be transformed when added to the path.
+    fn transform_point(&self, x: f32, y: f32) -> (f32, f32) {
+        let t = &self.state.transform;
+        (
+            t.sx * x + t.kx * y + t.tx,
+            t.ky * x + t.sy * y + t.ty,
+        )
+    }
+
     /// Move to a point without drawing.
     pub fn move_to(&mut self, x: f32, y: f32) {
-        self.path_builder.move_to(x, y);
-        self.current_x = x;
-        self.current_y = y;
-        self.subpath_start_x = x;
-        self.subpath_start_y = y;
+        let (tx, ty) = self.transform_point(x, y);
+        self.path_builder.move_to(tx, ty);
+        self.current_x = tx;
+        self.current_y = ty;
+        self.subpath_start_x = tx;
+        self.subpath_start_y = ty;
     }
 
     /// Draw a line to a point.
     pub fn line_to(&mut self, x: f32, y: f32) {
-        self.path_builder.line_to(x, y);
-        self.current_x = x;
-        self.current_y = y;
+        let (tx, ty) = self.transform_point(x, y);
+        self.path_builder.line_to(tx, ty);
+        self.current_x = tx;
+        self.current_y = ty;
     }
 
     /// Close the current subpath.
@@ -827,22 +849,41 @@ impl Canvas2dContext {
 
     /// Add a cubic bezier curve.
     pub fn bezier_curve_to(&mut self, cp1x: f32, cp1y: f32, cp2x: f32, cp2y: f32, x: f32, y: f32) {
-        self.path_builder.cubic_to(cp1x, cp1y, cp2x, cp2y, x, y);
-        self.current_x = x;
-        self.current_y = y;
+        let (tcp1x, tcp1y) = self.transform_point(cp1x, cp1y);
+        let (tcp2x, tcp2y) = self.transform_point(cp2x, cp2y);
+        let (tx, ty) = self.transform_point(x, y);
+        self.path_builder.cubic_to(tcp1x, tcp1y, tcp2x, tcp2y, tx, ty);
+        self.current_x = tx;
+        self.current_y = ty;
     }
 
     /// Add a quadratic bezier curve.
     pub fn quadratic_curve_to(&mut self, cpx: f32, cpy: f32, x: f32, y: f32) {
-        self.path_builder.quad_to(cpx, cpy, x, y);
-        self.current_x = x;
-        self.current_y = y;
+        let (tcpx, tcpy) = self.transform_point(cpx, cpy);
+        let (tx, ty) = self.transform_point(x, y);
+        self.path_builder.quad_to(tcpx, tcpy, tx, ty);
+        self.current_x = tx;
+        self.current_y = ty;
     }
 
     /// Add a rectangle to the path.
     pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        use crate::path::PathBuilderExt;
-        self.path_builder.rect(x, y, width, height);
+        // Transform all four corners
+        let (x0, y0) = self.transform_point(x, y);
+        let (x1, y1) = self.transform_point(x + width, y);
+        let (x2, y2) = self.transform_point(x + width, y + height);
+        let (x3, y3) = self.transform_point(x, y + height);
+
+        self.path_builder.move_to(x0, y0);
+        self.path_builder.line_to(x1, y1);
+        self.path_builder.line_to(x2, y2);
+        self.path_builder.line_to(x3, y3);
+        self.path_builder.close();
+
+        self.current_x = x0;
+        self.current_y = y0;
+        self.subpath_start_x = x0;
+        self.subpath_start_y = y0;
     }
 
     /// Add a rounded rectangle to the path with uniform corner radius.
@@ -938,11 +979,19 @@ impl Canvas2dContext {
         end_angle: f32,
         anticlockwise: bool,
     ) {
+        // Transform center point
+        let (tx, ty) = self.transform_point(x, y);
+        // Scale radius by the average of x and y scale factors
+        let t = &self.state.transform;
+        let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
+        let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
+        let scaled_radius = radius * (scale_x + scale_y) / 2.0;
+
         crate::arc::arc(
             &mut self.path_builder,
-            x,
-            y,
-            radius,
+            tx,
+            ty,
+            scaled_radius,
             start_angle,
             end_angle,
             anticlockwise,
@@ -951,15 +1000,23 @@ impl Canvas2dContext {
 
     /// Add an arcTo segment to the path.
     pub fn arc_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, radius: f32) {
+        let (tx1, ty1) = self.transform_point(x1, y1);
+        let (tx2, ty2) = self.transform_point(x2, y2);
+        // Scale radius
+        let t = &self.state.transform;
+        let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
+        let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
+        let scaled_radius = radius * (scale_x + scale_y) / 2.0;
+
         crate::arc::arc_to(
             &mut self.path_builder,
             self.current_x,
             self.current_y,
-            x1,
-            y1,
-            x2,
-            y2,
-            radius,
+            tx1,
+            ty1,
+            tx2,
+            ty2,
+            scaled_radius,
         );
     }
 
@@ -976,13 +1033,23 @@ impl Canvas2dContext {
         end_angle: f32,
         anticlockwise: bool,
     ) {
+        // Transform center point
+        let (tx, ty) = self.transform_point(x, y);
+        // Scale radii
+        let t = &self.state.transform;
+        let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
+        let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
+        // Add rotation from transform to the ellipse rotation
+        let transform_rotation = t.ky.atan2(t.sx);
+        let total_rotation = rotation + transform_rotation;
+
         crate::arc::ellipse(
             &mut self.path_builder,
-            x,
-            y,
-            radius_x,
-            radius_y,
-            rotation,
+            tx,
+            ty,
+            radius_x * scale_x,
+            radius_y * scale_y,
+            total_rotation,
             start_angle,
             end_angle,
             anticlockwise,
@@ -1018,18 +1085,19 @@ impl Canvas2dContext {
 
     /// Fill the current path with the specified fill rule.
     pub fn fill_with_rule(&mut self, fill_rule: CanvasFillRule) {
-        let path =
-            std::mem::replace(&mut self.path_builder, tiny_skia::PathBuilder::new()).finish();
+        // Clone the path builder so we don't consume it - stroke() may follow
+        let path = self.path_builder.clone().finish();
 
         if let Some(path) = path {
             if let Some(paint) = self.create_fill_paint() {
                 // Create clip mask if we have a clip path
                 let clip_mask = self.create_clip_mask();
+                // Path coordinates are already transformed, so use identity transform
                 self.pixmap.fill_path(
                     &path,
                     &paint,
                     fill_rule.into(),
-                    self.state.transform,
+                    Transform::identity(),
                     clip_mask.as_ref(),
                 );
             }
@@ -1038,32 +1106,40 @@ impl Canvas2dContext {
 
     /// Stroke the current path.
     pub fn stroke(&mut self) {
-        let path =
-            std::mem::replace(&mut self.path_builder, tiny_skia::PathBuilder::new()).finish();
+        // Clone the path builder so we don't consume it - fill() may have been called or may follow
+        let path = self.path_builder.clone().finish();
 
         if let Some(path) = path {
             if let Some(paint) = self.create_stroke_paint() {
+                // Scale line width by transform
+                let t = &self.state.transform;
+                let scale = ((t.sx * t.sx + t.ky * t.ky).sqrt() + (t.kx * t.kx + t.sy * t.sy).sqrt()) / 2.0;
+                let scaled_line_width = self.state.line_width * scale;
+
                 let stroke = tiny_skia::Stroke {
-                    width: self.state.line_width,
+                    width: scaled_line_width,
                     line_cap: self.state.line_cap.into(),
                     line_join: self.state.line_join.into(),
                     miter_limit: self.state.miter_limit,
                     dash: if self.state.line_dash.is_empty() {
                         None
                     } else {
+                        // Scale dash pattern too
+                        let scaled_dash: Vec<f32> = self.state.line_dash.iter().map(|d| d * scale).collect();
                         tiny_skia::StrokeDash::new(
-                            self.state.line_dash.clone(),
-                            self.state.line_dash_offset,
+                            scaled_dash,
+                            self.state.line_dash_offset * scale,
                         )
                     },
                 };
 
                 let clip_mask = self.create_clip_mask();
+                // Path coordinates are already transformed, so use identity transform
                 self.pixmap.stroke_path(
                     &path,
                     &paint,
                     &stroke,
-                    self.state.transform,
+                    Transform::identity(),
                     clip_mask.as_ref(),
                 );
             }
@@ -1138,13 +1214,10 @@ impl Canvas2dContext {
 
     /// Fill a rectangle.
     pub fn fill_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        if let Some(rect) = tiny_skia::Rect::from_xywh(x, y, width, height) {
-            if let Some(paint) = self.create_fill_paint() {
-                let clip_mask = self.create_clip_mask();
-                self.pixmap
-                    .fill_rect(rect, &paint, self.state.transform, clip_mask.as_ref());
-            }
-        }
+        // Use path-based approach for proper transform handling
+        self.begin_path();
+        self.rect(x, y, width, height);
+        self.fill();
     }
 
     /// Stroke a rectangle.
@@ -1156,14 +1229,25 @@ impl Canvas2dContext {
 
     /// Clear a rectangle (set pixels to transparent).
     pub fn clear_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        if let Some(rect) = tiny_skia::Rect::from_xywh(x, y, width, height) {
+        // Transform corners and find bounding box
+        let (x0, y0) = self.transform_point(x, y);
+        let (x1, y1) = self.transform_point(x + width, y);
+        let (x2, y2) = self.transform_point(x + width, y + height);
+        let (x3, y3) = self.transform_point(x, y + height);
+
+        let min_x = x0.min(x1).min(x2).min(x3);
+        let min_y = y0.min(y1).min(y2).min(y3);
+        let max_x = x0.max(x1).max(x2).max(x3);
+        let max_y = y0.max(y1).max(y2).max(y3);
+
+        if let Some(rect) = tiny_skia::Rect::from_xywh(min_x, min_y, max_x - min_x, max_y - min_y) {
             let paint = tiny_skia::Paint {
                 blend_mode: tiny_skia::BlendMode::Clear,
                 ..Default::default()
             };
             let clip_mask = self.create_clip_mask();
             self.pixmap
-                .fill_rect(rect, &paint, self.state.transform, clip_mask.as_ref());
+                .fill_rect(rect, &paint, Transform::identity(), clip_mask.as_ref());
         }
     }
 
@@ -1488,12 +1572,25 @@ impl Canvas2dContext {
     }
 
     /// Export the canvas as PNG data.
-    pub fn to_png(&self) -> Canvas2dResult<Vec<u8>> {
+    ///
+    /// # Arguments
+    /// * `ppi` - Optional pixels per inch for PNG metadata. Defaults to 72 if not specified.
+    pub fn to_png(&self, ppi: Option<f32>) -> Canvas2dResult<Vec<u8>> {
+        let ppi = ppi.unwrap_or(72.0);
+
         let mut buf = Vec::new();
         {
             let mut encoder = png::Encoder::new(&mut buf, self.width, self.height);
             encoder.set_color(png::ColorType::Rgba);
             encoder.set_depth(png::BitDepth::Eight);
+
+            // Set pixel density metadata (pixels per meter)
+            let ppm = (ppi.max(0.0) / 0.0254).round() as u32;
+            encoder.set_pixel_dims(Some(png::PixelDimensions {
+                xppu: ppm,
+                yppu: ppm,
+                unit: png::Unit::Meter,
+            }));
 
             let mut writer = encoder.write_header()?;
 

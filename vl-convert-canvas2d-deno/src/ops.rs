@@ -7,6 +7,7 @@ use crate::{CanvasResource, SharedFontDb};
 use deno_core::op2;
 use deno_core::{OpState, ResourceId};
 use deno_error::JsErrorBox;
+use serde::Serialize;
 use vl_convert_canvas2d::{Canvas2dContext, Canvas2dContextBuilder, LineCap, LineJoin, TextAlign, TextBaseline};
 
 // --- Canvas creation and lifecycle ---
@@ -848,9 +849,13 @@ pub fn op_canvas_get_image_data(
 }
 
 /// Export the canvas as PNG data.
+///
+/// # Arguments
+/// * `rid` - Canvas resource ID
+/// * `ppi` - Optional pixels per inch for PNG metadata. Defaults to 72 if not specified.
 #[op2]
 #[serde]
-pub fn op_canvas_to_png(state: &mut OpState, rid: u32) -> Result<Vec<u8>, JsErrorBox> {
+pub fn op_canvas_to_png(state: &mut OpState, rid: u32, ppi: Option<f32>) -> Result<Vec<u8>, JsErrorBox> {
     let resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
@@ -859,7 +864,7 @@ pub fn op_canvas_to_png(state: &mut OpState, rid: u32) -> Result<Vec<u8>, JsErro
     let png_data = resource
         .ctx
         .borrow()
-        .to_png()
+        .to_png(ppi)
         .map_err(|e| JsErrorBox::generic(format!("Failed to export PNG: {}", e)))?;
     Ok(png_data)
 }
@@ -2138,4 +2143,38 @@ pub fn op_path2d_round_rect_radii(
         radii_array,
     );
     Ok(())
+}
+
+// --- Image decoding ---
+
+/// Result of decoding an image - contains RGBA data and dimensions.
+#[derive(Serialize)]
+pub struct DecodedImage {
+    data: Vec<u8>,
+    width: u32,
+    height: u32,
+}
+
+/// Decode image bytes (PNG, JPEG, GIF, WebP) into RGBA pixel data.
+#[op2]
+#[serde]
+pub fn op_canvas_decode_image(
+    #[buffer] bytes: &[u8],
+) -> Result<DecodedImage, JsErrorBox> {
+    // Use the image crate to decode the image
+    let img = image::load_from_memory(bytes)
+        .map_err(|e| JsErrorBox::generic(format!("Failed to decode image: {}", e)))?;
+    
+    let width = img.width();
+    let height = img.height();
+    
+    // Convert to RGBA8
+    let rgba = img.to_rgba8();
+    let data = rgba.into_raw();
+    
+    Ok(DecodedImage {
+        data,
+        width,
+        height,
+    })
 }

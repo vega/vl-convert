@@ -22,3 +22,9 @@ tiny-skia = { workspace = true }
 
 # For font database sharing
 fontdb = { workspace = true }
+
+# For image decoding
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+
+# For serialization
+serde = { version = "1.0", features = ["derive"] }
