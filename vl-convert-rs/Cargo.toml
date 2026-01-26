@@ -11,7 +11,7 @@ keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
 vl-convert-canvas2d = { path = "../vl-convert-canvas2d" }
-vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno" }
+vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", features = ["svg"] }
 
 deno_runtime = { workspace = true }
 deno_core = { workspace = true }
@@ -53,3 +53,5 @@ deno_core = { workspace = true }
 deno_error = { workspace = true }
 # Need "snapshot" feature to access deno_runtime::snapshot::create_runtime_snapshot
 deno_runtime = { workspace = true, features = ["snapshot"] }
+# Canvas 2D Deno extension - used in snapshot creation
+vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno" }

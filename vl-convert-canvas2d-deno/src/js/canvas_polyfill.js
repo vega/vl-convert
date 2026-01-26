@@ -1,12 +1,6 @@
 // Canvas 2D polyfill for vl-convert
 // Provides HTMLCanvasElement and CanvasRenderingContext2D that use Rust ops
 
-// Debug logging - set to true to trace all canvas calls
-const DEBUG_CANVAS = false;
-function log(...args) {
-  if (DEBUG_CANVAS) console.log('[canvas]', ...args);
-}
-
 import {
   op_canvas_create,
   op_canvas_destroy,
@@ -116,7 +110,16 @@ import {
   op_path2d_round_rect_radii,
   // Image decoding
   op_canvas_decode_image,
+  op_canvas_get_image_info,
+  op_canvas_decode_svg_at_size,
+  // Logging
+  op_canvas_log,
 } from "ext:core/ops";
+
+// Debug logging - controlled by RUST_LOG=canvas=debug
+function log(...args) {
+  op_canvas_log(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+}
 
 /**
  * ImageData class for getImageData results
@@ -140,6 +143,8 @@ class Image {
   #height = 0;
   #complete = false;
   #imageData = null;
+  #rawBytes = null;  // Store raw bytes for SVG images
+  #isSvg = false;
 
   constructor(width, height) {
     if (width !== undefined) this.#width = width;
@@ -187,7 +192,17 @@ class Image {
     return this.#height;
   }
 
-  // Internal: get decoded image data for drawImage
+  // Internal: check if this is an SVG image
+  get _isSvg() {
+    return this.#isSvg;
+  }
+
+  // Internal: get raw bytes for SVG images
+  get _rawBytes() {
+    return this.#rawBytes;
+  }
+
+  // Internal: get decoded image data for drawImage (raster images only)
   get _imageData() {
     return this.#imageData;
   }
@@ -205,21 +220,31 @@ class Image {
       const arrayBuffer = await response.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
 
-      // Decode the image to get RGBA pixel data
-      // We need a Deno op for this - for now use a simple decode op
-      const decoded = op_canvas_decode_image(bytes);
+      // Get image info (checks if SVG and returns native dimensions)
+      const info = op_canvas_get_image_info(bytes);
 
-      this.#width = decoded.width;
-      this.#height = decoded.height;
-      // Convert data to Uint8Array (it comes back as a regular Array from serde)
-      const pixelData = decoded.data instanceof Uint8Array
-        ? decoded.data
-        : new Uint8Array(decoded.data);
-      this.#imageData = {
-        data: pixelData,
-        width: decoded.width,
-        height: decoded.height,
-      };
+      this.#width = info.width;
+      this.#height = info.height;
+      this.#isSvg = info.is_svg;
+
+      if (info.is_svg) {
+        // For SVG, store raw bytes - decode at drawImage time for proper scaling
+        this.#rawBytes = bytes;
+        this.#imageData = null;
+      } else {
+        // For raster images, decode immediately
+        const decoded = op_canvas_decode_image(bytes);
+        const pixelData = decoded.data instanceof Uint8Array
+          ? decoded.data
+          : new Uint8Array(decoded.data);
+        this.#imageData = {
+          data: pixelData,
+          width: decoded.width,
+          height: decoded.height,
+        };
+        this.#rawBytes = null;
+      }
+
       this.#complete = true;
 
       log('Image loaded:', url, this.#width, 'x', this.#height);
@@ -949,30 +974,66 @@ class CanvasRenderingContext2D {
         op_canvas_draw_canvas_cropped(this.#rid, sourceRid, sx, sy, sw, sh, dx, dy, dw, dh);
       }
     } else if (source instanceof Image) {
-      // Image (HTMLImageElement) source - use decoded image data
-      log('drawImage: Image instance, complete:', source.complete, 'src:', source.src);
-      const imageData = source._imageData;
-      log('drawImage: imageData:', imageData ? `${imageData.width}x${imageData.height}` : 'null');
-      if (!imageData) {
-        log('drawImage: Image not loaded yet');
-        return;
-      }
-      const data = imageData.data;
-      const imgWidth = imageData.width;
-      const imgHeight = imageData.height;
+      // Image (HTMLImageElement) source
+      log('drawImage: Image instance, complete:', source.complete, 'src:', source.src, 'isSvg:', source._isSvg);
 
-      if (args.length === 2) {
-        // drawImage(image, dx, dy)
-        const [dx, dy] = args;
-        op_canvas_draw_image(this.#rid, data, imgWidth, imgHeight, dx, dy);
-      } else if (args.length === 4) {
-        // drawImage(image, dx, dy, dw, dh)
-        const [dx, dy, dw, dh] = args;
-        op_canvas_draw_image_scaled(this.#rid, data, imgWidth, imgHeight, dx, dy, dw, dh);
-      } else if (args.length === 8) {
-        // drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)
-        const [sx, sy, sw, sh, dx, dy, dw, dh] = args;
-        op_canvas_draw_image_cropped(this.#rid, data, imgWidth, imgHeight, sx, sy, sw, sh, dx, dy, dw, dh);
+      if (source._isSvg && source._rawBytes) {
+        // SVG image - decode at target size for quality
+        // Determine target dimensions
+        let targetWidth, targetHeight;
+        if (args.length === 2) {
+          // drawImage(image, dx, dy) - use natural size
+          targetWidth = source.naturalWidth;
+          targetHeight = source.naturalHeight;
+        } else if (args.length >= 4) {
+          // drawImage(image, dx, dy, dw, dh) - use specified size
+          targetWidth = Math.ceil(args[2]);
+          targetHeight = Math.ceil(args[3]);
+        }
+
+        // Decode SVG at target size (with 2x supersampling done in Rust)
+        const decoded = op_canvas_decode_svg_at_size(source._rawBytes, targetWidth, targetHeight);
+        const pixelData = decoded.data instanceof Uint8Array
+          ? decoded.data
+          : new Uint8Array(decoded.data);
+
+        if (args.length === 2) {
+          const [dx, dy] = args;
+          // decoded is at 2x size, scale down when drawing
+          op_canvas_draw_image_scaled(this.#rid, pixelData, decoded.width, decoded.height, dx, dy, targetWidth, targetHeight);
+        } else if (args.length === 4) {
+          const [dx, dy, dw, dh] = args;
+          op_canvas_draw_image_scaled(this.#rid, pixelData, decoded.width, decoded.height, dx, dy, dw, dh);
+        } else if (args.length === 8) {
+          // For cropped drawing, scale source coordinates to 2x
+          const [sx, sy, sw, sh, dx, dy, dw, dh] = args;
+          op_canvas_draw_image_cropped(this.#rid, pixelData, decoded.width, decoded.height, sx * 2, sy * 2, sw * 2, sh * 2, dx, dy, dw, dh);
+        }
+      } else {
+        // Raster image - use pre-decoded image data
+        const imageData = source._imageData;
+        log('drawImage: imageData:', imageData ? `${imageData.width}x${imageData.height}` : 'null');
+        if (!imageData) {
+          log('drawImage: Image not loaded yet');
+          return;
+        }
+        const data = imageData.data;
+        const imgWidth = imageData.width;
+        const imgHeight = imageData.height;
+
+        if (args.length === 2) {
+          // drawImage(image, dx, dy)
+          const [dx, dy] = args;
+          op_canvas_draw_image(this.#rid, data, imgWidth, imgHeight, dx, dy);
+        } else if (args.length === 4) {
+          // drawImage(image, dx, dy, dw, dh)
+          const [dx, dy, dw, dh] = args;
+          op_canvas_draw_image_scaled(this.#rid, data, imgWidth, imgHeight, dx, dy, dw, dh);
+        } else if (args.length === 8) {
+          // drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)
+          const [sx, sy, sw, sh, dx, dy, dw, dh] = args;
+          op_canvas_draw_image_cropped(this.#rid, data, imgWidth, imgHeight, sx, sy, sw, sh, dx, dy, dw, dh);
+        }
       }
     } else if (source instanceof ImageData || (source && source.data && source.width && source.height)) {
       // ImageData source - extract RGBA data

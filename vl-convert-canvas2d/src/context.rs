@@ -641,23 +641,28 @@ impl Canvas2dContext {
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
 
         // Build attributes from parsed font
-        // Handle generic family names correctly (same logic as measure_text)
-        let family_str = font.families.first().map(|s| s.as_str()).unwrap_or("sans-serif");
-        let family = match family_str.to_lowercase().as_str() {
-            "sans-serif" => Family::SansSerif,
-            "serif" => Family::Serif,
-            "monospace" => Family::Monospace,
-            "cursive" => Family::Cursive,
-            "fantasy" => Family::Fantasy,
-            _ => Family::Name(family_str),
-        };
+        // Use get_family_with_fallback for proper font resolution (same as measure_text)
+        let mut resolved_name: Option<String> = None;
+        let resolution = font
+            .families
+            .first()
+            .map(|f| {
+                crate::text::get_family_with_fallback(&self.font_system, f, &mut resolved_name)
+            })
+            .unwrap_or(crate::text::FamilyResolution {
+                family: Family::SansSerif,
+                weight_override: None,
+            });
+
+        // Use weight from post_script_name match if available, otherwise use parsed CSS weight
+        let weight = resolution.weight_override.unwrap_or(font.weight);
 
         // Build attributes including letter spacing if set
         // Disable hinting to match SVG text rendering (usvg doesn't apply hinting)
         let letter_spacing = self.state.letter_spacing;
         let attrs = Attrs::new()
-            .family(family)
-            .weight(font.weight)
+            .family(resolution.family)
+            .weight(weight)
             .style(font.style)
             .letter_spacing(letter_spacing)
             .cache_key_flags(CacheKeyFlags::DISABLE_HINTING);
@@ -1616,11 +1621,13 @@ impl Canvas2dContext {
     fn create_clip_mask(&self) -> Option<tiny_skia::Mask> {
         self.state.clip_path.as_ref().and_then(|clip_path| {
             let mut mask = tiny_skia::Mask::new(self.width, self.height)?;
+            // Use identity transform because the clip path is already in pixel coordinates
+            // (rect() and other path operations already transform points via transform_point())
             mask.fill_path(
                 clip_path,
                 tiny_skia::FillRule::Winding,
                 true,
-                self.state.transform,
+                Transform::identity(),
             );
             Some(mask)
         })
