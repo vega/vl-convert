@@ -144,11 +144,9 @@ deno_core::extension!(
         op_path2d_round_rect_radii,
         // Image decoding
         op_canvas_decode_image,
-        op_canvas_get_image_info,
         #[cfg(feature = "svg")]
         op_canvas_decode_svg_at_size,
-        // Logging
-        op_canvas_log,
+        op_canvas_get_image_info,
     ],
     esm_entry_point = "ext:vl_convert_canvas2d/canvas_polyfill.js",
     esm = [

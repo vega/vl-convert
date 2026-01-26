@@ -2297,13 +2297,3 @@ fn unpremultiply_alpha(mut data: Vec<u8>) -> Vec<u8> {
     data
 }
 
-// --- Logging ---
-
-/// Log a debug message from JavaScript using the Rust log infrastructure.
-/// Controlled by RUST_LOG environment variable (e.g., RUST_LOG=canvas=debug).
-#[op2(fast)]
-pub fn op_canvas_log(state: &mut OpState, #[string] message: String) -> Result<(), JsErrorBox> {
-    let _ = state;
-    log::debug!(target: "canvas", "{}", message);
-    Ok(())
-}

@@ -320,11 +320,13 @@ impl Canvas2dContext {
 
     /// Save the current drawing state.
     pub fn save(&mut self) {
+        log::debug!(target: "canvas", "save");
         self.state_stack.push(self.state.clone());
     }
 
     /// Restore the previously saved drawing state.
     pub fn restore(&mut self) {
+        log::debug!(target: "canvas", "restore");
         if let Some(state) = self.state_stack.pop() {
             self.state = state;
         }
@@ -603,6 +605,7 @@ impl Canvas2dContext {
 
     /// Fill text at the specified position.
     pub fn fill_text(&mut self, text: &str, x: f32, y: f32) {
+        log::debug!(target: "canvas", "fillText \"{}\" {} {}", text, x, y);
         self.render_text_impl(text, x, y, None, true);
     }
 
@@ -616,6 +619,7 @@ impl Canvas2dContext {
 
     /// Stroke text at the specified position.
     pub fn stroke_text(&mut self, text: &str, x: f32, y: f32) {
+        log::debug!(target: "canvas", "strokeText \"{}\" {} {}", text, x, y);
         self.render_text_impl(text, x, y, None, false);
     }
 
@@ -814,6 +818,7 @@ impl Canvas2dContext {
 
     /// Begin a new path.
     pub fn begin_path(&mut self) {
+        log::debug!(target: "canvas", "beginPath");
         self.path_builder = tiny_skia::PathBuilder::new();
     }
 
@@ -829,6 +834,7 @@ impl Canvas2dContext {
 
     /// Move to a point without drawing.
     pub fn move_to(&mut self, x: f32, y: f32) {
+        log::debug!(target: "canvas", "moveTo {} {}", x, y);
         let (tx, ty) = self.transform_point(x, y);
         self.path_builder.move_to(tx, ty);
         self.current_x = tx;
@@ -839,6 +845,7 @@ impl Canvas2dContext {
 
     /// Draw a line to a point.
     pub fn line_to(&mut self, x: f32, y: f32) {
+        log::debug!(target: "canvas", "lineTo {} {}", x, y);
         let (tx, ty) = self.transform_point(x, y);
         self.path_builder.line_to(tx, ty);
         self.current_x = tx;
@@ -847,6 +854,7 @@ impl Canvas2dContext {
 
     /// Close the current subpath.
     pub fn close_path(&mut self) {
+        log::debug!(target: "canvas", "closePath");
         self.path_builder.close();
         self.current_x = self.subpath_start_x;
         self.current_y = self.subpath_start_y;
@@ -873,6 +881,7 @@ impl Canvas2dContext {
 
     /// Add a rectangle to the path.
     pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        log::debug!(target: "canvas", "rect {} {} {} {}", x, y, width, height);
         // Transform all four corners
         let (x0, y0) = self.transform_point(x, y);
         let (x1, y1) = self.transform_point(x + width, y);
@@ -1065,11 +1074,13 @@ impl Canvas2dContext {
 
     /// Create a clipping region from the current path using the non-zero winding rule.
     pub fn clip(&mut self) {
+        log::debug!(target: "canvas", "clip");
         self.clip_with_rule(CanvasFillRule::NonZero);
     }
 
     /// Create a clipping region from the current path with the specified fill rule.
     pub fn clip_with_rule(&mut self, _fill_rule: CanvasFillRule) {
+        log::debug!(target: "canvas", "clip_with_rule");
         // Note: The fill_rule is stored but used during mask creation in create_clip_mask()
         // For now, we store the path and use FillRule::Winding in the mask
         // A more complete implementation would store the fill rule with the clip path
@@ -1085,11 +1096,13 @@ impl Canvas2dContext {
 
     /// Fill the current path using the non-zero winding rule.
     pub fn fill(&mut self) {
+        log::debug!(target: "canvas", "fill");
         self.fill_with_rule(CanvasFillRule::NonZero);
     }
 
     /// Fill the current path with the specified fill rule.
     pub fn fill_with_rule(&mut self, fill_rule: CanvasFillRule) {
+        log::debug!(target: "canvas", "fill_with_rule {:?}", fill_rule);
         // Clone the path builder so we don't consume it - stroke() may follow
         let path = self.path_builder.clone().finish();
 
@@ -1111,6 +1124,7 @@ impl Canvas2dContext {
 
     /// Stroke the current path.
     pub fn stroke(&mut self) {
+        log::debug!(target: "canvas", "stroke");
         // Clone the path builder so we don't consume it - fill() may have been called or may follow
         let path = self.path_builder.clone().finish();
 
@@ -1219,6 +1233,7 @@ impl Canvas2dContext {
 
     /// Fill a rectangle.
     pub fn fill_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        log::debug!(target: "canvas", "fillRect {} {} {} {}", x, y, width, height);
         // Use path-based approach for proper transform handling
         self.begin_path();
         self.rect(x, y, width, height);
@@ -1227,6 +1242,7 @@ impl Canvas2dContext {
 
     /// Stroke a rectangle.
     pub fn stroke_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        log::debug!(target: "canvas", "strokeRect {} {} {} {}", x, y, width, height);
         self.begin_path();
         self.rect(x, y, width, height);
         self.stroke();
@@ -1234,6 +1250,7 @@ impl Canvas2dContext {
 
     /// Clear a rectangle (set pixels to transparent).
     pub fn clear_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
+        log::debug!(target: "canvas", "clearRect {} {} {} {}", x, y, width, height);
         // Transform corners and find bounding box
         let (x0, y0) = self.transform_point(x, y);
         let (x1, y1) = self.transform_point(x + width, y);
@@ -1263,6 +1280,7 @@ impl Canvas2dContext {
     /// This is the simplest form of drawImage - it draws the entire image
     /// at the specified (dx, dy) coordinates.
     pub fn draw_image(&mut self, image: tiny_skia::PixmapRef, dx: f32, dy: f32) {
+        log::debug!(target: "canvas", "drawImage {}x{} at {} {}", image.width(), image.height(), dx, dy);
         let paint = tiny_skia::PixmapPaint {
             opacity: self.state.global_alpha,
             blend_mode: self.state.global_composite_operation,
@@ -1361,11 +1379,13 @@ impl Canvas2dContext {
 
     /// Translate the canvas.
     pub fn translate(&mut self, x: f32, y: f32) {
+        log::debug!(target: "canvas", "translate {} {}", x, y);
         self.state.transform = self.state.transform.pre_translate(x, y);
     }
 
     /// Rotate the canvas.
     pub fn rotate(&mut self, angle: f32) {
+        log::debug!(target: "canvas", "rotate {}", angle);
         let cos = angle.cos();
         let sin = angle.sin();
         let rotation = Transform::from_row(cos, sin, -sin, cos, 0.0, 0.0);
@@ -1374,22 +1394,26 @@ impl Canvas2dContext {
 
     /// Scale the canvas.
     pub fn scale(&mut self, x: f32, y: f32) {
+        log::debug!(target: "canvas", "scale {} {}", x, y);
         self.state.transform = self.state.transform.pre_scale(x, y);
     }
 
     /// Apply a transform matrix.
     pub fn transform(&mut self, a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) {
+        log::debug!(target: "canvas", "transform {} {} {} {} {} {}", a, b, c, d, e, f);
         let t = Transform::from_row(a, b, c, d, e, f);
         self.state.transform = self.state.transform.pre_concat(t);
     }
 
     /// Set the transform matrix (replacing the current one).
     pub fn set_transform(&mut self, a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) {
+        log::debug!(target: "canvas", "setTransform {} {} {} {} {} {}", a, b, c, d, e, f);
         self.state.transform = Transform::from_row(a, b, c, d, e, f);
     }
 
     /// Reset the transform to identity.
     pub fn reset_transform(&mut self) {
+        log::debug!(target: "canvas", "resetTransform");
         self.state.transform = Transform::identity();
     }
 
