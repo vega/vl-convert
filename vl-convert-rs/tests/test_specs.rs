@@ -1031,4 +1031,3 @@ mod test_vega_label_transform {
     #[test]
     fn test_marker() {} // Help IDE detect test module
 }
-

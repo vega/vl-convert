@@ -8,7 +8,9 @@ use deno_core::op2;
 use deno_core::{OpState, ResourceId};
 use deno_error::JsErrorBox;
 use serde::Serialize;
-use vl_convert_canvas2d::{Canvas2dContext, Canvas2dContextBuilder, LineCap, LineJoin, TextAlign, TextBaseline};
+use vl_convert_canvas2d::{
+    Canvas2dContext, Canvas2dContextBuilder, LineCap, LineJoin, TextAlign, TextBaseline,
+};
 
 // --- Canvas creation and lifecycle ---
 
@@ -855,7 +857,11 @@ pub fn op_canvas_get_image_data(
 /// * `ppi` - Optional pixels per inch for PNG metadata. Defaults to 72 if not specified.
 #[op2]
 #[serde]
-pub fn op_canvas_to_png(state: &mut OpState, rid: u32, ppi: Option<f32>) -> Result<Vec<u8>, JsErrorBox> {
+pub fn op_canvas_to_png(
+    state: &mut OpState,
+    rid: u32,
+    ppi: Option<f32>,
+) -> Result<Vec<u8>, JsErrorBox> {
     let resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
@@ -1109,13 +1115,10 @@ pub fn op_canvas_draw_image_scaled(
     let pixmap = tiny_skia::PixmapRef::from_bytes(data, img_width, img_height)
         .ok_or_else(|| JsErrorBox::generic("Invalid image data"))?;
 
-    resource.ctx.borrow_mut().draw_image_scaled(
-        pixmap,
-        dx as f32,
-        dy as f32,
-        dw as f32,
-        dh as f32,
-    );
+    resource
+        .ctx
+        .borrow_mut()
+        .draw_image_scaled(pixmap, dx as f32, dy as f32, dw as f32, dh as f32);
     Ok(())
 }
 
@@ -1146,14 +1149,7 @@ pub fn op_canvas_draw_image_cropped(
         .ok_or_else(|| JsErrorBox::generic("Invalid image data"))?;
 
     resource.ctx.borrow_mut().draw_image_cropped(
-        pixmap,
-        sx as f32,
-        sy as f32,
-        sw as f32,
-        sh as f32,
-        dx as f32,
-        dy as f32,
-        dw as f32,
+        pixmap, sx as f32, sy as f32, sw as f32, sh as f32, dx as f32, dy as f32, dw as f32,
         dh as f32,
     );
     Ok(())
@@ -1602,7 +1598,10 @@ pub fn op_path2d_create_from_svg(
 
 /// Create a Path2D by copying another Path2D.
 #[op2(fast)]
-pub fn op_path2d_create_from_path(state: &mut OpState, source_path_id: u32) -> Result<u32, JsErrorBox> {
+pub fn op_path2d_create_from_path(
+    state: &mut OpState,
+    source_path_id: u32,
+) -> Result<u32, JsErrorBox> {
     let source = state
         .resource_table
         .get::<Path2DResource>(ResourceId::from(source_path_id))
@@ -1625,7 +1624,12 @@ pub fn op_path2d_destroy(state: &mut OpState, path_id: u32) -> Result<(), JsErro
 
 /// Move to a point in Path2D.
 #[op2(fast)]
-pub fn op_path2d_move_to(state: &mut OpState, path_id: u32, x: f64, y: f64) -> Result<(), JsErrorBox> {
+pub fn op_path2d_move_to(
+    state: &mut OpState,
+    path_id: u32,
+    x: f64,
+    y: f64,
+) -> Result<(), JsErrorBox> {
     let resource = state
         .resource_table
         .get::<Path2DResource>(ResourceId::from(path_id))
@@ -1637,7 +1641,12 @@ pub fn op_path2d_move_to(state: &mut OpState, path_id: u32, x: f64, y: f64) -> R
 
 /// Line to a point in Path2D.
 #[op2(fast)]
-pub fn op_path2d_line_to(state: &mut OpState, path_id: u32, x: f64, y: f64) -> Result<(), JsErrorBox> {
+pub fn op_path2d_line_to(
+    state: &mut OpState,
+    path_id: u32,
+    x: f64,
+    y: f64,
+) -> Result<(), JsErrorBox> {
     let resource = state
         .resource_table
         .get::<Path2DResource>(ResourceId::from(path_id))
@@ -2019,10 +2028,30 @@ pub fn op_canvas_round_rect_radii(
 
     // Convert radii array - Canvas spec allows 1, 2, 3, or 4 values
     let radii_array = match radii.len() {
-        1 => [radii[0] as f32, radii[0] as f32, radii[0] as f32, radii[0] as f32],
-        2 => [radii[0] as f32, radii[1] as f32, radii[0] as f32, radii[1] as f32],
-        3 => [radii[0] as f32, radii[1] as f32, radii[2] as f32, radii[1] as f32],
-        4 => [radii[0] as f32, radii[1] as f32, radii[2] as f32, radii[3] as f32],
+        1 => [
+            radii[0] as f32,
+            radii[0] as f32,
+            radii[0] as f32,
+            radii[0] as f32,
+        ],
+        2 => [
+            radii[0] as f32,
+            radii[1] as f32,
+            radii[0] as f32,
+            radii[1] as f32,
+        ],
+        3 => [
+            radii[0] as f32,
+            radii[1] as f32,
+            radii[2] as f32,
+            radii[1] as f32,
+        ],
+        4 => [
+            radii[0] as f32,
+            radii[1] as f32,
+            radii[2] as f32,
+            radii[3] as f32,
+        ],
         _ => return Err(JsErrorBox::generic("Invalid radii array length")),
     };
 
@@ -2128,10 +2157,30 @@ pub fn op_path2d_round_rect_radii(
 
     // Convert radii array - Canvas spec allows 1, 2, 3, or 4 values
     let radii_array = match radii.len() {
-        1 => [radii[0] as f32, radii[0] as f32, radii[0] as f32, radii[0] as f32],
-        2 => [radii[0] as f32, radii[1] as f32, radii[0] as f32, radii[1] as f32],
-        3 => [radii[0] as f32, radii[1] as f32, radii[2] as f32, radii[1] as f32],
-        4 => [radii[0] as f32, radii[1] as f32, radii[2] as f32, radii[3] as f32],
+        1 => [
+            radii[0] as f32,
+            radii[0] as f32,
+            radii[0] as f32,
+            radii[0] as f32,
+        ],
+        2 => [
+            radii[0] as f32,
+            radii[1] as f32,
+            radii[0] as f32,
+            radii[1] as f32,
+        ],
+        3 => [
+            radii[0] as f32,
+            radii[1] as f32,
+            radii[2] as f32,
+            radii[1] as f32,
+        ],
+        4 => [
+            radii[0] as f32,
+            radii[1] as f32,
+            radii[2] as f32,
+            radii[3] as f32,
+        ],
         _ => return Err(JsErrorBox::generic("Invalid radii array length")),
     };
 
@@ -2192,9 +2241,7 @@ pub fn op_canvas_get_image_info(#[buffer] bytes: &[u8]) -> Result<ImageInfo, JsE
 /// For SVG images, use op_canvas_decode_svg_at_size instead.
 #[op2]
 #[serde]
-pub fn op_canvas_decode_image(
-    #[buffer] bytes: &[u8],
-) -> Result<DecodedImage, JsErrorBox> {
+pub fn op_canvas_decode_image(#[buffer] bytes: &[u8]) -> Result<DecodedImage, JsErrorBox> {
     // Use the image crate to decode the image
     let img = image::load_from_memory(bytes)
         .map_err(|e| JsErrorBox::generic(format!("Failed to decode image: {}", e)))?;
@@ -2261,7 +2308,9 @@ pub fn op_canvas_decode_svg_at_size(
 fn is_svg(bytes: &[u8]) -> bool {
     let s = std::str::from_utf8(bytes).unwrap_or("");
     let trimmed = s.trim_start();
-    trimmed.starts_with("<?xml") || trimmed.starts_with("<svg") || trimmed.starts_with("<!DOCTYPE svg")
+    trimmed.starts_with("<?xml")
+        || trimmed.starts_with("<svg")
+        || trimmed.starts_with("<!DOCTYPE svg")
 }
 
 #[cfg(feature = "svg")]
@@ -2296,4 +2345,3 @@ fn unpremultiply_alpha(mut data: Vec<u8>) -> Vec<u8> {
     }
     data
 }
-
