@@ -655,10 +655,11 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
 
         // Add shared fontdb to OpState so canvas contexts use the same fonts as SVG rendering
         {
-            let opts = USVG_OPTIONS.lock().map_err(|e| {
-                anyhow!("Failed to acquire USVG_OPTIONS lock: {}", e)
-            })?;
-            let shared_fontdb = vl_convert_canvas2d_deno::SharedFontDb::from_arc(opts.fontdb.clone());
+            let opts = USVG_OPTIONS
+                .lock()
+                .map_err(|e| anyhow!("Failed to acquire USVG_OPTIONS lock: {}", e))?;
+            let shared_fontdb =
+                vl_convert_canvas2d_deno::SharedFontDb::from_arc(opts.fontdb.clone());
             worker.js_runtime.op_state().borrow_mut().put(shared_fontdb);
         }
 
@@ -1337,7 +1338,9 @@ impl VlConverter {
                             ppi,
                             responder,
                         } => {
-                            let png_result = inner.vega_to_canvas_png(&vg_spec, vg_opts, scale, ppi).await;
+                            let png_result = inner
+                                .vega_to_canvas_png(&vg_spec, vg_opts, scale, ppi)
+                                .await;
                             responder.send(png_result).ok();
                         }
                         VlConvertCommand::VlToCanvasPng {
@@ -1347,7 +1350,9 @@ impl VlConverter {
                             ppi,
                             responder,
                         } => {
-                            let png_result = inner.vegalite_to_canvas_png(&vl_spec, vl_opts, scale, ppi).await;
+                            let png_result = inner
+                                .vegalite_to_canvas_png(&vl_spec, vl_opts, scale, ppi)
+                                .await;
                             responder.send(png_result).ok();
                         }
                         VlConvertCommand::GetLocalTz { responder } => {

@@ -22,7 +22,6 @@ mod context;
 mod error;
 mod font_parser;
 mod gradient;
-mod path;
 mod path2d;
 mod pattern;
 mod style;

@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
-use vl_convert_canvas2d::{CanvasGradient, CanvasPattern, Canvas2dContext, Path2D};
+use vl_convert_canvas2d::{Canvas2dContext, CanvasGradient, CanvasPattern, Path2D};
 
 /// Resource wrapper for Canvas2dContext to be stored in Deno's resource table.
 /// Also stores gradients and patterns with numeric IDs for JavaScript reference.
@@ -50,7 +50,9 @@ impl CanvasResource {
     pub fn get_gradient_mut(&self, id: u32) -> Option<std::cell::RefMut<'_, CanvasGradient>> {
         let gradients = self.gradients.borrow_mut();
         if gradients.contains_key(&id) {
-            Some(std::cell::RefMut::map(gradients, |g| g.get_mut(&id).unwrap()))
+            Some(std::cell::RefMut::map(gradients, |g| {
+                g.get_mut(&id).unwrap()
+            }))
         } else {
             None
         }

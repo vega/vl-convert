@@ -9,7 +9,9 @@ use crate::style::{
     CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
 };
 use crate::text::TextMetrics;
-use cosmic_text::{Attrs, Buffer, CacheKeyFlags, Command, Family, FontSystem, Metrics, Shaping, SwashCache};
+use cosmic_text::{
+    Attrs, Buffer, CacheKeyFlags, Command, Family, FontSystem, Metrics, Shaping, SwashCache,
+};
 use std::sync::Arc;
 use tiny_skia::{Pixmap, Transform};
 
@@ -826,10 +828,7 @@ impl Canvas2dContext {
     /// Canvas 2D spec requires path coordinates to be transformed when added to the path.
     fn transform_point(&self, x: f32, y: f32) -> (f32, f32) {
         let t = &self.state.transform;
-        (
-            t.sx * x + t.kx * y + t.tx,
-            t.ky * x + t.sy * y + t.ty,
-        )
+        (t.sx * x + t.kx * y + t.tx, t.ky * x + t.sy * y + t.ty)
     }
 
     /// Move to a point without drawing.
@@ -865,7 +864,8 @@ impl Canvas2dContext {
         let (tcp1x, tcp1y) = self.transform_point(cp1x, cp1y);
         let (tcp2x, tcp2y) = self.transform_point(cp2x, cp2y);
         let (tx, ty) = self.transform_point(x, y);
-        self.path_builder.cubic_to(tcp1x, tcp1y, tcp2x, tcp2y, tx, ty);
+        self.path_builder
+            .cubic_to(tcp1x, tcp1y, tcp2x, tcp2y, tx, ty);
         self.current_x = tx;
         self.current_y = ty;
     }
@@ -1132,7 +1132,8 @@ impl Canvas2dContext {
             if let Some(paint) = self.create_stroke_paint() {
                 // Scale line width by transform
                 let t = &self.state.transform;
-                let scale = ((t.sx * t.sx + t.ky * t.ky).sqrt() + (t.kx * t.kx + t.sy * t.sy).sqrt()) / 2.0;
+                let scale =
+                    ((t.sx * t.sx + t.ky * t.ky).sqrt() + (t.kx * t.kx + t.sy * t.sy).sqrt()) / 2.0;
                 let scaled_line_width = self.state.line_width * scale;
 
                 let stroke = tiny_skia::Stroke {
@@ -1144,11 +1145,9 @@ impl Canvas2dContext {
                         None
                     } else {
                         // Scale dash pattern too
-                        let scaled_dash: Vec<f32> = self.state.line_dash.iter().map(|d| d * scale).collect();
-                        tiny_skia::StrokeDash::new(
-                            scaled_dash,
-                            self.state.line_dash_offset * scale,
-                        )
+                        let scaled_dash: Vec<f32> =
+                            self.state.line_dash.iter().map(|d| d * scale).collect();
+                        tiny_skia::StrokeDash::new(scaled_dash, self.state.line_dash_offset * scale)
                     },
                 };
 

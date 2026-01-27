@@ -332,11 +332,15 @@ fn test_postscript_name_fallback() {
         .join("vl-convert-rs/tests/fonts/matter/Matter-SemiBold.ttf");
 
     if !matter_font_path.exists() {
-        println!("Skipping test - Matter font not found at {:?}", matter_font_path);
+        println!(
+            "Skipping test - Matter font not found at {:?}",
+            matter_font_path
+        );
         return;
     }
 
-    db.load_font_file(&matter_font_path).expect("Failed to load Matter font");
+    db.load_font_file(&matter_font_path)
+        .expect("Failed to load Matter font");
 
     // Debug: Print all faces and their properties
     println!("\nFaces in fontdb after loading Matter font:");
@@ -357,12 +361,18 @@ fn test_postscript_name_fallback() {
     ctx.set_font("12px Matter SemiBold").unwrap();
 
     let metrics = ctx.measure_text("Test").unwrap();
-    println!("Measured text 'Test' with 'Matter SemiBold': width = {}", metrics.width);
+    println!(
+        "Measured text 'Test' with 'Matter SemiBold': width = {}",
+        metrics.width
+    );
 
     // Also try with the actual family name + weight
     ctx.set_font("600 12px Matter").unwrap();
     let metrics2 = ctx.measure_text("Test").unwrap();
-    println!("Measured text 'Test' with 'Matter' (weight 600): width = {}", metrics2.width);
+    println!(
+        "Measured text 'Test' with 'Matter' (weight 600): width = {}",
+        metrics2.width
+    );
 
     // The width should be positive and reasonable
     assert!(metrics.width > 0.0, "Width should be positive");
@@ -388,7 +398,11 @@ fn test_measure_text_vs_node_canvas() {
         ("11px Helvetica", "Count of Records", 85.60546875),
         ("bold 11px Helvetica", "Count of Records", 92.2822265625),
         ("11px sans-serif", "IMDB Rating (binned)", 105.775390625),
-        ("11px sans-serif", "Rotten Tomatoes Rating (binned)", 161.2431640625),
+        (
+            "11px sans-serif",
+            "Rotten Tomatoes Rating (binned)",
+            161.2431640625,
+        ),
         ("10px sans-serif", "Count of Records", 77.8173828125),
         ("12px sans-serif", "Count of Records", 93.380859375),
     ];

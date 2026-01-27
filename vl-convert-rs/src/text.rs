@@ -244,11 +244,9 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
 
-    // Get mutable reference to font_db. This should always be successful since
-    // we're holding the mutex on USVG_OPTIONS
-    let Some(font_db) = Arc::get_mut(&mut opts.fontdb) else {
-        return Err(anyhow!("Could not acquire font_db reference"));
-    };
+    // Get mutable reference to font_db. Use Arc::make_mut which will clone the
+    // database if there are other references (e.g., from canvas contexts).
+    let font_db = Arc::make_mut(&mut opts.fontdb);
 
     // Load fonts
     font_db.load_fonts_dir(dir);
