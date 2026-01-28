@@ -5,6 +5,8 @@ edition = "2021"
 description = "Pure Rust Canvas 2D API implementation using tiny-skia and cosmic-text"
 license = "BSD-3-Clause"
 repository = "https://github.com/vega/vl-convert"
+readme = "README.md"
+keywords = ["canvas", "2d", "graphics", "tiny-skia"]
 
 [dependencies]
 # Graphics rendering
