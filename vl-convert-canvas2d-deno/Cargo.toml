@@ -5,6 +5,8 @@ edition = "2021"
 description = "Deno extension for Canvas 2D API wrapping vl-convert-canvas2d"
 license = "BSD-3-Clause"
 repository = "https://github.com/vega/vl-convert"
+readme = "README.md"
+keywords = ["canvas", "2d", "deno", "graphics"]
 
 [features]
 default = []
