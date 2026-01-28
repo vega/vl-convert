@@ -1,6 +1,6 @@
 [package]
 name = "vl-convert-canvas2d-deno"
-version = "0.1.0"
+version = "1.9.0"
 edition = "2021"
 description = "Deno extension for Canvas 2D API wrapping vl-convert-canvas2d"
 license = "BSD-3-Clause"
