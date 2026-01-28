@@ -242,7 +242,16 @@ pub fn arc_to(
     path.line_to(start_x, start_y);
 
     // Draw arc - we just did line_to so we have a current point
-    arc(path, cx, cy, radius, start_angle, end_angle, cross > 0.0, true);
+    arc(
+        path,
+        cx,
+        cy,
+        radius,
+        start_angle,
+        end_angle,
+        cross > 0.0,
+        true,
+    );
 }
 
 #[cfg(test)]
