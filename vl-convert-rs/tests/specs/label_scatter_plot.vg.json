@@ -1,0 +1,116 @@
+{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "description": "A scatter plot with automatic label placement using the label transform",
+  "width": 500,
+  "height": 300,
+  "padding": 5,
+  "data": [
+    {
+      "name": "movies",
+      "values": [
+        {"title": "Avatar", "rating": 7.9, "gross": 760.5},
+        {"title": "Titanic", "rating": 7.7, "gross": 658.7},
+        {"title": "Star Wars", "rating": 8.6, "gross": 460.9},
+        {"title": "Avengers", "rating": 8.0, "gross": 623.4},
+        {"title": "Jurassic World", "rating": 7.0, "gross": 652.3},
+        {"title": "Furious 7", "rating": 7.1, "gross": 353.0},
+        {"title": "The Lion King", "rating": 8.5, "gross": 422.8},
+        {"title": "Frozen", "rating": 7.4, "gross": 400.7},
+        {"title": "Harry Potter", "rating": 7.6, "gross": 381.0},
+        {"title": "Finding Nemo", "rating": 8.1, "gross": 380.8}
+      ]
+    },
+    {
+      "name": "trend",
+      "source": "movies",
+      "transform": [
+        {
+          "type": "regression",
+          "method": "linear",
+          "x": "rating",
+          "y": "gross",
+          "as": ["u", "v"]
+        }
+      ]
+    }
+  ],
+  "scales": [
+    {
+      "name": "x",
+      "type": "linear",
+      "domain": {"data": "movies", "field": "rating"},
+      "range": "width",
+      "nice": true
+    },
+    {
+      "name": "y",
+      "type": "linear",
+      "domain": {"data": "movies", "field": "gross"},
+      "range": "height",
+      "nice": true
+    }
+  ],
+  "axes": [
+    {
+      "orient": "bottom",
+      "scale": "x",
+      "title": "IMDB Rating"
+    },
+    {
+      "orient": "left",
+      "scale": "y",
+      "title": "Worldwide Gross (millions)"
+    }
+  ],
+  "marks": [
+    {
+      "name": "trendline",
+      "type": "line",
+      "from": {"data": "trend"},
+      "encode": {
+        "enter": {
+          "x": {"scale": "x", "field": "u"},
+          "y": {"scale": "y", "field": "v"},
+          "stroke": {"value": "#ccc"},
+          "strokeWidth": {"value": 2}
+        }
+      }
+    },
+    {
+      "name": "points",
+      "type": "symbol",
+      "from": {"data": "movies"},
+      "encode": {
+        "enter": {
+          "x": {"scale": "x", "field": "rating"},
+          "y": {"scale": "y", "field": "gross"},
+          "size": {"value": 100},
+          "fill": {"value": "steelblue"},
+          "fillOpacity": {"value": 0.8}
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {"data": "movies"},
+      "encode": {
+        "enter": {
+          "x": {"scale": "x", "field": "rating"},
+          "y": {"scale": "y", "field": "gross"},
+          "text": {"field": "title"},
+          "fontSize": {"value": 10},
+          "fill": {"value": "#333"}
+        }
+      },
+      "transform": [
+        {
+          "type": "label",
+          "avoidMarks": ["points", "trendline"],
+          "anchor": ["top", "bottom", "right", "left", "top-left", "top-right", "bottom-left", "bottom-right"],
+          "offset": [8, 10],
+          "size": {"signal": "[width, height]"}
+        }
+      ]
+    }
+  ]
+}

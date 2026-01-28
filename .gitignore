@@ -1,6 +1,7 @@
 /.idea
 /target
 /vl-convert-rs/tests/output/
+/vl-convert-canvas2d/test_output/
 
 __pycache__/
 .pytest_cache/
@@ -12,11 +13,14 @@ __pycache__/
 /vl-convert-python/notebooks/.ipynb_checkpoints/
 /vl-convert-python/notebooks/output/
 /vl-convert/tests/output/
+/vl-convert-rs/tests/specs/failed/
 /vl-convert-rs/tests/vl-specs/failed/
 
 .pixi/
 
 scratch/
+vl-convert-canvas2d/tests/node_baseline/
 
 # File generated to check for
 CI.yaml
+.agent-ask-threads/
