@@ -17,6 +17,7 @@ use tiny_skia::PathBuilder;
 /// * `end_angle` - Ending angle in radians
 /// * `anticlockwise` - If true, draw arc counterclockwise
 /// * `has_current_point` - If true, line to arc start; otherwise move to arc start
+#[allow(clippy::too_many_arguments)]
 pub fn arc(
     path: &mut PathBuilder,
     x: f32,
