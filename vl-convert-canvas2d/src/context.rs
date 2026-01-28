@@ -199,6 +199,8 @@ pub struct Canvas2dContext {
     /// Subpath start position (for closePath).
     subpath_start_x: f32,
     subpath_start_y: f32,
+    /// Whether the path has a current point (for arc/ellipse line_to vs move_to).
+    has_current_point: bool,
 }
 
 impl Canvas2dContext {
@@ -253,6 +255,7 @@ impl Canvas2dContext {
             current_y: 0.0,
             subpath_start_x: 0.0,
             subpath_start_y: 0.0,
+            has_current_point: false,
         })
     }
 
@@ -354,6 +357,7 @@ impl Canvas2dContext {
         self.current_y = 0.0;
         self.subpath_start_x = 0.0;
         self.subpath_start_y = 0.0;
+        self.has_current_point = false;
     }
 
     // --- Style setters ---
@@ -822,6 +826,7 @@ impl Canvas2dContext {
     pub fn begin_path(&mut self) {
         log::debug!(target: "canvas", "beginPath");
         self.path_builder = tiny_skia::PathBuilder::new();
+        self.has_current_point = false;
     }
 
     /// Transform a point by the current transformation matrix.
@@ -840,6 +845,7 @@ impl Canvas2dContext {
         self.current_y = ty;
         self.subpath_start_x = tx;
         self.subpath_start_y = ty;
+        self.has_current_point = true;
     }
 
     /// Draw a line to a point.
@@ -849,6 +855,7 @@ impl Canvas2dContext {
         self.path_builder.line_to(tx, ty);
         self.current_x = tx;
         self.current_y = ty;
+        self.has_current_point = true;
     }
 
     /// Close the current subpath.
@@ -868,6 +875,7 @@ impl Canvas2dContext {
             .cubic_to(tcp1x, tcp1y, tcp2x, tcp2y, tx, ty);
         self.current_x = tx;
         self.current_y = ty;
+        self.has_current_point = true;
     }
 
     /// Add a quadratic bezier curve.
@@ -877,6 +885,7 @@ impl Canvas2dContext {
         self.path_builder.quad_to(tcpx, tcpy, tx, ty);
         self.current_x = tx;
         self.current_y = ty;
+        self.has_current_point = true;
     }
 
     /// Add a rectangle to the path.
@@ -898,6 +907,7 @@ impl Canvas2dContext {
         self.current_y = y0;
         self.subpath_start_x = x0;
         self.subpath_start_y = y0;
+        self.has_current_point = true;
     }
 
     /// Add a rounded rectangle to the path with uniform corner radius.
@@ -1009,7 +1019,9 @@ impl Canvas2dContext {
             start_angle,
             end_angle,
             anticlockwise,
+            self.has_current_point,
         );
+        self.has_current_point = true;
     }
 
     /// Add an arcTo segment to the path.
@@ -1067,7 +1079,9 @@ impl Canvas2dContext {
             start_angle,
             end_angle,
             anticlockwise,
+            self.has_current_point,
         );
+        self.has_current_point = true;
     }
 
     // --- Clipping ---
