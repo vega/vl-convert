@@ -19,6 +19,8 @@ pub struct Path2D {
     /// Subpath start for closePath.
     subpath_start_x: f32,
     subpath_start_y: f32,
+    /// Whether the path has a current point (for arc line_to vs move_to).
+    has_current_point: bool,
 }
 
 impl Default for Path2D {
@@ -37,6 +39,7 @@ impl Path2D {
             current_y: 0.0,
             subpath_start_x: 0.0,
             subpath_start_y: 0.0,
+            has_current_point: false,
         }
     }
 
@@ -108,6 +111,7 @@ impl Path2D {
         self.current_y = y;
         self.subpath_start_x = x;
         self.subpath_start_y = y;
+        self.has_current_point = true;
     }
 
     /// Draw a line to a point.
@@ -116,6 +120,7 @@ impl Path2D {
         self.builder.line_to(x, y);
         self.current_x = x;
         self.current_y = y;
+        self.has_current_point = true;
     }
 
     /// Close the current subpath.
@@ -239,7 +244,9 @@ impl Path2D {
             start_angle,
             end_angle,
             anticlockwise,
+            self.has_current_point,
         );
+        self.has_current_point = true;
     }
 
     /// Add an arcTo segment to the path.
@@ -281,7 +288,9 @@ impl Path2D {
             start_angle,
             end_angle,
             anticlockwise,
+            self.has_current_point,
         );
+        self.has_current_point = true;
     }
 
     /// Get the finished path for rendering.

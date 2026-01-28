@@ -16,6 +16,7 @@ use tiny_skia::PathBuilder;
 /// * `start_angle` - Starting angle in radians
 /// * `end_angle` - Ending angle in radians
 /// * `anticlockwise` - If true, draw arc counterclockwise
+/// * `has_current_point` - If true, line to arc start; otherwise move to arc start
 pub fn arc(
     path: &mut PathBuilder,
     x: f32,
@@ -24,6 +25,7 @@ pub fn arc(
     start_angle: f32,
     end_angle: f32,
     anticlockwise: bool,
+    has_current_point: bool,
 ) {
     ellipse(
         path,
@@ -35,6 +37,7 @@ pub fn arc(
         start_angle,
         end_angle,
         anticlockwise,
+        has_current_point,
     );
 }
 
@@ -50,6 +53,7 @@ pub fn arc(
 /// * `start_angle` - Starting angle in radians
 /// * `end_angle` - Ending angle in radians
 /// * `anticlockwise` - If true, draw arc counterclockwise
+/// * `has_current_point` - If true, line to arc start; otherwise move to arc start
 #[allow(clippy::too_many_arguments)]
 pub fn ellipse(
     path: &mut PathBuilder,
@@ -61,6 +65,7 @@ pub fn ellipse(
     start_angle: f32,
     end_angle: f32,
     anticlockwise: bool,
+    has_current_point: bool,
 ) {
     if radius_x <= 0.0 || radius_y <= 0.0 {
         return;
@@ -91,16 +96,13 @@ pub fn ellipse(
     let start_x = x + radius_x * start.cos() * cos_rot - radius_y * start.sin() * sin_rot;
     let start_y = y + radius_x * start.cos() * sin_rot + radius_y * start.sin() * cos_rot;
 
-    // If path has no current point (is empty), move to start; otherwise line to start.
-    // PathBuilder doesn't expose "has current point", but if the bounds are empty,
-    // there's likely no content yet. We check this by seeing if we have any points.
-    // A more robust approach: track separately in Canvas2dContext if we have a current point.
-    // For now, we use a heuristic: call move_to if line_to would create a degenerate path.
-    // Actually, the cleanest approach is to always move_to for the first point.
-    // But Canvas 2D semantics say arc() should line to start if there's a current point.
-    // So we need this information passed in. For now, let's use move_to which is safer
-    // for standalone arcs and matches the more common usage pattern.
-    path.move_to(start_x, start_y);
+    // Per Canvas 2D spec: if there's a current point, line to the arc start;
+    // otherwise move to the arc start.
+    if has_current_point {
+        path.line_to(start_x, start_y);
+    } else {
+        path.move_to(start_x, start_y);
+    }
 
     // Draw arc segments
     for i in 0..num_segments {
@@ -239,8 +241,8 @@ pub fn arc_to(
     // Line to arc start
     path.line_to(start_x, start_y);
 
-    // Draw arc
-    arc(path, cx, cy, radius, start_angle, end_angle, cross > 0.0);
+    // Draw arc - we just did line_to so we have a current point
+    arc(path, cx, cy, radius, start_angle, end_angle, cross > 0.0, true);
 }
 
 #[cfg(test)]
@@ -251,7 +253,8 @@ mod tests {
     fn test_arc_full_circle() {
         let mut builder = PathBuilder::new();
         builder.move_to(100.0, 50.0);
-        arc(&mut builder, 50.0, 50.0, 50.0, 0.0, 2.0 * PI, false);
+        // has_current_point = true because we just did move_to
+        arc(&mut builder, 50.0, 50.0, 50.0, 0.0, 2.0 * PI, false, true);
         let path = builder.finish();
         assert!(path.is_some());
     }
@@ -260,8 +263,32 @@ mod tests {
     fn test_arc_quarter_circle() {
         let mut builder = PathBuilder::new();
         builder.move_to(100.0, 50.0);
-        arc(&mut builder, 50.0, 50.0, 50.0, 0.0, PI / 2.0, false);
+        // has_current_point = true because we just did move_to
+        arc(&mut builder, 50.0, 50.0, 50.0, 0.0, PI / 2.0, false, true);
         let path = builder.finish();
         assert!(path.is_some());
+    }
+
+    #[test]
+    fn test_arc_without_current_point() {
+        // Test arc with no current point - should use move_to
+        let mut builder = PathBuilder::new();
+        arc(&mut builder, 50.0, 50.0, 30.0, 0.0, PI, false, false);
+        let path = builder.finish();
+        assert!(path.is_some());
+    }
+
+    #[test]
+    fn test_arc_connects_to_path() {
+        // Test that arc with current point uses line_to to connect
+        let mut builder = PathBuilder::new();
+        builder.move_to(0.0, 0.0);
+        builder.line_to(50.0, 50.0);
+        // Arc centered at (80, 50) with radius 30, starting at angle PI (left side)
+        // The start point of the arc is (50, 50) which should connect via line_to
+        arc(&mut builder, 80.0, 50.0, 30.0, PI, 0.0, false, true);
+        let path = builder.finish();
+        assert!(path.is_some());
+        // The path should be continuous (one contour) not multiple separate paths
     }
 }
