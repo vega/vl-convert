@@ -290,25 +290,21 @@ jobs:
           cargo test -p vl-convert -- --test-threads=1
 
       # HTML bundle validation with Chrome headless
-      - name: Build CLI for HTML validation
-        env:
-          RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
-        run: cargo build --release -p vl-convert
-
+      # Use debug build (already built by tests) to avoid disk space issues
       - name: Generate HTML files (bundled and unbundled)
         run: |
           mkdir -p html-validation
           # Generate bundled HTML
-          ./target/release/vl-convert vl2html \
+          ./target/debug/vl-convert vl2html \
             -i vl-convert-rs/tests/vl-specs/circle_binned.vl.json \
             -o html-validation/circle_binned_bundled.html \
             --bundle
-          ./target/release/vl-convert vl2html \
+          ./target/debug/vl-convert vl2html \
             -i vl-convert-rs/tests/vl-specs/stacked_bar_h.vl.json \
             -o html-validation/stacked_bar_bundled.html \
             --bundle
           # Generate unbundled HTML (uses CDN)
-          ./target/release/vl-convert vl2html \
+          ./target/debug/vl-convert vl2html \
             -i vl-convert-rs/tests/vl-specs/circle_binned.vl.json \
             -o html-validation/circle_binned_cdn.html
           echo "Generated HTML files:"
