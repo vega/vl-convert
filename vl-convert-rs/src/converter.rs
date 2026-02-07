@@ -376,11 +376,9 @@ function vegaToView(vgSpec, allowedBaseUrls, errors) {
 
     if (allowedBaseUrls != null) {
         loader.http = async (uri, options) => {
-            // Note: We use uri.startsWith() directly instead of new URL(uri).href
-            // because the URL constructor is not available in deno_core without deno_url extension
             if (
                 allowedBaseUrls.every(
-                    (allowedUrl) => !uri.startsWith(allowedUrl),
+                    (allowedUrl) => !new URL(uri).href.startsWith(allowedUrl),
                 )
             ) {
                 errors.push(`External data url not allowed: ${uri}`);
@@ -603,8 +601,7 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
     }
 
     pub async fn try_new() -> Result<Self, AnyError> {
-        // Install rustls crypto provider (required for TLS/HTTPS operations)
-        // Using aws_lc_rs as the default provider (same as Deno)
+        // MainWorker's deno_tls extension panics without a global crypto provider
         let _ =
             deno_runtime::deno_tls::rustls::crypto::aws_lc_rs::default_provider().install_default();
 
