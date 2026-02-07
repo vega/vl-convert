@@ -10,6 +10,9 @@ jobs:
   # Build V8 from source with fPIC flags for Linux shared library builds (Python wheels)
   # This job skips if the pre-built artifact already exists in GitHub Releases
   build-v8-linux-x86_64:
+    concurrency:
+      group: v8-build-x86_64
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     outputs:
       v8-version: ${{ steps.v8-version.outputs.version }}
@@ -91,6 +94,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   build-v8-linux-aarch64:
+    concurrency:
+      group: v8-build-aarch64
+      cancel-in-progress: false
     runs-on: ubuntu-24.04-arm
     outputs:
       v8-version: ${{ steps.v8-version.outputs.version }}
