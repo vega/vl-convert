@@ -10,17 +10,12 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-# Deno runtime - provides MainWorker with all Web APIs
 deno_runtime = { workspace = true }
-# deno_core needed explicitly for op2 and extension! macros
 deno_core = { workspace = true }
-# deno_error for JsErrorBox
 deno_error = { workspace = true }
-# For stub type implementations
 node_resolver = { workspace = true }
 sys_traits = { workspace = true }
 deno_semver = { workspace = true }
-# For bundler module
 deno_graph = { workspace = true }
 deno_ast = { workspace = true }
 serde = { workspace = true }
@@ -55,6 +50,3 @@ deno_core = { workspace = true }
 deno_error = { workspace = true }
 # Need "snapshot" feature to access deno_runtime::snapshot::create_runtime_snapshot
 deno_runtime = { workspace = true, features = ["snapshot"] }
-# Note: V8 snapshot generation is always enabled - it's required for container compatibility
-
-# Note: Deno 2.5+ uses libffi-sys 3.x which should not require the macOS system libffi workaround.
