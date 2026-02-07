@@ -14,8 +14,6 @@ use usvg::{
     ImageHrefResolver,
 };
 
-// op_text_width is exported and used in the combined vl_convert_runtime extension in converter.rs
-
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
 }
