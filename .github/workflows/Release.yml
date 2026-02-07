@@ -75,6 +75,8 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # NASM is needed on Windows to compile aws-lc-rs (x86 assembly optimizations),
+      # pulled in via deno_runtime -> deno_tls -> rustls -> aws-lc-rs
       - name: Install NASM
         uses: ilammy/setup-nasm@v1
       - name: Build vl-convert
@@ -274,6 +276,8 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # NASM is needed on Windows to compile aws-lc-rs (x86 assembly optimizations),
+      # pulled in via deno_runtime -> deno_tls -> rustls -> aws-lc-rs
       - name: Install NASM
         uses: ilammy/setup-nasm@v1
       - uses: messense/maturin-action@v1

@@ -58,13 +58,18 @@ async function main() {
         timeout: 30000
     });
 
-    // Wait a bit for Vega to render
-    await page.waitForSelector('canvas, svg', { timeout: 10000 }).catch(() => {
-        console.log('Warning: No canvas or svg element found');
+    // Wait for Vega to render marks into the SVG or canvas
+    await page.waitForFunction(
+        () => {
+            const svg = document.querySelector('svg');
+            const canvas = document.querySelector('canvas');
+            return (svg && svg.querySelectorAll('path, rect, circle, line, text').length > 0)
+                || (canvas && canvas.width > 0);
+        },
+        { timeout: 10000 }
+    ).catch(() => {
+        console.log('Warning: No rendered chart content found');
     });
-
-    // Additional wait for rendering to complete
-    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Take screenshot
     await page.screenshot({
