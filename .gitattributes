@@ -1,2 +1,10 @@
 # Always checkout files with \n line endings (even on Windows)
 * -text
+
+# Collapse generated/vendored files in GitHub PR diffs
+Cargo.lock linguist-generated
+pixi.lock linguist-generated
+vl-convert-rs/vendor/**/*.js linguist-generated
+vl-convert-rs/vendor/manifest.json linguist-generated
+**/thirdparty_rust.yaml linguist-generated
+vl-convert-rs/src/module_loader/import_map.rs linguist-generated

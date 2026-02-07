@@ -45,12 +45,12 @@ pypdfium2 = ">=4.30.0, <5"
 python = "3.11.*"
 maturin = "1.8.*"
 pytest = ">=8.2.2,<8.3"
-rust = "1.87.*"
+rust = "1.88.*"
 scikit-image = ">=0.23.2,<0.24"
-deno = ">=1.46.3,<2"
 protobuf = ">=4.25.3,<5"
 ruff = ">=0.8,<1"
 pip = ">=24.2,<25"
+deno = ">=2.3,<3"  # For vendoring JavaScript dependencies
 
 # macOS 15.4 tightened the dynamic-loader rules and now rejects binaries
 # with duplicate LC_RPATH entries.  Older conda-forge builds of OpenBLAS /

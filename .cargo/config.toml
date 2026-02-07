@@ -1,0 +1,9 @@
+# Deno 2's MainWorker + V8 runtime requires more than the default 1MB stack on
+# Windows. Without this, the vl-convert CLI binary hits a stack overflow on
+# startup. Linux and macOS default to 8MB stacks so they are unaffected.
+#
+# Note: This sets the stack size baked into the binary (PE header). The separate
+# RUST_MIN_STACK env var in CI handles test harness threads, which is a different
+# code path (cargo test runs V8 in spawned threads, not the main thread).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-args=/STACK:8388608"]

@@ -35,47 +35,26 @@ jobs:
             vl-convert_linux-64.zip
 
   build-cli-linux-aarch64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-      - name: Cache
-        uses: actions/cache@v4
-        with:
-          key: build-cli-linux-aarch64-${{ hashFiles('Cargo.lock') }}
-          path: |
-            cargo-arm64
-            target-arm64
-      - name: Build in Docker
+      - name: Install latest stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install protoc
         run: |
-          docker run \
-            --rm \
-            -v $(pwd):/workspace \
-            -w /workspace \
-            --platform linux/arm64 \
-            --env CARGO_TARGET_DIR=/workspace/target-arm64 \
-            --env CARGO_HOME=/workspace/cargo-arm64 \
-            rust:1.87-slim-bullseye \
-            bash -c "\
-              uname -a && \
-              apt update -y && \
-              apt install cmake curl zip unzip -y && \
-              curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v24.0/protoc-24.0-linux-aarch_64.zip && \
-              unzip protoc-24.0-linux-aarch_64.zip -d /usr/ && \
-              which protoc && \
-              cargo build --release -p vl-convert && \
-              rm -rf bin/ && \
-              rm -rf vl-convert_linux-aarch64.zip && \
-              mkdir -p bin/ && \
-              cp target-arm64/release/vl-convert bin/ && \
-              cp LICENSE bin/ && \
-              cp thirdparty_* bin/ && \
-              zip -r vl-convert_linux-aarch64.zip bin/
-            "
-      - name: Upload executable
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+      - name: Build vl-convert
+        run: |
+          cargo build --release -p vl-convert
+      - name: Move executable to bin directory
+        run: |
+          mkdir -p bin
+          cp target/release/vl-convert bin/
+          cp LICENSE bin/
+          cp thirdparty_* bin/
+          zip -r vl-convert_linux-aarch64.zip bin/
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: vl-convert-linux-aarch64
@@ -84,7 +63,11 @@ jobs:
 
   build-cli-win-64:
     runs-on: windows-2022
+    env:
+      RUST_MIN_STACK: 8388608
     steps:
+      - name: Enable long paths
+        run: git config --system core.longpaths true
       - uses: actions/checkout@v4
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -92,6 +75,10 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # NASM is needed on Windows to compile aws-lc-rs (x86 assembly optimizations),
+      # pulled in via deno_runtime -> deno_tls -> rustls -> aws-lc-rs
+      - name: Install NASM
+        uses: ilammy/setup-nasm@v1
       - name: Build vl-convert
         run: |
           cargo build --release -p vl-convert
@@ -169,22 +156,54 @@ jobs:
 
   build-wheels-linux-x86_64:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch:
-          - "x86_64-unknown-linux-gnu"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get V8 version from Cargo.lock
+        id: v8-version
+        run: |
+          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
+          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
+          echo "V8 version: $V8_VERSION"
+
+      - name: Download pre-built V8
+        id: download-v8
+        run: |
+          mkdir -p v8-prebuilt
+          if curl -L -f -o v8-prebuilt/librusty_v8.a \
+            "https://github.com/vega/vl-convert/releases/download/v8-${{ steps.v8-version.outputs.version }}/librusty_v8-linux-x86_64.a"; then
+            echo "downloaded=true" >> $GITHUB_OUTPUT
+            echo "Pre-built V8 downloaded successfully"
+            ls -la v8-prebuilt/
+          else
+            echo "downloaded=false" >> $GITHUB_OUTPUT
+            echo "No pre-built V8 available, will build from source"
+          fi
+
       - uses: messense/maturin-action@v1
         with:
-          manylinux: auto
-          target: ${{ matrix.arch }}
+          manylinux: 2_28
+          target: x86_64-unknown-linux-gnu
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
+          docker-options: >-
+            -v ${{ github.workspace }}/v8-prebuilt:/v8-prebuilt
+            ${{ steps.download-v8.outputs.downloaded == 'true' && '-e RUSTY_V8_ARCHIVE=/v8-prebuilt/librusty_v8.a' || '-e V8_FROM_SOURCE=1' }}
+            ${{ steps.download-v8.outputs.downloaded != 'true' && '-e GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0' || '' }}
           before-script-linux: |
+            # Install build dependencies
+            dnf install -y glib2-devel libffi-devel clang-devel || yum install -y glib2-devel libffi-devel clang-devel
+
+            # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
             unzip protoc-24.0-linux-x86_64.zip -d /usr/
+
+      - name: Test wheel
+        run: |
+          docker run --rm -v $(pwd)/dist:/dist -e RUST_BACKTRACE=1 python:3.11-slim \
+            bash -c "pip install /dist/*x86_64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -192,33 +211,55 @@ jobs:
           path: dist
 
   build-wheels-linux-aarch64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
+
+      - name: Get V8 version from Cargo.lock
+        id: v8-version
+        run: |
+          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
+          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
+          echo "V8 version: $V8_VERSION"
+
+      - name: Download pre-built V8
+        id: download-v8
+        run: |
+          mkdir -p v8-prebuilt
+          if curl -L -f -o v8-prebuilt/librusty_v8.a \
+            "https://github.com/vega/vl-convert/releases/download/v8-${{ steps.v8-version.outputs.version }}/librusty_v8-linux-aarch64.a"; then
+            echo "downloaded=true" >> $GITHUB_OUTPUT
+            echo "Pre-built V8 downloaded successfully"
+            ls -la v8-prebuilt/
+          else
+            echo "downloaded=false" >> $GITHUB_OUTPUT
+            echo "No pre-built V8 available, will build from source"
+          fi
+
       - uses: messense/maturin-action@v1
         with:
-          manylinux: auto
-          container: quay.io/pypa/manylinux2014_aarch64
+          manylinux: 2_28
           target: aarch64-unknown-linux-gnu
           command: build
-          args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
+          args: --release -m vl-convert-python/Cargo.toml -o dist --strip
+          docker-options: >-
+            -v ${{ github.workspace }}/v8-prebuilt:/v8-prebuilt
+            ${{ steps.download-v8.outputs.downloaded == 'true' && '-e RUSTY_V8_ARCHIVE=/v8-prebuilt/librusty_v8.a' || '-e V8_FROM_SOURCE=1' }}
+            ${{ steps.download-v8.outputs.downloaded != 'true' && '-e GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0' || '' }}
           before-script-linux: |
+            # Install build dependencies
+            dnf install -y glib2-devel libffi-devel clang-devel || yum install -y glib2-devel libffi-devel clang-devel
+
             # Install protoc
-            echo $PATH
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
             curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
             unzip protoc-24.0-linux-aarch_64.zip -d /usr/
 
-      # Not sure why the compiled wheels end up with x86_64 in the file name,
-      # they are aarch64 and work properly after being renamed.
-      - name: Rename files
+      - name: Test wheel
         run: |
-          sudo apt-get update
-          sudo apt-get install rename
-          ls dist/
-          rename 's/x86_64/aarch64/g' dist/vl_convert_python-*.whl
+          docker run --rm -v $(pwd)/dist:/dist -e RUST_BACKTRACE=1 python:3.11-slim \
+            bash -c "pip install /dist/*aarch64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -228,15 +269,25 @@ jobs:
   build-wheels-win-64:
     runs-on: windows-latest
     steps:
+      - name: Enable long paths
+        run: git config --system core.longpaths true
       - uses: actions/checkout@v4
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      # NASM is needed on Windows to compile aws-lc-rs (x86 assembly optimizations),
+      # pulled in via deno_runtime -> deno_tls -> rustls -> aws-lc-rs
+      - name: Install NASM
+        uses: ilammy/setup-nasm@v1
       - uses: messense/maturin-action@v1
         with:
           command: build
           args: --release -m vl-convert-python/Cargo.toml -o dist --strip
+      - name: Test wheel
+        run: |
+          pip install (Get-ChildItem dist/*.whl)
+          python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -251,7 +302,7 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: set up python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -261,6 +312,10 @@ jobs:
           command: build
           args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
           target: x86_64-apple-darwin
+      - name: Test wheel
+        run: |
+          pip install dist/*.whl
+          python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -275,7 +330,7 @@ jobs:
         uses: arduino/setup-protoc@v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: set up python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -284,6 +339,10 @@ jobs:
         with:
           command: build
           args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
+      - name: Test wheel
+        run: |
+          pip install dist/*.whl
+          python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:

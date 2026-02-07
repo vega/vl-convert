@@ -44,6 +44,87 @@ You can build the Python wheel for your architecture with the `build-py` Pixi ta
 pixi run build-py
 ```
 
+# Linux Wheel Builds and V8
+
+Building Python wheels for Linux requires special handling of V8 due to position-independent code (PIC) requirements.
+
+## The Problem
+
+When building `vl-convert-python` as a shared library (`.so`) for Linux, we encounter linker errors like:
+
+```
+relocation R_X86_64_TPOFF32 against symbol `_ZN2v88internal18g_current_isolate_E'
+can not be used when making a shared object
+```
+
+This error occurs because:
+
+1. **Python wheels are shared libraries**: The compiled `.so` file gets loaded via `dlopen()` at runtime
+2. **V8 uses thread-local storage (TLS)**: V8 uses the "local-exec" TLS model for performance, which assumes variables are in the main executable
+3. **TLS model incompatibility**: The `R_X86_64_TPOFF32` relocation type used by local-exec TLS cannot be used in shared objects because the offset isn't known at link time
+
+This issue is tracked in [denoland/rusty_v8#1706](https://github.com/denoland/rusty_v8/issues/1706).
+
+## The Solution
+
+We build V8 from source with these GN arguments:
+
+```
+GN_ARGS="v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0"
+```
+
+### GN Arguments Explained
+
+| Argument | Value | Purpose |
+|----------|-------|---------|
+| `v8_monolithic` | `true` | Build all V8 functionality into a single static library |
+| `v8_monolithic_for_shared_library` | `true` | Builds V8 with position-independent code and compatible TLS model for linking into shared libraries |
+| `is_component_build` | `false` | Build static libraries, not shared libraries (we link statically into our .so) |
+| `v8_enable_temporal_support` | `false` | Disable TC39 Temporal API. When enabled, V8 requires linking `temporal_rs` Rust library which needs `known-target-triples.txt` from Chromium. See [chromium build/rust](https://chromium.googlesource.com/chromium/src/build/config/+/main/rust.gni) |
+| `enable_rust` | `false` | Disable V8's internal Rust components. Required because building V8's Rust code outside Chromium requires `known-target-triples.txt` which isn't available in standalone builds |
+| `treat_warnings_as_errors` | `false` | Allow build to succeed despite compiler warnings |
+| `symbol_level` | `0` | Minimal debug symbols to reduce binary size and build time |
+
+### Why Not Use Pre-built rusty_v8 Binaries?
+
+The [rusty_v8](https://github.com/denoland/rusty_v8) project publishes pre-built static libraries, but these are built with:
+- `enable_rust = true`
+- `v8_enable_temporal_support = true`
+
+These settings cause the TLS/PIC issues described above when linking into a Python wheel. Building from source with our custom flags resolves this.
+
+## Pre-built V8 Workflow
+
+To avoid 1+ hour V8 builds on every CI run, we maintain pre-built V8 binaries in GitHub Releases (tagged `v8-{version}`).
+
+### How It Works
+
+V8 build jobs are part of `CI.yml` and run on every PR:
+
+1. **Check for existing build**: The job checks if `librusty_v8-{platform}.a` already exists in GitHub Releases for the current V8 version (determined from `Cargo.lock`)
+2. **Skip if exists**: If the artifact exists, the job completes in seconds
+3. **Build if needed**: If no artifact exists (e.g., V8 version changed), the job builds V8 from source (~1 hour) and uploads to releases
+
+Linux test jobs depend on these V8 build jobs, ensuring the pre-built binary is available before tests run.
+
+### Updating Deno/V8
+
+When a PR updates the Deno version and changes the V8 version in `Cargo.lock`:
+
+1. The V8 build jobs detect no pre-built artifact exists for the new version
+2. V8 builds from source automatically (~1 hour)
+3. The artifact is uploaded to GitHub Releases
+4. Subsequent CI runs (and the Release workflow) use the pre-built artifact
+
+No manual intervention is required—the PR that updates Deno will trigger the V8 builds if the V8 version changed.
+
+## References
+
+- [rusty_v8#1706](https://github.com/denoland/rusty_v8/issues/1706) - Original fPIC relocation issue
+- [V8 Build Documentation](https://v8.dev/docs/build-gn) - Official V8 GN build docs
+- [v8-users mailing list](https://www.mail-archive.com/v8-users@googlegroups.com/msg14918.html) - Discussion of R_X86_64_TPOFF32 errors
+- [rusty_v8 README](https://github.com/denoland/rusty_v8/blob/main/README.md) - Building from source with `V8_FROM_SOURCE`
+
 # Vendor JavaScript Dependencies
 vl-convert embeds vendored copies of all the JavaScript libraries it uses. The `vendor` Pixi task performs this 
 download

@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 
 pub mod converter;
+pub mod deno_emit;
+pub mod deno_stubs;
 pub mod html;
 pub mod image_loading;
 pub mod module_loader;
@@ -9,7 +11,16 @@ pub mod text;
 #[macro_use]
 extern crate lazy_static;
 
+// extern crate deno_core makes it available at crate root for op2 and extension! macros
+extern crate deno_core;
+
 pub use converter::VlConverter;
-pub use deno_runtime::deno_core::anyhow;
+pub use deno_core::anyhow;
 pub use module_loader::import_map::VlVersion;
 pub use serde_json;
+
+/// V8 snapshot containing the pre-compiled deno_runtime extensions plus our
+/// vl_convert_runtime extension. Generated at build time for container
+/// compatibility and faster startup.
+pub static VL_CONVERT_SNAPSHOT: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/VL_CONVERT_SNAPSHOT.bin"));

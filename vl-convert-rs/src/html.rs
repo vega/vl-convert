@@ -1,8 +1,8 @@
+use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
 use deno_core::error::AnyError;
-use deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use std::path::Path;
 
 pub fn get_vega_or_vegalite_script(
@@ -35,7 +35,6 @@ pub async fn bundle_script(script: String, vl_version: VlVersion) -> Result<Stri
     let bundled = bundle(
         bundle_entry_point,
         &mut loader,
-        None,
         BundleOptions {
             bundle_type: BundleType::Module,
             transpile_options: Default::default(),
