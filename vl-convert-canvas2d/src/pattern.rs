@@ -1,10 +1,7 @@
 //! Pattern types for Canvas 2D operations.
 
 use crate::error::{Canvas2dError, Canvas2dResult};
-use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
 use tiny_skia::{Pixmap, PixmapRef, Shader, SpreadMode, Transform};
 
 /// Maximum pattern size (4096x4096).
@@ -13,49 +10,8 @@ const MAX_PATTERN_SIZE: u32 = 4096;
 /// Global counter for pattern IDs.
 static PATTERN_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// Cache key for leaked pixmaps.
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct PixmapCacheKey {
-    pattern_id: u64,
-    repetition: Repetition,
-    /// Canvas dimensions (0,0 for Repeat mode since it doesn't depend on canvas size)
-    canvas_width: u32,
-    canvas_height: u32,
-}
-
-impl Hash for PixmapCacheKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.pattern_id.hash(state);
-        std::mem::discriminant(&self.repetition).hash(state);
-        self.canvas_width.hash(state);
-        self.canvas_height.hash(state);
-    }
-}
-
-/// Global cache for leaked pixmaps to avoid leaking duplicates.
-static PIXMAP_CACHE: Mutex<Option<HashMap<PixmapCacheKey, &'static Pixmap>>> = Mutex::new(None);
-
-/// Get or create a cached leaked pixmap.
-fn get_or_leak_pixmap(
-    key: PixmapCacheKey,
-    create_fn: impl FnOnce() -> Option<Pixmap>,
-) -> Option<&'static Pixmap> {
-    let mut cache_guard = PIXMAP_CACHE.lock().ok()?;
-    let cache = cache_guard.get_or_insert_with(HashMap::new);
-
-    if let Some(&pixmap_ref) = cache.get(&key) {
-        return Some(pixmap_ref);
-    }
-
-    // Create and leak the pixmap
-    let pixmap = create_fn()?;
-    let leaked: &'static Pixmap = Box::leak(Box::new(pixmap));
-    cache.insert(key, leaked);
-    Some(leaked)
-}
-
 /// Pattern repetition mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Repetition {
     /// Repeat in both directions (default).
     #[default]
@@ -225,95 +181,67 @@ impl CanvasPattern {
         self.repetition
     }
 
-    /// Create a shader for this pattern.
+    /// Get the unique pattern ID used by caches.
+    pub(crate) fn id(&self) -> u64 {
+        self.id
+    }
+
+    /// Get cache dimensions for this pattern repetition mode.
     ///
-    /// For repeat-x and repeat-y modes, this creates an extended pixmap with
-    /// transparent padding to simulate partial repetition using SpreadMode::Pad.
+    /// Repeat mode does not depend on canvas size, so it uses a `(0, 0)` sentinel.
+    pub(crate) fn cache_dimensions(&self, canvas_width: u32, canvas_height: u32) -> (u32, u32) {
+        if self.repetition == Repetition::Repeat {
+            (0, 0)
+        } else {
+            (canvas_width, canvas_height)
+        }
+    }
+
+    /// Create the pixmap backing needed for this pattern and canvas dimensions.
     ///
-    /// Leaked pixmaps are cached by pattern ID and canvas dimensions to avoid
-    /// leaking duplicate pixmaps when the same pattern is used multiple times.
-    pub fn create_shader(
+    /// Repeat mode returns a clone of the base pattern pixmap.
+    /// Other modes create an extended pixmap with transparent padding.
+    pub(crate) fn create_cache_pixmap(
         &self,
         canvas_width: u32,
         canvas_height: u32,
+    ) -> Option<Pixmap> {
+        match self.repetition {
+            Repetition::Repeat => Some(self.pixmap.clone()),
+            Repetition::NoRepeat => {
+                self.create_extended_pixmap_no_repeat(canvas_width, canvas_height)
+            }
+            Repetition::RepeatX => {
+                self.create_extended_pixmap_repeat_x(canvas_width, canvas_height)
+            }
+            Repetition::RepeatY => {
+                self.create_extended_pixmap_repeat_y(canvas_width, canvas_height)
+            }
+        }
+    }
+
+    /// Create a shader for this pattern from a caller-managed pixmap reference.
+    pub(crate) fn create_shader_for_pixmap<'a>(
+        &self,
+        pixmap_ref: PixmapRef<'a>,
         context_transform: Transform,
-    ) -> Option<Shader<'static>> {
+    ) -> Shader<'a> {
         // Combine pattern transform with context transform
         let combined_transform = self.transform.post_concat(context_transform);
 
-        match self.repetition {
-            Repetition::Repeat => {
-                // For Repeat mode, canvas size doesn't matter - use (0, 0) as sentinel
-                let key = PixmapCacheKey {
-                    pattern_id: self.id,
-                    repetition: self.repetition,
-                    canvas_width: 0,
-                    canvas_height: 0,
-                };
-                let pixmap_ref = get_or_leak_pixmap(key, || Some(self.pixmap.clone()))?;
-                Some(tiny_skia::Pattern::new(
-                    pixmap_ref.as_ref(),
-                    SpreadMode::Repeat,
-                    tiny_skia::FilterQuality::Bilinear,
-                    1.0, // opacity applied elsewhere via global_alpha
-                    combined_transform,
-                ))
-            }
-            Repetition::NoRepeat => {
-                let key = PixmapCacheKey {
-                    pattern_id: self.id,
-                    repetition: self.repetition,
-                    canvas_width,
-                    canvas_height,
-                };
-                let pixmap_ref = get_or_leak_pixmap(key, || {
-                    self.create_extended_pixmap_no_repeat(canvas_width, canvas_height)
-                })?;
-                Some(tiny_skia::Pattern::new(
-                    pixmap_ref.as_ref(),
-                    SpreadMode::Pad,
-                    tiny_skia::FilterQuality::Bilinear,
-                    1.0,
-                    combined_transform,
-                ))
-            }
-            Repetition::RepeatX => {
-                let key = PixmapCacheKey {
-                    pattern_id: self.id,
-                    repetition: self.repetition,
-                    canvas_width,
-                    canvas_height,
-                };
-                let pixmap_ref = get_or_leak_pixmap(key, || {
-                    self.create_extended_pixmap_repeat_x(canvas_width, canvas_height)
-                })?;
-                Some(tiny_skia::Pattern::new(
-                    pixmap_ref.as_ref(),
-                    SpreadMode::Pad,
-                    tiny_skia::FilterQuality::Bilinear,
-                    1.0,
-                    combined_transform,
-                ))
-            }
-            Repetition::RepeatY => {
-                let key = PixmapCacheKey {
-                    pattern_id: self.id,
-                    repetition: self.repetition,
-                    canvas_width,
-                    canvas_height,
-                };
-                let pixmap_ref = get_or_leak_pixmap(key, || {
-                    self.create_extended_pixmap_repeat_y(canvas_width, canvas_height)
-                })?;
-                Some(tiny_skia::Pattern::new(
-                    pixmap_ref.as_ref(),
-                    SpreadMode::Pad,
-                    tiny_skia::FilterQuality::Bilinear,
-                    1.0,
-                    combined_transform,
-                ))
-            }
-        }
+        let spread_mode = if self.repetition == Repetition::Repeat {
+            SpreadMode::Repeat
+        } else {
+            SpreadMode::Pad
+        };
+
+        tiny_skia::Pattern::new(
+            pixmap_ref,
+            spread_mode,
+            tiny_skia::FilterQuality::Bilinear,
+            1.0, // opacity applied elsewhere via global_alpha
+            combined_transform,
+        )
     }
 
     /// Create an extended pixmap for no-repeat mode with transparent padding.

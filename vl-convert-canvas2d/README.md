@@ -239,7 +239,7 @@ let ctx = Canvas2dContext::builder(800, 600)
 3. **Shadows**: Shadow effects are not supported
 4. **Filters**: CSS filter property is not supported
 5. **Conic gradients**: `createConicGradient()` is not implemented
-6. **Pattern memory**: Pattern pixmaps use `Box::leak` for static lifetime requirements; duplicates are cached to minimize leaks
+6. **Pattern memory**: Pattern backing pixmaps are cached per context with an LRU byte budget (no intentional leaks)
 
 ## License
 

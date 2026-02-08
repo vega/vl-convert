@@ -16,11 +16,128 @@ use crate::text::TextMetrics;
 use cosmic_text::{
     Attrs, Buffer, CacheKeyFlags, Command, Family, FontSystem, Metrics, Shaping, SwashCache,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 use tiny_skia::{Pixmap, Transform};
 
 /// Maximum canvas dimension (same as Chrome).
 const MAX_DIMENSION: u32 = 32767;
+
+/// Maximum number of bytes retained by the per-context pattern pixmap cache.
+const PATTERN_CACHE_MAX_BYTES: usize = 64 * 1024 * 1024;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct PatternCacheKey {
+    pattern_id: u64,
+    repetition: Repetition,
+    /// Cache dimensions (0,0 sentinel for Repeat mode).
+    canvas_width: u32,
+    canvas_height: u32,
+}
+
+#[derive(Debug)]
+struct PatternCacheEntry {
+    pixmap: Arc<Pixmap>,
+    size_bytes: usize,
+    last_used: u64,
+}
+
+#[derive(Debug)]
+struct PatternPixmapCache {
+    max_bytes: usize,
+    total_bytes: usize,
+    clock: u64,
+    entries: HashMap<PatternCacheKey, PatternCacheEntry>,
+}
+
+impl PatternPixmapCache {
+    fn new(max_bytes: usize) -> Self {
+        Self {
+            max_bytes,
+            total_bytes: 0,
+            clock: 0,
+            entries: HashMap::new(),
+        }
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.total_bytes = 0;
+        self.clock = 0;
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[cfg(test)]
+    fn total_bytes(&self) -> usize {
+        self.total_bytes
+    }
+
+    fn next_tick(&mut self) -> u64 {
+        self.clock = self.clock.wrapping_add(1);
+        self.clock
+    }
+
+    fn get_or_insert(
+        &mut self,
+        key: PatternCacheKey,
+        create: impl FnOnce() -> Option<Pixmap>,
+    ) -> Option<Arc<Pixmap>> {
+        if self.entries.contains_key(&key) {
+            let tick = self.next_tick();
+            let entry = self.entries.get_mut(&key)?;
+            entry.last_used = tick;
+            return Some(Arc::clone(&entry.pixmap));
+        }
+
+        let pixmap = create()?;
+        let size_bytes = pixmap.data().len();
+        let pixmap = Arc::new(pixmap);
+
+        // Avoid pinning a single oversize pixmap in cache.
+        if size_bytes > self.max_bytes {
+            return Some(pixmap);
+        }
+
+        let tick = self.next_tick();
+        self.total_bytes += size_bytes;
+        self.entries.insert(
+            key,
+            PatternCacheEntry {
+                pixmap: Arc::clone(&pixmap),
+                size_bytes,
+                last_used: tick,
+            },
+        );
+
+        self.evict_to_budget();
+
+        Some(pixmap)
+    }
+
+    fn evict_to_budget(&mut self) {
+        while self.total_bytes > self.max_bytes {
+            let lru_key = self
+                .entries
+                .iter()
+                .min_by_key(|(_key, entry)| entry.last_used)
+                .map(|(key, _entry)| *key);
+
+            let Some(key) = lru_key else {
+                break;
+            };
+
+            if let Some(entry) = self.entries.remove(&key) {
+                self.total_bytes = self.total_bytes.saturating_sub(entry.size_bytes);
+            } else {
+                break;
+            }
+        }
+    }
+}
 
 /// DOMMatrix represents a 2D transformation matrix.
 ///
@@ -205,6 +322,8 @@ pub struct Canvas2dContext {
     subpath_start_y: f32,
     /// Whether the path has a current point (for arc/ellipse line_to vs move_to).
     has_current_point: bool,
+    /// Owned cache of pattern backing pixmaps used for tiny-skia shader lifetimes.
+    pattern_pixmap_cache: PatternPixmapCache,
 }
 
 impl Canvas2dContext {
@@ -260,6 +379,7 @@ impl Canvas2dContext {
             subpath_start_x: 0.0,
             subpath_start_y: 0.0,
             has_current_point: false,
+            pattern_pixmap_cache: PatternPixmapCache::new(PATTERN_CACHE_MAX_BYTES),
         })
     }
 
@@ -362,6 +482,9 @@ impl Canvas2dContext {
         self.subpath_start_x = 0.0;
         self.subpath_start_y = 0.0;
         self.has_current_point = false;
+
+        // Reset pattern cache so stale pattern backing pixmaps are released.
+        self.pattern_pixmap_cache.clear();
     }
 
     // --- Style setters ---
@@ -708,16 +831,6 @@ impl Canvas2dContext {
         // Calculate baseline offset
         let y_offset = crate::text::calculate_text_y_offset(font.size_px, self.state.text_baseline);
 
-        // Get the paint for rendering text
-        let style = if fill {
-            self.state.fill_style.clone()
-        } else {
-            self.state.stroke_style.clone()
-        };
-        let Some(paint) = self.create_paint_from_style(&style) else {
-            return; // Could not create paint
-        };
-
         // Calculate base position with alignment offsets
         // Note: We use (x, y) as the anchor point, x_offset adjusts for alignment
         let base_x = x + x_offset;
@@ -742,78 +855,91 @@ impl Canvas2dContext {
             transform
         };
 
-        // Render each glyph as a vector path
-        for run in buffer.layout_runs() {
-            for glyph in run.glyphs.iter() {
-                // Get the cache key for outline retrieval (physical() provides this)
-                let physical_glyph = glyph.physical((base_x, base_y), 1.0);
+        // Get the paint for rendering text and render while it's alive.
+        let style = if fill {
+            self.state.fill_style.clone()
+        } else {
+            self.state.stroke_style.clone()
+        };
+        let _ = self.with_paint_from_style(style, |ctx, paint| {
+            // Render each glyph as a vector path
+            for run in buffer.layout_runs() {
+                for glyph in run.glyphs.iter() {
+                    // Get the cache key for outline retrieval (physical() provides this)
+                    let physical_glyph = glyph.physical((base_x, base_y), 1.0);
 
-                // Calculate floating-point glyph position for sub-pixel precision
-                // (matching how usvg/resvg positions glyphs)
-                let glyph_x = base_x + glyph.x + glyph.font_size * glyph.x_offset;
-                let glyph_y = base_y + glyph.y - glyph.font_size * glyph.y_offset;
+                    // Calculate floating-point glyph position for sub-pixel precision
+                    // (matching how usvg/resvg positions glyphs)
+                    let glyph_x = base_x + glyph.x + glyph.font_size * glyph.x_offset;
+                    let glyph_y = base_y + glyph.y - glyph.font_size * glyph.y_offset;
 
-                // Get outline commands for this glyph
-                if let Some(commands) = self
-                    .swash_cache
-                    .get_outline_commands(&mut self.font_system, physical_glyph.cache_key)
-                {
-                    // Build a path from the outline commands
-                    // Note: Font outlines have Y pointing up, screen has Y pointing down
-                    // so we negate Y coordinates during path building
-                    let mut path_builder = tiny_skia::PathBuilder::new();
-                    for cmd in commands {
-                        match cmd {
-                            Command::MoveTo(p) => path_builder.move_to(p.x, -p.y),
-                            Command::LineTo(p) => path_builder.line_to(p.x, -p.y),
-                            Command::QuadTo(ctrl, end) => {
-                                path_builder.quad_to(ctrl.x, -ctrl.y, end.x, -end.y)
+                    // Get outline commands for this glyph
+                    if let Some(commands) = ctx
+                        .swash_cache
+                        .get_outline_commands(&mut ctx.font_system, physical_glyph.cache_key)
+                    {
+                        // Build a path from the outline commands
+                        // Note: Font outlines have Y pointing up, screen has Y pointing down
+                        // so we negate Y coordinates during path building
+                        let mut path_builder = tiny_skia::PathBuilder::new();
+                        for cmd in commands {
+                            match cmd {
+                                Command::MoveTo(p) => path_builder.move_to(p.x, -p.y),
+                                Command::LineTo(p) => path_builder.line_to(p.x, -p.y),
+                                Command::QuadTo(ctrl, end) => {
+                                    path_builder.quad_to(ctrl.x, -ctrl.y, end.x, -end.y)
+                                }
+                                Command::CurveTo(c1, c2, end) => {
+                                    path_builder.cubic_to(c1.x, -c1.y, c2.x, -c2.y, end.x, -end.y)
+                                }
+                                Command::Close => path_builder.close(),
                             }
-                            Command::CurveTo(c1, c2, end) => {
-                                path_builder.cubic_to(c1.x, -c1.y, c2.x, -c2.y, end.x, -end.y)
-                            }
-                            Command::Close => path_builder.close(),
                         }
-                    }
 
-                    if let Some(path) = path_builder.finish() {
-                        // Create a transform that positions the glyph correctly
-                        // Using floating-point position for sub-pixel precision
-                        let glyph_transform = Transform::from_translate(glyph_x, glyph_y)
-                            .post_concat(scale_transform);
+                        if let Some(path) = path_builder.finish() {
+                            // Create a transform that positions the glyph correctly
+                            // Using floating-point position for sub-pixel precision
+                            let glyph_transform = Transform::from_translate(glyph_x, glyph_y)
+                                .post_concat(scale_transform);
 
-                        if fill {
-                            // Fill the glyph path
-                            self.pixmap.fill_path(
-                                &path,
-                                &paint,
-                                tiny_skia::FillRule::Winding,
-                                glyph_transform,
-                                None,
-                            );
-                        } else {
-                            // Stroke the glyph path
-                            let stroke = tiny_skia::Stroke {
-                                width: self.state.line_width,
-                                line_cap: self.state.line_cap.into(),
-                                line_join: self.state.line_join.into(),
-                                miter_limit: self.state.miter_limit,
-                                dash: if self.state.line_dash.is_empty() {
-                                    None
-                                } else {
-                                    tiny_skia::StrokeDash::new(
-                                        self.state.line_dash.clone(),
-                                        self.state.line_dash_offset,
-                                    )
-                                },
-                            };
-                            self.pixmap
-                                .stroke_path(&path, &paint, &stroke, glyph_transform, None);
+                            if fill {
+                                // Fill the glyph path
+                                ctx.pixmap.fill_path(
+                                    &path,
+                                    paint,
+                                    tiny_skia::FillRule::Winding,
+                                    glyph_transform,
+                                    None,
+                                );
+                            } else {
+                                // Stroke the glyph path
+                                let stroke = tiny_skia::Stroke {
+                                    width: ctx.state.line_width,
+                                    line_cap: ctx.state.line_cap.into(),
+                                    line_join: ctx.state.line_join.into(),
+                                    miter_limit: ctx.state.miter_limit,
+                                    dash: if ctx.state.line_dash.is_empty() {
+                                        None
+                                    } else {
+                                        tiny_skia::StrokeDash::new(
+                                            ctx.state.line_dash.clone(),
+                                            ctx.state.line_dash_offset,
+                                        )
+                                    },
+                                };
+                                ctx.pixmap.stroke_path(
+                                    &path,
+                                    paint,
+                                    &stroke,
+                                    glyph_transform,
+                                    None,
+                                );
+                            }
                         }
                     }
                 }
             }
-        }
+        });
     }
 
     // --- Path operations ---
@@ -1096,18 +1222,18 @@ impl Canvas2dContext {
         let path = self.path_builder.clone().finish();
 
         if let Some(path) = path {
-            if let Some(paint) = self.create_fill_paint() {
-                // Create clip mask if we have a clip path
-                let clip_mask = self.create_clip_mask();
+            // Create clip mask if we have a clip path
+            let clip_mask = self.create_clip_mask();
+            let _ = self.with_fill_paint(|ctx, paint| {
                 // Path coordinates are already transformed, so use identity transform
-                self.pixmap.fill_path(
+                ctx.pixmap.fill_path(
                     &path,
-                    &paint,
+                    paint,
                     fill_rule.into(),
                     Transform::identity(),
                     clip_mask.as_ref(),
                 );
-            }
+            });
         }
     }
 
@@ -1118,38 +1244,38 @@ impl Canvas2dContext {
         let path = self.path_builder.clone().finish();
 
         if let Some(path) = path {
-            if let Some(paint) = self.create_stroke_paint() {
-                // Scale line width by transform
-                let t = &self.state.transform;
-                let scale =
-                    ((t.sx * t.sx + t.ky * t.ky).sqrt() + (t.kx * t.kx + t.sy * t.sy).sqrt()) / 2.0;
-                let scaled_line_width = self.state.line_width * scale;
+            // Scale line width by transform
+            let t = &self.state.transform;
+            let scale =
+                ((t.sx * t.sx + t.ky * t.ky).sqrt() + (t.kx * t.kx + t.sy * t.sy).sqrt()) / 2.0;
+            let scaled_line_width = self.state.line_width * scale;
 
-                let stroke = tiny_skia::Stroke {
-                    width: scaled_line_width,
-                    line_cap: self.state.line_cap.into(),
-                    line_join: self.state.line_join.into(),
-                    miter_limit: self.state.miter_limit,
-                    dash: if self.state.line_dash.is_empty() {
-                        None
-                    } else {
-                        // Scale dash pattern too
-                        let scaled_dash: Vec<f32> =
-                            self.state.line_dash.iter().map(|d| d * scale).collect();
-                        tiny_skia::StrokeDash::new(scaled_dash, self.state.line_dash_offset * scale)
-                    },
-                };
+            let stroke = tiny_skia::Stroke {
+                width: scaled_line_width,
+                line_cap: self.state.line_cap.into(),
+                line_join: self.state.line_join.into(),
+                miter_limit: self.state.miter_limit,
+                dash: if self.state.line_dash.is_empty() {
+                    None
+                } else {
+                    // Scale dash pattern too
+                    let scaled_dash: Vec<f32> =
+                        self.state.line_dash.iter().map(|d| d * scale).collect();
+                    tiny_skia::StrokeDash::new(scaled_dash, self.state.line_dash_offset * scale)
+                },
+            };
 
-                let clip_mask = self.create_clip_mask();
+            let clip_mask = self.create_clip_mask();
+            let _ = self.with_stroke_paint(|ctx, paint| {
                 // Path coordinates are already transformed, so use identity transform
-                self.pixmap.stroke_path(
+                ctx.pixmap.stroke_path(
                     &path,
-                    &paint,
+                    paint,
                     &stroke,
                     Transform::identity(),
                     clip_mask.as_ref(),
                 );
-            }
+            });
         }
     }
 
@@ -1163,47 +1289,39 @@ impl Canvas2dContext {
     /// Fill a Path2D object with the specified fill rule.
     pub fn fill_path2d_with_rule(&mut self, path: &mut Path2D, fill_rule: CanvasFillRule) {
         if let Some(p) = path.get_path() {
-            if let Some(paint) = self.create_fill_paint() {
-                let clip_mask = self.create_clip_mask();
-                self.pixmap.fill_path(
-                    p,
-                    &paint,
-                    fill_rule.into(),
-                    self.state.transform,
-                    clip_mask.as_ref(),
-                );
-            }
+            let clip_mask = self.create_clip_mask();
+            let transform = self.state.transform;
+            let _ = self.with_fill_paint(|ctx, paint| {
+                ctx.pixmap
+                    .fill_path(p, paint, fill_rule.into(), transform, clip_mask.as_ref());
+            });
         }
     }
 
     /// Stroke a Path2D object.
     pub fn stroke_path2d(&mut self, path: &mut Path2D) {
         if let Some(p) = path.get_path() {
-            if let Some(paint) = self.create_stroke_paint() {
-                let stroke = tiny_skia::Stroke {
-                    width: self.state.line_width,
-                    line_cap: self.state.line_cap.into(),
-                    line_join: self.state.line_join.into(),
-                    miter_limit: self.state.miter_limit,
-                    dash: if self.state.line_dash.is_empty() {
-                        None
-                    } else {
-                        tiny_skia::StrokeDash::new(
-                            self.state.line_dash.clone(),
-                            self.state.line_dash_offset,
-                        )
-                    },
-                };
+            let stroke = tiny_skia::Stroke {
+                width: self.state.line_width,
+                line_cap: self.state.line_cap.into(),
+                line_join: self.state.line_join.into(),
+                miter_limit: self.state.miter_limit,
+                dash: if self.state.line_dash.is_empty() {
+                    None
+                } else {
+                    tiny_skia::StrokeDash::new(
+                        self.state.line_dash.clone(),
+                        self.state.line_dash_offset,
+                    )
+                },
+            };
 
-                let clip_mask = self.create_clip_mask();
-                self.pixmap.stroke_path(
-                    p,
-                    &paint,
-                    &stroke,
-                    self.state.transform,
-                    clip_mask.as_ref(),
-                );
-            }
+            let clip_mask = self.create_clip_mask();
+            let transform = self.state.transform;
+            let _ = self.with_stroke_paint(|ctx, paint| {
+                ctx.pixmap
+                    .stroke_path(p, paint, &stroke, transform, clip_mask.as_ref());
+            });
         }
     }
 
@@ -1626,15 +1744,27 @@ impl Canvas2dContext {
         })
     }
 
-    fn create_fill_paint(&self) -> Option<tiny_skia::Paint<'static>> {
-        self.create_paint_from_style(&self.state.fill_style)
+    fn with_fill_paint<R>(
+        &mut self,
+        draw: impl for<'a> FnOnce(&mut Self, &tiny_skia::Paint<'a>) -> R,
+    ) -> Option<R> {
+        let style = self.state.fill_style.clone();
+        self.with_paint_from_style(style, draw)
     }
 
-    fn create_stroke_paint(&self) -> Option<tiny_skia::Paint<'static>> {
-        self.create_paint_from_style(&self.state.stroke_style)
+    fn with_stroke_paint<R>(
+        &mut self,
+        draw: impl for<'a> FnOnce(&mut Self, &tiny_skia::Paint<'a>) -> R,
+    ) -> Option<R> {
+        let style = self.state.stroke_style.clone();
+        self.with_paint_from_style(style, draw)
     }
 
-    fn create_paint_from_style(&self, style: &FillStyle) -> Option<tiny_skia::Paint<'static>> {
+    fn with_paint_from_style<R>(
+        &mut self,
+        style: FillStyle,
+        draw: impl for<'a> FnOnce(&mut Self, &tiny_skia::Paint<'a>) -> R,
+    ) -> Option<R> {
         let mut paint = tiny_skia::Paint {
             anti_alias: true,
             blend_mode: self.state.global_composite_operation,
@@ -1643,27 +1773,39 @@ impl Canvas2dContext {
 
         match style {
             FillStyle::Color(color) => {
-                let mut color = *color;
+                let mut color = color;
                 // Apply global alpha
                 if self.state.global_alpha < 1.0 {
                     color.set_alpha((color.alpha() * self.state.global_alpha).clamp(0.0, 1.0));
                 }
                 paint.set_color(color);
-                Some(paint)
+                Some(draw(self, &paint))
             }
             FillStyle::LinearGradient(gradient) | FillStyle::RadialGradient(gradient) => {
-                let shader = self.create_gradient_shader(gradient)?;
+                let shader = self.create_gradient_shader(&gradient)?;
                 paint.shader = shader;
-                Some(paint)
+                Some(draw(self, &paint))
             }
             FillStyle::Pattern(pattern) => {
-                let shader = pattern.create_shader(
-                    self.pixmap.width(),
-                    self.pixmap.height(),
+                let canvas_width = self.pixmap.width();
+                let canvas_height = self.pixmap.height();
+                let (cache_width, cache_height) =
+                    pattern.cache_dimensions(canvas_width, canvas_height);
+                let key = PatternCacheKey {
+                    pattern_id: pattern.id(),
+                    repetition: pattern.repetition(),
+                    canvas_width: cache_width,
+                    canvas_height: cache_height,
+                };
+                let cached_pixmap = self.pattern_pixmap_cache.get_or_insert(key, || {
+                    pattern.create_cache_pixmap(canvas_width, canvas_height)
+                })?;
+                let shader = pattern.create_shader_for_pixmap(
+                    cached_pixmap.as_ref().as_ref(),
                     self.state.transform,
-                )?;
+                );
                 paint.shader = shader;
-                Some(paint)
+                Some(draw(self, &paint))
             }
         }
     }
@@ -1718,6 +1860,16 @@ impl Canvas2dContext {
                 )
             }
         }
+    }
+
+    #[cfg(test)]
+    fn pattern_cache_entry_count(&self) -> usize {
+        self.pattern_pixmap_cache.len()
+    }
+
+    #[cfg(test)]
+    fn pattern_cache_total_bytes(&self) -> usize {
+        self.pattern_pixmap_cache.total_bytes()
     }
 }
 
@@ -1918,12 +2070,27 @@ mod tests {
             width: 100.0,
             height: 100.0,
         });
+
+        // Populate pattern cache and verify reset clears it.
+        let pattern_data = vec![255_u8; 8 * 8 * 4];
+        let pattern = ctx.create_pattern(&pattern_data, 8, 8, "repeat").unwrap();
+        ctx.set_fill_style_pattern(pattern);
+        ctx.fill_rect(&RectParams {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+        });
+
         assert!(ctx.pixmap().data().iter().any(|&b| b != 0));
+        assert!(ctx.pattern_cache_entry_count() > 0);
 
         ctx.reset();
 
         // Canvas should be clear
         assert!(ctx.pixmap().data().iter().all(|&b| b == 0));
+        assert_eq!(ctx.pattern_cache_entry_count(), 0);
+        assert_eq!(ctx.pattern_cache_total_bytes(), 0);
         // State should be back to defaults
         assert_eq!(ctx.state.line_width, 1.0);
         assert_eq!(ctx.state.global_alpha, 1.0);
@@ -1947,5 +2114,37 @@ mod tests {
         let ctx = Canvas2dContext::new(100, 100).unwrap();
         let data = ctx.create_image_data(1000, 1000);
         assert_eq!(data.len(), 1000 * 1000 * 4);
+    }
+
+    #[test]
+    fn test_pattern_cache_lru_eviction() {
+        let mut ctx = Canvas2dContext::new(64, 64).unwrap();
+        ctx.pattern_pixmap_cache = PatternPixmapCache::new(256);
+
+        let p1_data = vec![255_u8; 8 * 8 * 4];
+        let p1 = ctx.create_pattern(&p1_data, 8, 8, "repeat").unwrap();
+        ctx.set_fill_style_pattern(p1);
+        ctx.fill_rect(&RectParams {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 20.0,
+        });
+        assert_eq!(ctx.pattern_cache_entry_count(), 1);
+        assert_eq!(ctx.pattern_cache_total_bytes(), 256);
+
+        let p2_data = vec![64_u8; 8 * 8 * 4];
+        let p2 = ctx.create_pattern(&p2_data, 8, 8, "repeat").unwrap();
+        ctx.set_fill_style_pattern(p2);
+        ctx.fill_rect(&RectParams {
+            x: 10.0,
+            y: 10.0,
+            width: 20.0,
+            height: 20.0,
+        });
+
+        // Cache budget only allows one 8x8 pixmap, so inserting p2 evicts p1.
+        assert_eq!(ctx.pattern_cache_entry_count(), 1);
+        assert_eq!(ctx.pattern_cache_total_bytes(), 256);
     }
 }
