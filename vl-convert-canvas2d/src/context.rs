@@ -18,7 +18,7 @@ use cosmic_text::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use tiny_skia::{Pixmap, Transform};
+use tiny_skia::{PathSegment, Pixmap, Transform};
 
 /// Maximum canvas dimension (same as Chrome).
 const MAX_DIMENSION: u32 = 32767;
@@ -312,6 +312,10 @@ pub struct Canvas2dContext {
     state: DrawingState,
     /// Stack of saved drawing states.
     state_stack: Vec<DrawingState>,
+    /// Fill rule associated with the current clipping path.
+    clip_fill_rule: CanvasFillRule,
+    /// Stack of saved clip fill rules (parallel to state_stack).
+    clip_fill_rule_stack: Vec<CanvasFillRule>,
     /// Current path builder.
     path_builder: tiny_skia::PathBuilder,
     /// Current path position (for tracking subpath start).
@@ -373,6 +377,8 @@ impl Canvas2dContext {
             swash_cache,
             state: DrawingState::default(),
             state_stack: Vec::new(),
+            clip_fill_rule: CanvasFillRule::NonZero,
+            clip_fill_rule_stack: Vec::new(),
             path_builder: tiny_skia::PathBuilder::new(),
             current_x: 0.0,
             current_y: 0.0,
@@ -451,6 +457,7 @@ impl Canvas2dContext {
     pub fn save(&mut self) {
         log::debug!(target: "canvas", "save");
         self.state_stack.push(self.state.clone());
+        self.clip_fill_rule_stack.push(self.clip_fill_rule);
     }
 
     /// Restore the previously saved drawing state.
@@ -458,6 +465,10 @@ impl Canvas2dContext {
         log::debug!(target: "canvas", "restore");
         if let Some(state) = self.state_stack.pop() {
             self.state = state;
+            self.clip_fill_rule = self
+                .clip_fill_rule_stack
+                .pop()
+                .unwrap_or(CanvasFillRule::NonZero);
         }
     }
 
@@ -474,6 +485,7 @@ impl Canvas2dContext {
 
         // Clear saved states
         self.state_stack.clear();
+        self.clip_fill_rule_stack.clear();
 
         // Reset path
         self.path_builder = tiny_skia::PathBuilder::new();
@@ -482,6 +494,7 @@ impl Canvas2dContext {
         self.subpath_start_x = 0.0;
         self.subpath_start_y = 0.0;
         self.has_current_point = false;
+        self.clip_fill_rule = CanvasFillRule::NonZero;
 
         // Reset pattern cache so stale pattern backing pixmaps are released.
         self.pattern_pixmap_cache.clear();
@@ -801,8 +814,16 @@ impl Canvas2dContext {
 
         // Get text dimensions for alignment
         let mut text_width: f32 = 0.0;
+        let mut text_ascent: f32 = 0.0;
+        let mut text_descent: f32 = 0.0;
         for run in buffer.layout_runs() {
             text_width = text_width.max(run.line_w);
+            text_ascent = text_ascent.max(run.line_y - run.line_top);
+            text_descent = text_descent.max((run.line_top + run.line_height) - run.line_y);
+        }
+        if text_ascent == 0.0 && text_descent == 0.0 {
+            text_ascent = font.size_px * 0.8;
+            text_descent = font.size_px * 0.2;
         }
 
         // Calculate horizontal scale factor for maxWidth
@@ -829,7 +850,11 @@ impl Canvas2dContext {
         let x_offset = crate::text::calculate_text_x_offset(text_width, self.state.text_align);
 
         // Calculate baseline offset
-        let y_offset = crate::text::calculate_text_y_offset(font.size_px, self.state.text_baseline);
+        let y_offset = crate::text::calculate_text_y_offset(
+            text_ascent,
+            text_descent,
+            self.state.text_baseline,
+        );
 
         // Calculate base position with alignment offsets
         // Note: We use (x, y) as the anchor point, x_offset adjusts for alignment
@@ -954,8 +979,93 @@ impl Canvas2dContext {
     /// Transform a point by the current transformation matrix.
     /// Canvas 2D spec requires path coordinates to be transformed when added to the path.
     fn transform_point(&self, x: f32, y: f32) -> (f32, f32) {
-        let t = &self.state.transform;
-        (t.sx * x + t.kx * y + t.tx, t.ky * x + t.sy * y + t.ty)
+        Self::map_point_with_transform(&self.state.transform, x, y)
+    }
+
+    fn map_point_with_transform(transform: &Transform, x: f32, y: f32) -> (f32, f32) {
+        (
+            transform.sx * x + transform.kx * y + transform.tx,
+            transform.ky * x + transform.sy * y + transform.ty,
+        )
+    }
+
+    fn append_transformed_path(
+        &mut self,
+        path: &tiny_skia::Path,
+        transform: Transform,
+        connect_first_move: bool,
+        skip_first_move: bool,
+    ) {
+        let mut saw_first_move = false;
+
+        for segment in path.segments() {
+            match segment {
+                PathSegment::MoveTo(p) => {
+                    let (x, y) = Self::map_point_with_transform(&transform, p.x, p.y);
+
+                    if !saw_first_move {
+                        saw_first_move = true;
+                        if skip_first_move {
+                            if !self.has_current_point {
+                                self.path_builder.move_to(x, y);
+                                self.subpath_start_x = x;
+                                self.subpath_start_y = y;
+                                self.current_x = x;
+                                self.current_y = y;
+                                self.has_current_point = true;
+                            }
+                            continue;
+                        }
+
+                        if connect_first_move && self.has_current_point {
+                            self.path_builder.line_to(x, y);
+                        } else {
+                            self.path_builder.move_to(x, y);
+                            self.subpath_start_x = x;
+                            self.subpath_start_y = y;
+                        }
+                    } else {
+                        self.path_builder.move_to(x, y);
+                        self.subpath_start_x = x;
+                        self.subpath_start_y = y;
+                    }
+
+                    self.current_x = x;
+                    self.current_y = y;
+                    self.has_current_point = true;
+                }
+                PathSegment::LineTo(p) => {
+                    let (x, y) = Self::map_point_with_transform(&transform, p.x, p.y);
+                    self.path_builder.line_to(x, y);
+                    self.current_x = x;
+                    self.current_y = y;
+                    self.has_current_point = true;
+                }
+                PathSegment::QuadTo(ctrl, p) => {
+                    let (cx, cy) = Self::map_point_with_transform(&transform, ctrl.x, ctrl.y);
+                    let (x, y) = Self::map_point_with_transform(&transform, p.x, p.y);
+                    self.path_builder.quad_to(cx, cy, x, y);
+                    self.current_x = x;
+                    self.current_y = y;
+                    self.has_current_point = true;
+                }
+                PathSegment::CubicTo(ctrl1, ctrl2, p) => {
+                    let (c1x, c1y) = Self::map_point_with_transform(&transform, ctrl1.x, ctrl1.y);
+                    let (c2x, c2y) = Self::map_point_with_transform(&transform, ctrl2.x, ctrl2.y);
+                    let (x, y) = Self::map_point_with_transform(&transform, p.x, p.y);
+                    self.path_builder.cubic_to(c1x, c1y, c2x, c2y, x, y);
+                    self.current_x = x;
+                    self.current_y = y;
+                    self.has_current_point = true;
+                }
+                PathSegment::Close => {
+                    self.path_builder.close();
+                    self.current_x = self.subpath_start_x;
+                    self.current_y = self.subpath_start_y;
+                    self.has_current_point = true;
+                }
+            }
+        }
     }
 
     /// Move to a point without drawing.
@@ -1109,51 +1219,59 @@ impl Canvas2dContext {
 
     /// Add an arc to the path.
     pub fn arc(&mut self, params: &ArcParams) {
-        // Transform center point
-        let (tx, ty) = self.transform_point(params.x, params.y);
-        // Scale radius by the average of x and y scale factors
-        let t = &self.state.transform;
-        let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
-        let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
-        let scaled_radius = params.radius * (scale_x + scale_y) / 2.0;
+        let mut arc_builder = tiny_skia::PathBuilder::new();
+        crate::arc::arc(&mut arc_builder, params, false);
 
-        crate::arc::arc(
-            &mut self.path_builder,
-            &ArcParams {
-                x: tx,
-                y: ty,
-                radius: scaled_radius,
-                start_angle: params.start_angle,
-                end_angle: params.end_angle,
-                anticlockwise: params.anticlockwise,
-            },
-            self.has_current_point,
-        );
-        self.has_current_point = true;
+        if let Some(path) = arc_builder.finish() {
+            self.append_transformed_path(&path, self.state.transform, true, false);
+        }
     }
 
     /// Add an arcTo segment to the path.
     pub fn arc_to(&mut self, params: &ArcToParams) {
-        let (tx1, ty1) = self.transform_point(params.x1, params.y1);
-        let (tx2, ty2) = self.transform_point(params.x2, params.y2);
-        // Scale radius
-        let t = &self.state.transform;
-        let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
-        let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
-        let scaled_radius = params.radius * (scale_x + scale_y) / 2.0;
+        if !self.has_current_point {
+            self.move_to(params.x1, params.y1);
+            return;
+        }
 
-        crate::arc::arc_to(
-            &mut self.path_builder,
-            self.current_x,
-            self.current_y,
-            &ArcToParams {
-                x1: tx1,
-                y1: ty1,
-                x2: tx2,
-                y2: ty2,
-                radius: scaled_radius,
-            },
-        );
+        let transform = self.state.transform;
+        let Some(inverse) = transform.invert() else {
+            log::debug!(
+                target: "canvas",
+                "arcTo: non-invertible transform; falling back to approximate scaling"
+            );
+
+            let (tx1, ty1) = self.transform_point(params.x1, params.y1);
+            let (tx2, ty2) = self.transform_point(params.x2, params.y2);
+            let t = &self.state.transform;
+            let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
+            let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
+            let scaled_radius = params.radius * (scale_x + scale_y) / 2.0;
+
+            crate::arc::arc_to(
+                &mut self.path_builder,
+                self.current_x,
+                self.current_y,
+                &ArcToParams {
+                    x1: tx1,
+                    y1: ty1,
+                    x2: tx2,
+                    y2: ty2,
+                    radius: scaled_radius,
+                },
+            );
+            return;
+        };
+
+        let (local_x0, local_y0) =
+            Self::map_point_with_transform(&inverse, self.current_x, self.current_y);
+        let mut arc_builder = tiny_skia::PathBuilder::new();
+        arc_builder.move_to(local_x0, local_y0);
+        crate::arc::arc_to(&mut arc_builder, local_x0, local_y0, params);
+
+        if let Some(path) = arc_builder.finish() {
+            self.append_transformed_path(&path, transform, false, true);
+        }
     }
 
     /// Add an ellipse to the path.
@@ -1194,16 +1312,14 @@ impl Canvas2dContext {
     }
 
     /// Create a clipping region from the current path with the specified fill rule.
-    pub fn clip_with_rule(&mut self, _fill_rule: CanvasFillRule) {
+    pub fn clip_with_rule(&mut self, fill_rule: CanvasFillRule) {
         log::debug!(target: "canvas", "clip_with_rule");
-        // Note: The fill_rule is stored but used during mask creation in create_clip_mask()
-        // For now, we store the path and use FillRule::Winding in the mask
-        // A more complete implementation would store the fill rule with the clip path
         let path =
             std::mem::replace(&mut self.path_builder, tiny_skia::PathBuilder::new()).finish();
 
         if let Some(path) = path {
             self.state.clip_path = Some(path);
+            self.clip_fill_rule = fill_rule;
         }
     }
 
@@ -1331,9 +1447,10 @@ impl Canvas2dContext {
     }
 
     /// Clip to a Path2D object with the specified fill rule.
-    pub fn clip_path2d_with_rule(&mut self, path: &mut Path2D, _fill_rule: CanvasFillRule) {
+    pub fn clip_path2d_with_rule(&mut self, path: &mut Path2D, fill_rule: CanvasFillRule) {
         if let Some(p) = path.get_path() {
             self.state.clip_path = Some(p.clone());
+            self.clip_fill_rule = fill_rule;
         }
     }
 
@@ -1736,7 +1853,7 @@ impl Canvas2dContext {
             // (rect() and other path operations already transform points via transform_point())
             mask.fill_path(
                 clip_path,
-                tiny_skia::FillRule::Winding,
+                self.clip_fill_rule.into(),
                 true,
                 Transform::identity(),
             );
@@ -1899,6 +2016,7 @@ mod tests {
         assert_eq!(ctx.state.line_dash_offset, 0.0);
         assert!(ctx.state.image_smoothing_enabled);
         assert!(ctx.state.clip_path.is_none());
+        assert_eq!(ctx.clip_fill_rule, CanvasFillRule::NonZero);
         // Canvas should be fully transparent
         assert!(ctx.pixmap().data().iter().all(|&b| b == 0));
     }
@@ -2099,6 +2217,58 @@ mod tests {
         assert_eq!(t.d, 1.0);
         assert_eq!(t.e, 0.0);
         assert_eq!(t.f, 0.0);
+        assert_eq!(ctx.clip_fill_rule, CanvasFillRule::NonZero);
+    }
+
+    #[test]
+    fn test_clip_fill_rule_save_restore_and_reset() {
+        let mut ctx = Canvas2dContext::new(64, 64).unwrap();
+
+        ctx.begin_path();
+        ctx.rect(&RectParams {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 20.0,
+        });
+        ctx.clip_with_rule(CanvasFillRule::EvenOdd);
+        assert_eq!(ctx.clip_fill_rule, CanvasFillRule::EvenOdd);
+
+        ctx.save();
+
+        ctx.begin_path();
+        ctx.rect(&RectParams {
+            x: 10.0,
+            y: 10.0,
+            width: 20.0,
+            height: 20.0,
+        });
+        ctx.clip_with_rule(CanvasFillRule::NonZero);
+        assert_eq!(ctx.clip_fill_rule, CanvasFillRule::NonZero);
+
+        ctx.restore();
+        assert_eq!(ctx.clip_fill_rule, CanvasFillRule::EvenOdd);
+
+        ctx.reset();
+        assert_eq!(ctx.clip_fill_rule, CanvasFillRule::NonZero);
+    }
+
+    #[test]
+    fn test_arc_to_non_invertible_transform_fallback() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.begin_path();
+        ctx.move_to(10.0, 10.0);
+        ctx.set_transform(DOMMatrix::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+
+        ctx.arc_to(&ArcToParams {
+            x1: 30.0,
+            y1: 10.0,
+            x2: 30.0,
+            y2: 30.0,
+            radius: 12.0,
+        });
+
+        assert!(ctx.has_current_point);
     }
 
     #[test]

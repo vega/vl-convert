@@ -114,6 +114,20 @@ import {
   op_canvas_decode_svg_at_size,
 } from "ext:core/ops";
 
+function unsupported(methodName) {
+  throw new Error(`${methodName} is not supported by vl-convert canvas polyfill`);
+}
+
+function uint8ArrayToBase64(bytes) {
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+}
+
 /**
  * ImageData class for getImageData results
  */
@@ -402,8 +416,7 @@ class Path2D {
   }
 
   addPath(path, transform) {
-    // addPath with transform is not currently supported
-    // This is a no-op for API compatibility
+    unsupported("Path2D.addPath");
   }
 }
 
@@ -1018,8 +1031,13 @@ class CanvasRenderingContext2D {
   }
 
   // --- Other stubs ---
-  isPointInPath() { return false; }
-  isPointInStroke() { return false; }
+  isPointInPath() {
+    unsupported("CanvasRenderingContext2D.isPointInPath");
+  }
+
+  isPointInStroke() {
+    unsupported("CanvasRenderingContext2D.isPointInStroke");
+  }
 }
 
 /**
@@ -1096,7 +1114,7 @@ class HTMLCanvasElement {
       return "data:,";
     }
     const pngData = op_canvas_to_png(this.#rid, null);
-    const base64 = btoa(String.fromCharCode(...pngData));
+    const base64 = uint8ArrayToBase64(pngData);
     return `data:image/png;base64,${base64}`;
   }
 
@@ -1106,7 +1124,7 @@ class HTMLCanvasElement {
       return;
     }
     const pngData = op_canvas_to_png(this.#rid, null);
-    const blob = new Blob([new Uint8Array(pngData)], { type: "image/png" });
+    const blob = new Blob([pngData], { type: "image/png" });
     callback(blob);
   }
 

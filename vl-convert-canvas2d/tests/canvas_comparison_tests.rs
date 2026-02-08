@@ -22,9 +22,9 @@ use std::process::Command;
 use std::sync::OnceLock;
 use tempfile::TempDir;
 use vl_convert_canvas2d::{
-    ArcParams, Canvas2dContext, CubicBezierParams, DOMMatrix, DirtyRect, EllipseParams,
-    QuadraticBezierParams, RadialGradientParams, RectParams, RoundRectParams, TextAlign,
-    TextBaseline,
+    ArcParams, ArcToParams, Canvas2dContext, CanvasFillRule, CubicBezierParams, DOMMatrix,
+    DirtyRect, EllipseParams, Path2D, QuadraticBezierParams, RadialGradientParams, RectParams,
+    RoundRectParams, TextAlign, TextBaseline,
 };
 
 /// Get path to node_modules for canvas tests.
@@ -1869,6 +1869,99 @@ ctx.stroke();
         max_diff_percent: 3.0,
     };
     run_comparison_test(&test).expect("clip_with_transform comparison failed");
+}
+
+#[test]
+fn test_clip_evenodd_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "clip_evenodd",
+        width: 160,
+        height: 160,
+        js_code: r#"
+ctx.beginPath();
+ctx.rect(20, 20, 120, 120);
+ctx.rect(50, 50, 60, 60);
+ctx.clip('evenodd');
+
+ctx.fillStyle = '#ff8800';
+ctx.fillRect(0, 0, 160, 160);
+"#,
+        rust_fn: |ctx| {
+            ctx.begin_path();
+            ctx.rect(&RectParams {
+                x: 20.0,
+                y: 20.0,
+                width: 120.0,
+                height: 120.0,
+            });
+            ctx.rect(&RectParams {
+                x: 50.0,
+                y: 50.0,
+                width: 60.0,
+                height: 60.0,
+            });
+            ctx.clip_with_rule(CanvasFillRule::EvenOdd);
+
+            ctx.set_fill_style("#ff8800").unwrap();
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 160.0,
+                height: 160.0,
+            });
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("clip_evenodd comparison failed");
+}
+
+#[test]
+fn test_clip_path2d_evenodd_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "clip_path2d_evenodd",
+        width: 160,
+        height: 160,
+        // node-canvas Path2D coverage is inconsistent; compare against equivalent context-path clip.
+        js_code: r#"
+ctx.beginPath();
+ctx.rect(20, 20, 120, 120);
+ctx.rect(55, 55, 50, 50);
+ctx.clip('evenodd');
+
+ctx.fillStyle = '#0055ff';
+ctx.fillRect(0, 0, 160, 160);
+"#,
+        rust_fn: |ctx| {
+            let mut path = Path2D::new();
+            path.rect(&RectParams {
+                x: 20.0,
+                y: 20.0,
+                width: 120.0,
+                height: 120.0,
+            });
+            path.rect(&RectParams {
+                x: 55.0,
+                y: 55.0,
+                width: 50.0,
+                height: 50.0,
+            });
+            ctx.clip_path2d_with_rule(&mut path, CanvasFillRule::EvenOdd);
+
+            ctx.set_fill_style("#0055ff").unwrap();
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 160.0,
+                height: 160.0,
+            });
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("clip_path2d_evenodd comparison failed");
 }
 
 // =============================================================================
@@ -3841,6 +3934,154 @@ ctx.putImageData(imageData, 5, 5);
 // These tests verify that transforms are applied at the correct time
 // (path construction vs draw time) per the Canvas 2D spec.
 // ============================================================================
+
+#[test]
+fn test_arc_non_uniform_scale_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "arc_non_uniform_scale",
+        width: 220,
+        height: 140,
+        js_code: r#"
+ctx.strokeStyle = '#cc0000';
+ctx.lineWidth = 3;
+ctx.scale(2, 0.5);
+ctx.beginPath();
+ctx.arc(50, 120, 35, 0, Math.PI * 1.75, false);
+ctx.stroke();
+"#,
+        rust_fn: |ctx| {
+            ctx.set_stroke_style("#cc0000").unwrap();
+            ctx.set_line_width(3.0);
+            ctx.scale(2.0, 0.5);
+            ctx.begin_path();
+            ctx.arc(&ArcParams {
+                x: 50.0,
+                y: 120.0,
+                radius: 35.0,
+                start_angle: 0.0,
+                end_angle: PI * 1.75,
+                anticlockwise: false,
+            });
+            ctx.stroke();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("arc_non_uniform_scale comparison failed");
+}
+
+#[test]
+fn test_arc_shear_transform_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "arc_shear_transform",
+        width: 220,
+        height: 180,
+        js_code: r#"
+ctx.strokeStyle = '#0066cc';
+ctx.lineWidth = 2;
+ctx.transform(1, 0.45, 0.2, 1, 15, 5);
+ctx.beginPath();
+ctx.arc(70, 60, 30, Math.PI * 0.25, Math.PI * 1.8, false);
+ctx.stroke();
+"#,
+        rust_fn: |ctx| {
+            ctx.set_stroke_style("#0066cc").unwrap();
+            ctx.set_line_width(2.0);
+            ctx.transform(DOMMatrix::new(1.0, 0.45, 0.2, 1.0, 15.0, 5.0));
+            ctx.begin_path();
+            ctx.arc(&ArcParams {
+                x: 70.0,
+                y: 60.0,
+                radius: 30.0,
+                start_angle: PI * 0.25,
+                end_angle: PI * 1.8,
+                anticlockwise: false,
+            });
+            ctx.stroke();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("arc_shear_transform comparison failed");
+}
+
+#[test]
+fn test_arc_to_non_uniform_scale_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "arc_to_non_uniform_scale",
+        width: 220,
+        height: 140,
+        js_code: r#"
+ctx.strokeStyle = '#009944';
+ctx.lineWidth = 3;
+ctx.scale(1.8, 0.6);
+ctx.beginPath();
+ctx.moveTo(20, 30);
+ctx.arcTo(90, 30, 90, 90, 25);
+ctx.stroke();
+"#,
+        rust_fn: |ctx| {
+            ctx.set_stroke_style("#009944").unwrap();
+            ctx.set_line_width(3.0);
+            ctx.scale(1.8, 0.6);
+            ctx.begin_path();
+            ctx.move_to(20.0, 30.0);
+            ctx.arc_to(&ArcToParams {
+                x1: 90.0,
+                y1: 30.0,
+                x2: 90.0,
+                y2: 90.0,
+                radius: 25.0,
+            });
+            ctx.stroke();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("arc_to_non_uniform_scale comparison failed");
+}
+
+#[test]
+fn test_arc_to_after_transform_change_comparison() {
+    skip_if_no_node_canvas!();
+    let test = CanvasTestCase {
+        name: "arc_to_after_transform_change",
+        width: 220,
+        height: 160,
+        js_code: r#"
+ctx.strokeStyle = '#aa00aa';
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.moveTo(30, 30);
+ctx.scale(1.6, 0.75);
+ctx.arcTo(110, 30, 110, 100, 28);
+ctx.setTransform(1, 0, 0, 1, 0, 0);
+ctx.stroke();
+"#,
+        rust_fn: |ctx| {
+            ctx.set_stroke_style("#aa00aa").unwrap();
+            ctx.set_line_width(3.0);
+            ctx.begin_path();
+            ctx.move_to(30.0, 30.0);
+            ctx.scale(1.6, 0.75);
+            ctx.arc_to(&ArcToParams {
+                x1: 110.0,
+                y1: 30.0,
+                x2: 110.0,
+                y2: 100.0,
+                radius: 28.0,
+            });
+            ctx.set_transform(DOMMatrix::new(1.0, 0.0, 0.0, 1.0, 0.0, 0.0));
+            ctx.stroke();
+        },
+        threshold: DEFAULT_THRESHOLD,
+        max_diff_percent: 2.0,
+    };
+    run_comparison_test(&test).expect("arc_to_after_transform_change comparison failed");
+}
 
 #[test]
 fn test_transform_before_path_reset_before_stroke() {

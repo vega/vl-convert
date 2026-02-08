@@ -2,7 +2,7 @@
 
 use vl_convert_canvas2d::{
     ArcParams, Canvas2dContext, Canvas2dContextBuilder, CubicBezierParams, EllipseParams,
-    QuadraticBezierParams, RectParams,
+    QuadraticBezierParams, RectParams, TextBaseline,
 };
 
 /// Test creating a canvas and drawing basic shapes.
@@ -208,6 +208,61 @@ fn test_measure_text() {
 
     // Width should be positive for non-empty text
     assert!(metrics.width > 0.0);
+}
+
+#[test]
+fn test_measure_text_reports_nonzero_ascent_descent() {
+    let mut ctx = Canvas2dContext::new(120, 120).unwrap();
+    ctx.set_font("14px sans-serif").unwrap();
+
+    let metrics = ctx.measure_text("Hello").unwrap();
+    assert!(metrics.actual_bounding_box_ascent > 0.0);
+    assert!(metrics.actual_bounding_box_descent > 0.0);
+    assert!(metrics.font_bounding_box_ascent > 0.0);
+    assert!(metrics.font_bounding_box_descent > 0.0);
+}
+
+#[test]
+fn test_measure_text_cjk_metrics_nonzero() {
+    let mut ctx = Canvas2dContext::new(120, 120).unwrap();
+    ctx.set_font("16px sans-serif").unwrap();
+
+    let metrics = ctx.measure_text("漢字テスト").unwrap();
+    assert!(metrics.width > 0.0);
+    assert!(metrics.actual_bounding_box_ascent > 0.0);
+    assert!(metrics.actual_bounding_box_descent > 0.0);
+}
+
+#[test]
+fn test_text_baseline_vertical_ordering() {
+    fn first_ink_row(data: &[u8], width: u32, height: u32) -> Option<u32> {
+        for y in 0..height {
+            for x in 0..width {
+                let idx = ((y * width + x) * 4) as usize;
+                if data[idx + 3] > 0 {
+                    return Some(y);
+                }
+            }
+        }
+        None
+    }
+
+    fn render_first_row(baseline: TextBaseline) -> u32 {
+        let mut ctx = Canvas2dContext::new(120, 120).unwrap();
+        ctx.set_fill_style("#000000").unwrap();
+        ctx.set_font("20px sans-serif").unwrap();
+        ctx.set_text_baseline(baseline);
+        ctx.fill_text("H", 30.0, 70.0);
+        let data = ctx.get_image_data(0, 0, 120, 120);
+        first_ink_row(&data, 120, 120).unwrap()
+    }
+
+    let top_row = render_first_row(TextBaseline::Top);
+    let alpha_row = render_first_row(TextBaseline::Alphabetic);
+    let bottom_row = render_first_row(TextBaseline::Bottom);
+
+    assert!(bottom_row < alpha_row);
+    assert!(alpha_row < top_row);
 }
 
 /// Test arc drawing.

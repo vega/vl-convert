@@ -1039,23 +1039,9 @@ delete themes.default
         deno_core::scope!(scope, self.worker.js_runtime);
         let local = v8::Local::new(scope, res);
 
-        // The result should be a JSON array of bytes
-        let deserialized_value = serde_v8::from_v8::<serde_json::Value>(scope, local)?;
-
-        match deserialized_value {
-            serde_json::Value::Array(arr) => {
-                let bytes: Result<Vec<u8>, _> = arr
-                    .into_iter()
-                    .map(|v| {
-                        v.as_u64()
-                            .and_then(|n| u8::try_from(n).ok())
-                            .ok_or_else(|| anyhow!("Invalid byte value in PNG data"))
-                    })
-                    .collect();
-                bytes
-            }
-            _ => Err(anyhow!("Expected array of bytes for PNG data")),
-        }
+        // Deserialize typed-array data to bytes directly.
+        let bytes = serde_v8::from_v8::<serde_v8::JsBuffer>(scope, local)?;
+        Ok(bytes.to_vec())
     }
 
     pub async fn vega_to_canvas_png(
@@ -1946,6 +1932,7 @@ pub fn vega_to_url(vg_spec: &serde_json::Value, fullscreen: bool) -> Result<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[tokio::test]
     async fn test_convert_context() {
@@ -2012,6 +1999,121 @@ mod tests {
             .await
             .unwrap();
         println!("vg_spec2: {}", vg_spec2);
+    }
+
+    #[tokio::test]
+    async fn test_execute_script_to_bytes_typed_array() {
+        let mut ctx = InnerVlConverter::try_new().await.unwrap();
+        let bytes = ctx
+            .execute_script_to_bytes("new Uint8Array([1, 2, 3])")
+            .await
+            .unwrap();
+        assert_eq!(bytes, vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_canvas_png_and_image_data_are_typed_arrays() {
+        let mut ctx = InnerVlConverter::try_new().await.unwrap();
+        let code = r#"
+const canvas = new HTMLCanvasElement(8, 8);
+const ctx2d = canvas.getContext('2d');
+ctx2d.fillStyle = '#ff0000';
+ctx2d.fillRect(0, 0, 8, 8);
+
+var __pngBytes = canvas._toPngWithPpi(72);
+var __pngIsUint8Array = __pngBytes instanceof Uint8Array;
+
+const imageData = ctx2d.getImageData(0, 0, 1, 1);
+var __imageDataChecks = [
+  imageData.data instanceof Uint8ClampedArray,
+  imageData.data[0], imageData.data[1], imageData.data[2], imageData.data[3]
+];
+"#
+        .to_string();
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let png_is_typed = ctx
+            .execute_script_to_json("__pngIsUint8Array")
+            .await
+            .unwrap();
+        assert_eq!(png_is_typed, json!(true));
+
+        let png_bytes = ctx.execute_script_to_bytes("__pngBytes").await.unwrap();
+        assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+        let image_data_checks = ctx
+            .execute_script_to_json("__imageDataChecks")
+            .await
+            .unwrap();
+        assert_eq!(image_data_checks, json!([true, 255, 0, 0, 255]));
+    }
+
+    #[tokio::test]
+    async fn test_polyfill_unsupported_methods_throw() {
+        let mut ctx = InnerVlConverter::try_new().await.unwrap();
+        let code = r#"
+var __unsupportedMessages = [];
+try {
+  new Path2D().addPath(new Path2D());
+} catch (err) {
+  __unsupportedMessages.push(String(err && err.message ? err.message : err));
+}
+
+const canvas = new HTMLCanvasElement(16, 16);
+const ctx2d = canvas.getContext('2d');
+try {
+  ctx2d.isPointInPath(0, 0);
+} catch (err) {
+  __unsupportedMessages.push(String(err && err.message ? err.message : err));
+}
+try {
+  ctx2d.isPointInStroke(0, 0);
+} catch (err) {
+  __unsupportedMessages.push(String(err && err.message ? err.message : err));
+}
+"#
+        .to_string();
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let messages = ctx
+            .execute_script_to_json("__unsupportedMessages")
+            .await
+            .unwrap()
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+
+        assert_eq!(messages.len(), 3);
+        assert!(messages[0]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Path2D.addPath"));
+        assert!(messages[1]
+            .as_str()
+            .unwrap_or_default()
+            .contains("CanvasRenderingContext2D.isPointInPath"));
+        assert!(messages[2]
+            .as_str()
+            .unwrap_or_default()
+            .contains("CanvasRenderingContext2D.isPointInStroke"));
     }
 
     #[test]

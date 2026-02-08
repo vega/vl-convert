@@ -851,7 +851,7 @@ pub fn op_canvas_set_line_dash_offset(
 
 /// Get image data for a region of the canvas.
 #[op2]
-#[serde]
+#[buffer]
 pub fn op_canvas_get_image_data(
     state: &mut OpState,
     rid: u32,
@@ -875,7 +875,7 @@ pub fn op_canvas_get_image_data(
 /// * `rid` - Canvas resource ID
 /// * `ppi` - Optional pixels per inch for PNG metadata. Defaults to 72 if not specified.
 #[op2]
-#[serde]
+#[buffer]
 pub fn op_canvas_to_png(
     state: &mut OpState,
     rid: u32,

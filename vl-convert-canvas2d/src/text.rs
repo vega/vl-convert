@@ -168,9 +168,21 @@ pub fn measure_text(
         width = width.max(run.line_w);
     }
 
-    // Get font metrics for ascent/descent
-    let font_ascent = font.size_px * 0.8; // Approximation
-    let font_descent = font.size_px * 0.2;
+    // Derive ascent/descent from shaped layout output for better browser parity.
+    let mut font_ascent: f32 = 0.0;
+    let mut font_descent: f32 = 0.0;
+    for line in &buffer.lines {
+        if let Some(layout_lines) = line.layout_opt() {
+            for layout_line in layout_lines {
+                font_ascent = font_ascent.max(layout_line.max_ascent);
+                font_descent = font_descent.max(layout_line.max_descent);
+            }
+        }
+    }
+    if font_ascent == 0.0 && font_descent == 0.0 {
+        font_ascent = font.size_px * 0.8;
+        font_descent = font.size_px * 0.2;
+    }
 
     Ok(TextMetrics {
         width,
@@ -193,10 +205,7 @@ pub fn calculate_text_x_offset(width: f32, align: TextAlign) -> f32 {
 }
 
 /// Calculate Y offset for text baseline.
-pub fn calculate_text_y_offset(font_size: f32, baseline: TextBaseline) -> f32 {
-    let ascent = font_size * 0.8;
-    let descent = font_size * 0.2;
-
+pub fn calculate_text_y_offset(ascent: f32, descent: f32, baseline: TextBaseline) -> f32 {
     match baseline {
         TextBaseline::Top => ascent,
         TextBaseline::Hanging => ascent * 0.8,
