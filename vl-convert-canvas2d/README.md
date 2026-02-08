@@ -15,11 +15,11 @@ The API closely follows the [WHATWG Canvas 2D specification](https://html.spec.w
 ## Quick Example
 
 ```rust
-use vl_convert_canvas2d::Canvas2dContext;
+use vl_convert_canvas2d::{Canvas2dContext, RectParams};
 
 let mut ctx = Canvas2dContext::new(400, 300)?;
 ctx.set_fill_style("#ff0000")?;
-ctx.fill_rect(10.0, 10.0, 100.0, 50.0);
+ctx.fill_rect(&RectParams { x: 10.0, y: 10.0, width: 100.0, height: 50.0 });
 let png_data = ctx.to_png()?;
 ```
 

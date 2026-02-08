@@ -2,6 +2,7 @@
 
 use vl_convert_canvas2d::{
     ArcParams, Canvas2dContext, Canvas2dContextBuilder, CubicBezierParams, EllipseParams,
+    QuadraticBezierParams, RectParams,
 };
 
 /// Test creating a canvas and drawing basic shapes.
@@ -11,7 +12,12 @@ fn test_draw_rectangle() {
 
     // Set fill style and draw rectangle
     ctx.set_fill_style("#ff0000").unwrap();
-    ctx.fill_rect(10.0, 10.0, 100.0, 100.0);
+    ctx.fill_rect(&RectParams {
+        x: 10.0,
+        y: 10.0,
+        width: 100.0,
+        height: 100.0,
+    });
 
     // Verify the pixmap has non-transparent pixels
     let data = ctx.get_image_data(0, 0, 200, 200);
@@ -85,13 +91,23 @@ fn test_save_restore_state() {
     ctx.set_line_width(10.0);
 
     // Draw with modified state
-    ctx.fill_rect(0.0, 0.0, 50.0, 50.0);
+    ctx.fill_rect(&RectParams {
+        x: 0.0,
+        y: 0.0,
+        width: 50.0,
+        height: 50.0,
+    });
 
     // Restore state
     ctx.restore();
 
     // Draw with original state
-    ctx.fill_rect(50.0, 50.0, 50.0, 50.0);
+    ctx.fill_rect(&RectParams {
+        x: 50.0,
+        y: 50.0,
+        width: 50.0,
+        height: 50.0,
+    });
 
     // Check colors - top-left should be green, bottom-right should be red
     let data = ctx.get_image_data(0, 0, 100, 100);
@@ -115,7 +131,12 @@ fn test_transforms() {
     // Translate and draw
     ctx.translate(50.0, 50.0);
     ctx.set_fill_style("#ff0000").unwrap();
-    ctx.fill_rect(-10.0, -10.0, 20.0, 20.0);
+    ctx.fill_rect(&RectParams {
+        x: -10.0,
+        y: -10.0,
+        width: 20.0,
+        height: 20.0,
+    });
 
     // Check that the rectangle is at the center
     let data = ctx.get_image_data(0, 0, 100, 100);
@@ -131,10 +152,20 @@ fn test_clear_rect() {
 
     // Fill entire canvas
     ctx.set_fill_style("#ff0000").unwrap();
-    ctx.fill_rect(0.0, 0.0, 100.0, 100.0);
+    ctx.fill_rect(&RectParams {
+        x: 0.0,
+        y: 0.0,
+        width: 100.0,
+        height: 100.0,
+    });
 
     // Clear center
-    ctx.clear_rect(25.0, 25.0, 50.0, 50.0);
+    ctx.clear_rect(&RectParams {
+        x: 25.0,
+        y: 25.0,
+        width: 50.0,
+        height: 50.0,
+    });
 
     // Check that center is cleared
     let data = ctx.get_image_data(0, 0, 100, 100);
@@ -153,7 +184,12 @@ fn test_png_export() {
     let mut ctx = Canvas2dContext::new(50, 50).unwrap();
 
     ctx.set_fill_style("#0000ff").unwrap();
-    ctx.fill_rect(0.0, 0.0, 50.0, 50.0);
+    ctx.fill_rect(&RectParams {
+        x: 0.0,
+        y: 0.0,
+        width: 50.0,
+        height: 50.0,
+    });
 
     let png_data = ctx.to_png(None).unwrap();
 
@@ -237,7 +273,12 @@ fn test_quadratic_curve() {
     ctx.set_line_width(2.0);
     ctx.begin_path();
     ctx.move_to(10.0, 50.0);
-    ctx.quadratic_curve_to(50.0, 10.0, 90.0, 50.0);
+    ctx.quadratic_curve_to(&QuadraticBezierParams {
+        cpx: 50.0,
+        cpy: 10.0,
+        x: 90.0,
+        y: 50.0,
+    });
     ctx.stroke();
 
     // Just verify it doesn't crash and produces some output
@@ -269,7 +310,12 @@ fn test_linear_gradient() {
     gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
 
     ctx.set_fill_style_gradient(gradient);
-    ctx.fill_rect(0.0, 0.0, 100.0, 100.0);
+    ctx.fill_rect(&RectParams {
+        x: 0.0,
+        y: 0.0,
+        width: 100.0,
+        height: 100.0,
+    });
 
     let data = ctx.get_image_data(0, 0, 100, 100);
 
@@ -289,7 +335,12 @@ fn test_global_alpha() {
 
     ctx.set_global_alpha(0.5);
     ctx.set_fill_style("#ff0000").unwrap();
-    ctx.fill_rect(0.0, 0.0, 100.0, 100.0);
+    ctx.fill_rect(&RectParams {
+        x: 0.0,
+        y: 0.0,
+        width: 100.0,
+        height: 100.0,
+    });
 
     let data = ctx.get_image_data(0, 0, 100, 100);
     let idx = (50 * 100 + 50) * 4;

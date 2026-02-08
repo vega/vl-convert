@@ -4,7 +4,7 @@ use crate::error::{Canvas2dError, Canvas2dResult};
 use crate::font_parser::{parse_font, ParsedFont};
 use crate::geometry::{
     ArcParams, ArcToParams, CubicBezierParams, DirtyRect, EllipseParams, ImageCropParams,
-    RadialGradientParams,
+    QuadraticBezierParams, RadialGradientParams, RectParams, RoundRectParams,
 };
 use crate::gradient::{CanvasGradient, GradientType};
 use crate::path2d::Path2D;
@@ -875,9 +875,9 @@ impl Canvas2dContext {
     }
 
     /// Add a quadratic bezier curve.
-    pub fn quadratic_curve_to(&mut self, cpx: f32, cpy: f32, x: f32, y: f32) {
-        let (tcpx, tcpy) = self.transform_point(cpx, cpy);
-        let (tx, ty) = self.transform_point(x, y);
+    pub fn quadratic_curve_to(&mut self, params: &QuadraticBezierParams) {
+        let (tcpx, tcpy) = self.transform_point(params.cpx, params.cpy);
+        let (tx, ty) = self.transform_point(params.x, params.y);
         self.path_builder.quad_to(tcpx, tcpy, tx, ty);
         self.current_x = tx;
         self.current_y = ty;
@@ -885,13 +885,13 @@ impl Canvas2dContext {
     }
 
     /// Add a rectangle to the path.
-    pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        log::debug!(target: "canvas", "rect {} {} {} {}", x, y, width, height);
+    pub fn rect(&mut self, params: &RectParams) {
+        log::debug!(target: "canvas", "rect {} {} {} {}", params.x, params.y, params.width, params.height);
         // Transform all four corners
-        let (x0, y0) = self.transform_point(x, y);
-        let (x1, y1) = self.transform_point(x + width, y);
-        let (x2, y2) = self.transform_point(x + width, y + height);
-        let (x3, y3) = self.transform_point(x, y + height);
+        let (x0, y0) = self.transform_point(params.x, params.y);
+        let (x1, y1) = self.transform_point(params.x + params.width, params.y);
+        let (x2, y2) = self.transform_point(params.x + params.width, params.y + params.height);
+        let (x3, y3) = self.transform_point(params.x, params.y + params.height);
 
         self.path_builder.move_to(x0, y0);
         self.path_builder.line_to(x1, y1);
@@ -906,29 +906,21 @@ impl Canvas2dContext {
         self.has_current_point = true;
     }
 
-    /// Add a rounded rectangle to the path with uniform corner radius.
-    pub fn round_rect(&mut self, x: f32, y: f32, width: f32, height: f32, radius: f32) {
-        self.round_rect_radii(x, y, width, height, [radius, radius, radius, radius]);
-    }
-
-    /// Add a rounded rectangle to the path with individual corner radii.
-    ///
-    /// The radii array specifies the corner radii in order:
-    /// `[top-left, top-right, bottom-right, bottom-left]`
-    pub fn round_rect_radii(&mut self, x: f32, y: f32, width: f32, height: f32, radii: [f32; 4]) {
+    /// Add a rounded rectangle to the path.
+    pub fn round_rect(&mut self, params: &RoundRectParams) {
         // Handle negative dimensions by adjusting position
-        let (x, width) = if width < 0.0 {
-            (x + width, -width)
+        let (x, width) = if params.width < 0.0 {
+            (params.x + params.width, -params.width)
         } else {
-            (x, width)
+            (params.x, params.width)
         };
-        let (y, height) = if height < 0.0 {
-            (y + height, -height)
+        let (y, height) = if params.height < 0.0 {
+            (params.y + params.height, -params.height)
         } else {
-            (y, height)
+            (params.y, params.height)
         };
 
-        let [mut tl, mut tr, mut br, mut bl] = radii;
+        let [mut tl, mut tr, mut br, mut bl] = params.radii;
 
         // Clamp radii to non-negative
         tl = tl.max(0.0);
@@ -1228,30 +1220,30 @@ impl Canvas2dContext {
     }
 
     /// Fill a rectangle.
-    pub fn fill_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        log::debug!(target: "canvas", "fillRect {} {} {} {}", x, y, width, height);
+    pub fn fill_rect(&mut self, params: &RectParams) {
+        log::debug!(target: "canvas", "fillRect {} {} {} {}", params.x, params.y, params.width, params.height);
         // Use path-based approach for proper transform handling
         self.begin_path();
-        self.rect(x, y, width, height);
+        self.rect(params);
         self.fill();
     }
 
     /// Stroke a rectangle.
-    pub fn stroke_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        log::debug!(target: "canvas", "strokeRect {} {} {} {}", x, y, width, height);
+    pub fn stroke_rect(&mut self, params: &RectParams) {
+        log::debug!(target: "canvas", "strokeRect {} {} {} {}", params.x, params.y, params.width, params.height);
         self.begin_path();
-        self.rect(x, y, width, height);
+        self.rect(params);
         self.stroke();
     }
 
     /// Clear a rectangle (set pixels to transparent).
-    pub fn clear_rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        log::debug!(target: "canvas", "clearRect {} {} {} {}", x, y, width, height);
+    pub fn clear_rect(&mut self, params: &RectParams) {
+        log::debug!(target: "canvas", "clearRect {} {} {} {}", params.x, params.y, params.width, params.height);
         // Transform corners and find bounding box
-        let (x0, y0) = self.transform_point(x, y);
-        let (x1, y1) = self.transform_point(x + width, y);
-        let (x2, y2) = self.transform_point(x + width, y + height);
-        let (x3, y3) = self.transform_point(x, y + height);
+        let (x0, y0) = self.transform_point(params.x, params.y);
+        let (x1, y1) = self.transform_point(params.x + params.width, params.y);
+        let (x2, y2) = self.transform_point(params.x + params.width, params.y + params.height);
+        let (x3, y3) = self.transform_point(params.x, params.y + params.height);
 
         let min_x = x0.min(x1).min(x2).min(x3);
         let min_y = y0.min(y1).min(y2).min(y3);
@@ -1868,7 +1860,12 @@ mod tests {
     fn test_fill_rect_pixels() {
         let mut ctx = Canvas2dContext::new(100, 100).unwrap();
         ctx.set_fill_style("#ff0000").unwrap();
-        ctx.fill_rect(10.0, 10.0, 50.0, 50.0);
+        ctx.fill_rect(&RectParams {
+            x: 10.0,
+            y: 10.0,
+            width: 50.0,
+            height: 50.0,
+        });
 
         let data = ctx.get_image_data(0, 0, 100, 100);
         // Inside the rect at (30, 30): should be red
@@ -1888,7 +1885,12 @@ mod tests {
         let mut ctx = Canvas2dContext::new(100, 100).unwrap();
         ctx.set_stroke_style("#0000ff").unwrap();
         ctx.set_line_width(2.0);
-        ctx.stroke_rect(20.0, 20.0, 60.0, 60.0);
+        ctx.stroke_rect(&RectParams {
+            x: 20.0,
+            y: 20.0,
+            width: 60.0,
+            height: 60.0,
+        });
 
         let data = ctx.get_image_data(0, 0, 100, 100);
         // On the top edge at (50, 20): should have blue pixels
@@ -1910,7 +1912,12 @@ mod tests {
         ctx.set_global_alpha(0.5);
         ctx.translate(10.0, 10.0);
         ctx.save();
-        ctx.fill_rect(0.0, 0.0, 100.0, 100.0);
+        ctx.fill_rect(&RectParams {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        });
         assert!(ctx.pixmap().data().iter().any(|&b| b != 0));
 
         ctx.reset();

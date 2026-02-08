@@ -1,3 +1,6 @@
+// Allow uninlined format args for cleaner bail!/anyhow! macros
+#![allow(clippy::uninlined_format_args)]
+
 //! Pure Rust Canvas 2D API implementation using tiny-skia and cosmic-text.
 //!
 //! This crate provides a Canvas 2D API implementation that can be used without
@@ -9,11 +12,11 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use vl_convert_canvas2d::Canvas2dContext;
+//! use vl_convert_canvas2d::{Canvas2dContext, RectParams};
 //!
 //! let mut ctx = Canvas2dContext::new(400, 300)?;
 //! ctx.set_fill_style("#ff0000");
-//! ctx.fill_rect(10.0, 10.0, 100.0, 50.0);
+//! ctx.fill_rect(&RectParams { x: 10.0, y: 10.0, width: 100.0, height: 50.0 });
 //! let png_data = ctx.to_png()?;
 //! ```
 
@@ -33,7 +36,7 @@ pub use context::{Canvas2dContext, Canvas2dContextBuilder, DOMMatrix, DrawingSta
 pub use error::{Canvas2dError, Canvas2dResult};
 pub use geometry::{
     ArcParams, ArcToParams, CubicBezierParams, DirtyRect, EllipseParams, ImageCropParams,
-    RadialGradientParams,
+    QuadraticBezierParams, RadialGradientParams, RectParams, RoundRectParams,
 };
 pub use gradient::{CanvasGradient, GradientStop};
 pub use path2d::Path2D;

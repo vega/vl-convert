@@ -23,7 +23,8 @@ use std::sync::OnceLock;
 use tempfile::TempDir;
 use vl_convert_canvas2d::{
     ArcParams, Canvas2dContext, CubicBezierParams, DOMMatrix, DirtyRect, EllipseParams,
-    RadialGradientParams, TextAlign, TextBaseline,
+    QuadraticBezierParams, RadialGradientParams, RectParams, RoundRectParams, TextAlign,
+    TextBaseline,
 };
 
 /// Get path to node_modules for canvas tests.
@@ -220,7 +221,12 @@ ctx.fillRect(10, 10, 100, 100);
 "#,
         rust_fn: |ctx| {
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(10.0, 10.0, 100.0, 100.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 10.0,
+                width: 100.0,
+                height: 100.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -243,7 +249,12 @@ ctx.strokeRect(20, 20, 100, 80);
         rust_fn: |ctx| {
             ctx.set_stroke_style("#0000ff").unwrap();
             ctx.set_line_width(4.0);
-            ctx.stroke_rect(20.0, 20.0, 100.0, 80.0);
+            ctx.stroke_rect(&RectParams {
+                x: 20.0,
+                y: 20.0,
+                width: 100.0,
+                height: 80.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -437,7 +448,12 @@ ctx.stroke();
             ctx.set_line_width(2.0);
             ctx.begin_path();
             ctx.move_to(10.0, 80.0);
-            ctx.quadratic_curve_to(50.0, 10.0, 90.0, 80.0);
+            ctx.quadratic_curve_to(&QuadraticBezierParams {
+                cpx: 50.0,
+                cpy: 10.0,
+                x: 90.0,
+                y: 80.0,
+            });
             ctx.stroke();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -531,7 +547,12 @@ ctx.fillRect(-15, -15, 30, 30);
         rust_fn: |ctx| {
             ctx.translate(50.0, 50.0);
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(-15.0, -15.0, 30.0, 30.0);
+            ctx.fill_rect(&RectParams {
+                x: -15.0,
+                y: -15.0,
+                width: 30.0,
+                height: 30.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -557,7 +578,12 @@ ctx.fillRect(-20, -20, 40, 40);
             ctx.translate(50.0, 50.0);
             ctx.rotate(PI / 4.0);
             ctx.set_fill_style("#0000ff").unwrap();
-            ctx.fill_rect(-20.0, -20.0, 40.0, 40.0);
+            ctx.fill_rect(&RectParams {
+                x: -20.0,
+                y: -20.0,
+                width: 40.0,
+                height: 40.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: 2.0,
@@ -580,7 +606,12 @@ ctx.fillRect(10, 50, 20, 40);
         rust_fn: |ctx| {
             ctx.scale(2.0, 0.5);
             ctx.set_fill_style("#00ff00").unwrap();
-            ctx.fill_rect(10.0, 50.0, 20.0, 40.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 50.0,
+                width: 20.0,
+                height: 40.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -607,11 +638,21 @@ ctx.fillRect(30, 30, 60, 60);
 "#,
         rust_fn: |ctx| {
             ctx.set_fill_style("#0000ff").unwrap();
-            ctx.fill_rect(10.0, 10.0, 60.0, 60.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 10.0,
+                width: 60.0,
+                height: 60.0,
+            });
 
             ctx.set_global_alpha(0.5);
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(30.0, 30.0, 60.0, 60.0);
+            ctx.fill_rect(&RectParams {
+                x: 30.0,
+                y: 30.0,
+                width: 60.0,
+                height: 60.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: 2.0,
@@ -790,8 +831,18 @@ ctx.clearRect(25, 25, 50, 50);
 "#,
         rust_fn: |ctx| {
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(0.0, 0.0, 100.0, 100.0);
-            ctx.clear_rect(25.0, 25.0, 50.0, 50.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            });
+            ctx.clear_rect(&RectParams {
+                x: 25.0,
+                y: 25.0,
+                width: 50.0,
+                height: 50.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -818,9 +869,19 @@ ctx.fillRect(50, 50, 50, 50);
             ctx.set_fill_style("#ff0000").unwrap();
             ctx.save();
             ctx.set_fill_style("#00ff00").unwrap();
-            ctx.fill_rect(0.0, 0.0, 50.0, 50.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 50.0,
+                height: 50.0,
+            });
             ctx.restore();
-            ctx.fill_rect(50.0, 50.0, 50.0, 50.0);
+            ctx.fill_rect(&RectParams {
+                x: 50.0,
+                y: 50.0,
+                width: 50.0,
+                height: 50.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -1308,7 +1369,12 @@ ctx.fillRect(0, 0, 200, 100);
             gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
             ctx.set_fill_style_gradient(gradient);
-            ctx.fill_rect(0.0, 0.0, 200.0, 100.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 100.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -1335,7 +1401,12 @@ ctx.fillRect(0, 0, 100, 200);
             gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(0, 255, 0, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
             ctx.set_fill_style_gradient(gradient);
-            ctx.fill_rect(0.0, 0.0, 100.0, 200.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 200.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -1364,7 +1435,12 @@ ctx.fillRect(0, 0, 150, 150);
             gradient.add_color_stop(0.5, tiny_skia::Color::from_rgba8(0, 255, 0, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
             ctx.set_fill_style_gradient(gradient);
-            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 150.0,
+                height: 150.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -1398,7 +1474,12 @@ ctx.fillRect(0, 0, 150, 150);
             gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 255, 255, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 0, 255));
             ctx.set_fill_style_gradient(gradient);
-            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 150.0,
+                height: 150.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: 2.0, // Slightly higher for radial gradient edge differences
@@ -1434,7 +1515,12 @@ ctx.fillRect(0, 0, 150, 150);
             gradient.add_color_stop(0.5, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
             ctx.set_fill_style_gradient(gradient);
-            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 150.0,
+                height: 150.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         // Higher tolerance for offset radial gradients - tiny_skia doesn't support
@@ -1506,7 +1592,7 @@ fn test_clip_rect_comparison() {
         js_code: r#"
 // Define rectangular clipping region
 ctx.beginPath();
-ctx.rect(25, 25, 100, 100);
+ctx.rect(&RectParams { x: 25, y: 25, width: 100, height: 100 });
 ctx.clip();
 
 // Fill entire canvas - only clipped region should be visible
@@ -1522,12 +1608,22 @@ ctx.fill();
         rust_fn: |ctx| {
             // Define rectangular clipping region
             ctx.begin_path();
-            ctx.rect(25.0, 25.0, 100.0, 100.0);
+            ctx.rect(&RectParams {
+                x: 25.0,
+                y: 25.0,
+                width: 100.0,
+                height: 100.0,
+            });
             ctx.clip();
 
             // Fill entire canvas - only clipped region should be visible
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 150.0,
+                height: 150.0,
+            });
 
             // Draw a circle that extends outside clip region
             ctx.set_fill_style("#0000ff").unwrap();
@@ -1600,7 +1696,12 @@ for (let i = 0; i <= 150; i += 20) {
             gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
             ctx.set_fill_style_gradient(gradient);
-            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 150.0,
+                height: 150.0,
+            });
 
             // Draw grid lines
             ctx.set_stroke_style("#ffffff").unwrap();
@@ -1680,7 +1781,12 @@ ctx.fillRect(0, 0, 150, 150);
             gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
             ctx.set_fill_style_gradient(gradient);
-            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 150.0,
+                height: 150.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: 3.0,
@@ -1703,7 +1809,7 @@ ctx.translate(-75, -75);
 
 // Define rectangular clipping region (now rotated)
 ctx.beginPath();
-ctx.rect(37.5, 37.5, 75, 75);
+ctx.rect(&RectParams { x: 37.5, y: 37.5, width: 75, height: 75 });
 ctx.clip();
 
 // Fill with solid color
@@ -1730,12 +1836,22 @@ ctx.stroke();
 
             // Define rectangular clipping region (now rotated)
             ctx.begin_path();
-            ctx.rect(37.5, 37.5, 75.0, 75.0);
+            ctx.rect(&RectParams {
+                x: 37.5,
+                y: 37.5,
+                width: 75.0,
+                height: 75.0,
+            });
             ctx.clip();
 
             // Fill with solid color
             ctx.set_fill_style("#00ff00").unwrap();
-            ctx.fill_rect(0.0, 0.0, 150.0, 150.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 150.0,
+                height: 150.0,
+            });
 
             // Draw some lines
             ctx.set_stroke_style("#000000").unwrap();
@@ -1825,7 +1941,13 @@ ctx.fill();
         rust_fn: |ctx| {
             ctx.set_fill_style("#4488ff").unwrap();
             ctx.begin_path();
-            ctx.round_rect(20.0, 20.0, 110.0, 110.0, 15.0);
+            ctx.round_rect(&RoundRectParams {
+                x: 20.0,
+                y: 20.0,
+                width: 110.0,
+                height: 110.0,
+                radii: [15.0, 15.0, 15.0, 15.0],
+            });
             ctx.fill();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -1851,7 +1973,13 @@ ctx.fill();
         rust_fn: |ctx| {
             ctx.set_fill_style("#ff8844").unwrap();
             ctx.begin_path();
-            ctx.round_rect_radii(20.0, 20.0, 110.0, 110.0, [5.0, 15.0, 25.0, 35.0]);
+            ctx.round_rect(&RoundRectParams {
+                x: 20.0,
+                y: 20.0,
+                width: 110.0,
+                height: 110.0,
+                radii: [5.0, 15.0, 25.0, 35.0],
+            });
             ctx.fill();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -1878,7 +2006,13 @@ ctx.stroke();
             ctx.set_stroke_style("#00aa00").unwrap();
             ctx.set_line_width(4.0);
             ctx.begin_path();
-            ctx.round_rect(25.0, 25.0, 100.0, 100.0, 20.0);
+            ctx.round_rect(&RoundRectParams {
+                x: 25.0,
+                y: 25.0,
+                width: 100.0,
+                height: 100.0,
+                radii: [20.0, 20.0, 20.0, 20.0],
+            });
             ctx.stroke();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -1900,15 +2034,25 @@ fn test_path2d_fill_comparison() {
 // Draw two rectangles (what Path2D would produce)
 ctx.fillStyle = '#9933ff';
 ctx.beginPath();
-ctx.rect(20, 20, 50, 50);
-ctx.rect(80, 80, 50, 50);
+ctx.rect(&RectParams { x: 20, y: 20, width: 50, height: 50 });
+ctx.rect(&RectParams { x: 80, y: 80, width: 50, height: 50 });
 ctx.fill();
 "#,
         rust_fn: |ctx| {
             use vl_convert_canvas2d::Path2D;
             let mut path = Path2D::new();
-            path.rect(20.0, 20.0, 50.0, 50.0);
-            path.rect(80.0, 80.0, 50.0, 50.0);
+            path.rect(&RectParams {
+                x: 20.0,
+                y: 20.0,
+                width: 50.0,
+                height: 50.0,
+            });
+            path.rect(&RectParams {
+                x: 80.0,
+                y: 80.0,
+                width: 50.0,
+                height: 50.0,
+            });
 
             ctx.set_fill_style("#9933ff").unwrap();
             ctx.fill_path2d(&mut path);
@@ -2317,11 +2461,31 @@ ctx.drawImage(patternCanvas, 0, 0, 100, 100);
             // Create a small 4x4 checkerboard pattern
             let mut pattern_ctx = Canvas2dContext::new(4, 4).unwrap();
             pattern_ctx.set_fill_style("#ff0000").unwrap();
-            pattern_ctx.fill_rect(0.0, 0.0, 2.0, 2.0);
-            pattern_ctx.fill_rect(2.0, 2.0, 2.0, 2.0);
+            pattern_ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 2.0,
+                height: 2.0,
+            });
+            pattern_ctx.fill_rect(&RectParams {
+                x: 2.0,
+                y: 2.0,
+                width: 2.0,
+                height: 2.0,
+            });
             pattern_ctx.set_fill_style("#0000ff").unwrap();
-            pattern_ctx.fill_rect(2.0, 0.0, 2.0, 2.0);
-            pattern_ctx.fill_rect(0.0, 2.0, 2.0, 2.0);
+            pattern_ctx.fill_rect(&RectParams {
+                x: 2.0,
+                y: 0.0,
+                width: 2.0,
+                height: 2.0,
+            });
+            pattern_ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 2.0,
+                width: 2.0,
+                height: 2.0,
+            });
 
             // Disable image smoothing
             ctx.set_image_smoothing_enabled(false);
@@ -2366,7 +2530,12 @@ ctx.drawImage(patternCanvas, 0, 0, 100, 100);
             gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
             pattern_ctx.set_fill_style_gradient(gradient);
-            pattern_ctx.fill_rect(0.0, 0.0, 10.0, 10.0);
+            pattern_ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            });
 
             // Enable high quality smoothing
             ctx.set_image_smoothing_enabled(true);
@@ -2450,7 +2619,12 @@ ctx.putImageData(imageData, 25, 25);
         rust_fn: |ctx| {
             // Draw a blue background first
             ctx.set_fill_style("#0000ff").unwrap();
-            ctx.fill_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            });
 
             // Create image data with semi-transparent red
             let mut data = vec![0u8; 50 * 50 * 4];
@@ -2779,17 +2953,42 @@ ctx.fillRect(0, 0, 200, 200);
             // Create a 20x20 checkerboard pattern
             let mut pattern_ctx = vl_convert_canvas2d::Canvas2dContext::new(20, 20).unwrap();
             pattern_ctx.set_fill_style("#ff0000").unwrap();
-            pattern_ctx.fill_rect(0.0, 0.0, 10.0, 10.0);
-            pattern_ctx.fill_rect(10.0, 10.0, 10.0, 10.0);
+            pattern_ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            });
+            pattern_ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 10.0,
+                width: 10.0,
+                height: 10.0,
+            });
             pattern_ctx.set_fill_style("#0000ff").unwrap();
-            pattern_ctx.fill_rect(10.0, 0.0, 10.0, 10.0);
-            pattern_ctx.fill_rect(0.0, 10.0, 10.0, 10.0);
+            pattern_ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            });
+            pattern_ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 10.0,
+                width: 10.0,
+                height: 10.0,
+            });
 
             let pattern = ctx
                 .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "repeat")
                 .unwrap();
             ctx.set_fill_style_pattern(pattern);
-            ctx.fill_rect(0.0, 0.0, 200.0, 200.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 200.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -2820,13 +3019,23 @@ ctx.fillRect(0, 0, 200, 200);
             // Create a 50x50 green square pattern
             let mut pattern_ctx = vl_convert_canvas2d::Canvas2dContext::new(50, 50).unwrap();
             pattern_ctx.set_fill_style("#00ff00").unwrap();
-            pattern_ctx.fill_rect(0.0, 0.0, 50.0, 50.0);
+            pattern_ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 50.0,
+                height: 50.0,
+            });
 
             let pattern = ctx
                 .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "no-repeat")
                 .unwrap();
             ctx.set_fill_style_pattern(pattern);
-            ctx.fill_rect(0.0, 0.0, 200.0, 200.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 200.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -2863,13 +3072,23 @@ ctx.fillRect(0, 0, 200, 200);
             grad.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
             grad.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
             pattern_ctx.set_fill_style_gradient(grad);
-            pattern_ctx.fill_rect(0.0, 0.0, 30.0, 30.0);
+            pattern_ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 30.0,
+                height: 30.0,
+            });
 
             let pattern = ctx
                 .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "repeat-x")
                 .unwrap();
             ctx.set_fill_style_pattern(pattern);
-            ctx.fill_rect(0.0, 0.0, 200.0, 200.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 200.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: 3.0, // Slightly higher tolerance for repeat-x edge handling
@@ -2906,13 +3125,23 @@ ctx.fillRect(0, 0, 200, 200);
             grad.add_color_stop(0.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
             grad.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 255, 255, 255));
             pattern_ctx.set_fill_style_gradient(grad);
-            pattern_ctx.fill_rect(0.0, 0.0, 30.0, 30.0);
+            pattern_ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 30.0,
+                height: 30.0,
+            });
 
             let pattern = ctx
                 .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "repeat-y")
                 .unwrap();
             ctx.set_fill_style_pattern(pattern);
-            ctx.fill_rect(0.0, 0.0, 200.0, 200.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 200.0,
+                height: 200.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: 3.0, // Slightly higher tolerance for repeat-y edge handling
@@ -2949,13 +3178,23 @@ ctx.putImageData(imageData, 0, 0);
         rust_fn: |ctx| {
             // Draw a red rectangle
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(10.0, 10.0, 80.0, 80.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 10.0,
+                width: 80.0,
+                height: 80.0,
+            });
 
             // Get image data that partially extends outside canvas
             let image_data = ctx.get_image_data(80, 80, 40, 40);
 
             // Clear canvas
-            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.clear_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            });
 
             // Put the image data at a new location
             ctx.put_image_data(&image_data, 40, 40, 0, 0);
@@ -2977,7 +3216,12 @@ fn test_get_image_data_negative_coords() {
 
     // Draw a blue rectangle in corner
     ctx.set_fill_style("#0000ff").unwrap();
-    ctx.fill_rect(0.0, 0.0, 40.0, 40.0);
+    ctx.fill_rect(&RectParams {
+        x: 0.0,
+        y: 0.0,
+        width: 40.0,
+        height: 40.0,
+    });
 
     // Get image data starting at negative coordinates
     // This should return 30x30 with transparent pixels for out-of-bounds areas
@@ -3046,7 +3290,12 @@ ctx.putImageData(imageData, 50, 50);
         rust_fn: |ctx| {
             // Draw a green rectangle
             ctx.set_fill_style("#00ff00").unwrap();
-            ctx.fill_rect(20.0, 20.0, 40.0, 40.0);
+            ctx.fill_rect(&RectParams {
+                x: 20.0,
+                y: 20.0,
+                width: 40.0,
+                height: 40.0,
+            });
 
             // Apply a transform
             ctx.translate(50.0, 0.0);
@@ -3066,7 +3315,12 @@ ctx.putImageData(imageData, 50, 50);
             });
 
             // Clear and put image data
-            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.clear_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            });
             ctx.put_image_data(&image_data, 40, 40, 50, 50);
         },
         threshold: DEFAULT_THRESHOLD,
@@ -3101,16 +3355,31 @@ ctx.putImageData(imageData, 30, 30);
         rust_fn: |ctx| {
             // Draw semi-transparent rectangles
             ctx.set_fill_style("rgba(255, 0, 0, 0.5)").unwrap();
-            ctx.fill_rect(10.0, 10.0, 40.0, 40.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 10.0,
+                width: 40.0,
+                height: 40.0,
+            });
 
             ctx.set_fill_style("rgba(0, 0, 255, 0.25)").unwrap();
-            ctx.fill_rect(30.0, 30.0, 40.0, 40.0);
+            ctx.fill_rect(&RectParams {
+                x: 30.0,
+                y: 30.0,
+                width: 40.0,
+                height: 40.0,
+            });
 
             // Get image data
             let image_data = ctx.get_image_data(10, 10, 60, 60);
 
             // Clear and put at new position
-            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.clear_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            });
             ctx.put_image_data(&image_data, 60, 60, 30, 30);
         },
         threshold: DEFAULT_THRESHOLD,
@@ -3144,13 +3413,23 @@ ctx.putImageData(imageData, 70, 70);
         rust_fn: |ctx| {
             // Draw a red rectangle
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(0.0, 0.0, 50.0, 50.0);
+            ctx.fill_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 50.0,
+                height: 50.0,
+            });
 
             // Get image data
             let image_data = ctx.get_image_data(0, 0, 50, 50);
 
             // Clear canvas
-            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.clear_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            });
 
             // Put image data with part outside canvas bounds
             ctx.put_image_data(&image_data, 50, 50, 70, 70);
@@ -3194,11 +3473,26 @@ ctx.putImageData(imageData, 0, 0);
         rust_fn: |ctx| {
             // Draw complex pattern
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(10.0, 10.0, 30.0, 30.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 10.0,
+                width: 30.0,
+                height: 30.0,
+            });
             ctx.set_fill_style("#00ff00").unwrap();
-            ctx.fill_rect(30.0, 30.0, 30.0, 30.0);
+            ctx.fill_rect(&RectParams {
+                x: 30.0,
+                y: 30.0,
+                width: 30.0,
+                height: 30.0,
+            });
             ctx.set_fill_style("#0000ff").unwrap();
-            ctx.fill_rect(50.0, 50.0, 30.0, 30.0);
+            ctx.fill_rect(&RectParams {
+                x: 50.0,
+                y: 50.0,
+                width: 30.0,
+                height: 30.0,
+            });
 
             // Draw a circle
             ctx.set_fill_style("#ffff00").unwrap();
@@ -3217,7 +3511,12 @@ ctx.putImageData(imageData, 0, 0);
             let image_data = ctx.get_image_data(0, 0, 100, 100);
 
             // Clear and put back
-            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.clear_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            });
             ctx.put_image_data(&image_data, 100, 100, 0, 0);
         },
         threshold: DEFAULT_THRESHOLD,
@@ -3250,13 +3549,28 @@ ctx.fillRect(20.9, 60.1, 20.0, 20.0);
 "#,
         rust_fn: |ctx| {
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(10.5, 10.5, 30.0, 30.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.5,
+                y: 10.5,
+                width: 30.0,
+                height: 30.0,
+            });
 
             ctx.set_fill_style("#00ff00").unwrap();
-            ctx.fill_rect(50.25, 50.75, 25.5, 25.5);
+            ctx.fill_rect(&RectParams {
+                x: 50.25,
+                y: 50.75,
+                width: 25.5,
+                height: 25.5,
+            });
 
             ctx.set_fill_style("#0000ff").unwrap();
-            ctx.fill_rect(20.9, 60.1, 20.0, 20.0);
+            ctx.fill_rect(&RectParams {
+                x: 20.9,
+                y: 60.1,
+                width: 20.0,
+                height: 20.0,
+            });
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -3392,13 +3706,23 @@ ctx.restore();
         rust_fn: |ctx| {
             // Original rectangle for reference
             ctx.set_fill_style("#cccccc").unwrap();
-            ctx.fill_rect(10.0, 10.0, 30.0, 30.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 10.0,
+                width: 30.0,
+                height: 30.0,
+            });
 
             // Translated rectangle
             ctx.save();
             ctx.translate(50.0, 0.0);
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(10.0, 10.0, 30.0, 30.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 10.0,
+                width: 30.0,
+                height: 30.0,
+            });
             ctx.restore();
 
             // Scaled rectangle
@@ -3406,7 +3730,12 @@ ctx.restore();
             ctx.translate(0.0, 50.0);
             ctx.scale(1.5, 1.5);
             ctx.set_fill_style("#00ff00").unwrap();
-            ctx.fill_rect(10.0, 10.0, 20.0, 20.0);
+            ctx.fill_rect(&RectParams {
+                x: 10.0,
+                y: 10.0,
+                width: 20.0,
+                height: 20.0,
+            });
             ctx.restore();
 
             // Rotated rectangle
@@ -3414,7 +3743,12 @@ ctx.restore();
             ctx.translate(100.0, 100.0);
             ctx.rotate(PI / 6.0);
             ctx.set_fill_style("#0000ff").unwrap();
-            ctx.fill_rect(-15.0, -15.0, 30.0, 30.0);
+            ctx.fill_rect(&RectParams {
+                x: -15.0,
+                y: -15.0,
+                width: 30.0,
+                height: 30.0,
+            });
             ctx.restore();
 
             // Combined transforms
@@ -3423,7 +3757,12 @@ ctx.restore();
             ctx.scale(0.8, 1.2);
             ctx.rotate(-PI / 8.0);
             ctx.set_fill_style("#ff00ff").unwrap();
-            ctx.fill_rect(-10.0, -10.0, 20.0, 20.0);
+            ctx.fill_rect(&RectParams {
+                x: -10.0,
+                y: -10.0,
+                width: 20.0,
+                height: 20.0,
+            });
             ctx.restore();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -3462,7 +3801,12 @@ ctx.putImageData(imageData, 5, 5);
             ctx.translate(50.0, 50.0);
             ctx.rotate(PI / 4.0);
             ctx.set_fill_style("#ff0000").unwrap();
-            ctx.fill_rect(-20.0, -20.0, 40.0, 40.0);
+            ctx.fill_rect(&RectParams {
+                x: -20.0,
+                y: -20.0,
+                width: 40.0,
+                height: 40.0,
+            });
 
             // Reset transform for getImageData
             ctx.set_transform(DOMMatrix {
@@ -3478,7 +3822,12 @@ ctx.putImageData(imageData, 5, 5);
             let image_data = ctx.get_image_data(30, 30, 40, 40);
 
             // Clear and show what we captured
-            ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
+            ctx.clear_rect(&RectParams {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0,
+            });
             ctx.put_image_data(&image_data, 40, 40, 5, 5);
         },
         threshold: DEFAULT_THRESHOLD,

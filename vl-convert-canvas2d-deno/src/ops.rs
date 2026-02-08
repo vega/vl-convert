@@ -10,8 +10,8 @@ use deno_error::JsErrorBox;
 use serde::Serialize;
 use vl_convert_canvas2d::{
     ArcParams, ArcToParams, Canvas2dContext, Canvas2dContextBuilder, CubicBezierParams, DOMMatrix,
-    DirtyRect, EllipseParams, ImageCropParams, LineCap, LineJoin, RadialGradientParams, TextAlign,
-    TextBaseline,
+    DirtyRect, EllipseParams, ImageCropParams, LineCap, LineJoin, QuadraticBezierParams,
+    RadialGradientParams, RectParams, RoundRectParams, TextAlign, TextBaseline,
 };
 
 // --- Canvas creation and lifecycle ---
@@ -477,7 +477,12 @@ pub fn op_canvas_quadratic_curve_to(
     resource
         .ctx
         .borrow_mut()
-        .quadratic_curve_to(cpx as f32, cpy as f32, x as f32, y as f32);
+        .quadratic_curve_to(&QuadraticBezierParams {
+            cpx: cpx as f32,
+            cpy: cpy as f32,
+            x: x as f32,
+            y: y as f32,
+        });
     Ok(())
 }
 
@@ -496,10 +501,12 @@ pub fn op_canvas_rect(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource
-        .ctx
-        .borrow_mut()
-        .rect(x as f32, y as f32, width as f32, height as f32);
+    resource.ctx.borrow_mut().rect(&RectParams {
+        x: x as f32,
+        y: y as f32,
+        width: width as f32,
+        height: height as f32,
+    });
     Ok(())
 }
 
@@ -632,10 +639,12 @@ pub fn op_canvas_fill_rect(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource
-        .ctx
-        .borrow_mut()
-        .fill_rect(x as f32, y as f32, width as f32, height as f32);
+    resource.ctx.borrow_mut().fill_rect(&RectParams {
+        x: x as f32,
+        y: y as f32,
+        width: width as f32,
+        height: height as f32,
+    });
     Ok(())
 }
 
@@ -654,10 +663,12 @@ pub fn op_canvas_stroke_rect(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource
-        .ctx
-        .borrow_mut()
-        .stroke_rect(x as f32, y as f32, width as f32, height as f32);
+    resource.ctx.borrow_mut().stroke_rect(&RectParams {
+        x: x as f32,
+        y: y as f32,
+        width: width as f32,
+        height: height as f32,
+    });
     Ok(())
 }
 
@@ -676,10 +687,12 @@ pub fn op_canvas_clear_rect(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource
-        .ctx
-        .borrow_mut()
-        .clear_rect(x as f32, y as f32, width as f32, height as f32);
+    resource.ctx.borrow_mut().clear_rect(&RectParams {
+        x: x as f32,
+        y: y as f32,
+        width: width as f32,
+        height: height as f32,
+    });
     Ok(())
 }
 
@@ -1745,7 +1758,12 @@ pub fn op_path2d_quadratic_curve_to(
     resource
         .path
         .borrow_mut()
-        .quadratic_curve_to(cpx as f32, cpy as f32, x as f32, y as f32);
+        .quadratic_curve_to(&QuadraticBezierParams {
+            cpx: cpx as f32,
+            cpy: cpy as f32,
+            x: x as f32,
+            y: y as f32,
+        });
     Ok(())
 }
 
@@ -1764,10 +1782,12 @@ pub fn op_path2d_rect(
         .get::<Path2DResource>(ResourceId::from(path_id))
         .map_err(|e| JsErrorBox::generic(format!("Invalid Path2D resource: {}", e)))?;
 
-    resource
-        .path
-        .borrow_mut()
-        .rect(x as f32, y as f32, width as f32, height as f32);
+    resource.path.borrow_mut().rect(&RectParams {
+        x: x as f32,
+        y: y as f32,
+        width: width as f32,
+        height: height as f32,
+    });
     Ok(())
 }
 
@@ -2033,13 +2053,13 @@ pub fn op_canvas_round_rect(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource.ctx.borrow_mut().round_rect(
-        x as f32,
-        y as f32,
-        width as f32,
-        height as f32,
-        radius as f32,
-    );
+    resource.ctx.borrow_mut().round_rect(&RoundRectParams {
+        x: x as f32,
+        y: y as f32,
+        width: width as f32,
+        height: height as f32,
+        radii: [radius as f32, radius as f32, radius as f32, radius as f32],
+    });
     Ok(())
 }
 
@@ -2088,13 +2108,13 @@ pub fn op_canvas_round_rect_radii(
         _ => return Err(JsErrorBox::generic("Invalid radii array length")),
     };
 
-    resource.ctx.borrow_mut().round_rect_radii(
-        x as f32,
-        y as f32,
-        width as f32,
-        height as f32,
-        radii_array,
-    );
+    resource.ctx.borrow_mut().round_rect(&RoundRectParams {
+        x: x as f32,
+        y: y as f32,
+        width: width as f32,
+        height: height as f32,
+        radii: radii_array,
+    });
     Ok(())
 }
 
@@ -2162,13 +2182,13 @@ pub fn op_path2d_round_rect(
         .get::<Path2DResource>(ResourceId::from(path_id))
         .map_err(|e| JsErrorBox::generic(format!("Invalid Path2D resource: {}", e)))?;
 
-    resource.path.borrow_mut().round_rect(
-        x as f32,
-        y as f32,
-        width as f32,
-        height as f32,
-        radius as f32,
-    );
+    resource.path.borrow_mut().round_rect(&RoundRectParams {
+        x: x as f32,
+        y: y as f32,
+        width: width as f32,
+        height: height as f32,
+        radii: [radius as f32, radius as f32, radius as f32, radius as f32],
+    });
     Ok(())
 }
 
@@ -2217,13 +2237,13 @@ pub fn op_path2d_round_rect_radii(
         _ => return Err(JsErrorBox::generic("Invalid radii array length")),
     };
 
-    resource.path.borrow_mut().round_rect_radii(
-        x as f32,
-        y as f32,
-        width as f32,
-        height as f32,
-        radii_array,
-    );
+    resource.path.borrow_mut().round_rect(&RoundRectParams {
+        x: x as f32,
+        y: y as f32,
+        width: width as f32,
+        height: height as f32,
+        radii: radii_array,
+    });
     Ok(())
 }
 

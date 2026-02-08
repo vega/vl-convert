@@ -4,7 +4,10 @@
 //! fill, stroke, or clip operations.
 
 use crate::error::{Canvas2dError, Canvas2dResult};
-use crate::geometry::{ArcParams, ArcToParams, CubicBezierParams, EllipseParams};
+use crate::geometry::{
+    ArcParams, ArcToParams, CubicBezierParams, EllipseParams, QuadraticBezierParams, RectParams,
+    RoundRectParams,
+};
 use tiny_skia::PathBuilder;
 
 /// A reusable path object that can be used with fill, stroke, and clip operations.
@@ -76,7 +79,12 @@ impl Path2D {
                     path.line_to(x as f32, y as f32);
                 }
                 svgtypes::SimplePathSegment::Quadratic { x1, y1, x, y } => {
-                    path.quadratic_curve_to(x1 as f32, y1 as f32, x as f32, y as f32);
+                    path.quadratic_curve_to(&QuadraticBezierParams {
+                        cpx: x1 as f32,
+                        cpy: y1 as f32,
+                        x: x as f32,
+                        y: y as f32,
+                    });
                 }
                 svgtypes::SimplePathSegment::CurveTo {
                     x1,
@@ -153,45 +161,41 @@ impl Path2D {
     }
 
     /// Add a quadratic bezier curve.
-    pub fn quadratic_curve_to(&mut self, cpx: f32, cpy: f32, x: f32, y: f32) {
+    pub fn quadratic_curve_to(&mut self, params: &QuadraticBezierParams) {
         self.invalidate();
-        self.builder.quad_to(cpx, cpy, x, y);
-        self.current_x = x;
-        self.current_y = y;
+        self.builder
+            .quad_to(params.cpx, params.cpy, params.x, params.y);
+        self.current_x = params.x;
+        self.current_y = params.y;
     }
 
     /// Add a rectangle to the path.
-    pub fn rect(&mut self, x: f32, y: f32, width: f32, height: f32) {
+    pub fn rect(&mut self, params: &RectParams) {
         self.invalidate();
-        self.move_to(x, y);
-        self.line_to(x + width, y);
-        self.line_to(x + width, y + height);
-        self.line_to(x, y + height);
+        self.move_to(params.x, params.y);
+        self.line_to(params.x + params.width, params.y);
+        self.line_to(params.x + params.width, params.y + params.height);
+        self.line_to(params.x, params.y + params.height);
         self.close_path();
     }
 
-    /// Add a rounded rectangle to the path with uniform corner radius.
-    pub fn round_rect(&mut self, x: f32, y: f32, width: f32, height: f32, radius: f32) {
-        self.round_rect_radii(x, y, width, height, [radius, radius, radius, radius]);
-    }
-
-    /// Add a rounded rectangle to the path with individual corner radii.
-    pub fn round_rect_radii(&mut self, x: f32, y: f32, width: f32, height: f32, radii: [f32; 4]) {
+    /// Add a rounded rectangle to the path.
+    pub fn round_rect(&mut self, params: &RoundRectParams) {
         self.invalidate();
 
         // Handle negative dimensions
-        let (x, width) = if width < 0.0 {
-            (x + width, -width)
+        let (x, width) = if params.width < 0.0 {
+            (params.x + params.width, -params.width)
         } else {
-            (x, width)
+            (params.x, params.width)
         };
-        let (y, height) = if height < 0.0 {
-            (y + height, -height)
+        let (y, height) = if params.height < 0.0 {
+            (params.y + params.height, -params.height)
         } else {
-            (y, height)
+            (params.y, params.height)
         };
 
-        let [mut tl, mut tr, mut br, mut bl] = radii;
+        let [mut tl, mut tr, mut br, mut bl] = params.radii;
 
         // Clamp radii
         tl = tl.max(0.0);
@@ -273,7 +277,10 @@ impl Path2D {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::{ArcParams, CubicBezierParams, EllipseParams};
+    use crate::geometry::{
+        ArcParams, CubicBezierParams, EllipseParams, QuadraticBezierParams, RectParams,
+        RoundRectParams,
+    };
     use tiny_skia::PathSegment;
 
     /// Collect all segments from a Path2D into a Vec for assertion.
@@ -318,7 +325,12 @@ mod tests {
     #[test]
     fn test_rect_produces_closed_path() {
         let mut path = Path2D::new();
-        path.rect(10.0, 20.0, 30.0, 40.0);
+        path.rect(&RectParams {
+            x: 10.0,
+            y: 20.0,
+            width: 30.0,
+            height: 40.0,
+        });
 
         let segs = segments(&mut path);
         assert_eq!(segs[0], PathSegment::MoveTo(pt(10.0, 20.0)));
@@ -331,7 +343,12 @@ mod tests {
     #[test]
     fn test_rect_bounds() {
         let mut path = Path2D::new();
-        path.rect(10.0, 20.0, 30.0, 40.0);
+        path.rect(&RectParams {
+            x: 10.0,
+            y: 20.0,
+            width: 30.0,
+            height: 40.0,
+        });
 
         let bounds = path.get_path().unwrap().bounds();
         assert_eq!(bounds.left(), 10.0);
@@ -357,7 +374,12 @@ mod tests {
     fn test_quadratic_curve() {
         let mut path = Path2D::new();
         path.move_to(0.0, 0.0);
-        path.quadratic_curve_to(50.0, 100.0, 100.0, 0.0);
+        path.quadratic_curve_to(&QuadraticBezierParams {
+            cpx: 50.0,
+            cpy: 100.0,
+            x: 100.0,
+            y: 0.0,
+        });
 
         let segs = segments(&mut path);
         assert_eq!(segs.len(), 2);
@@ -438,7 +460,12 @@ mod tests {
     #[test]
     fn test_clone_does_not_copy_cache() {
         let mut path1 = Path2D::new();
-        path1.rect(0.0, 0.0, 10.0, 10.0);
+        path1.rect(&RectParams {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+        });
         let _ = path1.get_path(); // populate cache
 
         let mut path2 = Path2D::from_path(&path1);
@@ -511,7 +538,13 @@ mod tests {
     #[test]
     fn test_round_rect_bounds() {
         let mut path = Path2D::new();
-        path.round_rect(10.0, 20.0, 100.0, 50.0, 5.0);
+        path.round_rect(&RoundRectParams {
+            x: 10.0,
+            y: 20.0,
+            width: 100.0,
+            height: 50.0,
+            radii: [5.0, 5.0, 5.0, 5.0],
+        });
 
         let bounds = path.get_path().unwrap().bounds();
         assert_eq!(bounds.left(), 10.0);
@@ -523,7 +556,13 @@ mod tests {
     #[test]
     fn test_round_rect_has_quads_and_close() {
         let mut path = Path2D::new();
-        path.round_rect(0.0, 0.0, 100.0, 50.0, 10.0);
+        path.round_rect(&RoundRectParams {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 50.0,
+            radii: [10.0, 10.0, 10.0, 10.0],
+        });
 
         let segs = segments(&mut path);
         // Should have quad segments for rounded corners
@@ -534,7 +573,13 @@ mod tests {
     #[test]
     fn test_round_rect_zero_radius_is_rect() {
         let mut round = Path2D::new();
-        round.round_rect(0.0, 0.0, 100.0, 50.0, 0.0);
+        round.round_rect(&RoundRectParams {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 50.0,
+            radii: [0.0, 0.0, 0.0, 0.0],
+        });
 
         let segs = segments(&mut round);
         // Zero radius means no quad segments — just lines

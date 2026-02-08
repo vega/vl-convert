@@ -125,6 +125,47 @@ pub struct DirtyRect {
     pub height: i32,
 }
 
+/// Parameters for a quadratic Bezier curve.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct QuadraticBezierParams {
+    /// Control point X.
+    pub cpx: f32,
+    /// Control point Y.
+    pub cpy: f32,
+    /// End point X.
+    pub x: f32,
+    /// End point Y.
+    pub y: f32,
+}
+
+/// Parameters for a rectangle.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RectParams {
+    /// X coordinate of the rectangle origin.
+    pub x: f32,
+    /// Y coordinate of the rectangle origin.
+    pub y: f32,
+    /// Width of the rectangle.
+    pub width: f32,
+    /// Height of the rectangle.
+    pub height: f32,
+}
+
+/// Parameters for a rounded rectangle.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RoundRectParams {
+    /// X coordinate of the rectangle origin.
+    pub x: f32,
+    /// Y coordinate of the rectangle origin.
+    pub y: f32,
+    /// Width of the rectangle.
+    pub width: f32,
+    /// Height of the rectangle.
+    pub height: f32,
+    /// Corner radii in order: [top-left, top-right, bottom-right, bottom-left].
+    pub radii: [f32; 4],
+}
+
 /// Parameters for creating a radial gradient.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RadialGradientParams {
