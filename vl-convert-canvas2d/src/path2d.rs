@@ -308,67 +308,290 @@ impl Path2D {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tiny_skia::PathSegment;
 
-    #[test]
-    fn test_path2d_new() {
-        let path = Path2D::new();
-        assert!(path.path.is_none());
+    /// Collect all segments from a Path2D into a Vec for assertion.
+    fn segments(path: &mut Path2D) -> Vec<PathSegment> {
+        path.get_path()
+            .map(|p| p.segments().collect())
+            .unwrap_or_default()
+    }
+
+    fn pt(x: f32, y: f32) -> tiny_skia::Point {
+        tiny_skia::Point { x, y }
     }
 
     #[test]
-    fn test_path2d_rect() {
+    fn test_empty_path_returns_none() {
         let mut path = Path2D::new();
-        path.rect(10.0, 10.0, 50.0, 50.0);
-        assert!(path.get_path().is_some());
+        assert!(path.get_path().is_none());
     }
 
     #[test]
-    fn test_path2d_clone() {
+    fn test_move_only_returns_none() {
+        // A single moveTo with no geometry produces no renderable path
+        let mut path = Path2D::new();
+        path.move_to(10.0, 20.0);
+        assert!(path.get_path().is_none());
+    }
+
+    #[test]
+    fn test_line_segments() {
+        let mut path = Path2D::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(100.0, 0.0);
+        path.line_to(100.0, 50.0);
+
+        let segs = segments(&mut path);
+        assert_eq!(segs.len(), 3);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(0.0, 0.0)));
+        assert_eq!(segs[1], PathSegment::LineTo(pt(100.0, 0.0)));
+        assert_eq!(segs[2], PathSegment::LineTo(pt(100.0, 50.0)));
+    }
+
+    #[test]
+    fn test_rect_produces_closed_path() {
+        let mut path = Path2D::new();
+        path.rect(10.0, 20.0, 30.0, 40.0);
+
+        let segs = segments(&mut path);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(10.0, 20.0)));
+        assert_eq!(segs[1], PathSegment::LineTo(pt(40.0, 20.0)));
+        assert_eq!(segs[2], PathSegment::LineTo(pt(40.0, 60.0)));
+        assert_eq!(segs[3], PathSegment::LineTo(pt(10.0, 60.0)));
+        assert_eq!(segs[4], PathSegment::Close);
+    }
+
+    #[test]
+    fn test_rect_bounds() {
+        let mut path = Path2D::new();
+        path.rect(10.0, 20.0, 30.0, 40.0);
+
+        let bounds = path.get_path().unwrap().bounds();
+        assert_eq!(bounds.left(), 10.0);
+        assert_eq!(bounds.top(), 20.0);
+        assert_eq!(bounds.right(), 40.0);
+        assert_eq!(bounds.bottom(), 60.0);
+    }
+
+    #[test]
+    fn test_close_path_returns_to_subpath_start() {
+        let mut path = Path2D::new();
+        path.move_to(10.0, 10.0);
+        path.line_to(50.0, 10.0);
+        path.close_path();
+        assert_eq!(path.current_x, 10.0);
+        assert_eq!(path.current_y, 10.0);
+
+        let segs = segments(&mut path);
+        assert_eq!(segs.last(), Some(&PathSegment::Close));
+    }
+
+    #[test]
+    fn test_quadratic_curve() {
+        let mut path = Path2D::new();
+        path.move_to(0.0, 0.0);
+        path.quadratic_curve_to(50.0, 100.0, 100.0, 0.0);
+
+        let segs = segments(&mut path);
+        assert_eq!(segs.len(), 2);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(0.0, 0.0)));
+        assert_eq!(
+            segs[1],
+            PathSegment::QuadTo(pt(50.0, 100.0), pt(100.0, 0.0))
+        );
+    }
+
+    #[test]
+    fn test_bezier_curve() {
+        let mut path = Path2D::new();
+        path.move_to(0.0, 0.0);
+        path.bezier_curve_to(10.0, 50.0, 90.0, 50.0, 100.0, 0.0);
+
+        let segs = segments(&mut path);
+        assert_eq!(segs.len(), 2);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(0.0, 0.0)));
+        assert_eq!(
+            segs[1],
+            PathSegment::CubicTo(pt(10.0, 50.0), pt(90.0, 50.0), pt(100.0, 0.0))
+        );
+    }
+
+    #[test]
+    fn test_current_position_tracking() {
+        let mut path = Path2D::new();
+        assert!(!path.has_current_point);
+
+        path.move_to(10.0, 20.0);
+        assert!(path.has_current_point);
+        assert_eq!(path.current_x, 10.0);
+        assert_eq!(path.current_y, 20.0);
+
+        path.line_to(30.0, 40.0);
+        assert_eq!(path.current_x, 30.0);
+        assert_eq!(path.current_y, 40.0);
+
+        path.bezier_curve_to(0.0, 0.0, 0.0, 0.0, 50.0, 60.0);
+        assert_eq!(path.current_x, 50.0);
+        assert_eq!(path.current_y, 60.0);
+    }
+
+    #[test]
+    fn test_cache_invalidation() {
+        let mut path = Path2D::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(10.0, 10.0);
+
+        // Build cache
+        let _ = path.get_path();
+        assert!(path.path.is_some());
+
+        // Modification invalidates cache
+        path.line_to(20.0, 20.0);
+        assert!(path.path.is_none());
+
+        // Rebuild produces updated path
+        let segs = segments(&mut path);
+        assert_eq!(segs.len(), 3);
+    }
+
+    #[test]
+    fn test_clone_does_not_copy_cache() {
         let mut path1 = Path2D::new();
-        path1.rect(10.0, 10.0, 50.0, 50.0);
-        let path2 = Path2D::from_path(&path1);
-        assert!(path2.path.is_none()); // Clone doesn't copy cached path
+        path1.rect(0.0, 0.0, 10.0, 10.0);
+        let _ = path1.get_path(); // populate cache
+
+        let mut path2 = Path2D::from_path(&path1);
+        // Clone rebuilds from builder, not cache
+        let segs = segments(&mut path2);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(0.0, 0.0)));
+        assert!(segs.contains(&PathSegment::Close));
     }
 
     #[test]
-    fn test_path2d_from_svg_simple() {
+    fn test_svg_path_line() {
         let mut path = Path2D::from_svg_path_data("M10,10 L50,50 Z").unwrap();
-        assert!(path.get_path().is_some());
+
+        let segs = segments(&mut path);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(10.0, 10.0)));
+        assert_eq!(segs[1], PathSegment::LineTo(pt(50.0, 50.0)));
+        assert_eq!(segs[2], PathSegment::Close);
     }
 
     #[test]
-    fn test_path2d_from_svg_curves() {
-        // Test quadratic and cubic curves
+    fn test_svg_path_relative_commands() {
+        let mut path = Path2D::from_svg_path_data("M10,10 l40,40 z").unwrap();
+
+        let segs = segments(&mut path);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(10.0, 10.0)));
+        assert_eq!(segs[1], PathSegment::LineTo(pt(50.0, 50.0)));
+        assert_eq!(segs[2], PathSegment::Close);
+    }
+
+    #[test]
+    fn test_svg_path_curves() {
         let mut path =
             Path2D::from_svg_path_data("M0,0 Q50,50,100,0 C150,50,200,50,250,0").unwrap();
-        assert!(path.get_path().is_some());
+
+        let segs = segments(&mut path);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(0.0, 0.0)));
+        assert_eq!(
+            segs[1],
+            PathSegment::QuadTo(pt(50.0, 50.0), pt(100.0, 0.0))
+        );
+        assert_eq!(
+            segs[2],
+            PathSegment::CubicTo(pt(150.0, 50.0), pt(200.0, 50.0), pt(250.0, 0.0))
+        );
     }
 
     #[test]
-    fn test_path2d_from_svg_arc() {
-        // Test arc (gets converted to cubic beziers)
+    fn test_svg_path_arc_produces_cubics() {
+        // SVG arcs get converted to cubic beziers
         let mut path = Path2D::from_svg_path_data("M10,10 A20,20 0 0 1 50,50").unwrap();
-        assert!(path.get_path().is_some());
+
+        let segs = segments(&mut path);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(10.0, 10.0)));
+        // Arc decomposition produces cubics, not arcs
+        assert!(segs.iter().skip(1).all(|s| matches!(s, PathSegment::CubicTo(..))));
     }
 
     #[test]
-    fn test_path2d_from_svg_invalid() {
-        // Test invalid path data
+    fn test_svg_path_empty() {
+        let mut path = Path2D::from_svg_path_data("").unwrap();
+        assert!(path.get_path().is_none());
+    }
+
+    #[test]
+    fn test_svg_path_invalid() {
         let result = Path2D::from_svg_path_data("not valid path data");
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_path2d_from_svg_empty() {
-        // Empty path data should succeed but produce empty path
-        let mut path = Path2D::from_svg_path_data("").unwrap();
-        assert!(path.get_path().is_none()); // Empty path
+    fn test_round_rect_bounds() {
+        let mut path = Path2D::new();
+        path.round_rect(10.0, 20.0, 100.0, 50.0, 5.0);
+
+        let bounds = path.get_path().unwrap().bounds();
+        assert_eq!(bounds.left(), 10.0);
+        assert_eq!(bounds.top(), 20.0);
+        assert_eq!(bounds.right(), 110.0);
+        assert_eq!(bounds.bottom(), 70.0);
     }
 
     #[test]
-    fn test_path2d_from_svg_relative_commands() {
-        // Test relative commands (lowercase)
-        let mut path = Path2D::from_svg_path_data("M10,10 l40,40 z").unwrap();
-        assert!(path.get_path().is_some());
+    fn test_round_rect_has_quads_and_close() {
+        let mut path = Path2D::new();
+        path.round_rect(0.0, 0.0, 100.0, 50.0, 10.0);
+
+        let segs = segments(&mut path);
+        // Should have quad segments for rounded corners
+        assert!(segs.iter().any(|s| matches!(s, PathSegment::QuadTo(..))));
+        assert_eq!(segs.last(), Some(&PathSegment::Close));
+    }
+
+    #[test]
+    fn test_round_rect_zero_radius_is_rect() {
+        let mut round = Path2D::new();
+        round.round_rect(0.0, 0.0, 100.0, 50.0, 0.0);
+
+        let segs = segments(&mut round);
+        // Zero radius means no quad segments — just lines
+        assert!(!segs.iter().any(|s| matches!(s, PathSegment::QuadTo(..))));
+    }
+
+    #[test]
+    fn test_arc_sets_has_current_point() {
+        let mut path = Path2D::new();
+        assert!(!path.has_current_point);
+
+        path.arc(50.0, 50.0, 25.0, 0.0, std::f32::consts::PI, false);
+        assert!(path.has_current_point);
+    }
+
+    #[test]
+    fn test_ellipse_sets_has_current_point() {
+        let mut path = Path2D::new();
+        assert!(!path.has_current_point);
+
+        path.ellipse(50.0, 50.0, 30.0, 20.0, 0.0, 0.0, std::f32::consts::TAU, false);
+        assert!(path.has_current_point);
+    }
+
+    #[test]
+    fn test_multiple_subpaths() {
+        let mut path = Path2D::new();
+        path.move_to(0.0, 0.0);
+        path.line_to(10.0, 10.0);
+        path.move_to(50.0, 50.0);
+        path.line_to(60.0, 60.0);
+
+        let segs = segments(&mut path);
+        let move_count = segs
+            .iter()
+            .filter(|s| matches!(s, PathSegment::MoveTo(..)))
+            .count();
+        assert_eq!(move_count, 2);
     }
 }
