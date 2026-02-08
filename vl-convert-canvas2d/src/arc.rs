@@ -6,68 +6,28 @@
 use std::f32::consts::PI;
 use tiny_skia::PathBuilder;
 
+use crate::geometry::{ArcParams, ArcToParams, EllipseParams};
+
 /// Add an arc to the path using bezier curve approximation.
 ///
-/// # Arguments
-/// * `path` - The path builder to add the arc to
-/// * `x` - X coordinate of the arc center
-/// * `y` - Y coordinate of the arc center
-/// * `radius` - Radius of the arc
-/// * `start_angle` - Starting angle in radians
-/// * `end_angle` - Ending angle in radians
-/// * `anticlockwise` - If true, draw arc counterclockwise
-/// * `has_current_point` - If true, line to arc start; otherwise move to arc start
-#[allow(clippy::too_many_arguments)]
-pub fn arc(
-    path: &mut PathBuilder,
-    x: f32,
-    y: f32,
-    radius: f32,
-    start_angle: f32,
-    end_angle: f32,
-    anticlockwise: bool,
-    has_current_point: bool,
-) {
-    ellipse(
-        path,
-        x,
-        y,
-        radius,
-        radius,
-        0.0,
-        start_angle,
-        end_angle,
-        anticlockwise,
-        has_current_point,
-    );
+/// Delegates to [`ellipse`] with equal radii and no rotation.
+pub fn arc(path: &mut PathBuilder, params: &ArcParams, has_current_point: bool) {
+    ellipse(path, &EllipseParams::from(params), has_current_point);
 }
 
 /// Add an elliptical arc to the path using bezier curve approximation.
-///
-/// # Arguments
-/// * `path` - The path builder to add the arc to
-/// * `x` - X coordinate of the ellipse center
-/// * `y` - Y coordinate of the ellipse center
-/// * `radius_x` - X radius of the ellipse
-/// * `radius_y` - Y radius of the ellipse
-/// * `rotation` - Rotation of the ellipse in radians
-/// * `start_angle` - Starting angle in radians
-/// * `end_angle` - Ending angle in radians
-/// * `anticlockwise` - If true, draw arc counterclockwise
-/// * `has_current_point` - If true, line to arc start; otherwise move to arc start
-#[allow(clippy::too_many_arguments)]
-pub fn ellipse(
-    path: &mut PathBuilder,
-    x: f32,
-    y: f32,
-    radius_x: f32,
-    radius_y: f32,
-    rotation: f32,
-    start_angle: f32,
-    end_angle: f32,
-    anticlockwise: bool,
-    has_current_point: bool,
-) {
+pub fn ellipse(path: &mut PathBuilder, params: &EllipseParams, has_current_point: bool) {
+    let EllipseParams {
+        x,
+        y,
+        radius_x,
+        radius_y,
+        rotation,
+        start_angle,
+        end_angle,
+        anticlockwise,
+    } = *params;
+
     if radius_x <= 0.0 || radius_y <= 0.0 {
         return;
     }
@@ -164,26 +124,16 @@ fn arc_segment(
 
 /// Add an arc connecting two points with a given radius (arcTo operation).
 ///
-/// # Arguments
-/// * `path` - The path builder
-/// * `x0` - Current point X (from last path operation)
-/// * `y0` - Current point Y
-/// * `x1` - First control point X
-/// * `y1` - First control point Y
-/// * `x2` - Second control point X
-/// * `y2` - Second control point Y
-/// * `radius` - Arc radius
-#[allow(clippy::too_many_arguments)]
-pub fn arc_to(
-    path: &mut PathBuilder,
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-    x2: f32,
-    y2: f32,
-    radius: f32,
-) {
+/// `x0, y0` is the current point (path state, not geometry).
+pub fn arc_to(path: &mut PathBuilder, x0: f32, y0: f32, params: &ArcToParams) {
+    let ArcToParams {
+        x1,
+        y1,
+        x2,
+        y2,
+        radius,
+    } = *params;
+
     if radius <= 0.0 {
         path.line_to(x1, y1);
         return;
@@ -245,12 +195,14 @@ pub fn arc_to(
     // Draw arc - we just did line_to so we have a current point
     arc(
         path,
-        cx,
-        cy,
-        radius,
-        start_angle,
-        end_angle,
-        cross > 0.0,
+        &ArcParams {
+            x: cx,
+            y: cy,
+            radius,
+            start_angle,
+            end_angle,
+            anticlockwise: cross > 0.0,
+        },
         true,
     );
 }
@@ -258,47 +210,300 @@ pub fn arc_to(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tiny_skia::PathSegment;
+
+    fn segments(builder: PathBuilder) -> Vec<PathSegment> {
+        builder
+            .finish()
+            .map(|p| p.segments().collect())
+            .unwrap_or_default()
+    }
+
+    fn approx_eq(a: f32, b: f32) -> bool {
+        (a - b).abs() < 0.01
+    }
+
+    fn arc_params(
+        x: f32,
+        y: f32,
+        radius: f32,
+        start_angle: f32,
+        end_angle: f32,
+        anticlockwise: bool,
+    ) -> ArcParams {
+        ArcParams {
+            x,
+            y,
+            radius,
+            start_angle,
+            end_angle,
+            anticlockwise,
+        }
+    }
 
     #[test]
     fn test_arc_full_circle() {
         let mut builder = PathBuilder::new();
-        builder.move_to(100.0, 50.0);
-        // has_current_point = true because we just did move_to
-        arc(&mut builder, 50.0, 50.0, 50.0, 0.0, 2.0 * PI, false, true);
-        let path = builder.finish();
-        assert!(path.is_some());
+        arc(
+            &mut builder,
+            &arc_params(50.0, 50.0, 50.0, 0.0, 2.0 * PI, false),
+            false,
+        );
+
+        let segs = segments(builder);
+        // First segment should be MoveTo at angle 0: (100, 50)
+        assert!(
+            matches!(segs[0], PathSegment::MoveTo(p) if approx_eq(p.x, 100.0) && approx_eq(p.y, 50.0))
+        );
+        // Full circle = 4 quarter-arc cubics
+        let cubic_count = segs
+            .iter()
+            .filter(|s| matches!(s, PathSegment::CubicTo(..)))
+            .count();
+        assert_eq!(cubic_count, 4);
     }
 
     #[test]
     fn test_arc_quarter_circle() {
         let mut builder = PathBuilder::new();
-        builder.move_to(100.0, 50.0);
-        // has_current_point = true because we just did move_to
-        arc(&mut builder, 50.0, 50.0, 50.0, 0.0, PI / 2.0, false, true);
-        let path = builder.finish();
-        assert!(path.is_some());
+        arc(
+            &mut builder,
+            &arc_params(50.0, 50.0, 50.0, 0.0, PI / 2.0, false),
+            false,
+        );
+
+        let segs = segments(builder);
+        // MoveTo at (100, 50), then one cubic
+        assert!(
+            matches!(segs[0], PathSegment::MoveTo(p) if approx_eq(p.x, 100.0) && approx_eq(p.y, 50.0))
+        );
+        assert_eq!(segs.len(), 2);
+        // End point should be near (50, 100) — top of circle at angle π/2
+        assert!(
+            matches!(segs[1], PathSegment::CubicTo(_, _, end) if approx_eq(end.x, 50.0) && approx_eq(end.y, 100.0))
+        );
     }
 
     #[test]
-    fn test_arc_without_current_point() {
-        // Test arc with no current point - should use move_to
+    fn test_arc_half_circle() {
         let mut builder = PathBuilder::new();
-        arc(&mut builder, 50.0, 50.0, 30.0, 0.0, PI, false, false);
-        let path = builder.finish();
-        assert!(path.is_some());
+        arc(
+            &mut builder,
+            &arc_params(50.0, 50.0, 50.0, 0.0, PI, false),
+            false,
+        );
+
+        let segs = segments(builder);
+        // Half circle = 2 quarter-arc cubics
+        let cubic_count = segs
+            .iter()
+            .filter(|s| matches!(s, PathSegment::CubicTo(..)))
+            .count();
+        assert_eq!(cubic_count, 2);
+        // End point should be near (0, 50) — left side at angle π
+        let last_cubic = segs
+            .iter()
+            .rev()
+            .find(|s| matches!(s, PathSegment::CubicTo(..)))
+            .unwrap();
+        assert!(
+            matches!(last_cubic, PathSegment::CubicTo(_, _, end) if approx_eq(end.x, 0.0) && approx_eq(end.y, 50.0))
+        );
     }
 
     #[test]
-    fn test_arc_connects_to_path() {
-        // Test that arc with current point uses line_to to connect
+    fn test_arc_without_current_point_starts_with_move() {
+        let mut builder = PathBuilder::new();
+        arc(
+            &mut builder,
+            &arc_params(50.0, 50.0, 30.0, 0.0, PI, false),
+            false,
+        );
+
+        let segs = segments(builder);
+        // No current point → first segment is MoveTo
+        assert!(matches!(segs[0], PathSegment::MoveTo(..)));
+        // Start point at angle 0: (80, 50)
+        assert!(
+            matches!(segs[0], PathSegment::MoveTo(p) if approx_eq(p.x, 80.0) && approx_eq(p.y, 50.0))
+        );
+    }
+
+    #[test]
+    fn test_arc_with_current_point_starts_with_line() {
+        let mut builder = PathBuilder::new();
+        builder.move_to(0.0, 0.0);
+        arc(
+            &mut builder,
+            &arc_params(50.0, 50.0, 30.0, 0.0, PI, false),
+            true,
+        );
+
+        let segs = segments(builder);
+        // Has current point → arc connects via LineTo to arc start (80, 50)
+        assert!(
+            matches!(segs[0], PathSegment::MoveTo(p) if approx_eq(p.x, 0.0) && approx_eq(p.y, 0.0))
+        );
+        assert!(
+            matches!(segs[1], PathSegment::LineTo(p) if approx_eq(p.x, 80.0) && approx_eq(p.y, 50.0))
+        );
+    }
+
+    #[test]
+    fn test_arc_connects_to_existing_path() {
         let mut builder = PathBuilder::new();
         builder.move_to(0.0, 0.0);
         builder.line_to(50.0, 50.0);
-        // Arc centered at (80, 50) with radius 30, starting at angle PI (left side)
-        // The start point of the arc is (50, 50) which should connect via line_to
-        arc(&mut builder, 80.0, 50.0, 30.0, PI, 0.0, false, true);
-        let path = builder.finish();
-        assert!(path.is_some());
-        // The path should be continuous (one contour) not multiple separate paths
+        // Arc centered at (80, 50) radius 30, starting at PI → start point (50, 50)
+        arc(
+            &mut builder,
+            &arc_params(80.0, 50.0, 30.0, PI, 0.0, false),
+            true,
+        );
+
+        let segs = segments(builder);
+        // Should be one continuous path: MoveTo, LineTo(50,50), LineTo(~50,50), then cubics
+        let move_count = segs
+            .iter()
+            .filter(|s| matches!(s, PathSegment::MoveTo(..)))
+            .count();
+        assert_eq!(move_count, 1, "should be one continuous subpath");
+    }
+
+    #[test]
+    fn test_arc_anticlockwise() {
+        let mut builder = PathBuilder::new();
+        // Anticlockwise from 0 to π/2 sweeps the large way around (3π/2)
+        arc(
+            &mut builder,
+            &arc_params(50.0, 50.0, 50.0, 0.0, PI / 2.0, true),
+            false,
+        );
+
+        let segs = segments(builder);
+        // Anticlockwise swaps start/end internally, so sweeps 3π/2 → 3 cubics
+        let cubic_count = segs
+            .iter()
+            .filter(|s| matches!(s, PathSegment::CubicTo(..)))
+            .count();
+        assert_eq!(cubic_count, 3);
+    }
+
+    #[test]
+    fn test_arc_bounds() {
+        let mut builder = PathBuilder::new();
+        arc(
+            &mut builder,
+            &arc_params(50.0, 50.0, 50.0, 0.0, 2.0 * PI, false),
+            false,
+        );
+
+        let path = builder.finish().unwrap();
+        let bounds = path.bounds();
+        // Full circle centered at (50,50) radius 50 should span [0,100] x [0,100]
+        assert!(bounds.left() < 1.0);
+        assert!(bounds.top() < 1.0);
+        assert!(bounds.right() > 99.0);
+        assert!(bounds.bottom() > 99.0);
+    }
+
+    #[test]
+    fn test_ellipse_different_radii() {
+        let mut builder = PathBuilder::new();
+        ellipse(
+            &mut builder,
+            &EllipseParams {
+                x: 50.0,
+                y: 50.0,
+                radius_x: 80.0,
+                radius_y: 30.0,
+                rotation: 0.0,
+                start_angle: 0.0,
+                end_angle: 2.0 * PI,
+                anticlockwise: false,
+            },
+            false,
+        );
+
+        let path = builder.finish().unwrap();
+        let bounds = path.bounds();
+        // Ellipse with rx=80, ry=30 centered at (50,50)
+        // x: [50-80, 50+80] = [-30, 130], y: [50-30, 50+30] = [20, 80]
+        assert!(bounds.left() < -29.0);
+        assert!(bounds.right() > 129.0);
+        assert!(bounds.top() < 21.0);
+        assert!(bounds.bottom() > 79.0);
+    }
+
+    #[test]
+    fn test_ellipse_zero_radius_is_noop() {
+        let mut builder = PathBuilder::new();
+        ellipse(
+            &mut builder,
+            &EllipseParams {
+                x: 50.0,
+                y: 50.0,
+                radius_x: 0.0,
+                radius_y: 30.0,
+                rotation: 0.0,
+                start_angle: 0.0,
+                end_angle: PI,
+                anticlockwise: false,
+            },
+            false,
+        );
+        // Zero radius_x → early return, path builder is empty
+        assert!(builder.finish().is_none());
+    }
+
+    #[test]
+    fn test_arc_to_geometry() {
+        let mut builder = PathBuilder::new();
+        builder.move_to(0.0, 0.0);
+        // arcTo from (0,0) through corner (50,0) toward (50,50) with radius 20
+        arc_to(
+            &mut builder,
+            0.0,
+            0.0,
+            &ArcToParams {
+                x1: 50.0,
+                y1: 0.0,
+                x2: 50.0,
+                y2: 50.0,
+                radius: 20.0,
+            },
+        );
+
+        let segs = segments(builder);
+        // Should have: MoveTo(0,0), LineTo(tangent point on first edge), then cubics for arc
+        assert!(matches!(segs[0], PathSegment::MoveTo(..)));
+        // At least one LineTo (to tangent point) and at least one CubicTo (the arc)
+        assert!(segs.iter().any(|s| matches!(s, PathSegment::LineTo(..))));
+        assert!(segs.iter().any(|s| matches!(s, PathSegment::CubicTo(..))));
+    }
+
+    #[test]
+    fn test_arc_to_zero_radius_lines_to_corner() {
+        let mut builder = PathBuilder::new();
+        builder.move_to(0.0, 0.0);
+        arc_to(
+            &mut builder,
+            0.0,
+            0.0,
+            &ArcToParams {
+                x1: 50.0,
+                y1: 0.0,
+                x2: 50.0,
+                y2: 50.0,
+                radius: 0.0,
+            },
+        );
+
+        let segs = segments(builder);
+        // Zero radius → just a line_to(x1, y1)
+        assert_eq!(segs.len(), 2);
+        assert!(
+            matches!(segs[1], PathSegment::LineTo(p) if approx_eq(p.x, 50.0) && approx_eq(p.y, 0.0))
+        );
     }
 }

@@ -1,6 +1,8 @@
 //! Integration tests for vl-convert-canvas2d.
 
-use vl_convert_canvas2d::{Canvas2dContext, Canvas2dContextBuilder};
+use vl_convert_canvas2d::{
+    ArcParams, Canvas2dContext, Canvas2dContextBuilder, CubicBezierParams, EllipseParams,
+};
 
 /// Test creating a canvas and drawing basic shapes.
 #[test]
@@ -181,7 +183,14 @@ fn test_arc() {
 
     ctx.set_fill_style("#ff00ff").unwrap();
     ctx.begin_path();
-    ctx.arc(50.0, 50.0, 30.0, 0.0, 2.0 * PI, false);
+    ctx.arc(&ArcParams {
+        x: 50.0,
+        y: 50.0,
+        radius: 30.0,
+        start_angle: 0.0,
+        end_angle: 2.0 * PI,
+        anticlockwise: false,
+    });
     ctx.fill();
 
     // Check that the center has the fill color
@@ -201,7 +210,14 @@ fn test_bezier_curve() {
     ctx.set_line_width(2.0);
     ctx.begin_path();
     ctx.move_to(10.0, 50.0);
-    ctx.bezier_curve_to(30.0, 10.0, 70.0, 90.0, 90.0, 50.0);
+    ctx.bezier_curve_to(&CubicBezierParams {
+        cp1x: 30.0,
+        cp1y: 10.0,
+        cp2x: 70.0,
+        cp2y: 90.0,
+        x: 90.0,
+        y: 50.0,
+    });
     ctx.stroke();
 
     // Just verify it doesn't crash and produces some output
@@ -310,7 +326,16 @@ fn test_ellipse() {
 
     ctx.set_fill_style("#00ff00").unwrap();
     ctx.begin_path();
-    ctx.ellipse(50.0, 50.0, 40.0, 20.0, 0.0, 0.0, 2.0 * PI, false);
+    ctx.ellipse(&EllipseParams {
+        x: 50.0,
+        y: 50.0,
+        radius_x: 40.0,
+        radius_y: 20.0,
+        rotation: 0.0,
+        start_angle: 0.0,
+        end_angle: 2.0 * PI,
+        anticlockwise: false,
+    });
     ctx.fill();
 
     // Check center is filled

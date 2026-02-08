@@ -1,5 +1,7 @@
 //! Gradient types for Canvas 2D operations.
 
+use crate::geometry::RadialGradientParams;
+
 /// A color stop in a gradient.
 #[derive(Debug, Clone)]
 pub struct GradientStop {
@@ -24,14 +26,7 @@ pub enum GradientType {
     /// Linear gradient from (x0, y0) to (x1, y1).
     Linear { x0: f32, y0: f32, x1: f32, y1: f32 },
     /// Radial gradient from inner circle to outer circle.
-    Radial {
-        x0: f32,
-        y0: f32,
-        r0: f32,
-        x1: f32,
-        y1: f32,
-        r1: f32,
-    },
+    Radial(RadialGradientParams),
 }
 
 impl CanvasGradient {
@@ -44,16 +39,9 @@ impl CanvasGradient {
     }
 
     /// Create a new radial gradient.
-    pub fn new_radial(x0: f32, y0: f32, r0: f32, x1: f32, y1: f32, r1: f32) -> Self {
+    pub fn new_radial(params: &RadialGradientParams) -> Self {
         Self {
-            gradient_type: GradientType::Radial {
-                x0,
-                y0,
-                r0,
-                x1,
-                y1,
-                r1,
-            },
+            gradient_type: GradientType::Radial(*params),
             stops: Vec::new(),
         }
     }

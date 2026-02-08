@@ -9,7 +9,9 @@ use deno_core::{OpState, ResourceId};
 use deno_error::JsErrorBox;
 use serde::Serialize;
 use vl_convert_canvas2d::{
-    Canvas2dContext, Canvas2dContextBuilder, LineCap, LineJoin, TextAlign, TextBaseline,
+    ArcParams, ArcToParams, Canvas2dContext, Canvas2dContextBuilder, CubicBezierParams, DOMMatrix,
+    DirtyRect, EllipseParams, ImageCropParams, LineCap, LineJoin, RadialGradientParams, TextAlign,
+    TextBaseline,
 };
 
 // --- Canvas creation and lifecycle ---
@@ -443,14 +445,17 @@ pub fn op_canvas_bezier_curve_to(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource.ctx.borrow_mut().bezier_curve_to(
-        cp1x as f32,
-        cp1y as f32,
-        cp2x as f32,
-        cp2y as f32,
-        x as f32,
-        y as f32,
-    );
+    resource
+        .ctx
+        .borrow_mut()
+        .bezier_curve_to(&CubicBezierParams {
+            cp1x: cp1x as f32,
+            cp1y: cp1y as f32,
+            cp2x: cp2x as f32,
+            cp2y: cp2y as f32,
+            x: x as f32,
+            y: y as f32,
+        });
     Ok(())
 }
 
@@ -516,14 +521,14 @@ pub fn op_canvas_arc(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource.ctx.borrow_mut().arc(
-        x as f32,
-        y as f32,
-        radius as f32,
-        start_angle as f32,
-        end_angle as f32,
+    resource.ctx.borrow_mut().arc(&ArcParams {
+        x: x as f32,
+        y: y as f32,
+        radius: radius as f32,
+        start_angle: start_angle as f32,
+        end_angle: end_angle as f32,
         anticlockwise,
-    );
+    });
     Ok(())
 }
 
@@ -543,10 +548,13 @@ pub fn op_canvas_arc_to(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource
-        .ctx
-        .borrow_mut()
-        .arc_to(x1 as f32, y1 as f32, x2 as f32, y2 as f32, radius as f32);
+    resource.ctx.borrow_mut().arc_to(&ArcToParams {
+        x1: x1 as f32,
+        y1: y1 as f32,
+        x2: x2 as f32,
+        y2: y2 as f32,
+        radius: radius as f32,
+    });
     Ok(())
 }
 
@@ -570,16 +578,16 @@ pub fn op_canvas_ellipse(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource.ctx.borrow_mut().ellipse(
-        x as f32,
-        y as f32,
-        radius_x as f32,
-        radius_y as f32,
-        rotation as f32,
-        start_angle as f32,
-        end_angle as f32,
+    resource.ctx.borrow_mut().ellipse(&EllipseParams {
+        x: x as f32,
+        y: y as f32,
+        radius_x: radius_x as f32,
+        radius_y: radius_y as f32,
+        rotation: rotation as f32,
+        start_angle: start_angle as f32,
+        end_angle: end_angle as f32,
         anticlockwise,
-    );
+    });
     Ok(())
 }
 
@@ -747,10 +755,9 @@ pub fn op_canvas_transform(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource
-        .ctx
-        .borrow_mut()
-        .transform(a as f32, b as f32, c as f32, d as f32, e as f32, f as f32);
+    resource.ctx.borrow_mut().transform(DOMMatrix::new(
+        a as f32, b as f32, c as f32, d as f32, e as f32, f as f32,
+    ));
     Ok(())
 }
 
@@ -771,10 +778,9 @@ pub fn op_canvas_set_transform(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource
-        .ctx
-        .borrow_mut()
-        .set_transform(a as f32, b as f32, c as f32, d as f32, e as f32, f as f32);
+    resource.ctx.borrow_mut().set_transform(DOMMatrix::new(
+        a as f32, b as f32, c as f32, d as f32, e as f32, f as f32,
+    ));
     Ok(())
 }
 
@@ -942,9 +948,17 @@ pub fn op_canvas_create_radial_gradient(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    let gradient = resource.ctx.borrow().create_radial_gradient(
-        x0 as f32, y0 as f32, r0 as f32, x1 as f32, y1 as f32, r1 as f32,
-    );
+    let gradient = resource
+        .ctx
+        .borrow()
+        .create_radial_gradient(&RadialGradientParams {
+            x0: x0 as f32,
+            y0: y0 as f32,
+            r0: r0 as f32,
+            x1: x1 as f32,
+            y1: y1 as f32,
+            r1: r1 as f32,
+        });
     let gradient_id = resource.add_gradient(gradient);
     Ok(gradient_id)
 }
@@ -1149,8 +1163,17 @@ pub fn op_canvas_draw_image_cropped(
         .ok_or_else(|| JsErrorBox::generic("Invalid image data"))?;
 
     resource.ctx.borrow_mut().draw_image_cropped(
-        pixmap, sx as f32, sy as f32, sw as f32, sh as f32, dx as f32, dy as f32, dw as f32,
-        dh as f32,
+        pixmap,
+        &ImageCropParams {
+            sx: sx as f32,
+            sy: sy as f32,
+            sw: sw as f32,
+            sh: sh as f32,
+            dx: dx as f32,
+            dy: dy as f32,
+            dw: dw as f32,
+            dh: dh as f32,
+        },
     );
     Ok(())
 }
@@ -1256,14 +1279,16 @@ pub fn op_canvas_draw_canvas_cropped(
 
     dest_resource.ctx.borrow_mut().draw_image_cropped(
         source_pixmap.as_ref(),
-        sx as f32,
-        sy as f32,
-        sw as f32,
-        sh as f32,
-        dx as f32,
-        dy as f32,
-        dw as f32,
-        dh as f32,
+        &ImageCropParams {
+            sx: sx as f32,
+            sy: sy as f32,
+            sw: sw as f32,
+            sh: sh as f32,
+            dx: dx as f32,
+            dy: dy as f32,
+            dw: dw as f32,
+            dh: dh as f32,
+        },
     );
     Ok(())
 }
@@ -1420,10 +1445,12 @@ pub fn op_canvas_put_image_data_dirty(
         height,
         dx,
         dy,
-        dirty_x,
-        dirty_y,
-        dirty_width,
-        dirty_height,
+        &DirtyRect {
+            x: dirty_x,
+            y: dirty_y,
+            width: dirty_width,
+            height: dirty_height,
+        },
     );
     Ok(())
 }
@@ -1686,14 +1713,17 @@ pub fn op_path2d_bezier_curve_to(
         .get::<Path2DResource>(ResourceId::from(path_id))
         .map_err(|e| JsErrorBox::generic(format!("Invalid Path2D resource: {}", e)))?;
 
-    resource.path.borrow_mut().bezier_curve_to(
-        cp1x as f32,
-        cp1y as f32,
-        cp2x as f32,
-        cp2y as f32,
-        x as f32,
-        y as f32,
-    );
+    resource
+        .path
+        .borrow_mut()
+        .bezier_curve_to(&CubicBezierParams {
+            cp1x: cp1x as f32,
+            cp1y: cp1y as f32,
+            cp2x: cp2x as f32,
+            cp2y: cp2y as f32,
+            x: x as f32,
+            y: y as f32,
+        });
     Ok(())
 }
 
@@ -1759,14 +1789,14 @@ pub fn op_path2d_arc(
         .get::<Path2DResource>(ResourceId::from(path_id))
         .map_err(|e| JsErrorBox::generic(format!("Invalid Path2D resource: {}", e)))?;
 
-    resource.path.borrow_mut().arc(
-        x as f32,
-        y as f32,
-        radius as f32,
-        start_angle as f32,
-        end_angle as f32,
+    resource.path.borrow_mut().arc(&ArcParams {
+        x: x as f32,
+        y: y as f32,
+        radius: radius as f32,
+        start_angle: start_angle as f32,
+        end_angle: end_angle as f32,
         anticlockwise,
-    );
+    });
     Ok(())
 }
 
@@ -1786,10 +1816,13 @@ pub fn op_path2d_arc_to(
         .get::<Path2DResource>(ResourceId::from(path_id))
         .map_err(|e| JsErrorBox::generic(format!("Invalid Path2D resource: {}", e)))?;
 
-    resource
-        .path
-        .borrow_mut()
-        .arc_to(x1 as f32, y1 as f32, x2 as f32, y2 as f32, radius as f32);
+    resource.path.borrow_mut().arc_to(&ArcToParams {
+        x1: x1 as f32,
+        y1: y1 as f32,
+        x2: x2 as f32,
+        y2: y2 as f32,
+        radius: radius as f32,
+    });
     Ok(())
 }
 
@@ -1813,16 +1846,16 @@ pub fn op_path2d_ellipse(
         .get::<Path2DResource>(ResourceId::from(path_id))
         .map_err(|e| JsErrorBox::generic(format!("Invalid Path2D resource: {}", e)))?;
 
-    resource.path.borrow_mut().ellipse(
-        x as f32,
-        y as f32,
-        radius_x as f32,
-        radius_y as f32,
-        rotation as f32,
-        start_angle as f32,
-        end_angle as f32,
+    resource.path.borrow_mut().ellipse(&EllipseParams {
+        x: x as f32,
+        y: y as f32,
+        radius_x: radius_x as f32,
+        radius_y: radius_y as f32,
+        rotation: rotation as f32,
+        start_angle: start_angle as f32,
+        end_angle: end_angle as f32,
         anticlockwise,
-    );
+    });
     Ok(())
 }
 

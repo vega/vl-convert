@@ -4,6 +4,7 @@
 //! fill, stroke, or clip operations.
 
 use crate::error::{Canvas2dError, Canvas2dResult};
+use crate::geometry::{ArcParams, ArcToParams, CubicBezierParams, EllipseParams};
 use tiny_skia::PathBuilder;
 
 /// A reusable path object that can be used with fill, stroke, and clip operations.
@@ -85,9 +86,14 @@ impl Path2D {
                     x,
                     y,
                 } => {
-                    path.bezier_curve_to(
-                        x1 as f32, y1 as f32, x2 as f32, y2 as f32, x as f32, y as f32,
-                    );
+                    path.bezier_curve_to(&CubicBezierParams {
+                        cp1x: x1 as f32,
+                        cp1y: y1 as f32,
+                        cp2x: x2 as f32,
+                        cp2y: y2 as f32,
+                        x: x as f32,
+                        y: y as f32,
+                    });
                 }
                 svgtypes::SimplePathSegment::ClosePath => {
                     path.close_path();
@@ -132,11 +138,18 @@ impl Path2D {
     }
 
     /// Add a cubic bezier curve.
-    pub fn bezier_curve_to(&mut self, cp1x: f32, cp1y: f32, cp2x: f32, cp2y: f32, x: f32, y: f32) {
+    pub fn bezier_curve_to(&mut self, params: &CubicBezierParams) {
         self.invalidate();
-        self.builder.cubic_to(cp1x, cp1y, cp2x, cp2y, x, y);
-        self.current_x = x;
-        self.current_y = y;
+        self.builder.cubic_to(
+            params.cp1x,
+            params.cp1y,
+            params.cp2x,
+            params.cp2y,
+            params.x,
+            params.y,
+        );
+        self.current_x = params.x;
+        self.current_y = params.y;
     }
 
     /// Add a quadratic bezier curve.
@@ -226,70 +239,22 @@ impl Path2D {
     }
 
     /// Add an arc to the path.
-    pub fn arc(
-        &mut self,
-        x: f32,
-        y: f32,
-        radius: f32,
-        start_angle: f32,
-        end_angle: f32,
-        anticlockwise: bool,
-    ) {
+    pub fn arc(&mut self, params: &ArcParams) {
         self.invalidate();
-        crate::arc::arc(
-            &mut self.builder,
-            x,
-            y,
-            radius,
-            start_angle,
-            end_angle,
-            anticlockwise,
-            self.has_current_point,
-        );
+        crate::arc::arc(&mut self.builder, params, self.has_current_point);
         self.has_current_point = true;
     }
 
     /// Add an arcTo segment to the path.
-    pub fn arc_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, radius: f32) {
+    pub fn arc_to(&mut self, params: &ArcToParams) {
         self.invalidate();
-        crate::arc::arc_to(
-            &mut self.builder,
-            self.current_x,
-            self.current_y,
-            x1,
-            y1,
-            x2,
-            y2,
-            radius,
-        );
+        crate::arc::arc_to(&mut self.builder, self.current_x, self.current_y, params);
     }
 
     /// Add an ellipse to the path.
-    #[allow(clippy::too_many_arguments)]
-    pub fn ellipse(
-        &mut self,
-        x: f32,
-        y: f32,
-        radius_x: f32,
-        radius_y: f32,
-        rotation: f32,
-        start_angle: f32,
-        end_angle: f32,
-        anticlockwise: bool,
-    ) {
+    pub fn ellipse(&mut self, params: &EllipseParams) {
         self.invalidate();
-        crate::arc::ellipse(
-            &mut self.builder,
-            x,
-            y,
-            radius_x,
-            radius_y,
-            rotation,
-            start_angle,
-            end_angle,
-            anticlockwise,
-            self.has_current_point,
-        );
+        crate::arc::ellipse(&mut self.builder, params, self.has_current_point);
         self.has_current_point = true;
     }
 
@@ -308,6 +273,7 @@ impl Path2D {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::geometry::{ArcParams, CubicBezierParams, EllipseParams};
     use tiny_skia::PathSegment;
 
     /// Collect all segments from a Path2D into a Vec for assertion.
@@ -406,7 +372,14 @@ mod tests {
     fn test_bezier_curve() {
         let mut path = Path2D::new();
         path.move_to(0.0, 0.0);
-        path.bezier_curve_to(10.0, 50.0, 90.0, 50.0, 100.0, 0.0);
+        path.bezier_curve_to(&CubicBezierParams {
+            cp1x: 10.0,
+            cp1y: 50.0,
+            cp2x: 90.0,
+            cp2y: 50.0,
+            x: 100.0,
+            y: 0.0,
+        });
 
         let segs = segments(&mut path);
         assert_eq!(segs.len(), 2);
@@ -431,7 +404,14 @@ mod tests {
         assert_eq!(path.current_x, 30.0);
         assert_eq!(path.current_y, 40.0);
 
-        path.bezier_curve_to(0.0, 0.0, 0.0, 0.0, 50.0, 60.0);
+        path.bezier_curve_to(&CubicBezierParams {
+            cp1x: 0.0,
+            cp1y: 0.0,
+            cp2x: 0.0,
+            cp2y: 0.0,
+            x: 50.0,
+            y: 60.0,
+        });
         assert_eq!(path.current_x, 50.0);
         assert_eq!(path.current_y, 60.0);
     }
@@ -495,10 +475,7 @@ mod tests {
 
         let segs = segments(&mut path);
         assert_eq!(segs[0], PathSegment::MoveTo(pt(0.0, 0.0)));
-        assert_eq!(
-            segs[1],
-            PathSegment::QuadTo(pt(50.0, 50.0), pt(100.0, 0.0))
-        );
+        assert_eq!(segs[1], PathSegment::QuadTo(pt(50.0, 50.0), pt(100.0, 0.0)));
         assert_eq!(
             segs[2],
             PathSegment::CubicTo(pt(150.0, 50.0), pt(200.0, 50.0), pt(250.0, 0.0))
@@ -513,7 +490,10 @@ mod tests {
         let segs = segments(&mut path);
         assert_eq!(segs[0], PathSegment::MoveTo(pt(10.0, 10.0)));
         // Arc decomposition produces cubics, not arcs
-        assert!(segs.iter().skip(1).all(|s| matches!(s, PathSegment::CubicTo(..))));
+        assert!(segs
+            .iter()
+            .skip(1)
+            .all(|s| matches!(s, PathSegment::CubicTo(..))));
     }
 
     #[test]
@@ -566,7 +546,14 @@ mod tests {
         let mut path = Path2D::new();
         assert!(!path.has_current_point);
 
-        path.arc(50.0, 50.0, 25.0, 0.0, std::f32::consts::PI, false);
+        path.arc(&ArcParams {
+            x: 50.0,
+            y: 50.0,
+            radius: 25.0,
+            start_angle: 0.0,
+            end_angle: std::f32::consts::PI,
+            anticlockwise: false,
+        });
         assert!(path.has_current_point);
     }
 
@@ -575,7 +562,16 @@ mod tests {
         let mut path = Path2D::new();
         assert!(!path.has_current_point);
 
-        path.ellipse(50.0, 50.0, 30.0, 20.0, 0.0, 0.0, std::f32::consts::TAU, false);
+        path.ellipse(&EllipseParams {
+            x: 50.0,
+            y: 50.0,
+            radius_x: 30.0,
+            radius_y: 20.0,
+            rotation: 0.0,
+            start_angle: 0.0,
+            end_angle: std::f32::consts::TAU,
+            anticlockwise: false,
+        });
         assert!(path.has_current_point);
     }
 

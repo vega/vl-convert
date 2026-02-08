@@ -2,6 +2,10 @@
 
 use crate::error::{Canvas2dError, Canvas2dResult};
 use crate::font_parser::{parse_font, ParsedFont};
+use crate::geometry::{
+    ArcParams, ArcToParams, CubicBezierParams, DirtyRect, EllipseParams, ImageCropParams,
+    RadialGradientParams,
+};
 use crate::gradient::{CanvasGradient, GradientType};
 use crate::path2d::Path2D;
 use crate::pattern::{CanvasPattern, Repetition};
@@ -498,16 +502,8 @@ impl Canvas2dContext {
     }
 
     /// Create a radial gradient.
-    pub fn create_radial_gradient(
-        &self,
-        x0: f32,
-        y0: f32,
-        r0: f32,
-        x1: f32,
-        y1: f32,
-        r1: f32,
-    ) -> CanvasGradient {
-        CanvasGradient::new_radial(x0, y0, r0, x1, y1, r1)
+    pub fn create_radial_gradient(&self, params: &RadialGradientParams) -> CanvasGradient {
+        CanvasGradient::new_radial(params)
     }
 
     /// Set the fill style to a gradient.
@@ -867,10 +863,10 @@ impl Canvas2dContext {
     }
 
     /// Add a cubic bezier curve.
-    pub fn bezier_curve_to(&mut self, cp1x: f32, cp1y: f32, cp2x: f32, cp2y: f32, x: f32, y: f32) {
-        let (tcp1x, tcp1y) = self.transform_point(cp1x, cp1y);
-        let (tcp2x, tcp2y) = self.transform_point(cp2x, cp2y);
-        let (tx, ty) = self.transform_point(x, y);
+    pub fn bezier_curve_to(&mut self, params: &CubicBezierParams) {
+        let (tcp1x, tcp1y) = self.transform_point(params.cp1x, params.cp1y);
+        let (tcp2x, tcp2y) = self.transform_point(params.cp2x, params.cp2y);
+        let (tx, ty) = self.transform_point(params.x, params.y);
         self.path_builder
             .cubic_to(tcp1x, tcp1y, tcp2x, tcp2y, tx, ty);
         self.current_x = tx;
@@ -994,91 +990,78 @@ impl Canvas2dContext {
     }
 
     /// Add an arc to the path.
-    pub fn arc(
-        &mut self,
-        x: f32,
-        y: f32,
-        radius: f32,
-        start_angle: f32,
-        end_angle: f32,
-        anticlockwise: bool,
-    ) {
+    pub fn arc(&mut self, params: &ArcParams) {
         // Transform center point
-        let (tx, ty) = self.transform_point(x, y);
+        let (tx, ty) = self.transform_point(params.x, params.y);
         // Scale radius by the average of x and y scale factors
         let t = &self.state.transform;
         let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
         let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
-        let scaled_radius = radius * (scale_x + scale_y) / 2.0;
+        let scaled_radius = params.radius * (scale_x + scale_y) / 2.0;
 
         crate::arc::arc(
             &mut self.path_builder,
-            tx,
-            ty,
-            scaled_radius,
-            start_angle,
-            end_angle,
-            anticlockwise,
+            &ArcParams {
+                x: tx,
+                y: ty,
+                radius: scaled_radius,
+                start_angle: params.start_angle,
+                end_angle: params.end_angle,
+                anticlockwise: params.anticlockwise,
+            },
             self.has_current_point,
         );
         self.has_current_point = true;
     }
 
     /// Add an arcTo segment to the path.
-    pub fn arc_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, radius: f32) {
-        let (tx1, ty1) = self.transform_point(x1, y1);
-        let (tx2, ty2) = self.transform_point(x2, y2);
+    pub fn arc_to(&mut self, params: &ArcToParams) {
+        let (tx1, ty1) = self.transform_point(params.x1, params.y1);
+        let (tx2, ty2) = self.transform_point(params.x2, params.y2);
         // Scale radius
         let t = &self.state.transform;
         let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
         let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
-        let scaled_radius = radius * (scale_x + scale_y) / 2.0;
+        let scaled_radius = params.radius * (scale_x + scale_y) / 2.0;
 
         crate::arc::arc_to(
             &mut self.path_builder,
             self.current_x,
             self.current_y,
-            tx1,
-            ty1,
-            tx2,
-            ty2,
-            scaled_radius,
+            &ArcToParams {
+                x1: tx1,
+                y1: ty1,
+                x2: tx2,
+                y2: ty2,
+                radius: scaled_radius,
+            },
         );
     }
 
     /// Add an ellipse to the path.
-    #[allow(clippy::too_many_arguments)]
-    pub fn ellipse(
-        &mut self,
-        x: f32,
-        y: f32,
-        radius_x: f32,
-        radius_y: f32,
-        rotation: f32,
-        start_angle: f32,
-        end_angle: f32,
-        anticlockwise: bool,
-    ) {
+    pub fn ellipse(&mut self, params: &EllipseParams) {
         // Transform center point
-        let (tx, ty) = self.transform_point(x, y);
+        let (tx, ty) = self.transform_point(params.x, params.y);
         // Scale radii
         let t = &self.state.transform;
         let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
         let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
         // Add rotation from transform to the ellipse rotation
         let transform_rotation = t.ky.atan2(t.sx);
-        let total_rotation = rotation + transform_rotation;
+        let total_rotation = params.rotation + transform_rotation;
 
         crate::arc::ellipse(
             &mut self.path_builder,
-            tx,
-            ty,
-            radius_x * scale_x,
-            radius_y * scale_y,
-            total_rotation,
-            start_angle,
-            end_angle,
-            anticlockwise,
+            &EllipseParams {
+                x: tx,
+                y: ty,
+                radius_x: params.radius_x * scale_x,
+                radius_y: params.radius_y * scale_y,
+                rotation: total_rotation,
+                start_angle: params.start_angle,
+                end_angle: params.end_angle,
+                anticlockwise: params.anticlockwise,
+            },
             self.has_current_point,
         );
         self.has_current_point = true;
@@ -1344,21 +1327,20 @@ impl Canvas2dContext {
 
     /// Draw a portion of an image to a destination rectangle.
     ///
-    /// This form extracts a source rectangle (sx, sy, sw, sh) from the image
-    /// and draws it into the destination rectangle (dx, dy, dw, dh).
-    #[allow(clippy::too_many_arguments)]
-    pub fn draw_image_cropped(
-        &mut self,
-        image: tiny_skia::PixmapRef,
-        sx: f32,
-        sy: f32,
-        sw: f32,
-        sh: f32,
-        dx: f32,
-        dy: f32,
-        dw: f32,
-        dh: f32,
-    ) {
+    /// This form extracts a source rectangle from the image
+    /// and draws it into the destination rectangle.
+    pub fn draw_image_cropped(&mut self, image: tiny_skia::PixmapRef, params: &ImageCropParams) {
+        let ImageCropParams {
+            sx,
+            sy,
+            sw,
+            sh,
+            dx,
+            dy,
+            dw,
+            dh,
+        } = *params;
+
         // Clamp source rectangle to image bounds
         let sx = sx.max(0.0);
         let sy = sy.max(0.0);
@@ -1412,16 +1394,16 @@ impl Canvas2dContext {
     }
 
     /// Apply a transform matrix.
-    pub fn transform(&mut self, a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) {
-        log::debug!(target: "canvas", "transform {} {} {} {} {} {}", a, b, c, d, e, f);
-        let t = Transform::from_row(a, b, c, d, e, f);
+    pub fn transform(&mut self, matrix: DOMMatrix) {
+        log::debug!(target: "canvas", "transform {:?}", matrix);
+        let t: Transform = matrix.into();
         self.state.transform = self.state.transform.pre_concat(t);
     }
 
     /// Set the transform matrix (replacing the current one).
-    pub fn set_transform(&mut self, a: f32, b: f32, c: f32, d: f32, e: f32, f: f32) {
-        log::debug!(target: "canvas", "setTransform {} {} {} {} {} {}", a, b, c, d, e, f);
-        self.state.transform = Transform::from_row(a, b, c, d, e, f);
+    pub fn set_transform(&mut self, matrix: DOMMatrix) {
+        log::debug!(target: "canvas", "setTransform {:?}", matrix);
+        self.state.transform = matrix.into();
     }
 
     /// Reset the transform to identity.
@@ -1433,11 +1415,6 @@ impl Canvas2dContext {
     /// Get the current transformation matrix.
     pub fn get_transform(&self) -> DOMMatrix {
         self.state.transform.into()
-    }
-
-    /// Set the transform from a DOMMatrix.
-    pub fn set_transform_matrix(&mut self, matrix: DOMMatrix) {
-        self.state.transform = matrix.into();
     }
 
     // --- Output ---
@@ -1507,10 +1484,12 @@ impl Canvas2dContext {
             height,
             dx,
             dy,
-            0,
-            0,
-            width as i32,
-            height as i32,
+            &DirtyRect {
+                x: 0,
+                y: 0,
+                width: width as i32,
+                height: height as i32,
+            },
         );
     }
 
@@ -1518,18 +1497,6 @@ impl Canvas2dContext {
     ///
     /// The dirty rectangle specifies which portion of the source data to write.
     /// Pixels outside the canvas bounds are silently ignored.
-    ///
-    /// # Arguments
-    /// * `data` - RGBA pixel data (4 bytes per pixel, non-premultiplied alpha)
-    /// * `width` - Width of the image data
-    /// * `height` - Height of the image data
-    /// * `dx` - Destination x coordinate
-    /// * `dy` - Destination y coordinate
-    /// * `dirty_x` - X offset into the source data
-    /// * `dirty_y` - Y offset into the source data
-    /// * `dirty_width` - Width of region to copy
-    /// * `dirty_height` - Height of region to copy
-    #[allow(clippy::too_many_arguments)]
     pub fn put_image_data_dirty(
         &mut self,
         data: &[u8],
@@ -1537,16 +1504,13 @@ impl Canvas2dContext {
         height: u32,
         dx: i32,
         dy: i32,
-        dirty_x: i32,
-        dirty_y: i32,
-        dirty_width: i32,
-        dirty_height: i32,
+        dirty: &DirtyRect,
     ) {
         // Clamp dirty rect to source image bounds
-        let dirty_x = dirty_x.max(0).min(width as i32);
-        let dirty_y = dirty_y.max(0).min(height as i32);
-        let dirty_width = dirty_width.max(0).min(width as i32 - dirty_x);
-        let dirty_height = dirty_height.max(0).min(height as i32 - dirty_y);
+        let dirty_x = dirty.x.max(0).min(width as i32);
+        let dirty_y = dirty.y.max(0).min(height as i32);
+        let dirty_width = dirty.width.max(0).min(width as i32 - dirty_x);
+        let dirty_height = dirty.height.max(0).min(height as i32 - dirty_y);
 
         if dirty_width <= 0 || dirty_height <= 0 {
             return; // Nothing to draw
@@ -1740,23 +1704,22 @@ impl Canvas2dContext {
                 tiny_skia::SpreadMode::Pad,
                 self.state.transform,
             ),
-            GradientType::Radial {
-                x0,
-                y0,
-                r0: _,
-                x1,
-                y1,
-                r1,
-            } => {
+            GradientType::Radial(params) => {
                 // tiny_skia's RadialGradient::new(start, end, radius, ...)
                 // - start: where gradient originates (inner circle center)
                 // - end: outer circle center
                 // - radius: outer circle radius
                 // Note: r0 (inner radius) is not directly supported by tiny_skia
                 tiny_skia::RadialGradient::new(
-                    tiny_skia::Point { x: *x0, y: *y0 },
-                    tiny_skia::Point { x: *x1, y: *y1 },
-                    *r1,
+                    tiny_skia::Point {
+                        x: params.x0,
+                        y: params.y0,
+                    },
+                    tiny_skia::Point {
+                        x: params.x1,
+                        y: params.y1,
+                    },
+                    params.r1,
                     stops,
                     tiny_skia::SpreadMode::Pad,
                     self.state.transform,
@@ -1780,87 +1743,202 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_context() {
-        let ctx = Canvas2dContext::new(100, 100);
-        assert!(ctx.is_ok());
+    fn test_new_context_defaults() {
+        let ctx = Canvas2dContext::new(200, 150).unwrap();
+        assert_eq!(ctx.width(), 200);
+        assert_eq!(ctx.height(), 150);
+        // Default drawing state
+        assert_eq!(ctx.state.line_width, 1.0);
+        assert_eq!(ctx.state.global_alpha, 1.0);
+        assert_eq!(ctx.state.miter_limit, 10.0);
+        assert!(ctx.state.line_dash.is_empty());
+        assert_eq!(ctx.state.line_dash_offset, 0.0);
+        assert!(ctx.state.image_smoothing_enabled);
+        assert!(ctx.state.clip_path.is_none());
+        // Canvas should be fully transparent
+        assert!(ctx.pixmap().data().iter().all(|&b| b == 0));
     }
 
     #[test]
     fn test_invalid_dimensions() {
-        let ctx = Canvas2dContext::new(0, 100);
-        assert!(matches!(ctx, Err(Canvas2dError::InvalidDimensions { .. })));
+        assert!(matches!(
+            Canvas2dContext::new(0, 100),
+            Err(Canvas2dError::InvalidDimensions { .. })
+        ));
+        assert!(matches!(
+            Canvas2dContext::new(100, 0),
+            Err(Canvas2dError::InvalidDimensions { .. })
+        ));
     }
 
     #[test]
-    fn test_save_restore() {
+    fn test_line_width_clamped_to_zero() {
         let mut ctx = Canvas2dContext::new(100, 100).unwrap();
-        ctx.set_fill_style("#ff0000").unwrap();
-        ctx.save();
-        ctx.set_fill_style("#00ff00").unwrap();
-        ctx.restore();
-        // State should be restored
+        ctx.set_line_width(5.0);
+        assert_eq!(ctx.state.line_width, 5.0);
+
+        ctx.set_line_width(-1.0);
+        assert_eq!(ctx.state.line_width, 0.0);
     }
 
     #[test]
-    fn test_fill_rect() {
+    fn test_line_cap_and_join() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+
+        ctx.set_line_cap(LineCap::Round);
+        assert_eq!(ctx.state.line_cap, LineCap::Round);
+
+        ctx.set_line_join(LineJoin::Bevel);
+        assert_eq!(ctx.state.line_join, LineJoin::Bevel);
+    }
+
+    #[test]
+    fn test_line_dash_set_get() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.set_line_dash(vec![5.0, 10.0, 15.0]);
+        assert_eq!(ctx.get_line_dash(), &[5.0, 10.0, 15.0]);
+
+        ctx.set_line_dash_offset(3.5);
+        assert_eq!(ctx.state.line_dash_offset, 3.5);
+    }
+
+    #[test]
+    fn test_global_alpha_clamped() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.set_global_alpha(0.5);
+        assert_eq!(ctx.state.global_alpha, 0.5);
+
+        ctx.set_global_alpha(2.0);
+        assert_eq!(ctx.state.global_alpha, 1.0);
+
+        ctx.set_global_alpha(-0.5);
+        assert_eq!(ctx.state.global_alpha, 0.0);
+    }
+
+    #[test]
+    fn test_save_restore_line_state() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+
+        // Set non-default line state
+        ctx.set_line_width(5.0);
+        ctx.set_line_cap(LineCap::Round);
+        ctx.set_line_join(LineJoin::Bevel);
+        ctx.set_line_dash(vec![4.0, 2.0]);
+        ctx.set_line_dash_offset(1.5);
+        ctx.set_global_alpha(0.7);
+        ctx.save();
+
+        // Modify everything
+        ctx.set_line_width(10.0);
+        ctx.set_line_cap(LineCap::Square);
+        ctx.set_line_join(LineJoin::Round);
+        ctx.set_line_dash(vec![1.0]);
+        ctx.set_line_dash_offset(0.0);
+        ctx.set_global_alpha(0.3);
+
+        ctx.restore();
+
+        // All values should be restored
+        assert_eq!(ctx.state.line_width, 5.0);
+        assert_eq!(ctx.state.line_cap, LineCap::Round);
+        assert_eq!(ctx.state.line_join, LineJoin::Bevel);
+        assert_eq!(ctx.get_line_dash(), &[4.0, 2.0]);
+        assert_eq!(ctx.state.line_dash_offset, 1.5);
+        assert_eq!(ctx.state.global_alpha, 0.7);
+    }
+
+    #[test]
+    fn test_save_restore_transform() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.translate(10.0, 20.0);
+        ctx.save();
+        ctx.translate(30.0, 40.0);
+
+        let t = ctx.get_transform();
+        assert_eq!(t.e, 40.0); // 10 + 30
+        assert_eq!(t.f, 60.0); // 20 + 40
+
+        ctx.restore();
+        let t = ctx.get_transform();
+        assert_eq!(t.e, 10.0);
+        assert_eq!(t.f, 20.0);
+    }
+
+    #[test]
+    fn test_fill_rect_pixels() {
         let mut ctx = Canvas2dContext::new(100, 100).unwrap();
         ctx.set_fill_style("#ff0000").unwrap();
         ctx.fill_rect(10.0, 10.0, 50.0, 50.0);
-        // Verify the pixmap has non-zero data
-        assert!(ctx.pixmap().data().iter().any(|&b| b != 0));
+
+        let data = ctx.get_image_data(0, 0, 100, 100);
+        // Inside the rect at (30, 30): should be red
+        let idx = (30 * 100 + 30) * 4;
+        assert_eq!(data[idx], 255); // R
+        assert_eq!(data[idx + 1], 0); // G
+        assert_eq!(data[idx + 2], 0); // B
+        assert_eq!(data[idx + 3], 255); // A
+
+        // Outside the rect at (5, 5): should be transparent
+        let idx_out = (5 * 100 + 5) * 4;
+        assert_eq!(data[idx_out + 3], 0); // A
+    }
+
+    #[test]
+    fn test_stroke_rect_pixels() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.set_stroke_style("#0000ff").unwrap();
+        ctx.set_line_width(2.0);
+        ctx.stroke_rect(20.0, 20.0, 60.0, 60.0);
+
+        let data = ctx.get_image_data(0, 0, 100, 100);
+        // On the top edge at (50, 20): should have blue pixels
+        let idx = (20 * 100 + 50) * 4;
+        assert!(data[idx + 2] > 200); // B channel
+        assert!(data[idx + 3] > 0); // A
+
+        // Center of rect (50, 50): should be transparent (stroke only)
+        let idx_center = (50 * 100 + 50) * 4;
+        assert_eq!(data[idx_center + 3], 0);
     }
 
     #[test]
     fn test_reset() {
         let mut ctx = Canvas2dContext::new(100, 100).unwrap();
 
-        // Modify state
         ctx.set_fill_style("#ff0000").unwrap();
         ctx.set_line_width(5.0);
+        ctx.set_global_alpha(0.5);
         ctx.translate(10.0, 10.0);
         ctx.save();
         ctx.fill_rect(0.0, 0.0, 100.0, 100.0);
-
-        // Verify pixmap has data
         assert!(ctx.pixmap().data().iter().any(|&b| b != 0));
 
-        // Reset
         ctx.reset();
 
-        // Verify canvas is clear (all transparent)
+        // Canvas should be clear
         assert!(ctx.pixmap().data().iter().all(|&b| b == 0));
-
-        // Verify state is reset to defaults (line width should be 1.0)
-        // We can't directly access line_width, but we can check transform is identity
-        let transform = ctx.get_transform();
-        assert_eq!(transform.a, 1.0);
-        assert_eq!(transform.d, 1.0);
-        assert_eq!(transform.e, 0.0);
-        assert_eq!(transform.f, 0.0);
+        // State should be back to defaults
+        assert_eq!(ctx.state.line_width, 1.0);
+        assert_eq!(ctx.state.global_alpha, 1.0);
+        let t = ctx.get_transform();
+        assert_eq!(t.a, 1.0);
+        assert_eq!(t.d, 1.0);
+        assert_eq!(t.e, 0.0);
+        assert_eq!(t.f, 0.0);
     }
 
     #[test]
     fn test_create_image_data() {
         let ctx = Canvas2dContext::new(100, 100).unwrap();
-
-        // Create image data
         let data = ctx.create_image_data(50, 30);
-
-        // Verify correct size (50 * 30 * 4 = 6000 bytes)
-        assert_eq!(data.len(), 6000);
-
-        // Verify all zeros (transparent black)
+        assert_eq!(data.len(), 50 * 30 * 4);
         assert!(data.iter().all(|&b| b == 0));
     }
 
     #[test]
     fn test_create_image_data_large() {
         let ctx = Canvas2dContext::new(100, 100).unwrap();
-
-        // Create larger image data
         let data = ctx.create_image_data(1000, 1000);
-
-        // Verify correct size
         assert_eq!(data.len(), 1000 * 1000 * 4);
     }
 }

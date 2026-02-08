@@ -21,7 +21,10 @@ use std::io::BufReader;
 use std::process::Command;
 use std::sync::OnceLock;
 use tempfile::TempDir;
-use vl_convert_canvas2d::{Canvas2dContext, TextAlign, TextBaseline};
+use vl_convert_canvas2d::{
+    ArcParams, Canvas2dContext, CubicBezierParams, DOMMatrix, DirtyRect, EllipseParams,
+    RadialGradientParams, TextAlign, TextBaseline,
+};
 
 /// Get path to node_modules for canvas tests.
 fn get_node_modules_path() -> std::path::PathBuf {
@@ -327,7 +330,14 @@ ctx.fill();
             use std::f32::consts::PI;
             ctx.set_fill_style("#ff00ff").unwrap();
             ctx.begin_path();
-            ctx.arc(50.0, 50.0, 30.0, 0.0, 2.0 * PI, false);
+            ctx.arc(&ArcParams {
+                x: 50.0,
+                y: 50.0,
+                radius: 30.0,
+                start_angle: 0.0,
+                end_angle: 2.0 * PI,
+                anticlockwise: false,
+            });
             ctx.fill();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -355,7 +365,14 @@ ctx.stroke();
             ctx.set_stroke_style("#ff0000").unwrap();
             ctx.set_line_width(3.0);
             ctx.begin_path();
-            ctx.arc(50.0, 50.0, 30.0, 0.0, 1.5 * PI, false);
+            ctx.arc(&ArcParams {
+                x: 50.0,
+                y: 50.0,
+                radius: 30.0,
+                start_angle: 0.0,
+                end_angle: 1.5 * PI,
+                anticlockwise: false,
+            });
             ctx.stroke();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -384,7 +401,14 @@ ctx.stroke();
             ctx.set_line_width(2.0);
             ctx.begin_path();
             ctx.move_to(10.0, 50.0);
-            ctx.bezier_curve_to(30.0, 10.0, 70.0, 90.0, 90.0, 50.0);
+            ctx.bezier_curve_to(&CubicBezierParams {
+                cp1x: 30.0,
+                cp1y: 10.0,
+                cp2x: 70.0,
+                cp2y: 90.0,
+                x: 90.0,
+                y: 50.0,
+            });
             ctx.stroke();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -439,7 +463,16 @@ ctx.fill();
             use std::f32::consts::PI;
             ctx.set_fill_style("#00ff00").unwrap();
             ctx.begin_path();
-            ctx.ellipse(50.0, 50.0, 40.0, 20.0, 0.0, 0.0, 2.0 * PI, false);
+            ctx.ellipse(&EllipseParams {
+                x: 50.0,
+                y: 50.0,
+                radius_x: 40.0,
+                radius_y: 20.0,
+                rotation: 0.0,
+                start_angle: 0.0,
+                end_angle: 2.0 * PI,
+                anticlockwise: false,
+            });
             ctx.fill();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -465,7 +498,16 @@ ctx.fill();
             use std::f32::consts::PI;
             ctx.set_fill_style("#ff6600").unwrap();
             ctx.begin_path();
-            ctx.ellipse(50.0, 50.0, 35.0, 15.0, PI / 4.0, 0.0, 2.0 * PI, false);
+            ctx.ellipse(&EllipseParams {
+                x: 50.0,
+                y: 50.0,
+                radius_x: 35.0,
+                radius_y: 15.0,
+                rotation: PI / 4.0,
+                start_angle: 0.0,
+                end_angle: 2.0 * PI,
+                anticlockwise: false,
+            });
             ctx.fill();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -1345,7 +1387,14 @@ ctx.fillStyle = gradient;
 ctx.fillRect(0, 0, 150, 150);
 "#,
         rust_fn: |ctx| {
-            let mut gradient = ctx.create_radial_gradient(75.0, 75.0, 0.0, 75.0, 75.0, 75.0);
+            let mut gradient = ctx.create_radial_gradient(&RadialGradientParams {
+                x0: 75.0,
+                y0: 75.0,
+                r0: 0.0,
+                x1: 75.0,
+                y1: 75.0,
+                r1: 75.0,
+            });
             gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 255, 255, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 0, 255));
             ctx.set_fill_style_gradient(gradient);
@@ -1373,7 +1422,14 @@ ctx.fillStyle = gradient;
 ctx.fillRect(0, 0, 150, 150);
 "#,
         rust_fn: |ctx| {
-            let mut gradient = ctx.create_radial_gradient(50.0, 50.0, 10.0, 75.0, 75.0, 70.0);
+            let mut gradient = ctx.create_radial_gradient(&RadialGradientParams {
+                x0: 50.0,
+                y0: 50.0,
+                r0: 10.0,
+                x1: 75.0,
+                y1: 75.0,
+                r1: 70.0,
+            });
             gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
             gradient.add_color_stop(0.5, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
@@ -1420,7 +1476,14 @@ ctx.stroke();
             ctx.line_to(130.0, 75.0);
             ctx.stroke();
             ctx.begin_path();
-            ctx.arc(75.0, 75.0, 40.0, 0.0, 2.0 * PI, false);
+            ctx.arc(&ArcParams {
+                x: 75.0,
+                y: 75.0,
+                radius: 40.0,
+                start_angle: 0.0,
+                end_angle: 2.0 * PI,
+                anticlockwise: false,
+            });
             ctx.stroke();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -1469,7 +1532,14 @@ ctx.fill();
             // Draw a circle that extends outside clip region
             ctx.set_fill_style("#0000ff").unwrap();
             ctx.begin_path();
-            ctx.arc(75.0, 75.0, 60.0, 0.0, 2.0 * PI, false);
+            ctx.arc(&ArcParams {
+                x: 75.0,
+                y: 75.0,
+                radius: 60.0,
+                start_angle: 0.0,
+                end_angle: 2.0 * PI,
+                anticlockwise: false,
+            });
             ctx.fill();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -1515,7 +1585,14 @@ for (let i = 0; i <= 150; i += 20) {
         rust_fn: |ctx| {
             // Define circular clipping region
             ctx.begin_path();
-            ctx.arc(75.0, 75.0, 50.0, 0.0, 2.0 * PI, false);
+            ctx.arc(&ArcParams {
+                x: 75.0,
+                y: 75.0,
+                radius: 50.0,
+                start_angle: 0.0,
+                end_angle: 2.0 * PI,
+                anticlockwise: false,
+            });
             ctx.clip();
 
             // Draw gradient background
@@ -1592,7 +1669,14 @@ ctx.fillRect(0, 0, 150, 150);
             ctx.clip();
 
             // Fill with gradient
-            let mut gradient = ctx.create_radial_gradient(75.0, 75.0, 0.0, 75.0, 75.0, 75.0);
+            let mut gradient = ctx.create_radial_gradient(&RadialGradientParams {
+                x0: 75.0,
+                y0: 75.0,
+                r0: 0.0,
+                x1: 75.0,
+                y1: 75.0,
+                r1: 75.0,
+            });
             gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
             gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
             ctx.set_fill_style_gradient(gradient);
@@ -1912,7 +1996,14 @@ ctx.restore();
         rust_fn: |ctx| {
             use vl_convert_canvas2d::Path2D;
             let mut path = Path2D::new();
-            path.arc(0.0, 0.0, 20.0, 0.0, 2.0 * PI, false);
+            path.arc(&ArcParams {
+                x: 0.0,
+                y: 0.0,
+                radius: 20.0,
+                start_angle: 0.0,
+                end_angle: 2.0 * PI,
+                anticlockwise: false,
+            });
 
             // Draw in multiple positions - reusing the same path
             ctx.set_fill_style("#ff0000").unwrap();
@@ -2452,7 +2543,19 @@ ctx.putImageData(imageData, 20, 20, 30, 30, 30, 30);
             }
 
             // Only put the bottom-right quadrant (yellow) using dirty rect
-            ctx.put_image_data_dirty(&data, 60, 60, 20, 20, 30, 30, 30, 30);
+            ctx.put_image_data_dirty(
+                &data,
+                60,
+                60,
+                20,
+                20,
+                &DirtyRect {
+                    x: 30,
+                    y: 30,
+                    width: 30,
+                    height: 30,
+                },
+            );
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -2953,7 +3056,14 @@ ctx.putImageData(imageData, 50, 50);
             let image_data = ctx.get_image_data(20, 20, 40, 40);
 
             // Reset transform
-            ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+            ctx.set_transform(DOMMatrix {
+                a: 1.0,
+                b: 0.0,
+                c: 0.0,
+                d: 1.0,
+                e: 0.0,
+                f: 0.0,
+            });
 
             // Clear and put image data
             ctx.clear_rect(0.0, 0.0, 100.0, 100.0);
@@ -3093,7 +3203,14 @@ ctx.putImageData(imageData, 0, 0);
             // Draw a circle
             ctx.set_fill_style("#ffff00").unwrap();
             ctx.begin_path();
-            ctx.arc(50.0, 50.0, 20.0, 0.0, 2.0 * PI, false);
+            ctx.arc(&ArcParams {
+                x: 50.0,
+                y: 50.0,
+                radius: 20.0,
+                start_angle: 0.0,
+                end_angle: 2.0 * PI,
+                anticlockwise: false,
+            });
             ctx.fill();
 
             // Get entire image data
@@ -3348,7 +3465,14 @@ ctx.putImageData(imageData, 5, 5);
             ctx.fill_rect(-20.0, -20.0, 40.0, 40.0);
 
             // Reset transform for getImageData
-            ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+            ctx.set_transform(DOMMatrix {
+                a: 1.0,
+                b: 0.0,
+                c: 0.0,
+                d: 1.0,
+                e: 0.0,
+                f: 0.0,
+            });
 
             // Get image data from a specific area
             let image_data = ctx.get_image_data(30, 30, 40, 40);
@@ -3396,7 +3520,14 @@ ctx.stroke();
             ctx.begin_path();
             ctx.move_to(10.0, 10.0);
             ctx.line_to(50.0, 40.0);
-            ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0); // Reset transform
+            ctx.set_transform(DOMMatrix {
+                a: 1.0,
+                b: 0.0,
+                c: 0.0,
+                d: 1.0,
+                e: 0.0,
+                f: 0.0,
+            }); // Reset transform
             ctx.stroke();
         },
         threshold: DEFAULT_THRESHOLD,
@@ -3467,7 +3598,14 @@ ctx.stroke();  // Line width should be 5 (unscaled)
             ctx.begin_path();
             ctx.move_to(10.0, 10.0);
             ctx.line_to(50.0, 40.0);
-            ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0); // Reset transform
+            ctx.set_transform(DOMMatrix {
+                a: 1.0,
+                b: 0.0,
+                c: 0.0,
+                d: 1.0,
+                e: 0.0,
+                f: 0.0,
+            }); // Reset transform
             ctx.stroke(); // Line width should be 5 (unscaled)
         },
         threshold: DEFAULT_THRESHOLD,
@@ -3506,7 +3644,14 @@ ctx.stroke();
             ctx.scale(1.0, 2.0); // Scale Y by 2
             ctx.line_to(50.0, 50.0); // This point becomes (50, 100)
             ctx.line_to(10.0, 50.0); // This point becomes (10, 100)
-            ctx.set_transform(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+            ctx.set_transform(DOMMatrix {
+                a: 1.0,
+                b: 0.0,
+                c: 0.0,
+                d: 1.0,
+                e: 0.0,
+                f: 0.0,
+            });
             ctx.stroke();
         },
         threshold: DEFAULT_THRESHOLD,
