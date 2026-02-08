@@ -12,7 +12,7 @@ Try the Python library out on Binder! \
 Install `vl-convert` using [cargo](https://doc.rust-lang.org/cargo/) with:
 
 ```plain
-$ cargo install vl-convert
+$ cargo install vl-convert --locked
 $ vl-convert --help
 
 vl-convert: A utility for converting Vega-Lite specifications
