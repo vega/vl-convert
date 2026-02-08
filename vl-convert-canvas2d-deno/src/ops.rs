@@ -2337,6 +2337,20 @@ pub fn op_canvas_decode_svg_at_size(
     })
 }
 
+/// Fallback when SVG support is not compiled in.
+#[cfg(not(feature = "svg"))]
+#[op2]
+#[serde]
+pub fn op_canvas_decode_svg_at_size(
+    #[buffer] _bytes: &[u8],
+    _target_width: u32,
+    _target_height: u32,
+) -> Result<DecodedImage, JsErrorBox> {
+    Err(JsErrorBox::generic(
+        "SVG decoding is not available: the 'svg' feature is not enabled",
+    ))
+}
+
 #[cfg(feature = "svg")]
 fn is_svg(bytes: &[u8]) -> bool {
     let s = std::str::from_utf8(bytes).unwrap_or("");
