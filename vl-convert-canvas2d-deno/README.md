@@ -76,15 +76,16 @@ const pngData = canvas.toDataURL('image/png');
 - Path2D objects
 - Styles: `fillStyle`, `strokeStyle` (colors, gradients, patterns)
 - Line styles: `lineWidth`, `lineCap`, `lineJoin`, `miterLimit`, `setLineDash`, `lineDashOffset`
-- Text: `fillText`, `strokeText`, `measureText`, `font`, `textAlign`, `textBaseline`, `letterSpacing`
+- Text: `fillText`, `strokeText`, `measureText`, `font`, `textAlign`, `textBaseline`, `letterSpacing`, `fontStretch`
 - Transforms: `translate`, `rotate`, `scale`, `transform`, `setTransform`, `getTransform`, `resetTransform`
 - Compositing: `globalAlpha`, `globalCompositeOperation`
-- Image operations: `drawImage`, `getImageData`, `putImageData`, `createImageData`
+- Image operations: `drawImage`, `getImageData`, `putImageData`, `createImageData` (with `ImageDataSettings` validation)
 - Image smoothing: `imageSmoothingEnabled`, `imageSmoothingQuality`
 - State: `save`, `restore`, `reset`
 - Gradients: `createLinearGradient`, `createRadialGradient`
 - Patterns: `createPattern`
-- Hit testing: `isPointInPath`, `isPointInStroke`
+- Path2D: all path methods plus `addPath(path, transform)`
+- Not supported: `isPointInPath`, `isPointInStroke` (throw explicit errors)
 
 ## Architecture
 

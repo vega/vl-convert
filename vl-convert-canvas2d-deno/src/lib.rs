@@ -51,6 +51,8 @@ deno_core::extension!(
         op_canvas_set_font,
         op_canvas_set_text_align,
         op_canvas_set_text_baseline,
+        op_canvas_set_font_stretch,
+        op_canvas_get_font_stretch,
         op_canvas_measure_text,
         op_canvas_fill_text,
         op_canvas_stroke_text,
@@ -142,6 +144,7 @@ deno_core::extension!(
         op_canvas_get_transform,
         op_path2d_round_rect,
         op_path2d_round_rect_radii,
+        op_path2d_add_path,
         // Image decoding
         op_canvas_decode_image,
         op_canvas_decode_svg_at_size,

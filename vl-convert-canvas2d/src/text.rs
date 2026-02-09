@@ -157,7 +157,8 @@ pub fn measure_text(
     let attrs = Attrs::new()
         .family(resolution.family)
         .weight(weight)
-        .style(font.style);
+        .style(font.style)
+        .stretch(font.stretch.into());
 
     buffer.set_text(font_system, text, &attrs, Shaping::Advanced, None);
     buffer.shape_until_scroll(font_system, false);

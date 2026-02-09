@@ -3,14 +3,16 @@
 use crate::error::{Canvas2dError, Canvas2dResult};
 use crate::font_parser::{parse_font, ParsedFont};
 use crate::geometry::{
-    ArcParams, ArcToParams, CubicBezierParams, DirtyRect, EllipseParams, ImageCropParams,
-    QuadraticBezierParams, RadialGradientParams, RectParams, RoundRectParams,
+    ArcParams, ArcToParams, CanvasColor, CanvasImageDataRef, CubicBezierParams, DirtyRect,
+    EllipseParams, ImageCropParams, QuadraticBezierParams, RadialGradientParams, RectParams,
+    RoundRectParams,
 };
 use crate::gradient::{CanvasGradient, GradientType};
 use crate::path2d::Path2D;
 use crate::pattern::{CanvasPattern, Repetition};
 use crate::style::{
-    CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
+    CanvasFillRule, FillStyle, FontStretch, ImageSmoothingQuality, LineCap, LineJoin, TextAlign,
+    TextBaseline,
 };
 use crate::text::TextMetrics;
 use cosmic_text::{
@@ -509,9 +511,9 @@ impl Canvas2dContext {
         Ok(())
     }
 
-    /// Set the fill style from a tiny_skia Color.
-    pub fn set_fill_style_color(&mut self, color: tiny_skia::Color) {
-        self.state.fill_style = FillStyle::Color(color);
+    /// Set the fill style from a CanvasColor.
+    pub fn set_fill_style_color(&mut self, color: CanvasColor) {
+        self.state.fill_style = FillStyle::Color(color.into());
     }
 
     /// Set the stroke style from a CSS color string.
@@ -521,14 +523,17 @@ impl Canvas2dContext {
         Ok(())
     }
 
-    /// Set the stroke style from a tiny_skia Color.
-    pub fn set_stroke_style_color(&mut self, color: tiny_skia::Color) {
-        self.state.stroke_style = FillStyle::Color(color);
+    /// Set the stroke style from a CanvasColor.
+    pub fn set_stroke_style_color(&mut self, color: CanvasColor) {
+        self.state.stroke_style = FillStyle::Color(color.into());
     }
 
     /// Set the line width.
+    /// Per spec: ignore non-finite or values <= 0.
     pub fn set_line_width(&mut self, width: f32) {
-        self.state.line_width = width.max(0.0);
+        if width.is_finite() && width > 0.0 {
+            self.state.line_width = width;
+        }
     }
 
     /// Set the line cap style.
@@ -542,18 +547,26 @@ impl Canvas2dContext {
     }
 
     /// Set the miter limit.
+    /// Per spec: ignore non-finite or values <= 0.
     pub fn set_miter_limit(&mut self, limit: f32) {
-        self.state.miter_limit = limit.max(0.0);
+        if limit.is_finite() && limit > 0.0 {
+            self.state.miter_limit = limit;
+        }
     }
 
     /// Set the global alpha (opacity).
+    /// Per spec: ignore non-finite or values outside [0.0, 1.0].
     pub fn set_global_alpha(&mut self, alpha: f32) {
-        self.state.global_alpha = alpha.clamp(0.0, 1.0);
+        if alpha.is_finite() && (0.0..=1.0).contains(&alpha) {
+            self.state.global_alpha = alpha;
+        }
     }
 
     /// Set the global composite operation (blend mode).
-    pub fn set_global_composite_operation(&mut self, op: &str) {
-        self.state.global_composite_operation = match op {
+    /// Per spec: ignore invalid values, preserve previous mode.
+    /// Returns true if the value was accepted.
+    pub fn set_global_composite_operation(&mut self, op: &str) -> bool {
+        let mode = match op {
             "source-over" => tiny_skia::BlendMode::SourceOver,
             "source-in" => tiny_skia::BlendMode::SourceIn,
             "source-out" => tiny_skia::BlendMode::SourceOut,
@@ -580,12 +593,25 @@ impl Canvas2dContext {
             "saturation" => tiny_skia::BlendMode::Saturation,
             "color" => tiny_skia::BlendMode::Color,
             "luminosity" => tiny_skia::BlendMode::Luminosity,
-            _ => tiny_skia::BlendMode::SourceOver,
+            _ => return false,
         };
+        self.state.global_composite_operation = mode;
+        true
     }
 
     /// Set the line dash pattern.
-    pub fn set_line_dash(&mut self, segments: Vec<f32>) {
+    /// Per spec: ignore if any value is non-finite or negative.
+    /// Duplicate odd-length arrays to make them even.
+    pub fn set_line_dash(&mut self, mut segments: Vec<f32>) {
+        // Reject if any value is non-finite or negative
+        if segments.iter().any(|&v| !v.is_finite() || v < 0.0) {
+            return;
+        }
+        // Duplicate odd-length arrays per spec
+        if !segments.len().is_multiple_of(2) {
+            let copy = segments.clone();
+            segments.extend(copy);
+        }
         self.state.line_dash = segments;
     }
 
@@ -595,8 +621,11 @@ impl Canvas2dContext {
     }
 
     /// Set the line dash offset.
+    /// Per spec: ignore non-finite values.
     pub fn set_line_dash_offset(&mut self, offset: f32) {
-        self.state.line_dash_offset = offset;
+        if offset.is_finite() {
+            self.state.line_dash_offset = offset;
+        }
     }
 
     // --- Image smoothing ---
@@ -687,17 +716,6 @@ impl Canvas2dContext {
         Ok(Arc::new(pattern))
     }
 
-    /// Create a pattern from an existing canvas (pixmap reference).
-    pub fn create_pattern_from_canvas(
-        &self,
-        pixmap: tiny_skia::PixmapRef,
-        repetition: &str,
-    ) -> Canvas2dResult<Arc<CanvasPattern>> {
-        let rep = repetition.parse::<Repetition>()?;
-        let pattern = CanvasPattern::from_pixmap_ref(pixmap, rep)?;
-        Ok(Arc::new(pattern))
-    }
-
     /// Set the fill style to a pattern.
     pub fn set_fill_style_pattern(&mut self, pattern: Arc<CanvasPattern>) {
         self.state.fill_style = FillStyle::Pattern(pattern);
@@ -724,6 +742,16 @@ impl Canvas2dContext {
     /// Set the text baseline.
     pub fn set_text_baseline(&mut self, baseline: TextBaseline) {
         self.state.text_baseline = baseline;
+    }
+
+    /// Set the font stretch (width).
+    pub fn set_font_stretch(&mut self, stretch: FontStretch) {
+        self.state.font.stretch = stretch;
+    }
+
+    /// Get the current font stretch.
+    pub fn get_font_stretch(&self) -> FontStretch {
+        self.state.font.stretch
     }
 
     /// Set the letter spacing for text rendering (in pixels).
@@ -806,6 +834,7 @@ impl Canvas2dContext {
             .family(resolution.family)
             .weight(weight)
             .style(font.style)
+            .stretch(font.stretch.into())
             .letter_spacing(letter_spacing)
             .cache_key_flags(CacheKeyFlags::DISABLE_HINTING);
 
@@ -1144,6 +1173,8 @@ impl Canvas2dContext {
 
     /// Add a rounded rectangle to the path.
     pub fn round_rect(&mut self, params: &RoundRectParams) {
+        use crate::geometry::CornerRadius;
+
         // Handle negative dimensions by adjusting position
         let (x, width) = if params.width < 0.0 {
             (params.x + params.width, -params.width)
@@ -1159,59 +1190,107 @@ impl Canvas2dContext {
         let [mut tl, mut tr, mut br, mut bl] = params.radii;
 
         // Clamp radii to non-negative
-        tl = tl.max(0.0);
-        tr = tr.max(0.0);
-        br = br.max(0.0);
-        bl = bl.max(0.0);
+        tl = CornerRadius {
+            x: tl.x.max(0.0),
+            y: tl.y.max(0.0),
+        };
+        tr = CornerRadius {
+            x: tr.x.max(0.0),
+            y: tr.y.max(0.0),
+        };
+        br = CornerRadius {
+            x: br.x.max(0.0),
+            y: br.y.max(0.0),
+        };
+        bl = CornerRadius {
+            x: bl.x.max(0.0),
+            y: bl.y.max(0.0),
+        };
 
-        // Scale radii if they exceed the rectangle dimensions
-        // Per spec: scale all radii uniformly if they exceed dimensions
-        let scale_x = width / (tl.max(bl) + tr.max(br)).max(1e-10);
-        let scale_y = height / (tl.max(tr) + bl.max(br)).max(1e-10);
-        let scale = scale_x.min(scale_y).min(1.0);
+        // Scale radii uniformly if they exceed the rectangle dimensions
+        // Top edge: tl.x + tr.x <= width
+        // Bottom edge: bl.x + br.x <= width
+        // Left edge: tl.y + bl.y <= height
+        // Right edge: tr.y + br.y <= height
+        let top = (tl.x + tr.x).max(1e-10);
+        let bottom = (bl.x + br.x).max(1e-10);
+        let left = (tl.y + bl.y).max(1e-10);
+        let right = (tr.y + br.y).max(1e-10);
+        let scale = (width / top)
+            .min(width / bottom)
+            .min(height / left)
+            .min(height / right)
+            .min(1.0);
 
         if scale < 1.0 {
-            tl *= scale;
-            tr *= scale;
-            br *= scale;
-            bl *= scale;
+            tl.x *= scale;
+            tl.y *= scale;
+            tr.x *= scale;
+            tr.y *= scale;
+            br.x *= scale;
+            br.y *= scale;
+            bl.x *= scale;
+            bl.y *= scale;
         }
 
-        // Build the rounded rectangle path using quadratic curves for corners
-        // Start at the top edge, after the top-left corner
-        self.path_builder.move_to(x + tl, y);
+        // Kappa for quarter-ellipse cubic Bezier approximation
+        const K: f32 = 0.552_284_8;
 
-        // Top edge to top-right corner
-        self.path_builder.line_to(x + width - tr, y);
+        // Build rounded rectangle path with elliptical corners
+        self.path_builder.move_to(x + tl.x, y);
+
+        // Top edge
+        self.path_builder.line_to(x + width - tr.x, y);
 
         // Top-right corner
-        if tr > 0.0 {
-            self.path_builder.quad_to(x + width, y, x + width, y + tr);
+        if tr.x > 0.0 || tr.y > 0.0 {
+            self.path_builder.cubic_to(
+                x + width - tr.x + tr.x * K,
+                y,
+                x + width,
+                y + tr.y - tr.y * K,
+                x + width,
+                y + tr.y,
+            );
         }
 
-        // Right edge to bottom-right corner
-        self.path_builder.line_to(x + width, y + height - br);
+        // Right edge
+        self.path_builder.line_to(x + width, y + height - br.y);
 
         // Bottom-right corner
-        if br > 0.0 {
-            self.path_builder
-                .quad_to(x + width, y + height, x + width - br, y + height);
+        if br.x > 0.0 || br.y > 0.0 {
+            self.path_builder.cubic_to(
+                x + width,
+                y + height - br.y + br.y * K,
+                x + width - br.x + br.x * K,
+                y + height,
+                x + width - br.x,
+                y + height,
+            );
         }
 
-        // Bottom edge to bottom-left corner
-        self.path_builder.line_to(x + bl, y + height);
+        // Bottom edge
+        self.path_builder.line_to(x + bl.x, y + height);
 
         // Bottom-left corner
-        if bl > 0.0 {
-            self.path_builder.quad_to(x, y + height, x, y + height - bl);
+        if bl.x > 0.0 || bl.y > 0.0 {
+            self.path_builder.cubic_to(
+                x + bl.x - bl.x * K,
+                y + height,
+                x,
+                y + height - bl.y + bl.y * K,
+                x,
+                y + height - bl.y,
+            );
         }
 
-        // Left edge to top-left corner
-        self.path_builder.line_to(x, y + tl);
+        // Left edge
+        self.path_builder.line_to(x, y + tl.y);
 
         // Top-left corner
-        if tl > 0.0 {
-            self.path_builder.quad_to(x, y, x + tl, y);
+        if tl.x > 0.0 || tl.y > 0.0 {
+            self.path_builder
+                .cubic_to(x, y + tl.y - tl.y * K, x + tl.x - tl.x * K, y, x + tl.x, y);
         }
 
         self.path_builder.close();
@@ -1498,11 +1577,8 @@ impl Canvas2dContext {
 
     // --- Image drawing ---
 
-    /// Draw an image at the specified position.
-    ///
-    /// This is the simplest form of drawImage - it draws the entire image
-    /// at the specified (dx, dy) coordinates.
-    pub fn draw_image(&mut self, image: tiny_skia::PixmapRef, dx: f32, dy: f32) {
+    /// Internal: draw a premultiplied-alpha pixmap at (dx, dy).
+    pub(crate) fn draw_image(&mut self, image: tiny_skia::PixmapRef, dx: f32, dy: f32) {
         log::debug!(target: "canvas", "drawImage {}x{} at {} {}", image.width(), image.height(), dx, dy);
         let paint = tiny_skia::PixmapPaint {
             opacity: self.state.global_alpha,
@@ -1518,11 +1594,8 @@ impl Canvas2dContext {
             .draw_pixmap(0, 0, image, &paint, transform, clip_mask.as_ref());
     }
 
-    /// Draw an image scaled to the specified dimensions.
-    ///
-    /// This form draws the entire source image scaled to fit within
-    /// the destination rectangle (dx, dy, dw, dh).
-    pub fn draw_image_scaled(
+    /// Internal: draw a premultiplied-alpha pixmap scaled.
+    pub(crate) fn draw_image_scaled(
         &mut self,
         image: tiny_skia::PixmapRef,
         dx: f32,
@@ -1552,11 +1625,12 @@ impl Canvas2dContext {
             .draw_pixmap(0, 0, image, &paint, transform, clip_mask.as_ref());
     }
 
-    /// Draw a portion of an image to a destination rectangle.
-    ///
-    /// This form extracts a source rectangle from the image
-    /// and draws it into the destination rectangle.
-    pub fn draw_image_cropped(&mut self, image: tiny_skia::PixmapRef, params: &ImageCropParams) {
+    /// Internal: draw a cropped region of a premultiplied-alpha pixmap.
+    pub(crate) fn draw_image_cropped(
+        &mut self,
+        image: tiny_skia::PixmapRef,
+        params: &ImageCropParams,
+    ) {
         let ImageCropParams {
             sx,
             sy,
@@ -1595,6 +1669,79 @@ impl Canvas2dContext {
             // Now draw the extracted region scaled to the destination
             self.draw_image_scaled(sub_pixmap.as_ref(), dx, dy, dw, dh);
         }
+    }
+
+    // --- Public draw image/canvas methods (backend-neutral) ---
+
+    /// Draw image data at the specified position.
+    pub fn draw_image_data(&mut self, image: &CanvasImageDataRef<'_>, dx: f32, dy: f32) {
+        if let Some(pixmap) =
+            tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
+        {
+            self.draw_image(pixmap, dx, dy);
+        }
+    }
+
+    /// Draw image data scaled to the specified dimensions.
+    pub fn draw_image_data_scaled(
+        &mut self,
+        image: &CanvasImageDataRef<'_>,
+        dx: f32,
+        dy: f32,
+        dw: f32,
+        dh: f32,
+    ) {
+        if let Some(pixmap) =
+            tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
+        {
+            self.draw_image_scaled(pixmap, dx, dy, dw, dh);
+        }
+    }
+
+    /// Draw a cropped region of image data to a destination rectangle.
+    pub fn draw_image_data_cropped(
+        &mut self,
+        image: &CanvasImageDataRef<'_>,
+        params: &ImageCropParams,
+    ) {
+        if let Some(pixmap) =
+            tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
+        {
+            self.draw_image_cropped(pixmap, params);
+        }
+    }
+
+    /// Draw another canvas at the specified position.
+    pub fn draw_canvas(&mut self, source: &Canvas2dContext, dx: f32, dy: f32) {
+        self.draw_image(source.pixmap.as_ref(), dx, dy);
+    }
+
+    /// Draw another canvas scaled to the specified dimensions.
+    pub fn draw_canvas_scaled(
+        &mut self,
+        source: &Canvas2dContext,
+        dx: f32,
+        dy: f32,
+        dw: f32,
+        dh: f32,
+    ) {
+        self.draw_image_scaled(source.pixmap.as_ref(), dx, dy, dw, dh);
+    }
+
+    /// Draw a cropped region of another canvas to a destination rectangle.
+    pub fn draw_canvas_cropped(&mut self, source: &Canvas2dContext, params: &ImageCropParams) {
+        self.draw_image_cropped(source.pixmap.as_ref(), params);
+    }
+
+    /// Create a pattern from another canvas.
+    pub fn create_pattern_from_canvas(
+        &self,
+        source: &Canvas2dContext,
+        repetition: &str,
+    ) -> Canvas2dResult<Arc<CanvasPattern>> {
+        let rep = repetition.parse::<Repetition>()?;
+        let pattern = CanvasPattern::from_pixmap_ref(source.pixmap.as_ref(), rep)?;
+        Ok(Arc::new(pattern))
     }
 
     // --- Transform operations ---
@@ -1834,16 +1981,6 @@ impl Canvas2dContext {
         Ok(buf)
     }
 
-    /// Get a reference to the underlying pixmap.
-    pub fn pixmap(&self) -> &Pixmap {
-        &self.pixmap
-    }
-
-    /// Get a mutable reference to the underlying pixmap.
-    pub fn pixmap_mut(&mut self) -> &mut Pixmap {
-        &mut self.pixmap
-    }
-
     // --- Private helpers ---
 
     fn create_clip_mask(&self) -> Option<tiny_skia::Mask> {
@@ -1939,7 +2076,7 @@ impl Canvas2dContext {
             .stops
             .iter()
             .map(|stop| {
-                let mut color = stop.color;
+                let mut color: tiny_skia::Color = stop.color.into();
                 if self.state.global_alpha < 1.0 {
                     color.set_alpha((color.alpha() * self.state.global_alpha).clamp(0.0, 1.0));
                 }
@@ -2018,7 +2155,7 @@ mod tests {
         assert!(ctx.state.clip_path.is_none());
         assert_eq!(ctx.clip_fill_rule, CanvasFillRule::NonZero);
         // Canvas should be fully transparent
-        assert!(ctx.pixmap().data().iter().all(|&b| b == 0));
+        assert!(ctx.pixmap.data().iter().all(|&b| b == 0));
     }
 
     #[test]
@@ -2034,13 +2171,30 @@ mod tests {
     }
 
     #[test]
-    fn test_line_width_clamped_to_zero() {
+    fn test_line_width_ignore_invalid() {
         let mut ctx = Canvas2dContext::new(100, 100).unwrap();
         ctx.set_line_width(5.0);
         assert_eq!(ctx.state.line_width, 5.0);
 
+        // Negative values are ignored (value preserved)
         ctx.set_line_width(-1.0);
-        assert_eq!(ctx.state.line_width, 0.0);
+        assert_eq!(ctx.state.line_width, 5.0);
+
+        // Zero is ignored
+        ctx.set_line_width(0.0);
+        assert_eq!(ctx.state.line_width, 5.0);
+
+        // Non-finite values are ignored
+        ctx.set_line_width(f32::NAN);
+        assert_eq!(ctx.state.line_width, 5.0);
+        ctx.set_line_width(f32::INFINITY);
+        assert_eq!(ctx.state.line_width, 5.0);
+        ctx.set_line_width(f32::NEG_INFINITY);
+        assert_eq!(ctx.state.line_width, 5.0);
+
+        // Valid positive values are accepted
+        ctx.set_line_width(3.0);
+        assert_eq!(ctx.state.line_width, 3.0);
     }
 
     #[test]
@@ -2057,24 +2211,147 @@ mod tests {
     #[test]
     fn test_line_dash_set_get() {
         let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        // Even-length arrays stored as-is
+        ctx.set_line_dash(vec![5.0, 10.0]);
+        assert_eq!(ctx.get_line_dash(), &[5.0, 10.0]);
+
+        // Odd-length arrays are duplicated per spec
         ctx.set_line_dash(vec![5.0, 10.0, 15.0]);
-        assert_eq!(ctx.get_line_dash(), &[5.0, 10.0, 15.0]);
+        assert_eq!(ctx.get_line_dash(), &[5.0, 10.0, 15.0, 5.0, 10.0, 15.0]);
 
         ctx.set_line_dash_offset(3.5);
         assert_eq!(ctx.state.line_dash_offset, 3.5);
     }
 
     #[test]
-    fn test_global_alpha_clamped() {
+    fn test_line_dash_ignore_invalid() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.set_line_dash(vec![5.0, 5.0]);
+        assert_eq!(ctx.get_line_dash(), &[5.0, 5.0]);
+
+        // Negative values cause entire call to be ignored
+        ctx.set_line_dash(vec![5.0, -1.0]);
+        assert_eq!(ctx.get_line_dash(), &[5.0, 5.0]);
+
+        // NaN causes entire call to be ignored
+        ctx.set_line_dash(vec![5.0, f32::NAN]);
+        assert_eq!(ctx.get_line_dash(), &[5.0, 5.0]);
+
+        // Infinity causes entire call to be ignored
+        ctx.set_line_dash(vec![f32::INFINITY, 5.0]);
+        assert_eq!(ctx.get_line_dash(), &[5.0, 5.0]);
+
+        // Empty array is valid (clears dash)
+        ctx.set_line_dash(vec![]);
+        assert!(ctx.get_line_dash().is_empty());
+
+        // Single element (odd) is duplicated
+        ctx.set_line_dash(vec![3.0]);
+        assert_eq!(ctx.get_line_dash(), &[3.0, 3.0]);
+    }
+
+    #[test]
+    fn test_line_dash_offset_ignore_invalid() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.set_line_dash_offset(5.0);
+        assert_eq!(ctx.state.line_dash_offset, 5.0);
+
+        // Non-finite values are ignored
+        ctx.set_line_dash_offset(f32::NAN);
+        assert_eq!(ctx.state.line_dash_offset, 5.0);
+        ctx.set_line_dash_offset(f32::INFINITY);
+        assert_eq!(ctx.state.line_dash_offset, 5.0);
+        ctx.set_line_dash_offset(f32::NEG_INFINITY);
+        assert_eq!(ctx.state.line_dash_offset, 5.0);
+
+        // Valid values are accepted (including negative and zero)
+        ctx.set_line_dash_offset(-2.0);
+        assert_eq!(ctx.state.line_dash_offset, -2.0);
+        ctx.set_line_dash_offset(0.0);
+        assert_eq!(ctx.state.line_dash_offset, 0.0);
+    }
+
+    #[test]
+    fn test_global_alpha_ignore_invalid() {
         let mut ctx = Canvas2dContext::new(100, 100).unwrap();
         ctx.set_global_alpha(0.5);
         assert_eq!(ctx.state.global_alpha, 0.5);
 
+        // Out-of-range values are ignored (not clamped)
         ctx.set_global_alpha(2.0);
-        assert_eq!(ctx.state.global_alpha, 1.0);
-
+        assert_eq!(ctx.state.global_alpha, 0.5);
         ctx.set_global_alpha(-0.5);
+        assert_eq!(ctx.state.global_alpha, 0.5);
+
+        // Non-finite values are ignored
+        ctx.set_global_alpha(f32::NAN);
+        assert_eq!(ctx.state.global_alpha, 0.5);
+        ctx.set_global_alpha(f32::INFINITY);
+        assert_eq!(ctx.state.global_alpha, 0.5);
+        ctx.set_global_alpha(f32::NEG_INFINITY);
+        assert_eq!(ctx.state.global_alpha, 0.5);
+
+        // Valid boundary values are accepted
+        ctx.set_global_alpha(0.0);
         assert_eq!(ctx.state.global_alpha, 0.0);
+        ctx.set_global_alpha(1.0);
+        assert_eq!(ctx.state.global_alpha, 1.0);
+    }
+
+    #[test]
+    fn test_miter_limit_ignore_invalid() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        assert_eq!(ctx.state.miter_limit, 10.0); // default
+
+        ctx.set_miter_limit(5.0);
+        assert_eq!(ctx.state.miter_limit, 5.0);
+
+        // Non-positive values are ignored
+        ctx.set_miter_limit(0.0);
+        assert_eq!(ctx.state.miter_limit, 5.0);
+        ctx.set_miter_limit(-1.0);
+        assert_eq!(ctx.state.miter_limit, 5.0);
+
+        // Non-finite values are ignored
+        ctx.set_miter_limit(f32::NAN);
+        assert_eq!(ctx.state.miter_limit, 5.0);
+        ctx.set_miter_limit(f32::INFINITY);
+        assert_eq!(ctx.state.miter_limit, 5.0);
+
+        // Valid positive values are accepted
+        ctx.set_miter_limit(2.0);
+        assert_eq!(ctx.state.miter_limit, 2.0);
+    }
+
+    #[test]
+    fn test_global_composite_operation_ignore_invalid() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        // Default is source-over
+        assert_eq!(
+            ctx.state.global_composite_operation,
+            tiny_skia::BlendMode::SourceOver
+        );
+
+        // Valid value is accepted
+        assert!(ctx.set_global_composite_operation("multiply"));
+        assert_eq!(
+            ctx.state.global_composite_operation,
+            tiny_skia::BlendMode::Multiply
+        );
+
+        // Invalid value is ignored, previous mode preserved
+        assert!(!ctx.set_global_composite_operation("invalid-mode"));
+        assert_eq!(
+            ctx.state.global_composite_operation,
+            tiny_skia::BlendMode::Multiply
+        );
+
+        // Empty string is invalid
+        assert!(!ctx.set_global_composite_operation(""));
+        assert_eq!(
+            ctx.state.global_composite_operation,
+            tiny_skia::BlendMode::Multiply
+        );
     }
 
     #[test]
@@ -2200,13 +2477,13 @@ mod tests {
             height: 10.0,
         });
 
-        assert!(ctx.pixmap().data().iter().any(|&b| b != 0));
+        assert!(ctx.pixmap.data().iter().any(|&b| b != 0));
         assert!(ctx.pattern_cache_entry_count() > 0);
 
         ctx.reset();
 
         // Canvas should be clear
-        assert!(ctx.pixmap().data().iter().all(|&b| b == 0));
+        assert!(ctx.pixmap.data().iter().all(|&b| b == 0));
         assert_eq!(ctx.pattern_cache_entry_count(), 0);
         assert_eq!(ctx.pattern_cache_total_bytes(), 0);
         // State should be back to defaults
@@ -2284,6 +2561,50 @@ mod tests {
         let ctx = Canvas2dContext::new(100, 100).unwrap();
         let data = ctx.create_image_data(1000, 1000);
         assert_eq!(data.len(), 1000 * 1000 * 4);
+    }
+
+    #[test]
+    fn test_font_stretch_set_get() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        assert_eq!(ctx.get_font_stretch(), FontStretch::Normal);
+
+        ctx.set_font_stretch(FontStretch::Condensed);
+        assert_eq!(ctx.get_font_stretch(), FontStretch::Condensed);
+
+        ctx.set_font_stretch(FontStretch::UltraExpanded);
+        assert_eq!(ctx.get_font_stretch(), FontStretch::UltraExpanded);
+    }
+
+    #[test]
+    fn test_font_stretch_via_font_setter() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.set_font("condensed 12px Arial").unwrap();
+        assert_eq!(ctx.get_font_stretch(), FontStretch::Condensed);
+
+        // Setting font without stretch resets to Normal
+        ctx.set_font("12px Arial").unwrap();
+        assert_eq!(ctx.get_font_stretch(), FontStretch::Normal);
+    }
+
+    #[test]
+    fn test_font_stretch_save_restore() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.set_font_stretch(FontStretch::SemiExpanded);
+        ctx.save();
+
+        ctx.set_font_stretch(FontStretch::ExtraCondensed);
+        assert_eq!(ctx.get_font_stretch(), FontStretch::ExtraCondensed);
+
+        ctx.restore();
+        assert_eq!(ctx.get_font_stretch(), FontStretch::SemiExpanded);
+    }
+
+    #[test]
+    fn test_font_stretch_reset() {
+        let mut ctx = Canvas2dContext::new(100, 100).unwrap();
+        ctx.set_font_stretch(FontStretch::Expanded);
+        ctx.reset();
+        assert_eq!(ctx.get_font_stretch(), FontStretch::Normal);
     }
 
     #[test]

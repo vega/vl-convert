@@ -2062,10 +2062,14 @@ var __imageDataChecks = [
         let mut ctx = InnerVlConverter::try_new().await.unwrap();
         let code = r#"
 var __unsupportedMessages = [];
+
+// Path2D.addPath is now implemented and should NOT throw
+var addPathSucceeded = false;
 try {
   new Path2D().addPath(new Path2D());
+  addPathSucceeded = true;
 } catch (err) {
-  __unsupportedMessages.push(String(err && err.message ? err.message : err));
+  addPathSucceeded = false;
 }
 
 const canvas = new HTMLCanvasElement(16, 16);
@@ -2101,16 +2105,20 @@ try {
             .cloned()
             .unwrap_or_default();
 
-        assert_eq!(messages.len(), 3);
+        // Path2D.addPath should now succeed (no longer unsupported)
+        let add_path_succeeded = ctx
+            .execute_script_to_json("addPathSucceeded")
+            .await
+            .unwrap();
+        assert_eq!(add_path_succeeded, serde_json::json!(true));
+
+        // isPointInPath and isPointInStroke remain unsupported
+        assert_eq!(messages.len(), 2);
         assert!(messages[0]
             .as_str()
             .unwrap_or_default()
-            .contains("Path2D.addPath"));
-        assert!(messages[1]
-            .as_str()
-            .unwrap_or_default()
             .contains("CanvasRenderingContext2D.isPointInPath"));
-        assert!(messages[2]
+        assert!(messages[1]
             .as_str()
             .unwrap_or_default()
             .contains("CanvasRenderingContext2D.isPointInStroke"));

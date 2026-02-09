@@ -20,7 +20,7 @@ use vl_convert_canvas2d::{Canvas2dContext, RectParams};
 let mut ctx = Canvas2dContext::new(400, 300)?;
 ctx.set_fill_style("#ff0000")?;
 ctx.fill_rect(&RectParams { x: 10.0, y: 10.0, width: 100.0, height: 50.0 });
-let png_data = ctx.to_png()?;
+let png_data = ctx.to_png(None)?;
 ```
 
 ## Feature Support
@@ -143,8 +143,8 @@ let png_data = ctx.to_png()?;
 | clip(fillRule) | ✅ | `clip_with_rule(rule)` |
 | clip(Path2D) | ✅ | `clip_path2d(path)` |
 | clip(Path2D, fillRule) | ✅ | `clip_path2d_with_rule(path, rule)` |
-| isPointInPath() | ❌ | Not supported |
-| isPointInStroke() | ❌ | Not supported |
+| isPointInPath() | ❌ | Unsupported (throws) |
+| isPointInStroke() | ❌ | Unsupported (throws) |
 
 ### Path Building
 
@@ -158,7 +158,7 @@ let png_data = ctx.to_png()?;
 | arc() | ✅ | `arc(x, y, radius, start_angle, end_angle, anticlockwise)` |
 | ellipse() | ✅ | `ellipse(x, y, rx, ry, rotation, start, end, anticlockwise)` |
 | rect() | ✅ | `rect(x, y, w, h)` |
-| roundRect() | ✅ | `round_rect(x, y, w, h, radius)` / `round_rect_radii(x, y, w, h, radii)` |
+| roundRect() | ✅ | `round_rect(params)` - supports independent x/y corner radii |
 | closePath() | ✅ | `close_path()` |
 
 ### Text Drawing
@@ -179,10 +179,10 @@ let png_data = ctx.to_png()?;
 | textAlign | ✅ | `set_text_align(align)` - Left, Right, Center, Start, End |
 | textBaseline | ✅ | `set_text_baseline(baseline)` - Top, Hanging, Middle, Alphabetic, Ideographic, Bottom |
 | letterSpacing | ✅ | `set_letter_spacing(spacing)` / `get_letter_spacing()` |
+| fontStretch | ✅ | `set_font_stretch(stretch)` / `get_font_stretch()` |
 | direction | ❌ | - |
 | wordSpacing | ❌ | - |
 | fontKerning | ❌ | - |
-| fontStretch | ❌ | - |
 | fontVariantCaps | ❌ | - |
 | textRendering | ❌ | - |
 
@@ -190,18 +190,21 @@ let png_data = ctx.to_png()?;
 
 | Feature | Status | API |
 |---------|--------|-----|
-| drawImage(img, dx, dy) | ✅ | `draw_image(pixmap, dx, dy)` |
-| drawImage(img, dx, dy, dw, dh) | ✅ | `draw_image_scaled(pixmap, dx, dy, dw, dh)` |
-| drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) | ✅ | `draw_image_cropped(pixmap, sx, sy, sw, sh, dx, dy, dw, dh)` |
+| drawImage(img, dx, dy) | ✅ | `draw_image_data(data, dx, dy)` / `draw_canvas(ctx, dx, dy)` |
+| drawImage(img, dx, dy, dw, dh) | ✅ | `draw_image_data_scaled(data, ...)` / `draw_canvas_scaled(ctx, ...)` |
+| drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh) | ✅ | `draw_image_data_cropped(data, ...)` / `draw_canvas_cropped(ctx, ...)` |
+| createPattern(canvas) | ✅ | `create_pattern_from_canvas(ctx, repetition)` |
 
 ### Pixel Manipulation
 
 | Feature | Status | API |
 |---------|--------|-----|
 | getImageData() | ✅ | `get_image_data(x, y, w, h)` - returns Vec<u8> RGBA |
+| getImageData(settings) | ✅ | Settings validated (only colorSpace "srgb" accepted) |
 | putImageData(data, dx, dy) | ✅ | `put_image_data(data, w, h, dx, dy)` |
 | putImageData(data, dx, dy, dirty) | ✅ | `put_image_data_dirty(data, w, h, dx, dy, dirty_x, dirty_y, dirty_w, dirty_h)` |
 | createImageData() | ✅ | `create_image_data(width, height)` |
+| createImageData(settings) | ✅ | Settings validated (only colorSpace "srgb" accepted) |
 
 ### Path2D
 
@@ -211,14 +214,13 @@ let png_data = ctx.to_png()?;
 | Path2D(path) | ✅ | `Path2D::from_path(other)` |
 | Path2D(svgPath) | ✅ | `Path2D::from_svg_path_data(d)` |
 | All path methods | ✅ | Same as context path methods |
-| addPath() | ❌ | - |
+| addPath() | ✅ | `add_path(other, transform)` |
 
 ### Output
 
 | Feature | Status | API |
 |---------|--------|-----|
-| PNG export | ✅ | `to_png()` |
-| Pixmap access | ✅ | `pixmap()` / `pixmap_mut()` |
+| PNG export | ✅ | `to_png(ppi)` - optional PPI for DPI metadata |
 
 ## Builder Pattern
 

@@ -1,8 +1,8 @@
 //! Integration tests for vl-convert-canvas2d.
 
 use vl_convert_canvas2d::{
-    ArcParams, Canvas2dContext, Canvas2dContextBuilder, CubicBezierParams, EllipseParams,
-    QuadraticBezierParams, RectParams, TextBaseline,
+    ArcParams, Canvas2dContext, Canvas2dContextBuilder, CanvasColor, CubicBezierParams,
+    EllipseParams, QuadraticBezierParams, RectParams, TextBaseline,
 };
 
 /// Test creating a canvas and drawing basic shapes.
@@ -361,8 +361,8 @@ fn test_linear_gradient() {
     let mut ctx = Canvas2dContext::new(100, 100).unwrap();
 
     let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 100.0, 0.0);
-    gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
-    gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+    gradient.add_color_stop(0.0, CanvasColor::from_rgba8(255, 0, 0, 255));
+    gradient.add_color_stop(1.0, CanvasColor::from_rgba8(0, 0, 255, 255));
 
     ctx.set_fill_style_gradient(gradient);
     ctx.fill_rect(&RectParams {

@@ -22,9 +22,9 @@ use std::process::Command;
 use std::sync::OnceLock;
 use tempfile::TempDir;
 use vl_convert_canvas2d::{
-    ArcParams, ArcToParams, Canvas2dContext, CanvasFillRule, CubicBezierParams, DOMMatrix,
-    DirtyRect, EllipseParams, Path2D, QuadraticBezierParams, RadialGradientParams, RectParams,
-    RoundRectParams, TextAlign, TextBaseline,
+    ArcParams, ArcToParams, Canvas2dContext, CanvasColor, CanvasFillRule, CornerRadius,
+    CubicBezierParams, DOMMatrix, DirtyRect, EllipseParams, Path2D, QuadraticBezierParams,
+    RadialGradientParams, RectParams, RoundRectParams, TextAlign, TextBaseline,
 };
 
 /// Get path to node_modules for canvas tests.
@@ -1366,8 +1366,8 @@ ctx.fillRect(0, 0, 200, 100);
 "#,
         rust_fn: |ctx| {
             let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 200.0, 0.0);
-            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
-            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            gradient.add_color_stop(0.0, CanvasColor::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(1.0, CanvasColor::from_rgba8(0, 0, 255, 255));
             ctx.set_fill_style_gradient(gradient);
             ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -1398,8 +1398,8 @@ ctx.fillRect(0, 0, 100, 200);
 "#,
         rust_fn: |ctx| {
             let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 0.0, 200.0);
-            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(0, 255, 0, 255));
-            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
+            gradient.add_color_stop(0.0, CanvasColor::from_rgba8(0, 255, 0, 255));
+            gradient.add_color_stop(1.0, CanvasColor::from_rgba8(255, 255, 0, 255));
             ctx.set_fill_style_gradient(gradient);
             ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -1431,9 +1431,9 @@ ctx.fillRect(0, 0, 150, 150);
 "#,
         rust_fn: |ctx| {
             let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 150.0, 150.0);
-            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
-            gradient.add_color_stop(0.5, tiny_skia::Color::from_rgba8(0, 255, 0, 255));
-            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            gradient.add_color_stop(0.0, CanvasColor::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(0.5, CanvasColor::from_rgba8(0, 255, 0, 255));
+            gradient.add_color_stop(1.0, CanvasColor::from_rgba8(0, 0, 255, 255));
             ctx.set_fill_style_gradient(gradient);
             ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -1471,8 +1471,8 @@ ctx.fillRect(0, 0, 150, 150);
                 y1: 75.0,
                 r1: 75.0,
             });
-            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 255, 255, 255));
-            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 0, 255));
+            gradient.add_color_stop(0.0, CanvasColor::from_rgba8(255, 255, 255, 255));
+            gradient.add_color_stop(1.0, CanvasColor::from_rgba8(0, 0, 0, 255));
             ctx.set_fill_style_gradient(gradient);
             ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -1511,9 +1511,9 @@ ctx.fillRect(0, 0, 150, 150);
                 y1: 75.0,
                 r1: 70.0,
             });
-            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
-            gradient.add_color_stop(0.5, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
-            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            gradient.add_color_stop(0.0, CanvasColor::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(0.5, CanvasColor::from_rgba8(255, 255, 0, 255));
+            gradient.add_color_stop(1.0, CanvasColor::from_rgba8(0, 0, 255, 255));
             ctx.set_fill_style_gradient(gradient);
             ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -1553,8 +1553,8 @@ ctx.stroke();
 "#,
         rust_fn: |ctx| {
             let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 150.0, 0.0);
-            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
-            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 255, 0, 255));
+            gradient.add_color_stop(0.0, CanvasColor::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(1.0, CanvasColor::from_rgba8(0, 255, 0, 255));
             ctx.set_stroke_style_gradient(gradient);
             ctx.set_line_width(10.0);
             ctx.begin_path();
@@ -1693,8 +1693,8 @@ for (let i = 0; i <= 150; i += 20) {
 
             // Draw gradient background
             let mut gradient = ctx.create_linear_gradient(0.0, 0.0, 150.0, 150.0);
-            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
-            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            gradient.add_color_stop(0.0, CanvasColor::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(1.0, CanvasColor::from_rgba8(0, 0, 255, 255));
             ctx.set_fill_style_gradient(gradient);
             ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -1778,8 +1778,8 @@ ctx.fillRect(0, 0, 150, 150);
                 y1: 75.0,
                 r1: 75.0,
             });
-            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
-            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(0.0, CanvasColor::from_rgba8(255, 255, 0, 255));
+            gradient.add_color_stop(1.0, CanvasColor::from_rgba8(255, 0, 0, 255));
             ctx.set_fill_style_gradient(gradient);
             ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -2039,7 +2039,12 @@ ctx.fill();
                 y: 20.0,
                 width: 110.0,
                 height: 110.0,
-                radii: [15.0, 15.0, 15.0, 15.0],
+                radii: [
+                    CornerRadius { x: 15.0, y: 15.0 },
+                    CornerRadius { x: 15.0, y: 15.0 },
+                    CornerRadius { x: 15.0, y: 15.0 },
+                    CornerRadius { x: 15.0, y: 15.0 },
+                ],
             });
             ctx.fill();
         },
@@ -2071,7 +2076,12 @@ ctx.fill();
                 y: 20.0,
                 width: 110.0,
                 height: 110.0,
-                radii: [5.0, 15.0, 25.0, 35.0],
+                radii: [
+                    CornerRadius { x: 5.0, y: 5.0 },
+                    CornerRadius { x: 15.0, y: 15.0 },
+                    CornerRadius { x: 25.0, y: 25.0 },
+                    CornerRadius { x: 35.0, y: 35.0 },
+                ],
             });
             ctx.fill();
         },
@@ -2104,7 +2114,12 @@ ctx.stroke();
                 y: 25.0,
                 width: 100.0,
                 height: 100.0,
-                radii: [20.0, 20.0, 20.0, 20.0],
+                radii: [
+                    CornerRadius { x: 20.0, y: 20.0 },
+                    CornerRadius { x: 20.0, y: 20.0 },
+                    CornerRadius { x: 20.0, y: 20.0 },
+                    CornerRadius { x: 20.0, y: 20.0 },
+                ],
             });
             ctx.stroke();
         },
@@ -2584,7 +2599,7 @@ ctx.drawImage(patternCanvas, 0, 0, 100, 100);
             ctx.set_image_smoothing_enabled(false);
 
             // Scale the small pattern up - should show sharp pixels
-            ctx.draw_image_scaled(pattern_ctx.pixmap().as_ref(), 0.0, 0.0, 100.0, 100.0);
+            ctx.draw_canvas_scaled(&pattern_ctx, 0.0, 0.0, 100.0, 100.0);
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: MAX_DIFF_PERCENT,
@@ -2620,8 +2635,8 @@ ctx.drawImage(patternCanvas, 0, 0, 100, 100);
             // Create a small 10x10 gradient pattern
             let mut pattern_ctx = Canvas2dContext::new(10, 10).unwrap();
             let mut gradient = pattern_ctx.create_linear_gradient(0.0, 0.0, 10.0, 10.0);
-            gradient.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
-            gradient.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
+            gradient.add_color_stop(0.0, CanvasColor::from_rgba8(255, 0, 0, 255));
+            gradient.add_color_stop(1.0, CanvasColor::from_rgba8(0, 0, 255, 255));
             pattern_ctx.set_fill_style_gradient(gradient);
             pattern_ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -2635,7 +2650,7 @@ ctx.drawImage(patternCanvas, 0, 0, 100, 100);
             ctx.set_image_smoothing_quality(vl_convert_canvas2d::ImageSmoothingQuality::High);
 
             // Scale up
-            ctx.draw_image_scaled(pattern_ctx.pixmap().as_ref(), 0.0, 0.0, 100.0, 100.0);
+            ctx.draw_canvas_scaled(&pattern_ctx, 0.0, 0.0, 100.0, 100.0);
         },
         threshold: DEFAULT_THRESHOLD,
         max_diff_percent: 3.0, // Higher tolerance for interpolation differences
@@ -3073,7 +3088,7 @@ ctx.fillRect(0, 0, 200, 200);
             });
 
             let pattern = ctx
-                .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "repeat")
+                .create_pattern_from_canvas(&pattern_ctx, "repeat")
                 .unwrap();
             ctx.set_fill_style_pattern(pattern);
             ctx.fill_rect(&RectParams {
@@ -3120,7 +3135,7 @@ ctx.fillRect(0, 0, 200, 200);
             });
 
             let pattern = ctx
-                .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "no-repeat")
+                .create_pattern_from_canvas(&pattern_ctx, "no-repeat")
                 .unwrap();
             ctx.set_fill_style_pattern(pattern);
             ctx.fill_rect(&RectParams {
@@ -3162,8 +3177,8 @@ ctx.fillRect(0, 0, 200, 200);
             // Create a 30x30 gradient pattern
             let mut pattern_ctx = vl_convert_canvas2d::Canvas2dContext::new(30, 30).unwrap();
             let mut grad = vl_convert_canvas2d::CanvasGradient::new_linear(0.0, 0.0, 30.0, 0.0);
-            grad.add_color_stop(0.0, tiny_skia::Color::from_rgba8(255, 0, 0, 255));
-            grad.add_color_stop(1.0, tiny_skia::Color::from_rgba8(255, 255, 0, 255));
+            grad.add_color_stop(0.0, CanvasColor::from_rgba8(255, 0, 0, 255));
+            grad.add_color_stop(1.0, CanvasColor::from_rgba8(255, 255, 0, 255));
             pattern_ctx.set_fill_style_gradient(grad);
             pattern_ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -3173,7 +3188,7 @@ ctx.fillRect(0, 0, 200, 200);
             });
 
             let pattern = ctx
-                .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "repeat-x")
+                .create_pattern_from_canvas(&pattern_ctx, "repeat-x")
                 .unwrap();
             ctx.set_fill_style_pattern(pattern);
             ctx.fill_rect(&RectParams {
@@ -3215,8 +3230,8 @@ ctx.fillRect(0, 0, 200, 200);
             // Create a 30x30 gradient pattern
             let mut pattern_ctx = vl_convert_canvas2d::Canvas2dContext::new(30, 30).unwrap();
             let mut grad = vl_convert_canvas2d::CanvasGradient::new_linear(0.0, 0.0, 0.0, 30.0);
-            grad.add_color_stop(0.0, tiny_skia::Color::from_rgba8(0, 0, 255, 255));
-            grad.add_color_stop(1.0, tiny_skia::Color::from_rgba8(0, 255, 255, 255));
+            grad.add_color_stop(0.0, CanvasColor::from_rgba8(0, 0, 255, 255));
+            grad.add_color_stop(1.0, CanvasColor::from_rgba8(0, 255, 255, 255));
             pattern_ctx.set_fill_style_gradient(grad);
             pattern_ctx.fill_rect(&RectParams {
                 x: 0.0,
@@ -3226,7 +3241,7 @@ ctx.fillRect(0, 0, 200, 200);
             });
 
             let pattern = ctx
-                .create_pattern_from_canvas(pattern_ctx.pixmap().as_ref(), "repeat-y")
+                .create_pattern_from_canvas(&pattern_ctx, "repeat-y")
                 .unwrap();
             ctx.set_fill_style_pattern(pattern);
             ctx.fill_rect(&RectParams {

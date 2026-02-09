@@ -181,6 +181,7 @@ impl Path2D {
 
     /// Add a rounded rectangle to the path.
     pub fn round_rect(&mut self, params: &RoundRectParams) {
+        use crate::geometry::CornerRadius;
         self.invalidate();
 
         // Handle negative dimensions
@@ -197,48 +198,111 @@ impl Path2D {
 
         let [mut tl, mut tr, mut br, mut bl] = params.radii;
 
-        // Clamp radii
-        tl = tl.max(0.0);
-        tr = tr.max(0.0);
-        br = br.max(0.0);
-        bl = bl.max(0.0);
+        // Clamp radii to non-negative
+        tl = CornerRadius {
+            x: tl.x.max(0.0),
+            y: tl.y.max(0.0),
+        };
+        tr = CornerRadius {
+            x: tr.x.max(0.0),
+            y: tr.y.max(0.0),
+        };
+        br = CornerRadius {
+            x: br.x.max(0.0),
+            y: br.y.max(0.0),
+        };
+        bl = CornerRadius {
+            x: bl.x.max(0.0),
+            y: bl.y.max(0.0),
+        };
 
-        // Scale radii if they exceed dimensions
-        let scale_x = width / (tl.max(bl) + tr.max(br)).max(1e-10);
-        let scale_y = height / (tl.max(tr) + bl.max(br)).max(1e-10);
-        let scale = scale_x.min(scale_y).min(1.0);
+        // Scale radii uniformly if they exceed the rectangle dimensions
+        let top = (tl.x + tr.x).max(1e-10);
+        let bottom = (bl.x + br.x).max(1e-10);
+        let left = (tl.y + bl.y).max(1e-10);
+        let right = (tr.y + br.y).max(1e-10);
+        let scale = (width / top)
+            .min(width / bottom)
+            .min(height / left)
+            .min(height / right)
+            .min(1.0);
 
         if scale < 1.0 {
-            tl *= scale;
-            tr *= scale;
-            br *= scale;
-            bl *= scale;
+            tl.x *= scale;
+            tl.y *= scale;
+            tr.x *= scale;
+            tr.y *= scale;
+            br.x *= scale;
+            br.y *= scale;
+            bl.x *= scale;
+            bl.y *= scale;
         }
 
-        // Build the rounded rectangle
-        self.builder.move_to(x + tl, y);
-        self.builder.line_to(x + width - tr, y);
-        if tr > 0.0 {
-            self.builder.quad_to(x + width, y, x + width, y + tr);
+        // Kappa for quarter-ellipse cubic Bezier approximation
+        const K: f32 = 0.552_284_8;
+
+        // Build rounded rectangle path with elliptical corners
+        self.builder.move_to(x + tl.x, y);
+
+        // Top edge
+        self.builder.line_to(x + width - tr.x, y);
+
+        // Top-right corner
+        if tr.x > 0.0 || tr.y > 0.0 {
+            self.builder.cubic_to(
+                x + width - tr.x + tr.x * K,
+                y,
+                x + width,
+                y + tr.y - tr.y * K,
+                x + width,
+                y + tr.y,
+            );
         }
-        self.builder.line_to(x + width, y + height - br);
-        if br > 0.0 {
+
+        // Right edge
+        self.builder.line_to(x + width, y + height - br.y);
+
+        // Bottom-right corner
+        if br.x > 0.0 || br.y > 0.0 {
+            self.builder.cubic_to(
+                x + width,
+                y + height - br.y + br.y * K,
+                x + width - br.x + br.x * K,
+                y + height,
+                x + width - br.x,
+                y + height,
+            );
+        }
+
+        // Bottom edge
+        self.builder.line_to(x + bl.x, y + height);
+
+        // Bottom-left corner
+        if bl.x > 0.0 || bl.y > 0.0 {
+            self.builder.cubic_to(
+                x + bl.x - bl.x * K,
+                y + height,
+                x,
+                y + height - bl.y + bl.y * K,
+                x,
+                y + height - bl.y,
+            );
+        }
+
+        // Left edge
+        self.builder.line_to(x, y + tl.y);
+
+        // Top-left corner
+        if tl.x > 0.0 || tl.y > 0.0 {
             self.builder
-                .quad_to(x + width, y + height, x + width - br, y + height);
+                .cubic_to(x, y + tl.y - tl.y * K, x + tl.x - tl.x * K, y, x + tl.x, y);
         }
-        self.builder.line_to(x + bl, y + height);
-        if bl > 0.0 {
-            self.builder.quad_to(x, y + height, x, y + height - bl);
-        }
-        self.builder.line_to(x, y + tl);
-        if tl > 0.0 {
-            self.builder.quad_to(x, y, x + tl, y);
-        }
+
         self.builder.close();
 
-        self.subpath_start_x = x + tl;
+        self.subpath_start_x = x + tl.x;
         self.subpath_start_y = y;
-        self.current_x = x + tl;
+        self.current_x = x + tl.x;
         self.current_y = y;
     }
 
@@ -262,6 +326,63 @@ impl Path2D {
         self.has_current_point = true;
     }
 
+    /// Add the segments of another path to this path, optionally applying a transform.
+    pub fn add_path(&mut self, other: &mut Path2D, transform: Option<crate::context::DOMMatrix>) {
+        let Some(other_path) = other.get_path() else {
+            return;
+        };
+
+        let ts: tiny_skia::Transform = transform
+            .map(|m| m.into())
+            .unwrap_or(tiny_skia::Transform::identity());
+
+        let map = |x: f32, y: f32| -> (f32, f32) {
+            (ts.sx * x + ts.kx * y + ts.tx, ts.ky * x + ts.sy * y + ts.ty)
+        };
+
+        self.invalidate();
+
+        for seg in other_path.segments() {
+            match seg {
+                tiny_skia::PathSegment::MoveTo(pt) => {
+                    let (x, y) = map(pt.x, pt.y);
+                    self.builder.move_to(x, y);
+                    self.current_x = x;
+                    self.current_y = y;
+                    self.subpath_start_x = x;
+                    self.subpath_start_y = y;
+                }
+                tiny_skia::PathSegment::LineTo(pt) => {
+                    let (x, y) = map(pt.x, pt.y);
+                    self.builder.line_to(x, y);
+                    self.current_x = x;
+                    self.current_y = y;
+                }
+                tiny_skia::PathSegment::QuadTo(pt1, pt2) => {
+                    let (x1, y1) = map(pt1.x, pt1.y);
+                    let (x2, y2) = map(pt2.x, pt2.y);
+                    self.builder.quad_to(x1, y1, x2, y2);
+                    self.current_x = x2;
+                    self.current_y = y2;
+                }
+                tiny_skia::PathSegment::CubicTo(pt1, pt2, pt3) => {
+                    let (x1, y1) = map(pt1.x, pt1.y);
+                    let (x2, y2) = map(pt2.x, pt2.y);
+                    let (x3, y3) = map(pt3.x, pt3.y);
+                    self.builder.cubic_to(x1, y1, x2, y2, x3, y3);
+                    self.current_x = x3;
+                    self.current_y = y3;
+                }
+                tiny_skia::PathSegment::Close => {
+                    self.builder.close();
+                    self.current_x = self.subpath_start_x;
+                    self.current_y = self.subpath_start_y;
+                }
+            }
+        }
+        self.has_current_point = true;
+    }
+
     /// Get the finished path for rendering.
     /// Returns None if the path is empty.
     pub(crate) fn get_path(&mut self) -> Option<&tiny_skia::Path> {
@@ -278,8 +399,8 @@ impl Path2D {
 mod tests {
     use super::*;
     use crate::geometry::{
-        ArcParams, CubicBezierParams, EllipseParams, QuadraticBezierParams, RectParams,
-        RoundRectParams,
+        ArcParams, CornerRadius, CubicBezierParams, EllipseParams, QuadraticBezierParams,
+        RectParams, RoundRectParams,
     };
     use tiny_skia::PathSegment;
 
@@ -543,7 +664,7 @@ mod tests {
             y: 20.0,
             width: 100.0,
             height: 50.0,
-            radii: [5.0, 5.0, 5.0, 5.0],
+            radii: [CornerRadius::uniform(5.0); 4],
         });
 
         let bounds = path.get_path().unwrap().bounds();
@@ -554,19 +675,19 @@ mod tests {
     }
 
     #[test]
-    fn test_round_rect_has_quads_and_close() {
+    fn test_round_rect_has_cubics_and_close() {
         let mut path = Path2D::new();
         path.round_rect(&RoundRectParams {
             x: 0.0,
             y: 0.0,
             width: 100.0,
             height: 50.0,
-            radii: [10.0, 10.0, 10.0, 10.0],
+            radii: [CornerRadius::uniform(10.0); 4],
         });
 
         let segs = segments(&mut path);
-        // Should have quad segments for rounded corners
-        assert!(segs.iter().any(|s| matches!(s, PathSegment::QuadTo(..))));
+        // Should have cubic segments for rounded corners (elliptical arc approximation)
+        assert!(segs.iter().any(|s| matches!(s, PathSegment::CubicTo(..))));
         assert_eq!(segs.last(), Some(&PathSegment::Close));
     }
 
@@ -578,12 +699,12 @@ mod tests {
             y: 0.0,
             width: 100.0,
             height: 50.0,
-            radii: [0.0, 0.0, 0.0, 0.0],
+            radii: [CornerRadius::uniform(0.0); 4],
         });
 
         let segs = segments(&mut round);
-        // Zero radius means no quad segments — just lines
-        assert!(!segs.iter().any(|s| matches!(s, PathSegment::QuadTo(..))));
+        // Zero radius means no cubic/quad segments — just lines
+        assert!(!segs.iter().any(|s| matches!(s, PathSegment::CubicTo(..))));
     }
 
     #[test]
@@ -618,6 +739,114 @@ mod tests {
             anticlockwise: false,
         });
         assert!(path.has_current_point);
+    }
+
+    #[test]
+    fn test_add_path_no_transform() {
+        let mut src = Path2D::new();
+        src.move_to(10.0, 20.0);
+        src.line_to(30.0, 40.0);
+
+        let mut dst = Path2D::new();
+        dst.move_to(0.0, 0.0);
+        dst.line_to(5.0, 5.0);
+        dst.add_path(&mut src, None);
+
+        let segs = segments(&mut dst);
+        // dst original: MoveTo(0,0), LineTo(5,5)
+        // + src: MoveTo(10,20), LineTo(30,40)
+        assert_eq!(segs.len(), 4);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(0.0, 0.0)));
+        assert_eq!(segs[1], PathSegment::LineTo(pt(5.0, 5.0)));
+        assert_eq!(segs[2], PathSegment::MoveTo(pt(10.0, 20.0)));
+        assert_eq!(segs[3], PathSegment::LineTo(pt(30.0, 40.0)));
+    }
+
+    #[test]
+    fn test_add_path_with_translate_transform() {
+        let mut src = Path2D::new();
+        src.move_to(10.0, 20.0);
+        src.line_to(30.0, 40.0);
+
+        let mut dst = Path2D::new();
+        // Apply a translate(100, 200) transform: a=1, b=0, c=0, d=1, e=100, f=200
+        let transform = crate::context::DOMMatrix::new(1.0, 0.0, 0.0, 1.0, 100.0, 200.0);
+        dst.add_path(&mut src, Some(transform));
+
+        let segs = segments(&mut dst);
+        assert_eq!(segs.len(), 2);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(110.0, 220.0)));
+        assert_eq!(segs[1], PathSegment::LineTo(pt(130.0, 240.0)));
+    }
+
+    #[test]
+    fn test_add_path_with_scale_transform() {
+        let mut src = Path2D::new();
+        src.move_to(10.0, 20.0);
+        src.line_to(30.0, 40.0);
+
+        let mut dst = Path2D::new();
+        // Apply a scale(2, 3) transform: a=2, b=0, c=0, d=3, e=0, f=0
+        let transform = crate::context::DOMMatrix::new(2.0, 0.0, 0.0, 3.0, 0.0, 0.0);
+        dst.add_path(&mut src, Some(transform));
+
+        let segs = segments(&mut dst);
+        assert_eq!(segs.len(), 2);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(20.0, 60.0)));
+        assert_eq!(segs[1], PathSegment::LineTo(pt(60.0, 120.0)));
+    }
+
+    #[test]
+    fn test_add_path_empty_source() {
+        let mut src = Path2D::new();
+        let mut dst = Path2D::new();
+        dst.move_to(0.0, 0.0);
+        dst.line_to(10.0, 10.0);
+        dst.add_path(&mut src, None);
+
+        let segs = segments(&mut dst);
+        // Empty source adds nothing
+        assert_eq!(segs.len(), 2);
+    }
+
+    #[test]
+    fn test_add_path_invalidates_cache() {
+        let mut src = Path2D::new();
+        src.move_to(10.0, 10.0);
+        src.line_to(20.0, 20.0);
+
+        let mut dst = Path2D::new();
+        dst.move_to(0.0, 0.0);
+        dst.line_to(5.0, 5.0);
+        // Build cache
+        let _ = dst.get_path();
+        assert!(dst.path.is_some());
+
+        dst.add_path(&mut src, None);
+        // Cache should be invalidated
+        assert!(dst.path.is_none());
+
+        let segs = segments(&mut dst);
+        assert_eq!(segs.len(), 4);
+    }
+
+    #[test]
+    fn test_add_path_with_close() {
+        let mut src = Path2D::new();
+        src.move_to(0.0, 0.0);
+        src.line_to(10.0, 0.0);
+        src.line_to(10.0, 10.0);
+        src.close_path();
+
+        let mut dst = Path2D::new();
+        dst.add_path(&mut src, None);
+
+        let segs = segments(&mut dst);
+        assert_eq!(segs.len(), 4);
+        assert_eq!(segs[0], PathSegment::MoveTo(pt(0.0, 0.0)));
+        assert_eq!(segs[1], PathSegment::LineTo(pt(10.0, 0.0)));
+        assert_eq!(segs[2], PathSegment::LineTo(pt(10.0, 10.0)));
+        assert_eq!(segs[3], PathSegment::Close);
     }
 
     #[test]

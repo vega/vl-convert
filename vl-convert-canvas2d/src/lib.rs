@@ -32,15 +32,16 @@ mod style;
 mod text;
 
 // Re-export public API
-pub use context::{Canvas2dContext, Canvas2dContextBuilder, DOMMatrix, DrawingState};
+pub use context::{Canvas2dContext, Canvas2dContextBuilder, DOMMatrix};
 pub use error::{Canvas2dError, Canvas2dResult};
 pub use geometry::{
-    ArcParams, ArcToParams, CubicBezierParams, DirtyRect, EllipseParams, ImageCropParams,
+    ArcParams, ArcToParams, CanvasColor, CanvasColorSpace, CanvasImageDataRef, CanvasPixelFormat,
+    CornerRadius, CubicBezierParams, DirtyRect, EllipseParams, ImageCropParams, ImageDataSettings,
     QuadraticBezierParams, RadialGradientParams, RectParams, RoundRectParams,
 };
 pub use gradient::{CanvasGradient, GradientStop};
 pub use path2d::Path2D;
 pub use pattern::{CanvasPattern, Repetition};
 pub use style::{
-    CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
+    CanvasFillRule, FontStretch, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
 };

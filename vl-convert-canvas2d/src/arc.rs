@@ -63,9 +63,12 @@ pub fn ellipse(path: &mut PathBuilder, params: &EllipseParams, has_current_point
     // Append cubic bezier segments from kurbo.
     kurbo_arc.to_cubic_beziers(ARC_TOLERANCE, |p1, p2, p3| {
         path.cubic_to(
-            p1.x as f32, p1.y as f32,
-            p2.x as f32, p2.y as f32,
-            p3.x as f32, p3.y as f32,
+            p1.x as f32,
+            p1.y as f32,
+            p2.x as f32,
+            p2.y as f32,
+            p3.x as f32,
+            p3.y as f32,
         );
     });
 }
@@ -286,7 +289,10 @@ mod tests {
             .iter()
             .filter(|s| matches!(s, PathSegment::CubicTo(..)))
             .count();
-        assert!(cubic_count >= 1, "half circle should have at least one cubic");
+        assert!(
+            cubic_count >= 1,
+            "half circle should have at least one cubic"
+        );
         // End point should be near (0, 50) — left side at angle π
         let last_cubic = segs
             .iter()

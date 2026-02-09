@@ -163,7 +163,95 @@ pub struct RoundRectParams {
     /// Height of the rectangle.
     pub height: f32,
     /// Corner radii in order: [top-left, top-right, bottom-right, bottom-left].
-    pub radii: [f32; 4],
+    /// Each corner has independent x (horizontal) and y (vertical) radii.
+    pub radii: [CornerRadius; 4],
+}
+
+// --- Backend-neutral types ---
+
+/// A backend-neutral RGBA color with 8-bit components.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CanvasColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
+impl CanvasColor {
+    /// Create a color from 8-bit RGBA components.
+    pub const fn from_rgba8(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
+    }
+
+    /// Create a color from floating-point RGBA components (each in 0.0..=1.0).
+    pub fn from_rgba_f32(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self {
+            r: (r.clamp(0.0, 1.0) * 255.0).round() as u8,
+            g: (g.clamp(0.0, 1.0) * 255.0).round() as u8,
+            b: (b.clamp(0.0, 1.0) * 255.0).round() as u8,
+            a: (a.clamp(0.0, 1.0) * 255.0).round() as u8,
+        }
+    }
+}
+
+impl From<CanvasColor> for tiny_skia::Color {
+    fn from(c: CanvasColor) -> Self {
+        tiny_skia::Color::from_rgba8(c.r, c.g, c.b, c.a)
+    }
+}
+
+/// A reference to non-premultiplied RGBA image data.
+#[derive(Debug, Clone, Copy)]
+pub struct CanvasImageDataRef<'a> {
+    /// RGBA pixel data, non-premultiplied, 4 bytes per pixel.
+    pub data: &'a [u8],
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+}
+
+/// An independent x/y corner radius for rounded rectangles.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CornerRadius {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl CornerRadius {
+    /// Create a corner radius with equal x and y values.
+    pub const fn uniform(r: f32) -> Self {
+        Self { x: r, y: r }
+    }
+}
+
+/// Color space for image data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanvasColorSpace {
+    Srgb,
+}
+
+/// Pixel format for image data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanvasPixelFormat {
+    RgbaUnorm8,
+}
+
+/// Settings for image data creation and retrieval.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImageDataSettings {
+    pub color_space: CanvasColorSpace,
+    pub pixel_format: CanvasPixelFormat,
+}
+
+impl Default for ImageDataSettings {
+    fn default() -> Self {
+        Self {
+            color_space: CanvasColorSpace::Srgb,
+            pixel_format: CanvasPixelFormat::RgbaUnorm8,
+        }
+    }
 }
 
 /// Parameters for creating a radial gradient.

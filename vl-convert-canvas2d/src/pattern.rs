@@ -1,5 +1,6 @@
 //! Pattern types for Canvas 2D operations.
 
+use crate::context::DOMMatrix;
 use crate::error::{Canvas2dError, Canvas2dResult};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tiny_skia::{Pixmap, PixmapRef, Shader, SpreadMode, Transform};
@@ -131,7 +132,7 @@ impl CanvasPattern {
     }
 
     /// Create a new pattern from a Pixmap (already premultiplied).
-    pub fn from_pixmap(pixmap: Pixmap, repetition: Repetition) -> Canvas2dResult<Self> {
+    pub(crate) fn from_pixmap(pixmap: Pixmap, repetition: Repetition) -> Canvas2dResult<Self> {
         let width = pixmap.width();
         let height = pixmap.height();
 
@@ -151,19 +152,22 @@ impl CanvasPattern {
     }
 
     /// Create a new pattern from a PixmapRef (copies the data).
-    pub fn from_pixmap_ref(pixmap_ref: PixmapRef, repetition: Repetition) -> Canvas2dResult<Self> {
+    pub(crate) fn from_pixmap_ref(
+        pixmap_ref: PixmapRef,
+        repetition: Repetition,
+    ) -> Canvas2dResult<Self> {
         let pixmap = pixmap_ref.to_owned();
         Self::from_pixmap(pixmap, repetition)
     }
 
     /// Set the pattern transform matrix.
-    pub fn set_transform(&mut self, transform: Transform) {
-        self.transform = transform;
+    pub fn set_transform(&mut self, transform: DOMMatrix) {
+        self.transform = transform.into();
     }
 
     /// Get the pattern transform matrix.
-    pub fn transform(&self) -> Transform {
-        self.transform
+    pub fn transform(&self) -> DOMMatrix {
+        self.transform.into()
     }
 
     /// Get the pattern width.

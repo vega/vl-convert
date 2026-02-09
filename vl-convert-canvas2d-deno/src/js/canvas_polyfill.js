@@ -17,6 +17,8 @@ import {
   op_canvas_set_font,
   op_canvas_set_text_align,
   op_canvas_set_text_baseline,
+  op_canvas_set_font_stretch,
+  op_canvas_get_font_stretch,
   op_canvas_measure_text,
   op_canvas_fill_text,
   op_canvas_stroke_text,
@@ -108,6 +110,7 @@ import {
   op_canvas_get_transform,
   op_path2d_round_rect,
   op_path2d_round_rect_radii,
+  op_path2d_add_path,
   // Image decoding
   op_canvas_decode_image,
   op_canvas_get_image_info,
@@ -126,6 +129,20 @@ function uint8ArrayToBase64(bytes) {
     binary += String.fromCharCode.apply(null, chunk);
   }
   return btoa(binary);
+}
+
+/**
+ * Validate ImageDataSettings. Only colorSpace "srgb" is supported.
+ * Throws on unsupported values.
+ */
+function validateImageDataSettings(settings) {
+  if (typeof settings !== "object" || settings === null) return;
+  if (settings.colorSpace !== undefined && settings.colorSpace !== "srgb") {
+    throw new DOMException(
+      `Unsupported color space: ${settings.colorSpace}. Only "srgb" is supported.`,
+      "InvalidStateError"
+    );
+  }
 }
 
 /**
@@ -409,14 +426,19 @@ class Path2D {
     if (typeof radii === "number") {
       op_path2d_round_rect(this.#pathId, x, y, width, height, radii);
     } else if (Array.isArray(radii)) {
-      // Handle DOMPointInit objects or numbers in array
-      const numericRadii = radii.map(r => typeof r === "object" ? r.x || 0 : r);
-      op_path2d_round_rect_radii(this.#pathId, x, y, width, height, numericRadii);
+      // Handle DOMPointInit objects or numbers in array - produce [x, y] pairs
+      const xyRadii = radii.map(r => {
+        if (typeof r === "number") return [r, r];
+        return [r.x || 0, r.y || 0];
+      });
+      op_path2d_round_rect_radii(this.#pathId, x, y, width, height, xyRadii);
     }
   }
 
   addPath(path, transform) {
-    unsupported("Path2D.addPath");
+    if (!(path instanceof Path2D)) return;
+    const t = transform ? [transform.a, transform.b, transform.c, transform.d, transform.e, transform.f] : null;
+    op_path2d_add_path(this.#pathId, path._getPathId(), t);
   }
 }
 
@@ -441,6 +463,7 @@ class CanvasRenderingContext2D {
   #lineDashOffset = 0;
   #imageSmoothingEnabled = true;
   #imageSmoothingQuality = "low";
+  #fontStretch = "normal";
   #letterSpacing = "0px";
 
   constructor(rid, canvas) {
@@ -511,6 +534,7 @@ class CanvasRenderingContext2D {
   }
 
   set lineWidth(value) {
+    if (!Number.isFinite(value) || value <= 0) return;
     op_canvas_set_line_width(this.#rid, value);
     this.#lineWidth = value;
   }
@@ -538,6 +562,7 @@ class CanvasRenderingContext2D {
   }
 
   set miterLimit(value) {
+    if (!Number.isFinite(value) || value <= 0) return;
     op_canvas_set_miter_limit(this.#rid, value);
     this.#miterLimit = value;
   }
@@ -547,6 +572,7 @@ class CanvasRenderingContext2D {
   }
 
   set globalAlpha(value) {
+    if (!Number.isFinite(value) || value < 0 || value > 1) return;
     op_canvas_set_global_alpha(this.#rid, value);
     this.#globalAlpha = value;
   }
@@ -556,8 +582,9 @@ class CanvasRenderingContext2D {
   }
 
   set globalCompositeOperation(value) {
-    op_canvas_set_global_composite_operation(this.#rid, value);
-    this.#globalCompositeOperation = value;
+    if (op_canvas_set_global_composite_operation(this.#rid, value)) {
+      this.#globalCompositeOperation = value;
+    }
   }
 
   get font() {
@@ -568,6 +595,8 @@ class CanvasRenderingContext2D {
     try {
       op_canvas_set_font(this.#rid, value);
       this.#font = value;
+      // Refresh fontStretch from Rust since the font shorthand may include a stretch keyword
+      this.#fontStretch = op_canvas_get_font_stretch(this.#rid);
     } catch (e) {
       // Ignore invalid fonts
     }
@@ -589,6 +618,20 @@ class CanvasRenderingContext2D {
   set textBaseline(value) {
     op_canvas_set_text_baseline(this.#rid, value);
     this.#textBaseline = value;
+  }
+
+  get fontStretch() {
+    return this.#fontStretch;
+  }
+
+  set fontStretch(value) {
+    const valid = [
+      "ultra-condensed", "extra-condensed", "condensed", "semi-condensed",
+      "normal", "semi-expanded", "expanded", "extra-expanded", "ultra-expanded"
+    ];
+    if (!valid.includes(value)) return; // Ignore invalid values per spec
+    op_canvas_set_font_stretch(this.#rid, value);
+    this.#fontStretch = value;
   }
 
   // --- State ---
@@ -619,6 +662,7 @@ class CanvasRenderingContext2D {
     this.#lineDashOffset = 0;
     this.#imageSmoothingEnabled = true;
     this.#imageSmoothingQuality = "low";
+    this.#fontStretch = "normal";
     this.#letterSpacing = "0px";
   }
 
@@ -705,9 +749,12 @@ class CanvasRenderingContext2D {
     if (typeof radii === "number") {
       op_canvas_round_rect(this.#rid, x, y, width, height, radii);
     } else if (Array.isArray(radii)) {
-      // Handle DOMPointInit objects or numbers in array
-      const numericRadii = radii.map(r => typeof r === "object" ? r.x || 0 : r);
-      op_canvas_round_rect_radii(this.#rid, x, y, width, height, numericRadii);
+      // Handle DOMPointInit objects or numbers in array - produce [x, y] pairs
+      const xyRadii = radii.map(r => {
+        if (typeof r === "number") return [r, r];
+        return [r.x || 0, r.y || 0];
+      });
+      op_canvas_round_rect_radii(this.#rid, x, y, width, height, xyRadii);
     }
   }
 
@@ -793,8 +840,17 @@ class CanvasRenderingContext2D {
   // --- Line dash ---
 
   setLineDash(segments) {
-    op_canvas_set_line_dash(this.#rid, segments);
-    this.#lineDash = segments;
+    // Ignore if any value is non-finite or negative
+    for (const v of segments) {
+      if (!Number.isFinite(v) || v < 0) return;
+    }
+    // Duplicate odd-length arrays per spec
+    let normalized = segments;
+    if (segments.length % 2 !== 0) {
+      normalized = [...segments, ...segments];
+    }
+    op_canvas_set_line_dash(this.#rid, normalized);
+    this.#lineDash = normalized;
   }
 
   getLineDash() {
@@ -806,6 +862,7 @@ class CanvasRenderingContext2D {
   }
 
   set lineDashOffset(value) {
+    if (!Number.isFinite(value)) return;
     op_canvas_set_line_dash_offset(this.#rid, value);
     this.#lineDashOffset = value;
   }
@@ -854,23 +911,27 @@ class CanvasRenderingContext2D {
 
   // --- Image data ---
 
-  getImageData(x, y, width, height) {
+  getImageData(x, y, width, height, settings) {
+    if (settings) validateImageDataSettings(settings);
     const data = op_canvas_get_image_data(this.#rid, x, y, width, height);
     return new ImageData(new Uint8ClampedArray(data), width, height);
   }
 
-  createImageData(width, height) {
-    if (typeof width === "object") {
-      // ImageData form
+  createImageData(widthOrImageData, height, settings) {
+    if (typeof widthOrImageData === "object") {
+      // createImageData(imagedata[, settings])
+      if (height) validateImageDataSettings(height);
       return new ImageData(
-        new Uint8ClampedArray(width.width * width.height * 4),
-        width.width,
-        width.height
+        new Uint8ClampedArray(widthOrImageData.width * widthOrImageData.height * 4),
+        widthOrImageData.width,
+        widthOrImageData.height
       );
     }
+    // createImageData(width, height[, settings])
+    if (settings) validateImageDataSettings(settings);
     return new ImageData(
-      new Uint8ClampedArray(width * height * 4),
-      width,
+      new Uint8ClampedArray(widthOrImageData * height * 4),
+      widthOrImageData,
       height
     );
   }

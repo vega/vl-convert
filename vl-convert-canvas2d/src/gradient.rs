@@ -1,6 +1,6 @@
 //! Gradient types for Canvas 2D operations.
 
-use crate::geometry::RadialGradientParams;
+use crate::geometry::{CanvasColor, RadialGradientParams};
 
 /// A color stop in a gradient.
 #[derive(Debug, Clone)]
@@ -8,7 +8,7 @@ pub struct GradientStop {
     /// Offset position (0.0 to 1.0).
     pub offset: f64,
     /// Color at this stop.
-    pub color: tiny_skia::Color,
+    pub color: CanvasColor,
 }
 
 /// Canvas gradient (linear or radial).
@@ -47,7 +47,7 @@ impl CanvasGradient {
     }
 
     /// Add a color stop to the gradient.
-    pub fn add_color_stop(&mut self, offset: f64, color: tiny_skia::Color) {
+    pub fn add_color_stop(&mut self, offset: f64, color: CanvasColor) {
         self.stops.push(GradientStop { offset, color });
         // Keep stops sorted by offset
         self.stops.sort_by(|a, b| {

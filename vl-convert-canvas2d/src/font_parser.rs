@@ -4,6 +4,7 @@
 //! into components usable with cosmic-text.
 
 use crate::error::{Canvas2dError, Canvas2dResult};
+use crate::style::FontStretch;
 use cosmic_text::{Style, Weight};
 
 /// Parsed font specification from a CSS font string.
@@ -13,6 +14,8 @@ pub struct ParsedFont {
     pub style: Style,
     /// Font weight (100-900 or keywords like bold).
     pub weight: Weight,
+    /// Font stretch (width).
+    pub stretch: FontStretch,
     /// Font size in pixels.
     pub size_px: f32,
     /// Font families in order of preference.
@@ -24,6 +27,7 @@ impl Default for ParsedFont {
         Self {
             style: Style::Normal,
             weight: Weight::NORMAL,
+            stretch: FontStretch::Normal,
             size_px: 10.0,
             families: vec!["sans-serif".to_string()],
         }
@@ -58,6 +62,7 @@ pub fn parse_font(font_str: &str) -> Canvas2dResult<ParsedFont> {
             return Ok(ParsedFont {
                 style: Style::Normal,
                 weight: Weight::NORMAL,
+                stretch: FontStretch::Normal,
                 size_px: 16.0,
                 families: vec!["sans-serif".to_string()],
             });
@@ -137,8 +142,9 @@ pub fn parse_font(font_str: &str) -> Canvas2dResult<ParsedFont> {
             continue;
         }
 
-        // Try to parse font-stretch keyword (consume but discard)
-        if let Some(rest) = try_consume_font_stretch(trimmed) {
+        // Try to parse font-stretch keyword
+        if let Some((stretch, rest)) = try_consume_font_stretch(trimmed) {
+            result.stretch = stretch;
             remaining = rest;
             continue;
         }
@@ -243,24 +249,24 @@ fn try_consume_oblique_angle(s: &str) -> &str {
 }
 
 /// Try to consume a font-stretch keyword at the start of the string.
-/// Font-stretch is parsed but discarded (cosmic-text doesn't support it).
-fn try_consume_font_stretch(s: &str) -> Option<&str> {
+/// Returns the parsed FontStretch and the remaining string.
+fn try_consume_font_stretch(s: &str) -> Option<(FontStretch, &str)> {
     // Ordered longest-first to avoid prefix conflicts
-    let stretch_keywords = [
-        "ultra-condensed",
-        "extra-condensed",
-        "semi-condensed",
-        "semi-expanded",
-        "extra-expanded",
-        "ultra-expanded",
-        "condensed",
-        "expanded",
+    let stretch_keywords: &[(&str, FontStretch)] = &[
+        ("ultra-condensed", FontStretch::UltraCondensed),
+        ("extra-condensed", FontStretch::ExtraCondensed),
+        ("semi-condensed", FontStretch::SemiCondensed),
+        ("semi-expanded", FontStretch::SemiExpanded),
+        ("extra-expanded", FontStretch::ExtraExpanded),
+        ("ultra-expanded", FontStretch::UltraExpanded),
+        ("condensed", FontStretch::Condensed),
+        ("expanded", FontStretch::Expanded),
     ];
 
-    for keyword in &stretch_keywords {
+    for (keyword, stretch) in stretch_keywords {
         if let Some(rest) = s.strip_prefix(keyword) {
             if rest.is_empty() || rest.starts_with(char::is_whitespace) {
-                return Some(rest);
+                return Some((*stretch, rest));
             }
         }
     }
@@ -507,6 +513,7 @@ mod tests {
     #[test]
     fn test_stretch_keyword_condensed() {
         let font = parse_font("condensed 12px Arial").unwrap();
+        assert_eq!(font.stretch, FontStretch::Condensed);
         assert_eq!(font.size_px, 12.0);
         assert_eq!(font.families, vec!["Arial"]);
     }
@@ -514,6 +521,7 @@ mod tests {
     #[test]
     fn test_stretch_keyword_with_weight() {
         let font = parse_font("bold semi-expanded 14px serif").unwrap();
+        assert_eq!(font.stretch, FontStretch::SemiExpanded);
         assert_eq!(font.weight, Weight::BOLD);
         assert_eq!(font.size_px, 14.0);
         assert_eq!(font.families, vec!["serif"]);
@@ -522,20 +530,33 @@ mod tests {
     #[test]
     fn test_stretch_all_keywords() {
         let keywords = [
-            "ultra-condensed",
-            "extra-condensed",
-            "condensed",
-            "semi-condensed",
-            "semi-expanded",
-            "expanded",
-            "extra-expanded",
-            "ultra-expanded",
+            ("ultra-condensed", FontStretch::UltraCondensed),
+            ("extra-condensed", FontStretch::ExtraCondensed),
+            ("condensed", FontStretch::Condensed),
+            ("semi-condensed", FontStretch::SemiCondensed),
+            ("semi-expanded", FontStretch::SemiExpanded),
+            ("expanded", FontStretch::Expanded),
+            ("extra-expanded", FontStretch::ExtraExpanded),
+            ("ultra-expanded", FontStretch::UltraExpanded),
         ];
-        for keyword in &keywords {
+        for (keyword, expected) in &keywords {
             let input = format!("{} 12px Arial", keyword);
             let font = parse_font(&input).unwrap();
+            assert_eq!(font.stretch, *expected, "failed for stretch: {}", keyword);
             assert_eq!(font.size_px, 12.0, "failed for stretch: {}", keyword);
         }
+    }
+
+    #[test]
+    fn test_stretch_default_is_normal() {
+        let font = parse_font("12px Arial").unwrap();
+        assert_eq!(font.stretch, FontStretch::Normal);
+    }
+
+    #[test]
+    fn test_stretch_system_font_is_normal() {
+        let font = parse_font("caption").unwrap();
+        assert_eq!(font.stretch, FontStretch::Normal);
     }
 
     // --- Oblique with angle ---

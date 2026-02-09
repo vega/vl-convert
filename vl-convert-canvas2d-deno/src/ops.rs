@@ -9,9 +9,10 @@ use deno_core::{OpState, ResourceId};
 use deno_error::JsErrorBox;
 use serde::Serialize;
 use vl_convert_canvas2d::{
-    ArcParams, ArcToParams, Canvas2dContext, Canvas2dContextBuilder, CubicBezierParams, DOMMatrix,
-    DirtyRect, EllipseParams, ImageCropParams, LineCap, LineJoin, QuadraticBezierParams,
-    RadialGradientParams, RectParams, RoundRectParams, TextAlign, TextBaseline,
+    ArcParams, ArcToParams, Canvas2dContext, Canvas2dContextBuilder, CanvasColor,
+    CanvasImageDataRef, CornerRadius, CubicBezierParams, DOMMatrix, DirtyRect, EllipseParams,
+    FontStretch, ImageCropParams, LineCap, LineJoin, QuadraticBezierParams, RadialGradientParams,
+    RectParams, RoundRectParams, TextAlign, TextBaseline,
 };
 
 // --- Canvas creation and lifecycle ---
@@ -213,23 +214,23 @@ pub fn op_canvas_set_global_alpha(
     Ok(())
 }
 
-/// Set the global composite operation.
+/// Set the global composite operation. Returns true if accepted.
 #[op2(fast)]
 pub fn op_canvas_set_global_composite_operation(
     state: &mut OpState,
     rid: u32,
     #[string] op: String,
-) -> Result<(), JsErrorBox> {
+) -> Result<bool, JsErrorBox> {
     let resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    resource
+    let accepted = resource
         .ctx
         .borrow_mut()
         .set_global_composite_operation(&op);
-    Ok(())
+    Ok(accepted)
 }
 
 // --- Font and text ---
@@ -313,6 +314,48 @@ pub fn op_canvas_set_text_baseline(
 
     resource.ctx.borrow_mut().set_text_baseline(text_baseline);
     Ok(())
+}
+
+/// Set the font stretch.
+#[op2(fast)]
+pub fn op_canvas_set_font_stretch(
+    state: &mut OpState,
+    rid: u32,
+    #[string] stretch: String,
+) -> Result<(), JsErrorBox> {
+    let resource = state
+        .resource_table
+        .get::<CanvasResource>(ResourceId::from(rid))
+        .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
+
+    let font_stretch = match FontStretch::from_css_keyword(&stretch) {
+        Some(s) => s,
+        None => {
+            // Ignore invalid values per spec
+            return Ok(());
+        }
+    };
+
+    resource.ctx.borrow_mut().set_font_stretch(font_stretch);
+    Ok(())
+}
+
+/// Get the font stretch.
+#[op2]
+#[string]
+pub fn op_canvas_get_font_stretch(state: &mut OpState, rid: u32) -> Result<String, JsErrorBox> {
+    let resource = state
+        .resource_table
+        .get::<CanvasResource>(ResourceId::from(rid))
+        .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
+
+    let result = resource
+        .ctx
+        .borrow()
+        .get_font_stretch()
+        .as_css_keyword()
+        .to_string();
+    Ok(result)
 }
 
 /// Measure text and return the width.
@@ -995,13 +1038,12 @@ pub fn op_canvas_gradient_add_color_stop(
         .parse()
         .map_err(|e| JsErrorBox::generic(format!("Invalid color: {}", e)))?;
     let [r, g, b, a] = parsed_color.to_array();
-    let skia_color = tiny_skia::Color::from_rgba(r, g, b, a)
-        .ok_or_else(|| JsErrorBox::generic("Invalid color values"))?;
+    let color = CanvasColor::from_rgba_f32(r, g, b, a);
 
     let mut gradient = resource
         .get_gradient_mut(gradient_id)
         .ok_or_else(|| JsErrorBox::generic(format!("Invalid gradient id: {}", gradient_id)))?;
-    gradient.add_color_stop(offset, skia_color);
+    gradient.add_color_stop(offset, color);
     Ok(())
 }
 
@@ -1110,13 +1152,16 @@ pub fn op_canvas_draw_image(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    let pixmap = tiny_skia::PixmapRef::from_bytes(data, img_width, img_height)
-        .ok_or_else(|| JsErrorBox::generic("Invalid image data"))?;
+    let image = CanvasImageDataRef {
+        data,
+        width: img_width,
+        height: img_height,
+    };
 
     resource
         .ctx
         .borrow_mut()
-        .draw_image(pixmap, dx as f32, dy as f32);
+        .draw_image_data(&image, dx as f32, dy as f32);
     Ok(())
 }
 
@@ -1139,13 +1184,16 @@ pub fn op_canvas_draw_image_scaled(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    let pixmap = tiny_skia::PixmapRef::from_bytes(data, img_width, img_height)
-        .ok_or_else(|| JsErrorBox::generic("Invalid image data"))?;
+    let image = CanvasImageDataRef {
+        data,
+        width: img_width,
+        height: img_height,
+    };
 
     resource
         .ctx
         .borrow_mut()
-        .draw_image_scaled(pixmap, dx as f32, dy as f32, dw as f32, dh as f32);
+        .draw_image_data_scaled(&image, dx as f32, dy as f32, dw as f32, dh as f32);
     Ok(())
 }
 
@@ -1172,11 +1220,14 @@ pub fn op_canvas_draw_image_cropped(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    let pixmap = tiny_skia::PixmapRef::from_bytes(data, img_width, img_height)
-        .ok_or_else(|| JsErrorBox::generic("Invalid image data"))?;
+    let image = CanvasImageDataRef {
+        data,
+        width: img_width,
+        height: img_height,
+    };
 
-    resource.ctx.borrow_mut().draw_image_cropped(
-        pixmap,
+    resource.ctx.borrow_mut().draw_image_data_cropped(
+        &image,
         &ImageCropParams {
             sx: sx as f32,
             sy: sy as f32,
@@ -1200,25 +1251,21 @@ pub fn op_canvas_draw_canvas(
     dx: f64,
     dy: f64,
 ) -> Result<(), JsErrorBox> {
-    // Get source canvas pixmap data
     let source_resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(source_rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid source canvas resource: {}", e)))?;
 
-    let source_ctx = source_resource.ctx.borrow();
-    let source_pixmap = source_ctx.pixmap();
-
-    // Get destination canvas and draw
     let dest_resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
+    let source_ctx = source_resource.ctx.borrow();
     dest_resource
         .ctx
         .borrow_mut()
-        .draw_image(source_pixmap.as_ref(), dx as f32, dy as f32);
+        .draw_canvas(&source_ctx, dx as f32, dy as f32);
     Ok(())
 }
 
@@ -1234,23 +1281,19 @@ pub fn op_canvas_draw_canvas_scaled(
     dw: f64,
     dh: f64,
 ) -> Result<(), JsErrorBox> {
-    // Get source canvas pixmap data
     let source_resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(source_rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid source canvas resource: {}", e)))?;
 
-    let source_ctx = source_resource.ctx.borrow();
-    let source_pixmap = source_ctx.pixmap();
-
-    // Get destination canvas and draw
     let dest_resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    dest_resource.ctx.borrow_mut().draw_image_scaled(
-        source_pixmap.as_ref(),
+    let source_ctx = source_resource.ctx.borrow();
+    dest_resource.ctx.borrow_mut().draw_canvas_scaled(
+        &source_ctx,
         dx as f32,
         dy as f32,
         dw as f32,
@@ -1275,23 +1318,19 @@ pub fn op_canvas_draw_canvas_cropped(
     dw: f64,
     dh: f64,
 ) -> Result<(), JsErrorBox> {
-    // Get source canvas pixmap data
     let source_resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(source_rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid source canvas resource: {}", e)))?;
 
-    let source_ctx = source_resource.ctx.borrow();
-    let source_pixmap = source_ctx.pixmap();
-
-    // Get destination canvas and draw
     let dest_resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
-    dest_resource.ctx.borrow_mut().draw_image_cropped(
-        source_pixmap.as_ref(),
+    let source_ctx = source_resource.ctx.borrow();
+    dest_resource.ctx.borrow_mut().draw_canvas_cropped(
+        &source_ctx,
         &ImageCropParams {
             sx: sx as f32,
             sy: sy as f32,
@@ -1341,25 +1380,21 @@ pub fn op_canvas_create_pattern_from_canvas(
     source_rid: u32,
     #[string] repetition: String,
 ) -> Result<u32, JsErrorBox> {
-    // Get source canvas pixmap
     let source_resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(source_rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid source canvas resource: {}", e)))?;
 
-    let source_ctx = source_resource.ctx.borrow();
-    let source_pixmap = source_ctx.pixmap();
-
-    // Get destination canvas and create pattern
     let dest_resource = state
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
+    let source_ctx = source_resource.ctx.borrow();
     let pattern = dest_resource
         .ctx
         .borrow()
-        .create_pattern_from_canvas(source_pixmap.as_ref(), &repetition)
+        .create_pattern_from_canvas(&source_ctx, &repetition)
         .map_err(|e| JsErrorBox::generic(format!("Failed to create pattern: {}", e)))?;
 
     let pattern_id = dest_resource.add_pattern(pattern);
@@ -2053,17 +2088,22 @@ pub fn op_canvas_round_rect(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
+    let r = CornerRadius {
+        x: radius as f32,
+        y: radius as f32,
+    };
     resource.ctx.borrow_mut().round_rect(&RoundRectParams {
         x: x as f32,
         y: y as f32,
         width: width as f32,
         height: height as f32,
-        radii: [radius as f32, radius as f32, radius as f32, radius as f32],
+        radii: [r, r, r, r],
     });
     Ok(())
 }
 
 /// Add a rounded rectangle to the path with individual corner radii.
+/// Each radius is an [x, y] pair for independent horizontal/vertical radii.
 #[op2]
 pub fn op_canvas_round_rect_radii(
     state: &mut OpState,
@@ -2072,7 +2112,7 @@ pub fn op_canvas_round_rect_radii(
     y: f64,
     width: f64,
     height: f64,
-    #[serde] radii: Vec<f64>,
+    #[serde] radii: Vec<[f64; 2]>,
 ) -> Result<(), JsErrorBox> {
     let resource = state
         .resource_table
@@ -2080,30 +2120,31 @@ pub fn op_canvas_round_rect_radii(
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
     // Convert radii array - Canvas spec allows 1, 2, 3, or 4 values
+    let to_cr = |pair: &[f64; 2]| CornerRadius {
+        x: pair[0] as f32,
+        y: pair[1] as f32,
+    };
     let radii_array = match radii.len() {
-        1 => [
-            radii[0] as f32,
-            radii[0] as f32,
-            radii[0] as f32,
-            radii[0] as f32,
-        ],
-        2 => [
-            radii[0] as f32,
-            radii[1] as f32,
-            radii[0] as f32,
-            radii[1] as f32,
-        ],
-        3 => [
-            radii[0] as f32,
-            radii[1] as f32,
-            radii[2] as f32,
-            radii[1] as f32,
-        ],
+        1 => {
+            let r = to_cr(&radii[0]);
+            [r, r, r, r]
+        }
+        2 => {
+            let a = to_cr(&radii[0]);
+            let b = to_cr(&radii[1]);
+            [a, b, a, b]
+        }
+        3 => {
+            let a = to_cr(&radii[0]);
+            let b = to_cr(&radii[1]);
+            let c = to_cr(&radii[2]);
+            [a, b, c, b]
+        }
         4 => [
-            radii[0] as f32,
-            radii[1] as f32,
-            radii[2] as f32,
-            radii[3] as f32,
+            to_cr(&radii[0]),
+            to_cr(&radii[1]),
+            to_cr(&radii[2]),
+            to_cr(&radii[3]),
         ],
         _ => return Err(JsErrorBox::generic("Invalid radii array length")),
     };
@@ -2182,17 +2223,22 @@ pub fn op_path2d_round_rect(
         .get::<Path2DResource>(ResourceId::from(path_id))
         .map_err(|e| JsErrorBox::generic(format!("Invalid Path2D resource: {}", e)))?;
 
+    let r = CornerRadius {
+        x: radius as f32,
+        y: radius as f32,
+    };
     resource.path.borrow_mut().round_rect(&RoundRectParams {
         x: x as f32,
         y: y as f32,
         width: width as f32,
         height: height as f32,
-        radii: [radius as f32, radius as f32, radius as f32, radius as f32],
+        radii: [r, r, r, r],
     });
     Ok(())
 }
 
 /// Add a rounded rectangle to Path2D with individual corner radii.
+/// Each radius is an [x, y] pair for independent horizontal/vertical radii.
 #[op2]
 pub fn op_path2d_round_rect_radii(
     state: &mut OpState,
@@ -2201,7 +2247,7 @@ pub fn op_path2d_round_rect_radii(
     y: f64,
     width: f64,
     height: f64,
-    #[serde] radii: Vec<f64>,
+    #[serde] radii: Vec<[f64; 2]>,
 ) -> Result<(), JsErrorBox> {
     let resource = state
         .resource_table
@@ -2209,30 +2255,31 @@ pub fn op_path2d_round_rect_radii(
         .map_err(|e| JsErrorBox::generic(format!("Invalid Path2D resource: {}", e)))?;
 
     // Convert radii array - Canvas spec allows 1, 2, 3, or 4 values
+    let to_cr = |pair: &[f64; 2]| CornerRadius {
+        x: pair[0] as f32,
+        y: pair[1] as f32,
+    };
     let radii_array = match radii.len() {
-        1 => [
-            radii[0] as f32,
-            radii[0] as f32,
-            radii[0] as f32,
-            radii[0] as f32,
-        ],
-        2 => [
-            radii[0] as f32,
-            radii[1] as f32,
-            radii[0] as f32,
-            radii[1] as f32,
-        ],
-        3 => [
-            radii[0] as f32,
-            radii[1] as f32,
-            radii[2] as f32,
-            radii[1] as f32,
-        ],
+        1 => {
+            let r = to_cr(&radii[0]);
+            [r, r, r, r]
+        }
+        2 => {
+            let a = to_cr(&radii[0]);
+            let b = to_cr(&radii[1]);
+            [a, b, a, b]
+        }
+        3 => {
+            let a = to_cr(&radii[0]);
+            let b = to_cr(&radii[1]);
+            let c = to_cr(&radii[2]);
+            [a, b, c, b]
+        }
         4 => [
-            radii[0] as f32,
-            radii[1] as f32,
-            radii[2] as f32,
-            radii[3] as f32,
+            to_cr(&radii[0]),
+            to_cr(&radii[1]),
+            to_cr(&radii[2]),
+            to_cr(&radii[3]),
         ],
         _ => return Err(JsErrorBox::generic("Invalid radii array length")),
     };
@@ -2244,6 +2291,43 @@ pub fn op_path2d_round_rect_radii(
         height: height as f32,
         radii: radii_array,
     });
+    Ok(())
+}
+
+/// Add another path's segments to a Path2D, optionally with a transform.
+#[op2]
+pub fn op_path2d_add_path(
+    state: &mut OpState,
+    path_id: u32,
+    other_path_id: u32,
+    #[serde] transform: Option<[f64; 6]>,
+) -> Result<(), JsErrorBox> {
+    let resource = state
+        .resource_table
+        .get::<Path2DResource>(ResourceId::from(path_id))
+        .map_err(|e| JsErrorBox::generic(format!("Invalid Path2D resource: {}", e)))?;
+
+    let other_resource = state
+        .resource_table
+        .get::<Path2DResource>(ResourceId::from(other_path_id))
+        .map_err(|e| JsErrorBox::generic(format!("Invalid source Path2D resource: {}", e)))?;
+
+    let dom_matrix = transform.map(|t| {
+        DOMMatrix::new(
+            t[0] as f32,
+            t[1] as f32,
+            t[2] as f32,
+            t[3] as f32,
+            t[4] as f32,
+            t[5] as f32,
+        )
+    });
+
+    let mut other_path = other_resource.path.borrow_mut();
+    resource
+        .path
+        .borrow_mut()
+        .add_path(&mut other_path, dom_matrix);
     Ok(())
 }
 
