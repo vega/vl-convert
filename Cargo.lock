@@ -9604,6 +9604,7 @@ dependencies = [
  "csscolorparser",
  "fontdb",
  "image 0.25.9",
+ "kurbo 0.13.0",
  "log",
  "pixelmatch",
  "png 0.17.16",

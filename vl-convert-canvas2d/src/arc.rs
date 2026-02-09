@@ -1,12 +1,17 @@
-//! Arc operations using bezier curve approximation.
+//! Arc operations using kurbo for bezier curve approximation.
 //!
-//! tiny-skia does not support arc primitives directly, so we approximate
-//! arcs using cubic bezier curves.
+//! tiny-skia does not support arc primitives directly, so we use
+//! kurbo::Arc to convert arcs into cubic bezier curves.
 
-use std::f32::consts::PI;
+use std::f64::consts::PI;
+
+use kurbo::Shape;
 use tiny_skia::PathBuilder;
 
 use crate::geometry::{ArcParams, ArcToParams, EllipseParams};
+
+/// Tolerance for kurbo's arc-to-cubic approximation (in coordinate space units).
+const ARC_TOLERANCE: f64 = 0.25;
 
 /// Add an arc to the path using bezier curve approximation.
 ///
@@ -15,7 +20,7 @@ pub fn arc(path: &mut PathBuilder, params: &ArcParams, has_current_point: bool) 
     ellipse(path, &EllipseParams::from(params), has_current_point);
 }
 
-/// Add an elliptical arc to the path using bezier curve approximation.
+/// Add an elliptical arc to the path using kurbo's cubic bezier approximation.
 pub fn ellipse(path: &mut PathBuilder, params: &EllipseParams, has_current_point: bool) {
     let EllipseParams {
         x,
@@ -32,94 +37,68 @@ pub fn ellipse(path: &mut PathBuilder, params: &EllipseParams, has_current_point
         return;
     }
 
-    // Normalize angles
-    let (mut start, mut end) = (start_angle, end_angle);
+    // Convert Canvas 2D (start_angle, end_angle, anticlockwise) to kurbo sweep_angle.
+    let sweep_angle = compute_sweep_angle(start_angle as f64, end_angle as f64, anticlockwise);
 
-    if anticlockwise {
-        std::mem::swap(&mut start, &mut end);
-    }
-
-    // Ensure end > start
-    while end < start {
-        end += 2.0 * PI;
-    }
-
-    // Calculate number of segments (use more segments for larger arcs)
-    let angle_span = end - start;
-    let num_segments = ((angle_span / (PI / 2.0)).ceil() as usize).max(1);
-    let segment_angle = angle_span / num_segments as f32;
-
-    // Precompute rotation matrix
-    let cos_rot = rotation.cos();
-    let sin_rot = rotation.sin();
-
-    // Start point
-    let start_x = x + radius_x * start.cos() * cos_rot - radius_y * start.sin() * sin_rot;
-    let start_y = y + radius_x * start.cos() * sin_rot + radius_y * start.sin() * cos_rot;
-
-    // Per Canvas 2D spec: if there's a current point, line to the arc start;
-    // otherwise move to the arc start.
-    if has_current_point {
-        path.line_to(start_x, start_y);
-    } else {
-        path.move_to(start_x, start_y);
-    }
-
-    // Draw arc segments
-    for i in 0..num_segments {
-        let angle1 = start + i as f32 * segment_angle;
-        let angle2 = start + (i + 1) as f32 * segment_angle;
-
-        arc_segment(
-            path, x, y, radius_x, radius_y, cos_rot, sin_rot, angle1, angle2,
-        );
-    }
-}
-
-/// Add a single arc segment as a cubic bezier curve.
-#[allow(clippy::too_many_arguments)]
-fn arc_segment(
-    path: &mut PathBuilder,
-    cx: f32,
-    cy: f32,
-    rx: f32,
-    ry: f32,
-    cos_rot: f32,
-    sin_rot: f32,
-    angle1: f32,
-    angle2: f32,
-) {
-    // Calculate bezier control point factor
-    let angle_diff = angle2 - angle1;
-    let k = 4.0 / 3.0 * (angle_diff / 4.0).tan();
-
-    // Points on the unit circle
-    let x1 = angle1.cos();
-    let y1 = angle1.sin();
-    let x2 = angle2.cos();
-    let y2 = angle2.sin();
-
-    // Control points on the unit circle
-    let cp1x = x1 - k * y1;
-    let cp1y = y1 + k * x1;
-    let cp2x = x2 + k * y2;
-    let cp2y = y2 - k * x2;
-
-    // Transform points
-    let transform_point = |px: f32, py: f32| -> (f32, f32) {
-        let tx = rx * px;
-        let ty = ry * py;
-        (
-            cx + tx * cos_rot - ty * sin_rot,
-            cy + tx * sin_rot + ty * cos_rot,
-        )
+    let kurbo_arc = kurbo::Arc {
+        center: kurbo::Point::new(x as f64, y as f64),
+        radii: kurbo::Vec2::new(radius_x as f64, radius_y as f64),
+        start_angle: start_angle as f64,
+        sweep_angle,
+        x_rotation: rotation as f64,
     };
 
-    let (ctrl1_x, ctrl1_y) = transform_point(cp1x, cp1y);
-    let (ctrl2_x, ctrl2_y) = transform_point(cp2x, cp2y);
-    let (end_x, end_y) = transform_point(x2, y2);
+    // Compute start point from the arc's path representation.
+    let start_point = kurbo_arc.path_elements(ARC_TOLERANCE).next();
+    if let Some(kurbo::PathEl::MoveTo(p)) = start_point {
+        // Per Canvas 2D spec: if there's a current point, line to the arc start;
+        // otherwise move to the arc start.
+        if has_current_point {
+            path.line_to(p.x as f32, p.y as f32);
+        } else {
+            path.move_to(p.x as f32, p.y as f32);
+        }
+    }
 
-    path.cubic_to(ctrl1_x, ctrl1_y, ctrl2_x, ctrl2_y, end_x, end_y);
+    // Append cubic bezier segments from kurbo.
+    kurbo_arc.to_cubic_beziers(ARC_TOLERANCE, |p1, p2, p3| {
+        path.cubic_to(
+            p1.x as f32, p1.y as f32,
+            p2.x as f32, p2.y as f32,
+            p3.x as f32, p3.y as f32,
+        );
+    });
+}
+
+/// Convert Canvas 2D angle parameters to a kurbo sweep angle.
+///
+/// Canvas 2D uses `(start_angle, end_angle, anticlockwise)` while kurbo
+/// uses a single `sweep_angle` (positive = counterclockwise in standard
+/// math convention, but Canvas 2D's Y-axis points down so positive sweep
+/// goes clockwise visually).
+fn compute_sweep_angle(start: f64, end: f64, anticlockwise: bool) -> f64 {
+    let two_pi = 2.0 * PI;
+    let mut sweep = end - start;
+
+    if anticlockwise {
+        // Normalize to (-2π, 0]
+        if sweep > 0.0 {
+            sweep -= two_pi * ((sweep / two_pi).floor() + 1.0);
+        }
+        if sweep == 0.0 && end != start {
+            sweep = -two_pi;
+        }
+    } else {
+        // Normalize to [0, 2π)
+        if sweep < 0.0 {
+            sweep += two_pi * ((-sweep / two_pi).floor() + 1.0);
+        }
+        if sweep == 0.0 && end != start {
+            sweep = two_pi;
+        }
+    }
+
+    sweep
 }
 
 /// Add an arc connecting two points with a given radius (arcTo operation).
@@ -212,6 +191,8 @@ mod tests {
     use super::*;
     use tiny_skia::PathSegment;
 
+    const PI_F32: f32 = std::f32::consts::PI;
+
     fn segments(builder: PathBuilder) -> Vec<PathSegment> {
         builder
             .finish()
@@ -246,7 +227,7 @@ mod tests {
         let mut builder = PathBuilder::new();
         arc(
             &mut builder,
-            &arc_params(50.0, 50.0, 50.0, 0.0, 2.0 * PI, false),
+            &arc_params(50.0, 50.0, 50.0, 0.0, 2.0 * PI_F32, false),
             false,
         );
 
@@ -255,12 +236,12 @@ mod tests {
         assert!(
             matches!(segs[0], PathSegment::MoveTo(p) if approx_eq(p.x, 100.0) && approx_eq(p.y, 50.0))
         );
-        // Full circle = 4 quarter-arc cubics
+        // Full circle produces multiple cubics
         let cubic_count = segs
             .iter()
             .filter(|s| matches!(s, PathSegment::CubicTo(..)))
             .count();
-        assert_eq!(cubic_count, 4);
+        assert!(cubic_count >= 3, "full circle should have multiple cubics");
     }
 
     #[test]
@@ -268,19 +249,25 @@ mod tests {
         let mut builder = PathBuilder::new();
         arc(
             &mut builder,
-            &arc_params(50.0, 50.0, 50.0, 0.0, PI / 2.0, false),
+            &arc_params(50.0, 50.0, 50.0, 0.0, PI_F32 / 2.0, false),
             false,
         );
 
         let segs = segments(builder);
-        // MoveTo at (100, 50), then one cubic
+        // MoveTo at (100, 50)
         assert!(
             matches!(segs[0], PathSegment::MoveTo(p) if approx_eq(p.x, 100.0) && approx_eq(p.y, 50.0))
         );
-        assert_eq!(segs.len(), 2);
+        // At least one cubic
+        assert!(segs.iter().any(|s| matches!(s, PathSegment::CubicTo(..))));
         // End point should be near (50, 100) — top of circle at angle π/2
+        let last_cubic = segs
+            .iter()
+            .rev()
+            .find(|s| matches!(s, PathSegment::CubicTo(..)))
+            .unwrap();
         assert!(
-            matches!(segs[1], PathSegment::CubicTo(_, _, end) if approx_eq(end.x, 50.0) && approx_eq(end.y, 100.0))
+            matches!(last_cubic, PathSegment::CubicTo(_, _, end) if approx_eq(end.x, 50.0) && approx_eq(end.y, 100.0))
         );
     }
 
@@ -289,17 +276,17 @@ mod tests {
         let mut builder = PathBuilder::new();
         arc(
             &mut builder,
-            &arc_params(50.0, 50.0, 50.0, 0.0, PI, false),
+            &arc_params(50.0, 50.0, 50.0, 0.0, PI_F32, false),
             false,
         );
 
         let segs = segments(builder);
-        // Half circle = 2 quarter-arc cubics
+        // At least one cubic
         let cubic_count = segs
             .iter()
             .filter(|s| matches!(s, PathSegment::CubicTo(..)))
             .count();
-        assert_eq!(cubic_count, 2);
+        assert!(cubic_count >= 1, "half circle should have at least one cubic");
         // End point should be near (0, 50) — left side at angle π
         let last_cubic = segs
             .iter()
@@ -316,7 +303,7 @@ mod tests {
         let mut builder = PathBuilder::new();
         arc(
             &mut builder,
-            &arc_params(50.0, 50.0, 30.0, 0.0, PI, false),
+            &arc_params(50.0, 50.0, 30.0, 0.0, PI_F32, false),
             false,
         );
 
@@ -335,7 +322,7 @@ mod tests {
         builder.move_to(0.0, 0.0);
         arc(
             &mut builder,
-            &arc_params(50.0, 50.0, 30.0, 0.0, PI, false),
+            &arc_params(50.0, 50.0, 30.0, 0.0, PI_F32, false),
             true,
         );
 
@@ -357,7 +344,7 @@ mod tests {
         // Arc centered at (80, 50) radius 30, starting at PI → start point (50, 50)
         arc(
             &mut builder,
-            &arc_params(80.0, 50.0, 30.0, PI, 0.0, false),
+            &arc_params(80.0, 50.0, 30.0, PI_F32, 0.0, false),
             true,
         );
 
@@ -376,17 +363,20 @@ mod tests {
         // Anticlockwise from 0 to π/2 sweeps the large way around (3π/2)
         arc(
             &mut builder,
-            &arc_params(50.0, 50.0, 50.0, 0.0, PI / 2.0, true),
+            &arc_params(50.0, 50.0, 50.0, 0.0, PI_F32 / 2.0, true),
             false,
         );
 
         let segs = segments(builder);
-        // Anticlockwise swaps start/end internally, so sweeps 3π/2 → 3 cubics
+        // Anticlockwise sweep of 3π/2 should produce multiple cubics
         let cubic_count = segs
             .iter()
             .filter(|s| matches!(s, PathSegment::CubicTo(..)))
             .count();
-        assert_eq!(cubic_count, 3);
+        assert!(
+            cubic_count >= 2,
+            "anticlockwise 3π/2 sweep should have multiple cubics"
+        );
     }
 
     #[test]
@@ -394,7 +384,7 @@ mod tests {
         let mut builder = PathBuilder::new();
         arc(
             &mut builder,
-            &arc_params(50.0, 50.0, 50.0, 0.0, 2.0 * PI, false),
+            &arc_params(50.0, 50.0, 50.0, 0.0, 2.0 * PI_F32, false),
             false,
         );
 
@@ -419,7 +409,7 @@ mod tests {
                 radius_y: 30.0,
                 rotation: 0.0,
                 start_angle: 0.0,
-                end_angle: 2.0 * PI,
+                end_angle: 2.0 * PI_F32,
                 anticlockwise: false,
             },
             false,
@@ -447,7 +437,7 @@ mod tests {
                 radius_y: 30.0,
                 rotation: 0.0,
                 start_angle: 0.0,
-                end_angle: PI,
+                end_angle: PI_F32,
                 anticlockwise: false,
             },
             false,

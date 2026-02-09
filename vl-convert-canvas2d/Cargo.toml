@@ -27,6 +27,9 @@ csscolorparser = "0.7"
 # SVG path parsing (for Path2D from SVG string)
 svgtypes = "0.16"
 
+# Arc-to-cubic-bezier conversion
+kurbo = "0.13"
+
 # Error handling
 thiserror = "2"
 
