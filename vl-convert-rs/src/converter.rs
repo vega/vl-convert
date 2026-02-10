@@ -60,6 +60,10 @@ deno_core::extension!(
     }],
 );
 
+// Data transfer between Rust and V8 uses MessagePack for efficiency.
+// Arguments are msgpack-encoded in Rust, passed as byte buffers via Deno ops,
+// and decoded in JS. Results (e.g. scenegraphs) are encoded in JS and passed
+// back via ops. This avoids JSON serialization overhead for large payloads.
 lazy_static! {
     pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime =
         tokio::runtime::Builder::new_current_thread()
@@ -70,7 +74,7 @@ lazy_static! {
         Arc::new(Mutex::new(HashMap::new()));
     static ref MSGPACK_RESULTS: Arc<Mutex<HashMap<i32, Vec<u8>>>> =
         Arc::new(Mutex::new(HashMap::new()));
-    static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+    static ref NEXT_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
 #[derive(Debug, Clone, Default)]
@@ -220,7 +224,7 @@ impl VlOpts {
 }
 
 fn next_id() -> Result<i32, AnyError> {
-    match NEXT_ARG_ID.lock() {
+    match NEXT_ID.lock() {
         Ok(mut guard) => {
             let id = *guard;
             *guard = (*guard + 1) % i32::MAX;
@@ -232,7 +236,7 @@ fn next_id() -> Result<i32, AnyError> {
     }
 }
 
-fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
+fn set_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
     let id = next_id()?;
 
     let arg = rmp_serde::to_vec_named(&arg)?;
@@ -763,8 +767,8 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         self.init_vl_version(&vl_opts.vl_version).await?;
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
 
-        let spec_arg_id = set_json_arg(vl_spec.clone())?;
-        let config_arg_id = set_json_arg(config)?;
+        let spec_arg_id = set_arg(vl_spec.clone())?;
+        let config_arg_id = set_arg(config)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
@@ -811,12 +815,12 @@ compileVegaLite_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg_id = set_json_arg(vl_spec.clone())?;
-        let config_arg_id = set_json_arg(config)?;
+        let spec_arg_id = set_arg(vl_spec.clone())?;
+        let config_arg_id = set_arg(config)?;
         let allowed_base_urls_id =
-            set_json_arg(serde_json::Value::from(vl_opts.allowed_base_urls))?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
+            set_arg(serde_json::Value::from(vl_opts.allowed_base_urls))?;
+        let format_locale_id = set_arg(format_locale)?;
+        let time_format_locale_id = set_arg(time_format_locale)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
@@ -876,12 +880,12 @@ vegaLiteToSvg_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg_id = set_json_arg(vl_spec.clone())?;
-        let config_arg_id = set_json_arg(config)?;
+        let spec_arg_id = set_arg(vl_spec.clone())?;
+        let config_arg_id = set_arg(config)?;
         let allowed_base_urls_id =
-            set_json_arg(serde_json::Value::from(vl_opts.allowed_base_urls))?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
+            set_arg(serde_json::Value::from(vl_opts.allowed_base_urls))?;
+        let format_locale_id = set_arg(format_locale)?;
+        let time_format_locale_id = set_arg(time_format_locale)?;
         let result_id = alloc_msgpack_result_id()?;
 
         let theme_arg = match &vl_opts.theme {
@@ -932,7 +936,7 @@ vegaLiteToScenegraph_{ver_name:?}(
     ) -> Result<String, AnyError> {
         self.init_vega().await?;
         let allowed_base_urls_id =
-            set_json_arg(serde_json::Value::from(vg_opts.allowed_base_urls))?;
+            set_arg(serde_json::Value::from(vg_opts.allowed_base_urls))?;
 
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
@@ -944,9 +948,9 @@ vegaLiteToScenegraph_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let arg_id = set_json_arg(vg_spec.clone())?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
+        let arg_id = set_arg(vg_spec.clone())?;
+        let format_locale_id = set_arg(format_locale)?;
+        let time_format_locale_id = set_arg(time_format_locale)?;
 
         let code = format!(
             r#"
@@ -984,7 +988,7 @@ vegaToSvg(
     ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
         let allowed_base_urls_id =
-            set_json_arg(serde_json::Value::from(vg_opts.allowed_base_urls))?;
+            set_arg(serde_json::Value::from(vg_opts.allowed_base_urls))?;
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
             Some(fl) => fl.as_object()?,
@@ -995,9 +999,9 @@ vegaToSvg(
             Some(fl) => fl.as_object()?,
         };
 
-        let arg_id = set_json_arg(vg_spec.clone())?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
+        let arg_id = set_arg(vg_spec.clone())?;
+        let format_locale_id = set_arg(format_locale)?;
+        let time_format_locale_id = set_arg(time_format_locale)?;
         let result_id = alloc_msgpack_result_id()?;
 
         let code = format!(
