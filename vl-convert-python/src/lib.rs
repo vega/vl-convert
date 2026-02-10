@@ -9,7 +9,9 @@ use pythonize::{depythonize, pythonize};
 use std::borrow::Cow;
 use std::str::FromStr;
 use std::sync::Mutex;
-use vl_convert_rs::converter::{FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlOpts};
+use vl_convert_rs::converter::{
+    FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlOpts,
+};
 use vl_convert_rs::html::bundle_vega_snippet;
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -156,7 +158,6 @@ fn vega_to_scenegraph(
     time_format_locale: Option<PyObject>,
     format: &str,
 ) -> PyResult<PyObject> {
-    let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
@@ -172,6 +173,7 @@ fn vega_to_scenegraph(
 
     match format {
         "dict" => {
+            let vg_spec = parse_json_spec(vg_spec)?;
             let sg = PYTHON_RUNTIME
                 .block_on(converter.vega_to_scenegraph(vg_spec, vg_opts))
                 .map_err(|err| {
@@ -184,6 +186,7 @@ fn vega_to_scenegraph(
             })
         }
         "msgpack" => {
+            let vg_spec = parse_spec_to_value_or_string(vg_spec)?;
             let sg_bytes = PYTHON_RUNTIME
                 .block_on(converter.vega_to_scenegraph_msgpack(vg_spec, vg_opts))
                 .map_err(|err| {
@@ -299,7 +302,6 @@ fn vegalite_to_scenegraph(
     time_format_locale: Option<PyObject>,
     format: &str,
 ) -> PyResult<PyObject> {
-    let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -326,6 +328,7 @@ fn vegalite_to_scenegraph(
 
     match format {
         "dict" => {
+            let vl_spec = parse_json_spec(vl_spec)?;
             let sg = PYTHON_RUNTIME
                 .block_on(converter.vegalite_to_scenegraph(vl_spec, vl_opts))
                 .map_err(|err| {
@@ -340,6 +343,7 @@ fn vegalite_to_scenegraph(
             })
         }
         "msgpack" => {
+            let vl_spec = parse_spec_to_value_or_string(vl_spec)?;
             let sg_bytes = PYTHON_RUNTIME
                 .block_on(converter.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts))
                 .map_err(|err| {
@@ -942,6 +946,27 @@ fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
         } else if let Ok(vl_spec) = vl_spec.downcast_bound::<PyDict>(py) {
             match depythonize(vl_spec.as_any()) {
                 Ok(vl_spec) => Ok(vl_spec),
+                Err(err) => Err(PyValueError::new_err(format!(
+                    "Failed to parse vl_spec dict as JSON: {}",
+                    err
+                ))),
+            }
+        } else {
+            Err(PyValueError::new_err("vl_spec must be a string or dict"))
+        }
+    })
+}
+
+/// Helper function to parse a Python string or dict as a ValueOrString.
+/// When input is a string, returns ValueOrString::JsonString to avoid
+/// the serde_json::from_str/to_string round-trip.
+fn parse_spec_to_value_or_string(vl_spec: PyObject) -> PyResult<ValueOrString> {
+    Python::with_gil(|py| -> PyResult<ValueOrString> {
+        if let Ok(vl_spec) = vl_spec.extract::<String>(py) {
+            Ok(ValueOrString::JsonString(vl_spec))
+        } else if let Ok(vl_spec) = vl_spec.downcast_bound::<PyDict>(py) {
+            match depythonize(vl_spec.as_any()) {
+                Ok(vl_spec) => Ok(ValueOrString::Value(vl_spec)),
                 Err(err) => Err(PyValueError::new_err(format!(
                     "Failed to parse vl_spec dict as JSON: {}",
                     err
