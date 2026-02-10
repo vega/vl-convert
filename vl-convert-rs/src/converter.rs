@@ -417,58 +417,58 @@ function vegaToSvg(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, erro
     return svgPromise
 }
 
-function cloneScenegraph(obj) {
-    const keys = [
-      'marktype', 'name', 'role', 'interactive', 'clip', 'items', 'zindex',
-      'x', 'y', 'width', 'height', 'align', 'baseline',             // layout
-      'fill', 'fillOpacity', 'opacity', 'blend',                    // fill
-      'x1', 'y1', 'r1', 'r2', 'gradient',                           // gradient
-      'stops', 'offset', 'color',
-      'stroke', 'strokeOpacity', 'strokeWidth', 'strokeCap',        // stroke
-      'strokeJoin',
-      'strokeDash', 'strokeDashOffset',                             // stroke dash
-      'strokeForeground', 'strokeOffset',                           // group
-      'startAngle', 'endAngle', 'innerRadius', 'outerRadius',       // arc
-      'cornerRadius', 'padAngle',                                   // arc, rect
-      'cornerRadiusTopLeft', 'cornerRadiusTopRight',                // rect, group
-      'cornerRadiusBottomLeft', 'cornerRadiusBottomRight',
-      'interpolate', 'tension', 'orient', 'defined',                // area, line
-      'url', 'aspect', 'smooth',                                    // image
-      'path', 'scaleX', 'scaleY',                                   // path
-      'x2', 'y2',                                                   // rule
-      'size', 'shape',                                              // symbol
-      'text', 'angle', 'theta', 'radius', 'dir', 'dx', 'dy',        // text
-      'ellipsis', 'limit', 'lineBreak', 'lineHeight',
-      'font', 'fontSize', 'fontWeight', 'fontStyle', 'fontVariant', // font
-      'description', 'aria', 'ariaRole', 'ariaRoleDescription'      // aria
-    ];
+const SCENEGRAPH_KEYS = new Set([
+  'marktype', 'name', 'role', 'interactive', 'clip', 'items', 'zindex',
+  'x', 'y', 'width', 'height', 'align', 'baseline',             // layout
+  'fill', 'fillOpacity', 'opacity', 'blend',                    // fill
+  'x1', 'y1', 'r1', 'r2', 'gradient',                           // gradient
+  'stops', 'offset', 'color',
+  'stroke', 'strokeOpacity', 'strokeWidth', 'strokeCap',        // stroke
+  'strokeJoin',
+  'strokeDash', 'strokeDashOffset',                             // stroke dash
+  'strokeForeground', 'strokeOffset',                           // group
+  'startAngle', 'endAngle', 'innerRadius', 'outerRadius',       // arc
+  'cornerRadius', 'padAngle',                                   // arc, rect
+  'cornerRadiusTopLeft', 'cornerRadiusTopRight',                // rect, group
+  'cornerRadiusBottomLeft', 'cornerRadiusBottomRight',
+  'interpolate', 'tension', 'orient', 'defined',                // area, line
+  'url', 'aspect', 'smooth',                                    // image
+  'path', 'scaleX', 'scaleY',                                   // path
+  'x2', 'y2',                                                   // rule
+  'size', 'shape',                                              // symbol
+  'text', 'angle', 'theta', 'radius', 'dir', 'dx', 'dy',        // text
+  'ellipsis', 'limit', 'lineBreak', 'lineHeight',
+  'font', 'fontSize', 'fontWeight', 'fontStyle', 'fontVariant', // font
+  'description', 'aria', 'ariaRole', 'ariaRoleDescription'      // aria
+]);
 
-    // Check if the input is an object (including an array) or null
+function cloneScenegraph(obj) {
     if (typeof obj !== 'object' || obj === null) {
         return obj;
     }
 
-    // Initialize the clone as an array or object based on the input type
-    const clone = Array.isArray(obj) ? [] : {};
-
-    // If the object is an array, iterate over its elements
     if (Array.isArray(obj)) {
-        for (let i = 0; i < obj.length; i++) {
-            // Apply the function recursively to each element
-            clone.push(cloneScenegraph(obj[i]));
+        const len = obj.length;
+        const clone = new Array(len);
+        for (let i = 0; i < len; i++) {
+            clone[i] = cloneScenegraph(obj[i]);
         }
-    } else {
-        // If the object is not an array, iterate over its keys
-        for (const key in obj) {
-            // Clone only the properties with specified keys
-            if (key === "shape" && typeof obj[key] === "function") {
-                // Convert path object to SVG path string.
-                // Initialize context. This is needed for obj.shape(obj) to work.
-                obj.shape.context();
-                clone["shape"] = obj.shape(obj) ?? "";
-            } else if (keys.includes(key)) {
-                clone[key] = cloneScenegraph(obj[key]);
-            }
+        return clone;
+    }
+
+    const clone = {};
+    const objKeys = Object.keys(obj);
+    for (let i = 0; i < objKeys.length; i++) {
+        const key = objKeys[i];
+        const value = obj[key];
+
+        if (key === "shape" && typeof value === "function") {
+            // Convert path object to SVG path string.
+            // Initialize context. This is needed for value(obj) to work.
+            value.context();
+            clone.shape = value(obj) ?? "";
+        } else if (SCENEGRAPH_KEYS.has(key)) {
+            clone[key] = cloneScenegraph(value);
         }
     }
 
