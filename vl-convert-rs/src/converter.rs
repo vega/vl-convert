@@ -519,7 +519,7 @@ function cloneScenegraph(obj) {
             // Initialize context. This is needed for value(obj) to work.
             value.context();
             clone.shape = value(obj) ?? "";
-        } else if (SCENEGRAPH_KEYS.has(key)) {
+        } else if (SCENEGRAPH_KEYS.has(key) && value !== undefined) {
             clone[key] = cloneScenegraph(value);
         }
     }
@@ -817,8 +817,7 @@ compileVegaLite_{ver_name:?}(
 
         let spec_arg_id = set_arg(vl_spec.clone())?;
         let config_arg_id = set_arg(config)?;
-        let allowed_base_urls_id =
-            set_arg(serde_json::Value::from(vl_opts.allowed_base_urls))?;
+        let allowed_base_urls_id = set_arg(serde_json::Value::from(vl_opts.allowed_base_urls))?;
         let format_locale_id = set_arg(format_locale)?;
         let time_format_locale_id = set_arg(time_format_locale)?;
 
@@ -882,8 +881,7 @@ vegaLiteToSvg_{ver_name:?}(
 
         let spec_arg_id = set_arg(vl_spec.clone())?;
         let config_arg_id = set_arg(config)?;
-        let allowed_base_urls_id =
-            set_arg(serde_json::Value::from(vl_opts.allowed_base_urls))?;
+        let allowed_base_urls_id = set_arg(serde_json::Value::from(vl_opts.allowed_base_urls))?;
         let format_locale_id = set_arg(format_locale)?;
         let time_format_locale_id = set_arg(time_format_locale)?;
         let result_id = alloc_msgpack_result_id()?;
@@ -935,8 +933,7 @@ vegaLiteToScenegraph_{ver_name:?}(
         vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
         self.init_vega().await?;
-        let allowed_base_urls_id =
-            set_arg(serde_json::Value::from(vg_opts.allowed_base_urls))?;
+        let allowed_base_urls_id = set_arg(serde_json::Value::from(vg_opts.allowed_base_urls))?;
 
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
@@ -987,8 +984,7 @@ vegaToSvg(
         vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
-        let allowed_base_urls_id =
-            set_arg(serde_json::Value::from(vg_opts.allowed_base_urls))?;
+        let allowed_base_urls_id = set_arg(serde_json::Value::from(vg_opts.allowed_base_urls))?;
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
             Some(fl) => fl.as_object()?,

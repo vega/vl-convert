@@ -175,9 +175,7 @@ fn bench_vega_to_svg_large_scatter(c: &mut Criterion) {
                 |spec| {
                     black_box(
                         runtime
-                            .block_on(
-                                converter.vega_to_svg(black_box(spec), VgOpts::default()),
-                            )
+                            .block_on(converter.vega_to_svg(black_box(spec), VgOpts::default()))
                             .expect("SVG conversion failed"),
                     )
                 },
