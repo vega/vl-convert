@@ -26,11 +26,11 @@ use std::path::PathBuf;
 // are registered and used instead.
 
 #[op2]
-#[buffer]
-fn op_get_msgpack_arg(_arg_id: i32) -> Result<Vec<u8>, JsErrorBox> {
+#[string]
+fn op_get_json_arg(_arg_id: i32) -> Result<String, JsErrorBox> {
     // This is a stub - never called during snapshot creation
     Err(JsErrorBox::generic(
-        "op_get_msgpack_arg stub called during snapshot creation",
+        "op_get_json_arg stub called during snapshot creation",
     ))
 }
 
@@ -54,15 +54,15 @@ fn op_text_width(#[string] _text_info_str: String) -> Result<f64, JsErrorBox> {
 // This must match the extension defined in converter.rs
 extension!(
     vl_convert_runtime,
-    ops = [op_get_msgpack_arg, op_set_msgpack_result, op_text_width],
+    ops = [op_get_json_arg, op_set_msgpack_result, op_text_width],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
     esm = ["ext:vl_convert_runtime/bootstrap.js" = {
         source = r#"
-            import { op_text_width, op_get_msgpack_arg, op_set_msgpack_result } from "ext:core/ops";
+            import { op_text_width, op_get_json_arg, op_set_msgpack_result } from "ext:core/ops";
 
             // Expose our custom ops on globalThis for vega-scenegraph text measurement
             globalThis.op_text_width = op_text_width;
-            globalThis.op_get_msgpack_arg = op_get_msgpack_arg;
+            globalThis.op_get_json_arg = op_get_json_arg;
             globalThis.op_set_msgpack_result = op_set_msgpack_result;
         "#
     }],
