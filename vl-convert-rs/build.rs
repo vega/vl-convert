@@ -35,6 +35,14 @@ fn op_get_msgpack_arg(_arg_id: i32) -> Result<Vec<u8>, JsErrorBox> {
 }
 
 #[op2(fast)]
+fn op_set_msgpack_result(_result_id: i32, #[buffer] _data: &[u8]) -> Result<(), JsErrorBox> {
+    // This is a stub - never called during snapshot creation
+    Err(JsErrorBox::generic(
+        "op_set_msgpack_result stub called during snapshot creation",
+    ))
+}
+
+#[op2(fast)]
 fn op_text_width(#[string] _text_info_str: String) -> Result<f64, JsErrorBox> {
     // This is a stub - never called during snapshot creation
     Err(JsErrorBox::generic(
@@ -46,15 +54,16 @@ fn op_text_width(#[string] _text_info_str: String) -> Result<f64, JsErrorBox> {
 // This must match the extension defined in converter.rs
 extension!(
     vl_convert_runtime,
-    ops = [op_get_msgpack_arg, op_text_width],
+    ops = [op_get_msgpack_arg, op_set_msgpack_result, op_text_width],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
     esm = ["ext:vl_convert_runtime/bootstrap.js" = {
         source = r#"
-            import { op_text_width, op_get_msgpack_arg } from "ext:core/ops";
+            import { op_text_width, op_get_msgpack_arg, op_set_msgpack_result } from "ext:core/ops";
 
             // Expose our custom ops on globalThis for vega-scenegraph text measurement
             globalThis.op_text_width = op_text_width;
             globalThis.op_get_msgpack_arg = op_get_msgpack_arg;
+            globalThis.op_set_msgpack_result = op_set_msgpack_result;
         "#
     }],
 );
