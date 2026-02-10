@@ -860,11 +860,11 @@ vegaLiteToSvg_{ver_name:?}(
         Ok(value)
     }
 
-    pub async fn vegalite_to_scenegraph(
+    pub async fn vegalite_to_scenegraph_msgpack(
         &mut self,
         vl_spec: &serde_json::Value,
         vl_opts: VlOpts,
-    ) -> Result<serde_json::Value, AnyError> {
+    ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
         self.init_vl_version(&vl_opts.vl_version).await?;
 
@@ -921,7 +921,15 @@ vegaLiteToScenegraph_{ver_name:?}(
             .run_event_loop(Default::default())
             .await?;
 
-        let sg_msgpack = take_msgpack_result(result_id)?;
+        take_msgpack_result(result_id)
+    }
+
+    pub async fn vegalite_to_scenegraph(
+        &mut self,
+        vl_spec: &serde_json::Value,
+        vl_opts: VlOpts,
+    ) -> Result<serde_json::Value, AnyError> {
+        let sg_msgpack = self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await?;
         let value: serde_json::Value = rmp_serde::from_slice(&sg_msgpack)
             .map_err(|err| anyhow!("Failed to decode MessagePack scenegraph: {err}"))?;
         Ok(value)
@@ -1108,6 +1116,11 @@ pub enum VlConvertCommand {
         vl_opts: VlOpts,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
+    VlToSgMsgpack {
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
     GetLocalTz {
         responder: oneshot::Sender<Result<Option<String>, AnyError>>,
     },
@@ -1221,6 +1234,15 @@ impl VlConverter {
                             responder,
                         } => {
                             let sg_result = inner.vegalite_to_scenegraph(&vl_spec, vl_opts).await;
+                            responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VlToSgMsgpack {
+                            vl_spec,
+                            vl_opts,
+                            responder,
+                        } => {
+                            let sg_result =
+                                inner.vegalite_to_scenegraph_msgpack(&vl_spec, vl_opts).await;
                             responder.send(sg_result).ok();
                         }
                         VlConvertCommand::GetLocalTz { responder } => {
@@ -1415,7 +1437,36 @@ impl VlConverter {
 
         // Wait for result
         match resp_rx.await {
-            Ok(svg_result) => svg_result,
+            Ok(sg_result) => sg_result,
+            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
+        }
+    }
+
+    pub async fn vegalite_to_scenegraph_msgpack(
+        &mut self,
+        vl_spec: serde_json::Value,
+        vl_opts: VlOpts,
+    ) -> Result<Vec<u8>, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
+        let cmd = VlConvertCommand::VlToSgMsgpack {
+            vl_spec,
+            vl_opts,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send Scenegraph conversion request: {err}")
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(sg_result) => sg_result,
             Err(err) => bail!("Failed to retrieve conversion result: {err}"),
         }
     }
