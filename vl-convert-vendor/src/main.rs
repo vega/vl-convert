@@ -36,6 +36,7 @@ const VEGA_PATH: &str = "/npm/vega@6.2.0/+esm";
 const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
 const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.0.2/+esm";
 const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
+const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.2/+esm";
 
 // Example custom build script.
 fn main() {
@@ -136,6 +137,18 @@ fn main() {
     writeln!(
         imports,
         "import lodashDebounce from \"{JSDELIVR_URL}/npm/{debounce_package_url}/+esm\";",
+    )
+    .unwrap();
+
+    // Write msgpack
+    let msgpack_package_url = MSGPACK_PATH
+        .strip_prefix("/npm/")
+        .unwrap()
+        .strip_suffix("/+esm")
+        .unwrap();
+    writeln!(
+        imports,
+        "import * as msgpack from \"{JSDELIVR_URL}/npm/{msgpack_package_url}/+esm\";",
     )
     .unwrap();
 
@@ -242,7 +255,7 @@ fn main() {
         // canonical_path is like "/npm/vega@6.2.0/+esm"
         if let Some(pkg_part) = canonical_path.strip_prefix("/npm/") {
             if let Some(pkg_name_ver) = pkg_part.strip_suffix("/+esm") {
-                if let Some((name, ver_str)) = pkg_name_ver.split_once('@') {
+                if let Some((name, ver_str)) = pkg_name_ver.rsplit_once('@') {
                     if let Ok(version) = Version::parse(ver_str) {
                         // actual_path is like "cdn.jsdelivr.net/npm/vega@6.2.0/#+esm_3b53f.js"
                         // Extract the directory name from actual_path
@@ -303,6 +316,10 @@ fn main() {
         .get("lodash.debounce")
         .map(|v| format!("/npm/{}/+esm", v))
         .unwrap_or_else(|| DEBOUNCE_PATH.to_string());
+    let actual_msgpack_version = final_package_versions
+        .get("@msgpack/msgpack")
+        .map(|v| format!("/npm/{}/+esm", v))
+        .unwrap_or_else(|| MSGPACK_PATH.to_string());
 
     let mut content = format!(
         r#"
@@ -319,6 +336,7 @@ pub const VEGA_PATH: &str = "{VEGA_PATH}";
 pub const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
 pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
 pub const DEBOUNCE_PATH: &str = "{DEBOUNCE_PATH}";
+pub const MSGPACK_PATH: &str = "{MSGPACK_PATH}";
 
 pub const VEGA_VERSION: &str = "{VEGA_VERSION}";
 pub const VEGA_THEMES_VERSION: &str = "{VEGA_THEMES_VERSION}";
@@ -334,6 +352,10 @@ pub fn vega_url() -> String {{
 
 pub fn vega_themes_url() -> String {{
     url_for_path(VEGA_THEMES_PATH)
+}}
+
+pub fn msgpack_url() -> String {{
+    url_for_path(MSGPACK_PATH)
 }}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -418,6 +440,7 @@ pub fn build_import_map() -> HashMap<String, String> {{
         VEGA_THEMES_PATH = actual_vega_themes_version,
         VEGA_EMBED_PATH = actual_vega_embed_version,
         DEBOUNCE_PATH = actual_debounce_version,
+        MSGPACK_PATH = actual_msgpack_version,
         LATEST_VEGALITE = VL_PATHS[VL_PATHS.len() - 1].0
     );
 
@@ -633,11 +656,15 @@ fn extract_canonical_path(file_path: &Path) -> Option<String> {
             // rest is like "/npm/vega@6.2.0/build/vega.module.js"
             // We want to extract "/npm/vega@6.2.0/+esm"
             if let Some(npm_path) = rest.strip_prefix("/npm/") {
-                // Find the package@version part (everything up to the first /)
-                if let Some(slash_pos) = npm_path.find('/') {
-                    let pkg_name_ver = &npm_path[..slash_pos];
-                    return Some(format!("/npm/{}/+esm", pkg_name_ver));
-                }
+                let pkg_name_ver = if npm_path.starts_with('@') {
+                    let mut parts = npm_path.splitn(3, '/');
+                    let scope = parts.next()?;
+                    let package = parts.next()?;
+                    format!("{scope}/{package}")
+                } else {
+                    npm_path.split('/').next()?.to_string()
+                };
+                return Some(format!("/npm/{}/+esm", pkg_name_ver));
             }
         }
     }

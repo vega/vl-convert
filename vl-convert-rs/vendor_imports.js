@@ -11,3 +11,4 @@ import * as vega from "https://cdn.jsdelivr.net/npm/vega@6.2.0/+esm";
 import * as vegaThemes from "https://cdn.jsdelivr.net/npm/vega-themes@3.0.0/+esm";
 import * as vegaEmbed from "https://cdn.jsdelivr.net/npm/vega-embed@7.0.2/+esm";
 import lodashDebounce from "https://cdn.jsdelivr.net/npm/lodash.debounce@4.0.8/+esm";
+import * as msgpack from "https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.2/+esm";

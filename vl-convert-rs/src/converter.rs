@@ -1,5 +1,7 @@
 use crate::deno_stubs::{NoOpInNpmPackageChecker, NoOpNpmPackageFolderResolver, VlConvertNodeSys};
-use crate::module_loader::import_map::{url_for_path, vega_themes_url, vega_url, VlVersion};
+use crate::module_loader::import_map::{
+    msgpack_url, url_for_path, vega_themes_url, vega_url, VlVersion,
+};
 use crate::module_loader::{
     VlConvertModuleLoader, FORMATE_LOCALE_MAP, IMPORT_MAP, TIME_FORMATE_LOCALE_MAP,
 };
@@ -41,18 +43,18 @@ use resvg::render;
 use crate::text::{op_text_width, USVG_OPTIONS};
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
-// We only need to expose op_text_width and op_get_json_arg on globalThis
+// We only need to expose op_text_width and op_get_msgpack_arg on globalThis
 deno_core::extension!(
     vl_convert_runtime,
-    ops = [op_get_json_arg, op_text_width],
+    ops = [op_get_msgpack_arg, op_text_width],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
     esm = ["ext:vl_convert_runtime/bootstrap.js" = {
         source = r#"
-                import { op_text_width, op_get_json_arg } from "ext:core/ops";
+                import { op_text_width, op_get_msgpack_arg } from "ext:core/ops";
 
                 // Expose our custom ops on globalThis for vega-scenegraph text measurement
                 globalThis.op_text_width = op_text_width;
-                globalThis.op_get_json_arg = op_get_json_arg;
+                globalThis.op_get_msgpack_arg = op_get_msgpack_arg;
             "#
     }],
 );
@@ -63,7 +65,8 @@ lazy_static! {
             .enable_all()
             .build()
             .unwrap();
-    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> = Arc::new(Mutex::new(HashMap::new()));
+    static ref MSGPACK_ARGS: Arc<Mutex<HashMap<i32, Vec<u8>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
     static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 }
 
@@ -226,10 +229,12 @@ fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
         }
     };
 
+    let arg = rmp_serde::to_vec_named(&arg)?;
+
     // Add Arg at id to args
-    match JSON_ARGS.lock() {
+    match MSGPACK_ARGS.lock() {
         Ok(mut guard) => {
-            guard.insert(id, serde_json::to_string(&arg).unwrap());
+            guard.insert(id, arg);
         }
         Err(err) => {
             bail!("Failed to acquire lock: {err}")
@@ -240,9 +245,9 @@ fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
 }
 
 #[op2]
-#[string]
-fn op_get_json_arg(arg_id: i32) -> Result<String, JsErrorBox> {
-    match JSON_ARGS.lock() {
+#[buffer]
+fn op_get_msgpack_arg(arg_id: i32) -> Result<Vec<u8>, JsErrorBox> {
+    match MSGPACK_ARGS.lock() {
         Ok(mut guard) => {
             if let Some(arg) = guard.remove(&arg_id) {
                 Ok(arg)
@@ -279,9 +284,15 @@ var vegaThemes;
 import('{vega_themes_url}').then((imported) => {{
     vegaThemes = imported;
 }})
+
+var msgpack;
+import('{msgpack_url}').then((imported) => {{
+    msgpack = imported;
+}})
 "#,
                 vega_url = vega_url(),
                 vega_themes_url = vega_themes_url(),
+                msgpack_url = msgpack_url(),
             );
 
             self.worker
@@ -389,6 +400,10 @@ function vegaToView(vgSpec, allowedBaseUrls, errors) {
     }
 
     return new vega.View(runtime, {renderer: 'none', loader});
+}
+
+function decodeMsgpackArg(argId) {
+    return msgpack.decode(op_get_msgpack_arg(argId));
 }
 
 function vegaToSvg(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, errors) {
@@ -706,6 +721,24 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         Ok(value)
     }
 
+    async fn execute_script_to_bytes(&mut self, script: &str) -> Result<Vec<u8>, AnyError> {
+        let code = script.to_string();
+        let res = self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
+
+        deno_core::scope!(scope, self.worker.js_runtime);
+        let local = v8::Local::new(scope, res);
+        let uint8_array = v8::Local::<v8::Uint8Array>::try_from(local)
+            .map_err(|_| anyhow!("Expected JavaScript Uint8Array result"))?;
+        let mut bytes = vec![0; uint8_array.byte_length()];
+        uint8_array.copy_contents(&mut bytes);
+        Ok(bytes)
+    }
+
     pub async fn vegalite_to_vega(
         &mut self,
         vl_spec: &serde_json::Value,
@@ -729,8 +762,8 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
         let code = format!(
             r#"
 compileVegaLite_{ver_name:?}(
-    JSON.parse(op_get_json_arg({spec_arg_id})),
-    JSON.parse(op_get_json_arg({config_arg_id})),
+    decodeMsgpackArg({spec_arg_id}),
+    decodeMsgpackArg({config_arg_id}),
     {theme_arg},
     {show_warnings},
     {allowed_base_urls},
@@ -785,13 +818,13 @@ compileVegaLite_{ver_name:?}(
 var svg;
 var errors = [];
 vegaLiteToSvg_{ver_name:?}(
-    JSON.parse(op_get_json_arg({spec_arg_id})),
-    JSON.parse(op_get_json_arg({config_arg_id})),
+    decodeMsgpackArg({spec_arg_id}),
+    decodeMsgpackArg({config_arg_id}),
     {theme_arg},
     {show_warnings},
     {allowed_base_urls},
-    JSON.parse(op_get_json_arg({format_locale_id})),
-    JSON.parse(op_get_json_arg({time_format_locale_id})),
+    decodeMsgpackArg({format_locale_id}),
+    decodeMsgpackArg({time_format_locale_id}),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -847,22 +880,22 @@ vegaLiteToSvg_{ver_name:?}(
 
         let code = format!(
             r#"
-var sg;
+var sgMsgpack;
 var errors = [];
 vegaLiteToScenegraph_{ver_name:?}(
-    JSON.parse(op_get_json_arg({spec_arg_id})),
-    JSON.parse(op_get_json_arg({config_arg_id})),
+    decodeMsgpackArg({spec_arg_id}),
+    decodeMsgpackArg({config_arg_id}),
     {theme_arg},
     {show_warnings},
     {allowed_base_urls},
-    JSON.parse(op_get_json_arg({format_locale_id})),
-    JSON.parse(op_get_json_arg({time_format_locale_id})),
+    decodeMsgpackArg({format_locale_id}),
+    decodeMsgpackArg({time_format_locale_id}),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
         throw new Error(`${{errors}}`);
     }}
-    sg = result;
+    sgMsgpack = msgpack.encode(result);
 }})
 "#,
             ver_name = vl_opts.vl_version,
@@ -874,7 +907,9 @@ vegaLiteToScenegraph_{ver_name:?}(
             .run_event_loop(Default::default())
             .await?;
 
-        let value = self.execute_script_to_json("sg").await?;
+        let sg_msgpack = self.execute_script_to_bytes("sgMsgpack").await?;
+        let value: serde_json::Value = rmp_serde::from_slice(&sg_msgpack)
+            .map_err(|err| anyhow!("Failed to decode MessagePack scenegraph: {err}"))?;
         Ok(value)
     }
 
@@ -906,10 +941,10 @@ vegaLiteToScenegraph_{ver_name:?}(
 var svg;
 var errors = [];
 vegaToSvg(
-    JSON.parse(op_get_json_arg({arg_id})),
+    decodeMsgpackArg({arg_id}),
     {allowed_base_urls},
-    JSON.parse(op_get_json_arg({format_locale_id})),
-    JSON.parse(op_get_json_arg({time_format_locale_id})),
+    decodeMsgpackArg({format_locale_id}),
+    decodeMsgpackArg({time_format_locale_id}),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -929,11 +964,11 @@ vegaToSvg(
         Ok(value)
     }
 
-    pub async fn vega_to_scenegraph(
+    pub async fn vega_to_scenegraph_msgpack(
         &mut self,
         vg_spec: &serde_json::Value,
         vg_opts: VgOpts,
-    ) -> Result<serde_json::Value, AnyError> {
+    ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
@@ -953,19 +988,19 @@ vegaToSvg(
 
         let code = format!(
             r#"
-var sg;
+var sgMsgpack;
 var errors = [];
 vegaToScenegraph(
-    JSON.parse(op_get_json_arg({arg_id})),
+    decodeMsgpackArg({arg_id}),
     {allowed_base_urls},
-    JSON.parse(op_get_json_arg({format_locale_id})),
-    JSON.parse(op_get_json_arg({time_format_locale_id})),
+    decodeMsgpackArg({format_locale_id}),
+    decodeMsgpackArg({time_format_locale_id}),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
         throw new Error(`${{errors}}`);
     }}
-    sg = result;
+    sgMsgpack = msgpack.encode(result);
 }})
 "#
         );
@@ -975,7 +1010,17 @@ vegaToScenegraph(
             .run_event_loop(Default::default())
             .await?;
 
-        let value = self.execute_script_to_json("sg").await?;
+        self.execute_script_to_bytes("sgMsgpack").await
+    }
+
+    pub async fn vega_to_scenegraph(
+        &mut self,
+        vg_spec: &serde_json::Value,
+        vg_opts: VgOpts,
+    ) -> Result<serde_json::Value, AnyError> {
+        let sg_msgpack = self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await?;
+        let value: serde_json::Value = rmp_serde::from_slice(&sg_msgpack)
+            .map_err(|err| anyhow!("Failed to decode MessagePack scenegraph: {err}"))?;
         Ok(value)
     }
 
@@ -1032,6 +1077,11 @@ pub enum VlConvertCommand {
         vg_spec: serde_json::Value,
         vg_opts: VgOpts,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
+    },
+    VgToSgMsgpack {
+        vg_spec: serde_json::Value,
+        vg_opts: VgOpts,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSvg {
         vl_spec: serde_json::Value,
@@ -1131,6 +1181,15 @@ impl VlConverter {
                             responder,
                         } => {
                             let sg_result = inner.vega_to_scenegraph(&vg_spec, vg_opts).await;
+                            responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VgToSgMsgpack {
+                            vg_spec,
+                            vg_opts,
+                            responder,
+                        } => {
+                            let sg_result =
+                                inner.vega_to_scenegraph_msgpack(&vg_spec, vg_opts).await;
                             responder.send(sg_result).ok();
                         }
                         VlConvertCommand::VlToSvg {
@@ -1255,6 +1314,35 @@ impl VlConverter {
         // Wait for result
         match resp_rx.await {
             Ok(svg_result) => svg_result,
+            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
+        }
+    }
+
+    pub async fn vega_to_scenegraph_msgpack(
+        &mut self,
+        vg_spec: serde_json::Value,
+        vg_opts: VgOpts,
+    ) -> Result<Vec<u8>, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
+        let cmd = VlConvertCommand::VgToSgMsgpack {
+            vg_spec,
+            vg_opts,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send Scenegraph conversion request: {err}")
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(sg_msgpack_result) => sg_msgpack_result,
             Err(err) => bail!("Failed to retrieve conversion result: {err}"),
         }
     }

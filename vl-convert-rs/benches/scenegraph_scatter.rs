@@ -6,6 +6,7 @@ use vl_convert_rs::converter::{VgOpts, VlConverter};
 use vl_convert_rs::serde_json::Value;
 
 const LARGE_SCATTER_POINTS: usize = 50_000;
+const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 
 fn build_large_scatterplot_spec(num_points: usize) -> Value {
     let values: Vec<Value> = (0..num_points)
@@ -81,6 +82,15 @@ fn bench_vega_to_scenegraph_large_scatter(c: &mut Criterion) {
         warmup.get("scenegraph").is_some(),
         "scenegraph conversion did not return a scenegraph object"
     );
+    let warmup_msgpack = runtime
+        .block_on(converter.vega_to_scenegraph_msgpack(vg_spec.clone(), VgOpts::default()))
+        .expect("warmup scenegraph msgpack conversion failed");
+    let warmup_msgpack_decoded: Value =
+        rmp_serde::from_slice(&warmup_msgpack).expect("warmup scenegraph msgpack decode failed");
+    assert!(
+        warmup_msgpack_decoded.get("scenegraph").is_some(),
+        "scenegraph msgpack conversion did not return a scenegraph object"
+    );
 
     let mut group = c.benchmark_group("scenegraph_conversion");
     group.sample_size(10);
@@ -103,8 +113,87 @@ fn bench_vega_to_scenegraph_large_scatter(c: &mut Criterion) {
             );
         },
     );
+    group.bench_function(
+        BenchmarkId::new("vega_to_scenegraph_large_scatter_msgpack", num_points),
+        |b| {
+            b.iter_batched(
+                || vg_spec.clone(),
+                |spec| {
+                    black_box(
+                        runtime
+                            .block_on(
+                                converter
+                                    .vega_to_scenegraph_msgpack(black_box(spec), VgOpts::default()),
+                            )
+                            .expect("scenegraph msgpack conversion failed"),
+                    )
+                },
+                BatchSize::LargeInput,
+            );
+        },
+    );
+    group.bench_function(
+        BenchmarkId::new("scenegraph_msgpack_decode_to_json", num_points),
+        |b| {
+            b.iter(|| {
+                black_box(
+                    rmp_serde::from_slice::<Value>(black_box(&warmup_msgpack))
+                        .expect("scenegraph msgpack decode failed"),
+                )
+            });
+        },
+    );
     group.finish();
 }
 
-criterion_group!(benches, bench_vega_to_scenegraph_large_scatter);
+fn bench_vega_to_png_large_scatter(c: &mut Criterion) {
+    let num_points = LARGE_SCATTER_POINTS;
+    let vg_spec = build_large_scatterplot_spec(num_points);
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("failed to construct benchmark runtime");
+    let mut converter = VlConverter::new();
+
+    let warmup_png = runtime
+        .block_on(converter.vega_to_png(vg_spec.clone(), VgOpts::default(), None, None))
+        .expect("warmup PNG conversion failed");
+    assert!(
+        warmup_png.starts_with(PNG_SIGNATURE),
+        "warmup PNG conversion did not return a PNG payload"
+    );
+
+    let mut group = c.benchmark_group("png_conversion");
+    group.sample_size(10);
+    group.throughput(Throughput::Elements(num_points as u64));
+    group.bench_function(
+        BenchmarkId::new("vega_to_png_large_scatter", num_points),
+        |b| {
+            b.iter_batched(
+                || vg_spec.clone(),
+                |spec| {
+                    black_box(
+                        runtime
+                            .block_on(converter.vega_to_png(
+                                black_box(spec),
+                                VgOpts::default(),
+                                None,
+                                None,
+                            ))
+                            .expect("PNG conversion failed"),
+                    )
+                },
+                BatchSize::LargeInput,
+            );
+        },
+    );
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_vega_to_scenegraph_large_scatter,
+    bench_vega_to_png_large_scatter
+);
 criterion_main!(benches);

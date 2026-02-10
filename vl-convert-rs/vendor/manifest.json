@@ -4,6 +4,11 @@
     "https://cdn.jsdelivr.net/npm/json-stringify-pretty-compact@4.0.0/": "cdn.jsdelivr.net/npm/#json-stringify-prett_2eaac"
   },
   "modules": {
+    "https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.2/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
     "https://cdn.jsdelivr.net/npm/clone@2.1.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
