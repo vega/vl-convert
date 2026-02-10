@@ -44,6 +44,11 @@ escape8259 = "0.5.3"
 [dev-dependencies]
 rstest = { workspace = true }
 dssim = { workspace = true }
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "scenegraph_scatter"
+harness = false
 
 [build-dependencies]
 deno_core = { workspace = true }
