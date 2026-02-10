@@ -146,6 +146,48 @@ fn bench_vega_to_scenegraph_large_scatter(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_vega_to_svg_large_scatter(c: &mut Criterion) {
+    let num_points = LARGE_SCATTER_POINTS;
+    let vg_spec = build_large_scatterplot_spec(num_points);
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("failed to construct benchmark runtime");
+    let mut converter = VlConverter::new();
+
+    let warmup_svg = runtime
+        .block_on(converter.vega_to_svg(vg_spec.clone(), VgOpts::default()))
+        .expect("warmup SVG conversion failed");
+    assert!(
+        warmup_svg.contains("<svg"),
+        "warmup SVG conversion did not return SVG"
+    );
+
+    let mut group = c.benchmark_group("svg_conversion");
+    group.sample_size(10);
+    group.throughput(Throughput::Elements(num_points as u64));
+    group.bench_function(
+        BenchmarkId::new("vega_to_svg_large_scatter", num_points),
+        |b| {
+            b.iter_batched(
+                || vg_spec.clone(),
+                |spec| {
+                    black_box(
+                        runtime
+                            .block_on(
+                                converter.vega_to_svg(black_box(spec), VgOpts::default()),
+                            )
+                            .expect("SVG conversion failed"),
+                    )
+                },
+                BatchSize::LargeInput,
+            );
+        },
+    );
+    group.finish();
+}
+
 fn bench_vega_to_png_large_scatter(c: &mut Criterion) {
     let num_points = LARGE_SCATTER_POINTS;
     let vg_spec = build_large_scatterplot_spec(num_points);
@@ -194,6 +236,7 @@ fn bench_vega_to_png_large_scatter(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_vega_to_scenegraph_large_scatter,
+    bench_vega_to_svg_large_scatter,
     bench_vega_to_png_large_scatter
 );
 criterion_main!(benches);
