@@ -9,7 +9,9 @@ use pythonize::{depythonize, pythonize};
 use std::borrow::Cow;
 use std::str::FromStr;
 use std::sync::Mutex;
-use vl_convert_rs::converter::{FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlOpts};
+use vl_convert_rs::converter::{
+    FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlOpts,
+};
 use vl_convert_rs::html::bundle_vega_snippet;
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -144,17 +146,18 @@ fn vega_to_svg(
 ///                                      data requests. Default allows any base URL
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     format (str): Output format, either "dict" (default) or "msgpack"
 /// Returns:
-///     dict: scenegraph
+///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
-#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None, format="dict"))]
 fn vega_to_scenegraph(
     vg_spec: PyObject,
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
+    format: &str,
 ) -> PyResult<PyObject> {
-    let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
@@ -162,27 +165,41 @@ fn vega_to_scenegraph(
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let sg = match PYTHON_RUNTIME.block_on(converter.vega_to_scenegraph(
-        vg_spec,
-        VgOpts {
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-    )) {
-        Ok(vega_spec) => vega_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega to Scenegraph conversion failed:\n{}",
-                err
-            )))
-        }
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg)
-            .map_err(|err| PyValueError::new_err(err.to_string()))
-            .map(|obj| obj.into())
-    })
+
+    match format {
+        "dict" => {
+            let vg_spec = parse_json_spec(vg_spec)?;
+            let sg = PYTHON_RUNTIME
+                .block_on(converter.vega_to_scenegraph(vg_spec, vg_opts))
+                .map_err(|err| {
+                    PyValueError::new_err(format!("Vega to Scenegraph conversion failed:\n{err}"))
+                })?;
+            Python::with_gil(|py| -> PyResult<PyObject> {
+                pythonize(py, &sg)
+                    .map_err(|err| PyValueError::new_err(err.to_string()))
+                    .map(|obj| obj.into())
+            })
+        }
+        "msgpack" => {
+            let vg_spec = parse_spec_to_value_or_string(vg_spec)?;
+            let sg_bytes = PYTHON_RUNTIME
+                .block_on(converter.vega_to_scenegraph_msgpack(vg_spec, vg_opts))
+                .map_err(|err| {
+                    PyValueError::new_err(format!("Vega to Scenegraph conversion failed:\n{err}"))
+                })?;
+            Ok(Python::with_gil(|py| -> PyObject {
+                PyBytes::new(py, sg_bytes.as_slice()).into()
+            }))
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "Invalid format '{format}'. Expected 'dict' or 'msgpack'"
+        ))),
+    }
 }
 
 /// Convert a Vega-Lite spec to an SVG image string using a
@@ -267,11 +284,12 @@ fn vegalite_to_svg(
 ///                                      data requests. Default allows any base URL
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     format (str): Output format, either "dict" (default) or "msgpack"
 /// Returns:
-///     str: SVG image string
+///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, format="dict")
 )]
 fn vegalite_to_scenegraph(
     vl_spec: PyObject,
@@ -282,8 +300,8 @@ fn vegalite_to_scenegraph(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
+    format: &str,
 ) -> PyResult<PyObject> {
-    let vl_spec = parse_json_spec(vl_spec)?;
     let config = config.and_then(|c| parse_json_spec(c).ok());
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -298,31 +316,49 @@ fn vegalite_to_scenegraph(
         .lock()
         .expect("Failed to acquire lock on Vega-Lite converter");
 
-    let sg = match PYTHON_RUNTIME.block_on(converter.vegalite_to_scenegraph(
-        vl_spec,
-        VlOpts {
-            vl_version,
-            config,
-            theme,
-            show_warnings: show_warnings.unwrap_or(false),
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-    )) {
-        Ok(vega_spec) => vega_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega-Lite to SVG conversion failed:\n{}",
-                err
-            )))
-        }
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
-        pythonize(py, &sg)
-            .map_err(|err| PyValueError::new_err(err.to_string()))
-            .map(|obj| obj.into())
-    })
+
+    match format {
+        "dict" => {
+            let vl_spec = parse_json_spec(vl_spec)?;
+            let sg = PYTHON_RUNTIME
+                .block_on(converter.vegalite_to_scenegraph(vl_spec, vl_opts))
+                .map_err(|err| {
+                    PyValueError::new_err(format!(
+                        "Vega-Lite to Scenegraph conversion failed:\n{err}"
+                    ))
+                })?;
+            Python::with_gil(|py| -> PyResult<PyObject> {
+                pythonize(py, &sg)
+                    .map_err(|err| PyValueError::new_err(err.to_string()))
+                    .map(|obj| obj.into())
+            })
+        }
+        "msgpack" => {
+            let vl_spec = parse_spec_to_value_or_string(vl_spec)?;
+            let sg_bytes = PYTHON_RUNTIME
+                .block_on(converter.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts))
+                .map_err(|err| {
+                    PyValueError::new_err(format!(
+                        "Vega-Lite to Scenegraph conversion failed:\n{err}"
+                    ))
+                })?;
+            Ok(Python::with_gil(|py| -> PyObject {
+                PyBytes::new(py, sg_bytes.as_slice()).into()
+            }))
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "Invalid format '{format}'. Expected 'dict' or 'msgpack'"
+        ))),
+    }
 }
 
 /// Convert a Vega spec to PNG image data.
@@ -910,6 +946,27 @@ fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
         } else if let Ok(vl_spec) = vl_spec.downcast_bound::<PyDict>(py) {
             match depythonize(vl_spec.as_any()) {
                 Ok(vl_spec) => Ok(vl_spec),
+                Err(err) => Err(PyValueError::new_err(format!(
+                    "Failed to parse vl_spec dict as JSON: {}",
+                    err
+                ))),
+            }
+        } else {
+            Err(PyValueError::new_err("vl_spec must be a string or dict"))
+        }
+    })
+}
+
+/// Helper function to parse a Python string or dict as a ValueOrString.
+/// When input is a string, returns ValueOrString::JsonString to avoid
+/// the serde_json::from_str/to_string round-trip.
+fn parse_spec_to_value_or_string(vl_spec: PyObject) -> PyResult<ValueOrString> {
+    Python::with_gil(|py| -> PyResult<ValueOrString> {
+        if let Ok(vl_spec) = vl_spec.extract::<String>(py) {
+            Ok(ValueOrString::JsonString(vl_spec))
+        } else if let Ok(vl_spec) = vl_spec.downcast_bound::<PyDict>(py) {
+            match depythonize(vl_spec.as_any()) {
+                Ok(vl_spec) => Ok(ValueOrString::Value(vl_spec)),
                 Err(err) => Err(PyValueError::new_err(format!(
                     "Failed to parse vl_spec dict as JSON: {}",
                     err

@@ -446,7 +446,8 @@ def vega_to_scenegraph(
     allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
-) -> dict[str, Any]:
+    format: Literal["dict", "msgpack"] = "dict",
+) -> dict[str, Any] | bytes:
     """
     Convert a Vega spec to a Vega Scenegraph.
 
@@ -461,10 +462,13 @@ def vega_to_scenegraph(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
+    format
+        Output format: "dict" returns a Python dictionary (default),
+        "msgpack" returns raw MessagePack bytes
 
     Returns
     -------
-    scenegraph dictionary
+    scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
     """
     ...
 
@@ -694,7 +698,8 @@ def vegalite_to_scenegraph(
     allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
-) -> dict[str, Any]:
+    format: Literal["dict", "msgpack"] = "dict",
+) -> dict[str, Any] | bytes:
     """
     Convert a Vega-Lite spec to a Vega Scenegraph using a particular version of the Vega-Lite JavaScript library.
 
@@ -718,10 +723,13 @@ def vegalite_to_scenegraph(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
+    format
+        Output format: "dict" returns a Python dictionary (default),
+        "msgpack" returns raw MessagePack bytes
 
     Returns
     -------
-    scenegraph dictionary
+    scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
     """
     ...
 
