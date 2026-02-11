@@ -1,3 +1,4 @@
+use crate::converter::ValueOrString;
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
@@ -6,10 +7,14 @@ use deno_core::error::AnyError;
 use std::path::Path;
 
 pub fn get_vega_or_vegalite_script(
-    spec: serde_json::Value,
+    spec: impl Into<ValueOrString>,
     opts: serde_json::Value,
 ) -> Result<String, AnyError> {
     let chart_id = "vega-chart";
+    let spec_json = match spec.into() {
+        ValueOrString::JsonString(s) => s,
+        ValueOrString::Value(v) => serde_json::to_string(&v)?,
+    };
 
     // Setup embed opts
     let opts = format!("const opts = {}", serde_json::to_string(&opts)?);
@@ -17,12 +22,11 @@ pub fn get_vega_or_vegalite_script(
     let index_js = format!(
         r##"
 {{
-    const spec = {SPEC};
+    const spec = {spec_json};
     {opts}
     vegaEmbed('#{chart_id}', spec, opts).catch(console.error);
 }}
 "##,
-        SPEC = serde_json::to_string(&spec)?
     );
     Ok(index_js)
 }

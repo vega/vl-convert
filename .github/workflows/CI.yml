@@ -346,7 +346,7 @@ jobs:
           path: |
             vl-convert-rs/tests/vl-specs/failed
 
-  # Run Windows/macOS tests without Pixi to avoid environment issues with V8 and aws-lc-sys
+        # Run Windows/macOS tests without Pixi to avoid environment issues with V8 and aws-lc-sys
   vl-convert-rs-tests:
     runs-on: ${{ matrix.os }}
     strategy:

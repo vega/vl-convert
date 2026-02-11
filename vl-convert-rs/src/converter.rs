@@ -1,5 +1,5 @@
 use crate::deno_stubs::{NoOpInNpmPackageChecker, NoOpNpmPackageFolderResolver, VlConvertNodeSys};
-use crate::module_loader::import_map::{vega_themes_url, vega_url, VlVersion};
+use crate::module_loader::import_map::{msgpack_url, vega_themes_url, vega_url, VlVersion};
 use crate::module_loader::{VlConvertModuleLoader, FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 
 use deno_core::anyhow::bail;
@@ -44,6 +44,7 @@ deno_core::extension!(
     vl_convert_runtime,
     ops = [
         op_get_json_arg,
+        op_set_msgpack_result,
     ],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
     esm = [
@@ -52,6 +53,9 @@ deno_core::extension!(
     ],
 );
 
+// Arguments are passed to V8 as JSON strings via Deno ops and parsed in JS.
+// Scenegraph results are returned as MessagePack byte buffers via ops,
+// avoiding JSON serialization overhead for large payloads.
 lazy_static! {
     pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime =
         tokio::runtime::Builder::new_current_thread()
@@ -59,7 +63,38 @@ lazy_static! {
             .build()
             .unwrap();
     static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> = Arc::new(Mutex::new(HashMap::new()));
-    static ref NEXT_ARG_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+    static ref MSGPACK_RESULTS: Arc<Mutex<HashMap<i32, Vec<u8>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    static ref NEXT_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+}
+
+/// A JSON value that may already be serialized to a string.
+/// When the caller already has a JSON string (e.g. from Python), this avoids
+/// a redundant parse→Value→serialize round-trip.
+#[derive(Debug, Clone)]
+pub enum ValueOrString {
+    /// Pre-serialized JSON string — stored directly, no serialization needed
+    JsonString(String),
+    /// Parsed serde_json::Value — will be serialized to JSON when needed
+    Value(serde_json::Value),
+}
+
+impl From<serde_json::Value> for ValueOrString {
+    fn from(v: serde_json::Value) -> Self {
+        ValueOrString::Value(v)
+    }
+}
+
+impl From<&serde_json::Value> for ValueOrString {
+    fn from(v: &serde_json::Value) -> Self {
+        ValueOrString::Value(v.clone())
+    }
+}
+
+impl From<String> for ValueOrString {
+    fn from(s: String) -> Self {
+        ValueOrString::JsonString(s)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -208,23 +243,29 @@ impl VlOpts {
     }
 }
 
-fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
-    // Increment arg id
-    let id = match NEXT_ARG_ID.lock() {
+fn next_id() -> Result<i32, AnyError> {
+    match NEXT_ID.lock() {
         Ok(mut guard) => {
             let id = *guard;
             *guard = (*guard + 1) % i32::MAX;
-            id
+            Ok(id)
         }
         Err(err) => {
             bail!("Failed to acquire lock: {err}")
         }
-    };
+    }
+}
 
-    // Add Arg at id to args
+fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
+    set_json_str_arg(serde_json::to_string(&arg)?)
+}
+
+fn set_json_str_arg(json_str: String) -> Result<i32, AnyError> {
+    let id = next_id()?;
+
     match JSON_ARGS.lock() {
         Ok(mut guard) => {
-            guard.insert(id, serde_json::to_string(&arg).unwrap());
+            guard.insert(id, json_str);
         }
         Err(err) => {
             bail!("Failed to acquire lock: {err}")
@@ -232,6 +273,26 @@ fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
     }
 
     Ok(id)
+}
+
+fn set_spec_arg(spec: ValueOrString) -> Result<i32, AnyError> {
+    match spec {
+        ValueOrString::JsonString(s) => set_json_str_arg(s),
+        ValueOrString::Value(v) => set_json_arg(v),
+    }
+}
+
+fn alloc_msgpack_result_id() -> Result<i32, AnyError> {
+    next_id()
+}
+
+fn take_msgpack_result(result_id: i32) -> Result<Vec<u8>, AnyError> {
+    match MSGPACK_RESULTS.lock() {
+        Ok(mut guard) => guard
+            .remove(&result_id)
+            .ok_or_else(|| anyhow!("Result id not found")),
+        Err(err) => bail!("Failed to acquire lock: {err}"),
+    }
 }
 
 #[op2]
@@ -244,6 +305,20 @@ fn op_get_json_arg(arg_id: i32) -> Result<String, JsErrorBox> {
             } else {
                 Err(JsErrorBox::generic("Arg id not found"))
             }
+        }
+        Err(err) => Err(JsErrorBox::generic(format!(
+            "Failed to acquire lock: {}",
+            err
+        ))),
+    }
+}
+
+#[op2(fast)]
+fn op_set_msgpack_result(result_id: i32, #[buffer] data: &[u8]) -> Result<(), JsErrorBox> {
+    match MSGPACK_RESULTS.lock() {
+        Ok(mut guard) => {
+            guard.insert(result_id, data.to_vec());
+            Ok(())
         }
         Err(err) => Err(JsErrorBox::generic(format!(
             "Failed to acquire lock: {}",
@@ -274,9 +349,15 @@ var vegaThemes;
 import('{vega_themes_url}').then((imported) => {{
     vegaThemes = imported;
 }})
+
+var msgpack;
+import('{msgpack_url}').then((imported) => {{
+    msgpack = imported;
+}})
 "#,
                 vega_url = vega_url(),
                 vega_themes_url = vega_themes_url(),
+                msgpack_url = msgpack_url(),
             );
 
             self.worker
@@ -375,58 +456,58 @@ function vegaToSvg(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, erro
     return svgPromise
 }
 
-function cloneScenegraph(obj) {
-    const keys = [
-      'marktype', 'name', 'role', 'interactive', 'clip', 'items', 'zindex',
-      'x', 'y', 'width', 'height', 'align', 'baseline',             // layout
-      'fill', 'fillOpacity', 'opacity', 'blend',                    // fill
-      'x1', 'y1', 'r1', 'r2', 'gradient',                           // gradient
-      'stops', 'offset', 'color',
-      'stroke', 'strokeOpacity', 'strokeWidth', 'strokeCap',        // stroke
-      'strokeJoin',
-      'strokeDash', 'strokeDashOffset',                             // stroke dash
-      'strokeForeground', 'strokeOffset',                           // group
-      'startAngle', 'endAngle', 'innerRadius', 'outerRadius',       // arc
-      'cornerRadius', 'padAngle',                                   // arc, rect
-      'cornerRadiusTopLeft', 'cornerRadiusTopRight',                // rect, group
-      'cornerRadiusBottomLeft', 'cornerRadiusBottomRight',
-      'interpolate', 'tension', 'orient', 'defined',                // area, line
-      'url', 'aspect', 'smooth',                                    // image
-      'path', 'scaleX', 'scaleY',                                   // path
-      'x2', 'y2',                                                   // rule
-      'size', 'shape',                                              // symbol
-      'text', 'angle', 'theta', 'radius', 'dir', 'dx', 'dy',        // text
-      'ellipsis', 'limit', 'lineBreak', 'lineHeight',
-      'font', 'fontSize', 'fontWeight', 'fontStyle', 'fontVariant', // font
-      'description', 'aria', 'ariaRole', 'ariaRoleDescription'      // aria
-    ];
+const SCENEGRAPH_KEYS = new Set([
+  'marktype', 'name', 'role', 'interactive', 'clip', 'items', 'zindex',
+  'x', 'y', 'width', 'height', 'align', 'baseline',             // layout
+  'fill', 'fillOpacity', 'opacity', 'blend',                    // fill
+  'x1', 'y1', 'r1', 'r2', 'gradient',                           // gradient
+  'stops', 'offset', 'color',
+  'stroke', 'strokeOpacity', 'strokeWidth', 'strokeCap',        // stroke
+  'strokeJoin',
+  'strokeDash', 'strokeDashOffset',                             // stroke dash
+  'strokeForeground', 'strokeOffset',                           // group
+  'startAngle', 'endAngle', 'innerRadius', 'outerRadius',       // arc
+  'cornerRadius', 'padAngle',                                   // arc, rect
+  'cornerRadiusTopLeft', 'cornerRadiusTopRight',                // rect, group
+  'cornerRadiusBottomLeft', 'cornerRadiusBottomRight',
+  'interpolate', 'tension', 'orient', 'defined',                // area, line
+  'url', 'aspect', 'smooth',                                    // image
+  'path', 'scaleX', 'scaleY',                                   // path
+  'x2', 'y2',                                                   // rule
+  'size', 'shape',                                              // symbol
+  'text', 'angle', 'theta', 'radius', 'dir', 'dx', 'dy',        // text
+  'ellipsis', 'limit', 'lineBreak', 'lineHeight',
+  'font', 'fontSize', 'fontWeight', 'fontStyle', 'fontVariant', // font
+  'description', 'aria', 'ariaRole', 'ariaRoleDescription'      // aria
+]);
 
-    // Check if the input is an object (including an array) or null
+function cloneScenegraph(obj) {
     if (typeof obj !== 'object' || obj === null) {
         return obj;
     }
 
-    // Initialize the clone as an array or object based on the input type
-    const clone = Array.isArray(obj) ? [] : {};
-
-    // If the object is an array, iterate over its elements
     if (Array.isArray(obj)) {
-        for (let i = 0; i < obj.length; i++) {
-            // Apply the function recursively to each element
-            clone.push(cloneScenegraph(obj[i]));
+        const len = obj.length;
+        const clone = new Array(len);
+        for (let i = 0; i < len; i++) {
+            clone[i] = cloneScenegraph(obj[i]);
         }
-    } else {
-        // If the object is not an array, iterate over its keys
-        for (const key in obj) {
-            // Clone only the properties with specified keys
-            if (key === "shape" && typeof obj[key] === "function") {
-                // Convert path object to SVG path string.
-                // Initialize context. This is needed for obj.shape(obj) to work.
-                obj.shape.context();
-                clone["shape"] = obj.shape(obj) ?? "";
-            } else if (keys.includes(key)) {
-                clone[key] = cloneScenegraph(obj[key]);
-            }
+        return clone;
+    }
+
+    const clone = {};
+    const objKeys = Object.keys(obj);
+    for (let i = 0; i < objKeys.length; i++) {
+        const key = objKeys[i];
+        const value = obj[key];
+
+        if (key === "shape" && typeof value === "function") {
+            // Convert path object to SVG path string.
+            // Initialize context. This is needed for value(obj) to work.
+            value.context();
+            clone.shape = value(obj) ?? "";
+        } else if (SCENEGRAPH_KEYS.has(key) && value !== undefined) {
+            clone[key] = cloneScenegraph(value);
         }
     }
 
@@ -719,14 +800,14 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
 
     pub async fn vegalite_to_vega(
         &mut self,
-        vl_spec: &serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
         self.init_vega().await?;
         self.init_vl_version(&vl_opts.vl_version).await?;
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
 
-        let spec_arg_id = set_json_arg(vl_spec.clone())?;
+        let spec_arg_id = set_spec_arg(vl_spec.into())?;
         let config_arg_id = set_json_arg(config)?;
 
         let theme_arg = match &vl_opts.theme {
@@ -734,17 +815,13 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
             Some(s) => format!("'{}'", s),
         };
 
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
-
         let code = format!(
             r#"
 compileVegaLite_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
-    {show_warnings},
-    {allowed_base_urls},
+    {show_warnings}
 )
 "#,
             ver_name = vl_opts.vl_version,
@@ -760,7 +837,7 @@ compileVegaLite_{ver_name:?}(
 
     pub async fn vegalite_to_svg(
         &mut self,
-        vl_spec: &serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
         self.init_vega().await?;
@@ -778,8 +855,10 @@ compileVegaLite_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg_id = set_json_arg(vl_spec.clone())?;
+        let spec_arg_id = set_spec_arg(vl_spec.into())?;
         let config_arg_id = set_json_arg(config)?;
+        let allowed_base_urls =
+            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
         let format_locale_id = set_json_arg(format_locale)?;
         let time_format_locale_id = set_json_arg(time_format_locale)?;
 
@@ -787,9 +866,6 @@ compileVegaLite_{ver_name:?}(
             None => "null".to_string(),
             Some(s) => format!("'{}'", s),
         };
-
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
 
         let code = format!(
             r#"
@@ -824,13 +900,14 @@ vegaLiteToSvg_{ver_name:?}(
         Ok(value)
     }
 
-    pub async fn vegalite_to_scenegraph(
+    pub async fn vegalite_to_scenegraph_msgpack(
         &mut self,
-        vl_spec: &serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
-    ) -> Result<serde_json::Value, AnyError> {
+    ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
         self.init_vl_version(&vl_opts.vl_version).await?;
+        let vl_spec = vl_spec.into();
 
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
         let format_locale = match vl_opts.format_locale {
@@ -843,22 +920,21 @@ vegaLiteToSvg_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg_id = set_json_arg(vl_spec.clone())?;
+        let spec_arg_id = set_spec_arg(vl_spec)?;
         let config_arg_id = set_json_arg(config)?;
+        let allowed_base_urls =
+            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
         let format_locale_id = set_json_arg(format_locale)?;
         let time_format_locale_id = set_json_arg(time_format_locale)?;
+        let result_id = alloc_msgpack_result_id()?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
             Some(s) => format!("'{}'", s),
         };
 
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
-
         let code = format!(
             r#"
-var sg;
 var errors = [];
 vegaLiteToScenegraph_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
@@ -873,11 +949,12 @@ vegaLiteToScenegraph_{ver_name:?}(
     if (errors != null && errors.length > 0) {{
         throw new Error(`${{errors}}`);
     }}
-    sg = result;
+    op_set_msgpack_result({result_id}, msgpack.encode(result));
 }})
 "#,
             ver_name = vl_opts.vl_version,
             show_warnings = vl_opts.show_warnings,
+            result_id = result_id,
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -885,13 +962,25 @@ vegaLiteToScenegraph_{ver_name:?}(
             .run_event_loop(Default::default())
             .await?;
 
-        let value = self.execute_script_to_json("sg").await?;
+        take_msgpack_result(result_id)
+    }
+
+    pub async fn vegalite_to_scenegraph(
+        &mut self,
+        vl_spec: impl Into<ValueOrString>,
+        vl_opts: VlOpts,
+    ) -> Result<serde_json::Value, AnyError> {
+        let sg_msgpack = self
+            .vegalite_to_scenegraph_msgpack(vl_spec, vl_opts)
+            .await?;
+        let value: serde_json::Value = rmp_serde::from_slice(&sg_msgpack)
+            .map_err(|err| anyhow!("Failed to decode MessagePack scenegraph: {err}"))?;
         Ok(value)
     }
 
     pub async fn vega_to_svg(
         &mut self,
-        vg_spec: &serde_json::Value,
+        vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
         self.init_vega().await?;
@@ -908,7 +997,7 @@ vegaLiteToScenegraph_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let arg_id = set_json_arg(vg_spec.clone())?;
+        let arg_id = set_spec_arg(vg_spec.into())?;
         let format_locale_id = set_json_arg(format_locale)?;
         let time_format_locale_id = set_json_arg(time_format_locale)?;
 
@@ -928,7 +1017,7 @@ vegaToSvg(
     }}
     svg = result;
 }})
-"#
+        "#,
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -940,12 +1029,13 @@ vegaToSvg(
         Ok(value)
     }
 
-    pub async fn vega_to_scenegraph(
+    pub async fn vega_to_scenegraph_msgpack(
         &mut self,
-        vg_spec: &serde_json::Value,
+        vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
-    ) -> Result<serde_json::Value, AnyError> {
+    ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
+        let vg_spec = vg_spec.into();
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
         let format_locale = match vg_opts.format_locale {
@@ -958,13 +1048,13 @@ vegaToSvg(
             Some(fl) => fl.as_object()?,
         };
 
-        let arg_id = set_json_arg(vg_spec.clone())?;
+        let arg_id = set_spec_arg(vg_spec)?;
         let format_locale_id = set_json_arg(format_locale)?;
         let time_format_locale_id = set_json_arg(time_format_locale)?;
+        let result_id = alloc_msgpack_result_id()?;
 
         let code = format!(
             r#"
-var sg;
 var errors = [];
 vegaToScenegraph(
     JSON.parse(op_get_json_arg({arg_id})),
@@ -976,9 +1066,10 @@ vegaToScenegraph(
     if (errors != null && errors.length > 0) {{
         throw new Error(`${{errors}}`);
     }}
-    sg = result;
+    op_set_msgpack_result({result_id}, msgpack.encode(result));
 }})
-"#
+"#,
+            result_id = result_id,
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -986,7 +1077,17 @@ vegaToScenegraph(
             .run_event_loop(Default::default())
             .await?;
 
-        let value = self.execute_script_to_json("sg").await?;
+        take_msgpack_result(result_id)
+    }
+
+    pub async fn vega_to_scenegraph(
+        &mut self,
+        vg_spec: impl Into<ValueOrString>,
+        vg_opts: VgOpts,
+    ) -> Result<serde_json::Value, AnyError> {
+        let sg_msgpack = self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await?;
+        let value: serde_json::Value = rmp_serde::from_slice(&sg_msgpack)
+            .map_err(|err| anyhow!("Failed to decode MessagePack scenegraph: {err}"))?;
         Ok(value)
     }
 
@@ -1170,27 +1271,32 @@ vegaLiteToCanvas_{ver_name:?}(
 
 pub enum VlConvertCommand {
     VlToVg {
-        vl_spec: serde_json::Value,
+        vl_spec: ValueOrString,
         vl_opts: VlOpts,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToSvg {
-        vg_spec: serde_json::Value,
+        vg_spec: ValueOrString,
         vg_opts: VgOpts,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VgToSg {
-        vg_spec: serde_json::Value,
+        vg_spec: ValueOrString,
         vg_opts: VgOpts,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
+    VgToSgMsgpack {
+        vg_spec: ValueOrString,
+        vg_opts: VgOpts,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
     VlToSvg {
-        vl_spec: serde_json::Value,
+        vl_spec: ValueOrString,
         vl_opts: VlOpts,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VlToSg {
-        vl_spec: serde_json::Value,
+        vl_spec: ValueOrString,
         vl_opts: VlOpts,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
@@ -1206,6 +1312,11 @@ pub enum VlConvertCommand {
         vl_opts: VlOpts,
         scale: f32,
         ppi: f32,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    VlToSgMsgpack {
+        vl_spec: ValueOrString,
+        vl_opts: VlOpts,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     GetLocalTz {
@@ -1279,7 +1390,7 @@ impl VlConverter {
                             vl_opts,
                             responder,
                         } => {
-                            let vega_spec = inner.vegalite_to_vega(&vl_spec, vl_opts).await;
+                            let vega_spec = inner.vegalite_to_vega(vl_spec, vl_opts).await;
                             responder.send(vega_spec).ok();
                         }
                         VlConvertCommand::VgToSvg {
@@ -1287,7 +1398,7 @@ impl VlConverter {
                             vg_opts,
                             responder,
                         } => {
-                            let svg_result = inner.vega_to_svg(&vg_spec, vg_opts).await;
+                            let svg_result = inner.vega_to_svg(vg_spec, vg_opts).await;
                             responder.send(svg_result).ok();
                         }
                         VlConvertCommand::VgToSg {
@@ -1295,7 +1406,16 @@ impl VlConverter {
                             vg_opts,
                             responder,
                         } => {
-                            let sg_result = inner.vega_to_scenegraph(&vg_spec, vg_opts).await;
+                            let sg_result = inner.vega_to_scenegraph(vg_spec, vg_opts).await;
+                            responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VgToSgMsgpack {
+                            vg_spec,
+                            vg_opts,
+                            responder,
+                        } => {
+                            let sg_result =
+                                inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await;
                             responder.send(sg_result).ok();
                         }
                         VlConvertCommand::VlToSvg {
@@ -1303,7 +1423,7 @@ impl VlConverter {
                             vl_opts,
                             responder,
                         } => {
-                            let svg_result = inner.vegalite_to_svg(&vl_spec, vl_opts).await;
+                            let svg_result = inner.vegalite_to_svg(vl_spec, vl_opts).await;
                             responder.send(svg_result).ok();
                         }
                         VlConvertCommand::VlToSg {
@@ -1311,7 +1431,16 @@ impl VlConverter {
                             vl_opts,
                             responder,
                         } => {
-                            let sg_result = inner.vegalite_to_scenegraph(&vl_spec, vl_opts).await;
+                            let sg_result = inner.vegalite_to_scenegraph(vl_spec, vl_opts).await;
+                            responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VlToSgMsgpack {
+                            vl_spec,
+                            vl_opts,
+                            responder,
+                        } => {
+                            let sg_result =
+                                inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await;
                             responder.send(sg_result).ok();
                         }
                         VlConvertCommand::VgToCanvasPng {
@@ -1363,9 +1492,10 @@ impl VlConverter {
 
     pub async fn vegalite_to_vega(
         &mut self,
-        vl_spec: serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
+        let vl_spec = vl_spec.into();
         let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
         let cmd = VlConvertCommand::VlToVg {
             vl_spec,
@@ -1392,9 +1522,10 @@ impl VlConverter {
 
     pub async fn vega_to_svg(
         &mut self,
-        vg_spec: serde_json::Value,
+        vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
+        let vg_spec = vg_spec.into();
         let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
         let cmd = VlConvertCommand::VgToSvg {
             vg_spec,
@@ -1421,9 +1552,10 @@ impl VlConverter {
 
     pub async fn vega_to_scenegraph(
         &mut self,
-        vg_spec: serde_json::Value,
+        vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
     ) -> Result<serde_json::Value, AnyError> {
+        let vg_spec = vg_spec.into();
         let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
         let cmd = VlConvertCommand::VgToSg {
             vg_spec,
@@ -1448,11 +1580,42 @@ impl VlConverter {
         }
     }
 
+    pub async fn vega_to_scenegraph_msgpack(
+        &mut self,
+        vg_spec: impl Into<ValueOrString>,
+        vg_opts: VgOpts,
+    ) -> Result<Vec<u8>, AnyError> {
+        let vg_spec = vg_spec.into();
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
+        let cmd = VlConvertCommand::VgToSgMsgpack {
+            vg_spec,
+            vg_opts,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send Scenegraph conversion request: {err}")
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(sg_msgpack_result) => sg_msgpack_result,
+            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
+        }
+    }
+
     pub async fn vegalite_to_svg(
         &mut self,
-        vl_spec: serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
+        let vl_spec = vl_spec.into();
         let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
         let cmd = VlConvertCommand::VlToSvg {
             vl_spec,
@@ -1479,9 +1642,10 @@ impl VlConverter {
 
     pub async fn vegalite_to_scenegraph(
         &mut self,
-        vl_spec: serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
+        let vl_spec = vl_spec.into();
         let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
         let cmd = VlConvertCommand::VlToSg {
             vl_spec,
@@ -1501,14 +1665,44 @@ impl VlConverter {
 
         // Wait for result
         match resp_rx.await {
-            Ok(svg_result) => svg_result,
+            Ok(sg_result) => sg_result,
+            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
+        }
+    }
+
+    pub async fn vegalite_to_scenegraph_msgpack(
+        &mut self,
+        vl_spec: impl Into<ValueOrString>,
+        vl_opts: VlOpts,
+    ) -> Result<Vec<u8>, AnyError> {
+        let vl_spec = vl_spec.into();
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
+        let cmd = VlConvertCommand::VlToSgMsgpack {
+            vl_spec,
+            vl_opts,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send Scenegraph conversion request: {err}")
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(sg_result) => sg_result,
             Err(err) => bail!("Failed to retrieve conversion result: {err}"),
         }
     }
 
     pub async fn vega_to_png(
         &mut self,
-        vg_spec: serde_json::Value,
+        vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
         scale: Option<f32>,
         ppi: Option<f32>,
@@ -1546,7 +1740,7 @@ impl VlConverter {
 
     pub async fn vegalite_to_png(
         &mut self,
-        vl_spec: serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
         scale: Option<f32>,
         ppi: Option<f32>,
@@ -1584,7 +1778,7 @@ impl VlConverter {
 
     pub async fn vega_to_jpeg(
         &mut self,
-        vg_spec: serde_json::Value,
+        vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
         scale: Option<f32>,
         quality: Option<u8>,
@@ -1596,7 +1790,7 @@ impl VlConverter {
 
     pub async fn vegalite_to_jpeg(
         &mut self,
-        vl_spec: serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
         scale: Option<f32>,
         quality: Option<u8>,
@@ -1608,7 +1802,7 @@ impl VlConverter {
 
     pub async fn vega_to_pdf(
         &mut self,
-        vg_spec: serde_json::Value,
+        vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
         let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
@@ -1617,7 +1811,7 @@ impl VlConverter {
 
     pub async fn vegalite_to_pdf(
         &mut self,
-        vl_spec: serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
@@ -1699,7 +1893,7 @@ impl VlConverter {
 
     pub async fn vegalite_to_html(
         &mut self,
-        vl_spec: serde_json::Value,
+        vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
         bundle: bool,
         renderer: Renderer,
@@ -1711,7 +1905,7 @@ impl VlConverter {
 
     pub async fn vega_to_html(
         &mut self,
-        vg_spec: serde_json::Value,
+        vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
         bundle: bool,
         renderer: Renderer,
@@ -1903,8 +2097,14 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
     Ok(usvg::Tree::from_xmltree(&doc, &opts)?)
 }
 
-pub fn vegalite_to_url(vl_spec: &serde_json::Value, fullscreen: bool) -> Result<String, AnyError> {
-    let spec_str = serde_json::to_string(vl_spec)?;
+pub fn vegalite_to_url(
+    vl_spec: impl Into<ValueOrString>,
+    fullscreen: bool,
+) -> Result<String, AnyError> {
+    let spec_str = match vl_spec.into() {
+        ValueOrString::JsonString(s) => s,
+        ValueOrString::Value(v) => serde_json::to_string(&v)?,
+    };
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
     let view = if fullscreen {
         "/view".to_string()
@@ -1916,8 +2116,14 @@ pub fn vegalite_to_url(vl_spec: &serde_json::Value, fullscreen: bool) -> Result<
     ))
 }
 
-pub fn vega_to_url(vg_spec: &serde_json::Value, fullscreen: bool) -> Result<String, AnyError> {
-    let spec_str = serde_json::to_string(vg_spec)?;
+pub fn vega_to_url(
+    vg_spec: impl Into<ValueOrString>,
+    fullscreen: bool,
+) -> Result<String, AnyError> {
+    let spec_str = match vg_spec.into() {
+        ValueOrString::JsonString(s) => s,
+        ValueOrString::Value(v) => serde_json::to_string(&v)?,
+    };
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
     let view = if fullscreen {
         "/view".to_string()

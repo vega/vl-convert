@@ -11,6 +11,7 @@ pub const VEGA_PATH: &str = "/npm/vega@6.2.0/+esm";
 pub const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
 pub const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.0.2/+esm";
 pub const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
+pub const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.2/+esm";
 
 pub const VEGA_VERSION: &str = "6.2.0";
 pub const VEGA_THEMES_VERSION: &str = "3.0.0";
@@ -26,6 +27,10 @@ pub fn vega_url() -> String {
 
 pub fn vega_themes_url() -> String {
     url_for_path(VEGA_THEMES_PATH)
+}
+
+pub fn msgpack_url() -> String {
+    url_for_path(MSGPACK_PATH)
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -131,6 +136,11 @@ pub fn build_import_map() -> HashMap<String, String> {
             "../../vendor/cdn.jsdelivr.net/npm/#json-stringify-prett_2eaac/#+esm_3b53f.js"
         )
         .to_string(),
+    );
+    m.insert(
+        "/npm/@msgpack/msgpack@3.1.2/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.2/#+esm_3b53f.js")
+            .to_string(),
     );
     m.insert(
         "/npm/clone@2.1.2/+esm".to_string(),

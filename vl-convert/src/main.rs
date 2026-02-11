@@ -702,7 +702,7 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             // Initialize converter
             let vl_str = read_input_string(&input)?;
-            let vl_spec = serde_json::from_str(&vl_str)?;
+            let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
             let config = read_config_json(config)?;
             let vl_version = parse_vl_version(&vl_version)?;
             let format_locale = match &format_locale {
@@ -830,7 +830,7 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             // Initialize converter
             let vg_str = read_input_string(&input)?;
-            let vg_spec = serde_json::from_str(&vg_str)?;
+            let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
 
             let format_locale = match &format_locale {
                 None => None,

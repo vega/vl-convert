@@ -31,12 +31,21 @@ fn op_get_json_arg(_arg_id: i32) -> Result<String, JsErrorBox> {
     ))
 }
 
+#[op2(fast)]
+fn op_set_msgpack_result(_result_id: i32, #[buffer] _data: &[u8]) -> Result<(), JsErrorBox> {
+    // This is a stub - never called during snapshot creation
+    Err(JsErrorBox::generic(
+        "op_set_msgpack_result stub called during snapshot creation",
+    ))
+}
+
 // Define the extension with lazy_init for snapshot creation
 // This must match the extension defined in converter.rs
 extension!(
     vl_convert_runtime,
     ops = [
         op_get_json_arg,
+        op_set_msgpack_result,
     ],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
     esm = [
