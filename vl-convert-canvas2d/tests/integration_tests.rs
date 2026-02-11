@@ -355,6 +355,24 @@ fn test_with_config() {
     assert_eq!(ctx.height(), 100);
 }
 
+/// Test with_resolved constructor: resolve once, create multiple contexts cheaply.
+#[test]
+fn test_with_resolved() {
+    let config = FontConfig {
+        load_system_fonts: false,
+        ..FontConfig::default()
+    };
+    let resolved = config.resolve();
+
+    // Create two contexts from the same resolved config (no repeated font scan)
+    let ctx1 = Canvas2dContext::with_resolved(100, 100, &resolved).unwrap();
+    let ctx2 = Canvas2dContext::with_resolved(200, 150, &resolved).unwrap();
+
+    assert_eq!(ctx1.width(), 100);
+    assert_eq!(ctx2.width(), 200);
+    assert_eq!(ctx2.height(), 150);
+}
+
 /// Test linear gradient.
 #[test]
 fn test_linear_gradient() {

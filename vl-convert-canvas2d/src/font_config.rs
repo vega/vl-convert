@@ -82,6 +82,44 @@ impl GenericFamilyMap {
     }
 }
 
+impl FontConfig {
+    /// Resolve this configuration into a concrete font database.
+    ///
+    /// This performs the expensive work (system font scanning, directory loading,
+    /// custom font registration) once. The resulting [`ResolvedFontConfig`] can be
+    /// shared and cloned cheaply to create multiple canvas contexts without
+    /// repeating the filesystem scan.
+    pub fn resolve(&self) -> ResolvedFontConfig {
+        ResolvedFontConfig::new(self)
+    }
+}
+
+/// A [`FontConfig`] that has been resolved into a concrete font database.
+///
+/// This is an opaque wrapper — the rendering backend (`fontdb`) does not leak
+/// through the public API. Create one via [`FontConfig::resolve()`] or
+/// [`ResolvedFontConfig::new()`], then pass it to
+/// [`Canvas2dContext::with_resolved()`](crate::Canvas2dContext::with_resolved).
+///
+/// Cloning a `ResolvedFontConfig` clones the underlying database in memory
+/// (no filesystem scan), making it suitable for sharing across canvas contexts.
+pub struct ResolvedFontConfig {
+    pub(crate) fontdb: fontdb::Database,
+}
+
+impl ResolvedFontConfig {
+    /// Resolve a [`FontConfig`] into a concrete font database.
+    ///
+    /// This performs system font scanning, directory loading, and custom font
+    /// registration — the same work as [`font_config_to_fontdb`], cached in an
+    /// opaque wrapper.
+    pub fn new(config: &FontConfig) -> Self {
+        Self {
+            fontdb: font_config_to_fontdb(config),
+        }
+    }
+}
+
 /// Convert a [`FontConfig`] into a [`fontdb::Database`].
 ///
 /// This is the single point where font configuration is translated into the fontdb backend.

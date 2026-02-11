@@ -22,8 +22,7 @@ use vl_convert_canvas2d::{
 #[op2(fast)]
 pub fn op_canvas_create(state: &mut OpState, width: u32, height: u32) -> Result<u32, JsErrorBox> {
     let ctx = if let Some(shared_config) = state.try_borrow::<SharedFontConfig>() {
-        let config = shared_config.0.as_ref().clone();
-        Canvas2dContext::with_config(width, height, config)
+        Canvas2dContext::with_resolved(width, height, &shared_config.0)
             .map_err(|e| JsErrorBox::generic(format!("Failed to create canvas: {}", e)))?
     } else {
         Canvas2dContext::new(width, height)

@@ -741,13 +741,15 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         // Create the MainWorker with full Web API support
         let worker = MainWorker::bootstrap_from_options(&main_module, services, options);
 
-        // Add shared font config to OpState so canvas contexts use the same fonts as SVG rendering
+        // Add shared font config to OpState so canvas contexts use the same fonts as SVG rendering.
+        // We resolve the FontConfig into a fontdb once here; each canvas context then clones
+        // the cached database instead of re-scanning system fonts.
         {
             let font_config = FONT_CONFIG
                 .lock()
                 .map_err(|e| anyhow!("Failed to acquire FONT_CONFIG lock: {}", e))?;
-            let shared_config =
-                vl_convert_canvas2d_deno::SharedFontConfig::new(font_config.clone());
+            let resolved = font_config.resolve();
+            let shared_config = vl_convert_canvas2d_deno::SharedFontConfig::new(resolved);
             worker.js_runtime.op_state().borrow_mut().put(shared_config);
         }
 

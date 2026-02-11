@@ -1,7 +1,7 @@
 //! Canvas 2D rendering context implementation.
 
 use crate::error::{Canvas2dError, Canvas2dResult};
-use crate::font_config::{font_config_to_fontdb, FontConfig};
+use crate::font_config::{font_config_to_fontdb, FontConfig, ResolvedFontConfig};
 use crate::font_parser::{parse_font, ParsedFont};
 use crate::geometry::{
     ArcParams, ArcToParams, CanvasColor, CanvasImageDataRef, CubicBezierParams, DirtyRect,
@@ -318,6 +318,19 @@ impl Canvas2dContext {
     pub fn with_config(width: u32, height: u32, config: FontConfig) -> Canvas2dResult<Self> {
         let db = font_config_to_fontdb(&config);
         Self::new_internal(width, height, db)
+    }
+
+    /// Create a new Canvas2dContext using a pre-resolved font configuration.
+    ///
+    /// This clones the cached font database from the [`ResolvedFontConfig`] rather
+    /// than rebuilding it from scratch, avoiding repeated system font scanning.
+    /// Use this when creating multiple canvas contexts that share the same fonts.
+    pub fn with_resolved(
+        width: u32,
+        height: u32,
+        resolved: &ResolvedFontConfig,
+    ) -> Canvas2dResult<Self> {
+        Self::new_internal(width, height, resolved.fontdb.clone())
     }
 
     fn new_internal(width: u32, height: u32, font_db: fontdb::Database) -> Canvas2dResult<Self> {
