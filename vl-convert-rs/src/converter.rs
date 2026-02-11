@@ -97,6 +97,16 @@ impl From<String> for ValueOrString {
     }
 }
 
+impl ValueOrString {
+    /// Convert to a serde_json::Value, parsing if necessary.
+    pub fn to_value(self) -> Result<serde_json::Value, AnyError> {
+        match self {
+            ValueOrString::Value(v) => Ok(v),
+            ValueOrString::JsonString(s) => Ok(serde_json::from_str(&s)?),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct VgOpts {
     pub allowed_base_urls: Option<Vec<String>>,
@@ -1301,14 +1311,14 @@ pub enum VlConvertCommand {
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToCanvasPng {
-        vg_spec: serde_json::Value,
+        vg_spec: ValueOrString,
         vg_opts: VgOpts,
         scale: f32,
         ppi: f32,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToCanvasPng {
-        vl_spec: serde_json::Value,
+        vl_spec: ValueOrString,
         vl_opts: VlOpts,
         scale: f32,
         ppi: f32,
@@ -1450,9 +1460,10 @@ impl VlConverter {
                             ppi,
                             responder,
                         } => {
-                            let png_result = inner
-                                .vega_to_canvas_png(&vg_spec, vg_opts, scale, ppi)
-                                .await;
+                            let png_result = match vg_spec.to_value() {
+                                Ok(v) => inner.vega_to_canvas_png(&v, vg_opts, scale, ppi).await,
+                                Err(e) => Err(e),
+                            };
                             responder.send(png_result).ok();
                         }
                         VlConvertCommand::VlToCanvasPng {
@@ -1462,9 +1473,10 @@ impl VlConverter {
                             ppi,
                             responder,
                         } => {
-                            let png_result = inner
-                                .vegalite_to_canvas_png(&vl_spec, vl_opts, scale, ppi)
-                                .await;
+                            let png_result = match vl_spec.to_value() {
+                                Ok(v) => inner.vegalite_to_canvas_png(&v, vl_opts, scale, ppi).await,
+                                Err(e) => Err(e),
+                            };
                             responder.send(png_result).ok();
                         }
                         VlConvertCommand::GetLocalTz { responder } => {
@@ -1714,7 +1726,7 @@ impl VlConverter {
 
         let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
         let cmd = VlConvertCommand::VgToCanvasPng {
-            vg_spec,
+            vg_spec: vg_spec.into(),
             vg_opts,
             scale: effective_scale,
             ppi,
@@ -1752,7 +1764,7 @@ impl VlConverter {
 
         let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
         let cmd = VlConvertCommand::VlToCanvasPng {
-            vl_spec,
+            vl_spec: vl_spec.into(),
             vl_opts,
             scale: effective_scale,
             ppi,
