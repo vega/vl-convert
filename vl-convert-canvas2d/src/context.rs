@@ -1,6 +1,7 @@
 //! Canvas 2D rendering context implementation.
 
 use crate::error::{Canvas2dError, Canvas2dResult};
+use crate::font_config::{font_config_to_fontdb, FontConfig};
 use crate::font_parser::{parse_font, ParsedFont};
 use crate::geometry::{
     ArcParams, ArcToParams, CanvasColor, CanvasImageDataRef, CubicBezierParams, DirtyRect,
@@ -269,35 +270,6 @@ impl Default for DrawingState {
     }
 }
 
-/// Builder for Canvas2dContext.
-pub struct Canvas2dContextBuilder {
-    width: u32,
-    height: u32,
-    font_db: Option<fontdb::Database>,
-}
-
-impl Canvas2dContextBuilder {
-    /// Create a new builder with specified dimensions.
-    pub fn new(width: u32, height: u32) -> Self {
-        Self {
-            width,
-            height,
-            font_db: None,
-        }
-    }
-
-    /// Set a custom font database (to share with other components).
-    pub fn with_font_db(mut self, db: fontdb::Database) -> Self {
-        self.font_db = Some(db);
-        self
-    }
-
-    /// Build the Canvas2dContext.
-    pub fn build(self) -> Canvas2dResult<Canvas2dContext> {
-        Canvas2dContext::new_internal(self.width, self.height, self.font_db)
-    }
-}
-
 /// Canvas 2D rendering context.
 pub struct Canvas2dContext {
     /// Width of the canvas in pixels.
@@ -334,20 +306,21 @@ pub struct Canvas2dContext {
 
 impl Canvas2dContext {
     /// Create a new Canvas2dContext with the specified dimensions.
+    ///
+    /// Uses `FontConfig::default()` which loads system fonts and sets up
+    /// standard generic family mappings (sans-serif, serif, monospace).
     pub fn new(width: u32, height: u32) -> Canvas2dResult<Self> {
-        Self::new_internal(width, height, None)
+        let db = font_config_to_fontdb(&FontConfig::default());
+        Self::new_internal(width, height, db)
     }
 
-    /// Create a new builder for more configuration options.
-    pub fn builder(width: u32, height: u32) -> Canvas2dContextBuilder {
-        Canvas2dContextBuilder::new(width, height)
+    /// Create a new Canvas2dContext with the specified dimensions and font configuration.
+    pub fn with_config(width: u32, height: u32, config: FontConfig) -> Canvas2dResult<Self> {
+        let db = font_config_to_fontdb(&config);
+        Self::new_internal(width, height, db)
     }
 
-    fn new_internal(
-        width: u32,
-        height: u32,
-        font_db: Option<fontdb::Database>,
-    ) -> Canvas2dResult<Self> {
+    fn new_internal(width: u32, height: u32, font_db: fontdb::Database) -> Canvas2dResult<Self> {
         // Validate dimensions
         if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
             return Err(Canvas2dError::InvalidDimensions { width, height });
@@ -357,16 +330,8 @@ impl Canvas2dContext {
         let pixmap =
             Pixmap::new(width, height).ok_or(Canvas2dError::InvalidDimensions { width, height })?;
 
-        // Create font system
-        let mut font_system = if let Some(db) = font_db {
-            FontSystem::new_with_locale_and_db("en".to_string(), db)
-        } else {
-            FontSystem::new()
-        };
-
-        // Configure default font families to match browser behavior
-        // This ensures "sans-serif" resolves to Arial/Helvetica like in browsers
-        Self::setup_default_fonts(&mut font_system);
+        // Create font system from the provided (already-configured) fontdb
+        let font_system = FontSystem::new_with_locale_and_db("en".to_string(), font_db);
 
         // Create swash cache for glyph rasterization
         let swash_cache = SwashCache::new();
@@ -389,60 +354,6 @@ impl Canvas2dContext {
             has_current_point: false,
             pattern_pixmap_cache: PatternPixmapCache::new(PATTERN_CACHE_MAX_BYTES),
         })
-    }
-
-    /// Configure default font families to match browser behavior.
-    /// This ensures generic families like "sans-serif" resolve to
-    /// Arial/Helvetica, matching what browsers and node-canvas do.
-    fn setup_default_fonts(font_system: &mut FontSystem) {
-        use std::collections::HashSet;
-
-        // Collect available font families
-        let families: HashSet<String> = font_system
-            .db()
-            .faces()
-            .flat_map(|face| {
-                face.families
-                    .iter()
-                    .map(|(fam, _lang)| fam.clone())
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-
-        // Set sans-serif to Arial, Helvetica, or Liberation Sans (in order of preference)
-        // This matches browser behavior and node-canvas
-        for family in ["Arial", "Helvetica", "Liberation Sans"] {
-            if families.contains(family) {
-                font_system.db_mut().set_sans_serif_family(family);
-                break;
-            }
-        }
-
-        // Set monospace family
-        for family in [
-            "Courier New",
-            "Courier",
-            "Liberation Mono",
-            "DejaVu Sans Mono",
-        ] {
-            if families.contains(family) {
-                font_system.db_mut().set_monospace_family(family);
-                break;
-            }
-        }
-
-        // Set serif family
-        for family in [
-            "Times New Roman",
-            "Times",
-            "Liberation Serif",
-            "DejaVu Serif",
-        ] {
-            if families.contains(family) {
-                font_system.db_mut().set_serif_family(family);
-                break;
-            }
-        }
     }
 
     /// Get canvas width.

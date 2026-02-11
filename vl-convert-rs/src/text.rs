@@ -2,15 +2,18 @@ use crate::anyhow;
 use crate::anyhow::anyhow;
 use crate::image_loading::custom_string_resolver;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use usvg::fontdb::Database;
 use usvg::{
     FallbackSelectionFn, FontFamily, FontResolver, FontSelectionFn, FontStretch, FontStyle,
     ImageHrefResolver,
 };
+use vl_convert_canvas2d::font_config::{font_config_to_fontdb, CustomFont, FontConfig};
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
+    pub static ref FONT_CONFIG: Mutex<FontConfig> = Mutex::new(build_default_font_config());
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -21,6 +24,35 @@ const LIBERATION_SANS_ITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-Italic.ttf");
 const LIBERATION_SANS_BOLDITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-BoldItalic.ttf");
+
+/// Build the default FontConfig with vendored Liberation Sans fonts,
+/// system fonts enabled, and standard generic family mappings.
+pub fn build_default_font_config() -> FontConfig {
+    let liberation_fonts = vec![
+        CustomFont {
+            data: Arc::new(Vec::from(LIBERATION_SANS_REGULAR)),
+            family_name: None,
+        },
+        CustomFont {
+            data: Arc::new(Vec::from(LIBERATION_SANS_BOLD)),
+            family_name: None,
+        },
+        CustomFont {
+            data: Arc::new(Vec::from(LIBERATION_SANS_ITALIC)),
+            family_name: None,
+        },
+        CustomFont {
+            data: Arc::new(Vec::from(LIBERATION_SANS_BOLDITALIC)),
+            family_name: None,
+        },
+    ];
+
+    FontConfig {
+        custom_fonts: liberation_fonts,
+        load_system_fonts: true,
+        ..FontConfig::default()
+    }
+}
 
 fn init_usvg_options() -> usvg::Options<'static> {
     let image_href_resolver = ImageHrefResolver {
@@ -33,29 +65,15 @@ fn init_usvg_options() -> usvg::Options<'static> {
         select_fallback: custom_fallback_selector(),
     };
 
+    let font_config = build_default_font_config();
+    let fontdb = font_config_to_fontdb(&font_config);
+
     usvg::Options {
         image_href_resolver,
-        fontdb: Arc::new(init_font_db()),
+        fontdb: Arc::new(fontdb),
         font_resolver,
         ..Default::default()
     }
-}
-
-fn init_font_db() -> Database {
-    let mut font_database = Database::new();
-    // Load fonts from the operating system
-    font_database.load_system_fonts();
-
-    // Set default sans-serif font family.
-    // By default, Vega outputs SVGs with "sans-serif" as the font family, so
-    // we vendor the "Liberation Sans" font so that there is always a fallback
-    font_database.load_font_data(Vec::from(LIBERATION_SANS_REGULAR));
-    font_database.load_font_data(Vec::from(LIBERATION_SANS_BOLD));
-    font_database.load_font_data(Vec::from(LIBERATION_SANS_ITALIC));
-    font_database.load_font_data(Vec::from(LIBERATION_SANS_BOLDITALIC));
-
-    setup_default_fonts(&mut font_database);
-    font_database
 }
 
 fn setup_default_fonts(fontdb: &mut Database) {
@@ -240,17 +258,28 @@ pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
 }
 
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
-    let mut opts = USVG_OPTIONS
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
+    // Update FONT_CONFIG so new canvas contexts see the registered directory
+    {
+        let mut font_config = FONT_CONFIG
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
+        font_config.font_dirs.push(PathBuf::from(dir));
+    }
 
-    // Get mutable reference to font_db. Use Arc::make_mut which will clone the
-    // database if there are other references (e.g., from canvas contexts).
-    let font_db = Arc::make_mut(&mut opts.fontdb);
+    // Update USVG_OPTIONS fontdb incrementally (no full rebuild)
+    {
+        let mut opts = USVG_OPTIONS
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
 
-    // Load fonts
-    font_db.load_fonts_dir(dir);
-    setup_default_fonts(font_db);
+        // Get mutable reference to font_db. Use Arc::make_mut which will clone the
+        // database if there are other references (e.g., from canvas contexts).
+        let font_db = Arc::make_mut(&mut opts.fontdb);
+
+        // Load fonts incrementally
+        font_db.load_fonts_dir(dir);
+        setup_default_fonts(font_db);
+    }
 
     Ok(())
 }

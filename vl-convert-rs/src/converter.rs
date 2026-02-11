@@ -36,7 +36,7 @@ use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::text::USVG_OPTIONS;
+use crate::text::{FONT_CONFIG, USVG_OPTIONS};
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
 // Canvas 2D ops are now in the separate vl_convert_canvas2d extension from vl-convert-canvas2d-deno
@@ -741,14 +741,14 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         // Create the MainWorker with full Web API support
         let worker = MainWorker::bootstrap_from_options(&main_module, services, options);
 
-        // Add shared fontdb to OpState so canvas contexts use the same fonts as SVG rendering
+        // Add shared font config to OpState so canvas contexts use the same fonts as SVG rendering
         {
-            let opts = USVG_OPTIONS
+            let font_config = FONT_CONFIG
                 .lock()
-                .map_err(|e| anyhow!("Failed to acquire USVG_OPTIONS lock: {}", e))?;
-            let shared_fontdb =
-                vl_convert_canvas2d_deno::SharedFontDb::from_arc(opts.fontdb.clone());
-            worker.js_runtime.op_state().borrow_mut().put(shared_fontdb);
+                .map_err(|e| anyhow!("Failed to acquire FONT_CONFIG lock: {}", e))?;
+            let shared_config =
+                vl_convert_canvas2d_deno::SharedFontConfig::new(font_config.clone());
+            worker.js_runtime.op_state().borrow_mut().put(shared_config);
         }
 
         let this = Self {
@@ -1474,7 +1474,9 @@ impl VlConverter {
                             responder,
                         } => {
                             let png_result = match vl_spec.to_value() {
-                                Ok(v) => inner.vegalite_to_canvas_png(&v, vl_opts, scale, ppi).await,
+                                Ok(v) => {
+                                    inner.vegalite_to_canvas_png(&v, vl_opts, scale, ppi).await
+                                }
                                 Err(e) => Err(e),
                             };
                             responder.send(png_result).ok();

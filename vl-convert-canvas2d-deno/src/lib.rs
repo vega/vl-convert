@@ -17,18 +17,19 @@ use std::sync::Arc;
 pub use ops::*;
 pub use resource::{CanvasResource, Path2DResource};
 
-/// Shared font database for canvas contexts.
-/// This allows vl-convert-rs to pass its configured fontdb to canvas contexts.
+/// Shared font configuration for canvas contexts.
+/// This allows vl-convert-rs to pass its FontConfig to canvas contexts
+/// via the Deno OpState.
 #[derive(Clone)]
-pub struct SharedFontDb(pub Arc<fontdb::Database>);
+pub struct SharedFontConfig(pub Arc<::vl_convert_canvas2d::FontConfig>);
 
-impl SharedFontDb {
-    pub fn new(db: fontdb::Database) -> Self {
-        Self(Arc::new(db))
+impl SharedFontConfig {
+    pub fn new(config: ::vl_convert_canvas2d::FontConfig) -> Self {
+        Self(Arc::new(config))
     }
 
-    pub fn from_arc(db: Arc<fontdb::Database>) -> Self {
-        Self(db)
+    pub fn from_arc(config: Arc<::vl_convert_canvas2d::FontConfig>) -> Self {
+        Self(config)
     }
 }
 

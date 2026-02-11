@@ -23,6 +23,7 @@
 mod arc;
 mod context;
 mod error;
+pub mod font_config;
 mod font_parser;
 mod geometry;
 mod gradient;
@@ -32,8 +33,9 @@ mod style;
 mod text;
 
 // Re-export public API
-pub use context::{Canvas2dContext, Canvas2dContextBuilder, DOMMatrix};
+pub use context::{Canvas2dContext, DOMMatrix};
 pub use error::{Canvas2dError, Canvas2dResult};
+pub use font_config::{font_config_to_fontdb, CustomFont, FontConfig, GenericFamilyMap};
 pub use geometry::{
     ArcParams, ArcToParams, CanvasColor, CanvasColorSpace, CanvasImageDataRef, CanvasPixelFormat,
     CornerRadius, CubicBezierParams, DirtyRect, EllipseParams, ImageCropParams, ImageDataSettings,

@@ -1,8 +1,8 @@
 //! Integration tests for vl-convert-canvas2d.
 
 use vl_convert_canvas2d::{
-    ArcParams, Canvas2dContext, Canvas2dContextBuilder, CanvasColor, CubicBezierParams,
-    EllipseParams, QuadraticBezierParams, RectParams, TextBaseline,
+    ArcParams, Canvas2dContext, CanvasColor, CubicBezierParams, EllipseParams, FontConfig,
+    QuadraticBezierParams, RectParams, TextBaseline,
 };
 
 /// Test creating a canvas and drawing basic shapes.
@@ -342,14 +342,14 @@ fn test_quadratic_curve() {
     assert!(has_red);
 }
 
-/// Test builder pattern with font database.
+/// Test with_config constructor with custom font configuration.
 #[test]
-fn test_builder_pattern() {
-    let db = fontdb::Database::new();
-    let ctx = Canvas2dContextBuilder::new(100, 100)
-        .with_font_db(db)
-        .build()
-        .unwrap();
+fn test_with_config() {
+    let config = FontConfig {
+        load_system_fonts: false,
+        ..FontConfig::default()
+    };
+    let ctx = Canvas2dContext::with_config(100, 100, config).unwrap();
 
     assert_eq!(ctx.width(), 100);
     assert_eq!(ctx.height(), 100);
@@ -455,8 +455,10 @@ fn test_ellipse() {
 /// we should fall back to searching by post_script_name (e.g., "Matter-SemiBold").
 #[test]
 fn test_postscript_name_fallback() {
+    use std::sync::Arc;
+    use vl_convert_canvas2d::CustomFont;
+
     // Load the Matter font from the test fonts directory
-    let mut db = fontdb::Database::new();
     let matter_font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
@@ -470,22 +472,18 @@ fn test_postscript_name_fallback() {
         return;
     }
 
-    db.load_font_file(&matter_font_path)
-        .expect("Failed to load Matter font");
+    let font_data = std::fs::read(&matter_font_path).expect("Failed to read Matter font");
+    let config = FontConfig {
+        custom_fonts: vec![CustomFont {
+            data: Arc::new(font_data),
+            family_name: None,
+        }],
+        load_system_fonts: true,
+        ..FontConfig::default()
+    };
 
-    // Debug: Print all faces and their properties
-    println!("\nFaces in fontdb after loading Matter font:");
-    for face in db.faces() {
-        println!("  - family: {:?}", face.families);
-        println!("    post_script_name: {}", face.post_script_name);
-        println!("    weight: {:?}, style: {:?}", face.weight, face.style);
-    }
-
-    // Create canvas with the font database
-    let mut ctx = Canvas2dContextBuilder::new(100, 100)
-        .with_font_db(db)
-        .build()
-        .unwrap();
+    // Create canvas with the font configuration
+    let mut ctx = Canvas2dContext::with_config(100, 100, config).unwrap();
 
     // Try setting font as "Matter SemiBold" (CSS-style name)
     // This should find the font via post_script_name lookup
