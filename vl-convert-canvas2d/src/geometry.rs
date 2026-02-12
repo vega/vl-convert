@@ -212,6 +212,17 @@ pub struct CanvasImageDataRef<'a> {
     pub height: u32,
 }
 
+/// A reference to premultiplied-alpha RGBA pixel data (internal backing-store format).
+#[derive(Debug, Clone, Copy)]
+pub struct CanvasPixmapRef<'a> {
+    /// RGBA pixel data, premultiplied alpha, 4 bytes per pixel.
+    pub data: &'a [u8],
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+}
+
 /// An independent x/y corner radius for rounded rectangles.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CornerRadius {

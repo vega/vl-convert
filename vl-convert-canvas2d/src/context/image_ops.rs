@@ -2,7 +2,7 @@
 
 use super::Canvas2dContext;
 use crate::error::Canvas2dResult;
-use crate::geometry::{CanvasImageDataRef, DirtyRect, ImageCropParams};
+use crate::geometry::{CanvasImageDataRef, CanvasPixmapRef, DirtyRect, ImageCropParams};
 use crate::pattern::{CanvasPattern, Repetition};
 use std::sync::Arc;
 use tiny_skia::Transform;
@@ -11,8 +11,12 @@ impl Canvas2dContext {
     // --- Internal image drawing ---
 
     /// Internal: draw a premultiplied-alpha pixmap at (dx, dy).
-    pub(crate) fn draw_image(&mut self, image: tiny_skia::PixmapRef, dx: f32, dy: f32) {
-        log::debug!(target: "canvas", "drawImage {}x{} at {} {}", image.width(), image.height(), dx, dy);
+    pub(crate) fn draw_image(&mut self, image: CanvasPixmapRef, dx: f32, dy: f32) {
+        log::debug!(target: "canvas", "drawImage {}x{} at {} {}", image.width, image.height, dx, dy);
+        let Some(pixmap) = tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
+        else {
+            return;
+        };
         let paint = tiny_skia::PixmapPaint {
             opacity: self.state.global_alpha,
             blend_mode: self.state.global_composite_operation,
@@ -24,18 +28,22 @@ impl Canvas2dContext {
 
         let clip_mask = self.create_clip_mask();
         self.pixmap
-            .draw_pixmap(0, 0, image, &paint, transform, clip_mask.as_ref());
+            .draw_pixmap(0, 0, pixmap, &paint, transform, clip_mask.as_ref());
     }
 
     /// Internal: draw a premultiplied-alpha pixmap scaled.
     pub(crate) fn draw_image_scaled(
         &mut self,
-        image: tiny_skia::PixmapRef,
+        image: CanvasPixmapRef,
         dx: f32,
         dy: f32,
         dw: f32,
         dh: f32,
     ) {
+        let Some(pixmap) = tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
+        else {
+            return;
+        };
         let paint = tiny_skia::PixmapPaint {
             opacity: self.state.global_alpha,
             blend_mode: self.state.global_composite_operation,
@@ -43,8 +51,8 @@ impl Canvas2dContext {
         };
 
         // Calculate scale factors
-        let scale_x = dw / image.width() as f32;
-        let scale_y = dh / image.height() as f32;
+        let scale_x = dw / image.width as f32;
+        let scale_y = dh / image.height as f32;
 
         // Translate to destination position, then scale
         let transform = self
@@ -55,15 +63,19 @@ impl Canvas2dContext {
 
         let clip_mask = self.create_clip_mask();
         self.pixmap
-            .draw_pixmap(0, 0, image, &paint, transform, clip_mask.as_ref());
+            .draw_pixmap(0, 0, pixmap, &paint, transform, clip_mask.as_ref());
     }
 
     /// Internal: draw a cropped region of a premultiplied-alpha pixmap.
     pub(crate) fn draw_image_cropped(
         &mut self,
-        image: tiny_skia::PixmapRef,
+        image: CanvasPixmapRef,
         params: &ImageCropParams,
     ) {
+        let Some(pixmap) = tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
+        else {
+            return;
+        };
         let ImageCropParams {
             sx,
             sy,
@@ -78,8 +90,8 @@ impl Canvas2dContext {
         // Clamp source rectangle to image bounds
         let sx = sx.max(0.0);
         let sy = sy.max(0.0);
-        let sw = sw.min(image.width() as f32 - sx);
-        let sh = sh.min(image.height() as f32 - sy);
+        let sw = sw.min(image.width as f32 - sx);
+        let sh = sh.min(image.height as f32 - sy);
 
         if sw <= 0.0 || sh <= 0.0 || dw <= 0.0 || dh <= 0.0 {
             return;
@@ -97,10 +109,15 @@ impl Canvas2dContext {
             // Draw the source image offset to extract the region
             let extract_paint = tiny_skia::PixmapPaint::default();
             let extract_transform = Transform::from_translate(-src_x as f32, -src_y as f32);
-            sub_pixmap.draw_pixmap(0, 0, image, &extract_paint, extract_transform, None);
+            sub_pixmap.draw_pixmap(0, 0, pixmap, &extract_paint, extract_transform, None);
 
             // Now draw the extracted region scaled to the destination
-            self.draw_image_scaled(sub_pixmap.as_ref(), dx, dy, dw, dh);
+            let sub_ref = CanvasPixmapRef {
+                data: sub_pixmap.data(),
+                width: sub_width,
+                height: sub_height,
+            };
+            self.draw_image_scaled(sub_ref, dx, dy, dw, dh);
         }
     }
 
@@ -108,11 +125,12 @@ impl Canvas2dContext {
 
     /// Draw image data at the specified position.
     pub fn draw_image_data(&mut self, image: &CanvasImageDataRef<'_>, dx: f32, dy: f32) {
-        if let Some(pixmap) =
-            tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
-        {
-            self.draw_image(pixmap, dx, dy);
-        }
+        let pixmap_ref = CanvasPixmapRef {
+            data: image.data,
+            width: image.width,
+            height: image.height,
+        };
+        self.draw_image(pixmap_ref, dx, dy);
     }
 
     /// Draw image data scaled to the specified dimensions.
@@ -124,11 +142,12 @@ impl Canvas2dContext {
         dw: f32,
         dh: f32,
     ) {
-        if let Some(pixmap) =
-            tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
-        {
-            self.draw_image_scaled(pixmap, dx, dy, dw, dh);
-        }
+        let pixmap_ref = CanvasPixmapRef {
+            data: image.data,
+            width: image.width,
+            height: image.height,
+        };
+        self.draw_image_scaled(pixmap_ref, dx, dy, dw, dh);
     }
 
     /// Draw a cropped region of image data to a destination rectangle.
@@ -137,16 +156,22 @@ impl Canvas2dContext {
         image: &CanvasImageDataRef<'_>,
         params: &ImageCropParams,
     ) {
-        if let Some(pixmap) =
-            tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
-        {
-            self.draw_image_cropped(pixmap, params);
-        }
+        let pixmap_ref = CanvasPixmapRef {
+            data: image.data,
+            width: image.width,
+            height: image.height,
+        };
+        self.draw_image_cropped(pixmap_ref, params);
     }
 
     /// Draw another canvas at the specified position.
     pub fn draw_canvas(&mut self, source: &Canvas2dContext, dx: f32, dy: f32) {
-        self.draw_image(source.pixmap.as_ref(), dx, dy);
+        let pixmap_ref = CanvasPixmapRef {
+            data: source.pixmap.data(),
+            width: source.width,
+            height: source.height,
+        };
+        self.draw_image(pixmap_ref, dx, dy);
     }
 
     /// Draw another canvas scaled to the specified dimensions.
@@ -158,12 +183,22 @@ impl Canvas2dContext {
         dw: f32,
         dh: f32,
     ) {
-        self.draw_image_scaled(source.pixmap.as_ref(), dx, dy, dw, dh);
+        let pixmap_ref = CanvasPixmapRef {
+            data: source.pixmap.data(),
+            width: source.width,
+            height: source.height,
+        };
+        self.draw_image_scaled(pixmap_ref, dx, dy, dw, dh);
     }
 
     /// Draw a cropped region of another canvas to a destination rectangle.
     pub fn draw_canvas_cropped(&mut self, source: &Canvas2dContext, params: &ImageCropParams) {
-        self.draw_image_cropped(source.pixmap.as_ref(), params);
+        let pixmap_ref = CanvasPixmapRef {
+            data: source.pixmap.data(),
+            width: source.width,
+            height: source.height,
+        };
+        self.draw_image_cropped(pixmap_ref, params);
     }
 
     /// Create a pattern from another canvas.
