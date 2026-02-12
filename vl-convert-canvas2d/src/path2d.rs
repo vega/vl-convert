@@ -327,7 +327,7 @@ impl Path2D {
     }
 
     /// Add the segments of another path to this path, optionally applying a transform.
-    pub fn add_path(&mut self, other: &mut Path2D, transform: Option<crate::context::DOMMatrix>) {
+    pub fn add_path(&mut self, other: &mut Path2D, transform: Option<crate::dom_matrix::DOMMatrix>) {
         let Some(other_path) = other.get_path() else {
             return;
         };
@@ -770,7 +770,7 @@ mod tests {
 
         let mut dst = Path2D::new();
         // Apply a translate(100, 200) transform: a=1, b=0, c=0, d=1, e=100, f=200
-        let transform = crate::context::DOMMatrix::new(1.0, 0.0, 0.0, 1.0, 100.0, 200.0);
+        let transform = crate::dom_matrix::DOMMatrix::new(1.0, 0.0, 0.0, 1.0, 100.0, 200.0);
         dst.add_path(&mut src, Some(transform));
 
         let segs = segments(&mut dst);
@@ -787,7 +787,7 @@ mod tests {
 
         let mut dst = Path2D::new();
         // Apply a scale(2, 3) transform: a=2, b=0, c=0, d=3, e=0, f=0
-        let transform = crate::context::DOMMatrix::new(2.0, 0.0, 0.0, 3.0, 0.0, 0.0);
+        let transform = crate::dom_matrix::DOMMatrix::new(2.0, 0.0, 0.0, 3.0, 0.0, 0.0);
         dst.add_path(&mut src, Some(transform));
 
         let segs = segments(&mut dst);

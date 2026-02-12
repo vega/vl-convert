@@ -1,6 +1,6 @@
 //! Pattern types for Canvas 2D operations.
 
-use crate::context::DOMMatrix;
+use crate::dom_matrix::DOMMatrix;
 use crate::error::{Canvas2dError, Canvas2dResult};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tiny_skia::{Pixmap, PixmapRef, Shader, SpreadMode, Transform};
