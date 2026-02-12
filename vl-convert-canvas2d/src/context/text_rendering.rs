@@ -109,15 +109,19 @@ impl Canvas2dContext {
         let weight = resolution.weight_override.unwrap_or(font.weight);
 
         // Build attributes including letter spacing if set
-        // Disable hinting to match SVG text rendering (usvg doesn't apply hinting)
         let letter_spacing = self.state.letter_spacing;
+        let cache_key_flags = if self.hinting_enabled {
+            CacheKeyFlags::empty()
+        } else {
+            CacheKeyFlags::DISABLE_HINTING
+        };
         let attrs = Attrs::new()
             .family(resolution.family)
             .weight(weight)
             .style(font.style)
             .stretch(font.stretch.into())
             .letter_spacing(letter_spacing)
-            .cache_key_flags(CacheKeyFlags::DISABLE_HINTING);
+            .cache_key_flags(cache_key_flags);
 
         buffer.set_text(&mut self.font_system, text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(&mut self.font_system, false);

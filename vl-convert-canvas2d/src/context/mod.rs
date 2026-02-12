@@ -58,6 +58,8 @@ pub struct Canvas2dContext {
     pub(crate) has_current_point: bool,
     /// Owned cache of pattern backing pixmaps used for tiny-skia shader lifetimes.
     pub(crate) pattern_pixmap_cache: PatternPixmapCache,
+    /// Whether font hinting is enabled for text rendering.
+    pub(crate) hinting_enabled: bool,
 }
 
 impl Canvas2dContext {
@@ -66,14 +68,15 @@ impl Canvas2dContext {
     /// Uses `FontConfig::default()` which loads system fonts and sets up
     /// standard generic family mappings (sans-serif, serif, monospace).
     pub fn new(width: u32, height: u32) -> Canvas2dResult<Self> {
-        let db = font_config_to_fontdb(&FontConfig::default());
-        Self::new_internal(width, height, db)
+        let config = FontConfig::default();
+        let db = font_config_to_fontdb(&config);
+        Self::new_internal(width, height, db, config.hinting_enabled)
     }
 
     /// Create a new Canvas2dContext with the specified dimensions and font configuration.
     pub fn with_config(width: u32, height: u32, config: FontConfig) -> Canvas2dResult<Self> {
         let db = font_config_to_fontdb(&config);
-        Self::new_internal(width, height, db)
+        Self::new_internal(width, height, db, config.hinting_enabled)
     }
 
     /// Create a new Canvas2dContext using a pre-resolved font configuration.
@@ -86,10 +89,10 @@ impl Canvas2dContext {
         height: u32,
         resolved: &ResolvedFontConfig,
     ) -> Canvas2dResult<Self> {
-        Self::new_internal(width, height, resolved.fontdb.clone())
+        Self::new_internal(width, height, resolved.fontdb.clone(), resolved.hinting_enabled)
     }
 
-    fn new_internal(width: u32, height: u32, font_db: fontdb::Database) -> Canvas2dResult<Self> {
+    fn new_internal(width: u32, height: u32, font_db: fontdb::Database, hinting_enabled: bool) -> Canvas2dResult<Self> {
         // Validate dimensions
         if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
             return Err(Canvas2dError::InvalidDimensions { width, height });
@@ -122,6 +125,7 @@ impl Canvas2dContext {
             subpath_start_y: 0.0,
             has_current_point: false,
             pattern_pixmap_cache: PatternPixmapCache::new(PATTERN_CACHE_MAX_BYTES),
+            hinting_enabled,
         })
     }
 

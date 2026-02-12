@@ -18,6 +18,12 @@ pub struct FontConfig {
     pub load_system_fonts: bool,
     /// Additional directories to scan for font files.
     pub font_dirs: Vec<PathBuf>,
+    /// Whether font hinting is enabled for text rendering (default: false).
+    ///
+    /// Hinting adjusts glyph outlines to align with the pixel grid, improving
+    /// legibility at small sizes on low-DPI screens. Disabled by default to match
+    /// SVG text rendering behavior (usvg/resvg do not apply hinting).
+    pub hinting_enabled: bool,
 }
 
 impl Default for FontConfig {
@@ -27,6 +33,7 @@ impl Default for FontConfig {
             generic_families: GenericFamilyMap::defaults(),
             load_system_fonts: true,
             font_dirs: Vec::new(),
+            hinting_enabled: false,
         }
     }
 }
@@ -105,6 +112,7 @@ impl FontConfig {
 /// (no filesystem scan), making it suitable for sharing across canvas contexts.
 pub struct ResolvedFontConfig {
     pub(crate) fontdb: fontdb::Database,
+    pub(crate) hinting_enabled: bool,
 }
 
 impl ResolvedFontConfig {
@@ -116,6 +124,7 @@ impl ResolvedFontConfig {
     pub fn new(config: &FontConfig) -> Self {
         Self {
             fontdb: font_config_to_fontdb(config),
+            hinting_enabled: config.hinting_enabled,
         }
     }
 }
@@ -215,6 +224,7 @@ mod tests {
         assert!(config.load_system_fonts);
         assert!(config.font_dirs.is_empty());
         assert_eq!(config.generic_families.sans_serif[0], "Arial");
+        assert!(!config.hinting_enabled);
     }
 
     #[test]
@@ -249,10 +259,8 @@ mod tests {
     #[test]
     fn test_font_config_to_fontdb_no_system_fonts() {
         let config = FontConfig {
-            custom_fonts: Vec::new(),
-            generic_families: GenericFamilyMap::defaults(),
             load_system_fonts: false,
-            font_dirs: Vec::new(),
+            ..FontConfig::default()
         };
         let db = font_config_to_fontdb(&config);
         // With no system fonts and no custom fonts, database should have no faces
