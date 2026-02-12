@@ -39,6 +39,9 @@ pub struct DrawingState {
     pub transform: Transform,
     /// Clipping path (if any).
     pub clip_path: Option<tiny_skia::Path>,
+    /// Transform that was active when the clip path was set.
+    /// Used to transform the user-space clip path into device space at mask creation time.
+    pub clip_transform: Transform,
     /// Letter spacing for text rendering (in pixels).
     pub letter_spacing: f32,
     /// Whether image smoothing is enabled.
@@ -65,6 +68,7 @@ impl Default for DrawingState {
             global_composite_operation: tiny_skia::BlendMode::SourceOver,
             transform: Transform::identity(),
             clip_path: None,
+            clip_transform: Transform::identity(),
             letter_spacing: 0.0,
             image_smoothing_enabled: true,
             image_smoothing_quality: ImageSmoothingQuality::default(),

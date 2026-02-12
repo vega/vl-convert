@@ -5,7 +5,7 @@ use crate::geometry::{
     ArcParams, ArcToParams, CubicBezierParams, EllipseParams, QuadraticBezierParams, RectParams,
     RoundRectParams,
 };
-use tiny_skia::{PathSegment, Transform};
+use tiny_skia::PathSegment;
 
 impl Canvas2dContext {
     /// Begin a new path.
@@ -15,86 +15,45 @@ impl Canvas2dContext {
         self.has_current_point = false;
     }
 
-    /// Transform a point by the current transformation matrix.
-    /// Canvas 2D spec requires path coordinates to be transformed when added to the path.
-    pub(crate) fn transform_point(&self, x: f32, y: f32) -> (f32, f32) {
-        Self::map_point_with_transform(&self.state.transform, x, y)
-    }
-
-    pub(crate) fn map_point_with_transform(transform: &Transform, x: f32, y: f32) -> (f32, f32) {
-        (
-            transform.sx * x + transform.kx * y + transform.tx,
-            transform.ky * x + transform.sy * y + transform.ty,
-        )
-    }
-
-    pub(crate) fn append_transformed_path(
-        &mut self,
-        path: &tiny_skia::Path,
-        transform: Transform,
-        connect_first_move: bool,
-        skip_first_move: bool,
-    ) {
-        let mut saw_first_move = false;
-
+    /// Append all segments from a finished path to the current path builder.
+    ///
+    /// Used by arc/arc_to/ellipse to merge temp-built paths into the main path.
+    /// Updates `current_x`/`current_y`/`has_current_point` from the appended segments.
+    fn append_path_segments(&mut self, path: &tiny_skia::Path, connect_first: bool) {
+        let mut first_move = true;
         for segment in path.segments() {
             match segment {
                 PathSegment::MoveTo(p) => {
-                    let (x, y) = Self::map_point_with_transform(&transform, p.x, p.y);
-
-                    if !saw_first_move {
-                        saw_first_move = true;
-                        if skip_first_move {
-                            if !self.has_current_point {
-                                self.path_builder.move_to(x, y);
-                                self.subpath_start_x = x;
-                                self.subpath_start_y = y;
-                                self.current_x = x;
-                                self.current_y = y;
-                                self.has_current_point = true;
-                            }
-                            continue;
-                        }
-
-                        if connect_first_move && self.has_current_point {
-                            self.path_builder.line_to(x, y);
-                        } else {
-                            self.path_builder.move_to(x, y);
-                            self.subpath_start_x = x;
-                            self.subpath_start_y = y;
-                        }
+                    if first_move && connect_first && self.has_current_point {
+                        // Per Canvas 2D spec: arc/ellipse connects to current point via line
+                        self.path_builder.line_to(p.x, p.y);
                     } else {
-                        self.path_builder.move_to(x, y);
-                        self.subpath_start_x = x;
-                        self.subpath_start_y = y;
+                        self.path_builder.move_to(p.x, p.y);
+                        self.subpath_start_x = p.x;
+                        self.subpath_start_y = p.y;
                     }
-
-                    self.current_x = x;
-                    self.current_y = y;
+                    first_move = false;
+                    self.current_x = p.x;
+                    self.current_y = p.y;
                     self.has_current_point = true;
                 }
                 PathSegment::LineTo(p) => {
-                    let (x, y) = Self::map_point_with_transform(&transform, p.x, p.y);
-                    self.path_builder.line_to(x, y);
-                    self.current_x = x;
-                    self.current_y = y;
+                    self.path_builder.line_to(p.x, p.y);
+                    self.current_x = p.x;
+                    self.current_y = p.y;
                     self.has_current_point = true;
                 }
                 PathSegment::QuadTo(ctrl, p) => {
-                    let (cx, cy) = Self::map_point_with_transform(&transform, ctrl.x, ctrl.y);
-                    let (x, y) = Self::map_point_with_transform(&transform, p.x, p.y);
-                    self.path_builder.quad_to(cx, cy, x, y);
-                    self.current_x = x;
-                    self.current_y = y;
+                    self.path_builder.quad_to(ctrl.x, ctrl.y, p.x, p.y);
+                    self.current_x = p.x;
+                    self.current_y = p.y;
                     self.has_current_point = true;
                 }
                 PathSegment::CubicTo(ctrl1, ctrl2, p) => {
-                    let (c1x, c1y) = Self::map_point_with_transform(&transform, ctrl1.x, ctrl1.y);
-                    let (c2x, c2y) = Self::map_point_with_transform(&transform, ctrl2.x, ctrl2.y);
-                    let (x, y) = Self::map_point_with_transform(&transform, p.x, p.y);
-                    self.path_builder.cubic_to(c1x, c1y, c2x, c2y, x, y);
-                    self.current_x = x;
-                    self.current_y = y;
+                    self.path_builder
+                        .cubic_to(ctrl1.x, ctrl1.y, ctrl2.x, ctrl2.y, p.x, p.y);
+                    self.current_x = p.x;
+                    self.current_y = p.y;
                     self.has_current_point = true;
                 }
                 PathSegment::Close => {
@@ -110,22 +69,20 @@ impl Canvas2dContext {
     /// Move to a point without drawing.
     pub fn move_to(&mut self, x: f32, y: f32) {
         log::debug!(target: "canvas", "moveTo {} {}", x, y);
-        let (tx, ty) = self.transform_point(x, y);
-        self.path_builder.move_to(tx, ty);
-        self.current_x = tx;
-        self.current_y = ty;
-        self.subpath_start_x = tx;
-        self.subpath_start_y = ty;
+        self.path_builder.move_to(x, y);
+        self.current_x = x;
+        self.current_y = y;
+        self.subpath_start_x = x;
+        self.subpath_start_y = y;
         self.has_current_point = true;
     }
 
     /// Draw a line to a point.
     pub fn line_to(&mut self, x: f32, y: f32) {
         log::debug!(target: "canvas", "lineTo {} {}", x, y);
-        let (tx, ty) = self.transform_point(x, y);
-        self.path_builder.line_to(tx, ty);
-        self.current_x = tx;
-        self.current_y = ty;
+        self.path_builder.line_to(x, y);
+        self.current_x = x;
+        self.current_y = y;
         self.has_current_point = true;
     }
 
@@ -139,45 +96,41 @@ impl Canvas2dContext {
 
     /// Add a cubic bezier curve.
     pub fn bezier_curve_to(&mut self, params: &CubicBezierParams) {
-        let (tcp1x, tcp1y) = self.transform_point(params.cp1x, params.cp1y);
-        let (tcp2x, tcp2y) = self.transform_point(params.cp2x, params.cp2y);
-        let (tx, ty) = self.transform_point(params.x, params.y);
-        self.path_builder
-            .cubic_to(tcp1x, tcp1y, tcp2x, tcp2y, tx, ty);
-        self.current_x = tx;
-        self.current_y = ty;
+        self.path_builder.cubic_to(
+            params.cp1x, params.cp1y, params.cp2x, params.cp2y, params.x, params.y,
+        );
+        self.current_x = params.x;
+        self.current_y = params.y;
         self.has_current_point = true;
     }
 
     /// Add a quadratic bezier curve.
     pub fn quadratic_curve_to(&mut self, params: &QuadraticBezierParams) {
-        let (tcpx, tcpy) = self.transform_point(params.cpx, params.cpy);
-        let (tx, ty) = self.transform_point(params.x, params.y);
-        self.path_builder.quad_to(tcpx, tcpy, tx, ty);
-        self.current_x = tx;
-        self.current_y = ty;
+        self.path_builder
+            .quad_to(params.cpx, params.cpy, params.x, params.y);
+        self.current_x = params.x;
+        self.current_y = params.y;
         self.has_current_point = true;
     }
 
     /// Add a rectangle to the path.
     pub fn rect(&mut self, params: &RectParams) {
         log::debug!(target: "canvas", "rect {} {} {} {}", params.x, params.y, params.width, params.height);
-        // Transform all four corners
-        let (x0, y0) = self.transform_point(params.x, params.y);
-        let (x1, y1) = self.transform_point(params.x + params.width, params.y);
-        let (x2, y2) = self.transform_point(params.x + params.width, params.y + params.height);
-        let (x3, y3) = self.transform_point(params.x, params.y + params.height);
+        let x = params.x;
+        let y = params.y;
+        let w = params.width;
+        let h = params.height;
 
-        self.path_builder.move_to(x0, y0);
-        self.path_builder.line_to(x1, y1);
-        self.path_builder.line_to(x2, y2);
-        self.path_builder.line_to(x3, y3);
+        self.path_builder.move_to(x, y);
+        self.path_builder.line_to(x + w, y);
+        self.path_builder.line_to(x + w, y + h);
+        self.path_builder.line_to(x, y + h);
         self.path_builder.close();
 
-        self.current_x = x0;
-        self.current_y = y0;
-        self.subpath_start_x = x0;
-        self.subpath_start_y = y0;
+        self.current_x = x;
+        self.current_y = y;
+        self.subpath_start_x = x;
+        self.subpath_start_y = y;
         self.has_current_point = true;
     }
 
@@ -218,10 +171,6 @@ impl Canvas2dContext {
         };
 
         // Scale radii uniformly if they exceed the rectangle dimensions
-        // Top edge: tl.x + tr.x <= width
-        // Bottom edge: bl.x + br.x <= width
-        // Left edge: tl.y + bl.y <= height
-        // Right edge: tr.y + br.y <= height
         let top = (tl.x + tr.x).max(1e-10);
         let bottom = (bl.x + br.x).max(1e-10);
         let left = (tl.y + bl.y).max(1e-10);
@@ -312,7 +261,7 @@ impl Canvas2dContext {
         crate::arc::arc(&mut arc_builder, params, false);
 
         if let Some(path) = arc_builder.finish() {
-            self.append_transformed_path(&path, self.state.transform, true, false);
+            self.append_path_segments(&path, true);
         }
     }
 
@@ -323,72 +272,65 @@ impl Canvas2dContext {
             return;
         }
 
-        let transform = self.state.transform;
-        let Some(inverse) = transform.invert() else {
-            log::debug!(
-                target: "canvas",
-                "arcTo: non-invertible transform; falling back to approximate scaling"
-            );
-
-            let (tx1, ty1) = self.transform_point(params.x1, params.y1);
-            let (tx2, ty2) = self.transform_point(params.x2, params.y2);
-            let t = &self.state.transform;
-            let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
-            let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
-            let scaled_radius = params.radius * (scale_x + scale_y) / 2.0;
-
-            crate::arc::arc_to(
-                &mut self.path_builder,
-                self.current_x,
-                self.current_y,
-                &ArcToParams {
-                    x1: tx1,
-                    y1: ty1,
-                    x2: tx2,
-                    y2: ty2,
-                    radius: scaled_radius,
-                },
-            );
-            return;
-        };
-
-        let (local_x0, local_y0) =
-            Self::map_point_with_transform(&inverse, self.current_x, self.current_y);
         let mut arc_builder = tiny_skia::PathBuilder::new();
-        arc_builder.move_to(local_x0, local_y0);
-        crate::arc::arc_to(&mut arc_builder, local_x0, local_y0, params);
+        arc_builder.move_to(self.current_x, self.current_y);
+        crate::arc::arc_to(
+            &mut arc_builder,
+            self.current_x,
+            self.current_y,
+            params,
+        );
 
         if let Some(path) = arc_builder.finish() {
-            self.append_transformed_path(&path, transform, false, true);
+            // Skip the initial MoveTo (which is just the current point) and append the rest
+            let mut first_move = true;
+            for segment in path.segments() {
+                match segment {
+                    PathSegment::MoveTo(_) if first_move => {
+                        first_move = false;
+                        // Skip — this is just the current point we already have
+                    }
+                    PathSegment::MoveTo(p) => {
+                        self.path_builder.move_to(p.x, p.y);
+                        self.subpath_start_x = p.x;
+                        self.subpath_start_y = p.y;
+                        self.current_x = p.x;
+                        self.current_y = p.y;
+                    }
+                    PathSegment::LineTo(p) => {
+                        self.path_builder.line_to(p.x, p.y);
+                        self.current_x = p.x;
+                        self.current_y = p.y;
+                    }
+                    PathSegment::QuadTo(ctrl, p) => {
+                        self.path_builder.quad_to(ctrl.x, ctrl.y, p.x, p.y);
+                        self.current_x = p.x;
+                        self.current_y = p.y;
+                    }
+                    PathSegment::CubicTo(ctrl1, ctrl2, p) => {
+                        self.path_builder
+                            .cubic_to(ctrl1.x, ctrl1.y, ctrl2.x, ctrl2.y, p.x, p.y);
+                        self.current_x = p.x;
+                        self.current_y = p.y;
+                    }
+                    PathSegment::Close => {
+                        self.path_builder.close();
+                        self.current_x = self.subpath_start_x;
+                        self.current_y = self.subpath_start_y;
+                    }
+                }
+                self.has_current_point = true;
+            }
         }
     }
 
     /// Add an ellipse to the path.
     pub fn ellipse(&mut self, params: &EllipseParams) {
-        // Transform center point
-        let (tx, ty) = self.transform_point(params.x, params.y);
-        // Scale radii
-        let t = &self.state.transform;
-        let scale_x = (t.sx * t.sx + t.ky * t.ky).sqrt();
-        let scale_y = (t.kx * t.kx + t.sy * t.sy).sqrt();
-        // Add rotation from transform to the ellipse rotation
-        let transform_rotation = t.ky.atan2(t.sx);
-        let total_rotation = params.rotation + transform_rotation;
+        let mut ellipse_builder = tiny_skia::PathBuilder::new();
+        crate::arc::ellipse(&mut ellipse_builder, params, false);
 
-        crate::arc::ellipse(
-            &mut self.path_builder,
-            &EllipseParams {
-                x: tx,
-                y: ty,
-                radius_x: params.radius_x * scale_x,
-                radius_y: params.radius_y * scale_y,
-                rotation: total_rotation,
-                start_angle: params.start_angle,
-                end_angle: params.end_angle,
-                anticlockwise: params.anticlockwise,
-            },
-            self.has_current_point,
-        );
-        self.has_current_point = true;
+        if let Some(path) = ellipse_builder.finish() {
+            self.append_path_segments(&path, self.has_current_point);
+        }
     }
 }

@@ -825,7 +825,10 @@ mod tests {
     }
 
     #[test]
-    fn test_arc_to_non_invertible_transform_fallback() {
+    fn test_arc_to_with_non_invertible_transform() {
+        // With unified user-space coordinates, arc_to works in user space
+        // regardless of transform. A non-invertible transform just means
+        // the path collapses at render time, but path building should not panic.
         let mut ctx = Canvas2dContext::new(100, 100).unwrap();
         ctx.begin_path();
         ctx.move_to(10.0, 10.0);

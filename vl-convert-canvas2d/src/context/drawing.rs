@@ -6,7 +6,6 @@ use crate::gradient::{CanvasGradient, GradientType};
 use crate::path2d::Path2D;
 use crate::pattern_cache::PatternCacheKey;
 use crate::style::{CanvasFillRule, FillStyle};
-use tiny_skia::Transform;
 
 impl Canvas2dContext {
     // --- Clipping ---
@@ -25,6 +24,7 @@ impl Canvas2dContext {
 
         if let Some(path) = path {
             self.state.clip_path = Some(path);
+            self.state.clip_transform = self.state.transform;
             self.clip_fill_rule = fill_rule;
         }
     }
@@ -44,15 +44,14 @@ impl Canvas2dContext {
         let path = self.path_builder.clone().finish();
 
         if let Some(path) = path {
-            // Create clip mask if we have a clip path
             let clip_mask = self.create_clip_mask();
+            let transform = self.state.transform;
             let _ = self.with_fill_paint(|ctx, paint| {
-                // Path coordinates are already transformed, so use identity transform
                 ctx.pixmap.fill_path(
                     &path,
                     paint,
                     fill_rule.into(),
-                    Transform::identity(),
+                    transform,
                     clip_mask.as_ref(),
                 );
             });
@@ -66,37 +65,26 @@ impl Canvas2dContext {
         let path = self.path_builder.clone().finish();
 
         if let Some(path) = path {
-            // Scale line width by transform
-            let t = &self.state.transform;
-            let scale =
-                ((t.sx * t.sx + t.ky * t.ky).sqrt() + (t.kx * t.kx + t.sy * t.sy).sqrt()) / 2.0;
-            let scaled_line_width = self.state.line_width * scale;
-
             let stroke = tiny_skia::Stroke {
-                width: scaled_line_width,
+                width: self.state.line_width,
                 line_cap: self.state.line_cap.into(),
                 line_join: self.state.line_join.into(),
                 miter_limit: self.state.miter_limit,
                 dash: if self.state.line_dash.is_empty() {
                     None
                 } else {
-                    // Scale dash pattern too
-                    let scaled_dash: Vec<f32> =
-                        self.state.line_dash.iter().map(|d| d * scale).collect();
-                    tiny_skia::StrokeDash::new(scaled_dash, self.state.line_dash_offset * scale)
+                    tiny_skia::StrokeDash::new(
+                        self.state.line_dash.clone(),
+                        self.state.line_dash_offset,
+                    )
                 },
             };
 
             let clip_mask = self.create_clip_mask();
+            let transform = self.state.transform;
             let _ = self.with_stroke_paint(|ctx, paint| {
-                // Path coordinates are already transformed, so use identity transform
-                ctx.pixmap.stroke_path(
-                    &path,
-                    paint,
-                    &stroke,
-                    Transform::identity(),
-                    clip_mask.as_ref(),
-                );
+                ctx.pixmap
+                    .stroke_path(&path, paint, &stroke, transform, clip_mask.as_ref());
             });
         }
     }
@@ -156,6 +144,7 @@ impl Canvas2dContext {
     pub fn clip_path2d_with_rule(&mut self, path: &mut Path2D, fill_rule: CanvasFillRule) {
         if let Some(p) = path.get_path() {
             self.state.clip_path = Some(p.clone());
+            self.state.clip_transform = self.state.transform;
             self.clip_fill_rule = fill_rule;
         }
     }
@@ -180,25 +169,32 @@ impl Canvas2dContext {
     /// Clear a rectangle (set pixels to transparent).
     pub fn clear_rect(&mut self, params: &RectParams) {
         log::debug!(target: "canvas", "clearRect {} {} {} {}", params.x, params.y, params.width, params.height);
-        // Transform corners and find bounding box
-        let (x0, y0) = self.transform_point(params.x, params.y);
-        let (x1, y1) = self.transform_point(params.x + params.width, params.y);
-        let (x2, y2) = self.transform_point(params.x + params.width, params.y + params.height);
-        let (x3, y3) = self.transform_point(params.x, params.y + params.height);
+        // Build a user-space rect path and fill with Clear blend mode
+        let x = params.x;
+        let y = params.y;
+        let w = params.width;
+        let h = params.height;
 
-        let min_x = x0.min(x1).min(x2).min(x3);
-        let min_y = y0.min(y1).min(y2).min(y3);
-        let max_x = x0.max(x1).max(x2).max(x3);
-        let max_y = y0.max(y1).max(y2).max(y3);
+        let mut pb = tiny_skia::PathBuilder::new();
+        pb.move_to(x, y);
+        pb.line_to(x + w, y);
+        pb.line_to(x + w, y + h);
+        pb.line_to(x, y + h);
+        pb.close();
 
-        if let Some(rect) = tiny_skia::Rect::from_xywh(min_x, min_y, max_x - min_x, max_y - min_y) {
+        if let Some(path) = pb.finish() {
             let paint = tiny_skia::Paint {
                 blend_mode: tiny_skia::BlendMode::Clear,
                 ..Default::default()
             };
             let clip_mask = self.create_clip_mask();
-            self.pixmap
-                .fill_rect(rect, &paint, Transform::identity(), clip_mask.as_ref());
+            self.pixmap.fill_path(
+                &path,
+                &paint,
+                tiny_skia::FillRule::Winding,
+                self.state.transform,
+                clip_mask.as_ref(),
+            );
         }
     }
 
@@ -207,13 +203,11 @@ impl Canvas2dContext {
     pub(crate) fn create_clip_mask(&self) -> Option<tiny_skia::Mask> {
         self.state.clip_path.as_ref().and_then(|clip_path| {
             let mut mask = tiny_skia::Mask::new(self.width, self.height)?;
-            // Use identity transform because the clip path is already in pixel coordinates
-            // (rect() and other path operations already transform points via transform_point())
             mask.fill_path(
                 clip_path,
                 self.clip_fill_rule.into(),
                 true,
-                Transform::identity(),
+                self.state.clip_transform,
             );
             Some(mask)
         })
@@ -314,11 +308,6 @@ impl Canvas2dContext {
                 self.state.transform,
             ),
             GradientType::Radial(params) => {
-                // tiny_skia's RadialGradient::new(start, end, radius, ...)
-                // - start: where gradient originates (inner circle center)
-                // - end: outer circle center
-                // - radius: outer circle radius
-                // Note: r0 (inner radius) is not directly supported by tiny_skia
                 tiny_skia::RadialGradient::new(
                     tiny_skia::Point {
                         x: params.x0,
