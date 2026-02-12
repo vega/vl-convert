@@ -2,12 +2,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// Backend-agnostic font configuration.
-///
-/// This struct describes desired font configuration using only Rust standard library types,
-/// with no dependencies on any specific rendering backend (fontdb, cosmic-text, Fontique, etc.).
-/// Each backend converts it into its own internal representation via a conversion function
-/// (e.g., [`font_config_to_fontdb`]).
+/// Struct that describes desired font configuration
 #[derive(Clone, Debug)]
 pub struct FontConfig {
     /// Custom font data to register (font file bytes + optional family override).
