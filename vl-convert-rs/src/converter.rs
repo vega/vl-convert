@@ -1476,9 +1476,7 @@ impl VlConverter {
                             responder,
                         } => {
                             let png_result = match vl_spec.to_value() {
-                                Ok(v) => {
-                                    inner.vegalite_to_png(&v, vl_opts, scale, ppi).await
-                                }
+                                Ok(v) => inner.vegalite_to_png(&v, vl_opts, scale, ppi).await,
                                 Err(e) => Err(e),
                             };
                             responder.send(png_result).ok();
