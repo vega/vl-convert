@@ -1157,7 +1157,7 @@ delete themes.default
         Ok(bytes.to_vec())
     }
 
-    pub async fn vega_to_canvas_png(
+    pub async fn vega_to_png(
         &mut self,
         vg_spec: &serde_json::Value,
         vg_opts: VgOpts,
@@ -1211,7 +1211,7 @@ vegaToCanvas(
         Ok(png_data)
     }
 
-    pub async fn vegalite_to_canvas_png(
+    pub async fn vegalite_to_png(
         &mut self,
         vl_spec: &serde_json::Value,
         vl_opts: VlOpts,
@@ -1312,14 +1312,14 @@ pub enum VlConvertCommand {
         vl_opts: VlOpts,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
-    VgToCanvasPng {
+    VgToPng {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
         scale: f32,
         ppi: f32,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
-    VlToCanvasPng {
+    VlToPng {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
         scale: f32,
@@ -1455,7 +1455,7 @@ impl VlConverter {
                                 inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await;
                             responder.send(sg_result).ok();
                         }
-                        VlConvertCommand::VgToCanvasPng {
+                        VlConvertCommand::VgToPng {
                             vg_spec,
                             vg_opts,
                             scale,
@@ -1463,12 +1463,12 @@ impl VlConverter {
                             responder,
                         } => {
                             let png_result = match vg_spec.to_value() {
-                                Ok(v) => inner.vega_to_canvas_png(&v, vg_opts, scale, ppi).await,
+                                Ok(v) => inner.vega_to_png(&v, vg_opts, scale, ppi).await,
                                 Err(e) => Err(e),
                             };
                             responder.send(png_result).ok();
                         }
-                        VlConvertCommand::VlToCanvasPng {
+                        VlConvertCommand::VlToPng {
                             vl_spec,
                             vl_opts,
                             scale,
@@ -1477,7 +1477,7 @@ impl VlConverter {
                         } => {
                             let png_result = match vl_spec.to_value() {
                                 Ok(v) => {
-                                    inner.vegalite_to_canvas_png(&v, vl_opts, scale, ppi).await
+                                    inner.vegalite_to_png(&v, vl_opts, scale, ppi).await
                                 }
                                 Err(e) => Err(e),
                             };
@@ -1729,7 +1729,7 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
 
         let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
-        let cmd = VlConvertCommand::VgToCanvasPng {
+        let cmd = VlConvertCommand::VgToPng {
             vg_spec: vg_spec.into(),
             vg_opts,
             scale: effective_scale,
@@ -1767,7 +1767,7 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
 
         let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
-        let cmd = VlConvertCommand::VlToCanvasPng {
+        let cmd = VlConvertCommand::VlToPng {
             vl_spec: vl_spec.into(),
             vl_opts,
             scale: effective_scale,
