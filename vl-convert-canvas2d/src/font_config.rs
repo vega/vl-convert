@@ -125,10 +125,6 @@ impl ResolvedFontConfig {
 }
 
 /// Convert a [`FontConfig`] into a [`fontdb::Database`].
-///
-/// This is the single point where font configuration is translated into the fontdb backend.
-/// It replaces the duplicated `setup_default_fonts()` logic that previously existed in
-/// both `vl-convert-canvas2d` and `vl-convert-rs`.
 pub fn font_config_to_fontdb(config: &FontConfig) -> fontdb::Database {
     let mut db = fontdb::Database::new();
 

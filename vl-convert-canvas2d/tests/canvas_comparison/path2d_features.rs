@@ -1,4 +1,4 @@
-//! Phase 1 feature tests: fill(fillRule), roundRect, Path2D, SVG path data.
+//! Feature tests: fill(fillRule), roundRect, Path2D, SVG path data.
 
 use super::common::*;
 

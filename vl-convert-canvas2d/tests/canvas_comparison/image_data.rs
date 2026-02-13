@@ -55,7 +55,7 @@ ctx.putImageData(imageData, 0, 0);
     run_comparison_test(&test).expect("get_image_data_partial_bounds comparison failed");
 }
 
-/// Note: This test doesn't compare against node-canvas because node-canvas has a bug
+/// This test doesn't compare against node-canvas because node-canvas has a bug
 /// where getImageData with negative coords returns clipped dimensions instead of
 /// the requested dimensions with transparent padding (as per HTML Canvas spec).
 /// Our Rust implementation correctly follows the spec.

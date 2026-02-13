@@ -754,7 +754,7 @@ ctx.fillText('Hello', 20, 50);
     run_comparison_test(&test).expect("fill_text comparison failed");
 }
 
-// Note: strokeText currently renders as filled text (limitation - proper stroke
+// strokeText currently renders as filled text (limitation - proper stroke
 // would require glyph outline extraction). Higher tolerance to account for this.
 #[test]
 fn test_stroke_text_comparison() {

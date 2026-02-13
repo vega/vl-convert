@@ -5,9 +5,6 @@
 //!
 //! This crate provides a Deno extension that wraps the vl-convert-canvas2d crate,
 //! enabling JavaScript code to use Canvas 2D API via Rust ops.
-//!
-//! Key insight: Ops are never *called* during snapshot creation - they're just
-//! registered. So we can use the real implementations in both build.rs and runtime.
 
 mod ops;
 mod resource;
@@ -83,39 +80,39 @@ deno_core::extension!(
         op_canvas_to_png,
         op_canvas_width,
         op_canvas_height,
-        // Phase 1: Gradients
+        // Gradients
         op_canvas_create_linear_gradient,
         op_canvas_create_radial_gradient,
         op_canvas_gradient_add_color_stop,
         op_canvas_set_fill_style_gradient,
         op_canvas_set_stroke_style_gradient,
-        // Phase 1: Text with maxWidth
+        // Text with maxWidth
         op_canvas_fill_text_max_width,
         op_canvas_stroke_text_max_width,
-        // Phase 1: drawImage
+        // drawImage
         op_canvas_draw_image,
         op_canvas_draw_image_scaled,
         op_canvas_draw_image_cropped,
         op_canvas_draw_canvas,
         op_canvas_draw_canvas_scaled,
         op_canvas_draw_canvas_cropped,
-        // Phase 2: Patterns
+        // Patterns
         op_canvas_create_pattern,
         op_canvas_create_pattern_from_canvas,
         op_canvas_set_fill_style_pattern,
         op_canvas_set_stroke_style_pattern,
-        // Phase 2: putImageData
+        // putImageData
         op_canvas_put_image_data,
         op_canvas_put_image_data_dirty,
-        // Phase 2: imageSmoothingEnabled/Quality
+        // imageSmoothingEnabled/Quality
         op_canvas_set_image_smoothing_enabled,
         op_canvas_get_image_smoothing_enabled,
         op_canvas_set_image_smoothing_quality,
         op_canvas_get_image_smoothing_quality,
-        // Phase 2: fillRule support
+        // fillRule support
         op_canvas_fill_with_rule,
         op_canvas_clip_with_rule,
-        // Phase 2: Path2D
+        // Path2D
         op_path2d_create,
         op_path2d_create_from_svg,
         op_path2d_create_from_path,
@@ -134,7 +131,6 @@ deno_core::extension!(
         op_canvas_stroke_path2d,
         op_canvas_clip_path2d,
         op_canvas_clip_path2d_with_rule,
-        // Phase 3: Nice-to-Have
         op_canvas_reset,
         op_canvas_round_rect,
         op_canvas_round_rect_radii,
