@@ -36,7 +36,8 @@ use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::text::{FONT_CONFIG, USVG_OPTIONS};
+use crate::text::{FONT_CONFIG, FONT_CONFIG_VERSION, USVG_OPTIONS};
+use std::sync::atomic::Ordering;
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
 // Canvas 2D ops are now in the separate vl_convert_canvas2d extension from vl-convert-canvas2d-deno
@@ -56,6 +57,11 @@ deno_core::extension!(
 // Arguments are passed to V8 as JSON strings via Deno ops and parsed in JS.
 // Scenegraph results are returned as MessagePack byte buffers via ops,
 // avoiding JSON serialization overhead for large payloads.
+struct VlConverterRuntime {
+    sender: Sender<VlConvertCommand>,
+    _handle: Arc<JoinHandle<Result<(), AnyError>>>,
+}
+
 lazy_static! {
     pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime =
         tokio::runtime::Builder::new_current_thread()
@@ -66,6 +72,117 @@ lazy_static! {
     static ref MSGPACK_RESULTS: Arc<Mutex<HashMap<i32, Vec<u8>>>> =
         Arc::new(Mutex::new(HashMap::new()));
     static ref NEXT_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+    static ref VL_CONVERTER_RUNTIME: VlConverterRuntime = {
+        let (sender, mut receiver) = mpsc::channel::<VlConvertCommand>(32);
+        let handle = Arc::new(thread::spawn(move || {
+            TOKIO_RUNTIME.block_on(async {
+                let mut inner = InnerVlConverter::try_new().await?;
+                while let Some(cmd) = receiver.next().await {
+                    inner.refresh_font_config_if_needed()?;
+                    match cmd {
+                        VlConvertCommand::VlToVg {
+                            vl_spec,
+                            vl_opts,
+                            responder,
+                        } => {
+                            let vega_spec = inner.vegalite_to_vega(vl_spec, vl_opts).await;
+                            responder.send(vega_spec).ok();
+                        }
+                        VlConvertCommand::VgToSvg {
+                            vg_spec,
+                            vg_opts,
+                            responder,
+                        } => {
+                            let svg_result = inner.vega_to_svg(vg_spec, vg_opts).await;
+                            responder.send(svg_result).ok();
+                        }
+                        VlConvertCommand::VgToSg {
+                            vg_spec,
+                            vg_opts,
+                            responder,
+                        } => {
+                            let sg_result = inner.vega_to_scenegraph(vg_spec, vg_opts).await;
+                            responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VgToSgMsgpack {
+                            vg_spec,
+                            vg_opts,
+                            responder,
+                        } => {
+                            let sg_result =
+                                inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await;
+                            responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VlToSvg {
+                            vl_spec,
+                            vl_opts,
+                            responder,
+                        } => {
+                            let svg_result = inner.vegalite_to_svg(vl_spec, vl_opts).await;
+                            responder.send(svg_result).ok();
+                        }
+                        VlConvertCommand::VlToSg {
+                            vl_spec,
+                            vl_opts,
+                            responder,
+                        } => {
+                            let sg_result = inner.vegalite_to_scenegraph(vl_spec, vl_opts).await;
+                            responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VlToSgMsgpack {
+                            vl_spec,
+                            vl_opts,
+                            responder,
+                        } => {
+                            let sg_result =
+                                inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await;
+                            responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VgToPng {
+                            vg_spec,
+                            vg_opts,
+                            scale,
+                            ppi,
+                            responder,
+                        } => {
+                            let png_result = match vg_spec.to_value() {
+                                Ok(v) => inner.vega_to_png(&v, vg_opts, scale, ppi).await,
+                                Err(e) => Err(e),
+                            };
+                            responder.send(png_result).ok();
+                        }
+                        VlConvertCommand::VlToPng {
+                            vl_spec,
+                            vl_opts,
+                            scale,
+                            ppi,
+                            responder,
+                        } => {
+                            let png_result = match vl_spec.to_value() {
+                                Ok(v) => inner.vegalite_to_png(&v, vl_opts, scale, ppi).await,
+                                Err(e) => Err(e),
+                            };
+                            responder.send(png_result).ok();
+                        }
+                        VlConvertCommand::GetLocalTz { responder } => {
+                            let local_tz = inner.get_local_tz().await;
+                            responder.send(local_tz).ok();
+                        }
+                        VlConvertCommand::GetThemes { responder } => {
+                            let themes = inner.get_themes().await;
+                            responder.send(themes).ok();
+                        }
+                    }
+                }
+                Ok::<(), AnyError>(())
+            })?;
+            Ok(())
+        }));
+        VlConverterRuntime {
+            sender,
+            _handle: handle,
+        }
+    };
 }
 
 /// A JSON value that may already be serialized to a string.
@@ -342,9 +459,31 @@ struct InnerVlConverter {
     worker: MainWorker,
     initialized_vl_versions: HashSet<VlVersion>,
     vega_initialized: bool,
+    font_config_version: u64,
 }
 
 impl InnerVlConverter {
+    /// Refresh the SharedFontConfig in OpState if fonts have been registered
+    /// since the worker was created (or since the last refresh).
+    fn refresh_font_config_if_needed(&mut self) -> Result<(), AnyError> {
+        let current = FONT_CONFIG_VERSION.load(Ordering::Acquire);
+        if current != self.font_config_version {
+            let font_config = FONT_CONFIG
+                .lock()
+                .map_err(|e| anyhow!("Failed to acquire FONT_CONFIG lock: {}", e))?;
+            let resolved = font_config.resolve();
+            let shared_config =
+                vl_convert_canvas2d_deno::SharedFontConfig::new(resolved, current);
+            self.worker
+                .js_runtime
+                .op_state()
+                .borrow_mut()
+                .put(shared_config);
+            self.font_config_version = current;
+        }
+        Ok(())
+    }
+
     async fn init_vega(&mut self) -> Result<(), AnyError> {
         if !self.vega_initialized {
             // ops are now exposed on globalThis by the extension ESM bootstrap
@@ -744,12 +883,14 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         // Add shared font config to OpState so canvas contexts use the same fonts as SVG rendering.
         // We resolve the FontConfig into a fontdb once here; each canvas context then clones
         // the cached database instead of re-scanning system fonts.
+        let initial_font_version = FONT_CONFIG_VERSION.load(Ordering::Acquire);
         {
             let font_config = FONT_CONFIG
                 .lock()
                 .map_err(|e| anyhow!("Failed to acquire FONT_CONFIG lock: {}", e))?;
             let resolved = font_config.resolve();
-            let shared_config = vl_convert_canvas2d_deno::SharedFontConfig::new(resolved);
+            let shared_config =
+                vl_convert_canvas2d_deno::SharedFontConfig::new(resolved, initial_font_version);
             worker.js_runtime.op_state().borrow_mut().put(shared_config);
         }
 
@@ -757,6 +898,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
             worker,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
+            font_config_version: initial_font_version,
         };
 
         Ok(this)
@@ -1390,116 +1532,9 @@ impl VlConverter {
             .try_init()
             .ok();
 
-        let (sender, mut receiver) = mpsc::channel::<VlConvertCommand>(32);
-
-        let handle = Arc::new(thread::spawn(move || {
-            TOKIO_RUNTIME.block_on(async {
-                let mut inner = InnerVlConverter::try_new().await?;
-                while let Some(cmd) = receiver.next().await {
-                    match cmd {
-                        VlConvertCommand::VlToVg {
-                            vl_spec,
-                            vl_opts,
-                            responder,
-                        } => {
-                            let vega_spec = inner.vegalite_to_vega(vl_spec, vl_opts).await;
-                            responder.send(vega_spec).ok();
-                        }
-                        VlConvertCommand::VgToSvg {
-                            vg_spec,
-                            vg_opts,
-                            responder,
-                        } => {
-                            let svg_result = inner.vega_to_svg(vg_spec, vg_opts).await;
-                            responder.send(svg_result).ok();
-                        }
-                        VlConvertCommand::VgToSg {
-                            vg_spec,
-                            vg_opts,
-                            responder,
-                        } => {
-                            let sg_result = inner.vega_to_scenegraph(vg_spec, vg_opts).await;
-                            responder.send(sg_result).ok();
-                        }
-                        VlConvertCommand::VgToSgMsgpack {
-                            vg_spec,
-                            vg_opts,
-                            responder,
-                        } => {
-                            let sg_result =
-                                inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await;
-                            responder.send(sg_result).ok();
-                        }
-                        VlConvertCommand::VlToSvg {
-                            vl_spec,
-                            vl_opts,
-                            responder,
-                        } => {
-                            let svg_result = inner.vegalite_to_svg(vl_spec, vl_opts).await;
-                            responder.send(svg_result).ok();
-                        }
-                        VlConvertCommand::VlToSg {
-                            vl_spec,
-                            vl_opts,
-                            responder,
-                        } => {
-                            let sg_result = inner.vegalite_to_scenegraph(vl_spec, vl_opts).await;
-                            responder.send(sg_result).ok();
-                        }
-                        VlConvertCommand::VlToSgMsgpack {
-                            vl_spec,
-                            vl_opts,
-                            responder,
-                        } => {
-                            let sg_result =
-                                inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await;
-                            responder.send(sg_result).ok();
-                        }
-                        VlConvertCommand::VgToPng {
-                            vg_spec,
-                            vg_opts,
-                            scale,
-                            ppi,
-                            responder,
-                        } => {
-                            let png_result = match vg_spec.to_value() {
-                                Ok(v) => inner.vega_to_png(&v, vg_opts, scale, ppi).await,
-                                Err(e) => Err(e),
-                            };
-                            responder.send(png_result).ok();
-                        }
-                        VlConvertCommand::VlToPng {
-                            vl_spec,
-                            vl_opts,
-                            scale,
-                            ppi,
-                            responder,
-                        } => {
-                            let png_result = match vl_spec.to_value() {
-                                Ok(v) => inner.vegalite_to_png(&v, vl_opts, scale, ppi).await,
-                                Err(e) => Err(e),
-                            };
-                            responder.send(png_result).ok();
-                        }
-                        VlConvertCommand::GetLocalTz { responder } => {
-                            let local_tz = inner.get_local_tz().await;
-                            responder.send(local_tz).ok();
-                        }
-                        VlConvertCommand::GetThemes { responder } => {
-                            let themes = inner.get_themes().await;
-                            responder.send(themes).ok();
-                        }
-                    }
-                }
-                Ok::<(), AnyError>(())
-            })?;
-
-            Ok(())
-        }));
-
         Self {
-            sender,
-            _handle: handle,
+            sender: VL_CONVERTER_RUNTIME.sender.clone(),
+            _handle: VL_CONVERTER_RUNTIME._handle.clone(),
             _vegaembed_bundles: Default::default(),
         }
     }

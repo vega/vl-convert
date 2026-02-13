@@ -3,6 +3,7 @@ use crate::anyhow::anyhow;
 use crate::image_loading::custom_string_resolver;
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use usvg::fontdb::Database;
 use usvg::{
@@ -10,6 +11,10 @@ use usvg::{
     ImageHrefResolver,
 };
 use vl_convert_canvas2d::font_config::{font_config_to_fontdb, CustomFont, FontConfig};
+
+/// Monotonically increasing version counter for font configuration changes.
+/// Incremented each time `register_font_directory` is called.
+pub static FONT_CONFIG_VERSION: AtomicU64 = AtomicU64::new(0);
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
@@ -280,6 +285,9 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
         font_db.load_fonts_dir(dir);
         setup_default_fonts(font_db);
     }
+
+    // Bump version so the shared worker knows to refresh its cached SharedFontConfig
+    FONT_CONFIG_VERSION.fetch_add(1, Ordering::Release);
 
     Ok(())
 }

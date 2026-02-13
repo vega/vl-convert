@@ -29,15 +29,19 @@ use vl_convert_canvas2d::Canvas2dContext;
 /// If a SharedFontConfig is available in OpState, it will be used for the canvas.
 #[op2(fast)]
 pub fn op_canvas_create(state: &mut OpState, width: u32, height: u32) -> Result<u32, JsErrorBox> {
+    let font_config_version = state
+        .try_borrow::<SharedFontConfig>()
+        .map(|c| c.version)
+        .unwrap_or(0);
     let ctx = if let Some(shared_config) = state.try_borrow::<SharedFontConfig>() {
-        Canvas2dContext::with_resolved(width, height, &shared_config.0)
+        Canvas2dContext::with_resolved(width, height, &shared_config.resolved)
             .map_err(|e| JsErrorBox::generic(format!("Failed to create canvas: {}", e)))?
     } else {
         Canvas2dContext::new(width, height)
             .map_err(|e| JsErrorBox::generic(format!("Failed to create canvas: {}", e)))?
     };
 
-    let resource = CanvasResource::new(ctx);
+    let resource = CanvasResource::new(ctx, font_config_version);
     let rid = state.resource_table.add(resource);
     Ok(rid)
 }

@@ -137,6 +137,18 @@ impl Canvas2dContext {
         })
     }
 
+    /// Replace the font database used for text measurement and rendering.
+    ///
+    /// Call this when the shared font configuration has changed (e.g., new font
+    /// directories were registered) so that existing canvas contexts pick up the
+    /// updated fonts.
+    pub fn update_font_database(&mut self, resolved: &ResolvedFontConfig) {
+        self.font_system =
+            FontSystem::new_with_locale_and_db("en".to_string(), resolved.fontdb.clone());
+        self.swash_cache = SwashCache::new();
+        self.hinting_enabled = resolved.hinting_enabled;
+    }
+
     /// Get canvas width.
     pub fn width(&self) -> u32 {
         self.width
