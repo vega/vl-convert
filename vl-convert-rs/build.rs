@@ -3,16 +3,6 @@
 //! Generates a V8 snapshot at build time that embeds the deno_runtime extensions
 //! PLUS our vl_convert_runtime extension. This is required for container compatibility
 //! (manylinux, slim images) and improves startup performance.
-//!
-//! Uses `deno_runtime::snapshot::create_runtime_snapshot()` which:
-//! 1. Includes all deno_runtime extensions in the correct order
-//! 2. Allows adding custom extensions at the end
-//! 3. Produces a snapshot compatible with MainWorker
-//!
-//! Key insight: Ops are never *called* during snapshot creation - they're just
-//! registered. So we can use the real implementations from vl-convert-canvas2d-deno
-//! in both build.rs and runtime.
-
 use deno_core::extension;
 use deno_core::op2;
 use deno_error::JsErrorBox;
