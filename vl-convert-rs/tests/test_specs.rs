@@ -34,6 +34,18 @@ fn load_vl_spec(name: &str) -> serde_json::Value {
         .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", spec_path))
 }
 
+fn load_vg_spec(name: &str) -> serde_json::Value {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let spec_path = root_path
+        .join("tests")
+        .join("specs")
+        .join(format!("{}.vg.json", name));
+    let spec_str =
+        fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
+    serde_json::from_str(&spec_str)
+        .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", spec_path))
+}
+
 fn load_locale(
     format_name: &str,
     time_format_name: &str,
@@ -324,6 +336,83 @@ fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8])
         }
     } else {
         let path = write_failed_png(name, vl_version, theme, img);
+        panic!(
+            "Baseline image does not exist for {}.png. Failed image written to {:?}",
+            name, path
+        )
+    }
+}
+
+fn make_expected_vg_png_path(name: &str) -> PathBuf {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    root_path
+        .join("tests")
+        .join("specs")
+        .join("expected")
+        .join(format!("{}.png", name))
+}
+
+fn load_expected_vg_png_dssim(name: &str) -> Option<DssimImage<f32>> {
+    let spec_path = make_expected_vg_png_path(name);
+    dssim::load_image(&Dssim::new(), spec_path).ok()
+}
+
+fn write_failed_vg_png(name: &str, img: &[u8]) -> PathBuf {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let failed_dir = root_path.join("tests").join("specs").join("failed");
+
+    fs::create_dir_all(failed_dir.clone()).unwrap();
+
+    let file_path = failed_dir.join(format!("{}.png", name));
+
+    let mut file = fs::File::create(file_path.clone()).unwrap();
+    file.write_all(img).unwrap();
+    file_path
+}
+
+fn check_vg_png(name: &str, img: &[u8]) {
+    let expected_dssim = load_expected_vg_png_dssim(name);
+    if let Some(expected_dssim) = expected_dssim {
+        match to_dssim(img) {
+            Ok(img_dssim) => {
+                let attr = Dssim::new();
+
+                // Wrap the comparison in a panic-catching block to handle size mismatches
+                let comparison_result =
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        attr.compare(&expected_dssim, img_dssim)
+                    }));
+
+                match comparison_result {
+                    Ok((diff, _)) => {
+                        if diff > 0.00011 {
+                            println!("DSSIM diff {diff}");
+                            let path = write_failed_vg_png(name, img);
+                            panic!(
+                                "Images don't match for {}.png. Failed image written to {:?}",
+                                name, path
+                            )
+                        }
+                    }
+                    Err(_) => {
+                        let path = write_failed_vg_png(name, img);
+                        panic!(
+                            "Image size mismatch for {}.png (cannot compare different sized images). Failed image written to {:?}",
+                            name, path
+                        )
+                    }
+                }
+            }
+            Err(e) => {
+                let path = write_failed_vg_png(name, img);
+                panic!(
+                    "Failed to process image for {}.png: {}. Failed image written to {:?}",
+                    name, e, path
+                )
+            }
+        }
+    } else {
+        let path = write_failed_vg_png(name, img);
         panic!(
             "Baseline image does not exist for {}.png. Failed image written to {:?}",
             name, path
@@ -909,6 +998,34 @@ mod test_jpeg {
         // Convert directly to JPEG
         let jpeg_bytes = block_on(converter.vegalite_to_jpeg(vl_spec, VlOpts{vl_version, ..Default::default()}, None, None)).unwrap();
         assert_eq!(&jpeg_bytes.as_slice()[..10], b"\xff\xd8\xff\xe0\x00\x10JFIF");
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[rustfmt::skip]
+mod test_vega_label_transform {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::VlConverter;
+
+    #[rstest(name, scale,
+        case("label_transform_test", 1.0),
+        case("label_scatter_plot", 1.0),
+        case("label_movies_scatter", 1.0),
+    )]
+    fn test(name: &str, scale: f32) {
+        initialize();
+
+        let vg_spec = load_vg_spec(name);
+        let mut converter = VlConverter::new();
+
+        let png_data = block_on(
+            converter.vega_to_png(vg_spec, Default::default(), Some(scale), None)
+        ).unwrap();
+
+        check_vg_png(name, png_data.as_slice());
     }
 
     #[test]

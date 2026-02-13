@@ -1,0 +1,50 @@
+{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "width": 400,
+  "height": 200,
+  "data": [
+    {
+      "name": "points",
+      "values": [
+        {"x": 50, "y": 50, "label": "Point A"},
+        {"x": 100, "y": 80, "label": "Point B"},
+        {"x": 150, "y": 60, "label": "Point C overlapping"}
+      ]
+    }
+  ],
+  "marks": [
+    {
+      "name": "symbols",
+      "type": "symbol",
+      "from": {"data": "points"},
+      "encode": {
+        "enter": {
+          "x": {"field": "x"},
+          "y": {"field": "y"},
+          "size": {"value": 100}
+        }
+      }
+    },
+    {
+      "type": "text",
+      "from": {"data": "points"},
+      "encode": {
+        "enter": {
+          "x": {"field": "x"},
+          "y": {"field": "y"},
+          "text": {"field": "label"},
+          "fontSize": {"value": 12}
+        }
+      },
+      "transform": [
+        {
+          "type": "label",
+          "avoidMarks": ["symbols"],
+          "anchor": ["top", "bottom", "right", "left"],
+          "offset": [8],
+          "size": {"signal": "[width, height]"}
+        }
+      ]
+    }
+  ]
+}

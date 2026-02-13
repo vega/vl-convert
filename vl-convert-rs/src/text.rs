@@ -1,21 +1,19 @@
 use crate::anyhow;
-use crate::anyhow::{anyhow, bail};
+use crate::anyhow::anyhow;
 use crate::image_loading::custom_string_resolver;
-use deno_core::error::AnyError;
-use deno_core::op2;
-use deno_error::JsErrorBox;
-use serde::Deserialize;
-use serde_json::Value;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use usvg::fontdb::Database;
 use usvg::{
     FallbackSelectionFn, FontFamily, FontResolver, FontSelectionFn, FontStretch, FontStyle,
     ImageHrefResolver,
 };
+use vl_convert_canvas2d::font_config::{font_config_to_fontdb, CustomFont, FontConfig};
 
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
+    pub static ref FONT_CONFIG: Mutex<FontConfig> = Mutex::new(build_default_font_config());
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -26,6 +24,35 @@ const LIBERATION_SANS_ITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-Italic.ttf");
 const LIBERATION_SANS_BOLDITALIC: &[u8] =
     include_bytes!("../fonts/liberation-sans/LiberationSans-BoldItalic.ttf");
+
+/// Build the default FontConfig with vendored Liberation Sans fonts,
+/// system fonts enabled, and standard generic family mappings.
+pub fn build_default_font_config() -> FontConfig {
+    let liberation_fonts = vec![
+        CustomFont {
+            data: Arc::new(Vec::from(LIBERATION_SANS_REGULAR)),
+            family_name: None,
+        },
+        CustomFont {
+            data: Arc::new(Vec::from(LIBERATION_SANS_BOLD)),
+            family_name: None,
+        },
+        CustomFont {
+            data: Arc::new(Vec::from(LIBERATION_SANS_ITALIC)),
+            family_name: None,
+        },
+        CustomFont {
+            data: Arc::new(Vec::from(LIBERATION_SANS_BOLDITALIC)),
+            family_name: None,
+        },
+    ];
+
+    FontConfig {
+        custom_fonts: liberation_fonts,
+        load_system_fonts: true,
+        ..FontConfig::default()
+    }
+}
 
 fn init_usvg_options() -> usvg::Options<'static> {
     let image_href_resolver = ImageHrefResolver {
@@ -38,29 +65,15 @@ fn init_usvg_options() -> usvg::Options<'static> {
         select_fallback: custom_fallback_selector(),
     };
 
+    let font_config = build_default_font_config();
+    let fontdb = font_config_to_fontdb(&font_config);
+
     usvg::Options {
         image_href_resolver,
-        fontdb: Arc::new(init_font_db()),
+        fontdb: Arc::new(fontdb),
         font_resolver,
         ..Default::default()
     }
-}
-
-fn init_font_db() -> Database {
-    let mut font_database = Database::new();
-    // Load fonts from the operating system
-    font_database.load_system_fonts();
-
-    // Set default sans-serif font family.
-    // By default, Vega outputs SVGs with "sans-serif" as the font family, so
-    // we vendor the "Liberation Sans" font so that there is always a fallback
-    font_database.load_font_data(Vec::from(LIBERATION_SANS_REGULAR));
-    font_database.load_font_data(Vec::from(LIBERATION_SANS_BOLD));
-    font_database.load_font_data(Vec::from(LIBERATION_SANS_ITALIC));
-    font_database.load_font_data(Vec::from(LIBERATION_SANS_BOLDITALIC));
-
-    setup_default_fonts(&mut font_database);
-    font_database
 }
 
 fn setup_default_fonts(fontdb: &mut Database) {
@@ -244,169 +257,29 @@ pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
     })
 }
 
-#[derive(Deserialize, Clone, Debug)]
-struct TextInfo {
-    style: Option<String>,
-    variant: Option<String>,
-    weight: Option<String>,
-    family: Option<String>,
-    size: f64,
-    text: Option<Value>,
-}
-
-impl TextInfo {
-    pub fn to_svg(&self) -> String {
-        let mut text_attrs: Vec<String> = Vec::new();
-
-        text_attrs.push(format!("font-size=\"{}\"", self.size));
-
-        if let Some(family) = &self.family {
-            // Remove quotes since usvg can't handle them
-            let family = family.replace(['"', '\''], "");
-            text_attrs.push(format!("font-family=\"{}\"", family));
-        }
-
-        if let Some(weight) = &self.weight {
-            text_attrs.push(format!("font-weight=\"{}\"", weight));
-        }
-
-        if let Some(style) = &self.style {
-            text_attrs.push(format!("font-style=\"{}\"", style));
-        }
-
-        if let Some(variant) = &self.variant {
-            text_attrs.push(format!("font-variant=\"{}\"", variant));
-        }
-
-        let text_attrs_str = text_attrs.join(" ");
-        let mut escaped_text = String::new();
-
-        let text = match &self.text {
-            Some(Value::String(s)) => s.to_string(),
-            Some(text) => text.to_string(),
-            None => "".to_string(),
-        };
-
-        for char in text.chars() {
-            match char {
-                '<' => escaped_text.push_str("&lt;"),
-                '>' => escaped_text.push_str("&gt;"),
-                '"' => escaped_text.push_str("&quot;"),
-                '\'' => escaped_text.push_str("&apos;"),
-                '&' => escaped_text.push_str("&amp;"),
-                '\n' => escaped_text.push_str("&#xA;"),
-                '\r' => escaped_text.push_str("&#xD;"),
-                _ => escaped_text.push(char),
-            }
-        }
-
-        format!(
-            r#"
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100" height="100">
-    <text x="20" y="50" {text_attrs_str}>{escaped_text}</text>
-</svg>"#,
-            text_attrs_str = text_attrs_str,
-            escaped_text = escaped_text
-        )
-    }
-
-    /// Strip potentially unsupported font properties, replace with a supported font,
-    /// replace text with zeros
-    fn fallback(&self) -> Self {
-        let mut new = self.clone();
-        new.text = new
-            .text
-            .map(|t| Value::String(String::from_utf8(vec![b'0'; t.to_string().len()]).unwrap()));
-        new.style = None;
-        new.family = Some("sans-serif".to_string());
-        new.variant = None;
-        new.weight = None;
-        new
-    }
-}
-
-#[op2(fast)]
-pub fn op_text_width(#[string] text_info_str: String) -> Result<f64, JsErrorBox> {
-    let text_info = match serde_json::from_str::<TextInfo>(&text_info_str) {
-        Ok(text_info) => text_info,
-        Err(err) => {
-            return Err(JsErrorBox::generic(format!(
-                "Failed to deserialize text info: {}",
-                err
-            )))
-        }
-    };
-
-    // Return width zero for text with non-positive size
-    if text_info.size <= 0.0 {
-        return Ok(0.0);
-    }
-
-    // Return width zero for empty strings and missing text
-    match &text_info.text {
-        Some(Value::String(text)) => {
-            if text.trim().is_empty() {
-                return Ok(0.0);
-            }
-        }
-        None => {
-            return Ok(0.0);
-        }
-        _ => {}
-    }
-
-    let svg = text_info.to_svg();
-    if let Ok(width) = extract_text_width(&svg) {
-        Ok(width)
-    } else {
-        // Try falling back to a supported text info
-        let text_info = text_info.fallback();
-        let svg = text_info.to_svg();
-        extract_text_width(&svg).map_err(|e| JsErrorBox::generic(e.to_string()))
-    }
-}
-
-fn extract_text_width(svg: &String) -> Result<f64, AnyError> {
-    let opts = USVG_OPTIONS
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
-
-    let rtree = usvg::Tree::from_str(svg, &opts).expect("Failed to parse text SVG");
-
-    // Children instead of descendents ok?
-    for node in rtree.root().children() {
-        // Text bboxes are different from path bboxes.
-        if let usvg::Node::Text(ref text) = node {
-            let bbox = text.bounding_box();
-            let width = bbox.right() - bbox.left();
-            let _height = bbox.bottom() - bbox.top();
-            return Ok(width as f64);
-        }
-    }
-
-    let node_strs: Vec<_> = rtree
-        .root()
-        .children()
-        .iter()
-        .map(|node| format!("{:?}", node))
-        .collect();
-    bail!("Failed to locate text in SVG:\n{}\n{:?}", svg, node_strs)
-}
-
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
-    let mut opts = USVG_OPTIONS
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
+    // Update FONT_CONFIG so new canvas contexts see the registered directory
+    {
+        let mut font_config = FONT_CONFIG
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
+        font_config.font_dirs.push(PathBuf::from(dir));
+    }
 
-    // Get mutable reference to font_db. This should always be successful since
-    // we're holding the mutex on USVG_OPTIONS
-    let Some(font_db) = Arc::get_mut(&mut opts.fontdb) else {
-        return Err(anyhow!("Could not acquire font_db reference"));
-    };
+    // Update USVG_OPTIONS fontdb incrementally (no full rebuild)
+    {
+        let mut opts = USVG_OPTIONS
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
 
-    // Load fonts
-    font_db.load_fonts_dir(dir);
-    setup_default_fonts(font_db);
+        // Get mutable reference to font_db. Use Arc::make_mut which will clone the
+        // database if there are other references (e.g., from canvas contexts).
+        let font_db = Arc::make_mut(&mut opts.fontdb);
+
+        // Load fonts incrementally
+        font_db.load_fonts_dir(dir);
+        setup_default_fonts(font_db);
+    }
 
     Ok(())
 }

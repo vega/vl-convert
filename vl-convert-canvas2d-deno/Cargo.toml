@@ -1,0 +1,40 @@
+[package]
+name = "vl-convert-canvas2d-deno"
+version = "1.9.0"
+edition = "2021"
+description = "Deno extension for Canvas 2D API wrapping vl-convert-canvas2d"
+license = "BSD-3-Clause"
+repository = "https://github.com/vega/vl-convert"
+readme = "README.md"
+keywords = ["canvas", "2d", "deno", "graphics"]
+
+[features]
+default = []
+svg = ["dep:resvg", "dep:usvg"]
+
+[dependencies]
+# Deno runtime for ops and extension macro
+deno_core = { workspace = true }
+deno_error = { workspace = true }
+
+# Canvas 2D implementation
+vl-convert-canvas2d = { path = "../vl-convert-canvas2d" }
+
+# For gradient color parsing
+csscolorparser = "0.7"
+
+# For image data handling
+tiny-skia = { workspace = true }
+
+# For image decoding
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+
+# For serialization
+serde = { version = "1.0", features = ["derive"] }
+
+# For logging
+log = { workspace = true }
+
+# For SVG image decoding (optional)
+resvg = { workspace = true, optional = true }
+usvg = { workspace = true, optional = true }

@@ -1,0 +1,46 @@
+[package]
+name = "vl-convert-canvas2d"
+version = "1.9.0"
+edition = "2021"
+description = "Pure Rust Canvas 2D API implementation using tiny-skia and cosmic-text"
+license = "BSD-3-Clause"
+repository = "https://github.com/vega/vl-convert"
+readme = "README.md"
+keywords = ["canvas", "2d", "graphics", "tiny-skia"]
+
+[dependencies]
+# Graphics rendering
+tiny-skia = { workspace = true }
+
+# Text shaping and measurement
+cosmic-text = "0.16"
+
+# Font database (shared with vl-convert-rs via usvg)
+fontdb = { workspace = true }
+
+# PNG encoding
+png = { workspace = true }
+
+# CSS color parsing
+csscolorparser = "0.7"
+
+# SVG path parsing (for Path2D from SVG string)
+svgtypes = "0.16"
+
+# Arc-to-cubic-bezier conversion
+kurbo = "0.13"
+
+# Error handling
+thiserror = "2"
+
+# Logging
+log = { workspace = true }
+
+[dev-dependencies]
+# For testing
+rstest = { workspace = true }
+
+# For image comparison tests
+image = "0.25"
+pixelmatch = "0.1.0"
+tempfile = "3"

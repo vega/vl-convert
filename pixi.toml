@@ -17,6 +17,7 @@ test-cli = "cargo test -p vl-convert"
 test-rs = "cargo test -p vl-convert-rs -- --test-threads=1"
 
 fmt-py = "ruff format vl-convert-python"
+build-node-canvas = { cmd = "cd vl-convert-canvas2d/tests/node_baseline && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig npm install" }
 fmt-py-check = "ruff format vl-convert-python --check"
 fmt-rs = "cargo fmt --all"
 fmt-rs-check = "cargo fmt --all -- --check"
@@ -68,3 +69,19 @@ altair_tiles = ">=0.3.0,<0.4"
 geopandas = ">=0.14.3,<0.15"
 jupyterlab = ">=4.0.11,<4.1"
 libffi = ">=3.4.6,<4"
+nodejs = ">=20,<21"
+
+[target.osx-arm64.dependencies]
+# These dependencies are for building node-canvas from source on Apple Silicon
+pkg-config = ">=0.29,<1"
+cairo = ">=1.16,<2"
+pango = ">=1.50,<2"
+libpng = ">=1.6,<2"
+libjpeg-turbo = ">=3,<4"
+giflib = ">=5.2,<6"
+libglib = ">=2.76,<3"
+glib = ">=2.76,<3"
+expat = ">=2.5,<3"
+fontconfig = ">=2.14,<3"
+freetype = ">=2.12,<3"
+pixman = ">=0.42,<1"

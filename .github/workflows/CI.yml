@@ -290,11 +290,7 @@ jobs:
           cargo test -p vl-convert -- --test-threads=1
 
       # HTML bundle validation with Chrome headless
-      - name: Build CLI for HTML validation
-        env:
-          RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
-        run: cargo build -p vl-convert
-
+      # Use debug build (already built by tests) to avoid disk space issues
       - name: Generate HTML files (bundled and unbundled)
         run: |
           mkdir -p html-validation
@@ -350,7 +346,7 @@ jobs:
           path: |
             vl-convert-rs/tests/vl-specs/failed
 
-  # Run Windows/macOS tests without Pixi to avoid environment issues with V8 and aws-lc-sys
+        # Run Windows/macOS tests without Pixi to avoid environment issues with V8 and aws-lc-sys
   vl-convert-rs-tests:
     runs-on: ${{ matrix.os }}
     strategy:

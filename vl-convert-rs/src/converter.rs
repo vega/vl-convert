@@ -1,10 +1,6 @@
 use crate::deno_stubs::{NoOpInNpmPackageChecker, NoOpNpmPackageFolderResolver, VlConvertNodeSys};
-use crate::module_loader::import_map::{
-    msgpack_url, url_for_path, vega_themes_url, vega_url, VlVersion,
-};
-use crate::module_loader::{
-    VlConvertModuleLoader, FORMATE_LOCALE_MAP, IMPORT_MAP, TIME_FORMATE_LOCALE_MAP,
-};
+use crate::module_loader::import_map::{msgpack_url, vega_themes_url, vega_url, VlVersion};
+use crate::module_loader::{VlConvertModuleLoader, FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 
 use deno_core::anyhow::bail;
 use deno_core::error::AnyError;
@@ -40,24 +36,21 @@ use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::text::{op_text_width, USVG_OPTIONS};
+use crate::text::{FONT_CONFIG, USVG_OPTIONS};
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
-// We only need to expose a few custom ops on globalThis
+// Canvas 2D ops are now in the separate vl_convert_canvas2d extension from vl-convert-canvas2d-deno
 deno_core::extension!(
     vl_convert_runtime,
-    ops = [op_get_json_arg, op_set_msgpack_result, op_text_width],
+    ops = [
+        op_get_json_arg,
+        op_set_msgpack_result,
+    ],
     esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
-    esm = ["ext:vl_convert_runtime/bootstrap.js" = {
-        source = r#"
-                import { op_text_width, op_get_json_arg, op_set_msgpack_result } from "ext:core/ops";
-
-                // Expose our custom ops on globalThis for vega-scenegraph text measurement
-                globalThis.op_text_width = op_text_width;
-                globalThis.op_get_json_arg = op_get_json_arg;
-                globalThis.op_set_msgpack_result = op_set_msgpack_result;
-            "#
-    }],
+    esm = [
+        dir "src/js",
+        "bootstrap.js",
+    ],
 );
 
 // Arguments are passed to V8 as JSON strings via Deno ops and parsed in JS.
@@ -101,6 +94,16 @@ impl From<&serde_json::Value> for ValueOrString {
 impl From<String> for ValueOrString {
     fn from(s: String) -> Self {
         ValueOrString::JsonString(s)
+    }
+}
+
+impl ValueOrString {
+    /// Convert to a serde_json::Value, parsing if necessary.
+    pub fn to_value(self) -> Result<serde_json::Value, AnyError> {
+        match self {
+            ValueOrString::Value(v) => Ok(v),
+            ValueOrString::JsonString(s) => Ok(serde_json::from_str(&s)?),
+        }
     }
 }
 
@@ -412,43 +415,6 @@ class WarningCollector {
                 .run_event_loop(Default::default())
                 .await?;
 
-            // Override text width measurement in vega-scenegraph
-            for path in IMPORT_MAP.keys() {
-                if path.contains("vega-scenegraph@") {
-                    let script_code = format!(
-                        r#"
-import('{url}').then((sg) => {{
-    sg.textMetrics.width = (item, text) => {{
-        let style = item.fontStyle;
-        let variant = item.fontVariant;
-
-        // weight may be string like "bold" or number like 600.
-        // Convert number form to string
-        let weight = item.fontWeight == null? null: String(item.fontWeight);
-        let size = sg.fontSize(item);
-        let family = sg.fontFamily(item);
-
-        let text_info = JSON.stringify({{
-            style, variant, weight, size, family, text
-        }}, null, 2);
-
-        let fullWidth = op_text_width(text_info);
-        return item.limit > 0? Math.min(fullWidth, item.limit): fullWidth
-    }};
-}})
-"#,
-                        url = url_for_path(path)
-                    );
-                    self.worker
-                        .js_runtime
-                        .execute_script("ext:<anon>", script_code)?;
-                    self.worker
-                        .js_runtime
-                        .run_event_loop(Default::default())
-                        .await?;
-                }
-            }
-
             // Create and initialize svg function string
             let function_str = r#"
 function vegaToView(vgSpec, allowedBaseUrls, errors) {
@@ -594,6 +560,39 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
     });
     return scenegraphPromise
 }
+
+function vegaToViewCanvas(vgSpec, allowedBaseUrls, errors) {
+    // Use the same view setup as vegaToView, since toCanvas() creates its own renderer
+    return vegaToView(vgSpec, allowedBaseUrls, errors);
+}
+
+function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, scale, errors) {
+    if (formatLocale != null) {
+        vega.formatLocale(formatLocale);
+    }
+    if (timeFormatLocale != null) {
+        vega.timeFormatLocale(timeFormatLocale);
+    }
+
+    let view = vegaToViewCanvas(vgSpec, allowedBaseUrls, errors);
+    let canvasPromise = view.runAsync().then(() => {
+        try {
+            // Workaround for https://github.com/vega/vega/issues/3481
+            view.signal("geo_interval_init_tick", {});
+        } catch (e) {
+            // No geo_interval_init_tick signal
+        }
+    }).then(() => {
+        return view.runAsync().then(
+            // Pass scale factor to toCanvas
+            () => view.toCanvas(scale)
+        ).finally(() => {
+            view.finalize();
+            vega.resetDefaultLocale();
+        })
+    });
+    return canvasPromise;
+}
 "#;
             self.worker.js_runtime.execute_script(
                 "ext:<anon>",
@@ -664,6 +663,11 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
     return vegaToScenegraph(vgSpec, allowedBaseUrls,formatLocale, timeFormatLocale,  errors)
 }}
+
+function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBaseUrls, formatLocale, timeFormatLocale, scale, errors) {{
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
+    return vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, scale, errors)
+}}
 "#,
                 ver_name = format!("{:?}", vl_version),
             );
@@ -720,17 +724,34 @@ function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, allowe
             bundle_provider: None,
         };
 
-        // Configure WorkerOptions with our custom extension and V8 snapshot.
+        // Configure WorkerOptions with our custom extensions and V8 snapshot.
         // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
         // This is required for container compatibility (manylinux, slim images).
         let options = WorkerOptions {
-            extensions: vec![vl_convert_runtime::init()],
+            extensions: vec![
+                // Canvas 2D extension from vl-convert-canvas2d-deno crate
+                vl_convert_canvas2d_deno::vl_convert_canvas2d::init(),
+                // Our runtime extension (text width, JSON args)
+                vl_convert_runtime::init(),
+            ],
             startup_snapshot: Some(crate::VL_CONVERT_SNAPSHOT),
             ..Default::default()
         };
 
         // Create the MainWorker with full Web API support
         let worker = MainWorker::bootstrap_from_options(&main_module, services, options);
+
+        // Add shared font config to OpState so canvas contexts use the same fonts as SVG rendering.
+        // We resolve the FontConfig into a fontdb once here; each canvas context then clones
+        // the cached database instead of re-scanning system fonts.
+        {
+            let font_config = FONT_CONFIG
+                .lock()
+                .map_err(|e| anyhow!("Failed to acquire FONT_CONFIG lock: {}", e))?;
+            let resolved = font_config.resolve();
+            let shared_config = vl_convert_canvas2d_deno::SharedFontConfig::new(resolved);
+            worker.js_runtime.op_state().borrow_mut().put(shared_config);
+        }
 
         let this = Self {
             worker,
@@ -1118,6 +1139,146 @@ delete themes.default
         let value = self.execute_script_to_json("themes").await?;
         Ok(value)
     }
+
+    async fn execute_script_to_bytes(&mut self, script: &str) -> Result<Vec<u8>, AnyError> {
+        let code = script.to_string();
+        let res = self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
+
+        deno_core::scope!(scope, self.worker.js_runtime);
+        let local = v8::Local::new(scope, res);
+
+        // Deserialize typed-array data to bytes directly.
+        let bytes = serde_v8::from_v8::<serde_v8::JsBuffer>(scope, local)?;
+        Ok(bytes.to_vec())
+    }
+
+    pub async fn vega_to_png(
+        &mut self,
+        vg_spec: &serde_json::Value,
+        vg_opts: VgOpts,
+        scale: f32,
+        ppi: f32,
+    ) -> Result<Vec<u8>, AnyError> {
+        self.init_vega().await?;
+        let allowed_base_urls =
+            serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
+
+        let format_locale = match vg_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vg_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let arg_id = set_json_arg(vg_spec.clone())?;
+        let format_locale_id = set_json_arg(format_locale)?;
+        let time_format_locale_id = set_json_arg(time_format_locale)?;
+
+        let code = format!(
+            r#"
+var canvasPngData;
+var errors = [];
+vegaToCanvas(
+    JSON.parse(op_get_json_arg({arg_id})),
+    {allowed_base_urls},
+    JSON.parse(op_get_json_arg({format_locale_id})),
+    JSON.parse(op_get_json_arg({time_format_locale_id})),
+    {scale},
+    errors,
+).then((canvas) => {{
+    if (errors != null && errors.length > 0) {{
+        throw new Error(`${{errors}}`);
+    }}
+    canvasPngData = canvas._toPngWithPpi({ppi});
+}})
+"#
+        );
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
+
+        let png_data = self.execute_script_to_bytes("canvasPngData").await?;
+        Ok(png_data)
+    }
+
+    pub async fn vegalite_to_png(
+        &mut self,
+        vl_spec: &serde_json::Value,
+        vl_opts: VlOpts,
+        scale: f32,
+        ppi: f32,
+    ) -> Result<Vec<u8>, AnyError> {
+        self.init_vega().await?;
+        self.init_vl_version(&vl_opts.vl_version).await?;
+
+        let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
+
+        let format_locale = match vl_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let time_format_locale = match vl_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let spec_arg_id = set_json_arg(vl_spec.clone())?;
+        let config_arg_id = set_json_arg(config)?;
+        let format_locale_id = set_json_arg(format_locale)?;
+        let time_format_locale_id = set_json_arg(time_format_locale)?;
+
+        let theme_arg = match &vl_opts.theme {
+            None => "null".to_string(),
+            Some(s) => format!("'{}'", s),
+        };
+
+        let allowed_base_urls =
+            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
+
+        let code = format!(
+            r#"
+var canvasPngData;
+var errors = [];
+vegaLiteToCanvas_{ver_name:?}(
+    JSON.parse(op_get_json_arg({spec_arg_id})),
+    JSON.parse(op_get_json_arg({config_arg_id})),
+    {theme_arg},
+    {show_warnings},
+    {allowed_base_urls},
+    JSON.parse(op_get_json_arg({format_locale_id})),
+    JSON.parse(op_get_json_arg({time_format_locale_id})),
+    {scale},
+    errors,
+).then((canvas) => {{
+    if (errors != null && errors.length > 0) {{
+        throw new Error(`${{errors}}`);
+    }}
+    canvasPngData = canvas._toPngWithPpi({ppi});
+}})
+"#,
+            ver_name = vl_opts.vl_version,
+            show_warnings = vl_opts.show_warnings,
+        );
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
+
+        let png_data = self.execute_script_to_bytes("canvasPngData").await?;
+        Ok(png_data)
+    }
 }
 
 pub enum VlConvertCommand {
@@ -1150,6 +1311,20 @@ pub enum VlConvertCommand {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
+    },
+    VgToPng {
+        vg_spec: ValueOrString,
+        vg_opts: VgOpts,
+        scale: f32,
+        ppi: f32,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    VlToPng {
+        vl_spec: ValueOrString,
+        vl_opts: VlOpts,
+        scale: f32,
+        ppi: f32,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSgMsgpack {
         vl_spec: ValueOrString,
@@ -1279,6 +1454,32 @@ impl VlConverter {
                             let sg_result =
                                 inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await;
                             responder.send(sg_result).ok();
+                        }
+                        VlConvertCommand::VgToPng {
+                            vg_spec,
+                            vg_opts,
+                            scale,
+                            ppi,
+                            responder,
+                        } => {
+                            let png_result = match vg_spec.to_value() {
+                                Ok(v) => inner.vega_to_png(&v, vg_opts, scale, ppi).await,
+                                Err(e) => Err(e),
+                            };
+                            responder.send(png_result).ok();
+                        }
+                        VlConvertCommand::VlToPng {
+                            vl_spec,
+                            vl_opts,
+                            scale,
+                            ppi,
+                            responder,
+                        } => {
+                            let png_result = match vl_spec.to_value() {
+                                Ok(v) => inner.vegalite_to_png(&v, vl_opts, scale, ppi).await,
+                                Err(e) => Err(e),
+                            };
+                            responder.send(png_result).ok();
                         }
                         VlConvertCommand::GetLocalTz { responder } => {
                             let local_tz = inner.get_local_tz().await;
@@ -1521,8 +1722,34 @@ impl VlConverter {
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
-        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        svg_to_png(&svg, scale, ppi)
+        let ppi = ppi.unwrap_or(72.0);
+        // Calculate effective scale: combine user scale with ppi adjustment
+        let effective_scale = scale * ppi / 72.0;
+
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
+        let cmd = VlConvertCommand::VgToPng {
+            vg_spec: vg_spec.into(),
+            vg_opts,
+            scale: effective_scale,
+            ppi,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send PNG conversion request: {err}")
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(png_result) => png_result,
+            Err(err) => bail!("Failed to retrieve PNG conversion result: {err}"),
+        }
     }
 
     pub async fn vegalite_to_png(
@@ -1533,8 +1760,34 @@ impl VlConverter {
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
-        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        svg_to_png(&svg, scale, ppi)
+        let ppi = ppi.unwrap_or(72.0);
+        // Calculate effective scale: combine user scale with ppi adjustment
+        let effective_scale = scale * ppi / 72.0;
+
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
+        let cmd = VlConvertCommand::VlToPng {
+            vl_spec: vl_spec.into(),
+            vl_opts,
+            scale: effective_scale,
+            ppi,
+            responder: resp_tx,
+        };
+
+        // Send request
+        match self.sender.send(cmd).await {
+            Ok(_) => {
+                // All good
+            }
+            Err(err) => {
+                bail!("Failed to send PNG conversion request: {err}")
+            }
+        }
+
+        // Wait for result
+        match resp_rx.await {
+            Ok(png_result) => png_result,
+            Err(err) => bail!("Failed to retrieve PNG conversion result: {err}"),
+        }
     }
 
     pub async fn vega_to_jpeg(
@@ -1899,6 +2152,7 @@ pub fn vega_to_url(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[tokio::test]
     async fn test_convert_context() {
@@ -1965,6 +2219,129 @@ mod tests {
             .await
             .unwrap();
         println!("vg_spec2: {}", vg_spec2);
+    }
+
+    #[tokio::test]
+    async fn test_execute_script_to_bytes_typed_array() {
+        let mut ctx = InnerVlConverter::try_new().await.unwrap();
+        let bytes = ctx
+            .execute_script_to_bytes("new Uint8Array([1, 2, 3])")
+            .await
+            .unwrap();
+        assert_eq!(bytes, vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_canvas_png_and_image_data_are_typed_arrays() {
+        let mut ctx = InnerVlConverter::try_new().await.unwrap();
+        let code = r#"
+const canvas = new HTMLCanvasElement(8, 8);
+const ctx2d = canvas.getContext('2d');
+ctx2d.fillStyle = '#ff0000';
+ctx2d.fillRect(0, 0, 8, 8);
+
+var __pngBytes = canvas._toPngWithPpi(72);
+var __pngIsUint8Array = __pngBytes instanceof Uint8Array;
+
+const imageData = ctx2d.getImageData(0, 0, 1, 1);
+var __imageDataChecks = [
+  imageData.data instanceof Uint8ClampedArray,
+  imageData.data[0], imageData.data[1], imageData.data[2], imageData.data[3]
+];
+"#
+        .to_string();
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let png_is_typed = ctx
+            .execute_script_to_json("__pngIsUint8Array")
+            .await
+            .unwrap();
+        assert_eq!(png_is_typed, json!(true));
+
+        let png_bytes = ctx.execute_script_to_bytes("__pngBytes").await.unwrap();
+        assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+        let image_data_checks = ctx
+            .execute_script_to_json("__imageDataChecks")
+            .await
+            .unwrap();
+        assert_eq!(image_data_checks, json!([true, 255, 0, 0, 255]));
+    }
+
+    #[tokio::test]
+    async fn test_polyfill_unsupported_methods_throw() {
+        let mut ctx = InnerVlConverter::try_new().await.unwrap();
+        let code = r#"
+var __unsupportedMessages = [];
+
+// Path2D.addPath is now implemented and should NOT throw
+var addPathSucceeded = false;
+try {
+  new Path2D().addPath(new Path2D());
+  addPathSucceeded = true;
+} catch (err) {
+  addPathSucceeded = false;
+}
+
+const canvas = new HTMLCanvasElement(16, 16);
+const ctx2d = canvas.getContext('2d');
+try {
+  ctx2d.isPointInPath(0, 0);
+} catch (err) {
+  __unsupportedMessages.push(String(err && err.message ? err.message : err));
+}
+try {
+  ctx2d.isPointInStroke(0, 0);
+} catch (err) {
+  __unsupportedMessages.push(String(err && err.message ? err.message : err));
+}
+"#
+        .to_string();
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let messages = ctx
+            .execute_script_to_json("__unsupportedMessages")
+            .await
+            .unwrap()
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+
+        // Path2D.addPath should now succeed (no longer unsupported)
+        let add_path_succeeded = ctx
+            .execute_script_to_json("addPathSucceeded")
+            .await
+            .unwrap();
+        assert_eq!(add_path_succeeded, serde_json::json!(true));
+
+        // isPointInPath and isPointInStroke remain unsupported
+        assert_eq!(messages.len(), 2);
+        assert!(messages[0]
+            .as_str()
+            .unwrap_or_default()
+            .contains("CanvasRenderingContext2D.isPointInPath"));
+        assert!(messages[1]
+            .as_str()
+            .unwrap_or_default()
+            .contains("CanvasRenderingContext2D.isPointInStroke"));
     }
 
     #[test]
