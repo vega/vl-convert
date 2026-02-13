@@ -33,6 +33,8 @@ pub fn op_canvas_set_font(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
+    refresh_canvas_fonts_if_needed(state, &resource);
+
     resource
         .ctx
         .borrow_mut()
