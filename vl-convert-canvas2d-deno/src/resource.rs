@@ -19,6 +19,8 @@ pub struct CanvasResource {
     next_gradient_id: Cell<u32>,
     /// Next pattern ID to assign
     next_pattern_id: Cell<u32>,
+    /// Font config version this canvas was created with (or last updated to).
+    pub font_config_version: Cell<u64>,
 }
 
 /// Resource wrapper for Path2D objects to be stored in Deno's resource table.
@@ -28,13 +30,14 @@ pub struct Path2DResource {
 }
 
 impl CanvasResource {
-    pub fn new(ctx: Canvas2dContext) -> Self {
+    pub fn new(ctx: Canvas2dContext, font_config_version: u64) -> Self {
         Self {
             ctx: RefCell::new(ctx),
             gradients: RefCell::new(HashMap::new()),
             patterns: RefCell::new(HashMap::new()),
             next_gradient_id: Cell::new(1),
             next_pattern_id: Cell::new(1),
+            font_config_version: Cell::new(font_config_version),
         }
     }
 

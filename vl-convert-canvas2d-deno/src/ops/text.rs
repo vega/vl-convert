@@ -1,10 +1,25 @@
 //! Text rendering operations: font, alignment, baseline, measure, fill/stroke text.
 
-use crate::CanvasResource;
+use crate::{CanvasResource, SharedFontConfig};
 use deno_core::op2;
 use deno_core::{OpState, ResourceId};
 use deno_error::JsErrorBox;
 use vl_convert_canvas2d::{FontStretch, TextAlign, TextBaseline};
+
+/// If the shared font configuration has been updated since this canvas was
+/// created (or last refreshed), update the canvas context's font database so
+/// that newly-registered fonts are available for text measurement / rendering.
+fn refresh_canvas_fonts_if_needed(state: &OpState, resource: &CanvasResource) {
+    if let Some(shared_config) = state.try_borrow::<SharedFontConfig>() {
+        if shared_config.version != resource.font_config_version.get() {
+            resource
+                .ctx
+                .borrow_mut()
+                .update_font_database(&shared_config.resolved);
+            resource.font_config_version.set(shared_config.version);
+        }
+    }
+}
 
 /// Set the font from a CSS font string.
 #[op2(fast)]
@@ -17,6 +32,8 @@ pub fn op_canvas_set_font(
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
+
+    refresh_canvas_fonts_if_needed(state, &resource);
 
     resource
         .ctx
@@ -169,6 +186,8 @@ pub fn op_canvas_measure_text(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
+    refresh_canvas_fonts_if_needed(state, &resource);
+
     let metrics = resource
         .ctx
         .borrow_mut()
@@ -192,6 +211,8 @@ pub fn op_canvas_fill_text(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
+    refresh_canvas_fonts_if_needed(state, &resource);
+
     resource
         .ctx
         .borrow_mut()
@@ -212,6 +233,8 @@ pub fn op_canvas_stroke_text(
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
+
+    refresh_canvas_fonts_if_needed(state, &resource);
 
     resource
         .ctx
@@ -235,6 +258,8 @@ pub fn op_canvas_fill_text_max_width(
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
 
+    refresh_canvas_fonts_if_needed(state, &resource);
+
     resource
         .ctx
         .borrow_mut()
@@ -256,6 +281,8 @@ pub fn op_canvas_stroke_text_max_width(
         .resource_table
         .get::<CanvasResource>(ResourceId::from(rid))
         .map_err(|e| JsErrorBox::generic(format!("Invalid canvas resource: {}", e)))?;
+
+    refresh_canvas_fonts_if_needed(state, &resource);
 
     resource
         .ctx

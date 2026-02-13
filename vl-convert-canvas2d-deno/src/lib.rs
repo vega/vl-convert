@@ -19,12 +19,21 @@ pub use resource::{CanvasResource, Path2DResource};
 /// Wraps a pre-built [`ResolvedFontConfig`](::vl_convert_canvas2d::ResolvedFontConfig)
 /// so that canvas contexts clone the cached font database instead of rebuilding
 /// it (and re-scanning system fonts) on every creation.
+///
+/// Includes a version counter so that existing canvas contexts can detect when
+/// the font database has changed and refresh their local copy.
 #[derive(Clone)]
-pub struct SharedFontConfig(pub Arc<::vl_convert_canvas2d::ResolvedFontConfig>);
+pub struct SharedFontConfig {
+    pub resolved: Arc<::vl_convert_canvas2d::ResolvedFontConfig>,
+    pub version: u64,
+}
 
 impl SharedFontConfig {
-    pub fn new(resolved: ::vl_convert_canvas2d::ResolvedFontConfig) -> Self {
-        Self(Arc::new(resolved))
+    pub fn new(resolved: ::vl_convert_canvas2d::ResolvedFontConfig, version: u64) -> Self {
+        Self {
+            resolved: Arc::new(resolved),
+            version,
+        }
     }
 }
 
