@@ -24,25 +24,21 @@ let mut runtime = JsRuntime::new(RuntimeOptions {
 });
 ```
 
-### Sharing a Font Database
+### Sharing a Font Configuration
 
-By default, canvas contexts use system fonts. To share a custom font database (e.g., with additional fonts loaded), put a `SharedFontDb` into the runtime's `OpState` before creating any canvases:
+By default, canvas contexts use system fonts. To share a pre-resolved font configuration (avoiding re-scanning system fonts on every canvas creation), put a `SharedFontConfig` into the runtime's `OpState`:
 
 ```rust
-use std::sync::Arc;
-use vl_convert_canvas2d_deno::SharedFontDb;
+use vl_convert_canvas2d::FontConfig;
+use vl_convert_canvas2d_deno::SharedFontConfig;
 
-// Create and configure your fontdb
-let mut fontdb = fontdb::Database::new();
-fontdb.load_system_fonts();
-fontdb.load_font_file("/path/to/custom/font.ttf")?;
-
-// Wrap in SharedFontDb and put into OpState
-let shared_fontdb = SharedFontDb::from_arc(Arc::new(fontdb));
-runtime.op_state().borrow_mut().put(shared_fontdb);
+let font_config = FontConfig::default();
+let resolved = font_config.resolve();
+let shared_config = SharedFontConfig::new(resolved);
+runtime.op_state().borrow_mut().put(shared_config);
 ```
 
-All subsequent canvas contexts created via JavaScript will use this shared font database.
+All subsequent canvas contexts created via JavaScript will clone the cached font database from this configuration.
 
 ### JavaScript API
 
@@ -79,55 +75,10 @@ const pngData = canvas.toDataURL('image/png');
 - Text: `fillText`, `strokeText`, `measureText`, `font`, `textAlign`, `textBaseline`, `letterSpacing`, `fontStretch`
 - Transforms: `translate`, `rotate`, `scale`, `transform`, `setTransform`, `getTransform`, `resetTransform`
 - Compositing: `globalAlpha`, `globalCompositeOperation`
-- Image operations: `drawImage`, `getImageData`, `putImageData`, `createImageData` (with `ImageDataSettings` validation)
+- Image operations: `drawImage`, `getImageData`, `putImageData`, `createImageData`
 - Image smoothing: `imageSmoothingEnabled`, `imageSmoothingQuality`
 - State: `save`, `restore`, `reset`
 - Gradients: `createLinearGradient`, `createRadialGradient`
 - Patterns: `createPattern`
 - Path2D: all path methods plus `addPath(path, transform)`
-- Not supported: `isPointInPath`, `isPointInStroke` (throw explicit errors)
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     JavaScript (Deno)                        │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  canvas_polyfill.js - Canvas/CanvasRenderingContext2D│    │
-│  └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│              vl-convert-canvas2d-deno (this crate)          │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  ops.rs - Deno ops (op_canvas_*, op_path2d_*)       │    │
-│  │  resource.rs - CanvasResource, Path2DResource       │    │
-│  └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    vl-convert-canvas2d                       │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  Canvas2dContext - Pure Rust Canvas 2D impl         │    │
-│  │  Uses: tiny-skia (rendering), cosmic-text (fonts)   │    │
-│  └─────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Example: vl-convert-rs Integration
-
-[vl-convert-rs](../vl-convert-rs) uses this extension to provide canvas support for Vega/Vega-Lite rendering:
-
-```rust
-// In vl-convert-rs/src/converter.rs
-use vl_convert_canvas2d_deno::SharedFontDb;
-
-// After creating the Deno worker...
-let opts = USVG_OPTIONS.lock()?;
-let shared_fontdb = SharedFontDb::from_arc(opts.fontdb.clone());
-worker.js_runtime.op_state().borrow_mut().put(shared_fontdb);
-```
-
-This allows Vega's canvas renderer to use the same font database as the SVG renderer, ensuring consistent text measurement and rendering.
+- Not supported: `isPointInPath`, `isPointInStroke`
