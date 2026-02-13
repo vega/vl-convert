@@ -28,7 +28,7 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_linux-64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vl-convert-linux-x86
           path: |
@@ -55,7 +55,7 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_linux-aarch64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vl-convert-linux-aarch64
           path: |
@@ -72,7 +72,7 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       # NASM is needed on Windows to compile aws-lc-rs (x86 assembly optimizations),
@@ -89,12 +89,12 @@ jobs:
           Copy-Item "LICENSE" -Destination "artifacts\bin"
           Copy-Item "thirdparty_*" -Destination "artifacts\bin"
       - name: zip executable
-        uses: papeloto/action-zip@v1
+        uses: vimtor/action-zip@v1
         with:
           files: artifacts/
           dest: vl-convert_win-64.zip
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vl-convert-win-64
           path: |
@@ -107,7 +107,7 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
@@ -121,7 +121,7 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_osx-64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vl-convert-osx-64
           path: |
@@ -134,7 +134,7 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
@@ -148,7 +148,7 @@ jobs:
           cp thirdparty_* bin/
           zip -r vl-convert_osx-arm64.zip bin/
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vl-convert-osx-arm64
           path: |
@@ -180,7 +180,7 @@ jobs:
             echo "No pre-built V8 available, will build from source"
           fi
 
-      - uses: messense/maturin-action@v1
+      - uses: messense/maturin-action@v1.50.0
         with:
           manylinux: 2_28
           target: x86_64-unknown-linux-gnu
@@ -205,7 +205,7 @@ jobs:
             bash -c "pip install /dist/*x86_64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wheels-linux-x86_64
           path: dist
@@ -236,7 +236,7 @@ jobs:
             echo "No pre-built V8 available, will build from source"
           fi
 
-      - uses: messense/maturin-action@v1
+      - uses: messense/maturin-action@v1.50.0
         with:
           manylinux: 2_28
           target: aarch64-unknown-linux-gnu
@@ -261,7 +261,7 @@ jobs:
             bash -c "pip install /dist/*aarch64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wheels-linux-aarch64
           path: dist
@@ -273,14 +273,14 @@ jobs:
         run: git config --system core.longpaths true
       - uses: actions/checkout@v4
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       # NASM is needed on Windows to compile aws-lc-rs (x86 assembly optimizations),
       # pulled in via deno_runtime -> deno_tls -> rustls -> aws-lc-rs
       - name: Install NASM
         uses: ilammy/setup-nasm@v1
-      - uses: messense/maturin-action@v1
+      - uses: messense/maturin-action@v1.50.0
         with:
           command: build
           args: --release -m vl-convert-python/Cargo.toml -o dist --strip
@@ -289,7 +289,7 @@ jobs:
           pip install (Get-ChildItem dist/*.whl)
           python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wheels-win-64
           path: dist
@@ -299,7 +299,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Python
@@ -307,7 +307,7 @@ jobs:
         with:
           python-version: "3.10"
       - name: Build Intel wheels
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@v1.50.0
         with:
           command: build
           args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
@@ -317,7 +317,7 @@ jobs:
           pip install dist/*.whl
           python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wheels-osx-64
           path: dist
@@ -327,7 +327,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Python
@@ -335,7 +335,7 @@ jobs:
         with:
           python-version: "3.10"
       - name: Build arm64 wheels
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@v1.50.0
         with:
           command: build
           args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
@@ -344,7 +344,7 @@ jobs:
           pip install dist/*.whl
           python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wheels-osx-arm64
           path: dist
@@ -362,13 +362,13 @@ jobs:
         build-wheels-osx-arm64,
       ]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           pattern: wheels-*
           path: dist/
           merge-multiple: true
       - name: Publish to PyPI
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@v1.50.0
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         with:

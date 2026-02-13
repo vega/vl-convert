@@ -184,7 +184,7 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
-      - uses: prefix-dev/setup-pixi@v0.8.8
+      - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.47.0
       - name: Check cargo fmt compliance
@@ -203,11 +203,11 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           cache-on-failure: True
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check cargo fmt compliance
@@ -222,7 +222,7 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
-      - uses: prefix-dev/setup-pixi@v0.8.8
+      - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.47.0
       - name: Check that license is up to date
@@ -242,12 +242,12 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -332,14 +332,14 @@ jobs:
           echo "All bundled HTML files validated successfully"
 
       - name: Upload HTML validation screenshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: html-validation-screenshots
           path: html-validation/
 
       - name: Upload test failures
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: failed-images-linux
@@ -367,12 +367,12 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install NASM (Windows)
@@ -383,7 +383,7 @@ jobs:
       - name: Run CLI tests
         run: cargo test -p vl-convert -- --test-threads=1
       - name: Upload test failures
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: failed-images-${{ matrix.os }}
@@ -404,12 +404,12 @@ jobs:
         with:
           python-version: "3.10"
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
       - name: Install Protoc
-        uses: arduino/setup-protoc@v2
+        uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install fonts on Linux
@@ -470,11 +470,11 @@ jobs:
         run: git config --system core.longpaths true
       - name: Check out repository code
         uses: actions/checkout@v4
-      - uses: prefix-dev/setup-pixi@v0.8.8
+      - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.47.0
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -511,7 +511,7 @@ jobs:
             echo "downloaded=false" >> $GITHUB_OUTPUT
           fi
 
-      - uses: messense/maturin-action@v1
+      - uses: messense/maturin-action@v1.50.0
         with:
           manylinux: 2_28
           target: aarch64-unknown-linux-gnu
@@ -574,7 +574,7 @@ jobs:
             "
 
       - name: Upload test output images
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: aarch64-test-output
