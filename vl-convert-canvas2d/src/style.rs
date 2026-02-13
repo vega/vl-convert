@@ -213,8 +213,7 @@ pub enum ImageSmoothingQuality {
 impl From<ImageSmoothingQuality> for tiny_skia::FilterQuality {
     fn from(quality: ImageSmoothingQuality) -> Self {
         match quality {
-            // Low uses Nearest for actual performance benefit
-            ImageSmoothingQuality::Low => tiny_skia::FilterQuality::Nearest,
+            ImageSmoothingQuality::Low => tiny_skia::FilterQuality::Bilinear,
             ImageSmoothingQuality::Medium => tiny_skia::FilterQuality::Bilinear,
             ImageSmoothingQuality::High => tiny_skia::FilterQuality::Bicubic,
         }
