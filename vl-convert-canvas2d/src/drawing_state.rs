@@ -1,9 +1,7 @@
 //! Drawing state that can be saved and restored.
 
 use crate::font_parser::ParsedFont;
-use crate::style::{
-    FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline,
-};
+use crate::style::{FillStyle, ImageSmoothingQuality, LineCap, LineJoin, TextAlign, TextBaseline};
 use tiny_skia::Transform;
 
 /// Drawing state that can be saved and restored.

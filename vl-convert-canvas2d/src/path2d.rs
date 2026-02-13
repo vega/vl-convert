@@ -327,7 +327,11 @@ impl Path2D {
     }
 
     /// Add the segments of another path to this path, optionally applying a transform.
-    pub fn add_path(&mut self, other: &mut Path2D, transform: Option<crate::dom_matrix::DOMMatrix>) {
+    pub fn add_path(
+        &mut self,
+        other: &mut Path2D,
+        transform: Option<crate::dom_matrix::DOMMatrix>,
+    ) {
         let Some(other_path) = other.get_path() else {
             return;
         };

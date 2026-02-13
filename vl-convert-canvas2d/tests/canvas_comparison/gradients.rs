@@ -229,4 +229,3 @@ ctx.stroke();
     };
     run_comparison_test(&test).expect("linear_gradient_stroke comparison failed");
 }
-

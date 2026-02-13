@@ -238,4 +238,3 @@ fn test_put_image_data_round_trip() {
         }
     }
 }
-

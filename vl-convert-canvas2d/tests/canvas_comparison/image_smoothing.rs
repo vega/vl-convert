@@ -118,4 +118,3 @@ ctx.drawImage(patternCanvas, 0, 0, 100, 100);
     };
     run_comparison_test(&test).expect("image_smoothing_quality_high comparison failed");
 }
-

@@ -128,4 +128,3 @@ ctx.fillText('Centered Text', 100, 50, 60);
     };
     run_comparison_test(&test).expect("fill_text_max_width_center comparison failed");
 }
-

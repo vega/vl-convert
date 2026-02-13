@@ -374,4 +374,3 @@ ctx.putImageData(imageData, 0, 0);
     };
     run_comparison_test(&test).expect("put_image_data_roundtrip comparison failed");
 }
-

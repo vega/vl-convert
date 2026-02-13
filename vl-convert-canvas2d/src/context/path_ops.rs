@@ -94,10 +94,8 @@ impl Canvas2dContext {
                     self.has_current_point = true;
                 }
                 PathSegment::CubicTo(ctrl1, ctrl2, p) => {
-                    let (c1x, c1y) =
-                        Self::map_point_with_transform(&transform, ctrl1.x, ctrl1.y);
-                    let (c2x, c2y) =
-                        Self::map_point_with_transform(&transform, ctrl2.x, ctrl2.y);
+                    let (c1x, c1y) = Self::map_point_with_transform(&transform, ctrl1.x, ctrl1.y);
+                    let (c2x, c2y) = Self::map_point_with_transform(&transform, ctrl2.x, ctrl2.y);
                     let (x, y) = Self::map_point_with_transform(&transform, p.x, p.y);
                     self.path_builder.cubic_to(c1x, c1y, c2x, c2y, x, y);
                     self.current_x = x;

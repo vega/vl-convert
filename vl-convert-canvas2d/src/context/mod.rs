@@ -13,9 +13,7 @@ use crate::geometry::{CanvasColor, RadialGradientParams};
 use crate::gradient::{CanvasGradient, GradientType};
 use crate::pattern::{CanvasPattern, Repetition};
 use crate::pattern_cache::PatternPixmapCache;
-use crate::style::{
-    CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin,
-};
+use crate::style::{CanvasFillRule, FillStyle, ImageSmoothingQuality, LineCap, LineJoin};
 use cosmic_text::{FontSystem, SwashCache};
 use std::sync::Arc;
 use tiny_skia::Pixmap;
@@ -89,10 +87,20 @@ impl Canvas2dContext {
         height: u32,
         resolved: &ResolvedFontConfig,
     ) -> Canvas2dResult<Self> {
-        Self::new_internal(width, height, resolved.fontdb.clone(), resolved.hinting_enabled)
+        Self::new_internal(
+            width,
+            height,
+            resolved.fontdb.clone(),
+            resolved.hinting_enabled,
+        )
     }
 
-    fn new_internal(width: u32, height: u32, font_db: fontdb::Database, hinting_enabled: bool) -> Canvas2dResult<Self> {
+    fn new_internal(
+        width: u32,
+        height: u32,
+        font_db: fontdb::Database,
+        hinting_enabled: bool,
+    ) -> Canvas2dResult<Self> {
         // Validate dimensions
         if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
             return Err(Canvas2dError::InvalidDimensions { width, height });

@@ -224,4 +224,3 @@ ctx.fillRect(0, 0, 200, 200);
     };
     run_comparison_test(&test).expect("pattern_repeat_y comparison failed");
 }
-

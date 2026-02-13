@@ -91,8 +91,13 @@ impl Canvas2dContext {
             let clip_mask = self.create_clip_mask();
             // Path coordinates are already in device space (pre-transformed)
             let _ = self.with_stroke_paint(|ctx, paint| {
-                ctx.pixmap
-                    .stroke_path(&path, paint, &stroke, Transform::identity(), clip_mask.as_ref());
+                ctx.pixmap.stroke_path(
+                    &path,
+                    paint,
+                    &stroke,
+                    Transform::identity(),
+                    clip_mask.as_ref(),
+                );
             });
         }
     }
@@ -315,22 +320,20 @@ impl Canvas2dContext {
                 tiny_skia::SpreadMode::Pad,
                 self.state.transform,
             ),
-            GradientType::Radial(params) => {
-                tiny_skia::RadialGradient::new(
-                    tiny_skia::Point {
-                        x: params.x0,
-                        y: params.y0,
-                    },
-                    tiny_skia::Point {
-                        x: params.x1,
-                        y: params.y1,
-                    },
-                    params.r1,
-                    stops,
-                    tiny_skia::SpreadMode::Pad,
-                    self.state.transform,
-                )
-            }
+            GradientType::Radial(params) => tiny_skia::RadialGradient::new(
+                tiny_skia::Point {
+                    x: params.x0,
+                    y: params.y0,
+                },
+                tiny_skia::Point {
+                    x: params.x1,
+                    y: params.y1,
+                },
+                params.r1,
+                stops,
+                tiny_skia::SpreadMode::Pad,
+                self.state.transform,
+            ),
         }
     }
 }

@@ -383,4 +383,3 @@ ctx.fillRect(0, 0, 160, 160);
     };
     run_comparison_test(&test).expect("clip_path2d_evenodd comparison failed");
 }
-

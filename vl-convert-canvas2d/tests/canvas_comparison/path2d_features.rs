@@ -570,4 +570,3 @@ ctx.fill();
     };
     run_comparison_test(&test).expect("path2d_svg_multi_subpath comparison failed");
 }
-

@@ -67,11 +67,7 @@ impl Canvas2dContext {
     }
 
     /// Internal: draw a cropped region of a premultiplied-alpha pixmap.
-    pub(crate) fn draw_image_cropped(
-        &mut self,
-        image: CanvasPixmapRef,
-        params: &ImageCropParams,
-    ) {
+    pub(crate) fn draw_image_cropped(&mut self, image: CanvasPixmapRef, params: &ImageCropParams) {
         let Some(pixmap) = tiny_skia::PixmapRef::from_bytes(image.data, image.width, image.height)
         else {
             return;
