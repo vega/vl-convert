@@ -6,6 +6,7 @@ use crate::gradient::{CanvasGradient, GradientType};
 use crate::path2d::Path2D;
 use crate::pattern_cache::PatternCacheKey;
 use crate::style::{CanvasFillRule, FillStyle};
+use tiny_skia::Transform;
 
 impl Canvas2dContext {
     // --- Clipping ---
@@ -24,7 +25,8 @@ impl Canvas2dContext {
 
         if let Some(path) = path {
             self.state.clip_path = Some(path);
-            self.state.clip_transform = self.state.transform;
+            // Inline path coordinates are pre-transformed to device space
+            self.state.clip_transform = Transform::identity();
             self.clip_fill_rule = fill_rule;
         }
     }
@@ -45,13 +47,13 @@ impl Canvas2dContext {
 
         if let Some(path) = path {
             let clip_mask = self.create_clip_mask();
-            let transform = self.state.transform;
+            // Path coordinates are already in device space (pre-transformed)
             let _ = self.with_fill_paint(|ctx, paint| {
                 ctx.pixmap.fill_path(
                     &path,
                     paint,
                     fill_rule.into(),
-                    transform,
+                    Transform::identity(),
                     clip_mask.as_ref(),
                 );
             });
@@ -65,26 +67,32 @@ impl Canvas2dContext {
         let path = self.path_builder.clone().finish();
 
         if let Some(path) = path {
+            // Scale line width and dash pattern by the average axis scale of the CTM,
+            // since path coordinates are pre-transformed but stroke width is in user space
+            let t = &self.state.transform;
+            let scale =
+                ((t.sx * t.sx + t.ky * t.ky).sqrt() + (t.kx * t.kx + t.sy * t.sy).sqrt()) / 2.0;
+            let scaled_line_width = self.state.line_width * scale;
+
             let stroke = tiny_skia::Stroke {
-                width: self.state.line_width,
+                width: scaled_line_width,
                 line_cap: self.state.line_cap.into(),
                 line_join: self.state.line_join.into(),
                 miter_limit: self.state.miter_limit,
                 dash: if self.state.line_dash.is_empty() {
                     None
                 } else {
-                    tiny_skia::StrokeDash::new(
-                        self.state.line_dash.clone(),
-                        self.state.line_dash_offset,
-                    )
+                    let scaled_dash: Vec<f32> =
+                        self.state.line_dash.iter().map(|d| d * scale).collect();
+                    tiny_skia::StrokeDash::new(scaled_dash, self.state.line_dash_offset * scale)
                 },
             };
 
             let clip_mask = self.create_clip_mask();
-            let transform = self.state.transform;
+            // Path coordinates are already in device space (pre-transformed)
             let _ = self.with_stroke_paint(|ctx, paint| {
                 ctx.pixmap
-                    .stroke_path(&path, paint, &stroke, transform, clip_mask.as_ref());
+                    .stroke_path(&path, paint, &stroke, Transform::identity(), clip_mask.as_ref());
             });
         }
     }
@@ -169,17 +177,17 @@ impl Canvas2dContext {
     /// Clear a rectangle (set pixels to transparent).
     pub fn clear_rect(&mut self, params: &RectParams) {
         log::debug!(target: "canvas", "clearRect {} {} {} {}", params.x, params.y, params.width, params.height);
-        // Build a user-space rect path and fill with Clear blend mode
-        let x = params.x;
-        let y = params.y;
-        let w = params.width;
-        let h = params.height;
+        // Transform corners to device space
+        let (x0, y0) = self.transform_point(params.x, params.y);
+        let (x1, y1) = self.transform_point(params.x + params.width, params.y);
+        let (x2, y2) = self.transform_point(params.x + params.width, params.y + params.height);
+        let (x3, y3) = self.transform_point(params.x, params.y + params.height);
 
         let mut pb = tiny_skia::PathBuilder::new();
-        pb.move_to(x, y);
-        pb.line_to(x + w, y);
-        pb.line_to(x + w, y + h);
-        pb.line_to(x, y + h);
+        pb.move_to(x0, y0);
+        pb.line_to(x1, y1);
+        pb.line_to(x2, y2);
+        pb.line_to(x3, y3);
         pb.close();
 
         if let Some(path) = pb.finish() {
@@ -192,7 +200,7 @@ impl Canvas2dContext {
                 &path,
                 &paint,
                 tiny_skia::FillRule::Winding,
-                self.state.transform,
+                Transform::identity(),
                 clip_mask.as_ref(),
             );
         }
