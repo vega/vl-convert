@@ -3,6 +3,7 @@
 
 use clap::{Parser, Subcommand};
 use itertools::Itertools;
+use std::io::{self, IsTerminal, Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 use vl_convert_rs::converter::{
@@ -27,15 +28,14 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Convert a Vega-Lite specification to a Vega specification
-    #[command(arg_required_else_help = true)]
     Vl2vg {
-        /// Path to input Vega-Lite file
+        /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output Vega file to be created
+        /// Path to output Vega file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
@@ -59,15 +59,14 @@ enum Commands {
     },
 
     /// Convert a Vega-Lite specification to an SVG image
-    #[command(arg_required_else_help = true)]
     Vl2svg {
-        /// Path to input Vega-Lite file
+        /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output SVG file to be created
+        /// Path to output SVG file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
@@ -103,15 +102,14 @@ enum Commands {
     },
 
     /// Convert a Vega-Lite specification to an PNG image
-    #[command(arg_required_else_help = true)]
     Vl2png {
-        /// Path to input Vega-Lite file
+        /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output PNG file to be created
+        /// Path to output PNG file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
@@ -155,15 +153,14 @@ enum Commands {
     },
 
     /// Convert a Vega-Lite specification to an JPEG image
-    #[command(arg_required_else_help = true)]
     Vl2jpeg {
-        /// Path to input Vega-Lite file
+        /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output JPEG file to be created
+        /// Path to output JPEG file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
@@ -207,15 +204,14 @@ enum Commands {
     },
 
     /// Convert a Vega-Lite specification to a PDF image
-    #[command(arg_required_else_help = true)]
     Vl2pdf {
-        /// Path to input Vega-Lite file
+        /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output PDF file to be created
+        /// Path to output PDF file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
@@ -251,11 +247,10 @@ enum Commands {
     },
 
     /// Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
-    #[command(arg_required_else_help = true)]
     Vl2url {
-        /// Path to input Vega-Lite file
+        /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
         /// Open chart in fullscreen mode
         #[arg(long, default_value = "false")]
@@ -263,15 +258,14 @@ enum Commands {
     },
 
     /// Convert a Vega-Lite specification to an HTML file
-    #[command(arg_required_else_help = true)]
     Vl2html {
-        /// Path to input Vega-Lite file
+        /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output HTML file to be created
+        /// Path to output HTML file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
@@ -304,15 +298,14 @@ enum Commands {
     },
 
     /// Convert a Vega specification to an SVG image
-    #[command(arg_required_else_help = true)]
     Vg2svg {
-        /// Path to input Vega file
+        /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output SVG file to be created
+        /// Path to output SVG file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -332,15 +325,14 @@ enum Commands {
     },
 
     /// Convert a Vega specification to an PNG image
-    #[command(arg_required_else_help = true)]
     Vg2png {
-        /// Path to input Vega file
+        /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output PNG file to be created
+        /// Path to output PNG file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Image scale factor
         #[arg(long, default_value = "1.0")]
@@ -368,15 +360,14 @@ enum Commands {
     },
 
     /// Convert a Vega specification to an JPEG image
-    #[command(arg_required_else_help = true)]
     Vg2jpeg {
-        /// Path to input Vega file
+        /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output JPEG file to be created
+        /// Path to output JPEG file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Image scale factor
         #[arg(long, default_value = "1.0")]
@@ -404,15 +395,14 @@ enum Commands {
     },
 
     /// Convert a Vega specification to an PDF image
-    #[command(arg_required_else_help = true)]
     Vg2pdf {
-        /// Path to input Vega file
+        /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output PDF file to be created
+        /// Path to output PDF file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -432,11 +422,10 @@ enum Commands {
     },
 
     /// Convert a Vega specification to a URL that opens the chart in the Vega editor
-    #[command(arg_required_else_help = true)]
     Vg2url {
-        /// Path to input Vega file
+        /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
         /// Open chart in fullscreen mode
         #[arg(long, default_value = "false")]
@@ -444,15 +433,14 @@ enum Commands {
     },
 
     /// Convert a Vega specification to an HTML file
-    #[command(arg_required_else_help = true)]
     Vg2html {
-        /// Path to input Vega file
+        /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output HTML file to be created
+        /// Path to output HTML file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Whether to bundle JavaScript dependencies in the HTML file
         /// instead of loading them from a CDN
@@ -473,15 +461,14 @@ enum Commands {
     },
 
     /// Convert an SVG image to a PNG image
-    #[command(arg_required_else_help = true)]
     Svg2png {
-        /// Path to input SVG file
+        /// Path to input SVG file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output PNG file to be created
+        /// Path to output PNG file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Image scale factor
         #[arg(long, default_value = "1.0")]
@@ -497,15 +484,14 @@ enum Commands {
     },
 
     /// Convert an SVG image to a JPEG image
-    #[command(arg_required_else_help = true)]
     Svg2jpeg {
-        /// Path to input SVG file
+        /// Path to input SVG file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output JPEG file to be created
+        /// Path to output JPEG file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Image scale factor
         #[arg(long, default_value = "1.0")]
@@ -521,15 +507,14 @@ enum Commands {
     },
 
     /// Convert an SVG image to a PDF image
-    #[command(arg_required_else_help = true)]
     Svg2pdf {
-        /// Path to input SVG file
+        /// Path to input SVG file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
-        /// Path to output PDF file to be created
+        /// Path to output PDF file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
-        output: String,
+        output: Option<String>,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -562,8 +547,8 @@ async fn main() -> Result<(), anyhow::Error> {
             show_warnings,
         } => {
             vl_2_vg(
-                &input_vegalite_file,
-                &output_vega_file,
+                input_vegalite_file.as_deref(),
+                output_vega_file.as_deref(),
                 &vl_version,
                 theme,
                 config,
@@ -586,8 +571,8 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vl_2_svg(
-                &input,
-                &output,
+                input.as_deref(),
+                output.as_deref(),
                 &vl_version,
                 theme,
                 config,
@@ -614,8 +599,8 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vl_2_png(
-                &input,
-                &output,
+                input.as_deref(),
+                output.as_deref(),
                 &vl_version,
                 theme,
                 config,
@@ -644,8 +629,8 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vl_2_jpeg(
-                &input,
-                &output,
+                input.as_deref(),
+                output.as_deref(),
                 &vl_version,
                 theme,
                 config,
@@ -672,8 +657,8 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vl_2_pdf(
-                &input,
-                &output,
+                input.as_deref(),
+                output.as_deref(),
                 &vl_version,
                 theme,
                 config,
@@ -685,9 +670,10 @@ async fn main() -> Result<(), anyhow::Error> {
             .await?
         }
         Vl2url { input, fullscreen } => {
-            let vl_str = read_input_string(&input)?;
+            let vl_str = read_input_string(input.as_deref())?;
             let vl_spec = serde_json::from_str(&vl_str)?;
-            println!("{}", vegalite_to_url(&vl_spec, fullscreen)?)
+            let url = vegalite_to_url(&vl_spec, fullscreen)?;
+            write_output_string(None, &url)?
         }
         Vl2html {
             input,
@@ -701,7 +687,7 @@ async fn main() -> Result<(), anyhow::Error> {
             renderer,
         } => {
             // Initialize converter
-            let vl_str = read_input_string(&input)?;
+            let vl_str = read_input_string(input.as_deref())?;
             let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
             let config = read_config_json(config)?;
             let vl_version = parse_vl_version(&vl_version)?;
@@ -733,7 +719,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     Renderer::from_str(&renderer)?,
                 )
                 .await?;
-            write_output_string(&output, &html)?;
+            write_output_string(output.as_deref(), &html)?;
         }
         Vg2svg {
             input,
@@ -745,8 +731,8 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vg_2_svg(
-                &input,
-                &output,
+                input.as_deref(),
+                output.as_deref(),
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
@@ -765,8 +751,8 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vg_2_png(
-                &input,
-                &output,
+                input.as_deref(),
+                output.as_deref(),
                 scale,
                 ppi,
                 allowed_base_url,
@@ -787,8 +773,8 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vg_2_jpeg(
-                &input,
-                &output,
+                input.as_deref(),
+                output.as_deref(),
                 scale,
                 quality,
                 allowed_base_url,
@@ -807,8 +793,8 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             vg_2_pdf(
-                &input,
-                &output,
+                input.as_deref(),
+                output.as_deref(),
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
@@ -816,9 +802,10 @@ async fn main() -> Result<(), anyhow::Error> {
             .await?
         }
         Vg2url { input, fullscreen } => {
-            let vg_str = read_input_string(&input)?;
+            let vg_str = read_input_string(input.as_deref())?;
             let vg_spec = serde_json::from_str(&vg_str)?;
-            println!("{}", vega_to_url(&vg_spec, fullscreen)?)
+            let url = vega_to_url(&vg_spec, fullscreen)?;
+            write_output_string(None, &url)?
         }
         Vg2html {
             input,
@@ -829,7 +816,7 @@ async fn main() -> Result<(), anyhow::Error> {
             renderer,
         } => {
             // Initialize converter
-            let vg_str = read_input_string(&input)?;
+            let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
 
             let format_locale = match &format_locale {
@@ -857,7 +844,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     Renderer::from_str(&renderer)?,
                 )
                 .await?;
-            write_output_string(&output, &html)?;
+            write_output_string(output.as_deref(), &html)?;
         }
         Svg2png {
             input,
@@ -867,9 +854,9 @@ async fn main() -> Result<(), anyhow::Error> {
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            let svg = read_input_string(&input)?;
+            let svg = read_input_string(input.as_deref())?;
             let png_data = vl_convert_rs::converter::svg_to_png(&svg, scale, Some(ppi))?;
-            write_output_binary(&output, &png_data)?;
+            write_output_binary(output.as_deref(), &png_data, "PNG")?;
         }
         Svg2jpeg {
             input,
@@ -879,9 +866,9 @@ async fn main() -> Result<(), anyhow::Error> {
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            let svg = read_input_string(&input)?;
+            let svg = read_input_string(input.as_deref())?;
             let jpeg_data = vl_convert_rs::converter::svg_to_jpeg(&svg, scale, Some(quality))?;
-            write_output_binary(&output, &jpeg_data)?;
+            write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
         }
         Svg2pdf {
             input,
@@ -889,9 +876,9 @@ async fn main() -> Result<(), anyhow::Error> {
             font_dir,
         } => {
             register_font_dir(font_dir)?;
-            let svg = read_input_string(&input)?;
+            let svg = read_input_string(input.as_deref())?;
             let pdf_data = vl_convert_rs::converter::svg_to_pdf(&svg)?;
-            write_output_binary(&output, &pdf_data)?;
+            write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
         }
         LsThemes => list_themes().await?,
         CatTheme { theme } => cat_theme(&theme).await?,
@@ -915,11 +902,41 @@ fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
     }
 }
 
-fn read_input_string(input: &str) -> Result<String, anyhow::Error> {
-    match std::fs::read_to_string(input) {
-        Ok(input_str) => Ok(input_str),
+fn read_input_string(input: Option<&str>) -> Result<String, anyhow::Error> {
+    match input {
+        Some(path) if path != "-" => std::fs::read_to_string(path)
+            .map_err(|err| anyhow::anyhow!("Failed to read input file: {}\n{}", path, err)),
+        _ => {
+            // Check if stdin is an interactive terminal
+            if io::stdin().is_terminal() {
+                eprintln!("Reading from stdin... (Press Ctrl-D when done, or use -i <file>)");
+            }
+
+            let mut buffer = String::new();
+            io::stdin()
+                .read_to_string(&mut buffer)
+                .map_err(|err| anyhow::anyhow!("Failed to read from stdin: {}", err))?;
+
+            // Check for empty or whitespace-only input
+            if buffer.trim().is_empty() {
+                bail!("No input provided. Provide a specification via stdin or use -i <file>");
+            }
+
+            Ok(buffer)
+        }
+    }
+}
+
+/// Read a file that is always a filesystem path (never stdin).
+///
+/// This function is used for reading configuration files (locale, time format)
+/// that should not come from stdin. For reading input specifications that may
+/// come from stdin or a file, use `read_input_string()` instead.
+fn read_file_string(path: &str) -> Result<String, anyhow::Error> {
+    match std::fs::read_to_string(path) {
+        Ok(contents) => Ok(contents),
         Err(err) => {
-            bail!("Failed to read input file: {}\n{}", input, err);
+            bail!("Failed to read file: {}\n{}", path, err);
         }
     }
 }
@@ -935,7 +952,7 @@ fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow::Error> {
 
 fn format_locale_from_str(s: &str) -> Result<FormatLocale, anyhow::Error> {
     if s.ends_with(".json") {
-        let s = read_input_string(s)?;
+        let s = read_file_string(s)?;
         Ok(FormatLocale::Object(parse_as_json(&s)?))
     } else {
         Ok(FormatLocale::Name(s.to_string()))
@@ -944,29 +961,170 @@ fn format_locale_from_str(s: &str) -> Result<FormatLocale, anyhow::Error> {
 
 fn time_format_locale_from_str(s: &str) -> Result<TimeFormatLocale, anyhow::Error> {
     if s.ends_with(".json") {
-        let s = read_input_string(s)?;
+        let s = read_file_string(s)?;
         Ok(TimeFormatLocale::Object(parse_as_json(&s)?))
     } else {
         Ok(TimeFormatLocale::Name(s.to_string()))
     }
 }
 
-fn write_output_string(output: &str, output_str: &str) -> Result<(), anyhow::Error> {
-    match std::fs::write(output, output_str) {
-        Ok(_) => Ok(()),
-        Err(err) => {
-            bail!("Failed to write converted output to {}\n{}", output, err);
+fn write_output_string(output: Option<&str>, output_str: &str) -> Result<(), anyhow::Error> {
+    match output {
+        Some(path) if path != "-" => {
+            // File output: write as-is without modification
+            std::fs::write(path, output_str)
+                .map_err(|err| anyhow::anyhow!("Failed to write output to {}\n{}", path, err))
+        }
+        _ => {
+            // Stdout output: ensure trailing newline and handle BrokenPipe
+            let stdout = io::stdout();
+            let mut handle = stdout.lock();
+
+            // Write the string
+            if let Err(err) = handle.write_all(output_str.as_bytes()) {
+                if err.kind() == io::ErrorKind::BrokenPipe {
+                    std::process::exit(0);
+                }
+                return Err(anyhow::anyhow!("Failed to write to stdout: {}", err));
+            }
+
+            // Add trailing newline if not already present
+            if !output_str.ends_with('\n') {
+                if let Err(err) = handle.write_all(b"\n") {
+                    if err.kind() == io::ErrorKind::BrokenPipe {
+                        std::process::exit(0);
+                    }
+                    return Err(anyhow::anyhow!(
+                        "Failed to write newline to stdout: {}",
+                        err
+                    ));
+                }
+            }
+
+            // Flush
+            if let Err(err) = handle.flush() {
+                if err.kind() == io::ErrorKind::BrokenPipe {
+                    std::process::exit(0);
+                }
+                return Err(anyhow::anyhow!("Failed to flush stdout: {}", err));
+            }
+
+            Ok(())
         }
     }
 }
 
-fn write_output_binary(output: &str, output_data: &[u8]) -> Result<(), anyhow::Error> {
-    match std::fs::write(output, output_data) {
-        Ok(_) => Ok(()),
-        Err(err) => {
-            bail!("Failed to write converted output to {}\n{}", output, err);
+/// Write binary output data to a file or stdout with TTY safety guard.
+///
+/// # Behavior
+/// - `output = Some(path)` where `path != "-"`: Write to file
+/// - `output = Some("-")`: Force write to stdout (user override)
+/// - `output = None`: Write to stdout only if not a TTY (safety guard)
+///
+/// # TTY Safety Guard
+/// When `output = None` and stdout is a terminal, this function refuses to write
+/// binary data to prevent terminal corruption. Users must either:
+/// - Redirect to a file: `vl-convert vl2png -o output.png`
+/// - Pipe to another command: `vl-convert vl2png | display`
+/// - Force stdout: `vl-convert vl2png -o -`
+///
+/// # Testing Note
+/// The TTY safety guard is tested manually because automated tests run with
+/// piped stdout (not a TTY). To verify:
+/// ```bash
+/// # Should refuse (interactive terminal)
+/// $ echo '{"$schema": "..."}' | vl-convert vl2png
+///
+/// # Should succeed (explicit override)
+/// $ echo '{"$schema": "..."}' | vl-convert vl2png -o -
+///
+/// # Should succeed (piped)
+/// $ echo '{"$schema": "..."}' | vl-convert vl2png | cat > test.png
+/// ```
+fn write_output_binary(
+    output: Option<&str>,
+    output_data: &[u8],
+    format_name: &str,
+) -> Result<(), anyhow::Error> {
+    match output {
+        Some(path) if path != "-" => std::fs::write(path, output_data)
+            .map_err(|err| anyhow::anyhow!("Failed to write output to {}\n{}", path, err)),
+        Some(_) => {
+            // Explicit "-": write to stdout unconditionally (user override)
+            write_stdout_bytes(output_data)
+        }
+        None => {
+            // Implicit stdout: TTY safety guard
+            if io::stdout().is_terminal() {
+                bail!(
+                    "Refusing to write binary {} data to terminal.\n\
+                     Use -o <file> to write to a file, or pipe to another command.\n\
+                     Use -o - to force output to stdout.",
+                    format_name
+                );
+            }
+            write_stdout_bytes(output_data)
         }
     }
+}
+
+/// Set stdout to binary mode on Windows to prevent newline translation.
+///
+/// On Windows, stdout defaults to "text mode" which translates `\n` (0x0A) to `\r\n` (0x0D 0x0A)
+/// and treats `\x1A` (Ctrl-Z) as EOF. This corrupts binary data like PNG, JPEG, and PDF files.
+///
+/// This function uses the Windows C runtime `_setmode` function to switch stdout to binary mode.
+/// On Unix systems (Linux, macOS), this is a no-op because stdout is always binary.
+///
+/// # References
+/// - [Microsoft _setmode Documentation](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/setmode)
+///
+/// # Safety
+/// Uses unsafe code to call the Windows CRT function `_setmode` via libc.
+#[cfg(target_family = "windows")]
+fn set_stdout_binary_mode() -> Result<(), anyhow::Error> {
+    use std::os::windows::io::AsRawHandle;
+    unsafe {
+        let handle = io::stdout().as_raw_handle();
+        let result = libc::_setmode(handle as i32, libc::O_BINARY);
+        if result == -1 {
+            Err(anyhow::anyhow!("Failed to set binary mode on stdout"))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// No-op on Unix systems where stdout is always binary.
+#[cfg(not(target_family = "windows"))]
+fn set_stdout_binary_mode() -> Result<(), anyhow::Error> {
+    Ok(())
+}
+
+fn write_stdout_bytes(data: &[u8]) -> Result<(), anyhow::Error> {
+    // Set stdout to binary mode on Windows before writing
+    set_stdout_binary_mode()?;
+
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
+
+    // Write data, handling BrokenPipe as clean exit
+    if let Err(err) = handle.write_all(data) {
+        if err.kind() == io::ErrorKind::BrokenPipe {
+            std::process::exit(0);
+        }
+        return Err(anyhow::anyhow!("Failed to write to stdout: {}", err));
+    }
+
+    // Flush, handling BrokenPipe as clean exit
+    if let Err(err) = handle.flush() {
+        if err.kind() == io::ErrorKind::BrokenPipe {
+            std::process::exit(0);
+        }
+        return Err(anyhow::anyhow!("Failed to flush stdout: {}", err));
+    }
+
+    Ok(())
 }
 
 fn normalize_config_path(config: Option<String>) -> Option<String> {
@@ -1002,8 +1160,8 @@ fn read_config_json(config: Option<String>) -> Result<Option<serde_json::Value>,
 
 #[allow(clippy::too_many_arguments)]
 async fn vl_2_vg(
-    input: &str,
-    output: &str,
+    input: Option<&str>,
+    output: Option<&str>,
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
@@ -1065,8 +1223,8 @@ async fn vl_2_vg(
 }
 
 async fn vg_2_svg(
-    input: &str,
-    output: &str,
+    input: Option<&str>,
+    output: Option<&str>,
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
@@ -1115,8 +1273,8 @@ async fn vg_2_svg(
 }
 
 async fn vg_2_png(
-    input: &str,
-    output: &str,
+    input: Option<&str>,
+    output: Option<&str>,
     scale: f32,
     ppi: f32,
     allowed_base_urls: Option<Vec<String>>,
@@ -1163,14 +1321,14 @@ async fn vg_2_png(
     };
 
     // Write result
-    write_output_binary(output, &png_data)?;
+    write_output_binary(output, &png_data, "PNG")?;
 
     Ok(())
 }
 
 async fn vg_2_jpeg(
-    input: &str,
-    output: &str,
+    input: Option<&str>,
+    output: Option<&str>,
     scale: f32,
     quality: u8,
     allowed_base_urls: Option<Vec<String>>,
@@ -1217,14 +1375,14 @@ async fn vg_2_jpeg(
     };
 
     // Write result
-    write_output_binary(output, &jpeg_data)?;
+    write_output_binary(output, &jpeg_data, "JPEG")?;
 
     Ok(())
 }
 
 async fn vg_2_pdf(
-    input: &str,
-    output: &str,
+    input: Option<&str>,
+    output: Option<&str>,
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
@@ -1267,15 +1425,15 @@ async fn vg_2_pdf(
     };
 
     // Write result
-    write_output_binary(output, &pdf_data)?;
+    write_output_binary(output, &pdf_data, "PDF")?;
 
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn vl_2_svg(
-    input: &str,
-    output: &str,
+    input: Option<&str>,
+    output: Option<&str>,
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
@@ -1339,8 +1497,8 @@ async fn vl_2_svg(
 
 #[allow(clippy::too_many_arguments)]
 async fn vl_2_png(
-    input: &str,
-    output: &str,
+    input: Option<&str>,
+    output: Option<&str>,
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
@@ -1401,15 +1559,15 @@ async fn vl_2_png(
     };
 
     // Write result
-    write_output_binary(output, &png_data)?;
+    write_output_binary(output, &png_data, "PNG")?;
 
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn vl_2_jpeg(
-    input: &str,
-    output: &str,
+    input: Option<&str>,
+    output: Option<&str>,
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
@@ -1470,15 +1628,15 @@ async fn vl_2_jpeg(
     };
 
     // Write result
-    write_output_binary(output, &jpeg_data)?;
+    write_output_binary(output, &jpeg_data, "JPEG")?;
 
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn vl_2_pdf(
-    input: &str,
-    output: &str,
+    input: Option<&str>,
+    output: Option<&str>,
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
@@ -1535,7 +1693,7 @@ async fn vl_2_pdf(
     };
 
     // Write result
-    write_output_binary(output, &pdf_data)?;
+    write_output_binary(output, &pdf_data, "PDF")?;
 
     Ok(())
 }
