@@ -1083,10 +1083,10 @@ fn write_output_binary(
 /// Uses unsafe code to call the Windows CRT function `_setmode` via libc.
 #[cfg(target_family = "windows")]
 fn set_stdout_binary_mode() -> Result<(), anyhow::Error> {
-    use std::os::windows::io::AsRawHandle;
     unsafe {
-        let handle = io::stdout().as_raw_handle();
-        let result = libc::_setmode(handle as i32, libc::O_BINARY);
+        // Use STDOUT_FILENO (file descriptor 1) instead of AsRawHandle
+        // _setmode expects a CRT file descriptor, not a Windows HANDLE
+        let result = libc::_setmode(libc::STDOUT_FILENO, libc::O_BINARY);
         if result == -1 {
             Err(anyhow::anyhow!("Failed to set binary mode on stdout"))
         } else {
