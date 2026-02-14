@@ -144,17 +144,19 @@ cargo install cargo-workspaces
 ```
 
 ## Tagging and publish to crates.io
-Check out the main branch, then tag and publish a new version of the `vl-convert` and `vl-convert-rs` crates with:
+Check out the main branch, then tag and publish new versions of the `vl-convert-canvas2d`, `vl-convert-canvas2d-deno`, `vl-convert-rs`, and `vl-convert` crates with:
 
 (replacing `0.1.0` with the desired version)
 
 ```bash
 pixi shell
-cargo ws publish --all --force "vl-convert*" custom 0.1.0
+cargo ws publish --all --force "vl-convert*" --allow-branch main custom 0.1.0
 ```
 
+This command bumps all crate versions, updates inter-crate dependency versions, commits, tags (`v0.1.0`), and pushes to `origin/main`.
+
 ## Publish Python packages to PyPI
-The `cargo ws publish ...` command above will push a commit to the `main` branch. This push to `main` will trigger CI, including the "Publish to PyPI" job. This job must be approved manually in the GitHub interface. After it is approved it will run and publish the Python packages to PyPI.
+The push to `main` will trigger CI, including the "Publish to PyPI" job. This job must be approved manually in the GitHub interface. After it is approved it will run and publish the Python packages to PyPI.
 
 ## Create GitHub Release
 Create a new GitHub release using the `v0.1.0` tag.
