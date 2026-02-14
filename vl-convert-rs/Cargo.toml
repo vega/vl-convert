@@ -1,6 +1,6 @@
 [package]
 name = "vl-convert-rs"
-version = "1.9.0"
+version = "2.0.0-rc1"
 edition = "2021"
 license = "BSD-3-Clause"
 readme = "README.md"
@@ -10,8 +10,8 @@ description = "Library for converting Vega-Lite visualization specifications to 
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-vl-convert-canvas2d = { path = "../vl-convert-canvas2d", version = "1.9.0" }
-vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", version = "1.9.0", features = ["svg"] }
+vl-convert-canvas2d = { path = "../vl-convert-canvas2d", version = "2.0.0-rc1" }
+vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", version = "2.0.0-rc1", features = ["svg"] }
 
 deno_runtime = { workspace = true }
 deno_core = { workspace = true }
@@ -60,4 +60,4 @@ deno_error = { workspace = true }
 # Need "snapshot" feature to access deno_runtime::snapshot::create_runtime_snapshot
 deno_runtime = { workspace = true, features = ["snapshot"] }
 # Canvas 2D Deno extension - used in snapshot creation
-vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", version = "1.9.0" }
+vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", version = "2.0.0-rc1" }

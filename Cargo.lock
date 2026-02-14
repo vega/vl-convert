@@ -9709,7 +9709,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vl-convert"
-version = "1.9.0"
+version = "2.0.0-rc1"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -9726,7 +9726,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-canvas2d"
-version = "1.9.0"
+version = "2.0.0-rc1"
 dependencies = [
  "cosmic-text",
  "csscolorparser",
@@ -9745,7 +9745,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-canvas2d-deno"
-version = "1.9.0"
+version = "2.0.0-rc1"
 dependencies = [
  "csscolorparser",
  "deno_core",
@@ -9761,7 +9761,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-python"
-version = "1.9.0"
+version = "2.0.0-rc1"
 dependencies = [
  "futures",
  "lazy_static",
@@ -9773,7 +9773,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-rs"
-version = "1.9.0"
+version = "2.0.0-rc1"
 dependencies = [
  "base64 0.22.1",
  "criterion",
@@ -9815,7 +9815,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-vendor"
-version = "1.9.0"
+version = "2.0.0-rc1"
 dependencies = [
  "anyhow",
  "dircpy",
