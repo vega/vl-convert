@@ -17,9 +17,6 @@ clap = { workspace = true }
 shellexpand = { workspace = true }
 itertools = { workspace = true }
 
-[target.'cfg(windows)'.dependencies]
-libc = "0.2"
-
 [dev-dependencies]
 assert_cmd = { workspace = true }
 predicates = { workspace = true }

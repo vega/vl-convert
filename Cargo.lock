@@ -9715,7 +9715,6 @@ dependencies = [
  "clap",
  "dssim",
  "itertools 0.14.0",
- "libc",
  "predicates",
  "rstest",
  "serde_json",
