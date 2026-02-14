@@ -1251,4 +1251,66 @@ mod test_stdin_stdout {
         assert!(validate_pdf_header(&pdf_data));
         Ok(())
     }
+
+    #[test]
+    fn test_vl2url_file_output() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let vl_spec = load_vl_spec_string("circle_binned");
+        let output = output_path("vl2url_output.txt");
+
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut child = cmd
+            .arg("vl2url")
+            .arg("-o").arg(&output)
+            .stdin(Stdio::piped())
+            .spawn()?;
+
+        let mut stdin = child.stdin.take().unwrap();
+        stdin.write_all(vl_spec.as_bytes())?;
+        drop(stdin);
+        let result = child.wait()?;
+
+        assert!(result.success());
+        let url = fs::read_to_string(&output)?;
+        assert!(url.contains("https://vega.github.io/editor"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_vg2url_file_output() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        // First convert VL to VG
+        let vl_spec = load_vl_spec_string("circle_binned");
+        let vg_output_path = output_path("vg_spec_for_url.vg.json");
+
+        let mut cmd1 = Command::cargo_bin("vl-convert")?;
+        let mut child1 = cmd1
+            .arg("vl2vg")
+            .arg("--vl-version").arg("5.8")
+            .arg("-o").arg(&vg_output_path)
+            .stdin(Stdio::piped())
+            .spawn()?;
+
+        let mut stdin1 = child1.stdin.take().unwrap();
+        stdin1.write_all(vl_spec.as_bytes())?;
+        drop(stdin1);
+        let result1 = child1.wait()?;
+        assert!(result1.success());
+
+        // Now convert VG to URL with file output
+        let url_output = output_path("vg2url_output.txt");
+        let mut cmd2 = Command::cargo_bin("vl-convert")?;
+        let result2 = cmd2
+            .arg("vg2url")
+            .arg("-i").arg(&vg_output_path)
+            .arg("-o").arg(&url_output)
+            .status()?;
+
+        assert!(result2.success());
+        let url = fs::read_to_string(&url_output)?;
+        assert!(url.contains("https://vega.github.io/editor"));
+        Ok(())
+    }
 }

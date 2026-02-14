@@ -252,6 +252,10 @@ enum Commands {
         #[arg(short, long)]
         input: Option<String>,
 
+        /// Path to output file. Writes to stdout if omitted or set to "-"
+        #[arg(short, long)]
+        output: Option<String>,
+
         /// Open chart in fullscreen mode
         #[arg(long, default_value = "false")]
         fullscreen: bool,
@@ -426,6 +430,10 @@ enum Commands {
         /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
         input: Option<String>,
+
+        /// Path to output file. Writes to stdout if omitted or set to "-"
+        #[arg(short, long)]
+        output: Option<String>,
 
         /// Open chart in fullscreen mode
         #[arg(long, default_value = "false")]
@@ -669,11 +677,15 @@ async fn main() -> Result<(), anyhow::Error> {
             )
             .await?
         }
-        Vl2url { input, fullscreen } => {
+        Vl2url {
+            input,
+            output,
+            fullscreen,
+        } => {
             let vl_str = read_input_string(input.as_deref())?;
             let vl_spec = serde_json::from_str(&vl_str)?;
             let url = vegalite_to_url(&vl_spec, fullscreen)?;
-            write_output_string(None, &url)?
+            write_output_string(output.as_deref(), &url)?
         }
         Vl2html {
             input,
@@ -801,11 +813,15 @@ async fn main() -> Result<(), anyhow::Error> {
             )
             .await?
         }
-        Vg2url { input, fullscreen } => {
+        Vg2url {
+            input,
+            output,
+            fullscreen,
+        } => {
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec = serde_json::from_str(&vg_str)?;
             let url = vega_to_url(&vg_spec, fullscreen)?;
-            write_output_string(None, &url)?
+            write_output_string(output.as_deref(), &url)?
         }
         Vg2html {
             input,
