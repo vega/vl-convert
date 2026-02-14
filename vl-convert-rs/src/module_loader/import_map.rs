@@ -9,13 +9,13 @@ use std::str::FromStr;
 pub const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
 pub const VEGA_PATH: &str = "/npm/vega@6.2.0/+esm";
 pub const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
-pub const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.0.2/+esm";
+pub const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.1.0/+esm";
 pub const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
 pub const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.2/+esm";
 
 pub const VEGA_VERSION: &str = "6.2.0";
 pub const VEGA_THEMES_VERSION: &str = "3.0.0";
-pub const VEGA_EMBED_VERSION: &str = "7.0.2";
+pub const VEGA_EMBED_VERSION: &str = "7.1.0";
 
 pub fn url_for_path(path: &str) -> String {
     format!("{}{}", JSDELIVR_URL, path)
@@ -59,7 +59,7 @@ impl VlVersion {
             v5_20 => "/npm/vega-lite@5.20.1/+esm",
             v5_21 => "/npm/vega-lite@5.21.0/+esm",
             v6_1 => "/npm/vega-lite@6.1.0/+esm",
-            v6_4 => "/npm/vega-lite@6.4.1/+esm",
+            v6_4 => "/npm/vega-lite@6.4.2/+esm",
         };
         path.to_string()
     }
@@ -277,8 +277,8 @@ pub fn build_import_map() -> HashMap<String, String> {
             .to_string(),
     );
     m.insert(
-        "/npm/vega-embed@7.0.2/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-embed@7.0.2/#+esm_3b53f.js")
+        "/npm/vega-embed@7.1.0/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-embed@7.1.0/#+esm_3b53f.js")
             .to_string(),
     );
     m.insert(
@@ -321,8 +321,8 @@ pub fn build_import_map() -> HashMap<String, String> {
             .to_string(),
     );
     m.insert(
-        "/npm/vega-interpreter@2.0.0/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-interpreter@2.0.0/#+esm_3b53f.js")
+        "/npm/vega-interpreter@2.2.1/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-interpreter@2.2.1/#+esm_3b53f.js")
             .to_string(),
     );
     m.insert(
@@ -373,6 +373,11 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert(
         "/npm/vega-lite@6.4.1/+esm".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-lite@6.4.1/#+esm_3b53f.js")
+            .to_string(),
+    );
+    m.insert(
+        "/npm/vega-lite@6.4.2/+esm".to_string(),
+        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-lite@6.4.2/#+esm_3b53f.js")
             .to_string(),
     );
     m.insert(

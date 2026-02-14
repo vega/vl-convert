@@ -279,7 +279,7 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-embed@7.0.2/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-embed@7.1.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
@@ -449,7 +449,7 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-interpreter@2.0.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-interpreter@2.2.1/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
@@ -515,6 +515,11 @@
       }
     },
     "https://cdn.jsdelivr.net/npm/vega-lite@6.4.1/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-lite@6.4.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
@@ -895,11 +900,6 @@
       }
     },
     "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.0/+esm": {
-      "headers": {
-        "content-type": "application/javascript; charset=utf-8"
-      }
-    },
-    "https://cdn.jsdelivr.net/npm/vega@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
