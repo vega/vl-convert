@@ -51,7 +51,7 @@ pixi run bundle-licenses # Bundle Rust licenses for Python wheels
 ## Release Process
 
 ```bash
-cargo ws publish --all --force "vl-convert*" custom X.Y.Z
+cargo ws publish --all --force "vl-convert*" --allow-branch main custom X.Y.Z
 ```
 
 CI publishes to PyPI after manual approval.

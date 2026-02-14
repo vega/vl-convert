@@ -18,7 +18,7 @@ deno_core = { workspace = true }
 deno_error = { workspace = true }
 
 # Canvas 2D implementation
-vl-convert-canvas2d = { path = "../vl-convert-canvas2d" }
+vl-convert-canvas2d = { path = "../vl-convert-canvas2d", version = "1.9.0" }
 
 # For gradient color parsing
 csscolorparser = "0.7"
