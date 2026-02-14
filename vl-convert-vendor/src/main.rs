@@ -28,13 +28,14 @@ const VL_PATHS: &[(&str, &str)] = &[
     // 5.20.1 is used by Altair 5.4.0 (keep longer)
     ("5.20", "/npm/vega-lite@5.20.1/+esm"),
     ("5.21", "/npm/vega-lite@5.21.0/+esm"),
+    // 6.1.0 is used by Altair 6.0.0 (keep longer)
     ("6.1", "/npm/vega-lite@6.1.0/+esm"),
-    ("6.4", "/npm/vega-lite@6.4.1/+esm"),
+    ("6.4", "/npm/vega-lite@6.4.2/+esm"),
 ];
 const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
 const VEGA_PATH: &str = "/npm/vega@6.2.0/+esm";
 const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
-const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.0.2/+esm";
+const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.1.0/+esm";
 const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
 const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.2/+esm";
 
