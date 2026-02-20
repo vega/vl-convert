@@ -451,7 +451,7 @@ mod test_vegalite_to_vega {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         let vg_result = block_on(
             converter.vegalite_to_vega(vl_spec, VlOpts{vl_version, ..Default::default()}
@@ -496,7 +496,7 @@ mod test_vegalite_to_html_no_bundle {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         let html_result = block_on(
             converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, false, Renderer::Canvas)
@@ -544,7 +544,7 @@ mod test_vegalite_to_html_bundle {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         let html_result = block_on(
             converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, true, Renderer::Svg)
@@ -589,7 +589,7 @@ mod test_svg {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         // Convert to vega first
         let vg_spec =
@@ -624,7 +624,7 @@ mod test_svg_allowed_base_url {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         // Convert to vega first
         let vg_spec = block_on(converter.vegalite_to_vega(
@@ -717,7 +717,7 @@ mod test_scenegraph {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         // Convert to vega first
         let vg_spec =
@@ -775,7 +775,7 @@ mod test_png_no_theme {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         // Convert to vega first
         let vg_spec = block_on(
@@ -823,7 +823,7 @@ mod test_png_theme_config {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         // Convert directly to png with theme and config that overrides background color
         let png_data = block_on(
@@ -884,7 +884,7 @@ async fn test_font_with_quotes() {
     let vl_spec = load_vl_spec(name);
 
     // Create Vega-Lite Converter and perform conversion
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     let png_data = converter
         .vegalite_to_png(
@@ -916,7 +916,7 @@ async fn test_locale() {
         load_locale(format_locale_name, time_format_locale_name);
 
     // Create Vega-Lite Converter and perform conversion
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Convert with locale objects
     let png_data = converter
@@ -984,7 +984,7 @@ mod test_jpeg {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         // Convert to vega first
         let vg_spec =
@@ -1019,7 +1019,7 @@ mod test_vega_label_transform {
         initialize();
 
         let vg_spec = load_vg_spec(name);
-        let mut converter = VlConverter::new();
+        let converter = VlConverter::new();
 
         let png_data = block_on(
             converter.vega_to_png(vg_spec, Default::default(), Some(scale), None)

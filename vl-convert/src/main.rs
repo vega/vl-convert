@@ -714,7 +714,7 @@ async fn main() -> Result<(), anyhow::Error> {
             };
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
-            let mut converter = VlConverter::new();
+            let converter = VlConverter::new();
             let html = converter
                 .vegalite_to_html(
                     vl_spec,
@@ -847,7 +847,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
-            let mut converter = VlConverter::new();
+            let converter = VlConverter::new();
             let html = converter
                 .vega_to_html(
                     vg_spec,
@@ -1200,7 +1200,7 @@ async fn vl_2_vg(
     let config = read_config_json(config)?;
 
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Perform conversion
     let vega_json = match converter
@@ -1265,7 +1265,7 @@ async fn vg_2_svg(
     };
 
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Perform conversion
     let svg = match converter
@@ -1317,7 +1317,7 @@ async fn vg_2_png(
     };
 
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Perform conversion
     let png_data = match converter
@@ -1371,7 +1371,7 @@ async fn vg_2_jpeg(
     };
 
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Perform conversion
     let jpeg_data = match converter
@@ -1423,7 +1423,7 @@ async fn vg_2_pdf(
     };
 
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Perform conversion
     let pdf_data = match converter
@@ -1484,7 +1484,7 @@ async fn vl_2_svg(
     };
 
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Perform conversion
     let svg = match converter
@@ -1551,7 +1551,7 @@ async fn vl_2_png(
     };
 
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Perform conversion
     let png_data = match converter
@@ -1620,7 +1620,7 @@ async fn vl_2_jpeg(
     };
 
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Perform conversion
     let jpeg_data = match converter
@@ -1687,7 +1687,7 @@ async fn vl_2_pdf(
     };
 
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     // Perform conversion
     let pdf_data = match converter
@@ -1719,7 +1719,7 @@ async fn vl_2_pdf(
 
 async fn list_themes() -> Result<(), anyhow::Error> {
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     if let serde_json::Value::Object(themes) = converter.get_themes().await? {
         for theme in themes.keys().sorted() {
@@ -1734,7 +1734,7 @@ async fn list_themes() -> Result<(), anyhow::Error> {
 
 async fn cat_theme(theme: &str) -> Result<(), anyhow::Error> {
     // Initialize converter
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     if let serde_json::Value::Object(themes) = converter.get_themes().await? {
         if let Some(theme_config) = themes.get(theme) {
