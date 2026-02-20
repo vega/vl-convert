@@ -7,8 +7,9 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 use pythonize::{depythonize, pythonize};
 use std::borrow::Cow;
+use std::future::Future;
 use std::str::FromStr;
-use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
 use vl_convert_rs::converter::{
     FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlOpts,
 };
@@ -25,12 +26,30 @@ use vl_convert_rs::VlConverter as VlConverterRs;
 extern crate lazy_static;
 
 lazy_static! {
-    static ref VL_CONVERTER: Mutex<VlConverterRs> = Mutex::new(VlConverterRs::new());
+    static ref VL_CONVERTER: RwLock<Arc<VlConverterRs>> =
+        RwLock::new(Arc::new(VlConverterRs::new()));
     static ref PYTHON_RUNTIME: tokio::runtime::Runtime =
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .unwrap();
+}
+
+fn converter_read_handle() -> Result<Arc<VlConverterRs>, vl_convert_rs::anyhow::Error> {
+    VL_CONVERTER
+        .read()
+        .map_err(|e| vl_convert_rs::anyhow::anyhow!("Failed to acquire converter read lock: {e}"))
+        .map(|guard| guard.clone())
+}
+
+fn run_converter_future<R, Fut, F>(make_future: F) -> Result<R, vl_convert_rs::anyhow::Error>
+where
+    F: FnOnce(Arc<VlConverterRs>) -> Fut + Send + 'static,
+    Fut: Future<Output = Result<R, vl_convert_rs::anyhow::Error>> + 'static,
+    R: Send + 'static,
+{
+    let converter = converter_read_handle()?;
+    Python::with_gil(|py| py.allow_threads(move || PYTHON_RUNTIME.block_on(make_future(converter))))
 }
 
 /// Convert a Vega-Lite spec to a Vega spec using a particular
@@ -63,21 +82,19 @@ fn vegalite_to_vega(
         Default::default()
     };
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
-    let vega_spec = match PYTHON_RUNTIME.block_on(converter.vegalite_to_vega(
-        vl_spec,
-        VlOpts {
-            vl_version,
-            config,
-            theme,
-            show_warnings: show_warnings.unwrap_or(false),
-            allowed_base_urls: None,
-            format_locale: None,
-            time_format_locale: None,
-        },
-    )) {
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls: None,
+        format_locale: None,
+        time_format_locale: None,
+    };
+
+    let vega_spec = match run_converter_future(move |converter| async move {
+        converter.vegalite_to_vega(vl_spec, vl_opts).await
+    }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -115,18 +132,15 @@ fn vega_to_svg(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
 
-    let svg = match PYTHON_RUNTIME.block_on(converter.vega_to_svg(
-        vg_spec,
-        VgOpts {
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-    )) {
+    let svg = match run_converter_future(move |converter| async move {
+        converter.vega_to_svg(vg_spec, vg_opts).await
+    }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -161,10 +175,6 @@ fn vega_to_scenegraph(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
-
     let vg_opts = VgOpts {
         allowed_base_urls,
         format_locale,
@@ -174,11 +184,12 @@ fn vega_to_scenegraph(
     match format {
         "dict" => {
             let vg_spec = parse_json_spec(vg_spec)?;
-            let sg = PYTHON_RUNTIME
-                .block_on(converter.vega_to_scenegraph(vg_spec, vg_opts))
-                .map_err(|err| {
-                    PyValueError::new_err(format!("Vega to Scenegraph conversion failed:\n{err}"))
-                })?;
+            let sg = run_converter_future(move |converter| async move {
+                converter.vega_to_scenegraph(vg_spec, vg_opts).await
+            })
+            .map_err(|err| {
+                PyValueError::new_err(format!("Vega to Scenegraph conversion failed:\n{err}"))
+            })?;
             Python::with_gil(|py| -> PyResult<PyObject> {
                 pythonize(py, &sg)
                     .map_err(|err| PyValueError::new_err(err.to_string()))
@@ -187,11 +198,12 @@ fn vega_to_scenegraph(
         }
         "msgpack" => {
             let vg_spec = parse_spec_to_value_or_string(vg_spec)?;
-            let sg_bytes = PYTHON_RUNTIME
-                .block_on(converter.vega_to_scenegraph_msgpack(vg_spec, vg_opts))
-                .map_err(|err| {
-                    PyValueError::new_err(format!("Vega to Scenegraph conversion failed:\n{err}"))
-                })?;
+            let sg_bytes = run_converter_future(move |converter| async move {
+                converter.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+            })
+            .map_err(|err| {
+                PyValueError::new_err(format!("Vega to Scenegraph conversion failed:\n{err}"))
+            })?;
             Ok(Python::with_gil(|py| -> PyObject {
                 PyBytes::new(py, sg_bytes.as_slice()).into()
             }))
@@ -243,22 +255,19 @@ fn vegalite_to_svg(
         Default::default()
     };
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
 
-    let svg = match PYTHON_RUNTIME.block_on(converter.vegalite_to_svg(
-        vl_spec,
-        VlOpts {
-            vl_version,
-            config,
-            theme,
-            show_warnings: show_warnings.unwrap_or(false),
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-    )) {
+    let svg = match run_converter_future(move |converter| async move {
+        converter.vegalite_to_svg(vl_spec, vl_opts).await
+    }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -312,10 +321,6 @@ fn vegalite_to_scenegraph(
         Default::default()
     };
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
-
     let vl_opts = VlOpts {
         vl_version,
         config,
@@ -329,13 +334,12 @@ fn vegalite_to_scenegraph(
     match format {
         "dict" => {
             let vl_spec = parse_json_spec(vl_spec)?;
-            let sg = PYTHON_RUNTIME
-                .block_on(converter.vegalite_to_scenegraph(vl_spec, vl_opts))
-                .map_err(|err| {
-                    PyValueError::new_err(format!(
-                        "Vega-Lite to Scenegraph conversion failed:\n{err}"
-                    ))
-                })?;
+            let sg = run_converter_future(move |converter| async move {
+                converter.vegalite_to_scenegraph(vl_spec, vl_opts).await
+            })
+            .map_err(|err| {
+                PyValueError::new_err(format!("Vega-Lite to Scenegraph conversion failed:\n{err}"))
+            })?;
             Python::with_gil(|py| -> PyResult<PyObject> {
                 pythonize(py, &sg)
                     .map_err(|err| PyValueError::new_err(err.to_string()))
@@ -344,13 +348,14 @@ fn vegalite_to_scenegraph(
         }
         "msgpack" => {
             let vl_spec = parse_spec_to_value_or_string(vl_spec)?;
-            let sg_bytes = PYTHON_RUNTIME
-                .block_on(converter.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts))
-                .map_err(|err| {
-                    PyValueError::new_err(format!(
-                        "Vega-Lite to Scenegraph conversion failed:\n{err}"
-                    ))
-                })?;
+            let sg_bytes = run_converter_future(move |converter| async move {
+                converter
+                    .vegalite_to_scenegraph_msgpack(vl_spec, vl_opts)
+                    .await
+            })
+            .map_err(|err| {
+                PyValueError::new_err(format!("Vega-Lite to Scenegraph conversion failed:\n{err}"))
+            })?;
             Ok(Python::with_gil(|py| -> PyObject {
                 PyBytes::new(py, sg_bytes.as_slice()).into()
             }))
@@ -389,20 +394,15 @@ fn vega_to_png(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
 
-    let png_data = match PYTHON_RUNTIME.block_on(converter.vega_to_png(
-        vg_spec,
-        VgOpts {
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-        scale,
-        ppi,
-    )) {
+    let png_data = match run_converter_future(move |converter| async move {
+        converter.vega_to_png(vg_spec, vg_opts, scale, ppi).await
+    }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -461,24 +461,21 @@ fn vegalite_to_png(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
 
-    let png_data = match PYTHON_RUNTIME.block_on(converter.vegalite_to_png(
-        vl_spec,
-        VlOpts {
-            vl_version,
-            config,
-            theme,
-            show_warnings: show_warnings.unwrap_or(false),
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-        scale,
-        ppi,
-    )) {
+    let png_data = match run_converter_future(move |converter| async move {
+        converter
+            .vegalite_to_png(vl_spec, vl_opts, scale, ppi)
+            .await
+    }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -521,20 +518,17 @@ fn vega_to_jpeg(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
 
-    let jpeg_data = match PYTHON_RUNTIME.block_on(converter.vega_to_jpeg(
-        vg_spec,
-        VgOpts {
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-        scale,
-        quality,
-    )) {
+    let jpeg_data = match run_converter_future(move |converter| async move {
+        converter
+            .vega_to_jpeg(vg_spec, vg_opts, scale, quality)
+            .await
+    }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -593,24 +587,21 @@ fn vegalite_to_jpeg(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
 
-    let jpeg_data = match PYTHON_RUNTIME.block_on(converter.vegalite_to_jpeg(
-        vl_spec,
-        VlOpts {
-            vl_version,
-            config,
-            theme,
-            show_warnings: show_warnings.unwrap_or(false),
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-        scale,
-        quality,
-    )) {
+    let jpeg_data = match run_converter_future(move |converter| async move {
+        converter
+            .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality)
+            .await
+    }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -650,18 +641,15 @@ fn vega_to_pdf(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
 
-    let pdf_bytes = match PYTHON_RUNTIME.block_on(converter.vega_to_pdf(
-        vg_spec,
-        VgOpts {
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-    )) {
+    let pdf_bytes = match run_converter_future(move |converter| async move {
+        converter.vega_to_pdf(vg_spec, vg_opts).await
+    }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -716,22 +704,19 @@ fn vegalite_to_pdf(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: false,
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
 
-    let pdf_data = match PYTHON_RUNTIME.block_on(converter.vegalite_to_pdf(
-        vl_spec,
-        VlOpts {
-            vl_version,
-            config,
-            theme,
-            show_warnings: false,
-            allowed_base_urls,
-            format_locale,
-            time_format_locale,
-        },
-    )) {
+    let pdf_data = match run_converter_future(move |converter| async move {
+        converter.vegalite_to_pdf(vl_spec, vl_opts).await
+    }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -821,24 +806,22 @@ fn vegalite_to_html(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
+    let renderer = Renderer::from_str(&renderer)?;
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: false,
+        allowed_base_urls: None,
+        format_locale,
+        time_format_locale,
+    };
 
-    Ok(PYTHON_RUNTIME.block_on(converter.vegalite_to_html(
-        vl_spec,
-        VlOpts {
-            vl_version,
-            config,
-            theme,
-            show_warnings: false,
-            allowed_base_urls: None,
-            format_locale,
-            time_format_locale,
-        },
-        bundle.unwrap_or(false),
-        Renderer::from_str(&renderer)?,
-    ))?)
+    Ok(run_converter_future(move |converter| async move {
+        converter
+            .vegalite_to_html(vl_spec, vl_opts, bundle.unwrap_or(false), renderer)
+            .await
+    })?)
 }
 
 /// Convert a Vega spec to a self-contained HTML document
@@ -866,19 +849,17 @@ fn vega_to_html(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
-    Ok(PYTHON_RUNTIME.block_on(converter.vega_to_html(
-        vg_spec,
-        VgOpts {
-            allowed_base_urls: None,
-            format_locale,
-            time_format_locale,
-        },
-        bundle.unwrap_or(false),
-        Renderer::from_str(&renderer)?,
-    ))?)
+    let renderer = Renderer::from_str(&renderer)?;
+    let vg_opts = VgOpts {
+        allowed_base_urls: None,
+        format_locale,
+        time_format_locale,
+    };
+    Ok(run_converter_future(move |converter| async move {
+        converter
+            .vega_to_html(vg_spec, vg_opts, bundle.unwrap_or(false), renderer)
+            .await
+    })?)
 }
 
 /// Convert an SVG image string to PNG image data
@@ -1063,6 +1044,37 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
     Ok(())
 }
 
+/// Set the number of parallel converter workers for subsequent requests
+#[pyfunction]
+#[pyo3(signature = (num_workers))]
+fn set_num_workers(num_workers: usize) -> PyResult<()> {
+    if num_workers < 1 {
+        return Err(PyValueError::new_err("num_workers must be >= 1"));
+    }
+
+    let converter = VlConverterRs::with_num_workers(num_workers).map_err(|err| {
+        PyValueError::new_err(format!(
+            "Failed to set worker count to {num_workers}: {err}"
+        ))
+    })?;
+
+    let mut guard = VL_CONVERTER.write().map_err(|e| {
+        PyValueError::new_err(format!("Failed to acquire converter write lock: {e}"))
+    })?;
+    *guard = Arc::new(converter);
+    Ok(())
+}
+
+/// Get the number of configured converter workers
+#[pyfunction]
+#[pyo3(signature = ())]
+fn get_num_workers() -> PyResult<usize> {
+    let guard = VL_CONVERTER.read().map_err(|e| {
+        PyValueError::new_err(format!("Failed to acquire converter read lock: {e}"))
+    })?;
+    Ok(guard.num_workers())
+}
+
 /// Get the named local timezone that Vega uses to perform timezone calculations
 ///
 /// Returns:
@@ -1071,18 +1083,16 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
 #[pyfunction]
 #[pyo3(signature = ())]
 fn get_local_tz() -> PyResult<Option<String>> {
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
-    let local_tz = match PYTHON_RUNTIME.block_on(converter.get_local_tz()) {
-        Ok(local_tz) => local_tz,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "get_local_tz request failed:\n{}",
-                err
-            )))
-        }
-    };
+    let local_tz =
+        match run_converter_future(|converter| async move { converter.get_local_tz().await }) {
+            Ok(local_tz) => local_tz,
+            Err(err) => {
+                return Err(PyValueError::new_err(format!(
+                    "get_local_tz request failed:\n{}",
+                    err
+                )))
+            }
+        };
     Ok(local_tz)
 }
 
@@ -1093,10 +1103,8 @@ fn get_local_tz() -> PyResult<Option<String>> {
 #[pyfunction]
 #[pyo3(signature = ())]
 fn get_themes() -> PyResult<PyObject> {
-    let mut converter = VL_CONVERTER
-        .lock()
-        .expect("Failed to acquire lock on Vega-Lite converter");
-    let themes = match PYTHON_RUNTIME.block_on(converter.get_themes()) {
+    let themes = match run_converter_future(|converter| async move { converter.get_themes().await })
+    {
         Ok(themes) => themes,
         Err(err) => {
             return Err(PyValueError::new_err(format!(
@@ -1196,13 +1204,14 @@ fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyRes
         Default::default()
     };
 
-    if let Some(snippet) = &snippet {
-        Ok(PYTHON_RUNTIME.block_on(bundle_vega_snippet(snippet, vl_version))?)
+    if let Some(snippet) = snippet {
+        Ok(Python::with_gil(|py| {
+            py.allow_threads(|| PYTHON_RUNTIME.block_on(bundle_vega_snippet(&snippet, vl_version)))
+        })?)
     } else {
-        let mut converter = VL_CONVERTER
-            .lock()
-            .expect("Failed to acquire lock on Vega-Lite converter");
-        Ok(PYTHON_RUNTIME.block_on(converter.get_vegaembed_bundle(vl_version))?)
+        Ok(run_converter_future(move |converter| async move {
+            converter.get_vegaembed_bundle(vl_version).await
+        })?)
     }
 }
 
@@ -1271,6 +1280,8 @@ fn vl_convert(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(set_num_workers, m)?)?;
+    m.add_function(wrap_pyfunction!(get_num_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
     m.add_function(wrap_pyfunction!(get_format_locale, m)?)?;

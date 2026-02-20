@@ -134,7 +134,9 @@ __all__ = [
     "get_themes",
     "get_time_format_locale",
     "javascript_bundle",
+    "get_num_workers",
     "register_font_directory",
+    "set_num_workers",
     "svg_to_jpeg",
     "svg_to_pdf",
     "svg_to_png",
@@ -254,6 +256,27 @@ def register_font_directory(font_dir: str) -> None:
     Returns
     -------
     None
+    """
+    ...
+
+def set_num_workers(num_workers: int) -> None:
+    """
+    Set the number of converter workers for subsequent conversions.
+
+    Parameters
+    ----------
+    num_workers
+        Worker count (must be >= 1).
+    """
+    ...
+
+def get_num_workers() -> int:
+    """
+    Get the configured converter worker count.
+
+    Returns
+    -------
+    Number of workers.
     """
     ...
 
