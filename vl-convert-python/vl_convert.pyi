@@ -129,6 +129,7 @@ if TYPE_CHECKING:
     VlSpec: TypeAlias = str | dict[str, Any]
 
 __all__ = [
+    "asyncio",
     "get_format_locale",
     "get_local_tz",
     "get_themes",
@@ -217,7 +218,7 @@ def get_time_format_locale(name: TimeFormatLocaleName) -> dict[str, Any]:
     """
     ...
 
-def javascript_bundle(snippet: str, vl_version: str | None = None) -> str:
+def javascript_bundle(snippet: str | None = None, vl_version: str | None = None) -> str:
     """
     Create a JavaScript bundle containing the Vega Embed, Vega-Lite, and Vega libraries.
 
@@ -892,3 +893,228 @@ def get_vegalite_versions() -> list[str]:
     Vega-Lite version strings (e.g. ["5.8", "5.9", ..., "5.21"])
     """
     ...
+
+if TYPE_CHECKING:
+    class _AsyncioModule:
+        async def get_format_locale(self, name: FormatLocaleName) -> dict[str, Any]:
+            """Async version of ``get_format_locale``. See sync function for full documentation."""
+            ...
+        async def get_local_tz(self) -> str | None:
+            """Async version of ``get_local_tz``. See sync function for full documentation."""
+            ...
+        async def get_themes(self) -> dict[VegaThemes, dict[str, Any]]:
+            """Async version of ``get_themes``. See sync function for full documentation."""
+            ...
+        async def get_time_format_locale(
+            self, name: TimeFormatLocaleName
+        ) -> dict[str, Any]:
+            """Async version of ``get_time_format_locale``. See sync function for full documentation."""
+            ...
+        async def javascript_bundle(
+            self, snippet: str | None = None, vl_version: str | None = None
+        ) -> str:
+            """Async version of ``javascript_bundle``. See sync function for full documentation."""
+            ...
+        async def register_font_directory(self, font_dir: str) -> None:
+            """Async version of ``register_font_directory``. See sync function for full documentation."""
+            ...
+        async def set_num_workers(self, num_workers: int) -> None:
+            """Async version of ``set_num_workers``. See sync function for full documentation."""
+            ...
+        async def get_num_workers(self) -> int:
+            """Async version of ``get_num_workers``. See sync function for full documentation."""
+            ...
+        async def warm_up_workers(self) -> None:
+            """Async version of ``warm_up_workers``. See sync function for full documentation."""
+            ...
+        async def svg_to_jpeg(
+            self, svg: str, scale: float | None = None, quality: int | None = None
+        ) -> bytes:
+            """Async version of ``svg_to_jpeg``. See sync function for full documentation."""
+            ...
+        async def svg_to_pdf(self, svg: str, scale: float | None = None) -> bytes:
+            """Async version of ``svg_to_pdf``. See sync function for full documentation."""
+            ...
+        async def svg_to_png(
+            self, svg: str, scale: float | None = None, ppi: float | None = None
+        ) -> bytes:
+            """Async version of ``svg_to_png``. See sync function for full documentation."""
+            ...
+        async def vega_to_html(
+            self,
+            vg_spec: VlSpec,
+            bundle: bool | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            renderer: Renderer | None = None,
+        ) -> str:
+            """Async version of ``vega_to_html``. See sync function for full documentation."""
+            ...
+        async def vega_to_jpeg(
+            self,
+            vg_spec: VlSpec,
+            scale: float | None = None,
+            quality: int | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes:
+            """Async version of ``vega_to_jpeg``. See sync function for full documentation."""
+            ...
+        async def vega_to_pdf(
+            self,
+            vg_spec: VlSpec,
+            scale: float | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes:
+            """Async version of ``vega_to_pdf``. See sync function for full documentation."""
+            ...
+        async def vega_to_png(
+            self,
+            vg_spec: VlSpec,
+            scale: float | None = None,
+            ppi: float | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes:
+            """Async version of ``vega_to_png``. See sync function for full documentation."""
+            ...
+        async def vega_to_scenegraph(
+            self,
+            vg_spec: VlSpec,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            format: Literal["dict", "msgpack"] = "dict",
+        ) -> dict[str, Any] | bytes:
+            """Async version of ``vega_to_scenegraph``. See sync function for full documentation."""
+            ...
+        async def vega_to_svg(
+            self,
+            vg_spec: VlSpec,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> str:
+            """Async version of ``vega_to_svg``. See sync function for full documentation."""
+            ...
+        async def vega_to_url(
+            self, vg_spec: VlSpec, fullscreen: bool | None = None
+        ) -> str:
+            """Async version of ``vega_to_url``. See sync function for full documentation."""
+            ...
+        async def vegalite_to_html(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            bundle: bool | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            renderer: Renderer | None = None,
+        ) -> str:
+            """Async version of ``vegalite_to_html``. See sync function for full documentation."""
+            ...
+        async def vegalite_to_jpeg(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            scale: float | None = None,
+            quality: int | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes:
+            """Async version of ``vegalite_to_jpeg``. See sync function for full documentation."""
+            ...
+        async def vegalite_to_pdf(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            scale: float | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes:
+            """Async version of ``vegalite_to_pdf``. See sync function for full documentation."""
+            ...
+        async def vegalite_to_png(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            scale: float | None = None,
+            ppi: float | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes:
+            """Async version of ``vegalite_to_png``. See sync function for full documentation."""
+            ...
+        async def vegalite_to_scenegraph(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            format: Literal["dict", "msgpack"] = "dict",
+        ) -> dict[str, Any] | bytes:
+            """Async version of ``vegalite_to_scenegraph``. See sync function for full documentation."""
+            ...
+        async def vegalite_to_svg(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> str:
+            """Async version of ``vegalite_to_svg``. See sync function for full documentation."""
+            ...
+        async def vegalite_to_url(
+            self, vl_spec: VlSpec, fullscreen: bool | None = None
+        ) -> str:
+            """Async version of ``vegalite_to_url``. See sync function for full documentation."""
+            ...
+        async def vegalite_to_vega(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+        ) -> dict[str, Any]:
+            """Async version of ``vegalite_to_vega``. See sync function for full documentation."""
+            ...
+        async def get_vega_version(self) -> str:
+            """Async version of ``get_vega_version``. See sync function for full documentation."""
+            ...
+        async def get_vega_themes_version(self) -> str:
+            """Async version of ``get_vega_themes_version``. See sync function for full documentation."""
+            ...
+        async def get_vega_embed_version(self) -> str:
+            """Async version of ``get_vega_embed_version``. See sync function for full documentation."""
+            ...
+        async def get_vegalite_versions(self) -> list[str]:
+            """Async version of ``get_vegalite_versions``. See sync function for full documentation."""
+            ...
+
+    asyncio: _AsyncioModule
