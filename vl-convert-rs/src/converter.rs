@@ -5,13 +5,14 @@ use crate::module_loader::{VlConvertModuleLoader, FORMATE_LOCALE_MAP, TIME_FORMA
 use deno_core::anyhow::bail;
 use deno_core::error::AnyError;
 use deno_core::op2;
-use deno_core::{serde_v8, v8, ModuleSpecifier};
+use deno_core::{serde_v8, v8, ModuleSpecifier, OpState};
 use deno_error::JsErrorBox;
 use deno_runtime::deno_fs::RealFs;
 use deno_runtime::deno_permissions::{PermissionsContainer, RuntimePermissionDescriptorParser};
 use deno_runtime::deno_web::{BlobStore, InMemoryBroadcastChannel};
 use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
 use deno_runtime::FeatureChecker;
+use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
@@ -79,12 +80,14 @@ impl WorkerPool {
     }
 }
 
-lazy_static! {
-    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> = Arc::new(Mutex::new(HashMap::new()));
-    static ref MSGPACK_RESULTS: Arc<Mutex<HashMap<i32, Vec<u8>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
-    static ref NEXT_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+#[derive(Default)]
+struct WorkerTransferState {
+    json_args: HashMap<i32, String>,
+    msgpack_results: HashMap<i32, Vec<u8>>,
+    next_id: i32,
 }
+
+type WorkerTransferStateHandle = Rc<RefCell<WorkerTransferState>>;
 
 fn ensure_v8_platform_initialized() {
     static V8_INIT: Once = Once::new();
@@ -361,84 +364,96 @@ impl VlOpts {
     }
 }
 
-fn next_id() -> Result<i32, AnyError> {
-    match NEXT_ID.lock() {
-        Ok(mut guard) => {
-            let id = *guard;
-            *guard = (*guard + 1) % i32::MAX;
-            Ok(id)
-        }
-        Err(err) => {
-            bail!("Failed to acquire lock: {err}")
-        }
-    }
-}
-
-fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
-    set_json_str_arg(serde_json::to_string(&arg)?)
-}
-
-fn set_json_str_arg(json_str: String) -> Result<i32, AnyError> {
-    let id = next_id()?;
-
-    match JSON_ARGS.lock() {
-        Ok(mut guard) => {
-            guard.insert(id, json_str);
-        }
-        Err(err) => {
-            bail!("Failed to acquire lock: {err}")
-        }
-    }
-
+fn next_id(transfer_state: &WorkerTransferStateHandle) -> Result<i32, AnyError> {
+    let mut guard = transfer_state
+        .try_borrow_mut()
+        .map_err(|err| anyhow!("Failed to borrow worker transfer state: {err}"))?;
+    let id = guard.next_id;
+    guard.next_id = (guard.next_id + 1) % i32::MAX;
     Ok(id)
 }
 
-fn set_spec_arg(spec: ValueOrString) -> Result<i32, AnyError> {
+fn set_json_arg(
+    transfer_state: &WorkerTransferStateHandle,
+    arg: serde_json::Value,
+) -> Result<i32, AnyError> {
+    set_json_str_arg(transfer_state, serde_json::to_string(&arg)?)
+}
+
+fn set_json_str_arg(
+    transfer_state: &WorkerTransferStateHandle,
+    json_str: String,
+) -> Result<i32, AnyError> {
+    let id = next_id(transfer_state)?;
+    let mut guard = transfer_state
+        .try_borrow_mut()
+        .map_err(|err| anyhow!("Failed to borrow worker transfer state: {err}"))?;
+    guard.json_args.insert(id, json_str);
+    Ok(id)
+}
+
+fn set_spec_arg(
+    transfer_state: &WorkerTransferStateHandle,
+    spec: ValueOrString,
+) -> Result<i32, AnyError> {
     match spec {
-        ValueOrString::JsonString(s) => set_json_str_arg(s),
-        ValueOrString::Value(v) => set_json_arg(v),
+        ValueOrString::JsonString(s) => set_json_str_arg(transfer_state, s),
+        ValueOrString::Value(v) => set_json_arg(transfer_state, v),
     }
 }
 
-fn alloc_msgpack_result_id() -> Result<i32, AnyError> {
-    next_id()
+fn alloc_msgpack_result_id(transfer_state: &WorkerTransferStateHandle) -> Result<i32, AnyError> {
+    next_id(transfer_state)
 }
 
-fn take_msgpack_result(result_id: i32) -> Result<Vec<u8>, AnyError> {
-    match MSGPACK_RESULTS.lock() {
-        Ok(mut guard) => guard
-            .remove(&result_id)
-            .ok_or_else(|| anyhow!("Result id not found")),
-        Err(err) => bail!("Failed to acquire lock: {err}"),
+fn take_msgpack_result(
+    transfer_state: &WorkerTransferStateHandle,
+    result_id: i32,
+) -> Result<Vec<u8>, AnyError> {
+    let mut guard = transfer_state
+        .try_borrow_mut()
+        .map_err(|err| anyhow!("Failed to borrow worker transfer state: {err}"))?;
+    guard
+        .msgpack_results
+        .remove(&result_id)
+        .ok_or_else(|| anyhow!("Result id not found"))
+}
+
+fn clear_json_arg(transfer_state: &WorkerTransferStateHandle, arg_id: i32) {
+    if let Ok(mut guard) = transfer_state.try_borrow_mut() {
+        guard.json_args.remove(&arg_id);
     }
 }
 
-fn clear_json_arg(arg_id: i32) {
-    if let Ok(mut guard) = JSON_ARGS.lock() {
-        guard.remove(&arg_id);
-    }
-}
-
-fn clear_msgpack_result(result_id: i32) {
-    if let Ok(mut guard) = MSGPACK_RESULTS.lock() {
-        guard.remove(&result_id);
+fn clear_msgpack_result(transfer_state: &WorkerTransferStateHandle, result_id: i32) {
+    if let Ok(mut guard) = transfer_state.try_borrow_mut() {
+        guard.msgpack_results.remove(&result_id);
     }
 }
 
 struct JsonArgGuard {
+    transfer_state: WorkerTransferStateHandle,
     arg_id: Option<i32>,
 }
 
 impl JsonArgGuard {
-    fn from_value(value: serde_json::Value) -> Result<Self, AnyError> {
+    fn from_value(
+        transfer_state: &WorkerTransferStateHandle,
+        value: serde_json::Value,
+    ) -> Result<Self, AnyError> {
         Ok(Self {
-            arg_id: Some(set_json_arg(value)?),
+            transfer_state: transfer_state.clone(),
+            arg_id: Some(set_json_arg(transfer_state, value)?),
         })
     }
 
-    fn from_spec(spec: ValueOrString) -> Result<Self, AnyError> {
+    fn from_spec(
+        transfer_state: &WorkerTransferStateHandle,
+        spec: ValueOrString,
+    ) -> Result<Self, AnyError> {
         Ok(Self {
-            arg_id: Some(set_spec_arg(spec)?),
+            transfer_state: transfer_state.clone(),
+            arg_id: Some(set_spec_arg(transfer_state, spec)?),
         })
     }
 
@@ -450,19 +465,21 @@ impl JsonArgGuard {
 impl Drop for JsonArgGuard {
     fn drop(&mut self) {
         if let Some(arg_id) = self.arg_id.take() {
-            clear_json_arg(arg_id);
+            clear_json_arg(&self.transfer_state, arg_id);
         }
     }
 }
 
 struct MsgpackResultGuard {
+    transfer_state: WorkerTransferStateHandle,
     result_id: Option<i32>,
 }
 
 impl MsgpackResultGuard {
-    fn new() -> Result<Self, AnyError> {
+    fn new(transfer_state: &WorkerTransferStateHandle) -> Result<Self, AnyError> {
         Ok(Self {
-            result_id: Some(alloc_msgpack_result_id()?),
+            transfer_state: transfer_state.clone(),
+            result_id: Some(alloc_msgpack_result_id(transfer_state)?),
         })
     }
 
@@ -475,53 +492,56 @@ impl MsgpackResultGuard {
             .result_id
             .take()
             .expect("MsgpackResultGuard id missing");
-        take_msgpack_result(result_id)
+        take_msgpack_result(&self.transfer_state, result_id)
     }
 }
 
 impl Drop for MsgpackResultGuard {
     fn drop(&mut self) {
         if let Some(result_id) = self.result_id.take() {
-            clear_msgpack_result(result_id);
+            clear_msgpack_result(&self.transfer_state, result_id);
         }
     }
 }
 
 #[op2]
 #[string]
-fn op_get_json_arg(arg_id: i32) -> Result<String, JsErrorBox> {
-    match JSON_ARGS.lock() {
-        Ok(mut guard) => {
-            if let Some(arg) = guard.remove(&arg_id) {
-                Ok(arg)
-            } else {
-                Err(JsErrorBox::generic("Arg id not found"))
-            }
-        }
-        Err(err) => Err(JsErrorBox::generic(format!(
-            "Failed to acquire lock: {}",
-            err
-        ))),
+fn op_get_json_arg(state: &mut OpState, arg_id: i32) -> Result<String, JsErrorBox> {
+    let transfer_state = state
+        .try_borrow::<WorkerTransferStateHandle>()
+        .cloned()
+        .ok_or_else(|| JsErrorBox::generic("Worker transfer state not found"))?;
+    let mut guard = transfer_state.try_borrow_mut().map_err(|err| {
+        JsErrorBox::generic(format!("Failed to borrow worker transfer state: {err}"))
+    })?;
+    if let Some(arg) = guard.json_args.remove(&arg_id) {
+        Ok(arg)
+    } else {
+        Err(JsErrorBox::generic("Arg id not found"))
     }
 }
 
 #[op2(fast)]
-fn op_set_msgpack_result(result_id: i32, #[buffer] data: &[u8]) -> Result<(), JsErrorBox> {
-    match MSGPACK_RESULTS.lock() {
-        Ok(mut guard) => {
-            guard.insert(result_id, data.to_vec());
-            Ok(())
-        }
-        Err(err) => Err(JsErrorBox::generic(format!(
-            "Failed to acquire lock: {}",
-            err
-        ))),
-    }
+fn op_set_msgpack_result(
+    state: &mut OpState,
+    result_id: i32,
+    #[buffer] data: &[u8],
+) -> Result<(), JsErrorBox> {
+    let transfer_state = state
+        .try_borrow::<WorkerTransferStateHandle>()
+        .cloned()
+        .ok_or_else(|| JsErrorBox::generic("Worker transfer state not found"))?;
+    let mut guard = transfer_state.try_borrow_mut().map_err(|err| {
+        JsErrorBox::generic(format!("Failed to borrow worker transfer state: {err}"))
+    })?;
+    guard.msgpack_results.insert(result_id, data.to_vec());
+    Ok(())
 }
 
 /// Struct that interacts directly with the Deno JavaScript runtime. Not Sendable
 struct InnerVlConverter {
     worker: MainWorker,
+    transfer_state: WorkerTransferStateHandle,
     initialized_vl_versions: HashSet<VlVersion>,
     vega_initialized: bool,
     font_config_version: u64,
@@ -934,7 +954,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
             extensions: vec![
                 // Canvas 2D extension from vl-convert-canvas2d-deno crate
                 vl_convert_canvas2d_deno::vl_convert_canvas2d::init(),
-                // Our runtime extension (text width, JSON args)
+                // Our runtime extension (worker-local JSON/msgpack transfer ops)
                 vl_convert_runtime::init(),
             ],
             startup_snapshot: Some(crate::VL_CONVERT_SNAPSHOT),
@@ -943,6 +963,12 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
 
         // Create the MainWorker with full Web API support
         let worker = MainWorker::bootstrap_from_options(&main_module, services, options);
+        let transfer_state = Rc::new(RefCell::new(WorkerTransferState::default()));
+        worker
+            .js_runtime
+            .op_state()
+            .borrow_mut()
+            .put(transfer_state.clone());
 
         // Add shared font config to OpState so canvas contexts use the same fonts as SVG rendering.
         // We resolve the FontConfig into a fontdb once here; each canvas context then clones
@@ -960,6 +986,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
 
         let this = Self {
             worker,
+            transfer_state,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
             font_config_version: initial_font_version,
@@ -1025,8 +1052,8 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         self.init_vl_version(&vl_opts.vl_version).await?;
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
 
-        let spec_arg = JsonArgGuard::from_spec(vl_spec.into())?;
-        let config_arg = JsonArgGuard::from_value(config)?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec.into())?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
@@ -1073,12 +1100,13 @@ compileVegaLite_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_spec(vl_spec.into())?;
-        let config_arg = JsonArgGuard::from_value(config)?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec.into())?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
-        let format_locale_arg = JsonArgGuard::from_value(format_locale)?;
-        let time_format_locale_arg = JsonArgGuard::from_value(time_format_locale)?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
@@ -1142,13 +1170,14 @@ vegaLiteToSvg_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_spec(vl_spec)?;
-        let config_arg = JsonArgGuard::from_value(config)?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec)?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
-        let format_locale_arg = JsonArgGuard::from_value(format_locale)?;
-        let time_format_locale_arg = JsonArgGuard::from_value(time_format_locale)?;
-        let result = MsgpackResultGuard::new()?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let result = MsgpackResultGuard::new(&self.transfer_state)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
@@ -1223,9 +1252,10 @@ vegaLiteToScenegraph_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_spec(vg_spec.into())?;
-        let format_locale_arg = JsonArgGuard::from_value(format_locale)?;
-        let time_format_locale_arg = JsonArgGuard::from_value(time_format_locale)?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec.into())?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
 
         let code = format!(
             r#"
@@ -1277,10 +1307,11 @@ vegaToSvg(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_spec(vg_spec)?;
-        let format_locale_arg = JsonArgGuard::from_value(format_locale)?;
-        let time_format_locale_arg = JsonArgGuard::from_value(time_format_locale)?;
-        let result = MsgpackResultGuard::new()?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec)?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let result = MsgpackResultGuard::new(&self.transfer_state)?;
 
         let code = format!(
             r#"
@@ -1398,9 +1429,10 @@ delete themes.default
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_value(vg_spec.clone())?;
-        let format_locale_arg = JsonArgGuard::from_value(format_locale)?;
-        let time_format_locale_arg = JsonArgGuard::from_value(time_format_locale)?;
+        let spec_arg = JsonArgGuard::from_value(&self.transfer_state, vg_spec.clone())?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
 
         let code = format!(
             r#"
@@ -1456,10 +1488,11 @@ vegaToCanvas(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_value(vl_spec.clone())?;
-        let config_arg = JsonArgGuard::from_value(config)?;
-        let format_locale_arg = JsonArgGuard::from_value(format_locale)?;
-        let time_format_locale_arg = JsonArgGuard::from_value(time_format_locale)?;
+        let spec_arg = JsonArgGuard::from_value(&self.transfer_state, vl_spec.clone())?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
