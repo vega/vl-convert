@@ -59,24 +59,89 @@ deno_core::extension!(
 // Scenegraph results are returned as MessagePack byte buffers via ops,
 // avoiding JSON serialization overhead for large payloads.
 struct WorkerPool {
-    senders: Vec<tokio::sync::mpsc::Sender<VlConvertCommand>>,
-    next_sender_idx: AtomicUsize,
+    senders: Vec<tokio::sync::mpsc::Sender<QueuedCommand>>,
+    // Per-worker count of requests that have been reserved for this worker but not yet
+    // fully processed. This includes in-flight senders blocked on channel capacity and
+    // commands currently queued/executing in the worker loop.
+    outstanding: Vec<Arc<AtomicUsize>>,
+    dispatch_cursor: AtomicUsize,
     _handles: Vec<JoinHandle<()>>,
 }
 
 impl WorkerPool {
-    fn next_sender(&self) -> Option<tokio::sync::mpsc::Sender<VlConvertCommand>> {
+    fn next_sender(&self) -> Option<(tokio::sync::mpsc::Sender<QueuedCommand>, OutstandingTicket)> {
         if self.senders.is_empty() {
             return None;
         }
-        let idx = self.next_sender_idx.fetch_add(1, Ordering::Relaxed) % self.senders.len();
-        Some(self.senders[idx].clone())
+
+        // Choose the worker with the smallest outstanding count. Rotate scan start so ties
+        // are not biased to index 0.
+        let start = self.dispatch_cursor.fetch_add(1, Ordering::Relaxed) % self.senders.len();
+        let mut best_idx = None;
+        let mut best_outstanding = usize::MAX;
+
+        for offset in 0..self.senders.len() {
+            let idx = (start + offset) % self.senders.len();
+            if self.senders[idx].is_closed() {
+                continue;
+            }
+
+            let outstanding = self.outstanding[idx].load(Ordering::Relaxed);
+            if outstanding < best_outstanding {
+                best_idx = Some(idx);
+                best_outstanding = outstanding;
+                if outstanding == 0 {
+                    break;
+                }
+            }
+        }
+
+        let idx = best_idx?;
+        let ticket = OutstandingTicket::new(self.outstanding[idx].clone());
+        Some((self.senders[idx].clone(), ticket))
     }
 
     fn is_closed(&self) -> bool {
         self.senders
             .iter()
             .all(tokio::sync::mpsc::Sender::is_closed)
+    }
+}
+
+struct OutstandingTicket {
+    counter: Arc<AtomicUsize>,
+}
+
+impl OutstandingTicket {
+    fn new(counter: Arc<AtomicUsize>) -> Self {
+        counter.fetch_add(1, Ordering::Relaxed);
+        Self { counter }
+    }
+}
+
+impl Drop for OutstandingTicket {
+    fn drop(&mut self) {
+        let prev = self.counter.fetch_sub(1, Ordering::Relaxed);
+        debug_assert!(prev > 0, "outstanding counter underflow");
+    }
+}
+
+struct QueuedCommand {
+    cmd: VlConvertCommand,
+    ticket: OutstandingTicket,
+}
+
+impl QueuedCommand {
+    fn new(cmd: VlConvertCommand, ticket: OutstandingTicket) -> Self {
+        Self { cmd, ticket }
+    }
+
+    fn into_command(self) -> VlConvertCommand {
+        self.cmd
+    }
+
+    fn into_parts(self) -> (VlConvertCommand, OutstandingTicket) {
+        (self.cmd, self.ticket)
     }
 }
 
@@ -111,8 +176,7 @@ fn spawn_worker_pool(num_workers: usize) -> Result<WorkerPool, AnyError> {
     let mut startup_receivers = Vec::with_capacity(num_workers);
 
     for _ in 0..num_workers {
-        let (tx, mut rx) =
-            tokio::sync::mpsc::channel::<VlConvertCommand>(per_worker_queue_capacity);
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<QueuedCommand>(per_worker_queue_capacity);
         senders.push(tx);
         let (startup_tx, startup_rx) = std::sync::mpsc::channel::<Result<(), String>>();
         let handle = thread::spawn(move || {
@@ -139,7 +203,10 @@ fn spawn_worker_pool(num_workers: usize) -> Result<WorkerPool, AnyError> {
                     }
                 };
 
-                while let Some(cmd) = rx.recv().await {
+                while let Some(queued_cmd) = rx.recv().await {
+                    // Keep the ticket alive for the full loop iteration so outstanding
+                    // covers refresh + command execution (drop happens at iteration end).
+                    let (cmd, _ticket) = queued_cmd.into_parts();
                     if let Err(e) = inner.refresh_font_config_if_needed() {
                         cmd.send_error(e);
                         continue;
@@ -172,9 +239,11 @@ fn spawn_worker_pool(num_workers: usize) -> Result<WorkerPool, AnyError> {
         }
     }
 
+    let num = senders.len();
     Ok(WorkerPool {
         senders,
-        next_sender_idx: AtomicUsize::new(0),
+        outstanding: (0..num).map(|_| Arc::new(AtomicUsize::new(0))).collect(),
+        dispatch_cursor: AtomicUsize::new(0),
         _handles: handles,
     })
 }
@@ -1819,7 +1888,9 @@ impl VlConverter {
         Ok(())
     }
 
-    fn get_or_spawn_sender(&self) -> Result<tokio::sync::mpsc::Sender<VlConvertCommand>, AnyError> {
+    fn get_or_spawn_sender(
+        &self,
+    ) -> Result<(tokio::sync::mpsc::Sender<QueuedCommand>, OutstandingTicket), AnyError> {
         let mut guard = self
             .inner
             .pool
@@ -1828,9 +1899,9 @@ impl VlConverter {
 
         if let Some(pool) = guard.as_ref() {
             if !pool.is_closed() {
-                return pool
-                    .next_sender()
-                    .ok_or_else(|| anyhow!("Worker pool has no senders"));
+                if let Some(sender) = pool.next_sender() {
+                    return Ok(sender);
+                }
             }
             *guard = None;
         }
@@ -1843,30 +1914,24 @@ impl VlConverter {
         Ok(sender)
     }
 
-    fn reset_pool(&self) -> Result<(), AnyError> {
-        let mut guard = self
-            .inner
-            .pool
-            .lock()
-            .map_err(|e| anyhow!("Failed to lock worker pool: {e}"))?;
-        *guard = None;
-        Ok(())
-    }
-
     async fn send_command_with_retry(
         &self,
         cmd: VlConvertCommand,
         request_name: &str,
     ) -> Result<(), AnyError> {
-        let sender = self.get_or_spawn_sender()?;
-        match sender.send(cmd).await {
+        let (sender, ticket) = self.get_or_spawn_sender()?;
+        let queued = QueuedCommand::new(cmd, ticket);
+        match sender.send(queued).await {
             Ok(()) => Ok(()),
-            Err(tokio::sync::mpsc::error::SendError(cmd)) => {
-                self.reset_pool()?;
-                let sender = self.get_or_spawn_sender()?;
-                sender.send(cmd).await.map_err(|err| {
-                    anyhow!("Failed to send {request_name} request after retry: {err}")
-                })
+            Err(tokio::sync::mpsc::error::SendError(queued)) => {
+                let cmd = queued.into_command();
+                let (sender, ticket) = self.get_or_spawn_sender()?;
+                sender
+                    .send(QueuedCommand::new(cmd, ticket))
+                    .await
+                    .map_err(|err| {
+                        anyhow!("Failed to send {request_name} request after retry: {err}")
+                    })
             }
         }
     }
@@ -2405,6 +2470,12 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn make_test_command() -> VlConvertCommand {
+        let (responder, _rx) =
+            futures::channel::oneshot::channel::<Result<Option<String>, AnyError>>();
+        VlConvertCommand::GetLocalTz { responder }
+    }
+
     #[tokio::test]
     async fn test_convert_context() {
         let ctx = VlConverter::new();
@@ -2742,6 +2813,171 @@ try {
     }
 
     #[test]
+    fn test_worker_pool_next_sender_balances_outstanding_reservations() {
+        let mut senders = Vec::new();
+        let mut _receivers = Vec::new();
+        for _ in 0..3 {
+            let (tx, rx) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+            senders.push(tx);
+            _receivers.push(rx);
+        }
+
+        let pool = WorkerPool {
+            senders,
+            outstanding: (0..3)
+                .map(|_| std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)))
+                .collect(),
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        let mut tickets = Vec::new();
+        for _ in 0..30 {
+            let (_, ticket) = pool
+                .next_sender()
+                .expect("pool with open senders should produce a sender");
+            tickets.push(ticket);
+
+            let loads: Vec<usize> = pool
+                .outstanding
+                .iter()
+                .map(|outstanding| outstanding.load(std::sync::atomic::Ordering::Relaxed))
+                .collect();
+            let min = *loads.iter().min().expect("loads should not be empty");
+            let max = *loads.iter().max().expect("loads should not be empty");
+            assert!(
+                max - min <= 1,
+                "expected balanced outstanding counts, got {loads:?}"
+            );
+        }
+
+        drop(tickets);
+        for outstanding in &pool.outstanding {
+            assert_eq!(outstanding.load(std::sync::atomic::Ordering::Relaxed), 0);
+        }
+    }
+
+    #[test]
+    fn test_worker_pool_next_sender_skips_closed_senders() {
+        let (closed_sender, closed_receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+        drop(closed_receiver);
+
+        let (open_sender, mut open_receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+
+        let pool = WorkerPool {
+            senders: vec![closed_sender, open_sender],
+            outstanding: (0..2)
+                .map(|_| std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)))
+                .collect(),
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        for _ in 0..4 {
+            let (sender, ticket) = pool
+                .next_sender()
+                .expect("pool should return the open sender");
+            sender
+                .try_send(QueuedCommand::new(make_test_command(), ticket))
+                .expect("dispatch should use open sender, not closed sender");
+            let queued = open_receiver
+                .try_recv()
+                .expect("open receiver should receive dispatched command");
+            drop(queued);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_worker_pool_cancellation_releases_outstanding_ticket() {
+        let (sender, mut receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+        let pool = WorkerPool {
+            senders: vec![sender],
+            outstanding: vec![std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0))],
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        let (sender, ticket) = pool.next_sender().unwrap();
+        sender
+            .send(QueuedCommand::new(make_test_command(), ticket))
+            .await
+            .unwrap();
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+
+        let (sender, ticket) = pool.next_sender().unwrap();
+        let blocked_send = tokio::spawn(async move {
+            sender
+                .send(QueuedCommand::new(make_test_command(), ticket))
+                .await
+        });
+        tokio::task::yield_now().await;
+
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            2
+        );
+
+        blocked_send.abort();
+        let _ = blocked_send.await;
+        tokio::task::yield_now().await;
+
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+
+        let queued = receiver
+            .recv()
+            .await
+            .expect("first queued command should still be in the channel");
+        drop(queued);
+
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
+    }
+
+    #[test]
+    fn test_warm_up_respawns_closed_pool_without_explicit_reset() {
+        let num_workers = 2;
+        let converter = VlConverter::with_num_workers(num_workers).unwrap();
+
+        let mut closed_senders = Vec::with_capacity(num_workers);
+        for _ in 0..num_workers {
+            let (sender, receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+            drop(receiver);
+            closed_senders.push(sender);
+        }
+
+        let closed_pool = WorkerPool {
+            senders: closed_senders,
+            outstanding: (0..num_workers)
+                .map(|_| std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)))
+                .collect(),
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        {
+            let mut guard = converter.inner.pool.lock().unwrap();
+            *guard = Some(closed_pool);
+        }
+
+        converter.warm_up().unwrap();
+
+        let guard = converter.inner.pool.lock().unwrap();
+        let pool = guard
+            .as_ref()
+            .expect("warm_up should replace closed pool with a live pool");
+        assert_eq!(pool.senders.len(), num_workers);
+        assert!(!pool.is_closed(), "respawned pool should be open");
+    }
+
+    #[test]
     fn test_warm_up_spawns_pool_without_request() {
         let converter = VlConverter::with_num_workers(2).unwrap();
 
@@ -2759,6 +2995,14 @@ try {
                 .expect("pool should be initialized by warm_up");
             assert_eq!(pool.senders.len(), 2);
             assert!(!pool.is_closed(), "warmed pool should have open senders");
+            assert_eq!(
+                pool.outstanding
+                    .iter()
+                    .map(|outstanding| outstanding.load(std::sync::atomic::Ordering::Relaxed))
+                    .sum::<usize>(),
+                0,
+                "warm_up should not leave outstanding reservations"
+            );
         }
     }
 
