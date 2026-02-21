@@ -218,7 +218,7 @@ def get_time_format_locale(name: TimeFormatLocaleName) -> dict[str, Any]:
     """
     ...
 
-def javascript_bundle(snippet: str, vl_version: str | None = None) -> str:
+def javascript_bundle(snippet: str | None = None, vl_version: str | None = None) -> str:
     """
     Create a JavaScript bundle containing the Vega Embed, Vega-Lite, and Vega libraries.
 

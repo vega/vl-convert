@@ -19,6 +19,14 @@ def run(coro):
     return asyncio.run(coro)
 
 
+def public_callable_names(module):
+    return {
+        name
+        for name in dir(module)
+        if not name.startswith("_") and callable(getattr(module, name))
+    }
+
+
 @pytest.fixture(autouse=True)
 def reset_worker_count():
     original = vlc.get_num_workers()
@@ -33,6 +41,20 @@ def test_asyncio_namespace_import_and_expected_attributes():
     assert hasattr(vlca, "vegalite_to_svg")
     assert hasattr(vlca, "vega_to_scenegraph")
     assert hasattr(vlca, "warm_up_workers")
+
+
+def test_asyncio_module_has_sync_callable_parity():
+    sync_callables = public_callable_names(vlc)
+    async_callables = public_callable_names(vlca)
+    assert async_callables == sync_callables
+
+
+def test_asyncio_functions_have_docstrings():
+    for name in public_callable_names(vlc):
+        doc = getattr(vlca, name).__doc__
+        assert isinstance(doc, str)
+        assert doc.strip()
+        assert f"vl_convert.{name}" in doc
 
 
 def test_asyncio_smoke_and_sync_parity_shapes():
@@ -106,15 +128,25 @@ def test_asyncio_cancellation_does_not_poison_followup_requests():
         await vlca.warm_up_workers()
 
         task = asyncio.ensure_future(vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16"))
-        await asyncio.sleep(0)
-        task.cancel()
+        assert task.cancel()
 
-        try:
+        with pytest.raises(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16")
         assert svg.lstrip().startswith("<svg")
+
+    run(scenario())
+
+
+def test_sync_invalid_config_raises_value_error():
+    with pytest.raises(ValueError):
+        vlc.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16", config="{bad json")
+
+
+def test_asyncio_invalid_config_raises_value_error():
+    async def scenario():
+        with pytest.raises(ValueError):
+            await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16", config="{bad json")
 
     run(scenario())
