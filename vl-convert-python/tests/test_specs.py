@@ -18,6 +18,7 @@ root_dir = tests_dir.parent.parent
 specs_dir = root_dir / "vl-convert-rs" / "tests" / "vl-specs"
 fonts_dir = root_dir / "vl-convert-rs" / "tests" / "fonts"
 locale_dir = root_dir / "vl-convert-rs" / "tests" / "locale"
+failed_dir = tests_dir / "failed"
 
 BACKGROUND_COLOR = "#abc"
 
@@ -247,11 +248,11 @@ def test_png(name, scale, as_dict):
     # Convert to vega first
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     png = vlc.vega_to_png(vg_spec, scale=scale)
-    check_png(png, expected_png)
+    check_png(png, expected_png, name=f"png_vega_{name}")
 
     # Convert directly to image
     png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version, scale=scale)
-    check_png(png, expected_png)
+    check_png(png, expected_png, name=f"png_vegalite_{name}")
 
 
 @pytest.mark.parametrize(
@@ -272,7 +273,7 @@ def test_png_theme_config(name, scale, theme):
         theme=theme,
         config=config,
     )
-    check_png(png, expected_png)
+    check_png(png, expected_png, name=f"png_theme_{name}_{theme}")
 
 
 @pytest.mark.parametrize(
@@ -334,12 +335,12 @@ def test_pdf(name, tol, as_dict):
     pdf = vlc.vega_to_pdf(vg_spec)
     png = pdf_to_png(pdf)
     # Lower tolerance because pdfium does its own text rendering, which won't be pixel identical to resvg
-    check_png(png, expected_png, tol=tol)
+    check_png(png, expected_png, tol=tol, name=f"pdf_vega_{name}")
 
     # Convert directly to image
     pdf = vlc.vegalite_to_pdf(vl_spec, vl_version=vl_version)
     png = pdf_to_png(pdf)
-    check_png(png, expected_png, tol=tol)
+    check_png(png, expected_png, tol=tol, name=f"pdf_vegalite_{name}")
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="Font mismatch on windows")
@@ -363,7 +364,7 @@ def test_locale():
     )
 
     expected_png = load_expected_png(name, vl_version)
-    check_png(png, expected_png)
+    check_png(png, expected_png, name=f"png_locale_dict_{name}")
 
     # Test locale by name
     png = vlc.vegalite_to_png(
@@ -375,7 +376,7 @@ def test_locale():
     )
 
     expected_png = load_expected_png(name, vl_version)
-    check_png(png, expected_png)
+    check_png(png, expected_png, name=f"png_locale_name_{name}")
 
 
 def test_gh_78():
@@ -388,14 +389,18 @@ def test_gh_78():
         png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version)
 
     expected_png = load_expected_png(name, vl_version)
-    check_png(png, expected_png)
+    check_png(png, expected_png, name=f"png_gh78_{name}")
 
 
-def check_png(png, expected_png, tol=0.994):
+def check_png(png, expected_png, tol=0.994, name=None):
     png_img = imread(BytesIO(png))
     expected_png_img = imread(BytesIO(expected_png))
     similarity_value = ssim(png_img, expected_png_img, channel_axis=2)
     if similarity_value < tol:
+        if name is not None:
+            failed_dir.mkdir(parents=True, exist_ok=True)
+            (failed_dir / f"{name}.png").write_bytes(png)
+            (failed_dir / f"{name}.expected.png").write_bytes(expected_png)
         pytest.fail(f"png mismatch with similarity: {similarity_value}")
 
 
