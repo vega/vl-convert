@@ -2,16 +2,17 @@
 #![allow(clippy::useless_conversion)]
 #![allow(clippy::uninlined_format_args)]
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyPermissionError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyModule};
 use pythonize::{depythonize, pythonize};
 use std::borrow::Cow;
 use std::future::Future;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::converter::{
-    FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlOpts,
+    FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -41,6 +42,106 @@ fn converter_read_handle() -> Result<Arc<VlConverterRs>, vl_convert_rs::anyhow::
         .map(|guard| guard.clone())
 }
 
+fn converter_config() -> Result<VlConverterConfig, vl_convert_rs::anyhow::Error> {
+    VL_CONVERTER
+        .read()
+        .map_err(|e| vl_convert_rs::anyhow::anyhow!("Failed to acquire converter read lock: {e}"))
+        .map(|guard| guard.config())
+}
+
+fn install_converter(converter: VlConverterRs) -> Result<(), vl_convert_rs::anyhow::Error> {
+    let mut guard = VL_CONVERTER.write().map_err(|e| {
+        vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
+    })?;
+    *guard = Arc::new(converter);
+    Ok(())
+}
+
+fn configure_converter_with_config(
+    config: VlConverterConfig,
+) -> Result<(), vl_convert_rs::anyhow::Error> {
+    let converter = VlConverterRs::with_config(config)?;
+    install_converter(converter)
+}
+
+fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
+    serde_json::json!({
+        "num_workers": config.num_workers,
+        "allow_http_access": config.allow_http_access,
+        "filesystem_root": config
+            .filesystem_root
+            .as_ref()
+            .map(|root| root.to_string_lossy().to_string()),
+        "allowed_base_urls": config.allowed_base_urls,
+    })
+}
+
+fn apply_config_overrides(
+    kwargs: Option<&Bound<'_, PyDict>>,
+) -> Result<VlConverterConfig, vl_convert_rs::anyhow::Error> {
+    let mut config = converter_config()?;
+    let Some(kwargs) = kwargs else {
+        return Ok(config);
+    };
+
+    for (key, value) in kwargs.iter() {
+        let key_str: String = key.extract().map_err(|err| {
+            vl_convert_rs::anyhow::anyhow!("configure_converter keyword parsing failed: {err}")
+        })?;
+        match key_str.as_str() {
+            "num_workers" => {
+                if !value.is_none() {
+                    config.num_workers = value.extract::<usize>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid num_workers value for configure_converter: {err}"
+                        )
+                    })?;
+                }
+            }
+            "allow_http_access" => {
+                if !value.is_none() {
+                    config.allow_http_access = value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid allow_http_access value for configure_converter: {err}"
+                        )
+                    })?;
+                }
+            }
+            "filesystem_root" => {
+                if value.is_none() {
+                    config.filesystem_root = None;
+                } else {
+                    config.filesystem_root =
+                        Some(PathBuf::from(value.extract::<String>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid filesystem_root value for configure_converter: {err}"
+                            )
+                        })?));
+                }
+            }
+            "allowed_base_urls" => {
+                if value.is_none() {
+                    config.allowed_base_urls = None;
+                } else {
+                    config.allowed_base_urls =
+                        Some(value.extract::<Vec<String>>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid allowed_base_urls value for configure_converter: {err}"
+                            )
+                        })?);
+                }
+            }
+            other => {
+                return Err(vl_convert_rs::anyhow::anyhow!(
+                    "Unknown configure_converter argument: {other}"
+                ));
+            }
+        }
+    }
+
+    Ok(config)
+}
+
 fn run_converter_future<R, Fut, F>(make_future: F) -> Result<R, vl_convert_rs::anyhow::Error>
 where
     F: FnOnce(Arc<VlConverterRs>) -> Fut + Send + 'static,
@@ -51,8 +152,26 @@ where
     Python::with_gil(|py| py.allow_threads(move || PYTHON_RUNTIME.block_on(make_future(converter))))
 }
 
-fn prefixed_py_value_error(prefix: &'static str, err: impl std::fmt::Display) -> PyErr {
-    PyValueError::new_err(format!("{prefix}:\n{err}"))
+fn is_permission_denied_message(message: &str) -> bool {
+    const ACCESS_DENIED_MARKER: &str = "VLC_ACCESS_DENIED";
+    if message.contains(ACCESS_DENIED_MARKER) {
+        return true;
+    }
+
+    let lowercase = message.to_ascii_lowercase();
+    lowercase.contains("permission")
+        || lowercase.contains("access denied")
+        || lowercase.contains("requires read access")
+        || lowercase.contains("requires net access")
+}
+
+fn prefixed_py_error(prefix: &'static str, err: impl std::fmt::Display) -> PyErr {
+    let message = format!("{prefix}:\n{err}");
+    if is_permission_denied_message(&message) {
+        PyPermissionError::new_err(message)
+    } else {
+        PyValueError::new_err(message)
+    }
 }
 
 fn future_into_py_object<'py, Fut>(py: Python<'py>, fut: Fut) -> PyResult<Bound<'py, PyAny>>
@@ -74,13 +193,12 @@ where
     R: Send + 'static,
     C: FnOnce(Python<'_>, R) -> PyResult<PyObject> + Send + 'static,
 {
-    let converter =
-        converter_read_handle().map_err(|err| prefixed_py_value_error(error_prefix, err))?;
+    let converter = converter_read_handle().map_err(|err| prefixed_py_error(error_prefix, err))?;
 
     future_into_py_object(py, async move {
         let value = make_future(converter)
             .await
-            .map_err(|err| prefixed_py_value_error(error_prefix, err))?;
+            .map_err(|err| prefixed_py_error(error_prefix, err))?;
         Python::with_gil(|py| convert(py, value))
     })
 }
@@ -142,10 +260,10 @@ fn vegalite_to_vega(
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega-Lite to Vega conversion failed:\n{}",
-                err
-            )))
+            return Err(prefixed_py_error(
+                "Vega-Lite to Vega conversion failed",
+                err,
+            ))
         }
     };
     Python::with_gil(|py| -> PyResult<PyObject> {
@@ -187,12 +305,7 @@ fn vega_to_svg(
         converter.vega_to_svg(vg_spec, vg_opts).await
     }) {
         Ok(vega_spec) => vega_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega to SVG conversion failed:\n{}",
-                err
-            )))
-        }
+        Err(err) => return Err(prefixed_py_error("Vega to SVG conversion failed", err)),
     };
     Ok(svg)
 }
@@ -232,9 +345,7 @@ fn vega_to_scenegraph(
             let sg = run_converter_future(move |converter| async move {
                 converter.vega_to_scenegraph(vg_spec, vg_opts).await
             })
-            .map_err(|err| {
-                PyValueError::new_err(format!("Vega to Scenegraph conversion failed:\n{err}"))
-            })?;
+            .map_err(|err| prefixed_py_error("Vega to Scenegraph conversion failed", err))?;
             Python::with_gil(|py| -> PyResult<PyObject> {
                 pythonize(py, &sg)
                     .map_err(|err| PyValueError::new_err(err.to_string()))
@@ -246,9 +357,7 @@ fn vega_to_scenegraph(
             let sg_bytes = run_converter_future(move |converter| async move {
                 converter.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
             })
-            .map_err(|err| {
-                PyValueError::new_err(format!("Vega to Scenegraph conversion failed:\n{err}"))
-            })?;
+            .map_err(|err| prefixed_py_error("Vega to Scenegraph conversion failed", err))?;
             Ok(Python::with_gil(|py| -> PyObject {
                 PyBytes::new(py, sg_bytes.as_slice()).into()
             }))
@@ -314,12 +423,7 @@ fn vegalite_to_svg(
         converter.vegalite_to_svg(vl_spec, vl_opts).await
     }) {
         Ok(vega_spec) => vega_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega-Lite to SVG conversion failed:\n{}",
-                err
-            )))
-        }
+        Err(err) => return Err(prefixed_py_error("Vega-Lite to SVG conversion failed", err)),
     };
     Ok(svg)
 }
@@ -382,9 +486,7 @@ fn vegalite_to_scenegraph(
             let sg = run_converter_future(move |converter| async move {
                 converter.vegalite_to_scenegraph(vl_spec, vl_opts).await
             })
-            .map_err(|err| {
-                PyValueError::new_err(format!("Vega-Lite to Scenegraph conversion failed:\n{err}"))
-            })?;
+            .map_err(|err| prefixed_py_error("Vega-Lite to Scenegraph conversion failed", err))?;
             Python::with_gil(|py| -> PyResult<PyObject> {
                 pythonize(py, &sg)
                     .map_err(|err| PyValueError::new_err(err.to_string()))
@@ -398,9 +500,7 @@ fn vegalite_to_scenegraph(
                     .vegalite_to_scenegraph_msgpack(vl_spec, vl_opts)
                     .await
             })
-            .map_err(|err| {
-                PyValueError::new_err(format!("Vega-Lite to Scenegraph conversion failed:\n{err}"))
-            })?;
+            .map_err(|err| prefixed_py_error("Vega-Lite to Scenegraph conversion failed", err))?;
             Ok(Python::with_gil(|py| -> PyObject {
                 PyBytes::new(py, sg_bytes.as_slice()).into()
             }))
@@ -449,12 +549,7 @@ fn vega_to_png(
         converter.vega_to_png(vg_spec, vg_opts, scale, ppi).await
     }) {
         Ok(vega_spec) => vega_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega to PNG conversion failed:\n{}",
-                err
-            )))
-        }
+        Err(err) => return Err(prefixed_py_error("Vega to PNG conversion failed", err)),
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
@@ -522,12 +617,7 @@ fn vegalite_to_png(
             .await
     }) {
         Ok(vega_spec) => vega_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega-Lite to PNG conversion failed:\n{}",
-                err
-            )))
-        }
+        Err(err) => return Err(prefixed_py_error("Vega-Lite to PNG conversion failed", err)),
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
@@ -575,12 +665,7 @@ fn vega_to_jpeg(
             .await
     }) {
         Ok(vega_spec) => vega_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega to JPEG conversion failed:\n{}",
-                err
-            )))
-        }
+        Err(err) => return Err(prefixed_py_error("Vega to JPEG conversion failed", err)),
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
@@ -649,10 +734,10 @@ fn vegalite_to_jpeg(
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega-Lite to JPEG conversion failed:\n{}",
-                err
-            )))
+            return Err(prefixed_py_error(
+                "Vega-Lite to JPEG conversion failed",
+                err,
+            ))
         }
     };
 
@@ -696,12 +781,7 @@ fn vega_to_pdf(
         converter.vega_to_pdf(vg_spec, vg_opts).await
     }) {
         Ok(vega_spec) => vega_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega to PDF conversion failed:\n{}",
-                err
-            )))
-        }
+        Err(err) => return Err(prefixed_py_error("Vega to PDF conversion failed", err)),
     };
     Ok(Python::with_gil(|py| -> PyObject {
         PyObject::from(PyBytes::new(py, pdf_bytes.as_slice()))
@@ -763,12 +843,7 @@ fn vegalite_to_pdf(
         converter.vegalite_to_pdf(vl_spec, vl_opts).await
     }) {
         Ok(vega_spec) => vega_spec,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "Vega-Lite to PDF conversion failed:\n{}",
-                err
-            )))
-        }
+        Err(err) => return Err(prefixed_py_error("Vega-Lite to PDF conversion failed", err)),
     };
 
     Ok(Python::with_gil(|py| -> PyObject {
@@ -862,11 +937,12 @@ fn vegalite_to_html(
         time_format_locale,
     };
 
-    Ok(run_converter_future(move |converter| async move {
+    run_converter_future(move |converter| async move {
         converter
             .vegalite_to_html(vl_spec, vl_opts, bundle.unwrap_or(false), renderer)
             .await
-    })?)
+    })
+    .map_err(|err| prefixed_py_error("Vega-Lite to HTML conversion failed", err))
 }
 
 /// Convert a Vega spec to a self-contained HTML document
@@ -900,11 +976,12 @@ fn vega_to_html(
         format_locale,
         time_format_locale,
     };
-    Ok(run_converter_future(move |converter| async move {
+    run_converter_future(move |converter| async move {
         converter
             .vega_to_html(vg_spec, vg_opts, bundle.unwrap_or(false), renderer)
             .await
-    })?)
+    })
+    .map_err(|err| prefixed_py_error("Vega to HTML conversion failed", err))
 }
 
 /// Convert an SVG image string to PNG image data
@@ -918,7 +995,13 @@ fn vega_to_html(
 #[pyfunction]
 #[pyo3(signature = (svg, scale=None, ppi=None))]
 fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
-    let png_data = vl_convert_rs::converter::svg_to_png(svg, scale.unwrap_or(1.0), ppi)?;
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
+    let svg = svg.to_string();
+    let png_data = Python::with_gil(|py| {
+        py.allow_threads(move || converter.svg_to_png(&svg, scale.unwrap_or(1.0), ppi))
+    })
+    .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
         PyBytes::new(py, png_data.as_slice()).into()
     }))
@@ -935,7 +1018,13 @@ fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObj
 #[pyfunction]
 #[pyo3(signature = (svg, scale=None, quality=None))]
 fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
-    let jpeg_data = vl_convert_rs::converter::svg_to_jpeg(svg, scale.unwrap_or(1.0), quality)?;
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
+    let svg = svg.to_string();
+    let jpeg_data = Python::with_gil(|py| {
+        py.allow_threads(move || converter.svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality))
+    })
+    .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
         PyBytes::new(py, jpeg_data.as_slice()).into()
     }))
@@ -952,7 +1041,11 @@ fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<P
 #[pyo3(signature = (svg, scale=None))]
 fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
-    let pdf_data = vl_convert_rs::converter::svg_to_pdf(svg)?; // Always pass 1.0 as scale
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
+    let svg = svg.to_string();
+    let pdf_data = Python::with_gil(|py| py.allow_threads(move || converter.svg_to_pdf(&svg)))
+        .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
         PyBytes::new(py, pdf_data.as_slice()).into()
     }))
@@ -1101,33 +1194,49 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
 
 /// Set the number of parallel converter workers for subsequent requests
 #[pyfunction]
+#[pyo3(signature = (**kwargs))]
+fn configure_converter(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
+    let config = apply_config_overrides(kwargs)
+        .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
+    configure_converter_with_config(config)
+        .map_err(|err| prefixed_py_error("Failed to configure converter", err))
+}
+
+/// Get the currently configured converter options.
+#[pyfunction]
+#[pyo3(signature = ())]
+fn get_converter_config() -> PyResult<PyObject> {
+    let config = converter_config()
+        .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
+    Python::with_gil(|py| {
+        pythonize(py, &converter_config_json(&config))
+            .map_err(|err| PyValueError::new_err(err.to_string()))
+            .map(|obj| obj.into())
+    })
+}
+
+/// Set the number of parallel converter workers for subsequent requests
+#[pyfunction]
 #[pyo3(signature = (num_workers))]
 fn set_num_workers(num_workers: usize) -> PyResult<()> {
     if num_workers < 1 {
         return Err(PyValueError::new_err("num_workers must be >= 1"));
     }
 
-    let converter = VlConverterRs::with_num_workers(num_workers).map_err(|err| {
-        PyValueError::new_err(format!(
-            "Failed to set worker count to {num_workers}: {err}"
-        ))
-    })?;
-
-    let mut guard = VL_CONVERTER.write().map_err(|e| {
-        PyValueError::new_err(format!("Failed to acquire converter write lock: {e}"))
-    })?;
-    *guard = Arc::new(converter);
-    Ok(())
+    let mut config =
+        converter_config().map_err(|err| prefixed_py_error("Failed to set worker count", err))?;
+    config.num_workers = num_workers;
+    configure_converter_with_config(config)
+        .map_err(|err| prefixed_py_error("Failed to set worker count", err))
 }
 
 /// Get the number of configured converter workers
 #[pyfunction]
 #[pyo3(signature = ())]
 fn get_num_workers() -> PyResult<usize> {
-    let guard = VL_CONVERTER.read().map_err(|e| {
-        PyValueError::new_err(format!("Failed to acquire converter read lock: {e}"))
-    })?;
-    Ok(guard.num_workers())
+    converter_config()
+        .map_err(|err| prefixed_py_error("Failed to read worker count", err))
+        .map(|config| config.num_workers)
 }
 
 /// Eagerly start converter workers for the current worker-count configuration
@@ -1135,10 +1244,10 @@ fn get_num_workers() -> PyResult<usize> {
 #[pyo3(signature = ())]
 fn warm_up_workers() -> PyResult<()> {
     let converter = converter_read_handle()
-        .map_err(|err| PyValueError::new_err(format!("warm_up_workers request failed:\n{err}")))?;
+        .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
 
     Python::with_gil(|py| py.allow_threads(move || converter.warm_up()))
-        .map_err(|err| PyValueError::new_err(format!("warm_up_workers request failed:\n{err}")))?;
+        .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
     Ok(())
 }
 
@@ -1150,17 +1259,8 @@ fn warm_up_workers() -> PyResult<()> {
 #[pyfunction]
 #[pyo3(signature = ())]
 fn get_local_tz() -> PyResult<Option<String>> {
-    let local_tz =
-        match run_converter_future(|converter| async move { converter.get_local_tz().await }) {
-            Ok(local_tz) => local_tz,
-            Err(err) => {
-                return Err(PyValueError::new_err(format!(
-                    "get_local_tz request failed:\n{}",
-                    err
-                )))
-            }
-        };
-    Ok(local_tz)
+    run_converter_future(|converter| async move { converter.get_local_tz().await })
+        .map_err(|err| prefixed_py_error("get_local_tz request failed", err))
 }
 
 /// Get the config dict for each built-in theme
@@ -1170,16 +1270,8 @@ fn get_local_tz() -> PyResult<Option<String>> {
 #[pyfunction]
 #[pyo3(signature = ())]
 fn get_themes() -> PyResult<PyObject> {
-    let themes = match run_converter_future(|converter| async move { converter.get_themes().await })
-    {
-        Ok(themes) => themes,
-        Err(err) => {
-            return Err(PyValueError::new_err(format!(
-                "get_themes request failed:\n{}",
-                err
-            )))
-        }
-    };
+    let themes = run_converter_future(|converter| async move { converter.get_themes().await })
+        .map_err(|err| prefixed_py_error("get_themes request failed", err))?;
     Python::with_gil(|py| -> PyResult<PyObject> {
         pythonize(py, &themes)
             .map_err(|err| PyValueError::new_err(err.to_string()))
@@ -1268,13 +1360,15 @@ fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyRes
     };
 
     if let Some(snippet) = snippet {
-        Ok(run_converter_future(move |converter| async move {
+        run_converter_future(move |converter| async move {
             converter.bundle_vega_snippet(snippet, vl_version).await
-        })?)
+        })
+        .map_err(|err| prefixed_py_error("javascript_bundle request failed", err))
     } else {
-        Ok(run_converter_future(move |converter| async move {
+        run_converter_future(move |converter| async move {
             converter.get_vegaembed_bundle(vl_version).await
-        })?)
+        })
+        .map_err(|err| prefixed_py_error("javascript_bundle request failed", err))
     }
 }
 
@@ -1933,13 +2027,15 @@ fn svg_to_png_asyncio<'py>(
     ppi: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let svg = svg.to_string();
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
     future_into_py_object(py, async move {
         let png_data = tokio::task::spawn_blocking(move || {
-            vl_convert_rs::converter::svg_to_png(&svg, scale.unwrap_or(1.0), ppi)
+            converter.svg_to_png(&svg, scale.unwrap_or(1.0), ppi)
         })
         .await
-        .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
-        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?
+        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
         Python::with_gil(|py| Ok(PyBytes::new(py, png_data.as_slice()).into()))
     })
 }
@@ -1954,13 +2050,15 @@ fn svg_to_jpeg_asyncio<'py>(
     quality: Option<u8>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let svg = svg.to_string();
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
     future_into_py_object(py, async move {
         let jpeg_data = tokio::task::spawn_blocking(move || {
-            vl_convert_rs::converter::svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality)
+            converter.svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality)
         })
         .await
-        .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
-        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?
+        .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
         Python::with_gil(|py| Ok(PyBytes::new(py, jpeg_data.as_slice()).into()))
     })
 }
@@ -1975,12 +2073,13 @@ fn svg_to_pdf_asyncio<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let svg = svg.to_string();
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
     future_into_py_object(py, async move {
-        let pdf_data =
-            tokio::task::spawn_blocking(move || vl_convert_rs::converter::svg_to_pdf(&svg))
-                .await
-                .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
-                .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let pdf_data = tokio::task::spawn_blocking(move || converter.svg_to_pdf(&svg))
+            .await
+            .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?
+            .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
         Python::with_gil(|py| Ok(PyBytes::new(py, pdf_data.as_slice()).into()))
     })
 }
@@ -2004,6 +2103,37 @@ fn register_font_directory_asyncio<'py>(
     })
 }
 
+#[doc = async_variant_doc!("configure_converter")]
+#[pyfunction(name = "configure_converter")]
+#[pyo3(signature = (**kwargs))]
+fn configure_converter_asyncio<'py>(
+    py: Python<'py>,
+    kwargs: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let config = apply_config_overrides(kwargs)
+        .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
+    future_into_py_object(py, async move {
+        configure_converter_with_config(config)
+            .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
+#[doc = async_variant_doc!("get_converter_config")]
+#[pyfunction(name = "get_converter_config")]
+#[pyo3(signature = ())]
+fn get_converter_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py_object(py, async move {
+        let config = converter_config()
+            .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
+        Python::with_gil(|py| {
+            pythonize(py, &converter_config_json(&config))
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
 #[doc = async_variant_doc!("set_num_workers")]
 #[pyfunction(name = "set_num_workers")]
 #[pyo3(signature = (num_workers))]
@@ -2016,18 +2146,11 @@ fn set_num_workers_asyncio<'py>(
             return Err(PyValueError::new_err("num_workers must be >= 1"));
         }
 
-        let converter = VlConverterRs::with_num_workers(num_workers).map_err(|err| {
-            PyValueError::new_err(format!(
-                "Failed to set worker count to {num_workers}: {err}"
-            ))
-        })?;
-
-        {
-            let mut guard = VL_CONVERTER.write().map_err(|e| {
-                PyValueError::new_err(format!("Failed to acquire converter write lock: {e}"))
-            })?;
-            *guard = Arc::new(converter);
-        }
+        let mut config = converter_config()
+            .map_err(|err| prefixed_py_error("Failed to set worker count", err))?;
+        config.num_workers = num_workers;
+        configure_converter_with_config(config)
+            .map_err(|err| prefixed_py_error("Failed to set worker count", err))?;
         Python::with_gil(|py| Ok(py.None().into()))
     })
 }
@@ -2037,12 +2160,9 @@ fn set_num_workers_asyncio<'py>(
 #[pyo3(signature = ())]
 fn get_num_workers_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     future_into_py_object(py, async move {
-        let num_workers = {
-            let guard = VL_CONVERTER.read().map_err(|e| {
-                PyValueError::new_err(format!("Failed to acquire converter read lock: {e}"))
-            })?;
-            guard.num_workers()
-        };
+        let num_workers = converter_config()
+            .map_err(|err| prefixed_py_error("Failed to read worker count", err))?
+            .num_workers;
         Python::with_gil(|py| {
             pythonize(py, &num_workers)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
@@ -2056,13 +2176,13 @@ fn get_num_workers_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> 
 #[pyo3(signature = ())]
 fn warm_up_workers_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     let converter = converter_read_handle()
-        .map_err(|err| prefixed_py_value_error("warm_up_workers request failed", err))?;
+        .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
 
     future_into_py_object(py, async move {
         tokio::task::spawn_blocking(move || converter.warm_up())
             .await
-            .map_err(|err| prefixed_py_value_error("warm_up_workers request failed", err))?
-            .map_err(|err| prefixed_py_value_error("warm_up_workers request failed", err))?;
+            .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?
+            .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
         Python::with_gil(|py| Ok(py.None().into()))
     })
 }
@@ -2266,6 +2386,8 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(svg_to_jpeg_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(configure_converter_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_converter_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(set_num_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_num_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
@@ -2308,6 +2430,8 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(configure_converter, m)?)?;
+    m.add_function(wrap_pyfunction!(get_converter_config, m)?)?;
     m.add_function(wrap_pyfunction!(set_num_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_num_workers, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;

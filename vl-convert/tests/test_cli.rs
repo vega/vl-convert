@@ -26,6 +26,156 @@ pub fn initialize() {
     });
 }
 
+#[rustfmt::skip]
+mod test_access_flags {
+    use crate::*;
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    const PNG_1X1: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+        8, 4, 0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 218, 99, 252, 255, 15,
+        0, 2, 3, 1, 128, 179, 248, 175, 217, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+
+    fn file_href(path: &std::path::Path) -> String {
+        let absolute = path.canonicalize().unwrap();
+        if cfg!(target_family = "windows") {
+            format!("file:///{}", absolute.to_string_lossy().replace('\\', "/"))
+        } else {
+            format!("file://{}", absolute.to_string_lossy())
+        }
+    }
+
+    #[test]
+    fn test_vl2svg_denied_http_access() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let output = output_path("access_vl2svg.svg");
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        cmd.arg("vl2svg")
+            .arg("-i").arg(vl_spec_path("seattle-weather"))
+            .arg("-o").arg(&output)
+            .arg("--font-dir").arg(test_font_dir())
+            .arg("--no-http-access")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("access").or(predicate::str::contains("denied")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vg2svg_denied_http_access() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let vg_output = output_path("access_seattle.vg.json");
+        Command::cargo_bin("vl-convert")?
+            .arg("vl2vg")
+            .arg("-i").arg(vl_spec_path("seattle-weather"))
+            .arg("-o").arg(&vg_output)
+            .arg("--vl-version").arg("5.8")
+            .assert()
+            .success();
+
+        let output = output_path("access_vg2svg.svg");
+        Command::cargo_bin("vl-convert")?
+            .arg("vg2svg")
+            .arg("-i").arg(&vg_output)
+            .arg("-o").arg(&output)
+            .arg("--font-dir").arg(test_font_dir())
+            .arg("--allow-http-access").arg("false")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("access").or(predicate::str::contains("denied")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_svg2png_denied_without_filesystem_root() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let temp = tempdir()?;
+        let image_path = temp.path().join("inside.png");
+        std::fs::write(&image_path, PNG_1X1)?;
+        let svg_input = temp.path().join("input.svg");
+        std::fs::write(
+            &svg_input,
+            format!(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"><image href=\"{}\" width=\"1\" height=\"1\"/></svg>",
+                file_href(&image_path)
+            ),
+        )?;
+
+        let output = output_path("access_svg2png_denied.png");
+        Command::cargo_bin("vl-convert")?
+            .arg("svg2png")
+            .arg("-i").arg(svg_input)
+            .arg("-o").arg(&output)
+            .arg("--allow-http-access").arg("false")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Filesystem access denied").or(predicate::str::contains("access denied")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_svg2png_allows_filesystem_root() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let temp = tempdir()?;
+        let root = temp.path().join("root");
+        std::fs::create_dir_all(&root)?;
+        let image_path = root.join("inside.png");
+        std::fs::write(&image_path, PNG_1X1)?;
+        let svg_input = root.join("input.svg");
+        std::fs::write(
+            &svg_input,
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"><image href=\"inside.png\" width=\"1\" height=\"1\"/></svg>",
+        )?;
+
+        let output = output_path("access_svg2png_allowed.png");
+        Command::cargo_bin("vl-convert")?
+            .arg("svg2png")
+            .arg("-i").arg(svg_input)
+            .arg("-o").arg(&output)
+            .arg("--allow-http-access").arg("false")
+            .arg("--filesystem-root").arg(root)
+            .assert()
+            .success();
+        assert!(!std::fs::read(&output)?.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_svg2png_rejects_allowed_base_url_when_http_disabled() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let temp = tempdir()?;
+        let svg_input = temp.path().join("input.svg");
+        std::fs::write(
+            &svg_input,
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>",
+        )?;
+
+        let output = output_path("access_svg2png_invalid_config.png");
+        Command::cargo_bin("vl-convert")?
+            .arg("svg2png")
+            .arg("-i").arg(svg_input)
+            .arg("-o").arg(&output)
+            .arg("--allow-http-access").arg("false")
+            .arg("--allowed-base-url").arg("https://example.com")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("allowed_base_urls cannot be set when HTTP access is disabled"));
+
+        Ok(())
+    }
+}
+
 fn vl_spec_path(name: &str) -> String {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let spec_path = root_path

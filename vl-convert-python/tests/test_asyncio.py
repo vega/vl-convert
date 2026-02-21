@@ -29,12 +29,12 @@ def public_callable_names(module):
 
 @pytest.fixture(autouse=True)
 def reset_worker_count():
-    original = vlc.get_num_workers()
-    vlc.set_num_workers(1)
+    original = vlc.get_converter_config()
+    vlc.configure_converter(num_workers=1)
     try:
         yield
     finally:
-        vlc.set_num_workers(original)
+        vlc.configure_converter(**original)
 
 
 def test_asyncio_namespace_import_and_expected_attributes():
@@ -96,6 +96,23 @@ def test_asyncio_worker_lifecycle_calls():
         await vlca.warm_up_workers()
         svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16")
         assert svg.lstrip().startswith("<svg")
+
+    run(scenario())
+
+
+def test_asyncio_configure_converter_round_trip(tmp_path):
+    async def scenario():
+        root = tmp_path / "root"
+        root.mkdir()
+        await vlca.configure_converter(
+            num_workers=2,
+            allow_http_access=False,
+            filesystem_root=str(root),
+        )
+        config = await vlca.get_converter_config()
+        assert config["num_workers"] == 2
+        assert config["allow_http_access"] is False
+        assert config["filesystem_root"] == str(root.resolve())
 
     run(scenario())
 

@@ -121,6 +121,8 @@ function unsupported(methodName) {
   throw new Error(`${methodName} is not supported by vl-convert canvas polyfill`);
 }
 
+const DEFAULT_ACCESS_DENIED_MARKER = "VLC_ACCESS_DENIED";
+
 function uint8ArrayToBase64(bytes) {
   const chunkSize = 0x8000;
   let binary = "";
@@ -232,16 +234,77 @@ class Image {
   }
 
   async #loadImage(url) {
-    try {
-      // Fetch the image
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status}`);
+    const accessDeniedMarker =
+      globalThis.__vlConvertAccessDeniedMarker ?? DEFAULT_ACCESS_DENIED_MARKER;
+    const accessErrors = globalThis.__vlConvertAccessErrors;
+    const recordAccessError = (message) => {
+      if (Array.isArray(accessErrors)) {
+        accessErrors.push(message);
       }
+    };
 
-      // Get image data as ArrayBuffer
-      const arrayBuffer = await response.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
+    try {
+      const allowHttpAccess = globalThis.__vlConvertAllowHttpAccess;
+      const allowedBaseUrls = globalThis.__vlConvertAllowedBaseUrls;
+
+      const denyAccess = (detail) => {
+        const message = `${accessDeniedMarker}: ${detail}`;
+        recordAccessError(message);
+        throw new Error(message);
+      };
+
+      const hasScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(url);
+      const isWindowsPath = /^[A-Za-z]:[\\/]/.test(url);
+      const isFileUrl = url.startsWith("file://");
+      const shouldReadLocalFile =
+        isFileUrl || isWindowsPath || (!hasScheme && !url.startsWith("//"));
+
+      let bytes;
+      if (shouldReadLocalFile) {
+        let filePath = url;
+        if (isFileUrl) {
+          const fileUrl = new URL(url);
+          if (fileUrl.protocol !== "file:") {
+            throw new Error(`Unsupported file URL protocol: ${fileUrl.protocol}`);
+          }
+          filePath = decodeURIComponent(fileUrl.pathname);
+          if (globalThis.Deno?.build?.os === "windows" && filePath.startsWith("/")) {
+            filePath = filePath.slice(1);
+          }
+        }
+        bytes = await Deno.readFile(filePath);
+      } else {
+        // Only enforce policy for HTTP(S). Other schemes (e.g. data:) are handled by fetch.
+        let normalizedUrl = null;
+        let isHttpUrl = false;
+        try {
+          const parsedUrl = new URL(url);
+          normalizedUrl = parsedUrl.href;
+          isHttpUrl = parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
+        } catch (_err) {
+          // Leave invalid/non-standard URL handling to fetch.
+        }
+
+        if (isHttpUrl) {
+          if (allowHttpAccess === false) {
+            denyAccess(`HTTP access denied by converter policy: ${url}`);
+          }
+          if (
+            allowedBaseUrls != null &&
+            !allowedBaseUrls.some((allowedUrl) => normalizedUrl.startsWith(allowedUrl))
+          ) {
+            denyAccess(`External data url not allowed: ${url}`);
+          }
+        }
+
+        // Fetch remote/data URL images
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.status}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        bytes = new Uint8Array(arrayBuffer);
+      }
 
       // Get image info (checks if SVG and returns native dimensions)
       const info = op_canvas_get_image_info(bytes);
@@ -278,6 +341,19 @@ class Image {
       this.#complete = false;
       if (this.onerror) {
         this.onerror(error);
+      }
+
+      const message = String(error?.message ?? error);
+      if (!message.includes(accessDeniedMarker)) {
+        const lower = message.toLowerCase();
+        if (
+          lower.includes("requires read access") ||
+          lower.includes("requires net access") ||
+          lower.includes("permission denied") ||
+          lower.includes("access denied")
+        ) {
+          recordAccessError(`${accessDeniedMarker}: ${message}`);
+        }
       }
     }
   }
