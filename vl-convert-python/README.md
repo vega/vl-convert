@@ -107,6 +107,39 @@ This setting applies to subsequent conversions and enables parallel work across 
 Calling `warm_up_workers()` is optional and only needed if you want to avoid first-request
 worker startup latency.
 
+## Asyncio API
+An async API with matching function names is available under `vl_convert.asyncio`.
+
+```python
+import asyncio
+import vl_convert.asyncio as vlca
+
+vl_spec = {
+    "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
+    "mark": "bar",
+    "encoding": {
+        "x": {"field": "a", "type": "nominal"},
+        "y": {"field": "b", "type": "quantitative"},
+    },
+}
+
+async def main():
+    await vlca.set_num_workers(4)
+    await vlca.warm_up_workers()  # optional
+
+    svg = await vlca.vegalite_to_svg(vl_spec, "v5_16")
+    print(svg[:5])
+
+    svgs = await asyncio.gather(
+        *[vlca.vegalite_to_svg(vl_spec, "v5_16") for _ in range(8)]
+    )
+    print(len(svgs))
+
+asyncio.run(main())
+```
+
+The top-level sync API (`vl_convert.<function>`) is unchanged. The async namespace is additive.
+
 # How it works
 This crate uses [PyO3](https://pyo3.rs/) to wrap the [`vl-convert-rs`](https://crates.io/crates/vl-convert-rs) Rust crate as a Python library. The `vl-convert-rs` crate is a self-contained Rust library for converting [Vega-Lite](https://vega.github.io/vega-lite/) visualization specifications into various formats.  The conversions are performed using the Vega-Lite and Vega JavaScript libraries running in a v8 JavaScript runtime provided by the [`deno_runtime`](https://crates.io/crates/deno_runtime) crate.  Font metrics and SVG-to-PNG conversions are provided by the [`resvg`](https://crates.io/crates/resvg) crate.
 

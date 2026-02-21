@@ -22,3 +22,4 @@ lazy_static = { workspace = true }
 futures = { workspace = true }
 pythonize = { workspace = true }
 tokio = { workspace = true }
+pyo3-async-runtimes = { workspace = true }

@@ -32,7 +32,7 @@ use png::{PixelDimensions, Unit};
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-use crate::html::{bundle_vega_snippet, get_vega_or_vegalite_script};
+use crate::html::get_vega_or_vegalite_script;
 use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
@@ -67,6 +67,9 @@ struct WorkerPool {
     dispatch_cursor: AtomicUsize,
     _handles: Vec<JoinHandle<()>>,
 }
+
+const VEGAEMBED_GLOBAL_SNIPPET: &str =
+    "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite;";
 
 impl WorkerPool {
     fn next_sender(&self) -> Option<(tokio::sync::mpsc::Sender<QueuedCommand>, OutstandingTicket)> {
@@ -1701,6 +1704,22 @@ vegaLiteToCanvas_{ver_name:?}(
                 let themes = self.get_themes().await;
                 responder.send(themes).ok();
             }
+            VlConvertCommand::ComputeVegaembedBundle {
+                vl_version,
+                responder,
+            } => {
+                let bundle =
+                    crate::html::bundle_vega_snippet(VEGAEMBED_GLOBAL_SNIPPET, vl_version).await;
+                responder.send(bundle).ok();
+            }
+            VlConvertCommand::BundleVegaSnippet {
+                snippet,
+                vl_version,
+                responder,
+            } => {
+                let bundle = crate::html::bundle_vega_snippet(&snippet, vl_version).await;
+                responder.send(bundle).ok();
+            }
         }
     }
 }
@@ -1761,6 +1780,15 @@ pub enum VlConvertCommand {
     GetThemes {
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
+    ComputeVegaembedBundle {
+        vl_version: VlVersion,
+        responder: oneshot::Sender<Result<String, AnyError>>,
+    },
+    BundleVegaSnippet {
+        snippet: String,
+        vl_version: VlVersion,
+        responder: oneshot::Sender<Result<String, AnyError>>,
+    },
 }
 
 impl VlConvertCommand {
@@ -1798,6 +1826,12 @@ impl VlConvertCommand {
                 responder.send(Err(err)).ok();
             }
             Self::GetThemes { responder } => {
+                responder.send(Err(err)).ok();
+            }
+            Self::ComputeVegaembedBundle { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
+            Self::BundleVegaSnippet { responder, .. } => {
                 responder.send(Err(err)).ok();
             }
         }
@@ -2173,11 +2207,15 @@ impl VlConverter {
             return Ok(bundle);
         }
 
-        let computed_bundle = bundle_vega_snippet(
-            "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite;",
-            vl_version,
-        )
-        .await?;
+        let computed_bundle = self
+            .request(
+                move |responder| VlConvertCommand::ComputeVegaembedBundle {
+                    vl_version,
+                    responder,
+                },
+                "Vega-Embed bundle generation",
+            )
+            .await?;
 
         let mut guard = self
             .inner
@@ -2192,6 +2230,23 @@ impl VlConverter {
             }
         };
         Ok(bundle)
+    }
+
+    pub async fn bundle_vega_snippet(
+        &self,
+        snippet: impl Into<String>,
+        vl_version: VlVersion,
+    ) -> Result<String, AnyError> {
+        let snippet = snippet.into();
+        self.request(
+            move |responder| VlConvertCommand::BundleVegaSnippet {
+                snippet,
+                vl_version,
+                responder,
+            },
+            "JavaScript bundle generation",
+        )
+        .await
     }
 
     async fn build_html(
@@ -2469,12 +2524,15 @@ pub fn vega_to_url(
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::future::Future;
 
     fn make_test_command() -> VlConvertCommand {
         let (responder, _rx) =
             futures::channel::oneshot::channel::<Result<Option<String>, AnyError>>();
         VlConvertCommand::GetLocalTz { responder }
     }
+
+    fn assert_send_future<F: Future + Send>(_: F) {}
 
     #[tokio::test]
     async fn test_convert_context() {
@@ -2810,6 +2868,70 @@ try {
     fn test_num_workers_reports_configured_value() {
         let converter = VlConverter::with_num_workers(4).unwrap();
         assert_eq!(converter.num_workers(), 4);
+    }
+
+    #[test]
+    fn test_html_and_bundle_futures_are_send() {
+        let converter = VlConverter::new();
+        let vl_spec = serde_json::json!({
+            "data": {"values": [{"a": "A", "b": 1}]},
+            "mark": "bar",
+            "encoding": {"x": {"field": "a", "type": "nominal"}}
+        });
+        let vg_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v6.json",
+            "data": [{"name": "table", "values": [{"x": "A", "y": 1}]}],
+            "marks": [{"type": "rect", "from": {"data": "table"}}]
+        });
+
+        assert_send_future(converter.get_vegaembed_bundle(VlVersion::v5_16));
+        assert_send_future(
+            converter.bundle_vega_snippet("window.__vlcBundleMarker = 'ok';", VlVersion::v5_16),
+        );
+        assert_send_future(converter.vegalite_to_html(
+            vl_spec,
+            VlOpts {
+                vl_version: VlVersion::v5_16,
+                ..Default::default()
+            },
+            true,
+            Renderer::Svg,
+        ));
+        assert_send_future(converter.vega_to_html(vg_spec, VgOpts::default(), true, Renderer::Svg));
+    }
+
+    #[tokio::test]
+    async fn test_get_vegaembed_bundle_caches_result() {
+        let converter = VlConverter::with_num_workers(1).unwrap();
+
+        let first = converter
+            .get_vegaembed_bundle(VlVersion::v5_16)
+            .await
+            .unwrap();
+        let len_after_first = converter.inner.vegaembed_bundles.lock().unwrap().len();
+
+        let second = converter
+            .get_vegaembed_bundle(VlVersion::v5_16)
+            .await
+            .unwrap();
+        let len_after_second = converter.inner.vegaembed_bundles.lock().unwrap().len();
+
+        assert_eq!(first, second);
+        assert_eq!(len_after_first, 1);
+        assert_eq!(len_after_second, 1);
+    }
+
+    #[tokio::test]
+    async fn test_bundle_vega_snippet_custom_snippet() {
+        let converter = VlConverter::with_num_workers(1).unwrap();
+        let snippet = "window.__vlcBundleMarker = 'ok';";
+
+        let bundle = converter
+            .bundle_vega_snippet(snippet, VlVersion::v5_16)
+            .await
+            .unwrap();
+
+        assert!(bundle.contains("__vlcBundleMarker"));
     }
 
     #[test]

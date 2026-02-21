@@ -4,7 +4,7 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::types::{PyBytes, PyDict, PyModule};
 use pythonize::{depythonize, pythonize};
 use std::borrow::Cow;
 use std::future::Future;
@@ -50,6 +50,40 @@ where
 {
     let converter = converter_read_handle()?;
     Python::with_gil(|py| py.allow_threads(move || PYTHON_RUNTIME.block_on(make_future(converter))))
+}
+
+fn prefixed_py_value_error(prefix: &'static str, err: impl std::fmt::Display) -> PyErr {
+    PyValueError::new_err(format!("{prefix}:\n{err}"))
+}
+
+fn future_into_py_object<'py, Fut>(py: Python<'py>, fut: Fut) -> PyResult<Bound<'py, PyAny>>
+where
+    Fut: Future<Output = PyResult<PyObject>> + Send + 'static,
+{
+    pyo3_async_runtimes::tokio::future_into_py::<_, PyObject>(py, fut)
+}
+
+fn run_converter_future_async<'py, R, Fut, F, C>(
+    py: Python<'py>,
+    make_future: F,
+    error_prefix: &'static str,
+    convert: C,
+) -> PyResult<Bound<'py, PyAny>>
+where
+    F: FnOnce(Arc<VlConverterRs>) -> Fut + Send + 'static,
+    Fut: Future<Output = Result<R, vl_convert_rs::anyhow::Error>> + Send + 'static,
+    R: Send + 'static,
+    C: FnOnce(Python<'_>, R) -> PyResult<PyObject> + Send + 'static,
+{
+    let converter =
+        converter_read_handle().map_err(|err| prefixed_py_value_error(error_prefix, err))?;
+
+    future_into_py_object(py, async move {
+        let value = make_future(converter)
+            .await
+            .map_err(|err| prefixed_py_value_error(error_prefix, err))?;
+        Python::with_gil(|py| convert(py, value))
+    })
 }
 
 /// Convert a Vega-Lite spec to a Vega spec using a particular
@@ -1270,9 +1304,939 @@ fn get_vegalite_versions() -> Vec<String> {
         .collect()
 }
 
+#[pyfunction(name = "vegalite_to_vega")]
+#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None))]
+fn vegalite_to_vega_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    show_warnings: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls: None,
+        format_locale: None,
+        time_format_locale: None,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move { converter.vegalite_to_vega(vl_spec, vl_opts).await },
+        "Vega-Lite to Vega conversion failed",
+        |py, value| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        },
+    )
+}
+
+#[pyfunction(name = "vega_to_svg")]
+#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None))]
+fn vega_to_svg_asyncio<'py>(
+    py: Python<'py>,
+    vg_spec: PyObject,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move { converter.vega_to_svg(vg_spec, vg_opts).await },
+        "Vega to SVG conversion failed",
+        |py, value| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        },
+    )
+}
+
+#[pyfunction(name = "vega_to_scenegraph")]
+#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None, format="dict"))]
+fn vega_to_scenegraph_asyncio<'py>(
+    py: Python<'py>,
+    vg_spec: PyObject,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+    format: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    match format {
+        "dict" => {
+            let vg_spec = parse_json_spec(vg_spec)?;
+            run_converter_future_async(
+                py,
+                move |converter| async move { converter.vega_to_scenegraph(vg_spec, vg_opts).await },
+                "Vega to Scenegraph conversion failed",
+                |py, value| {
+                    pythonize(py, &value)
+                        .map_err(|err| PyValueError::new_err(err.to_string()))
+                        .map(|obj| obj.into())
+                },
+            )
+        }
+        "msgpack" => {
+            let vg_spec = parse_spec_to_value_or_string(vg_spec)?;
+            run_converter_future_async(
+                py,
+                move |converter| async move {
+                    converter.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                },
+                "Vega to Scenegraph conversion failed",
+                |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
+            )
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "Invalid format '{format}'. Expected 'dict' or 'msgpack'"
+        ))),
+    }
+}
+
+#[pyfunction(name = "vegalite_to_svg")]
+#[pyo3(
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
+)]
+fn vegalite_to_svg_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    show_warnings: Option<bool>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move { converter.vegalite_to_svg(vl_spec, vl_opts).await },
+        "Vega-Lite to SVG conversion failed",
+        |py, value| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        },
+    )
+}
+
+#[pyfunction(name = "vegalite_to_scenegraph")]
+#[pyo3(
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, format="dict")
+)]
+fn vegalite_to_scenegraph_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    show_warnings: Option<bool>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+    format: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    match format {
+        "dict" => {
+            let vl_spec = parse_json_spec(vl_spec)?;
+            run_converter_future_async(
+                py,
+                move |converter| async move { converter.vegalite_to_scenegraph(vl_spec, vl_opts).await },
+                "Vega-Lite to Scenegraph conversion failed",
+                |py, value| {
+                    pythonize(py, &value)
+                        .map_err(|err| PyValueError::new_err(err.to_string()))
+                        .map(|obj| obj.into())
+                },
+            )
+        }
+        "msgpack" => {
+            let vl_spec = parse_spec_to_value_or_string(vl_spec)?;
+            run_converter_future_async(
+                py,
+                move |converter| async move {
+                    converter
+                        .vegalite_to_scenegraph_msgpack(vl_spec, vl_opts)
+                        .await
+                },
+                "Vega-Lite to Scenegraph conversion failed",
+                |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
+            )
+        }
+        _ => Err(PyValueError::new_err(format!(
+            "Invalid format '{format}'. Expected 'dict' or 'msgpack'"
+        ))),
+    }
+}
+
+#[pyfunction(name = "vega_to_png")]
+#[pyo3(
+    signature = (vg_spec, scale=None, ppi=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
+)]
+fn vega_to_png_asyncio<'py>(
+    py: Python<'py>,
+    vg_spec: PyObject,
+    scale: Option<f32>,
+    ppi: Option<f32>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move { converter.vega_to_png(vg_spec, vg_opts, scale, ppi).await },
+        "Vega to PNG conversion failed",
+        |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
+    )
+}
+
+#[pyfunction(name = "vegalite_to_png")]
+#[pyo3(
+    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
+)]
+fn vegalite_to_png_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    scale: Option<f32>,
+    ppi: Option<f32>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    show_warnings: Option<bool>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move {
+            converter
+                .vegalite_to_png(vl_spec, vl_opts, scale, ppi)
+                .await
+        },
+        "Vega-Lite to PNG conversion failed",
+        |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
+    )
+}
+
+#[pyfunction(name = "vega_to_jpeg")]
+#[pyo3(
+    signature = (vg_spec, scale=None, quality=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
+)]
+fn vega_to_jpeg_asyncio<'py>(
+    py: Python<'py>,
+    vg_spec: PyObject,
+    scale: Option<f32>,
+    quality: Option<u8>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move {
+            converter
+                .vega_to_jpeg(vg_spec, vg_opts, scale, quality)
+                .await
+        },
+        "Vega to JPEG conversion failed",
+        |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
+    )
+}
+
+#[pyfunction(name = "vegalite_to_jpeg")]
+#[pyo3(
+    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
+)]
+fn vegalite_to_jpeg_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    scale: Option<f32>,
+    quality: Option<u8>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    show_warnings: Option<bool>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: show_warnings.unwrap_or(false),
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move {
+            converter
+                .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality)
+                .await
+        },
+        "Vega-Lite to JPEG conversion failed",
+        |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
+    )
+}
+
+#[pyfunction(name = "vega_to_pdf")]
+#[pyo3(signature = (vg_spec, scale=None, allowed_base_urls=None, format_locale=None, time_format_locale=None))]
+fn vega_to_pdf_asyncio<'py>(
+    py: Python<'py>,
+    vg_spec: PyObject,
+    scale: Option<f32>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<Bound<'py, PyAny>> {
+    warn_if_scale_not_one_for_pdf(scale)?;
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vg_opts = VgOpts {
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move { converter.vega_to_pdf(vg_spec, vg_opts).await },
+        "Vega to PDF conversion failed",
+        |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
+    )
+}
+
+#[pyfunction(name = "vegalite_to_pdf")]
+#[pyo3(
+    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, allowed_base_urls=None, format_locale=None, time_format_locale=None)
+)]
+fn vegalite_to_pdf_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    scale: Option<f32>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    allowed_base_urls: Option<Vec<String>>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+) -> PyResult<Bound<'py, PyAny>> {
+    warn_if_scale_not_one_for_pdf(scale)?;
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: false,
+        allowed_base_urls,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move { converter.vegalite_to_pdf(vl_spec, vl_opts).await },
+        "Vega-Lite to PDF conversion failed",
+        |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
+    )
+}
+
+#[pyfunction(name = "vegalite_to_url")]
+#[pyo3(signature = (vl_spec, fullscreen=None))]
+fn vegalite_to_url_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: PyObject,
+    fullscreen: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let url = vl_convert_rs::converter::vegalite_to_url(&vl_spec, fullscreen.unwrap_or(false))?;
+    future_into_py_object(py, async move {
+        Python::with_gil(|py| {
+            pythonize(py, &url)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
+#[pyfunction(name = "vega_to_url")]
+#[pyo3(signature = (vg_spec, fullscreen=None))]
+fn vega_to_url_asyncio<'py>(
+    py: Python<'py>,
+    vg_spec: PyObject,
+    fullscreen: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let url = vl_convert_rs::converter::vega_to_url(&vg_spec, fullscreen.unwrap_or(false))?;
+    future_into_py_object(py, async move {
+        Python::with_gil(|py| {
+            pythonize(py, &url)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
+#[pyfunction(name = "vegalite_to_html")]
+#[pyo3(
+    signature = (vl_spec, vl_version=None, bundle=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None)
+)]
+fn vegalite_to_html_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    bundle: Option<bool>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+    renderer: Option<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config = config.and_then(|c| parse_json_spec(c).ok());
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let renderer = renderer.unwrap_or_else(|| "svg".to_string());
+    let renderer = Renderer::from_str(&renderer)?;
+    let vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        show_warnings: false,
+        allowed_base_urls: None,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move {
+            converter
+                .vegalite_to_html(vl_spec, vl_opts, bundle.unwrap_or(false), renderer)
+                .await
+        },
+        "Vega-Lite to HTML conversion failed",
+        |py, value| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        },
+    )
+}
+
+#[pyfunction(name = "vega_to_html")]
+#[pyo3(signature = (vg_spec, bundle=None, format_locale=None, time_format_locale=None, renderer=None))]
+fn vega_to_html_asyncio<'py>(
+    py: Python<'py>,
+    vg_spec: PyObject,
+    bundle: Option<bool>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+    renderer: Option<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let renderer = renderer.unwrap_or_else(|| "svg".to_string());
+    let renderer = Renderer::from_str(&renderer)?;
+    let vg_opts = VgOpts {
+        allowed_base_urls: None,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move {
+            converter
+                .vega_to_html(vg_spec, vg_opts, bundle.unwrap_or(false), renderer)
+                .await
+        },
+        "Vega to HTML conversion failed",
+        |py, value| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        },
+    )
+}
+
+#[pyfunction(name = "svg_to_png")]
+#[pyo3(signature = (svg, scale=None, ppi=None))]
+fn svg_to_png_asyncio<'py>(
+    py: Python<'py>,
+    svg: &str,
+    scale: Option<f32>,
+    ppi: Option<f32>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let svg = svg.to_string();
+    future_into_py_object(py, async move {
+        let png_data = tokio::task::spawn_blocking(move || {
+            vl_convert_rs::converter::svg_to_png(&svg, scale.unwrap_or(1.0), ppi)
+        })
+        .await
+        .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        Python::with_gil(|py| Ok(PyBytes::new(py, png_data.as_slice()).into()))
+    })
+}
+
+#[pyfunction(name = "svg_to_jpeg")]
+#[pyo3(signature = (svg, scale=None, quality=None))]
+fn svg_to_jpeg_asyncio<'py>(
+    py: Python<'py>,
+    svg: &str,
+    scale: Option<f32>,
+    quality: Option<u8>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let svg = svg.to_string();
+    future_into_py_object(py, async move {
+        let jpeg_data = tokio::task::spawn_blocking(move || {
+            vl_convert_rs::converter::svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality)
+        })
+        .await
+        .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        Python::with_gil(|py| Ok(PyBytes::new(py, jpeg_data.as_slice()).into()))
+    })
+}
+
+#[pyfunction(name = "svg_to_pdf")]
+#[pyo3(signature = (svg, scale=None))]
+fn svg_to_pdf_asyncio<'py>(
+    py: Python<'py>,
+    svg: &str,
+    scale: Option<f32>,
+) -> PyResult<Bound<'py, PyAny>> {
+    warn_if_scale_not_one_for_pdf(scale)?;
+    let svg = svg.to_string();
+    future_into_py_object(py, async move {
+        let pdf_data =
+            tokio::task::spawn_blocking(move || vl_convert_rs::converter::svg_to_pdf(&svg))
+                .await
+                .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
+                .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        Python::with_gil(|py| Ok(PyBytes::new(py, pdf_data.as_slice()).into()))
+    })
+}
+
+#[pyfunction(name = "register_font_directory")]
+#[pyo3(signature = (font_dir))]
+fn register_font_directory_asyncio<'py>(
+    py: Python<'py>,
+    font_dir: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let font_dir = font_dir.to_string();
+    future_into_py_object(py, async move {
+        tokio::task::spawn_blocking(move || register_font_directory_rs(&font_dir))
+            .await
+            .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("Failed to register font directory: {err}"))
+            })?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
+#[pyfunction(name = "set_num_workers")]
+#[pyo3(signature = (num_workers))]
+fn set_num_workers_asyncio<'py>(
+    py: Python<'py>,
+    num_workers: usize,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py_object(py, async move {
+        if num_workers < 1 {
+            return Err(PyValueError::new_err("num_workers must be >= 1"));
+        }
+
+        let converter = VlConverterRs::with_num_workers(num_workers).map_err(|err| {
+            PyValueError::new_err(format!(
+                "Failed to set worker count to {num_workers}: {err}"
+            ))
+        })?;
+
+        let mut guard = VL_CONVERTER.write().map_err(|e| {
+            PyValueError::new_err(format!("Failed to acquire converter write lock: {e}"))
+        })?;
+        *guard = Arc::new(converter);
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
+#[pyfunction(name = "get_num_workers")]
+#[pyo3(signature = ())]
+fn get_num_workers_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py_object(py, async move {
+        let guard = VL_CONVERTER.read().map_err(|e| {
+            PyValueError::new_err(format!("Failed to acquire converter read lock: {e}"))
+        })?;
+        let num_workers = guard.num_workers();
+        Python::with_gil(|py| {
+            pythonize(py, &num_workers)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
+#[pyfunction(name = "warm_up_workers")]
+#[pyo3(signature = ())]
+fn warm_up_workers_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_value_error("warm_up_workers request failed", err))?;
+
+    future_into_py_object(py, async move {
+        tokio::task::spawn_blocking(move || converter.warm_up())
+            .await
+            .map_err(|err| prefixed_py_value_error("warm_up_workers request failed", err))?
+            .map_err(|err| prefixed_py_value_error("warm_up_workers request failed", err))?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
+#[pyfunction(name = "get_local_tz")]
+#[pyo3(signature = ())]
+fn get_local_tz_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    run_converter_future_async(
+        py,
+        |converter| async move { converter.get_local_tz().await },
+        "get_local_tz request failed",
+        |py, value| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        },
+    )
+}
+
+#[pyfunction(name = "get_themes")]
+#[pyo3(signature = ())]
+fn get_themes_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    run_converter_future_async(
+        py,
+        |converter| async move { converter.get_themes().await },
+        "get_themes request failed",
+        |py, value| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        },
+    )
+}
+
+#[pyfunction(name = "get_format_locale")]
+#[pyo3(signature = (name))]
+fn get_format_locale_asyncio<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    let locale = match FORMATE_LOCALE_MAP.get(name) {
+        None => {
+            return Err(PyValueError::new_err(format!(
+                "Invalid format locale name: {name}\nSee https://github.com/d3/d3-format/tree/main/locale for available names"
+            )))
+        }
+        Some(locale) => serde_json::from_str::<serde_json::Value>(locale)
+            .expect("Failed to parse internal format locale as JSON"),
+    };
+
+    future_into_py_object(py, async move {
+        Python::with_gil(|py| {
+            pythonize(py, &locale)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
+#[pyfunction(name = "get_time_format_locale")]
+#[pyo3(signature = (name))]
+fn get_time_format_locale_asyncio<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    let locale = match TIME_FORMATE_LOCALE_MAP.get(name) {
+        None => {
+            return Err(PyValueError::new_err(format!(
+                "Invalid time format locale name: {name}\nSee https://github.com/d3/d3-time-format/tree/main/locale for available names"
+            )))
+        }
+        Some(locale) => serde_json::from_str::<serde_json::Value>(locale)
+            .expect("Failed to parse internal time format locale as JSON"),
+    };
+
+    future_into_py_object(py, async move {
+        Python::with_gil(|py| {
+            pythonize(py, &locale)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
+#[pyfunction(name = "javascript_bundle")]
+#[pyo3(signature = (snippet=None, vl_version=None))]
+fn javascript_bundle_asyncio<'py>(
+    py: Python<'py>,
+    snippet: Option<String>,
+    vl_version: Option<&str>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+
+    if let Some(snippet) = snippet {
+        run_converter_future_async(
+            py,
+            move |converter| async move { converter.bundle_vega_snippet(snippet, vl_version).await },
+            "javascript_bundle request failed",
+            |py, value| {
+                pythonize(py, &value)
+                    .map_err(|err| PyValueError::new_err(err.to_string()))
+                    .map(|obj| obj.into())
+            },
+        )
+    } else {
+        run_converter_future_async(
+            py,
+            move |converter| async move { converter.get_vegaembed_bundle(vl_version).await },
+            "javascript_bundle request failed",
+            |py, value| {
+                pythonize(py, &value)
+                    .map_err(|err| PyValueError::new_err(err.to_string()))
+                    .map(|obj| obj.into())
+            },
+        )
+    }
+}
+
+#[pyfunction(name = "get_vega_version")]
+#[pyo3(signature = ())]
+fn get_vega_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let value = VEGA_VERSION.to_string();
+    future_into_py_object(py, async move {
+        Python::with_gil(|py| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
+#[pyfunction(name = "get_vega_themes_version")]
+#[pyo3(signature = ())]
+fn get_vega_themes_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let value = VEGA_THEMES_VERSION.to_string();
+    future_into_py_object(py, async move {
+        Python::with_gil(|py| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
+#[pyfunction(name = "get_vega_embed_version")]
+#[pyo3(signature = ())]
+fn get_vega_embed_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let value = VEGA_EMBED_VERSION.to_string();
+    future_into_py_object(py, async move {
+        Python::with_gil(|py| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
+#[pyfunction(name = "get_vegalite_versions")]
+#[pyo3(signature = ())]
+fn get_vegalite_versions_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let value: Vec<String> = VL_VERSIONS
+        .iter()
+        .map(|v| v.to_semver().to_string())
+        .collect();
+    future_into_py_object(py, async move {
+        Python::with_gil(|py| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
+fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    let _ = pyo3_async_runtimes::tokio::init_with_runtime(&PYTHON_RUNTIME);
+
+    let asyncio = PyModule::new(py, "asyncio")?;
+    asyncio.add_function(wrap_pyfunction!(vegalite_to_vega_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vegalite_to_svg_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vegalite_to_scenegraph_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vegalite_to_png_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vegalite_to_jpeg_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vegalite_to_pdf_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vegalite_to_url_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vegalite_to_html_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vega_to_svg_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vega_to_scenegraph_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vega_to_png_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vega_to_jpeg_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vega_to_pdf_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vega_to_url_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vega_to_html_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(svg_to_png_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(svg_to_jpeg_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(set_num_workers_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_num_workers_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_themes_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_format_locale_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_time_format_locale_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(javascript_bundle_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vega_version_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vega_themes_version_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vega_embed_version_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vegalite_versions_asyncio, &asyncio)?)?;
+
+    m.add_submodule(&asyncio)?;
+    py.import("sys")?
+        .getattr("modules")?
+        .set_item("vl_convert.asyncio", &asyncio)?;
+    Ok(())
+}
+
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
-fn vl_convert(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;
@@ -1304,6 +2268,7 @@ fn vl_convert(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_vega_themes_version, m)?)?;
     m.add_function(wrap_pyfunction!(get_vega_embed_version, m)?)?;
     m.add_function(wrap_pyfunction!(get_vegalite_versions, m)?)?;
+    add_asyncio_submodule(py, m)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

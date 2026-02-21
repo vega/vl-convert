@@ -129,6 +129,7 @@ if TYPE_CHECKING:
     VlSpec: TypeAlias = str | dict[str, Any]
 
 __all__ = [
+    "asyncio",
     "get_format_locale",
     "get_local_tz",
     "get_themes",
@@ -892,3 +893,158 @@ def get_vegalite_versions() -> list[str]:
     Vega-Lite version strings (e.g. ["5.8", "5.9", ..., "5.21"])
     """
     ...
+
+if TYPE_CHECKING:
+    class _AsyncioModule:
+        async def get_format_locale(self, name: FormatLocaleName) -> dict[str, Any]: ...
+        async def get_local_tz(self) -> str | None: ...
+        async def get_themes(self) -> dict[VegaThemes, dict[str, Any]]: ...
+        async def get_time_format_locale(self, name: TimeFormatLocaleName) -> dict[str, Any]: ...
+        async def javascript_bundle(self, snippet: str | None = None, vl_version: str | None = None) -> str: ...
+        async def register_font_directory(self, font_dir: str) -> None: ...
+        async def set_num_workers(self, num_workers: int) -> None: ...
+        async def get_num_workers(self) -> int: ...
+        async def warm_up_workers(self) -> None: ...
+        async def svg_to_jpeg(
+            self, svg: str, scale: float | None = None, quality: int | None = None
+        ) -> bytes: ...
+        async def svg_to_pdf(self, svg: str, scale: float | None = None) -> bytes: ...
+        async def svg_to_png(
+            self, svg: str, scale: float | None = None, ppi: float | None = None
+        ) -> bytes: ...
+        async def vega_to_html(
+            self,
+            vg_spec: VlSpec,
+            bundle: bool | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            renderer: Renderer | None = None,
+        ) -> str: ...
+        async def vega_to_jpeg(
+            self,
+            vg_spec: VlSpec,
+            scale: float | None = None,
+            quality: int | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes: ...
+        async def vega_to_pdf(
+            self,
+            vg_spec: VlSpec,
+            scale: float | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes: ...
+        async def vega_to_png(
+            self,
+            vg_spec: VlSpec,
+            scale: float | None = None,
+            ppi: float | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes: ...
+        async def vega_to_scenegraph(
+            self,
+            vg_spec: VlSpec,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            format: Literal["dict", "msgpack"] = "dict",
+        ) -> dict[str, Any] | bytes: ...
+        async def vega_to_svg(
+            self,
+            vg_spec: VlSpec,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> str: ...
+        async def vega_to_url(self, vg_spec: VlSpec, fullscreen: bool | None = None) -> str: ...
+        async def vegalite_to_html(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            bundle: bool | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            renderer: Renderer | None = None,
+        ) -> str: ...
+        async def vegalite_to_jpeg(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            scale: float | None = None,
+            quality: int | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes: ...
+        async def vegalite_to_pdf(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            scale: float | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes: ...
+        async def vegalite_to_png(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            scale: float | None = None,
+            ppi: float | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> bytes: ...
+        async def vegalite_to_scenegraph(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            format: Literal["dict", "msgpack"] = "dict",
+        ) -> dict[str, Any] | bytes: ...
+        async def vegalite_to_svg(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+            allowed_base_urls: list[str] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> str: ...
+        async def vegalite_to_url(self, vl_spec: VlSpec, fullscreen: bool | None = None) -> str: ...
+        async def vegalite_to_vega(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            show_warnings: bool | None = None,
+        ) -> dict[str, Any]: ...
+        async def get_vega_version(self) -> str: ...
+        async def get_vega_themes_version(self) -> str: ...
+        async def get_vega_embed_version(self) -> str: ...
+        async def get_vegalite_versions(self) -> list[str]: ...
+
+    asyncio: _AsyncioModule

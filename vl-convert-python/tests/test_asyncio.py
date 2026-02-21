@@ -1,0 +1,120 @@
+import asyncio
+
+import pytest
+import vl_convert as vlc
+import vl_convert.asyncio as vlca
+
+
+SIMPLE_VL_SPEC = {
+    "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
+    "mark": "bar",
+    "encoding": {
+        "x": {"field": "a", "type": "nominal"},
+        "y": {"field": "b", "type": "quantitative"},
+    },
+}
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+@pytest.fixture(autouse=True)
+def reset_worker_count():
+    original = vlc.get_num_workers()
+    vlc.set_num_workers(1)
+    try:
+        yield
+    finally:
+        vlc.set_num_workers(original)
+
+
+def test_asyncio_namespace_import_and_expected_attributes():
+    assert hasattr(vlca, "vegalite_to_svg")
+    assert hasattr(vlca, "vega_to_scenegraph")
+    assert hasattr(vlca, "warm_up_workers")
+
+
+def test_asyncio_smoke_and_sync_parity_shapes():
+    async def scenario():
+        vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, "v5_16")
+        assert isinstance(vega, dict)
+
+        svg = await vlca.vega_to_svg(vega)
+        assert svg.lstrip().startswith("<svg")
+
+        msgpack_scenegraph = await vlca.vega_to_scenegraph(vega, format="msgpack")
+        assert isinstance(msgpack_scenegraph, bytes)
+
+        version = await vlca.get_vega_version()
+        assert version == vlc.get_vega_version()
+
+    run(scenario())
+
+
+def test_asyncio_parallel_gather_with_workers():
+    async def scenario():
+        await vlca.set_num_workers(4)
+        await vlca.warm_up_workers()
+
+        results = await asyncio.gather(
+            *[vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16") for _ in range(16)]
+        )
+
+        assert len(results) == 16
+        assert all(svg.lstrip().startswith("<svg") for svg in results)
+
+    run(scenario())
+
+
+def test_asyncio_worker_lifecycle_calls():
+    async def scenario():
+        await vlca.set_num_workers(3)
+        assert await vlca.get_num_workers() == 3
+        await vlca.warm_up_workers()
+        svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16")
+        assert svg.lstrip().startswith("<svg")
+
+    run(scenario())
+
+
+def test_asyncio_html_conversions():
+    async def scenario():
+        vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, "v5_16")
+        vega_html = await vlca.vega_to_html(vega, bundle=True)
+        assert vega_html.startswith("<!DOCTYPE html>")
+
+        vegalite_html = await vlca.vegalite_to_html(SIMPLE_VL_SPEC, "v5_16", bundle=True)
+        assert vegalite_html.startswith("<!DOCTYPE html>")
+
+    run(scenario())
+
+
+def test_asyncio_javascript_bundle_custom_snippet():
+    async def scenario():
+        bundle = await vlca.javascript_bundle(
+            "window.__vlcBundleMarker = 'ok';", vl_version="v5_16"
+        )
+        assert "__vlcBundleMarker" in bundle
+
+    run(scenario())
+
+
+def test_asyncio_cancellation_does_not_poison_followup_requests():
+    async def scenario():
+        await vlca.set_num_workers(4)
+        await vlca.warm_up_workers()
+
+        task = asyncio.ensure_future(vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16"))
+        await asyncio.sleep(0)
+        task.cancel()
+
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16")
+        assert svg.lstrip().startswith("<svg")
+
+    run(scenario())
