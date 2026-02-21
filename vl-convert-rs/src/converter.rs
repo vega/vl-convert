@@ -5,18 +5,20 @@ use crate::module_loader::{VlConvertModuleLoader, FORMATE_LOCALE_MAP, TIME_FORMA
 use deno_core::anyhow::bail;
 use deno_core::error::AnyError;
 use deno_core::op2;
-use deno_core::{serde_v8, v8, ModuleSpecifier};
+use deno_core::{serde_v8, v8, ModuleSpecifier, OpState};
 use deno_error::JsErrorBox;
 use deno_runtime::deno_fs::RealFs;
 use deno_runtime::deno_permissions::{PermissionsContainer, RuntimePermissionDescriptorParser};
 use deno_runtime::deno_web::{BlobStore, InMemoryBroadcastChannel};
 use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
 use deno_runtime::FeatureChecker;
+use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Cursor;
 use std::rc::Rc;
+use std::sync::Once;
 use std::sync::{Arc, Mutex};
 
 use std::panic;
@@ -25,8 +27,7 @@ use std::thread;
 use std::thread::JoinHandle;
 
 use deno_core::anyhow::anyhow;
-use futures::channel::{mpsc, mpsc::Sender, oneshot};
-use futures_util::{SinkExt, StreamExt};
+use futures::channel::oneshot;
 use png::{PixelDimensions, Unit};
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
@@ -37,7 +38,7 @@ use image::ImageReader;
 use resvg::render;
 
 use crate::text::{FONT_CONFIG, FONT_CONFIG_VERSION, USVG_OPTIONS};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
 // Canvas 2D ops are now in the separate vl_convert_canvas2d extension from vl-convert-canvas2d-deno
@@ -57,152 +58,194 @@ deno_core::extension!(
 // Arguments are passed to V8 as JSON strings via Deno ops and parsed in JS.
 // Scenegraph results are returned as MessagePack byte buffers via ops,
 // avoiding JSON serialization overhead for large payloads.
-struct VlConverterRuntime {
-    sender: Sender<VlConvertCommand>,
-    handle: JoinHandle<Result<(), AnyError>>,
+struct WorkerPool {
+    senders: Vec<tokio::sync::mpsc::Sender<QueuedCommand>>,
+    // Per-worker count of requests that have been reserved for this worker but not yet
+    // fully processed. This includes in-flight senders blocked on channel capacity and
+    // commands currently queued/executing in the worker loop.
+    outstanding: Vec<Arc<AtomicUsize>>,
+    dispatch_cursor: AtomicUsize,
+    _handles: Vec<JoinHandle<()>>,
 }
 
-lazy_static! {
-    pub static ref TOKIO_RUNTIME: tokio::runtime::Runtime =
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-    static ref JSON_ARGS: Arc<Mutex<HashMap<i32, String>>> = Arc::new(Mutex::new(HashMap::new()));
-    static ref MSGPACK_RESULTS: Arc<Mutex<HashMap<i32, Vec<u8>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
-    static ref NEXT_ID: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
-}
+impl WorkerPool {
+    fn next_sender(&self) -> Option<(tokio::sync::mpsc::Sender<QueuedCommand>, OutstandingTicket)> {
+        if self.senders.is_empty() {
+            return None;
+        }
 
-static VL_CONVERTER_RUNTIME: Mutex<Option<VlConverterRuntime>> = Mutex::new(None);
+        // Choose the worker with the smallest outstanding count. Rotate scan start so ties
+        // are not biased to index 0.
+        let start = self.dispatch_cursor.fetch_add(1, Ordering::Relaxed) % self.senders.len();
+        let mut best_idx = None;
+        let mut best_outstanding = usize::MAX;
 
-fn spawn_worker_thread() -> VlConverterRuntime {
-    let (sender, mut receiver) = mpsc::channel::<VlConvertCommand>(32);
-    let handle = thread::spawn(move || {
-        TOKIO_RUNTIME.block_on(async {
-            let mut inner = InnerVlConverter::try_new().await?;
-            while let Some(cmd) = receiver.next().await {
-                if let Err(e) = inner.refresh_font_config_if_needed() {
-                    cmd.send_error(e);
-                    continue;
-                }
-                match cmd {
-                    VlConvertCommand::VlToVg {
-                        vl_spec,
-                        vl_opts,
-                        responder,
-                    } => {
-                        let vega_spec = inner.vegalite_to_vega(vl_spec, vl_opts).await;
-                        responder.send(vega_spec).ok();
-                    }
-                    VlConvertCommand::VgToSvg {
-                        vg_spec,
-                        vg_opts,
-                        responder,
-                    } => {
-                        let svg_result = inner.vega_to_svg(vg_spec, vg_opts).await;
-                        responder.send(svg_result).ok();
-                    }
-                    VlConvertCommand::VgToSg {
-                        vg_spec,
-                        vg_opts,
-                        responder,
-                    } => {
-                        let sg_result = inner.vega_to_scenegraph(vg_spec, vg_opts).await;
-                        responder.send(sg_result).ok();
-                    }
-                    VlConvertCommand::VgToSgMsgpack {
-                        vg_spec,
-                        vg_opts,
-                        responder,
-                    } => {
-                        let sg_result = inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await;
-                        responder.send(sg_result).ok();
-                    }
-                    VlConvertCommand::VlToSvg {
-                        vl_spec,
-                        vl_opts,
-                        responder,
-                    } => {
-                        let svg_result = inner.vegalite_to_svg(vl_spec, vl_opts).await;
-                        responder.send(svg_result).ok();
-                    }
-                    VlConvertCommand::VlToSg {
-                        vl_spec,
-                        vl_opts,
-                        responder,
-                    } => {
-                        let sg_result = inner.vegalite_to_scenegraph(vl_spec, vl_opts).await;
-                        responder.send(sg_result).ok();
-                    }
-                    VlConvertCommand::VlToSgMsgpack {
-                        vl_spec,
-                        vl_opts,
-                        responder,
-                    } => {
-                        let sg_result =
-                            inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await;
-                        responder.send(sg_result).ok();
-                    }
-                    VlConvertCommand::VgToPng {
-                        vg_spec,
-                        vg_opts,
-                        scale,
-                        ppi,
-                        responder,
-                    } => {
-                        let png_result = match vg_spec.to_value() {
-                            Ok(v) => inner.vega_to_png(&v, vg_opts, scale, ppi).await,
-                            Err(e) => Err(e),
-                        };
-                        responder.send(png_result).ok();
-                    }
-                    VlConvertCommand::VlToPng {
-                        vl_spec,
-                        vl_opts,
-                        scale,
-                        ppi,
-                        responder,
-                    } => {
-                        let png_result = match vl_spec.to_value() {
-                            Ok(v) => inner.vegalite_to_png(&v, vl_opts, scale, ppi).await,
-                            Err(e) => Err(e),
-                        };
-                        responder.send(png_result).ok();
-                    }
-                    VlConvertCommand::GetLocalTz { responder } => {
-                        let local_tz = inner.get_local_tz().await;
-                        responder.send(local_tz).ok();
-                    }
-                    VlConvertCommand::GetThemes { responder } => {
-                        let themes = inner.get_themes().await;
-                        responder.send(themes).ok();
-                    }
+        for offset in 0..self.senders.len() {
+            let idx = (start + offset) % self.senders.len();
+            if self.senders[idx].is_closed() {
+                continue;
+            }
+
+            let outstanding = self.outstanding[idx].load(Ordering::Relaxed);
+            if outstanding < best_outstanding {
+                best_idx = Some(idx);
+                best_outstanding = outstanding;
+                if outstanding == 0 {
+                    break;
                 }
             }
-            Ok::<(), AnyError>(())
-        })?;
-        Ok(())
-    });
-    VlConverterRuntime { sender, handle }
+        }
+
+        let idx = best_idx?;
+        let ticket = OutstandingTicket::new(self.outstanding[idx].clone());
+        Some((self.senders[idx].clone(), ticket))
+    }
+
+    fn is_closed(&self) -> bool {
+        self.senders
+            .iter()
+            .all(tokio::sync::mpsc::Sender::is_closed)
+    }
 }
 
-/// Get a sender to the worker thread, respawning it if it has exited.
-fn get_or_spawn_sender() -> Result<Sender<VlConvertCommand>, AnyError> {
-    let mut guard = VL_CONVERTER_RUNTIME
-        .lock()
-        .map_err(|e| anyhow!("Failed to lock worker runtime: {}", e))?;
+struct OutstandingTicket {
+    counter: Arc<AtomicUsize>,
+}
 
-    if let Some(ref runtime) = *guard {
-        if !runtime.handle.is_finished() {
-            return Ok(runtime.sender.clone());
+impl OutstandingTicket {
+    fn new(counter: Arc<AtomicUsize>) -> Self {
+        counter.fetch_add(1, Ordering::Relaxed);
+        Self { counter }
+    }
+}
+
+impl Drop for OutstandingTicket {
+    fn drop(&mut self) {
+        let prev = self.counter.fetch_sub(1, Ordering::Relaxed);
+        debug_assert!(prev > 0, "outstanding counter underflow");
+    }
+}
+
+struct QueuedCommand {
+    cmd: VlConvertCommand,
+    ticket: OutstandingTicket,
+}
+
+impl QueuedCommand {
+    fn new(cmd: VlConvertCommand, ticket: OutstandingTicket) -> Self {
+        Self { cmd, ticket }
+    }
+
+    fn into_command(self) -> VlConvertCommand {
+        self.cmd
+    }
+
+    fn into_parts(self) -> (VlConvertCommand, OutstandingTicket) {
+        (self.cmd, self.ticket)
+    }
+}
+
+#[derive(Default)]
+struct WorkerTransferState {
+    json_args: HashMap<i32, String>,
+    msgpack_results: HashMap<i32, Vec<u8>>,
+    next_id: i32,
+}
+
+type WorkerTransferStateHandle = Rc<RefCell<WorkerTransferState>>;
+
+fn ensure_v8_platform_initialized() {
+    static V8_INIT: Once = Once::new();
+    V8_INIT.call_once(|| deno_core::JsRuntime::init_platform(None, false));
+}
+
+fn worker_queue_capacity(num_workers: usize) -> usize {
+    num_workers.saturating_mul(32).max(32)
+}
+
+fn spawn_worker_pool(num_workers: usize) -> Result<WorkerPool, AnyError> {
+    if num_workers < 1 {
+        bail!("num_workers must be >= 1");
+    }
+    ensure_v8_platform_initialized();
+
+    let total_queue_capacity = worker_queue_capacity(num_workers);
+    let per_worker_queue_capacity = (total_queue_capacity / num_workers).max(1);
+    let mut handles = Vec::with_capacity(num_workers);
+    let mut senders = Vec::with_capacity(num_workers);
+    let mut startup_receivers = Vec::with_capacity(num_workers);
+
+    for _ in 0..num_workers {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<QueuedCommand>(per_worker_queue_capacity);
+        senders.push(tx);
+        let (startup_tx, startup_rx) = std::sync::mpsc::channel::<Result<(), String>>();
+        let handle = thread::spawn(move || {
+            let runtime = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(runtime) => runtime,
+                Err(err) => {
+                    let _ = startup_tx.send(Err(format!("Failed to construct runtime: {err}")));
+                    return;
+                }
+            };
+            let local = tokio::task::LocalSet::new();
+            local.block_on(&runtime, async move {
+                let mut inner = match InnerVlConverter::try_new().await {
+                    Ok(inner) => {
+                        let _ = startup_tx.send(Ok(()));
+                        inner
+                    }
+                    Err(err) => {
+                        let _ = startup_tx.send(Err(err.to_string()));
+                        return;
+                    }
+                };
+
+                while let Some(queued_cmd) = rx.recv().await {
+                    // Keep the ticket alive for the full loop iteration so outstanding
+                    // covers refresh + command execution (drop happens at iteration end).
+                    let (cmd, _ticket) = queued_cmd.into_parts();
+                    if let Err(e) = inner.refresh_font_config_if_needed() {
+                        cmd.send_error(e);
+                        continue;
+                    }
+                    inner.handle_command(cmd).await;
+                }
+            });
+        });
+        handles.push(handle);
+        startup_receivers.push(startup_rx);
+    }
+
+    for startup_rx in startup_receivers {
+        match startup_rx.recv() {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                drop(senders);
+                for handle in handles {
+                    let _ = handle.join();
+                }
+                bail!("Failed to initialize worker: {err}");
+            }
+            Err(err) => {
+                drop(senders);
+                for handle in handles {
+                    let _ = handle.join();
+                }
+                bail!("Failed to receive worker startup status: {err}");
+            }
         }
     }
 
-    let runtime = spawn_worker_thread();
-    let sender = runtime.sender.clone();
-    *guard = Some(runtime);
-    Ok(sender)
+    let num = senders.len();
+    Ok(WorkerPool {
+        senders,
+        outstanding: (0..num).map(|_| Arc::new(AtomicUsize::new(0))).collect(),
+        dispatch_cursor: AtomicUsize::new(0),
+        _handles: handles,
+    })
 }
 
 /// A JSON value that may already be serialized to a string.
@@ -390,93 +433,184 @@ impl VlOpts {
     }
 }
 
-fn next_id() -> Result<i32, AnyError> {
-    match NEXT_ID.lock() {
-        Ok(mut guard) => {
-            let id = *guard;
-            *guard = (*guard + 1) % i32::MAX;
-            Ok(id)
-        }
-        Err(err) => {
-            bail!("Failed to acquire lock: {err}")
-        }
-    }
-}
-
-fn set_json_arg(arg: serde_json::Value) -> Result<i32, AnyError> {
-    set_json_str_arg(serde_json::to_string(&arg)?)
-}
-
-fn set_json_str_arg(json_str: String) -> Result<i32, AnyError> {
-    let id = next_id()?;
-
-    match JSON_ARGS.lock() {
-        Ok(mut guard) => {
-            guard.insert(id, json_str);
-        }
-        Err(err) => {
-            bail!("Failed to acquire lock: {err}")
-        }
-    }
-
+fn next_id(transfer_state: &WorkerTransferStateHandle) -> Result<i32, AnyError> {
+    let mut guard = transfer_state
+        .try_borrow_mut()
+        .map_err(|err| anyhow!("Failed to borrow worker transfer state: {err}"))?;
+    let id = guard.next_id;
+    guard.next_id = (guard.next_id + 1) % i32::MAX;
     Ok(id)
 }
 
-fn set_spec_arg(spec: ValueOrString) -> Result<i32, AnyError> {
+fn set_json_arg(
+    transfer_state: &WorkerTransferStateHandle,
+    arg: serde_json::Value,
+) -> Result<i32, AnyError> {
+    set_json_str_arg(transfer_state, serde_json::to_string(&arg)?)
+}
+
+fn set_json_str_arg(
+    transfer_state: &WorkerTransferStateHandle,
+    json_str: String,
+) -> Result<i32, AnyError> {
+    let id = next_id(transfer_state)?;
+    let mut guard = transfer_state
+        .try_borrow_mut()
+        .map_err(|err| anyhow!("Failed to borrow worker transfer state: {err}"))?;
+    guard.json_args.insert(id, json_str);
+    Ok(id)
+}
+
+fn set_spec_arg(
+    transfer_state: &WorkerTransferStateHandle,
+    spec: ValueOrString,
+) -> Result<i32, AnyError> {
     match spec {
-        ValueOrString::JsonString(s) => set_json_str_arg(s),
-        ValueOrString::Value(v) => set_json_arg(v),
+        ValueOrString::JsonString(s) => set_json_str_arg(transfer_state, s),
+        ValueOrString::Value(v) => set_json_arg(transfer_state, v),
     }
 }
 
-fn alloc_msgpack_result_id() -> Result<i32, AnyError> {
-    next_id()
+fn alloc_msgpack_result_id(transfer_state: &WorkerTransferStateHandle) -> Result<i32, AnyError> {
+    next_id(transfer_state)
 }
 
-fn take_msgpack_result(result_id: i32) -> Result<Vec<u8>, AnyError> {
-    match MSGPACK_RESULTS.lock() {
-        Ok(mut guard) => guard
-            .remove(&result_id)
-            .ok_or_else(|| anyhow!("Result id not found")),
-        Err(err) => bail!("Failed to acquire lock: {err}"),
+fn take_msgpack_result(
+    transfer_state: &WorkerTransferStateHandle,
+    result_id: i32,
+) -> Result<Vec<u8>, AnyError> {
+    let mut guard = transfer_state
+        .try_borrow_mut()
+        .map_err(|err| anyhow!("Failed to borrow worker transfer state: {err}"))?;
+    guard
+        .msgpack_results
+        .remove(&result_id)
+        .ok_or_else(|| anyhow!("Result id not found"))
+}
+
+fn clear_json_arg(transfer_state: &WorkerTransferStateHandle, arg_id: i32) {
+    if let Ok(mut guard) = transfer_state.try_borrow_mut() {
+        guard.json_args.remove(&arg_id);
+    }
+}
+
+fn clear_msgpack_result(transfer_state: &WorkerTransferStateHandle, result_id: i32) {
+    if let Ok(mut guard) = transfer_state.try_borrow_mut() {
+        guard.msgpack_results.remove(&result_id);
+    }
+}
+
+struct JsonArgGuard {
+    transfer_state: WorkerTransferStateHandle,
+    arg_id: Option<i32>,
+}
+
+impl JsonArgGuard {
+    fn from_value(
+        transfer_state: &WorkerTransferStateHandle,
+        value: serde_json::Value,
+    ) -> Result<Self, AnyError> {
+        Ok(Self {
+            transfer_state: transfer_state.clone(),
+            arg_id: Some(set_json_arg(transfer_state, value)?),
+        })
+    }
+
+    fn from_spec(
+        transfer_state: &WorkerTransferStateHandle,
+        spec: ValueOrString,
+    ) -> Result<Self, AnyError> {
+        Ok(Self {
+            transfer_state: transfer_state.clone(),
+            arg_id: Some(set_spec_arg(transfer_state, spec)?),
+        })
+    }
+
+    fn id(&self) -> i32 {
+        self.arg_id.expect("JsonArgGuard id missing")
+    }
+}
+
+impl Drop for JsonArgGuard {
+    fn drop(&mut self) {
+        if let Some(arg_id) = self.arg_id.take() {
+            clear_json_arg(&self.transfer_state, arg_id);
+        }
+    }
+}
+
+struct MsgpackResultGuard {
+    transfer_state: WorkerTransferStateHandle,
+    result_id: Option<i32>,
+}
+
+impl MsgpackResultGuard {
+    fn new(transfer_state: &WorkerTransferStateHandle) -> Result<Self, AnyError> {
+        Ok(Self {
+            transfer_state: transfer_state.clone(),
+            result_id: Some(alloc_msgpack_result_id(transfer_state)?),
+        })
+    }
+
+    fn id(&self) -> i32 {
+        self.result_id.expect("MsgpackResultGuard id missing")
+    }
+
+    fn take_result(mut self) -> Result<Vec<u8>, AnyError> {
+        let result_id = self
+            .result_id
+            .take()
+            .expect("MsgpackResultGuard id missing");
+        take_msgpack_result(&self.transfer_state, result_id)
+    }
+}
+
+impl Drop for MsgpackResultGuard {
+    fn drop(&mut self) {
+        if let Some(result_id) = self.result_id.take() {
+            clear_msgpack_result(&self.transfer_state, result_id);
+        }
     }
 }
 
 #[op2]
 #[string]
-fn op_get_json_arg(arg_id: i32) -> Result<String, JsErrorBox> {
-    match JSON_ARGS.lock() {
-        Ok(mut guard) => {
-            if let Some(arg) = guard.remove(&arg_id) {
-                Ok(arg)
-            } else {
-                Err(JsErrorBox::generic("Arg id not found"))
-            }
-        }
-        Err(err) => Err(JsErrorBox::generic(format!(
-            "Failed to acquire lock: {}",
-            err
-        ))),
+fn op_get_json_arg(state: &mut OpState, arg_id: i32) -> Result<String, JsErrorBox> {
+    let transfer_state = state
+        .try_borrow::<WorkerTransferStateHandle>()
+        .cloned()
+        .ok_or_else(|| JsErrorBox::generic("Worker transfer state not found"))?;
+    let mut guard = transfer_state.try_borrow_mut().map_err(|err| {
+        JsErrorBox::generic(format!("Failed to borrow worker transfer state: {err}"))
+    })?;
+    if let Some(arg) = guard.json_args.remove(&arg_id) {
+        Ok(arg)
+    } else {
+        Err(JsErrorBox::generic("Arg id not found"))
     }
 }
 
 #[op2(fast)]
-fn op_set_msgpack_result(result_id: i32, #[buffer] data: &[u8]) -> Result<(), JsErrorBox> {
-    match MSGPACK_RESULTS.lock() {
-        Ok(mut guard) => {
-            guard.insert(result_id, data.to_vec());
-            Ok(())
-        }
-        Err(err) => Err(JsErrorBox::generic(format!(
-            "Failed to acquire lock: {}",
-            err
-        ))),
-    }
+fn op_set_msgpack_result(
+    state: &mut OpState,
+    result_id: i32,
+    #[buffer] data: &[u8],
+) -> Result<(), JsErrorBox> {
+    let transfer_state = state
+        .try_borrow::<WorkerTransferStateHandle>()
+        .cloned()
+        .ok_or_else(|| JsErrorBox::generic("Worker transfer state not found"))?;
+    let mut guard = transfer_state.try_borrow_mut().map_err(|err| {
+        JsErrorBox::generic(format!("Failed to borrow worker transfer state: {err}"))
+    })?;
+    guard.msgpack_results.insert(result_id, data.to_vec());
+    Ok(())
 }
 
 /// Struct that interacts directly with the Deno JavaScript runtime. Not Sendable
 struct InnerVlConverter {
     worker: MainWorker,
+    transfer_state: WorkerTransferStateHandle,
     initialized_vl_versions: HashSet<VlVersion>,
     vega_initialized: bool,
     font_config_version: u64,
@@ -889,7 +1023,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
             extensions: vec![
                 // Canvas 2D extension from vl-convert-canvas2d-deno crate
                 vl_convert_canvas2d_deno::vl_convert_canvas2d::init(),
-                // Our runtime extension (text width, JSON args)
+                // Our runtime extension (worker-local JSON/msgpack transfer ops)
                 vl_convert_runtime::init(),
             ],
             startup_snapshot: Some(crate::VL_CONVERT_SNAPSHOT),
@@ -898,6 +1032,12 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
 
         // Create the MainWorker with full Web API support
         let worker = MainWorker::bootstrap_from_options(&main_module, services, options);
+        let transfer_state = Rc::new(RefCell::new(WorkerTransferState::default()));
+        worker
+            .js_runtime
+            .op_state()
+            .borrow_mut()
+            .put(transfer_state.clone());
 
         // Add shared font config to OpState so canvas contexts use the same fonts as SVG rendering.
         // We resolve the FontConfig into a fontdb once here; each canvas context then clones
@@ -915,6 +1055,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
 
         let this = Self {
             worker,
+            transfer_state,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
             font_config_version: initial_font_version,
@@ -980,8 +1121,8 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         self.init_vl_version(&vl_opts.vl_version).await?;
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
 
-        let spec_arg_id = set_spec_arg(vl_spec.into())?;
-        let config_arg_id = set_json_arg(config)?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec.into())?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
@@ -998,8 +1139,8 @@ compileVegaLite_{ver_name:?}(
 )
 "#,
             ver_name = vl_opts.vl_version,
-            spec_arg_id = spec_arg_id,
-            config_arg_id = config_arg_id,
+            spec_arg_id = spec_arg.id(),
+            config_arg_id = config_arg.id(),
             theme_arg = theme_arg,
             show_warnings = vl_opts.show_warnings,
         );
@@ -1028,12 +1169,13 @@ compileVegaLite_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg_id = set_spec_arg(vl_spec.into())?;
-        let config_arg_id = set_json_arg(config)?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec.into())?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
@@ -1062,6 +1204,10 @@ vegaLiteToSvg_{ver_name:?}(
 "#,
             ver_name = vl_opts.vl_version,
             show_warnings = vl_opts.show_warnings,
+            spec_arg_id = spec_arg.id(),
+            config_arg_id = config_arg.id(),
+            format_locale_id = format_locale_arg.id(),
+            time_format_locale_id = time_format_locale_arg.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -1093,13 +1239,14 @@ vegaLiteToSvg_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg_id = set_spec_arg(vl_spec)?;
-        let config_arg_id = set_json_arg(config)?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec)?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
         let allowed_base_urls =
             serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
-        let result_id = alloc_msgpack_result_id()?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let result = MsgpackResultGuard::new(&self.transfer_state)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
@@ -1127,7 +1274,11 @@ vegaLiteToScenegraph_{ver_name:?}(
 "#,
             ver_name = vl_opts.vl_version,
             show_warnings = vl_opts.show_warnings,
-            result_id = result_id,
+            spec_arg_id = spec_arg.id(),
+            config_arg_id = config_arg.id(),
+            format_locale_id = format_locale_arg.id(),
+            time_format_locale_id = time_format_locale_arg.id(),
+            result_id = result.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -1135,7 +1286,7 @@ vegaLiteToScenegraph_{ver_name:?}(
             .run_event_loop(Default::default())
             .await?;
 
-        take_msgpack_result(result_id)
+        result.take_result()
     }
 
     pub async fn vegalite_to_scenegraph(
@@ -1170,9 +1321,10 @@ vegaLiteToScenegraph_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let arg_id = set_spec_arg(vg_spec.into())?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec.into())?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
 
         let code = format!(
             r#"
@@ -1191,6 +1343,9 @@ vegaToSvg(
     svg = result;
 }})
         "#,
+            arg_id = spec_arg.id(),
+            format_locale_id = format_locale_arg.id(),
+            time_format_locale_id = time_format_locale_arg.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -1221,10 +1376,11 @@ vegaToSvg(
             Some(fl) => fl.as_object()?,
         };
 
-        let arg_id = set_spec_arg(vg_spec)?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
-        let result_id = alloc_msgpack_result_id()?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec)?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let result = MsgpackResultGuard::new(&self.transfer_state)?;
 
         let code = format!(
             r#"
@@ -1242,7 +1398,10 @@ vegaToScenegraph(
     op_set_msgpack_result({result_id}, msgpack.encode(result));
 }})
 "#,
-            result_id = result_id,
+            arg_id = spec_arg.id(),
+            format_locale_id = format_locale_arg.id(),
+            time_format_locale_id = time_format_locale_arg.id(),
+            result_id = result.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -1250,7 +1409,7 @@ vegaToScenegraph(
             .run_event_loop(Default::default())
             .await?;
 
-        take_msgpack_result(result_id)
+        result.take_result()
     }
 
     pub async fn vega_to_scenegraph(
@@ -1339,9 +1498,10 @@ delete themes.default
             Some(fl) => fl.as_object()?,
         };
 
-        let arg_id = set_json_arg(vg_spec.clone())?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
+        let spec_arg = JsonArgGuard::from_value(&self.transfer_state, vg_spec.clone())?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
 
         let code = format!(
             r#"
@@ -1360,7 +1520,10 @@ vegaToCanvas(
     }}
     canvasPngData = canvas._toPngWithPpi({ppi});
 }})
-"#
+"#,
+            arg_id = spec_arg.id(),
+            format_locale_id = format_locale_arg.id(),
+            time_format_locale_id = time_format_locale_arg.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -1394,10 +1557,11 @@ vegaToCanvas(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg_id = set_json_arg(vl_spec.clone())?;
-        let config_arg_id = set_json_arg(config)?;
-        let format_locale_id = set_json_arg(format_locale)?;
-        let time_format_locale_id = set_json_arg(time_format_locale)?;
+        let spec_arg = JsonArgGuard::from_value(&self.transfer_state, vl_spec.clone())?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
 
         let theme_arg = match &vl_opts.theme {
             None => "null".to_string(),
@@ -1430,6 +1594,10 @@ vegaLiteToCanvas_{ver_name:?}(
 "#,
             ver_name = vl_opts.vl_version,
             show_warnings = vl_opts.show_warnings,
+            spec_arg_id = spec_arg.id(),
+            config_arg_id = config_arg.id(),
+            format_locale_id = format_locale_arg.id(),
+            time_format_locale_id = time_format_locale_arg.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -1439,6 +1607,101 @@ vegaLiteToCanvas_{ver_name:?}(
 
         let png_data = self.execute_script_to_bytes("canvasPngData").await?;
         Ok(png_data)
+    }
+
+    async fn handle_command(&mut self, cmd: VlConvertCommand) {
+        match cmd {
+            VlConvertCommand::VlToVg {
+                vl_spec,
+                vl_opts,
+                responder,
+            } => {
+                let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts).await;
+                responder.send(vega_spec).ok();
+            }
+            VlConvertCommand::VgToSvg {
+                vg_spec,
+                vg_opts,
+                responder,
+            } => {
+                let svg_result = self.vega_to_svg(vg_spec, vg_opts).await;
+                responder.send(svg_result).ok();
+            }
+            VlConvertCommand::VgToSg {
+                vg_spec,
+                vg_opts,
+                responder,
+            } => {
+                let sg_result = self.vega_to_scenegraph(vg_spec, vg_opts).await;
+                responder.send(sg_result).ok();
+            }
+            VlConvertCommand::VgToSgMsgpack {
+                vg_spec,
+                vg_opts,
+                responder,
+            } => {
+                let sg_result = self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await;
+                responder.send(sg_result).ok();
+            }
+            VlConvertCommand::VlToSvg {
+                vl_spec,
+                vl_opts,
+                responder,
+            } => {
+                let svg_result = self.vegalite_to_svg(vl_spec, vl_opts).await;
+                responder.send(svg_result).ok();
+            }
+            VlConvertCommand::VlToSg {
+                vl_spec,
+                vl_opts,
+                responder,
+            } => {
+                let sg_result = self.vegalite_to_scenegraph(vl_spec, vl_opts).await;
+                responder.send(sg_result).ok();
+            }
+            VlConvertCommand::VlToSgMsgpack {
+                vl_spec,
+                vl_opts,
+                responder,
+            } => {
+                let sg_result = self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await;
+                responder.send(sg_result).ok();
+            }
+            VlConvertCommand::VgToPng {
+                vg_spec,
+                vg_opts,
+                scale,
+                ppi,
+                responder,
+            } => {
+                let png_result = match vg_spec.to_value() {
+                    Ok(v) => self.vega_to_png(&v, vg_opts, scale, ppi).await,
+                    Err(e) => Err(e),
+                };
+                responder.send(png_result).ok();
+            }
+            VlConvertCommand::VlToPng {
+                vl_spec,
+                vl_opts,
+                scale,
+                ppi,
+                responder,
+            } => {
+                let png_result = match vl_spec.to_value() {
+                    Ok(v) => self.vegalite_to_png(&v, vl_opts, scale, ppi).await,
+                    Err(e) => Err(e),
+                };
+                responder.send(png_result).ok();
+            }
+            VlConvertCommand::GetLocalTz { responder } => {
+                let local_tz = self.get_local_tz().await;
+                responder.send(local_tz).ok();
+            }
+            VlConvertCommand::GetThemes { responder } => {
+                let themes = self.get_themes().await;
+                responder.send(themes).ok();
+            }
+        }
     }
 }
 
@@ -1547,7 +1810,7 @@ impl VlConvertCommand {
 ///
 /// ```
 /// use vl_convert_rs::{VlConverter, VlVersion};
-/// let mut converter = VlConverter::new();
+/// let converter = VlConverter::new();
 ///
 /// let vl_spec: serde_json::Value = serde_json::from_str(r#"
 /// {
@@ -1575,13 +1838,27 @@ impl VlConvertCommand {
 ///
 ///     println!("{}", vega_spec)
 /// ```
+struct VlConverterInner {
+    vegaembed_bundles: Mutex<HashMap<VlVersion, String>>,
+    pool: Mutex<Option<WorkerPool>>,
+    num_workers: usize,
+}
+
 #[derive(Clone)]
 pub struct VlConverter {
-    _vegaembed_bundles: HashMap<VlVersion, String>,
+    inner: Arc<VlConverterInner>,
 }
 
 impl VlConverter {
     pub fn new() -> Self {
+        Self::with_num_workers(1).expect("default worker count must be valid")
+    }
+
+    pub fn with_num_workers(num_workers: usize) -> Result<Self, AnyError> {
+        if num_workers < 1 {
+            bail!("num_workers must be >= 1");
+        }
+
         // Initialize environment logger with filter to suppress noisy SWC tree-shaker spans
         // The swc_ecma_transforms_optimization module logs tracing spans at ERROR level
         // which are not actual errors - just instrumentation.
@@ -1590,223 +1867,210 @@ impl VlConverter {
             .try_init()
             .ok();
 
-        Self {
-            _vegaembed_bundles: Default::default(),
+        Ok(Self {
+            inner: Arc::new(VlConverterInner {
+                vegaembed_bundles: Default::default(),
+                pool: Default::default(),
+                num_workers,
+            }),
+        })
+    }
+
+    pub fn num_workers(&self) -> usize {
+        self.inner.num_workers
+    }
+
+    /// Eagerly start the worker pool for this converter instance.
+    ///
+    /// This is optional; if not called, the pool starts lazily on first request.
+    pub fn warm_up(&self) -> Result<(), AnyError> {
+        let _ = self.get_or_spawn_sender()?;
+        Ok(())
+    }
+
+    fn get_or_spawn_sender(
+        &self,
+    ) -> Result<(tokio::sync::mpsc::Sender<QueuedCommand>, OutstandingTicket), AnyError> {
+        let mut guard = self
+            .inner
+            .pool
+            .lock()
+            .map_err(|e| anyhow!("Failed to lock worker pool: {e}"))?;
+
+        if let Some(pool) = guard.as_ref() {
+            if !pool.is_closed() {
+                if let Some(sender) = pool.next_sender() {
+                    return Ok(sender);
+                }
+            }
+            *guard = None;
+        }
+
+        let pool = spawn_worker_pool(self.inner.num_workers)?;
+        let sender = pool
+            .next_sender()
+            .ok_or_else(|| anyhow!("Worker pool has no senders"))?;
+        *guard = Some(pool);
+        Ok(sender)
+    }
+
+    async fn send_command_with_retry(
+        &self,
+        cmd: VlConvertCommand,
+        request_name: &str,
+    ) -> Result<(), AnyError> {
+        let (sender, ticket) = self.get_or_spawn_sender()?;
+        let queued = QueuedCommand::new(cmd, ticket);
+        match sender.send(queued).await {
+            Ok(()) => Ok(()),
+            Err(tokio::sync::mpsc::error::SendError(queued)) => {
+                let cmd = queued.into_command();
+                let (sender, ticket) = self.get_or_spawn_sender()?;
+                sender
+                    .send(QueuedCommand::new(cmd, ticket))
+                    .await
+                    .map_err(|err| {
+                        anyhow!("Failed to send {request_name} request after retry: {err}")
+                    })
+            }
+        }
+    }
+
+    async fn request<R>(
+        &self,
+        make_cmd: impl FnOnce(oneshot::Sender<Result<R, AnyError>>) -> VlConvertCommand,
+        request_name: &str,
+    ) -> Result<R, AnyError> {
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<R, AnyError>>();
+        self.send_command_with_retry(make_cmd(resp_tx), request_name)
+            .await?;
+        match resp_rx.await {
+            Ok(result) => result,
+            Err(err) => bail!("Failed to retrieve {request_name} result: {err}"),
         }
     }
 
     pub async fn vegalite_to_vega(
-        &mut self,
+        &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
         let vl_spec = vl_spec.into();
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
-        let cmd = VlConvertCommand::VlToVg {
-            vl_spec,
-            vl_opts,
-            responder: resp_tx,
-        };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send conversion request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(vega_spec_result) => vega_spec_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
-        }
+        self.request(
+            move |responder| VlConvertCommand::VlToVg {
+                vl_spec,
+                vl_opts,
+                responder,
+            },
+            "Vega-Lite to Vega conversion",
+        )
+        .await
     }
 
     pub async fn vega_to_svg(
-        &mut self,
+        &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
         let vg_spec = vg_spec.into();
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
-        let cmd = VlConvertCommand::VgToSvg {
-            vg_spec,
-            vg_opts,
-            responder: resp_tx,
-        };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send SVG conversion request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(svg_result) => svg_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
-        }
+        self.request(
+            move |responder| VlConvertCommand::VgToSvg {
+                vg_spec,
+                vg_opts,
+                responder,
+            },
+            "Vega to SVG conversion",
+        )
+        .await
     }
 
     pub async fn vega_to_scenegraph(
-        &mut self,
+        &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
     ) -> Result<serde_json::Value, AnyError> {
         let vg_spec = vg_spec.into();
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
-        let cmd = VlConvertCommand::VgToSg {
-            vg_spec,
-            vg_opts,
-            responder: resp_tx,
-        };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send Scenegraph conversion request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(svg_result) => svg_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
-        }
+        self.request(
+            move |responder| VlConvertCommand::VgToSg {
+                vg_spec,
+                vg_opts,
+                responder,
+            },
+            "Vega to Scenegraph conversion",
+        )
+        .await
     }
 
     pub async fn vega_to_scenegraph_msgpack(
-        &mut self,
+        &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
         let vg_spec = vg_spec.into();
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
-        let cmd = VlConvertCommand::VgToSgMsgpack {
-            vg_spec,
-            vg_opts,
-            responder: resp_tx,
-        };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send Scenegraph conversion request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(sg_msgpack_result) => sg_msgpack_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
-        }
+        self.request(
+            move |responder| VlConvertCommand::VgToSgMsgpack {
+                vg_spec,
+                vg_opts,
+                responder,
+            },
+            "Vega to Scenegraph conversion",
+        )
+        .await
     }
 
     pub async fn vegalite_to_svg(
-        &mut self,
+        &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
         let vl_spec = vl_spec.into();
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<String, AnyError>>();
-        let cmd = VlConvertCommand::VlToSvg {
-            vl_spec,
-            vl_opts,
-            responder: resp_tx,
-        };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send SVG conversion request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(svg_result) => svg_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
-        }
+        self.request(
+            move |responder| VlConvertCommand::VlToSvg {
+                vl_spec,
+                vl_opts,
+                responder,
+            },
+            "Vega-Lite to SVG conversion",
+        )
+        .await
     }
 
     pub async fn vegalite_to_scenegraph(
-        &mut self,
+        &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
         let vl_spec = vl_spec.into();
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
-        let cmd = VlConvertCommand::VlToSg {
-            vl_spec,
-            vl_opts,
-            responder: resp_tx,
-        };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send Scenegraph conversion request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(sg_result) => sg_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
-        }
+        self.request(
+            move |responder| VlConvertCommand::VlToSg {
+                vl_spec,
+                vl_opts,
+                responder,
+            },
+            "Vega-Lite to Scenegraph conversion",
+        )
+        .await
     }
 
     pub async fn vegalite_to_scenegraph_msgpack(
-        &mut self,
+        &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
         let vl_spec = vl_spec.into();
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
-        let cmd = VlConvertCommand::VlToSgMsgpack {
-            vl_spec,
-            vl_opts,
-            responder: resp_tx,
-        };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send Scenegraph conversion request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(sg_result) => sg_result,
-            Err(err) => bail!("Failed to retrieve conversion result: {err}"),
-        }
+        self.request(
+            move |responder| VlConvertCommand::VlToSgMsgpack {
+                vl_spec,
+                vl_opts,
+                responder,
+            },
+            "Vega-Lite to Scenegraph conversion",
+        )
+        .await
     }
 
     pub async fn vega_to_png(
-        &mut self,
+        &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
         scale: Option<f32>,
@@ -1814,37 +2078,24 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
-        // Calculate effective scale: combine user scale with ppi adjustment
         let effective_scale = scale * ppi / 72.0;
+        let vg_spec = vg_spec.into();
 
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
-        let cmd = VlConvertCommand::VgToPng {
-            vg_spec: vg_spec.into(),
-            vg_opts,
-            scale: effective_scale,
-            ppi,
-            responder: resp_tx,
-        };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send PNG conversion request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(png_result) => png_result,
-            Err(err) => bail!("Failed to retrieve PNG conversion result: {err}"),
-        }
+        self.request(
+            move |responder| VlConvertCommand::VgToPng {
+                vg_spec,
+                vg_opts,
+                scale: effective_scale,
+                ppi,
+                responder,
+            },
+            "Vega to PNG conversion",
+        )
+        .await
     }
 
     pub async fn vegalite_to_png(
-        &mut self,
+        &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
         scale: Option<f32>,
@@ -1852,37 +2103,24 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
-        // Calculate effective scale: combine user scale with ppi adjustment
         let effective_scale = scale * ppi / 72.0;
+        let vl_spec = vl_spec.into();
 
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<Vec<u8>, AnyError>>();
-        let cmd = VlConvertCommand::VlToPng {
-            vl_spec: vl_spec.into(),
-            vl_opts,
-            scale: effective_scale,
-            ppi,
-            responder: resp_tx,
-        };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send PNG conversion request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(png_result) => png_result,
-            Err(err) => bail!("Failed to retrieve PNG conversion result: {err}"),
-        }
+        self.request(
+            move |responder| VlConvertCommand::VlToPng {
+                vl_spec,
+                vl_opts,
+                scale: effective_scale,
+                ppi,
+                responder,
+            },
+            "Vega-Lite to PNG conversion",
+        )
+        .await
     }
 
     pub async fn vega_to_jpeg(
-        &mut self,
+        &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
         scale: Option<f32>,
@@ -1894,7 +2132,7 @@ impl VlConverter {
     }
 
     pub async fn vegalite_to_jpeg(
-        &mut self,
+        &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
         scale: Option<f32>,
@@ -1906,7 +2144,7 @@ impl VlConverter {
     }
 
     pub async fn vega_to_pdf(
-        &mut self,
+        &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
@@ -1915,7 +2153,7 @@ impl VlConverter {
     }
 
     pub async fn vegalite_to_pdf(
-        &mut self,
+        &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
@@ -1923,28 +2161,41 @@ impl VlConverter {
         svg_to_pdf(&svg)
     }
 
-    pub async fn get_vegaembed_bundle(
-        &mut self,
-        vl_version: VlVersion,
-    ) -> Result<String, AnyError> {
-        let bundle = match self._vegaembed_bundles.entry(vl_version) {
+    pub async fn get_vegaembed_bundle(&self, vl_version: VlVersion) -> Result<String, AnyError> {
+        if let Some(bundle) = self
+            .inner
+            .vegaembed_bundles
+            .lock()
+            .map_err(|e| anyhow!("Failed to lock bundle cache: {e}"))?
+            .get(&vl_version)
+            .cloned()
+        {
+            return Ok(bundle);
+        }
+
+        let computed_bundle = bundle_vega_snippet(
+            "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite;",
+            vl_version,
+        )
+        .await?;
+
+        let mut guard = self
+            .inner
+            .vegaembed_bundles
+            .lock()
+            .map_err(|e| anyhow!("Failed to lock bundle cache: {e}"))?;
+        let bundle = match guard.entry(vl_version) {
             Entry::Occupied(occupied) => occupied.get().clone(),
             Entry::Vacant(vacant) => {
-                let bundle = bundle_vega_snippet(
-                    "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite;",
-                    vl_version,
-                )
-                .await?;
-                vacant.insert(bundle.clone());
-                bundle
+                vacant.insert(computed_bundle.clone());
+                computed_bundle
             }
         };
-
         Ok(bundle)
     }
 
     async fn build_html(
-        &mut self,
+        &self,
         code: &str,
         vl_version: VlVersion,
         bundle: bool,
@@ -1997,7 +2248,7 @@ impl VlConverter {
     }
 
     pub async fn vegalite_to_html(
-        &mut self,
+        &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
         bundle: bool,
@@ -2009,7 +2260,7 @@ impl VlConverter {
     }
 
     pub async fn vega_to_html(
-        &mut self,
+        &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
         bundle: bool,
@@ -2019,46 +2270,20 @@ impl VlConverter {
         self.build_html(&code, Default::default(), bundle).await
     }
 
-    pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<Option<String>, AnyError>>();
-        let cmd = VlConvertCommand::GetLocalTz { responder: resp_tx };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send get_local_tz request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(local_tz_result) => local_tz_result,
-            Err(err) => bail!("Failed to retrieve get_local_tz result: {err}"),
-        }
+    pub async fn get_local_tz(&self) -> Result<Option<String>, AnyError> {
+        self.request(
+            |responder| VlConvertCommand::GetLocalTz { responder },
+            "get_local_tz",
+        )
+        .await
     }
 
-    pub async fn get_themes(&mut self) -> Result<serde_json::Value, AnyError> {
-        let (resp_tx, resp_rx) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
-        let cmd = VlConvertCommand::GetThemes { responder: resp_tx };
-
-        // Send request
-        match get_or_spawn_sender()?.send(cmd).await {
-            Ok(_) => {
-                // All good
-            }
-            Err(err) => {
-                bail!("Failed to send get_themes request: {err}")
-            }
-        }
-
-        // Wait for result
-        match resp_rx.await {
-            Ok(themes_result) => themes_result,
-            Err(err) => bail!("Failed to retrieve get_themes result: {err}"),
-        }
+    pub async fn get_themes(&self) -> Result<serde_json::Value, AnyError> {
+        self.request(
+            |responder| VlConvertCommand::GetThemes { responder },
+            "get_themes",
+        )
+        .await
     }
 }
 
@@ -2245,9 +2470,15 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn make_test_command() -> VlConvertCommand {
+        let (responder, _rx) =
+            futures::channel::oneshot::channel::<Result<Option<String>, AnyError>>();
+        VlConvertCommand::GetLocalTz { responder }
+    }
+
     #[tokio::test]
     async fn test_convert_context() {
-        let mut ctx = VlConverter::new();
+        let ctx = VlConverter::new();
         let vl_spec: serde_json::Value = serde_json::from_str(r#"
 {
     "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
@@ -2285,7 +2516,7 @@ mod tests {
 }
         "#).unwrap();
 
-        let mut ctx1 = VlConverter::new();
+        let ctx1 = VlConverter::new();
         let vg_spec1 = ctx1
             .vegalite_to_vega(
                 vl_spec.clone(),
@@ -2298,7 +2529,7 @@ mod tests {
             .unwrap();
         println!("vg_spec1: {}", vg_spec1);
 
-        let mut ctx1 = VlConverter::new();
+        let ctx1 = VlConverter::new();
         let vg_spec2 = ctx1
             .vegalite_to_vega(
                 vl_spec,
@@ -2569,6 +2800,275 @@ try {
         assert_eq!(url, expected);
     }
 
+    #[test]
+    fn test_with_num_workers_rejects_zero() {
+        let err = VlConverter::with_num_workers(0).err().unwrap();
+        assert!(err.to_string().contains("num_workers must be >= 1"));
+    }
+
+    #[test]
+    fn test_num_workers_reports_configured_value() {
+        let converter = VlConverter::with_num_workers(4).unwrap();
+        assert_eq!(converter.num_workers(), 4);
+    }
+
+    #[test]
+    fn test_worker_pool_next_sender_balances_outstanding_reservations() {
+        let mut senders = Vec::new();
+        let mut _receivers = Vec::new();
+        for _ in 0..3 {
+            let (tx, rx) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+            senders.push(tx);
+            _receivers.push(rx);
+        }
+
+        let pool = WorkerPool {
+            senders,
+            outstanding: (0..3)
+                .map(|_| std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)))
+                .collect(),
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        let mut tickets = Vec::new();
+        for _ in 0..30 {
+            let (_, ticket) = pool
+                .next_sender()
+                .expect("pool with open senders should produce a sender");
+            tickets.push(ticket);
+
+            let loads: Vec<usize> = pool
+                .outstanding
+                .iter()
+                .map(|outstanding| outstanding.load(std::sync::atomic::Ordering::Relaxed))
+                .collect();
+            let min = *loads.iter().min().expect("loads should not be empty");
+            let max = *loads.iter().max().expect("loads should not be empty");
+            assert!(
+                max - min <= 1,
+                "expected balanced outstanding counts, got {loads:?}"
+            );
+        }
+
+        drop(tickets);
+        for outstanding in &pool.outstanding {
+            assert_eq!(outstanding.load(std::sync::atomic::Ordering::Relaxed), 0);
+        }
+    }
+
+    #[test]
+    fn test_worker_pool_next_sender_skips_closed_senders() {
+        let (closed_sender, closed_receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+        drop(closed_receiver);
+
+        let (open_sender, mut open_receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+
+        let pool = WorkerPool {
+            senders: vec![closed_sender, open_sender],
+            outstanding: (0..2)
+                .map(|_| std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)))
+                .collect(),
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        for _ in 0..4 {
+            let (sender, ticket) = pool
+                .next_sender()
+                .expect("pool should return the open sender");
+            sender
+                .try_send(QueuedCommand::new(make_test_command(), ticket))
+                .expect("dispatch should use open sender, not closed sender");
+            let queued = open_receiver
+                .try_recv()
+                .expect("open receiver should receive dispatched command");
+            drop(queued);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_worker_pool_cancellation_releases_outstanding_ticket() {
+        let (sender, mut receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+        let pool = WorkerPool {
+            senders: vec![sender],
+            outstanding: vec![std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0))],
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        let (sender, ticket) = pool.next_sender().unwrap();
+        sender
+            .send(QueuedCommand::new(make_test_command(), ticket))
+            .await
+            .unwrap();
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+
+        let (sender, ticket) = pool.next_sender().unwrap();
+        let blocked_send = tokio::spawn(async move {
+            sender
+                .send(QueuedCommand::new(make_test_command(), ticket))
+                .await
+        });
+        tokio::task::yield_now().await;
+
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            2
+        );
+
+        blocked_send.abort();
+        let _ = blocked_send.await;
+        tokio::task::yield_now().await;
+
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+
+        let queued = receiver
+            .recv()
+            .await
+            .expect("first queued command should still be in the channel");
+        drop(queued);
+
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
+    }
+
+    #[test]
+    fn test_warm_up_respawns_closed_pool_without_explicit_reset() {
+        let num_workers = 2;
+        let converter = VlConverter::with_num_workers(num_workers).unwrap();
+
+        let mut closed_senders = Vec::with_capacity(num_workers);
+        for _ in 0..num_workers {
+            let (sender, receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+            drop(receiver);
+            closed_senders.push(sender);
+        }
+
+        let closed_pool = WorkerPool {
+            senders: closed_senders,
+            outstanding: (0..num_workers)
+                .map(|_| std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)))
+                .collect(),
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        {
+            let mut guard = converter.inner.pool.lock().unwrap();
+            *guard = Some(closed_pool);
+        }
+
+        converter.warm_up().unwrap();
+
+        let guard = converter.inner.pool.lock().unwrap();
+        let pool = guard
+            .as_ref()
+            .expect("warm_up should replace closed pool with a live pool");
+        assert_eq!(pool.senders.len(), num_workers);
+        assert!(!pool.is_closed(), "respawned pool should be open");
+    }
+
+    #[test]
+    fn test_warm_up_spawns_pool_without_request() {
+        let converter = VlConverter::with_num_workers(2).unwrap();
+
+        {
+            let guard = converter.inner.pool.lock().unwrap();
+            assert!(guard.is_none(), "pool should start uninitialized");
+        }
+
+        converter.warm_up().unwrap();
+
+        {
+            let guard = converter.inner.pool.lock().unwrap();
+            let pool = guard
+                .as_ref()
+                .expect("pool should be initialized by warm_up");
+            assert_eq!(pool.senders.len(), 2);
+            assert!(!pool.is_closed(), "warmed pool should have open senders");
+            assert_eq!(
+                pool.outstanding
+                    .iter()
+                    .map(|outstanding| outstanding.load(std::sync::atomic::Ordering::Relaxed))
+                    .sum::<usize>(),
+                0,
+                "warm_up should not leave outstanding reservations"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_warm_up_is_idempotent() {
+        let converter = VlConverter::with_num_workers(2).unwrap();
+        converter.warm_up().unwrap();
+        converter.warm_up().unwrap();
+
+        let vl_spec = serde_json::json!({
+            "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
+            "mark": "bar",
+            "encoding": {
+                "x": {"field": "a", "type": "nominal"},
+                "y": {"field": "b", "type": "quantitative"}
+            }
+        });
+
+        let svg = converter
+            .vegalite_to_svg(
+                vl_spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(svg.trim_start().starts_with("<svg"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_parallel_conversions_with_shared_converter() {
+        let converter = VlConverter::with_num_workers(4).unwrap();
+        let vl_spec = serde_json::json!({
+            "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
+            "mark": "bar",
+            "encoding": {
+                "x": {"field": "a", "type": "nominal"},
+                "y": {"field": "b", "type": "quantitative"}
+            }
+        });
+
+        let mut tasks = Vec::new();
+        for _ in 0..16 {
+            let converter = converter.clone();
+            let vl_spec = vl_spec.clone();
+            tasks.push(tokio::spawn(async move {
+                converter
+                    .vegalite_to_svg(
+                        vl_spec,
+                        VlOpts {
+                            vl_version: VlVersion::v5_16,
+                            ..Default::default()
+                        },
+                    )
+                    .await
+            }));
+        }
+
+        for task in tasks {
+            let svg = task.await.unwrap().unwrap();
+            assert!(svg.trim_start().starts_with("<svg"));
+        }
+    }
+
     #[tokio::test]
     async fn test_font_version_propagation() {
         use crate::text::{register_font_directory, FONT_CONFIG_VERSION};
@@ -2577,7 +3077,7 @@ try {
         let version_before = FONT_CONFIG_VERSION.load(Ordering::Acquire);
 
         // Do an initial conversion to ensure the worker is running
-        let mut ctx = VlConverter::new();
+        let ctx = VlConverter::new();
         let vl_spec: serde_json::Value = serde_json::from_str(
             r#"{
                 "data": {"values": [{"a": 1}]},
@@ -2609,7 +3109,7 @@ try {
 
         // A subsequent conversion should still succeed, confirming the worker
         // picked up the font config change without dying
-        let mut ctx2 = VlConverter::new();
+        let ctx2 = VlConverter::new();
         ctx2.vegalite_to_vega(
             vl_spec,
             VlOpts {

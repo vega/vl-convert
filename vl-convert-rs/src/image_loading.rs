@@ -1,6 +1,8 @@
-use log::{error, info};
+use backon::{ExponentialBuilder, Retryable};
+use log::{error, info, warn};
 use reqwest::{Client, StatusCode};
 use std::io::Write;
+use std::time::Duration;
 use tokio::task;
 use usvg::{ImageHrefResolver, Options};
 
@@ -27,37 +29,69 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
     Box::new(move |href: &str, opts: &Options| {
         info!("Resolving image: {href}");
         if href.starts_with("http://") || href.starts_with("https://") {
-            // Download image to temporary file with reqwest
+            // Download image to temporary file with reqwest, retrying on transient errors
             let (bytes, content_type): (Option<_>, Option<_>) = task::block_in_place(move || {
                 IMAGE_TOKIO_RUNTIME.block_on(async {
-                    if let Ok(response) = REQWEST_CLIENT.get(href).send().await {
-                        let content_type = response.headers().get("Content-Type")
+                    let result = (|| async {
+                        let response = REQWEST_CLIENT.get(href).send().await?;
+                        let status = response.status();
+                        let content_type = response
+                            .headers()
+                            .get("Content-Type")
                             .and_then(|h| h.to_str().ok().map(|c| c.to_string()));
 
-                        // Check status code.
-                        match response.status() {
-                            StatusCode::OK => (response.bytes().await.ok(), content_type),
-                            status => {
-                                let msg = response
+                        match status {
+                            StatusCode::OK => {
+                                let bytes = response.bytes().await?;
+                                Ok((Some(bytes), content_type))
+                            }
+                            s if s.is_server_error() || s == StatusCode::TOO_MANY_REQUESTS => {
+                                // Transient HTTP error — signal for retry
+                                Err(response.error_for_status().unwrap_err())
+                            }
+                            s => {
+                                // Permanent HTTP error — log and short-circuit without retrying
+                                let body = response
                                     .bytes()
                                     .await
-                                    .map(|b| String::from_utf8_lossy(b.as_ref()).to_string());
-                                if let Ok(msg) = msg {
-                                    error!(
-                                        "Failed to load image from url {} with status code {:?}\n{}",
-                                        href, status, msg
-                                    );
-                                } else {
-                                    error!(
-                                        "Failed to load image from url {} with status code {:?}",
-                                        href, status
-                                    );
-                                }
-                                (None, None)
+                                    .map(|b| String::from_utf8_lossy(&b).to_string())
+                                    .unwrap_or_default();
+                                error!(
+                                    "Failed to load image from url {} with status code {:?}\n{}",
+                                    href, s, body
+                                );
+                                Ok((None, None))
                             }
                         }
-                    } else {
-                        (None, None)
+                    })
+                    .retry(
+                        ExponentialBuilder::default()
+                            .with_min_delay(Duration::from_millis(500))
+                            .with_max_delay(Duration::from_secs(10))
+                            .with_max_times(4),
+                    )
+                    .when(|e| {
+                        // Retry on network errors (no status) and transient HTTP errors
+                        e.status()
+                            .map(|s| s.is_server_error() || s == StatusCode::TOO_MANY_REQUESTS)
+                            .unwrap_or(true)
+                    })
+                    .notify(|err, dur| {
+                        warn!(
+                            "Retrying image load from {} in {:.1}s: {}",
+                            href,
+                            dur.as_secs_f32(),
+                            err
+                        );
+                    })
+                    .await;
+
+                    match result {
+                        Ok((bytes, content_type)) => (bytes, content_type),
+                        Err(e) => {
+                            error!("Failed to load image from url {}: {}", href, e);
+                            (None, None)
+                        }
                     }
                 })
             });

@@ -20,6 +20,7 @@ codegen-units = 1
 [workspace.dependencies]
 anyhow = "1.0"
 assert_cmd = "2.0"
+backon = { version = "1", default-features = false, features = ["tokio-sleep", "std"] }
 clap = { version = "4.5", features = ["derive"] }
 
 # Deno dependencies - versions correspond to Deno v2.6.6

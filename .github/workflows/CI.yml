@@ -485,6 +485,12 @@ jobs:
         run: pixi run dev-py
       - name: Run tests
         run: pixi run test-py
+      - name: Upload failed images
+        uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: failed-images-python-${{ matrix.options[0] }}
+          path: vl-convert-python/tests/failed/
 
   # Build and test aarch64 Linux wheel using manylinux container
   vl-convert-python-tests-linux-aarch64:
