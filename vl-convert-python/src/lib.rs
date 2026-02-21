@@ -1075,6 +1075,18 @@ fn get_num_workers() -> PyResult<usize> {
     Ok(guard.num_workers())
 }
 
+/// Eagerly start converter workers for the current worker-count configuration
+#[pyfunction]
+#[pyo3(signature = ())]
+fn warm_up_workers() -> PyResult<()> {
+    let converter = converter_read_handle()
+        .map_err(|err| PyValueError::new_err(format!("warm_up_workers request failed:\n{err}")))?;
+
+    Python::with_gil(|py| py.allow_threads(move || converter.warm_up()))
+        .map_err(|err| PyValueError::new_err(format!("warm_up_workers request failed:\n{err}")))?;
+    Ok(())
+}
+
 /// Get the named local timezone that Vega uses to perform timezone calculations
 ///
 /// Returns:
@@ -1282,6 +1294,7 @@ fn vl_convert(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(set_num_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_num_workers, m)?)?;
+    m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
     m.add_function(wrap_pyfunction!(get_format_locale, m)?)?;

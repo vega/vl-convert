@@ -100,9 +100,12 @@ import vl_convert as vlc
 
 vlc.get_num_workers()   # 1
 vlc.set_num_workers(4)  # enable parallel worker pool
+vlc.warm_up_workers()   # optional: pre-initialize workers before first conversion
 ```
 
 This setting applies to subsequent conversions and enables parallel work across Python threads.
+Calling `warm_up_workers()` is optional and only needed if you want to avoid first-request
+worker startup latency.
 
 # How it works
 This crate uses [PyO3](https://pyo3.rs/) to wrap the [`vl-convert-rs`](https://crates.io/crates/vl-convert-rs) Rust crate as a Python library. The `vl-convert-rs` crate is a self-contained Rust library for converting [Vega-Lite](https://vega.github.io/vega-lite/) visualization specifications into various formats.  The conversions are performed using the Vega-Lite and Vega JavaScript libraries running in a v8 JavaScript runtime provided by the [`deno_runtime`](https://crates.io/crates/deno_runtime) crate.  Font metrics and SVG-to-PNG conversions are provided by the [`resvg`](https://crates.io/crates/resvg) crate.

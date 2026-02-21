@@ -137,6 +137,7 @@ __all__ = [
     "get_num_workers",
     "register_font_directory",
     "set_num_workers",
+    "warm_up_workers",
     "svg_to_jpeg",
     "svg_to_pdf",
     "svg_to_png",
@@ -277,6 +278,15 @@ def get_num_workers() -> int:
     Returns
     -------
     Number of workers.
+    """
+    ...
+
+def warm_up_workers() -> None:
+    """
+    Eagerly start converter workers for the current worker-count configuration.
+
+    This can be used to avoid first-conversion startup latency by pre-initializing
+    worker runtimes before submitting conversion requests.
     """
     ...
 

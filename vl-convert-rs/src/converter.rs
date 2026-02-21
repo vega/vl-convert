@@ -1811,6 +1811,14 @@ impl VlConverter {
         self.inner.num_workers
     }
 
+    /// Eagerly start the worker pool for this converter instance.
+    ///
+    /// This is optional; if not called, the pool starts lazily on first request.
+    pub fn warm_up(&self) -> Result<(), AnyError> {
+        let _ = self.get_or_spawn_sender()?;
+        Ok(())
+    }
+
     fn get_or_spawn_sender(&self) -> Result<tokio::sync::mpsc::Sender<VlConvertCommand>, AnyError> {
         let mut guard = self
             .inner
@@ -2731,6 +2739,55 @@ try {
     fn test_num_workers_reports_configured_value() {
         let converter = VlConverter::with_num_workers(4).unwrap();
         assert_eq!(converter.num_workers(), 4);
+    }
+
+    #[test]
+    fn test_warm_up_spawns_pool_without_request() {
+        let converter = VlConverter::with_num_workers(2).unwrap();
+
+        {
+            let guard = converter.inner.pool.lock().unwrap();
+            assert!(guard.is_none(), "pool should start uninitialized");
+        }
+
+        converter.warm_up().unwrap();
+
+        {
+            let guard = converter.inner.pool.lock().unwrap();
+            let pool = guard
+                .as_ref()
+                .expect("pool should be initialized by warm_up");
+            assert_eq!(pool.senders.len(), 2);
+            assert!(!pool.is_closed(), "warmed pool should have open senders");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_warm_up_is_idempotent() {
+        let converter = VlConverter::with_num_workers(2).unwrap();
+        converter.warm_up().unwrap();
+        converter.warm_up().unwrap();
+
+        let vl_spec = serde_json::json!({
+            "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
+            "mark": "bar",
+            "encoding": {
+                "x": {"field": "a", "type": "nominal"},
+                "y": {"field": "b", "type": "quantitative"}
+            }
+        });
+
+        let svg = converter
+            .vegalite_to_svg(
+                vl_spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(svg.trim_start().starts_with("<svg"));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
