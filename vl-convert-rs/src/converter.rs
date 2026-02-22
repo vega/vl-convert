@@ -261,7 +261,9 @@ fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyEr
 
 /// Canonicalize a path, stripping the Windows extended-length prefix (`\\?\`)
 /// that `std::fs::canonicalize` adds on Windows.
-pub(crate) fn portable_canonicalize(path: &std::path::Path) -> Result<std::path::PathBuf, AnyError> {
+pub(crate) fn portable_canonicalize(
+    path: &std::path::Path,
+) -> Result<std::path::PathBuf, AnyError> {
     let canonical = std::fs::canonicalize(path)?;
     #[cfg(target_os = "windows")]
     {
@@ -1240,7 +1242,12 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
     }).then(() => {
         return view.runAsync()
             .then(() => Image.awaitAll())
-            .then(() => view.toCanvas(scale))
+            .then(() => {
+                if (errors != null && errors.length > 0) {
+                    throw new Error(`${errors}`);
+                }
+                return view.toCanvas(scale);
+            })
             .finally(() => {
                 view.finalize();
                 vega.resetDefaultLocale();
