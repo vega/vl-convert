@@ -259,6 +259,20 @@ fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyEr
     })
 }
 
+/// Canonicalize a path, stripping the Windows extended-length prefix (`\\?\`)
+/// that `std::fs::canonicalize` adds on Windows.
+pub(crate) fn portable_canonicalize(path: &std::path::Path) -> Result<std::path::PathBuf, AnyError> {
+    let canonical = std::fs::canonicalize(path)?;
+    #[cfg(target_os = "windows")]
+    {
+        let s = canonical.to_string_lossy();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            return Ok(std::path::PathBuf::from(stripped));
+        }
+    }
+    Ok(canonical)
+}
+
 fn normalize_converter_config(
     mut config: VlConverterConfig,
 ) -> Result<VlConverterConfig, AnyError> {
@@ -273,7 +287,7 @@ fn normalize_converter_config(
     config.allowed_base_urls = normalize_allowed_base_urls(config.allowed_base_urls.take())?;
 
     if let Some(root) = config.filesystem_root.take() {
-        let canonical_root = std::fs::canonicalize(&root).map_err(|err| {
+        let canonical_root = portable_canonicalize(&root).map_err(|err| {
             anyhow!(
                 "Failed to resolve filesystem_root {}: {}",
                 root.display(),
@@ -1224,13 +1238,13 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
             // No geo_interval_init_tick signal
         }
     }).then(() => {
-        return view.runAsync().then(
-            // Pass scale factor to toCanvas
-            () => view.toCanvas(scale)
-        ).finally(() => {
-            view.finalize();
-            vega.resetDefaultLocale();
-        })
+        return view.runAsync()
+            .then(() => Image.awaitAll())
+            .then(() => view.toCanvas(scale))
+            .finally(() => {
+                view.finalize();
+                vega.resetDefaultLocale();
+            })
     });
     return canvasPromise.finally(() => {
         clearCanvasImagePolicy();

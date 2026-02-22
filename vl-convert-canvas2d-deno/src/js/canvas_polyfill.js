@@ -164,6 +164,13 @@ class ImageData {
  * Used by Vega's ResourceLoader to load images for image marks
  */
 class Image {
+  static #pendingLoads = [];
+
+  static awaitAll() {
+    const pending = Image.#pendingLoads.splice(0);
+    return Promise.allSettled(pending);
+  }
+
   #src = "";
   #width = 0;
   #height = 0;
@@ -187,7 +194,8 @@ class Image {
   set src(url) {
     this.#src = url;
     this.#complete = false;
-    this.#loadImage(url);
+    const p = this.#loadImage(url);
+    Image.#pendingLoads.push(p);
   }
 
   get width() {

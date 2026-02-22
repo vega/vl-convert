@@ -103,7 +103,7 @@ fn resolve_local_href_path(href: &str, opts: &Options) -> Result<PathBuf, AnyErr
 
 fn resolve_path_for_policy_check(path: &Path) -> Result<PathBuf, AnyError> {
     if path.exists() {
-        return std::fs::canonicalize(path).map_err(|err| {
+        return crate::converter::portable_canonicalize(path).map_err(|err| {
             anyhow!(
                 "Failed to resolve local image path {}: {}",
                 path.display(),
@@ -113,7 +113,7 @@ fn resolve_path_for_policy_check(path: &Path) -> Result<PathBuf, AnyError> {
     }
 
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let canonical_parent = std::fs::canonicalize(parent).map_err(|err| {
+    let canonical_parent = crate::converter::portable_canonicalize(parent).map_err(|err| {
         anyhow!(
             "Failed to resolve local image parent path {}: {}",
             parent.display(),
