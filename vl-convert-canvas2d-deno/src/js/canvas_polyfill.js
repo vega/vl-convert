@@ -293,17 +293,38 @@ class Image {
             allowedBaseUrls != null &&
             !allowedBaseUrls.some((allowedUrl) => normalizedUrl.startsWith(allowedUrl))
           ) {
-            denyAccess(`External data url not allowed: ${url}`);
+            denyAccess(`External data url not allowed: ${normalizedUrl}`);
           }
-        }
 
-        // Fetch remote/data URL images
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch image: ${response.status}`);
+          const response = await fetch(normalizedUrl, {
+            redirect: allowedBaseUrls != null ? "manual" : "follow",
+          });
+          const isRedirect =
+            response.status === 301 ||
+            response.status === 302 ||
+            response.status === 303 ||
+            response.status === 307 ||
+            response.status === 308;
+          if (allowedBaseUrls != null && isRedirect) {
+            denyAccess(
+              `Redirected HTTP URLs are not allowed when allowed_base_urls is configured: ${normalizedUrl}`,
+            );
+          }
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          bytes = new Uint8Array(arrayBuffer);
+        } else {
+          // Fetch remote/data URL images
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          bytes = new Uint8Array(arrayBuffer);
         }
-        const arrayBuffer = await response.arrayBuffer();
-        bytes = new Uint8Array(arrayBuffer);
       }
 
       // Get image info (checks if SVG and returns native dimensions)

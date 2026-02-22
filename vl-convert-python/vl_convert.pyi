@@ -284,10 +284,14 @@ def configure_converter(
         Worker count (must be >= 1). If ``None``, keep current value.
     allow_http_access
         Whether HTTP(S) access is permitted for external resources. If ``None``, keep current value.
+        This controls only ``http://`` and ``https://`` URLs; ``data:`` URLs remain allowed.
     filesystem_root
         Root directory for filesystem access. ``None`` clears filesystem access root.
     allowed_base_urls
         Optional allowlist prefixes for HTTP(S) URLs. ``None`` clears this allowlist.
+        Entries are normalized to include a trailing ``/`` and must not include userinfo,
+        query, or fragment components.
+        When configured, HTTP redirects are denied instead of followed.
         Per-call ``allowed_base_urls`` arguments on conversion functions override
         this converter-level default when provided.
     """

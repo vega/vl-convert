@@ -49,21 +49,6 @@ fn converter_config() -> Result<VlConverterConfig, vl_convert_rs::anyhow::Error>
         .map(|guard| guard.config())
 }
 
-fn install_converter(converter: VlConverterRs) -> Result<(), vl_convert_rs::anyhow::Error> {
-    let mut guard = VL_CONVERTER.write().map_err(|e| {
-        vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
-    })?;
-    *guard = Arc::new(converter);
-    Ok(())
-}
-
-fn configure_converter_with_config(
-    config: VlConverterConfig,
-) -> Result<(), vl_convert_rs::anyhow::Error> {
-    let converter = VlConverterRs::with_config(config)?;
-    install_converter(converter)
-}
-
 fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
     serde_json::json!({
         "num_workers": config.num_workers,
@@ -76,12 +61,20 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
     })
 }
 
-fn apply_config_overrides(
+#[derive(Default)]
+struct ConverterConfigOverrides {
+    num_workers: Option<usize>,
+    allow_http_access: Option<bool>,
+    filesystem_root: Option<Option<PathBuf>>,
+    allowed_base_urls: Option<Option<Vec<String>>>,
+}
+
+fn parse_config_overrides(
     kwargs: Option<&Bound<'_, PyDict>>,
-) -> Result<VlConverterConfig, vl_convert_rs::anyhow::Error> {
-    let mut config = converter_config()?;
+) -> Result<ConverterConfigOverrides, vl_convert_rs::anyhow::Error> {
+    let mut overrides = ConverterConfigOverrides::default();
     let Some(kwargs) = kwargs else {
-        return Ok(config);
+        return Ok(overrides);
     };
 
     for (key, value) in kwargs.iter() {
@@ -91,44 +84,45 @@ fn apply_config_overrides(
         match key_str.as_str() {
             "num_workers" => {
                 if !value.is_none() {
-                    config.num_workers = value.extract::<usize>().map_err(|err| {
+                    overrides.num_workers = Some(value.extract::<usize>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid num_workers value for configure_converter: {err}"
                         )
-                    })?;
+                    })?);
                 }
             }
             "allow_http_access" => {
                 if !value.is_none() {
-                    config.allow_http_access = value.extract::<bool>().map_err(|err| {
+                    overrides.allow_http_access = Some(value.extract::<bool>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid allow_http_access value for configure_converter: {err}"
                         )
-                    })?;
+                    })?);
                 }
             }
             "filesystem_root" => {
                 if value.is_none() {
-                    config.filesystem_root = None;
+                    overrides.filesystem_root = Some(None);
                 } else {
-                    config.filesystem_root =
-                        Some(PathBuf::from(value.extract::<String>().map_err(|err| {
+                    overrides.filesystem_root = Some(Some(PathBuf::from(
+                        value.extract::<String>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
                                 "Invalid filesystem_root value for configure_converter: {err}"
                             )
-                        })?));
+                        })?,
+                    )));
                 }
             }
             "allowed_base_urls" => {
                 if value.is_none() {
-                    config.allowed_base_urls = None;
+                    overrides.allowed_base_urls = Some(None);
                 } else {
-                    config.allowed_base_urls =
-                        Some(value.extract::<Vec<String>>().map_err(|err| {
+                    overrides.allowed_base_urls =
+                        Some(Some(value.extract::<Vec<String>>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
                                 "Invalid allowed_base_urls value for configure_converter: {err}"
                             )
-                        })?);
+                        })?));
                 }
             }
             other => {
@@ -139,7 +133,36 @@ fn apply_config_overrides(
         }
     }
 
-    Ok(config)
+    Ok(overrides)
+}
+
+fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterConfigOverrides) {
+    if let Some(num_workers) = overrides.num_workers {
+        config.num_workers = num_workers;
+    }
+    if let Some(allow_http_access) = overrides.allow_http_access {
+        config.allow_http_access = allow_http_access;
+    }
+    if let Some(filesystem_root) = overrides.filesystem_root {
+        config.filesystem_root = filesystem_root;
+    }
+    if let Some(allowed_base_urls) = overrides.allowed_base_urls {
+        config.allowed_base_urls = allowed_base_urls;
+    }
+}
+
+fn configure_converter_with_config_overrides(
+    overrides: ConverterConfigOverrides,
+) -> Result<(), vl_convert_rs::anyhow::Error> {
+    let mut guard = VL_CONVERTER.write().map_err(|e| {
+        vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
+    })?;
+
+    let mut config = guard.config();
+    apply_config_overrides(&mut config, overrides);
+    let converter = VlConverterRs::with_config(config)?;
+    *guard = Arc::new(converter);
+    Ok(())
 }
 
 fn run_converter_future<R, Fut, F>(make_future: F) -> Result<R, vl_convert_rs::anyhow::Error>
@@ -159,7 +182,7 @@ fn is_permission_denied_message(message: &str) -> bool {
     }
 
     let lowercase = message.to_ascii_lowercase();
-    lowercase.contains("permission")
+    lowercase.contains("permission denied")
         || lowercase.contains("access denied")
         || lowercase.contains("requires read access")
         || lowercase.contains("requires net access")
@@ -1196,9 +1219,9 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
 fn configure_converter(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
-    let config = apply_config_overrides(kwargs)
+    let overrides = parse_config_overrides(kwargs)
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
-    configure_converter_with_config(config)
+    configure_converter_with_config_overrides(overrides)
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))
 }
 
@@ -1223,11 +1246,11 @@ fn set_num_workers(num_workers: usize) -> PyResult<()> {
         return Err(PyValueError::new_err("num_workers must be >= 1"));
     }
 
-    let mut config =
-        converter_config().map_err(|err| prefixed_py_error("Failed to set worker count", err))?;
-    config.num_workers = num_workers;
-    configure_converter_with_config(config)
-        .map_err(|err| prefixed_py_error("Failed to set worker count", err))
+    configure_converter_with_config_overrides(ConverterConfigOverrides {
+        num_workers: Some(num_workers),
+        ..Default::default()
+    })
+    .map_err(|err| prefixed_py_error("Failed to set worker count", err))
 }
 
 /// Get the number of configured converter workers
@@ -2110,10 +2133,10 @@ fn configure_converter_asyncio<'py>(
     py: Python<'py>,
     kwargs: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let config = apply_config_overrides(kwargs)
+    let overrides = parse_config_overrides(kwargs)
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
     future_into_py_object(py, async move {
-        configure_converter_with_config(config)
+        configure_converter_with_config_overrides(overrides)
             .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
         Python::with_gil(|py| Ok(py.None().into()))
     })
@@ -2146,11 +2169,11 @@ fn set_num_workers_asyncio<'py>(
             return Err(PyValueError::new_err("num_workers must be >= 1"));
         }
 
-        let mut config = converter_config()
-            .map_err(|err| prefixed_py_error("Failed to set worker count", err))?;
-        config.num_workers = num_workers;
-        configure_converter_with_config(config)
-            .map_err(|err| prefixed_py_error("Failed to set worker count", err))?;
+        configure_converter_with_config_overrides(ConverterConfigOverrides {
+            num_workers: Some(num_workers),
+            ..Default::default()
+        })
+        .map_err(|err| prefixed_py_error("Failed to set worker count", err))?;
         Python::with_gil(|py| Ok(py.None().into()))
     })
 }
