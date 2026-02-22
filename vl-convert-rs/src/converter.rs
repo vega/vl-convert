@@ -934,42 +934,14 @@ function isRedirectStatus(status) {
     return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
-function normalizePathForComparison(path) {
-    let normalized = path.replace(/\\/g, '/');
-    if (globalThis.Deno?.build?.os === 'windows') {
-        normalized = normalized.toLowerCase();
-    }
-    normalized = normalized.replace(/\/+$/, '');
-    if (normalized.length === 0) {
-        normalized = '/';
-    }
-    return normalized;
-}
-
-function isPathUnderRoot(path, rootPath) {
-    const normalizedPath = normalizePathForComparison(path);
-    const normalizedRoot = normalizePathForComparison(rootPath);
+function isReadPermissionError(error) {
+    const name = String(error?.name ?? '').toLowerCase();
+    const message = String(error?.message ?? '').toLowerCase();
     return (
-        normalizedPath === normalizedRoot || normalizedPath.startsWith(normalizedRoot + '/')
+        name === 'permissiondenied' ||
+        message.includes('requires read access') ||
+        message.includes('permission denied')
     );
-}
-
-async function ensurePathWithinFilesystemRoot(path, errors) {
-    if (CONVERTER_FILESYSTEM_BASE_URL == null) {
-        return path;
-    }
-    const rootPath = fileUrlToPath(CONVERTER_FILESYSTEM_BASE_URL);
-    const realRootPath = await Deno.realPath(rootPath).catch(() => rootPath);
-    const pathForCheck = await Deno.realPath(path).catch(() => path);
-    if (!isPathUnderRoot(pathForCheck, realRootPath)) {
-        const message = accessDeniedMessage(
-            'Filesystem access denied by converter policy (outside filesystem_root): ' +
-                pathForCheck
-        );
-        errors.push(message);
-        throw new Error(message);
-    }
-    return path;
 }
 
 async function fetchWithPolicy(uri, options, allowedBaseUrls, errors) {
@@ -1019,7 +991,7 @@ async function fetchWithPolicy(uri, options, allowedBaseUrls, errors) {
         return await response.text();
     }
 
-    throw new Error(response.status + '' + response.statusText);
+    throw new Error(`${response.status} ${response.statusText}`);
 }
 
 function setCanvasImagePolicy(allowedBaseUrls, errors) {
@@ -1070,20 +1042,19 @@ function buildLoader(allowedBaseUrls, errors) {
             errors.push(message);
             throw new Error(message);
         }
-        if (
-            CONVERTER_FILESYSTEM_BASE_URL != null &&
-            !resolved.startsWith(CONVERTER_FILESYSTEM_BASE_URL)
-        ) {
-            const message = accessDeniedMessage(
-                'Filesystem access denied by converter policy (outside filesystem_root): ' +
-                    resolved
-            );
-            errors.push(message);
-            throw new Error(message);
-        }
         const path = fileUrlToPath(resolved);
-        await ensurePathWithinFilesystemRoot(path, errors);
-        return await Deno.readTextFile(path);
+        try {
+            return await Deno.readTextFile(path);
+        } catch (error) {
+            if (isReadPermissionError(error)) {
+                const message = accessDeniedMessage(
+                    'Filesystem access denied by Deno permissions: ' + uri
+                );
+                errors.push(message);
+                throw new Error(message);
+            }
+            throw error;
+        }
     };
 
     return loader;
@@ -4195,7 +4166,7 @@ try {
         .unwrap();
 
         let spec = vegalite_spec_with_data_url("subdir/..%2F..%2Foutside.csv");
-        let svg = converter
+        let err = converter
             .vegalite_to_svg(
                 spec,
                 VlOpts {
@@ -4204,10 +4175,10 @@ try {
                 },
             )
             .await
-            .unwrap();
-        // Traversal outside filesystem_root must not load data; Vega emits NaN domains
-        // when the dataset is empty.
-        assert!(svg.contains("NaN"));
+            .unwrap_err();
+        assert!(err.to_string().contains(&format!(
+            "{ACCESS_DENIED_MARKER}: Filesystem access denied"
+        )));
     }
 
     #[tokio::test(flavor = "multi_thread")]
