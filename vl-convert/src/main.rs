@@ -4,11 +4,11 @@
 use clap::{Parser, Subcommand};
 use itertools::Itertools;
 use std::io::{self, IsTerminal, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use vl_convert_rs::converter::{
     vega_to_url, vegalite_to_url, FormatLocale, Renderer, TimeFormatLocale, VgOpts, VlConverter,
-    VlOpts,
+    VlConverterConfig, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
@@ -21,6 +21,18 @@ const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
 #[command(version, name = "vl-convert")]
 #[command(about = "vl-convert: A utility for converting Vega-Lite specifications", long_about = None)]
 struct Cli {
+    /// Whether HTTP(S) access is allowed during conversion
+    #[arg(long, global = true, default_value_t = true, action = clap::ArgAction::Set)]
+    allow_http_access: bool,
+
+    /// Disable HTTP(S) access during conversion (alias for --allow-http-access=false)
+    #[arg(long, global = true, default_value_t = false)]
+    no_http_access: bool,
+
+    /// Root directory for local filesystem access. If omitted, filesystem access is disabled.
+    #[arg(long, global = true)]
+    filesystem_root: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -489,6 +501,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external image requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert an SVG image to a JPEG image
@@ -512,6 +528,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external image requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert an SVG image to a PDF image
@@ -527,6 +547,10 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
+
+        /// Allowed base URL for external image requests. Default allows any base URL
+        #[arg(short, long)]
+        allowed_base_url: Option<Vec<String>>,
     },
 
     /// List available themes
@@ -542,9 +566,17 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let args = Cli::parse();
+    let Cli {
+        mut allow_http_access,
+        no_http_access,
+        filesystem_root,
+        command,
+    } = Cli::parse();
+    if no_http_access {
+        allow_http_access = false;
+    }
     use crate::Commands::*;
-    match args.command {
+    match command {
         Vl2vg {
             input: input_vegalite_file,
             output: output_vega_file,
@@ -562,6 +594,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config,
                 pretty,
                 show_warnings,
+                allow_http_access,
+                filesystem_root.clone(),
             )
             .await?
         }
@@ -588,6 +622,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
+                allow_http_access,
+                filesystem_root.clone(),
             )
             .await?
         }
@@ -618,6 +654,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
+                allow_http_access,
+                filesystem_root.clone(),
             )
             .await?
         }
@@ -648,6 +686,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
+                allow_http_access,
+                filesystem_root.clone(),
             )
             .await?
         }
@@ -674,6 +714,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
+                allow_http_access,
+                filesystem_root.clone(),
             )
             .await?
         }
@@ -748,6 +790,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
+                allow_http_access,
+                filesystem_root.clone(),
             )
             .await?
         }
@@ -770,6 +814,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
+                allow_http_access,
+                filesystem_root.clone(),
             )
             .await?
         }
@@ -792,6 +838,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
+                allow_http_access,
+                filesystem_root.clone(),
             )
             .await?
         }
@@ -810,6 +858,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 format_locale,
                 time_format_locale,
+                allow_http_access,
+                filesystem_root.clone(),
             )
             .await?
         }
@@ -868,10 +918,13 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             ppi,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
-            let png_data = vl_convert_rs::converter::svg_to_png(&svg, scale, Some(ppi))?;
+            let converter =
+                build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
+            let png_data = converter.svg_to_png(&svg, scale, Some(ppi))?;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
         }
         Svg2jpeg {
@@ -880,20 +933,26 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             quality,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
-            let jpeg_data = vl_convert_rs::converter::svg_to_jpeg(&svg, scale, Some(quality))?;
+            let converter =
+                build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
+            let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality))?;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
         }
         Svg2pdf {
             input,
             output,
             font_dir,
+            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
-            let pdf_data = vl_convert_rs::converter::svg_to_pdf(&svg)?;
+            let converter =
+                build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
+            let pdf_data = converter.svg_to_pdf(&svg)?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
         }
         LsThemes => list_themes().await?,
@@ -916,6 +975,22 @@ fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
     } else {
         bail!("Invalid or unsupported Vega-Lite version: {}", vl_version);
     }
+}
+
+fn build_converter(
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
+    allowed_base_urls: Option<Vec<String>>,
+) -> Result<VlConverter, anyhow::Error> {
+    let config = VlConverterConfig {
+        allow_http_access,
+        filesystem_root: filesystem_root.map(PathBuf::from),
+        allowed_base_urls,
+        ..Default::default()
+    };
+
+    VlConverter::with_config(config)
+        .map_err(|err| anyhow::anyhow!("Failed to configure converter: {err}"))
 }
 
 fn read_input_string(input: Option<&str>) -> Result<String, anyhow::Error> {
@@ -1186,6 +1261,8 @@ async fn vl_2_vg(
     config: Option<String>,
     pretty: bool,
     show_warnings: bool,
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1200,7 +1277,7 @@ async fn vl_2_vg(
     let config = read_config_json(config)?;
 
     // Initialize converter
-    let converter = VlConverter::new();
+    let converter = build_converter(allow_http_access, filesystem_root, None)?;
 
     // Perform conversion
     let vega_json = match converter
@@ -1247,6 +1324,8 @@ async fn vg_2_svg(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1265,7 +1344,7 @@ async fn vg_2_svg(
     };
 
     // Initialize converter
-    let converter = VlConverter::new();
+    let converter = build_converter(allow_http_access, filesystem_root, None)?;
 
     // Perform conversion
     let svg = match converter
@@ -1291,6 +1370,7 @@ async fn vg_2_svg(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn vg_2_png(
     input: Option<&str>,
     output: Option<&str>,
@@ -1299,6 +1379,8 @@ async fn vg_2_png(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1317,7 +1399,7 @@ async fn vg_2_png(
     };
 
     // Initialize converter
-    let converter = VlConverter::new();
+    let converter = build_converter(allow_http_access, filesystem_root, None)?;
 
     // Perform conversion
     let png_data = match converter
@@ -1345,6 +1427,7 @@ async fn vg_2_png(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn vg_2_jpeg(
     input: Option<&str>,
     output: Option<&str>,
@@ -1353,6 +1436,8 @@ async fn vg_2_jpeg(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1371,7 +1456,7 @@ async fn vg_2_jpeg(
     };
 
     // Initialize converter
-    let converter = VlConverter::new();
+    let converter = build_converter(allow_http_access, filesystem_root, None)?;
 
     // Perform conversion
     let jpeg_data = match converter
@@ -1405,6 +1490,8 @@ async fn vg_2_pdf(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1423,7 +1510,7 @@ async fn vg_2_pdf(
     };
 
     // Initialize converter
-    let converter = VlConverter::new();
+    let converter = build_converter(allow_http_access, filesystem_root, None)?;
 
     // Perform conversion
     let pdf_data = match converter
@@ -1460,6 +1547,8 @@ async fn vl_2_svg(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1484,7 +1573,7 @@ async fn vl_2_svg(
     };
 
     // Initialize converter
-    let converter = VlConverter::new();
+    let converter = build_converter(allow_http_access, filesystem_root, None)?;
 
     // Perform conversion
     let svg = match converter
@@ -1527,6 +1616,8 @@ async fn vl_2_png(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1551,7 +1642,7 @@ async fn vl_2_png(
     };
 
     // Initialize converter
-    let converter = VlConverter::new();
+    let converter = build_converter(allow_http_access, filesystem_root, None)?;
 
     // Perform conversion
     let png_data = match converter
@@ -1596,6 +1687,8 @@ async fn vl_2_jpeg(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1620,7 +1713,7 @@ async fn vl_2_jpeg(
     };
 
     // Initialize converter
-    let converter = VlConverter::new();
+    let converter = build_converter(allow_http_access, filesystem_root, None)?;
 
     // Perform conversion
     let jpeg_data = match converter
@@ -1663,6 +1756,8 @@ async fn vl_2_pdf(
     allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    allow_http_access: bool,
+    filesystem_root: Option<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1687,7 +1782,7 @@ async fn vl_2_pdf(
     };
 
     // Initialize converter
-    let converter = VlConverter::new();
+    let converter = build_converter(allow_http_access, filesystem_root, None)?;
 
     // Perform conversion
     let pdf_data = match converter

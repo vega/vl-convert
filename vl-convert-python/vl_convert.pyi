@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import sys
-    from typing import Any, Literal
+    from typing import Any, Literal, TypedDict
 
     if sys.version_info >= (3, 10):
         from typing import TypeAlias
@@ -128,9 +128,17 @@ if TYPE_CHECKING:
     TimeFormatLocale: TypeAlias = TimeFormatLocaleName | dict[str, Any]
     VlSpec: TypeAlias = str | dict[str, Any]
 
+    class ConverterConfig(TypedDict):
+        num_workers: int
+        allow_http_access: bool
+        filesystem_root: str | None
+        allowed_base_urls: list[str] | None
+
 __all__ = [
     "asyncio",
+    "configure_converter",
     "get_format_locale",
+    "get_converter_config",
     "get_local_tz",
     "get_themes",
     "get_time_format_locale",
@@ -258,6 +266,44 @@ def register_font_directory(font_dir: str) -> None:
     Returns
     -------
     None
+    """
+    ...
+
+def configure_converter(
+    num_workers: int | None = None,
+    allow_http_access: bool | None = None,
+    filesystem_root: str | None = None,
+    allowed_base_urls: list[str] | None = None,
+) -> None:
+    """
+    Configure converter worker/access settings used by subsequent conversions.
+
+    Parameters
+    ----------
+    num_workers
+        Worker count (must be >= 1). If ``None``, keep current value.
+    allow_http_access
+        Whether HTTP(S) access is permitted for external resources. If ``None``, keep current value.
+        This controls only ``http://`` and ``https://`` URLs; ``data:`` URLs remain allowed.
+    filesystem_root
+        Root directory for filesystem access. ``None`` clears filesystem access root.
+    allowed_base_urls
+        Optional allowlist prefixes for HTTP(S) URLs. ``None`` clears this allowlist.
+        Entries are normalized to include a trailing ``/`` and must not include userinfo,
+        query, or fragment components.
+        When configured, HTTP redirects are denied instead of followed.
+        Per-call ``allowed_base_urls`` arguments on conversion functions override
+        this converter-level default when provided.
+    """
+    ...
+
+def get_converter_config() -> ConverterConfig:
+    """
+    Get the active converter worker/access configuration.
+
+    Returns
+    -------
+    Converter configuration dictionary.
     """
     ...
 
@@ -917,6 +963,18 @@ if TYPE_CHECKING:
             ...
         async def register_font_directory(self, font_dir: str) -> None:
             """Async version of ``register_font_directory``. See sync function for full documentation."""
+            ...
+        async def configure_converter(
+            self,
+            num_workers: int | None = None,
+            allow_http_access: bool | None = None,
+            filesystem_root: str | None = None,
+            allowed_base_urls: list[str] | None = None,
+        ) -> None:
+            """Async version of ``configure_converter``. See sync function for full documentation."""
+            ...
+        async def get_converter_config(self) -> ConverterConfig:
+            """Async version of ``get_converter_config``. See sync function for full documentation."""
             ...
         async def set_num_workers(self, num_workers: int) -> None:
             """Async version of ``set_num_workers``. See sync function for full documentation."""

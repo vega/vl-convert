@@ -26,6 +26,452 @@ pub fn initialize() {
     });
 }
 
+#[rustfmt::skip]
+mod test_access_flags {
+    use crate::*;
+    use std::collections::HashMap;
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::{SocketAddr, TcpListener, TcpStream};
+    use std::process::Command;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread;
+    use std::time::Duration;
+    use tempfile::tempdir;
+
+    const PNG_1X1: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,
+        8, 4, 0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 218, 99, 252, 255, 15,
+        0, 2, 3, 1, 128, 179, 248, 175, 217, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+
+    #[derive(Clone)]
+    struct TestHttpResponse {
+        status: u16,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+    }
+
+    impl TestHttpResponse {
+        fn ok_csv(body: &str) -> Self {
+            Self {
+                status: 200,
+                headers: vec![("Content-Type".to_string(), "text/csv".to_string())],
+                body: body.as_bytes().to_vec(),
+            }
+        }
+
+        fn redirect(location: &str) -> Self {
+            Self {
+                status: 302,
+                headers: vec![("Location".to_string(), location.to_string())],
+                body: Vec::new(),
+            }
+        }
+    }
+
+    struct TestHttpServer {
+        addr: SocketAddr,
+        running: Arc<AtomicBool>,
+        handle: Option<thread::JoinHandle<()>>,
+    }
+
+    impl TestHttpServer {
+        fn new(routes: Vec<(&str, TestHttpResponse)>) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let addr = listener.local_addr().unwrap();
+            let routes = Arc::new(
+                routes
+                    .into_iter()
+                    .map(|(path, response)| (path.to_string(), response))
+                    .collect::<HashMap<_, _>>(),
+            );
+            let running = Arc::new(AtomicBool::new(true));
+            let running_clone = running.clone();
+            let routes_clone = routes.clone();
+            let handle = thread::spawn(move || {
+                while running_clone.load(Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            handle_test_http_connection(stream, &routes_clone);
+                        }
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+            Self {
+                addr,
+                running,
+                handle: Some(handle),
+            }
+        }
+
+        fn url(&self, path: &str) -> String {
+            format!("http://{}{}", self.addr, path)
+        }
+
+        fn origin(&self) -> String {
+            format!("http://{}", self.addr)
+        }
+    }
+
+    impl Drop for TestHttpServer {
+        fn drop(&mut self) {
+            self.running.store(false, Ordering::SeqCst);
+            let _ = TcpStream::connect(self.addr);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    fn handle_test_http_connection(
+        mut stream: TcpStream,
+        routes: &HashMap<String, TestHttpResponse>,
+    ) {
+        let Ok(reader_stream) = stream.try_clone() else {
+            return;
+        };
+        let mut reader = BufReader::new(reader_stream);
+
+        let mut request_line = String::new();
+        if reader.read_line(&mut request_line).is_err() {
+            return;
+        }
+        let request_target = request_line.split_whitespace().nth(1).unwrap_or("/");
+        let request_path = request_target.split('?').next().unwrap_or(request_target);
+
+        loop {
+            let mut header_line = String::new();
+            if reader.read_line(&mut header_line).is_err() {
+                return;
+            }
+            if header_line == "\r\n" || header_line == "\n" || header_line.is_empty() {
+                break;
+            }
+        }
+
+        let response = routes
+            .get(request_path)
+            .cloned()
+            .unwrap_or_else(|| TestHttpResponse {
+                status: 404,
+                headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
+                body: b"not found".to_vec(),
+            });
+
+        let mut headers = response.headers;
+        if !headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        {
+            headers.push(("Content-Length".to_string(), response.body.len().to_string()));
+        }
+        if !headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("connection"))
+        {
+            headers.push(("Connection".to_string(), "close".to_string()));
+        }
+
+        let mut response_head = format!(
+            "HTTP/1.1 {} {}\r\n",
+            response.status,
+            http_reason_phrase(response.status)
+        );
+        for (name, value) in headers {
+            response_head.push_str(&format!("{name}: {value}\r\n"));
+        }
+        response_head.push_str("\r\n");
+
+        let _ = stream.write_all(response_head.as_bytes());
+        let _ = stream.write_all(&response.body);
+        let _ = stream.flush();
+    }
+
+    fn http_reason_phrase(status: u16) -> &'static str {
+        match status {
+            200 => "OK",
+            302 => "Found",
+            404 => "Not Found",
+            _ => "Status",
+        }
+    }
+
+    fn file_href(path: &std::path::Path) -> String {
+        let absolute = path.canonicalize().unwrap();
+        if cfg!(target_family = "windows") {
+            format!("file:///{}", absolute.to_string_lossy().replace('\\', "/"))
+        } else {
+            format!("file://{}", absolute.to_string_lossy())
+        }
+    }
+
+    #[test]
+    fn test_vl2svg_denied_http_access() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let output = output_path("access_vl2svg.svg");
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        cmd.arg("vl2svg")
+            .arg("-i").arg(vl_spec_path("seattle-weather"))
+            .arg("-o").arg(&output)
+            .arg("--font-dir").arg(test_font_dir())
+            .arg("--no-http-access")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("access").or(predicate::str::contains("denied")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vg2svg_denied_http_access() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let vg_output = output_path("access_seattle.vg.json");
+        Command::cargo_bin("vl-convert")?
+            .arg("vl2vg")
+            .arg("-i").arg(vl_spec_path("seattle-weather"))
+            .arg("-o").arg(&vg_output)
+            .arg("--vl-version").arg("5.8")
+            .assert()
+            .success();
+
+        let output = output_path("access_vg2svg.svg");
+        Command::cargo_bin("vl-convert")?
+            .arg("vg2svg")
+            .arg("-i").arg(&vg_output)
+            .arg("-o").arg(&output)
+            .arg("--font-dir").arg(test_font_dir())
+            .arg("--allow-http-access").arg("false")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("access").or(predicate::str::contains("denied")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_svg2png_denied_without_filesystem_root() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let temp = tempdir()?;
+        let image_path = temp.path().join("inside.png");
+        std::fs::write(&image_path, PNG_1X1)?;
+        let svg_input = temp.path().join("input.svg");
+        std::fs::write(
+            &svg_input,
+            format!(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"><image href=\"{}\" width=\"1\" height=\"1\"/></svg>",
+                file_href(&image_path)
+            ),
+        )?;
+
+        let output = output_path("access_svg2png_denied.png");
+        Command::cargo_bin("vl-convert")?
+            .arg("svg2png")
+            .arg("-i").arg(svg_input)
+            .arg("-o").arg(&output)
+            .arg("--allow-http-access").arg("false")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Filesystem access denied").or(predicate::str::contains("access denied")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_svg2png_allows_filesystem_root() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let temp = tempdir()?;
+        let root = temp.path().join("root");
+        std::fs::create_dir_all(&root)?;
+        let image_path = root.join("inside.png");
+        std::fs::write(&image_path, PNG_1X1)?;
+        let svg_input = root.join("input.svg");
+        std::fs::write(
+            &svg_input,
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"><image href=\"inside.png\" width=\"1\" height=\"1\"/></svg>",
+        )?;
+
+        let output = output_path("access_svg2png_allowed.png");
+        Command::cargo_bin("vl-convert")?
+            .arg("svg2png")
+            .arg("-i").arg(svg_input)
+            .arg("-o").arg(&output)
+            .arg("--allow-http-access").arg("false")
+            .arg("--filesystem-root").arg(root)
+            .assert()
+            .success();
+        assert!(!std::fs::read(&output)?.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_svg2png_rejects_allowed_base_url_when_http_disabled() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let temp = tempdir()?;
+        let svg_input = temp.path().join("input.svg");
+        std::fs::write(
+            &svg_input,
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>",
+        )?;
+
+        let output = output_path("access_svg2png_invalid_config.png");
+        Command::cargo_bin("vl-convert")?
+            .arg("svg2png")
+            .arg("-i").arg(svg_input)
+            .arg("-o").arg(&output)
+            .arg("--allow-http-access").arg("false")
+            .arg("--allowed-base-url").arg("https://example.com")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("allowed_base_urls cannot be set when HTTP access is disabled"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vg2svg_allows_normalized_allowed_base_url() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let server = TestHttpServer::new(vec![(
+            "/allowed/data.csv",
+            TestHttpResponse::ok_csv("a,b\n1,2\n"),
+        )]);
+        let temp = tempdir()?;
+        let vg_spec_path = temp.path().join("input.vg.json");
+        let vg_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 20,
+            "height": 20,
+            "data": [{"name": "table", "url": server.url("/allowed/data.csv"), "format": {"type": "csv"}}],
+            "scales": [
+                {"name": "x", "type": "linear", "range": "width", "domain": {"data": "table", "field": "a"}},
+                {"name": "y", "type": "linear", "range": "height", "domain": {"data": "table", "field": "b"}}
+            ],
+            "marks": [{
+                "type": "symbol",
+                "from": {"data": "table"},
+                "encode": {"enter": {"x": {"scale": "x", "field": "a"}, "y": {"scale": "y", "field": "b"}}}
+            }]
+        });
+        std::fs::write(&vg_spec_path, serde_json::to_string(&vg_spec)?)?;
+
+        let output = output_path("access_vg2svg_allowed_base_url.svg");
+        Command::cargo_bin("vl-convert")?
+            .arg("vg2svg")
+            .arg("-i").arg(&vg_spec_path)
+            .arg("-o").arg(&output)
+            .arg("--font-dir").arg(test_font_dir())
+            .arg("--allowed-base-url").arg(format!("{}/allowed", server.origin()))
+            .assert()
+            .success();
+
+        assert!(!std::fs::read(&output)?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_vg2svg_denies_redirect_when_allowlist_configured() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let disallowed_server = TestHttpServer::new(vec![(
+            "/data.csv",
+            TestHttpResponse::ok_csv("a,b\n1,2\n"),
+        )]);
+        let allowed_server = TestHttpServer::new(vec![(
+            "/redirect.csv",
+            TestHttpResponse::redirect(&disallowed_server.url("/data.csv")),
+        )]);
+
+        let temp = tempdir()?;
+        let vg_spec_path = temp.path().join("redirect.vg.json");
+        let vg_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 20,
+            "height": 20,
+            "data": [{"name": "table", "url": allowed_server.url("/redirect.csv"), "format": {"type": "csv"}}],
+            "scales": [
+                {"name": "x", "type": "linear", "range": "width", "domain": {"data": "table", "field": "a"}},
+                {"name": "y", "type": "linear", "range": "height", "domain": {"data": "table", "field": "b"}}
+            ],
+            "marks": [{
+                "type": "symbol",
+                "from": {"data": "table"},
+                "encode": {"enter": {"x": {"scale": "x", "field": "a"}, "y": {"scale": "y", "field": "b"}}}
+            }]
+        });
+        std::fs::write(&vg_spec_path, serde_json::to_string(&vg_spec)?)?;
+
+        let output = output_path("access_vg2svg_redirect_denied.svg");
+        Command::cargo_bin("vl-convert")?
+            .arg("vg2svg")
+            .arg("-i").arg(&vg_spec_path)
+            .arg("-o").arg(&output)
+            .arg("--font-dir").arg(test_font_dir())
+            .arg("--allowed-base-url").arg(allowed_server.origin())
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("Redirected HTTP URLs are not allowed"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vg2svg_allows_redirect_without_allowlist() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let target_server = TestHttpServer::new(vec![(
+            "/data.csv",
+            TestHttpResponse::ok_csv("a,b\n1,2\n"),
+        )]);
+        let redirect_server = TestHttpServer::new(vec![(
+            "/redirect.csv",
+            TestHttpResponse::redirect(&target_server.url("/data.csv")),
+        )]);
+
+        let temp = tempdir()?;
+        let vg_spec_path = temp.path().join("redirect_allowed.vg.json");
+        let vg_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 20,
+            "height": 20,
+            "data": [{"name": "table", "url": redirect_server.url("/redirect.csv"), "format": {"type": "csv"}}],
+            "scales": [
+                {"name": "x", "type": "linear", "range": "width", "domain": {"data": "table", "field": "a"}},
+                {"name": "y", "type": "linear", "range": "height", "domain": {"data": "table", "field": "b"}}
+            ],
+            "marks": [{
+                "type": "symbol",
+                "from": {"data": "table"},
+                "encode": {"enter": {"x": {"scale": "x", "field": "a"}, "y": {"scale": "y", "field": "b"}}}
+            }]
+        });
+        std::fs::write(&vg_spec_path, serde_json::to_string(&vg_spec)?)?;
+
+        let output = output_path("access_vg2svg_redirect_allowed.svg");
+        Command::cargo_bin("vl-convert")?
+            .arg("vg2svg")
+            .arg("-i").arg(&vg_spec_path)
+            .arg("-o").arg(&output)
+            .arg("--font-dir").arg(test_font_dir())
+            .assert()
+            .success();
+
+        assert!(!std::fs::read(&output)?.is_empty());
+        Ok(())
+    }
+}
+
 fn vl_spec_path(name: &str) -> String {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let spec_path = root_path
