@@ -3487,20 +3487,16 @@ var __imageDecodeErrorResult = null;
         assert_eq!(result["naturalHeight"], json!(0));
         assert_eq!(result["onerrorCount"], json!(1));
         assert_eq!(result["listenerCount"], json!(1));
-        assert!(
-            result["decodeMessage"]
-                .as_str()
-                .unwrap_or_default()
-                .contains(ACCESS_DENIED_MARKER)
-        );
-        assert!(
-            result["accessErrors"]
-                .as_array()
-                .and_then(|values| values.first())
-                .and_then(|value| value.as_str())
-                .unwrap_or_default()
-                .contains(ACCESS_DENIED_MARKER)
-        );
+        assert!(result["decodeMessage"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(ACCESS_DENIED_MARKER));
+        assert!(result["accessErrors"]
+            .as_array()
+            .and_then(|values| values.first())
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .contains(ACCESS_DENIED_MARKER));
     }
 
     #[tokio::test]
@@ -3585,7 +3581,10 @@ var __imageRaceResult = null;
             .await
             .unwrap();
 
-        let result = ctx.execute_script_to_json("__imageRaceResult").await.unwrap();
+        let result = ctx
+            .execute_script_to_json("__imageRaceResult")
+            .await
+            .unwrap();
         assert_eq!(result["src"], json!("https://example.com/fast.png"));
         assert_eq!(result["complete"], json!(true));
         assert_eq!(result["naturalWidth"], json!(2));
