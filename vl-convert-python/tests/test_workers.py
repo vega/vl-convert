@@ -24,17 +24,17 @@ def reset_worker_count():
         vlc.configure_converter(**original)
 
 
-def test_get_num_workers_default_one():
-    assert vlc.get_num_workers() == 1
+def test_get_converter_config_reports_default_num_workers():
+    assert vlc.get_converter_config()["num_workers"] == 1
 
 
-def test_set_num_workers_rejects_zero():
+def test_configure_converter_rejects_zero_num_workers():
     with pytest.raises(ValueError):
-        vlc.set_num_workers(0)
+        vlc.configure_converter(num_workers=0)
 
 
 def test_parallel_threadpool_conversions_with_configured_workers():
-    vlc.set_num_workers(4)
+    vlc.configure_converter(num_workers=4)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [
@@ -48,7 +48,7 @@ def test_parallel_threadpool_conversions_with_configured_workers():
 
 
 def test_warm_up_workers_then_parallel_conversions():
-    vlc.set_num_workers(4)
+    vlc.configure_converter(num_workers=4)
     vlc.warm_up_workers()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
@@ -63,15 +63,15 @@ def test_warm_up_workers_then_parallel_conversions():
 
 
 def test_reconfigure_workers_while_requests_are_running():
-    vlc.set_num_workers(4)
+    vlc.configure_converter(num_workers=4)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [
             executor.submit(vlc.vegalite_to_svg, SIMPLE_VL_SPEC, "v5_16")
             for _ in range(24)
         ]
-        vlc.set_num_workers(2)
-        vlc.set_num_workers(3)
+        vlc.configure_converter(num_workers=2)
+        vlc.configure_converter(num_workers=3)
         svg_results = [future.result(timeout=30) for future in futures]
 
     assert len(svg_results) == 24
@@ -96,7 +96,7 @@ def test_configure_converter_round_trip(tmp_path):
     assert config["allowed_base_urls"] is None
 
 
-def test_set_num_workers_preserves_access_policy(tmp_path):
+def test_configure_converter_num_workers_preserves_access_policy(tmp_path):
     root = tmp_path / "root"
     root.mkdir()
 
@@ -106,7 +106,7 @@ def test_set_num_workers_preserves_access_policy(tmp_path):
         filesystem_root=str(root),
         allowed_base_urls=None,
     )
-    vlc.set_num_workers(3)
+    vlc.configure_converter(num_workers=3)
     config = vlc.get_converter_config()
 
     assert config["num_workers"] == 3

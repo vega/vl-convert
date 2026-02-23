@@ -2285,17 +2285,6 @@ impl VlConverter {
         })
     }
 
-    pub fn with_num_workers(num_workers: usize) -> Result<Self, AnyError> {
-        Self::with_config(VlConverterConfig {
-            num_workers,
-            ..Default::default()
-        })
-    }
-
-    pub fn num_workers(&self) -> usize {
-        self.inner.config.num_workers
-    }
-
     pub fn config(&self) -> VlConverterConfig {
         (*self.inner.config).clone()
     }
@@ -3797,15 +3786,24 @@ try {
     }
 
     #[test]
-    fn test_with_num_workers_rejects_zero() {
-        let err = VlConverter::with_num_workers(0).err().unwrap();
+    fn test_with_config_rejects_zero_num_workers() {
+        let err = VlConverter::with_config(VlConverterConfig {
+            num_workers: 0,
+            ..Default::default()
+        })
+        .err()
+        .unwrap();
         assert!(err.to_string().contains("num_workers must be >= 1"));
     }
 
     #[test]
-    fn test_num_workers_reports_configured_value() {
-        let converter = VlConverter::with_num_workers(4).unwrap();
-        assert_eq!(converter.num_workers(), 4);
+    fn test_config_reports_configured_num_workers() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 4,
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(converter.config().num_workers, 4);
     }
 
     fn write_test_png(path: &std::path::Path) {
@@ -4469,7 +4467,11 @@ try {
 
     #[tokio::test]
     async fn test_get_vegaembed_bundle_caches_result() {
-        let converter = VlConverter::with_num_workers(1).unwrap();
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 1,
+            ..Default::default()
+        })
+        .unwrap();
 
         let first = converter
             .get_vegaembed_bundle(VlVersion::v5_16)
@@ -4490,7 +4492,11 @@ try {
 
     #[tokio::test]
     async fn test_bundle_vega_snippet_custom_snippet() {
-        let converter = VlConverter::with_num_workers(1).unwrap();
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 1,
+            ..Default::default()
+        })
+        .unwrap();
         let snippet = "window.__vlcBundleMarker = 'ok';";
 
         let bundle = converter
@@ -4631,9 +4637,13 @@ try {
     }
 
     #[test]
-    fn test_warm_up_respawns_closed_pool_without_explicit_reset() {
+    fn test_get_or_spawn_sender_respawns_closed_pool_without_explicit_reset() {
         let num_workers = 2;
-        let converter = VlConverter::with_num_workers(num_workers).unwrap();
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers,
+            ..Default::default()
+        })
+        .unwrap();
 
         let mut closed_senders = Vec::with_capacity(num_workers);
         for _ in 0..num_workers {
@@ -4656,32 +4666,36 @@ try {
             *guard = Some(closed_pool);
         }
 
-        converter.warm_up().unwrap();
+        let _ = converter.get_or_spawn_sender().unwrap();
 
         let guard = converter.inner.pool.lock().unwrap();
         let pool = guard
             .as_ref()
-            .expect("warm_up should replace closed pool with a live pool");
+            .expect("get_or_spawn_sender should replace closed pool with a live pool");
         assert_eq!(pool.senders.len(), num_workers);
         assert!(!pool.is_closed(), "respawned pool should be open");
     }
 
     #[test]
-    fn test_warm_up_spawns_pool_without_request() {
-        let converter = VlConverter::with_num_workers(2).unwrap();
+    fn test_get_or_spawn_sender_spawns_pool_without_request() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 2,
+            ..Default::default()
+        })
+        .unwrap();
 
         {
             let guard = converter.inner.pool.lock().unwrap();
             assert!(guard.is_none(), "pool should start uninitialized");
         }
 
-        converter.warm_up().unwrap();
+        let _ = converter.get_or_spawn_sender().unwrap();
 
         {
             let guard = converter.inner.pool.lock().unwrap();
             let pool = guard
                 .as_ref()
-                .expect("pool should be initialized by warm_up");
+                .expect("pool should be initialized by get_or_spawn_sender");
             assert_eq!(pool.senders.len(), 2);
             assert!(!pool.is_closed(), "warmed pool should have open senders");
             assert_eq!(
@@ -4690,16 +4704,20 @@ try {
                     .map(|outstanding| outstanding.load(std::sync::atomic::Ordering::Relaxed))
                     .sum::<usize>(),
                 0,
-                "warm_up should not leave outstanding reservations"
+                "get_or_spawn_sender should not leave outstanding reservations"
             );
         }
     }
 
     #[tokio::test]
-    async fn test_warm_up_is_idempotent() {
-        let converter = VlConverter::with_num_workers(2).unwrap();
-        converter.warm_up().unwrap();
-        converter.warm_up().unwrap();
+    async fn test_get_or_spawn_sender_is_idempotent() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 2,
+            ..Default::default()
+        })
+        .unwrap();
+        let _ = converter.get_or_spawn_sender().unwrap();
+        let _ = converter.get_or_spawn_sender().unwrap();
 
         let vl_spec = serde_json::json!({
             "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
@@ -4725,7 +4743,11 @@ try {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_parallel_conversions_with_shared_converter() {
-        let converter = VlConverter::with_num_workers(4).unwrap();
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 4,
+            ..Default::default()
+        })
+        .unwrap();
         let vl_spec = serde_json::json!({
             "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
             "mark": "bar",

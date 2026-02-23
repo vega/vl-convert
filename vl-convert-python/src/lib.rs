@@ -1215,7 +1215,7 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
     Ok(())
 }
 
-/// Set the number of parallel converter workers for subsequent requests
+/// Configure converter options for subsequent requests
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
 fn configure_converter(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
@@ -1238,31 +1238,7 @@ fn get_converter_config() -> PyResult<PyObject> {
     })
 }
 
-/// Set the number of parallel converter workers for subsequent requests
-#[pyfunction]
-#[pyo3(signature = (num_workers))]
-fn set_num_workers(num_workers: usize) -> PyResult<()> {
-    if num_workers < 1 {
-        return Err(PyValueError::new_err("num_workers must be >= 1"));
-    }
-
-    configure_converter_with_config_overrides(ConverterConfigOverrides {
-        num_workers: Some(num_workers),
-        ..Default::default()
-    })
-    .map_err(|err| prefixed_py_error("Failed to set worker count", err))
-}
-
-/// Get the number of configured converter workers
-#[pyfunction]
-#[pyo3(signature = ())]
-fn get_num_workers() -> PyResult<usize> {
-    converter_config()
-        .map_err(|err| prefixed_py_error("Failed to read worker count", err))
-        .map(|config| config.num_workers)
-}
-
-/// Eagerly start converter workers for the current worker-count configuration
+/// Eagerly start converter workers for the current converter configuration
 #[pyfunction]
 #[pyo3(signature = ())]
 fn warm_up_workers() -> PyResult<()> {
@@ -2157,43 +2133,6 @@ fn get_converter_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyA
     })
 }
 
-#[doc = async_variant_doc!("set_num_workers")]
-#[pyfunction(name = "set_num_workers")]
-#[pyo3(signature = (num_workers))]
-fn set_num_workers_asyncio<'py>(
-    py: Python<'py>,
-    num_workers: usize,
-) -> PyResult<Bound<'py, PyAny>> {
-    future_into_py_object(py, async move {
-        if num_workers < 1 {
-            return Err(PyValueError::new_err("num_workers must be >= 1"));
-        }
-
-        configure_converter_with_config_overrides(ConverterConfigOverrides {
-            num_workers: Some(num_workers),
-            ..Default::default()
-        })
-        .map_err(|err| prefixed_py_error("Failed to set worker count", err))?;
-        Python::with_gil(|py| Ok(py.None().into()))
-    })
-}
-
-#[doc = async_variant_doc!("get_num_workers")]
-#[pyfunction(name = "get_num_workers")]
-#[pyo3(signature = ())]
-fn get_num_workers_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    future_into_py_object(py, async move {
-        let num_workers = converter_config()
-            .map_err(|err| prefixed_py_error("Failed to read worker count", err))?
-            .num_workers;
-        Python::with_gil(|py| {
-            pythonize(py, &num_workers)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
 #[doc = async_variant_doc!("warm_up_workers")]
 #[pyfunction(name = "warm_up_workers")]
 #[pyo3(signature = ())]
@@ -2411,8 +2350,6 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(configure_converter_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_converter_config_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(set_num_workers_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_num_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_themes_asyncio, &asyncio)?)?;
@@ -2455,8 +2392,6 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(configure_converter, m)?)?;
     m.add_function(wrap_pyfunction!(get_converter_config, m)?)?;
-    m.add_function(wrap_pyfunction!(set_num_workers, m)?)?;
-    m.add_function(wrap_pyfunction!(get_num_workers, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;

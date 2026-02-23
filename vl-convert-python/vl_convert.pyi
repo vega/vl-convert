@@ -143,9 +143,7 @@ __all__ = [
     "get_themes",
     "get_time_format_locale",
     "javascript_bundle",
-    "get_num_workers",
     "register_font_directory",
-    "set_num_workers",
     "warm_up_workers",
     "svg_to_jpeg",
     "svg_to_pdf",
@@ -307,30 +305,9 @@ def get_converter_config() -> ConverterConfig:
     """
     ...
 
-def set_num_workers(num_workers: int) -> None:
-    """
-    Set the number of converter workers for subsequent conversions.
-
-    Parameters
-    ----------
-    num_workers
-        Worker count (must be >= 1).
-    """
-    ...
-
-def get_num_workers() -> int:
-    """
-    Get the configured converter worker count.
-
-    Returns
-    -------
-    Number of workers.
-    """
-    ...
-
 def warm_up_workers() -> None:
     """
-    Eagerly start converter workers for the current worker-count configuration.
+    Eagerly start converter workers for the current converter configuration.
 
     This can be used to avoid first-conversion startup latency by pre-initializing
     worker runtimes before submitting conversion requests.
@@ -975,12 +952,6 @@ if TYPE_CHECKING:
             ...
         async def get_converter_config(self) -> ConverterConfig:
             """Async version of ``get_converter_config``. See sync function for full documentation."""
-            ...
-        async def set_num_workers(self, num_workers: int) -> None:
-            """Async version of ``set_num_workers``. See sync function for full documentation."""
-            ...
-        async def get_num_workers(self) -> int:
-            """Async version of ``get_num_workers``. See sync function for full documentation."""
             ...
         async def warm_up_workers(self) -> None:
             """Async version of ``warm_up_workers``. See sync function for full documentation."""
