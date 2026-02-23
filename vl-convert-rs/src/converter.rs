@@ -980,7 +980,7 @@ async function fetchWithPolicy(uri, options, allowedBaseUrls, errors) {
     }
 
     const response = await fetch(uri, fetchOptions);
-    if (allowedBaseUrls != null && isRedirectStatus(response.status)) {
+    if (allowedBaseUrls != null && (response.type === 'opaqueredirect' || isRedirectStatus(response.status))) {
         const message = accessDeniedMessage(
             'Redirected HTTP URLs are not allowed when allowed_base_urls is configured: ' + uri
         );
@@ -1087,7 +1087,12 @@ function vegaToSvg(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, erro
         }
     }).then(() => {
         return view.runAsync().then(
-            () => view.toSVG()
+            () => {
+                if (errors != null && errors.length > 0) {
+                    throw new Error(`${errors}`);
+                }
+                return view.toSVG();
+            }
         ).finally(() => {
             view.finalize();
             vega.resetDefaultLocale();
@@ -1172,6 +1177,9 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
     }).then(() => {
         return view.runAsync().then(
             () => {
+                if (errors != null && errors.length > 0) {
+                    throw new Error(`${errors}`);
+                }
                 let padding = view.padding();
                 return {
                     width: Math.max(0, view._viewWidth + padding.left + padding.right),
