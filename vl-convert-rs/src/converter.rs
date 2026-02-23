@@ -4176,9 +4176,9 @@ try {
             )
             .await
             .unwrap_err();
-        assert!(err.to_string().contains(&format!(
-            "{ACCESS_DENIED_MARKER}: Filesystem access denied"
-        )));
+        assert!(err
+            .to_string()
+            .contains(&format!("{ACCESS_DENIED_MARKER}: Filesystem access denied")));
     }
 
     #[tokio::test(flavor = "multi_thread")]
