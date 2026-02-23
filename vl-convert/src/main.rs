@@ -745,15 +745,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
             let config = read_config_json(config)?;
             let vl_version = parse_vl_version(&vl_version)?;
-            let format_locale = match &format_locale {
-                None => None,
-                Some(p) => Some(format_locale_from_str(p)?),
-            };
-
-            let time_format_locale = match &time_format_locale {
-                None => None,
-                Some(p) => Some(time_format_locale_from_str(p)?),
-            };
+            let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+            let time_format_locale =
+                parse_time_format_locale_option(time_format_locale.as_deref())?;
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
             let converter = VlConverter::new();
@@ -885,15 +879,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
 
-            let format_locale = match &format_locale {
-                None => None,
-                Some(p) => Some(format_locale_from_str(p)?),
-            };
-
-            let time_format_locale = match &time_format_locale {
-                None => None,
-                Some(p) => Some(time_format_locale_from_str(p)?),
-            };
+            let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+            let time_format_locale =
+                parse_time_format_locale_option(time_format_locale.as_deref())?;
 
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
@@ -970,11 +958,8 @@ fn register_font_dir(dir: Option<String>) -> Result<(), anyhow::Error> {
 }
 
 fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
-    if let Ok(vl_version) = VlVersion::from_str(vl_version) {
-        Ok(vl_version)
-    } else {
-        bail!("Invalid or unsupported Vega-Lite version: {}", vl_version);
-    }
+    VlVersion::from_str(vl_version)
+        .map_err(|_| anyhow::anyhow!("Invalid or unsupported Vega-Lite version: {vl_version}"))
 }
 
 fn build_converter(
@@ -1050,6 +1035,12 @@ fn format_locale_from_str(s: &str) -> Result<FormatLocale, anyhow::Error> {
     }
 }
 
+fn parse_format_locale_option(
+    format_locale: Option<&str>,
+) -> Result<Option<FormatLocale>, anyhow::Error> {
+    format_locale.map(format_locale_from_str).transpose()
+}
+
 fn time_format_locale_from_str(s: &str) -> Result<TimeFormatLocale, anyhow::Error> {
     if s.ends_with(".json") {
         let s = read_file_string(s)?;
@@ -1057,6 +1048,14 @@ fn time_format_locale_from_str(s: &str) -> Result<TimeFormatLocale, anyhow::Erro
     } else {
         Ok(TimeFormatLocale::Name(s.to_string()))
     }
+}
+
+fn parse_time_format_locale_option(
+    time_format_locale: Option<&str>,
+) -> Result<Option<TimeFormatLocale>, anyhow::Error> {
+    time_format_locale
+        .map(time_format_locale_from_str)
+        .transpose()
 }
 
 fn write_output_string(output: Option<&str>, output_str: &str) -> Result<(), anyhow::Error> {
@@ -1333,15 +1332,8 @@ async fn vg_2_svg(
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
     let converter = build_converter(allow_http_access, filesystem_root, None)?;
@@ -1388,15 +1380,8 @@ async fn vg_2_png(
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
     let converter = build_converter(allow_http_access, filesystem_root, None)?;
@@ -1445,15 +1430,8 @@ async fn vg_2_jpeg(
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
     let converter = build_converter(allow_http_access, filesystem_root, None)?;
@@ -1499,15 +1477,8 @@ async fn vg_2_pdf(
     // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
     let converter = build_converter(allow_http_access, filesystem_root, None)?;
@@ -1562,15 +1533,8 @@ async fn vl_2_svg(
     // Load config from file
     let config = read_config_json(config)?;
 
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
     let converter = build_converter(allow_http_access, filesystem_root, None)?;
@@ -1631,15 +1595,8 @@ async fn vl_2_png(
     // Load config from file
     let config = read_config_json(config)?;
 
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
     let converter = build_converter(allow_http_access, filesystem_root, None)?;
@@ -1702,15 +1659,8 @@ async fn vl_2_jpeg(
     // Load config from file
     let config = read_config_json(config)?;
 
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
     let converter = build_converter(allow_http_access, filesystem_root, None)?;
@@ -1771,15 +1721,8 @@ async fn vl_2_pdf(
     // Load config from file
     let config = read_config_json(config)?;
 
-    let format_locale = match &format_locale {
-        None => None,
-        Some(p) => Some(format_locale_from_str(p)?),
-    };
-
-    let time_format_locale = match &time_format_locale {
-        None => None,
-        Some(p) => Some(time_format_locale_from_str(p)?),
-    };
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
     let converter = build_converter(allow_http_access, filesystem_root, None)?;

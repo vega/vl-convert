@@ -33,6 +33,11 @@ def test_configure_converter_rejects_zero_num_workers():
         vlc.configure_converter(num_workers=0)
 
 
+def test_configure_converter_rejects_empty_allowed_base_urls():
+    with pytest.raises(ValueError):
+        vlc.configure_converter(allowed_base_urls=[])
+
+
 def test_parallel_threadpool_conversions_with_configured_workers():
     vlc.configure_converter(num_workers=4)
 

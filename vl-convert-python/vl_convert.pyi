@@ -288,7 +288,7 @@ def configure_converter(
     allowed_base_urls
         Optional allowlist prefixes for HTTP(S) URLs. ``None`` clears this allowlist.
         Entries are normalized to include a trailing ``/`` and must not include userinfo,
-        query, or fragment components.
+        query, or fragment components. When provided, this list must be non-empty.
         When configured, HTTP redirects are denied instead of followed.
         Per-call ``allowed_base_urls`` arguments on conversion functions override
         this converter-level default when provided.

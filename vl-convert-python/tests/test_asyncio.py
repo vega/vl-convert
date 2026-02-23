@@ -118,6 +118,14 @@ def test_asyncio_configure_converter_round_trip(tmp_path):
     run(scenario())
 
 
+def test_asyncio_configure_converter_rejects_empty_allowed_base_urls():
+    async def scenario():
+        with pytest.raises(ValueError):
+            await vlca.configure_converter(allowed_base_urls=[])
+
+    run(scenario())
+
+
 def test_asyncio_html_conversions():
     async def scenario():
         vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, "v5_16")

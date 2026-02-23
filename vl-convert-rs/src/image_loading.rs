@@ -4,8 +4,10 @@ use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use deno_core::url::Url;
 use log::{error, info, warn};
-use reqwest::{Client, StatusCode};
+use reqwest::{header::CONTENT_TYPE, Client, StatusCode};
+use std::borrow::Cow;
 use std::cell::RefCell;
+use std::future::Future;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -16,11 +18,6 @@ static VL_CONVERT_USER_AGENT: &str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 lazy_static! {
-    static ref IMAGE_TOKIO_RUNTIME: tokio::runtime::Runtime =
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
     static ref REQWEST_CLIENT_FOLLOW_REDIRECTS: Client = reqwest::ClientBuilder::new()
         .user_agent(VL_CONVERT_USER_AGENT)
         .build()
@@ -33,34 +30,71 @@ lazy_static! {
 }
 
 thread_local! {
+    static IMAGE_TOKIO_RUNTIME: tokio::runtime::Runtime =
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to construct image loader runtime");
     static IMAGE_ACCESS_POLICY: RefCell<Option<ImageAccessPolicy>> = const { RefCell::new(None) };
     static IMAGE_ACCESS_ERRORS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
+fn block_on_image_runtime<F>(future: F) -> F::Output
+where
+    F: Future,
+{
+    IMAGE_TOKIO_RUNTIME.with(|runtime| runtime.block_on(future))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageAccessPolicy {
+    /// Whether HTTP(S) image hrefs are allowed.
     pub allow_http_access: bool,
+    /// Filesystem root for local image hrefs. `None` disables local file access.
     pub filesystem_root: Option<PathBuf>,
+    /// Optional HTTP(S) base URL allowlist for image hrefs.
     pub allowed_base_urls: Option<Vec<String>>,
+}
+
+struct PolicyScopeGuard {
+    previous_policy: Option<ImageAccessPolicy>,
+    previous_errors: Vec<String>,
+}
+
+impl PolicyScopeGuard {
+    fn install(policy: ImageAccessPolicy) -> Self {
+        let previous_policy = IMAGE_ACCESS_POLICY.with(|slot| slot.replace(Some(policy)));
+        let previous_errors =
+            IMAGE_ACCESS_ERRORS.with(|slot| std::mem::take(&mut *slot.borrow_mut()));
+        Self {
+            previous_policy,
+            previous_errors,
+        }
+    }
+
+    fn drain_access_errors(&mut self) -> Vec<String> {
+        IMAGE_ACCESS_ERRORS.with(|slot| std::mem::take(&mut *slot.borrow_mut()))
+    }
+}
+
+impl Drop for PolicyScopeGuard {
+    fn drop(&mut self) {
+        IMAGE_ACCESS_POLICY.with(|slot| {
+            *slot.borrow_mut() = self.previous_policy.take();
+        });
+        IMAGE_ACCESS_ERRORS.with(|slot| {
+            *slot.borrow_mut() = std::mem::take(&mut self.previous_errors);
+        });
+    }
 }
 
 pub fn with_image_access_policy<T>(
     policy: ImageAccessPolicy,
     f: impl FnOnce() -> T,
 ) -> (T, Vec<String>) {
-    let previous_policy = IMAGE_ACCESS_POLICY.with(|slot| slot.replace(Some(policy)));
-    let previous_errors = IMAGE_ACCESS_ERRORS.with(|slot| std::mem::take(&mut *slot.borrow_mut()));
-
+    let mut guard = PolicyScopeGuard::install(policy);
     let result = f();
-
-    let access_errors = IMAGE_ACCESS_ERRORS.with(|slot| std::mem::take(&mut *slot.borrow_mut()));
-    IMAGE_ACCESS_POLICY.with(|slot| {
-        *slot.borrow_mut() = previous_policy;
-    });
-    IMAGE_ACCESS_ERRORS.with(|slot| {
-        *slot.borrow_mut() = previous_errors;
-    });
-
+    let access_errors = guard.drain_access_errors();
     (result, access_errors)
 }
 
@@ -173,7 +207,7 @@ async fn fetch_http_with_policy(
     let status = response.status();
     let content_type = response
         .headers()
-        .get("Content-Type")
+        .get(CONTENT_TYPE)
         .and_then(|h| h.to_str().ok().map(|c| c.to_string()));
 
     if allowed_base_urls.is_some() && status.is_redirection() {
@@ -248,7 +282,7 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
                 .as_ref()
                 .and_then(|policy| policy.allowed_base_urls.as_deref());
             let fetch_outcome = task::block_in_place(move || {
-                IMAGE_TOKIO_RUNTIME.block_on(async {
+                block_on_image_runtime(async {
                     let result =
                         (|| async { fetch_http_with_policy(href, allowed_base_urls).await })
                             .retry(
@@ -301,31 +335,31 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
 
             // Compute file extension, which usvg uses to infer the image type
             let href_path = std::path::Path::new(href);
-            let extension = href_path
+            let extension: Cow<'static, str> = href_path
                 .extension()
-                .and_then(|ext| ext.to_str().map(|ext| format!(".{}", ext)))
-                .unwrap_or_else(|| {
+                .and_then(|ext| ext.to_str().map(|ext| Cow::Owned(format!(".{}", ext))))
+                .unwrap_or({
                     // Fall back to extension based on content type
                     if let Some(content_type) = &content_type {
                         match content_type.as_str() {
-                            "image/jpeg" => ".jpg".to_string(),
-                            "image/png" => ".png".to_string(),
-                            "image/gif" => ".gif".to_string(),
-                            "image/svg+xml" => ".svg".to_string(),
-                            _ => String::new(),
+                            "image/jpeg" => Cow::Borrowed(".jpg"),
+                            "image/png" => Cow::Borrowed(".png"),
+                            "image/gif" => Cow::Borrowed(".gif"),
+                            "image/svg+xml" => Cow::Borrowed(".svg"),
+                            _ => Cow::Borrowed(""),
                         }
                     } else {
-                        String::new()
+                        Cow::Borrowed("")
                     }
                 });
 
             // Create the temporary file (maybe with an extension)
             let mut builder = tempfile::Builder::new();
-            builder.suffix(extension.as_str());
+            builder.suffix(extension.as_ref());
             if let Ok(mut temp_file) = builder.tempfile() {
                 // Write image contents to temp file and call default string resolver
                 // with temporary file path
-                if temp_file.write(bytes.as_ref()).ok().is_some() {
+                if temp_file.write_all(&bytes).is_ok() {
                     let temp_href = temp_file.path();
                     if let Some(temp_href) = temp_href.to_str() {
                         return default_string_resolver(temp_href, opts);
@@ -374,4 +408,53 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
         // Delegate to default implementation
         default_string_resolver(href, opts)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    fn test_policy(label: &str) -> ImageAccessPolicy {
+        ImageAccessPolicy {
+            allow_http_access: false,
+            filesystem_root: Some(PathBuf::from(format!("/tmp/{label}"))),
+            allowed_base_urls: None,
+        }
+    }
+
+    #[test]
+    fn with_image_access_policy_restores_previous_state_after_panic() {
+        let (panic_result, outer_errors) = with_image_access_policy(test_policy("outer"), || {
+            push_access_error("outer-error".to_string());
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = with_image_access_policy(test_policy("inner"), || {
+                    push_access_error("inner-error".to_string());
+                    panic!("boom");
+                });
+            }))
+        });
+
+        assert!(panic_result.is_err());
+        assert_eq!(outer_errors, vec!["outer-error".to_string()]);
+        assert_eq!(current_access_policy(), None);
+        assert!(IMAGE_ACCESS_ERRORS.with(|slot| slot.borrow().is_empty()));
+    }
+
+    #[test]
+    fn block_on_image_runtime_supports_multiple_threads() {
+        let mut handles = Vec::new();
+        for _ in 0..4 {
+            handles.push(std::thread::spawn(|| {
+                for _ in 0..50 {
+                    let value = block_on_image_runtime(async { 42usize });
+                    assert_eq!(value, 42);
+                }
+            }));
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+    }
 }

@@ -21,7 +21,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Cursor;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Once;
 use std::sync::{Arc, Mutex};
@@ -313,6 +313,9 @@ fn normalize_allowed_base_urls(
 ) -> Result<Option<Vec<String>>, AnyError> {
     allowed_base_urls
         .map(|urls| {
+            if urls.is_empty() {
+                bail!("allowed_base_urls cannot be empty");
+            }
             urls.into_iter()
                 .map(|url| normalize_allowed_base_url(&url))
                 .collect::<Result<Vec<_>, _>>()
@@ -386,7 +389,7 @@ fn build_permissions(config: &VlConverterConfig) -> Result<Permissions, AnyError
     .map_err(|err| anyhow!("Failed to build Deno permissions: {err}"))
 }
 
-fn filesystem_root_file_url(filesystem_root: &Option<PathBuf>) -> Result<Option<String>, AnyError> {
+fn filesystem_root_file_url(filesystem_root: Option<&Path>) -> Result<Option<String>, AnyError> {
     let Some(root) = filesystem_root else {
         return Ok(None);
     };
@@ -444,8 +447,8 @@ pub struct VlConverterConfig {
     pub allow_http_access: bool,
     pub filesystem_root: Option<PathBuf>,
     /// Converter-level default HTTP allowlist. Per-request `allowed_base_urls`
-    /// values override this default when provided. When configured, HTTP
-    /// redirects are denied instead of followed.
+    /// values override this default when provided. Must be non-empty when set.
+    /// When configured, HTTP redirects are denied instead of followed.
     pub allowed_base_urls: Option<Vec<String>>,
 }
 
@@ -882,8 +885,9 @@ class WarningCollector {
                 .await?;
 
             // Create and initialize svg function string
-            let filesystem_base_url =
-                serde_json::to_string(&filesystem_root_file_url(&self.config.filesystem_root)?)?;
+            let filesystem_base_url = serde_json::to_string(&filesystem_root_file_url(
+                self.config.filesystem_root.as_deref(),
+            )?)?;
             let mut function_str = r#"
 const DEFAULT_HTTP_BASE_URL = 'https://vega.github.io/vega-datasets/';
 const CONVERTER_ALLOW_HTTP_ACCESS = __ALLOW_HTTP_ACCESS__;
@@ -2411,7 +2415,7 @@ impl VlConverter {
         mut vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
         vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.clone())?;
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
         self.request(
             move |responder| VlConvertCommand::VgToSvg {
@@ -2430,7 +2434,7 @@ impl VlConverter {
         mut vg_opts: VgOpts,
     ) -> Result<serde_json::Value, AnyError> {
         vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.clone())?;
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
         self.request(
             move |responder| VlConvertCommand::VgToSg {
@@ -2449,7 +2453,7 @@ impl VlConverter {
         mut vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
         vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.clone())?;
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
         self.request(
             move |responder| VlConvertCommand::VgToSgMsgpack {
@@ -2468,7 +2472,7 @@ impl VlConverter {
         mut vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
         vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.clone())?;
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
         self.request(
             move |responder| VlConvertCommand::VlToSvg {
@@ -2487,7 +2491,7 @@ impl VlConverter {
         mut vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
         vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.clone())?;
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
         self.request(
             move |responder| VlConvertCommand::VlToSg {
@@ -2506,7 +2510,7 @@ impl VlConverter {
         mut vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
         vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.clone())?;
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
         self.request(
             move |responder| VlConvertCommand::VlToSgMsgpack {
@@ -2527,7 +2531,7 @@ impl VlConverter {
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.clone())?;
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
@@ -2554,7 +2558,7 @@ impl VlConverter {
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.clone())?;
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
@@ -2580,11 +2584,12 @@ impl VlConverter {
         scale: Option<f32>,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
-        vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.clone())?;
+        let effective_allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
         let image_policy =
-            self.image_access_policy_with_allowed_base_urls(vg_opts.allowed_base_urls.clone());
+            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+        vg_opts.allowed_base_urls = effective_allowed_base_urls;
         let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
         svg_to_jpeg_with_policy(&svg, scale, quality, &image_policy)
     }
@@ -2596,11 +2601,12 @@ impl VlConverter {
         scale: Option<f32>,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
-        vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.clone())?;
+        let effective_allowed_base_urls =
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
         let image_policy =
-            self.image_access_policy_with_allowed_base_urls(vl_opts.allowed_base_urls.clone());
+            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+        vl_opts.allowed_base_urls = effective_allowed_base_urls;
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
         svg_to_jpeg_with_policy(&svg, scale, quality, &image_policy)
     }
@@ -2610,10 +2616,11 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
-        vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.clone())?;
+        let effective_allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let image_policy =
-            self.image_access_policy_with_allowed_base_urls(vg_opts.allowed_base_urls.clone());
+            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+        vg_opts.allowed_base_urls = effective_allowed_base_urls;
         let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
         svg_to_pdf_with_policy(&svg, &image_policy)
     }
@@ -2623,10 +2630,11 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
-        vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.clone())?;
+        let effective_allowed_base_urls =
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let image_policy =
-            self.image_access_policy_with_allowed_base_urls(vl_opts.allowed_base_urls.clone());
+            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+        vl_opts.allowed_base_urls = effective_allowed_base_urls;
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
         svg_to_pdf_with_policy(&svg, &image_policy)
     }
@@ -3883,6 +3891,7 @@ try {
         assert!(normalize_allowed_base_url("https://user@example.com/").is_err());
         assert!(normalize_allowed_base_url("https://example.com/?q=1").is_err());
         assert!(normalize_allowed_base_url("https://example.com/#fragment").is_err());
+        assert!(normalize_allowed_base_urls(Some(vec![])).is_err());
     }
 
     #[test]
@@ -3897,6 +3906,20 @@ try {
         assert!(err
             .to_string()
             .contains("allowed_base_urls cannot be set when HTTP access is disabled"));
+    }
+
+    #[test]
+    fn test_with_config_rejects_empty_allowed_base_urls() {
+        let err = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec![]),
+            ..Default::default()
+        })
+        .err()
+        .unwrap();
+        assert!(err
+            .to_string()
+            .contains("allowed_base_urls cannot be empty"));
     }
 
     #[test]
@@ -3922,6 +3945,18 @@ try {
             request_override,
             vec!["https://request.example/".to_string()]
         );
+    }
+
+    #[test]
+    fn test_effective_allowed_base_urls_rejects_empty_override() {
+        let converter = VlConverter::new();
+        let err = converter
+            .effective_allowed_base_urls(Some(vec![]))
+            .err()
+            .unwrap();
+        assert!(err
+            .to_string()
+            .contains("allowed_base_urls cannot be empty"));
     }
 
     #[test]

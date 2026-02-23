@@ -13,6 +13,7 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::converter::{
     FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts,
+    ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -65,7 +66,9 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
 struct ConverterConfigOverrides {
     num_workers: Option<usize>,
     allow_http_access: Option<bool>,
+    // None => no change, Some(None) => clear, Some(Some(path)) => set
     filesystem_root: Option<Option<PathBuf>>,
+    // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
 }
 
@@ -176,7 +179,6 @@ where
 }
 
 fn is_permission_denied_message(message: &str) -> bool {
-    const ACCESS_DENIED_MARKER: &str = "VLC_ACCESS_DENIED";
     if message.contains(ACCESS_DENIED_MARKER) {
         return true;
     }
