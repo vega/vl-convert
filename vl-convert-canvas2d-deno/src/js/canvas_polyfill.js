@@ -166,9 +166,16 @@ class ImageData {
 class Image {
   static #pendingLoads = [];
 
-  static awaitAll() {
-    const pending = Image.#pendingLoads.splice(0);
-    return Promise.allSettled(pending);
+  static async awaitAll() {
+    // Drain image load promises until stable. New image loads can be queued
+    // while awaiting previous loads, so a single snapshot is racy.
+    while (true) {
+      const pending = Image.#pendingLoads.splice(0);
+      if (pending.length === 0) {
+        return;
+      }
+      await Promise.allSettled(pending);
+    }
   }
 
   #src = "";
@@ -307,16 +314,38 @@ class Image {
           const response = await fetch(normalizedUrl, {
             redirect: allowedBaseUrls != null ? "manual" : "follow",
           });
+          let finalUrl = normalizedUrl;
+          try {
+            if (typeof response.url === "string" && response.url.length > 0) {
+              finalUrl = new URL(response.url).href;
+            }
+          } catch (_err) {
+            // Keep requested URL when final response URL is unavailable/invalid.
+          }
           const isRedirect =
             response.status === 301 ||
             response.status === 302 ||
             response.status === 303 ||
             response.status === 307 ||
             response.status === 308;
-          if (allowedBaseUrls != null && isRedirect) {
+          if (
+            allowedBaseUrls != null &&
+            (
+              isRedirect ||
+              response.type === "opaqueredirect" ||
+              response.redirected ||
+              finalUrl !== normalizedUrl
+            )
+          ) {
             denyAccess(
               `Redirected HTTP URLs are not allowed when allowed_base_urls is configured: ${normalizedUrl}`,
             );
+          }
+          if (
+            allowedBaseUrls != null &&
+            !allowedBaseUrls.some((allowedUrl) => finalUrl.startsWith(allowedUrl))
+          ) {
+            denyAccess(`External data url not allowed: ${finalUrl}`);
           }
 
           if (!response.ok) {
