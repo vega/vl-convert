@@ -1589,6 +1589,15 @@ vegaLiteToSvg_{ver_name:?}(
             .run_event_loop(Default::default())
             .await?;
 
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
+
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -1660,6 +1669,15 @@ vegaLiteToScenegraph_{ver_name:?}(
             .run_event_loop(Default::default())
             .await?;
 
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
+
         result.take_result()
     }
 
@@ -1727,6 +1745,15 @@ vegaToSvg(
             .run_event_loop(Default::default())
             .await?;
 
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
+
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -1782,6 +1809,15 @@ vegaToScenegraph(
             .js_runtime
             .run_event_loop(Default::default())
             .await?;
+
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
 
         result.take_result()
     }
