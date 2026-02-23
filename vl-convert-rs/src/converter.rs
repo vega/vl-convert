@@ -1215,12 +1215,10 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
             .then(() => {
                 return view.toCanvas(scale)
                     .then((canvas) => {
-                        return Image.awaitAll().then(() => {
-                            if (errors != null && errors.length > 0) {
-                                throw new Error(`${errors}`);
-                            }
-                            return canvas;
-                        });
+                        if (errors != null && errors.length > 0) {
+                            throw new Error(`${errors}`);
+                        }
+                        return canvas;
                     });
             })
             .finally(() => {
@@ -3047,6 +3045,9 @@ mod tests {
         0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 218, 99, 252, 255, 15, 0, 2, 3,
         1, 128, 179, 248, 175, 217, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
     ];
+    const SVG_2X3_BASE64: &str =
+        "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyIiBoZWlnaHQ9IjMiPjxyZWN0IHdpZHRoPSIyIiBoZWlnaHQ9IjMiIGZpbGw9InJlZCIvPjwvc3ZnPg==";
+    const SVG_2X3_DATA_URL: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyIiBoZWlnaHQ9IjMiPjxyZWN0IHdpZHRoPSIyIiBoZWlnaHQ9IjMiIGZpbGw9InJlZCIvPjwvc3ZnPg==";
 
     fn make_test_command() -> VlConvertCommand {
         let (responder, _rx) =
@@ -3368,6 +3369,229 @@ var __imageDataChecks = [
             .await
             .unwrap();
         assert_eq!(image_data_checks, json!([true, 255, 0, 0, 255]));
+    }
+
+    #[tokio::test]
+    async fn test_image_decode_and_load_events() {
+        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
+            .await
+            .unwrap();
+        let image_url = serde_json::to_string(SVG_2X3_DATA_URL).unwrap();
+        let code = format!(
+            r#"
+var __imageDecodeLoadResult = null;
+(async () => {{
+  const img = new Image();
+  let onloadCount = 0;
+  let listenerCount = 0;
+  img.onload = () => {{ onloadCount += 1; }};
+  img.addEventListener("load", () => {{ listenerCount += 1; }});
+  img.src = {image_url};
+  await img.decode();
+  __imageDecodeLoadResult = {{
+    complete: img.complete,
+    naturalWidth: img.naturalWidth,
+    naturalHeight: img.naturalHeight,
+    onloadCount,
+    listenerCount
+  }};
+}})();
+"#
+        );
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let result = ctx
+            .execute_script_to_json("__imageDecodeLoadResult")
+            .await
+            .unwrap();
+        assert_eq!(result["complete"], json!(true));
+        assert_eq!(result["naturalWidth"], json!(2));
+        assert_eq!(result["naturalHeight"], json!(3));
+        assert_eq!(result["onloadCount"], json!(1));
+        assert_eq!(result["listenerCount"], json!(1));
+    }
+
+    #[tokio::test]
+    async fn test_image_decode_rejects_and_error_events_fire() {
+        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
+            .await
+            .unwrap();
+        let marker = serde_json::to_string(ACCESS_DENIED_MARKER).unwrap();
+        let code = format!(
+            r#"
+var __imageDecodeErrorResult = null;
+(async () => {{
+  globalThis.__vlConvertAllowHttpAccess = false;
+  globalThis.__vlConvertAllowedBaseUrls = null;
+  globalThis.__vlConvertAccessDeniedMarker = {marker};
+  globalThis.__vlConvertAccessErrors = [];
+
+  const img = new Image();
+  let onerrorCount = 0;
+  let listenerCount = 0;
+  img.onerror = () => {{ onerrorCount += 1; }};
+  img.addEventListener("error", () => {{ listenerCount += 1; }});
+  img.src = "https://example.com/image.png";
+
+  let decodeMessage = "";
+  try {{
+    await img.decode();
+    decodeMessage = "resolved";
+  }} catch (err) {{
+    decodeMessage = String(err && err.message ? err.message : err);
+  }}
+
+  __imageDecodeErrorResult = {{
+    complete: img.complete,
+    naturalWidth: img.naturalWidth,
+    naturalHeight: img.naturalHeight,
+    onerrorCount,
+    listenerCount,
+    decodeMessage,
+    accessErrors: globalThis.__vlConvertAccessErrors.slice(),
+  }};
+
+  delete globalThis.__vlConvertAllowHttpAccess;
+  delete globalThis.__vlConvertAllowedBaseUrls;
+  delete globalThis.__vlConvertAccessDeniedMarker;
+  delete globalThis.__vlConvertAccessErrors;
+}})();
+"#
+        );
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let result = ctx
+            .execute_script_to_json("__imageDecodeErrorResult")
+            .await
+            .unwrap();
+        assert_eq!(result["complete"], json!(true));
+        assert_eq!(result["naturalWidth"], json!(0));
+        assert_eq!(result["naturalHeight"], json!(0));
+        assert_eq!(result["onerrorCount"], json!(1));
+        assert_eq!(result["listenerCount"], json!(1));
+        assert!(
+            result["decodeMessage"]
+                .as_str()
+                .unwrap_or_default()
+                .contains(ACCESS_DENIED_MARKER)
+        );
+        assert!(
+            result["accessErrors"]
+                .as_array()
+                .and_then(|values| values.first())
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .contains(ACCESS_DENIED_MARKER)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_image_decode_ignores_stale_src_results() {
+        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
+            .await
+            .unwrap();
+        let code = format!(
+            r#"
+var __imageRaceResult = null;
+(async () => {{
+  const validImageBytes = (() => {{
+    const binary = atob({SVG_2X3_BASE64:?});
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {{
+      bytes[i] = binary.charCodeAt(i);
+    }}
+    return bytes;
+  }})();
+  const invalidBytes = new TextEncoder().encode("not-a-valid-image");
+  const toArrayBuffer = (bytes) =>
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {{
+    const asString = String(url);
+    if (asString.includes("slow")) {{
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return {{
+        ok: true,
+        status: 200,
+        url: asString,
+        type: "basic",
+        redirected: false,
+        arrayBuffer: async () => toArrayBuffer(invalidBytes),
+      }};
+    }}
+    return {{
+      ok: true,
+      status: 200,
+      url: asString,
+      type: "basic",
+      redirected: false,
+      arrayBuffer: async () => toArrayBuffer(validImageBytes),
+    }};
+  }};
+
+  try {{
+    const img = new Image();
+    let onloadCount = 0;
+    let onerrorCount = 0;
+    img.onload = () => {{ onloadCount += 1; }};
+    img.onerror = () => {{ onerrorCount += 1; }};
+
+    img.src = "https://example.com/slow.png";
+    img.src = "https://example.com/fast.png";
+    await img.decode();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    __imageRaceResult = {{
+      src: img.src,
+      complete: img.complete,
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
+      onloadCount,
+      onerrorCount,
+    }};
+  }} finally {{
+    globalThis.fetch = originalFetch;
+  }}
+}})();
+"#
+        );
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let result = ctx.execute_script_to_json("__imageRaceResult").await.unwrap();
+        assert_eq!(result["src"], json!("https://example.com/fast.png"));
+        assert_eq!(result["complete"], json!(true));
+        assert_eq!(result["naturalWidth"], json!(2));
+        assert_eq!(result["naturalHeight"], json!(3));
+        assert_eq!(result["onloadCount"], json!(1));
+        assert_eq!(result["onerrorCount"], json!(0));
     }
 
     #[tokio::test]
