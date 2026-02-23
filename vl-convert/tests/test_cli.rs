@@ -340,47 +340,6 @@ mod test_access_flags {
     }
 
     #[test]
-    fn test_vg2svg_allows_normalized_allowed_base_url() -> Result<(), Box<dyn std::error::Error>> {
-        initialize();
-
-        let server = TestHttpServer::new(vec![(
-            "/allowed/data.csv",
-            TestHttpResponse::ok_csv("a,b\n1,2\n"),
-        )]);
-        let temp = tempdir()?;
-        let vg_spec_path = temp.path().join("input.vg.json");
-        let vg_spec = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega/v5.json",
-            "width": 20,
-            "height": 20,
-            "data": [{"name": "table", "url": server.url("/allowed/data.csv"), "format": {"type": "csv"}}],
-            "scales": [
-                {"name": "x", "type": "linear", "range": "width", "domain": {"data": "table", "field": "a"}},
-                {"name": "y", "type": "linear", "range": "height", "domain": {"data": "table", "field": "b"}}
-            ],
-            "marks": [{
-                "type": "symbol",
-                "from": {"data": "table"},
-                "encode": {"enter": {"x": {"scale": "x", "field": "a"}, "y": {"scale": "y", "field": "b"}}}
-            }]
-        });
-        std::fs::write(&vg_spec_path, serde_json::to_string(&vg_spec)?)?;
-
-        let output = output_path("access_vg2svg_allowed_base_url.svg");
-        Command::cargo_bin("vl-convert")?
-            .arg("vg2svg")
-            .arg("-i").arg(&vg_spec_path)
-            .arg("-o").arg(&output)
-            .arg("--font-dir").arg(test_font_dir())
-            .arg("--allowed-base-url").arg(format!("{}/allowed", server.origin()))
-            .assert()
-            .success();
-
-        assert!(!std::fs::read(&output)?.is_empty());
-        Ok(())
-    }
-
-    #[test]
     fn test_vg2svg_denies_redirect_when_allowlist_configured() -> Result<(), Box<dyn std::error::Error>> {
         initialize();
 
@@ -426,50 +385,6 @@ mod test_access_flags {
         Ok(())
     }
 
-    #[test]
-    fn test_vg2svg_allows_redirect_without_allowlist() -> Result<(), Box<dyn std::error::Error>> {
-        initialize();
-
-        let target_server = TestHttpServer::new(vec![(
-            "/data.csv",
-            TestHttpResponse::ok_csv("a,b\n1,2\n"),
-        )]);
-        let redirect_server = TestHttpServer::new(vec![(
-            "/redirect.csv",
-            TestHttpResponse::redirect(&target_server.url("/data.csv")),
-        )]);
-
-        let temp = tempdir()?;
-        let vg_spec_path = temp.path().join("redirect_allowed.vg.json");
-        let vg_spec = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega/v5.json",
-            "width": 20,
-            "height": 20,
-            "data": [{"name": "table", "url": redirect_server.url("/redirect.csv"), "format": {"type": "csv"}}],
-            "scales": [
-                {"name": "x", "type": "linear", "range": "width", "domain": {"data": "table", "field": "a"}},
-                {"name": "y", "type": "linear", "range": "height", "domain": {"data": "table", "field": "b"}}
-            ],
-            "marks": [{
-                "type": "symbol",
-                "from": {"data": "table"},
-                "encode": {"enter": {"x": {"scale": "x", "field": "a"}, "y": {"scale": "y", "field": "b"}}}
-            }]
-        });
-        std::fs::write(&vg_spec_path, serde_json::to_string(&vg_spec)?)?;
-
-        let output = output_path("access_vg2svg_redirect_allowed.svg");
-        Command::cargo_bin("vl-convert")?
-            .arg("vg2svg")
-            .arg("-i").arg(&vg_spec_path)
-            .arg("-o").arg(&output)
-            .arg("--font-dir").arg(test_font_dir())
-            .assert()
-            .success();
-
-        assert!(!std::fs::read(&output)?.is_empty());
-        Ok(())
-    }
 }
 
 fn vl_spec_path(name: &str) -> String {

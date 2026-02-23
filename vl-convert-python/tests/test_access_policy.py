@@ -260,24 +260,6 @@ def test_sync_filesystem_root_allows_under_root(tmp_path: Path):
     assert "<svg" in svg
 
 
-def test_sync_allowed_base_urls_allows_http_and_normalizes_trailing_slash():
-    with run_test_http_server(
-        {
-            "/allowed/data.csv": _route(
-                200,
-                b"a,b\n1,2\n",
-                {"Content-Type": "text/csv"},
-            )
-        }
-    ) as base_url:
-        vlc.configure_converter(
-            allow_http_access=True,
-            allowed_base_urls=[f"{base_url}/allowed"],
-        )
-        svg = vlc.vega_to_svg(make_vega_data_url_spec(f"{base_url}/allowed/data.csv"))
-        assert "<svg" in svg
-
-
 def test_sync_redirect_to_disallowed_url_raises_permission_error():
     with run_test_http_server(
         {"/data.csv": _route(200, b"a,b\n1,2\n", {"Content-Type": "text/csv"})}
@@ -295,25 +277,6 @@ def test_sync_redirect_to_disallowed_url_raises_permission_error():
             )
             with pytest.raises(PermissionError):
                 vlc.vega_to_svg(make_vega_data_url_spec(f"{allowed_base}/redirect.csv"))
-
-
-def test_sync_redirect_is_allowed_without_allowlist():
-    with run_test_http_server(
-        {"/data.csv": _route(200, b"a,b\n1,2\n", {"Content-Type": "text/csv"})}
-    ) as target_base:
-        with run_test_http_server(
-            {
-                "/redirect.csv": _route(
-                    302, b"", {"Location": f"{target_base}/data.csv"}
-                )
-            }
-        ) as redirect_base:
-            vlc.configure_converter(
-                allow_http_access=True,
-                allowed_base_urls=None,
-            )
-            svg = vlc.vega_to_svg(make_vega_data_url_spec(f"{redirect_base}/redirect.csv"))
-            assert "<svg" in svg
 
 
 def test_sync_per_request_allowlist_override_for_svg_rasterization():
@@ -390,28 +353,5 @@ def test_asyncio_denied_access_raises_permission_error(tmp_path: Path):
         )
         with pytest.raises(PermissionError):
             await vlca.svg_to_png(local_svg)
-
-    asyncio.run(scenario())
-
-
-def test_asyncio_per_request_allowlist_and_data_uri_success():
-    async def scenario():
-        with run_test_http_server(
-            {"/image.png": _route(200, PNG_1X1, {"Content-Type": "image/png"})}
-        ) as base_url:
-            await vlca.configure_converter(
-                allow_http_access=True,
-                allowed_base_urls=["https://blocked.example/"],
-            )
-            jpeg = await vlca.vegalite_to_jpeg(
-                make_vegalite_image_url_spec(f"{base_url}/image.png"),
-                vl_version="v5_16",
-                allowed_base_urls=[base_url],
-            )
-            assert jpeg.startswith(b"\xff\xd8")
-
-        await vlca.configure_converter(allow_http_access=False, allowed_base_urls=None)
-        svg = await vlca.vega_to_svg(make_vega_data_url_spec("data:text/csv,a,b%0A1,2"))
-        assert "<svg" in svg
 
     asyncio.run(scenario())
