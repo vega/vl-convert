@@ -167,15 +167,22 @@ class Image {
   static #pendingLoads = [];
 
   static async awaitAll() {
-    // Drain image load promises until stable. New image loads can be queued
-    // while awaiting previous loads, so a single snapshot is racy.
-    while (true) {
+    // Drain image load promises until we observe two idle task turns.
+    // This captures image loads that may be enqueued after rendering returns.
+    let observedPending = false;
+    let idleTurns = 0;
+    while (idleTurns < 2) {
       const pending = Image.#pendingLoads.splice(0);
       if (pending.length === 0) {
-        return;
+        idleTurns += 1;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        continue;
       }
+      observedPending = true;
+      idleTurns = 0;
       await Promise.allSettled(pending);
     }
+    return observedPending;
   }
 
   #src = "";
@@ -311,9 +318,23 @@ class Image {
             denyAccess(`External data url not allowed: ${normalizedUrl}`);
           }
 
-          const response = await fetch(normalizedUrl, {
-            redirect: allowedBaseUrls != null ? "manual" : "follow",
-          });
+          const response = await (async () => {
+            try {
+              return await fetch(normalizedUrl, {
+                redirect: allowedBaseUrls != null ? "error" : "follow",
+              });
+            } catch (error) {
+              if (allowedBaseUrls != null) {
+                const message = String(error?.message ?? error).toLowerCase();
+                if (message.includes("redirect") || message.includes("location")) {
+                  denyAccess(
+                    `Redirected HTTP URLs are not allowed when allowed_base_urls is configured: ${normalizedUrl}`,
+                  );
+                }
+              }
+              throw error;
+            }
+          })();
           let finalUrl = normalizedUrl;
           try {
             if (typeof response.url === "string" && response.url.length > 0) {
@@ -322,16 +343,9 @@ class Image {
           } catch (_err) {
             // Keep requested URL when final response URL is unavailable/invalid.
           }
-          const isRedirect =
-            response.status === 301 ||
-            response.status === 302 ||
-            response.status === 303 ||
-            response.status === 307 ||
-            response.status === 308;
           if (
             allowedBaseUrls != null &&
             (
-              isRedirect ||
               response.type === "opaqueredirect" ||
               response.redirected ||
               finalUrl !== normalizedUrl

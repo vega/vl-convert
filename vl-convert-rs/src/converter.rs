@@ -1212,12 +1212,16 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
         }
     }).then(() => {
         return view.runAsync()
-            .then(() => Image.awaitAll())
             .then(() => {
-                if (errors != null && errors.length > 0) {
-                    throw new Error(`${errors}`);
-                }
-                return view.toCanvas(scale);
+                return view.toCanvas(scale)
+                    .then((canvas) => {
+                        return Image.awaitAll().then(() => {
+                            if (errors != null && errors.length > 0) {
+                                throw new Error(`${errors}`);
+                            }
+                            return canvas;
+                        });
+                    });
             })
             .finally(() => {
                 view.finalize();
@@ -3631,13 +3635,13 @@ try {
             "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
             "data": {
                 "values": [
-                    {"x": 0.5, "y": 0.5, "img": url}
+                    {"img": url}
                 ]
             },
             "mark": {"type": "image", "width": 20, "height": 20},
             "encoding": {
-                "x": {"field": "x", "type": "quantitative"},
-                "y": {"field": "y", "type": "quantitative"},
+                "x": {"value": 10},
+                "y": {"value": 10},
                 "url": {"field": "img", "type": "nominal"}
             }
         })
