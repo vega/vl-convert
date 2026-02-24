@@ -1,14 +1,18 @@
 use crate::deno_stubs::{NoOpInNpmPackageChecker, NoOpNpmPackageFolderResolver, VlConvertNodeSys};
+use crate::image_loading::ImageAccessPolicy;
 use crate::module_loader::import_map::{msgpack_url, vega_themes_url, vega_url, VlVersion};
 use crate::module_loader::{VlConvertModuleLoader, FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 
 use deno_core::anyhow::bail;
 use deno_core::error::AnyError;
 use deno_core::op2;
+use deno_core::url::Url;
 use deno_core::{serde_v8, v8, ModuleSpecifier, OpState};
 use deno_error::JsErrorBox;
 use deno_runtime::deno_fs::RealFs;
-use deno_runtime::deno_permissions::{PermissionsContainer, RuntimePermissionDescriptorParser};
+use deno_runtime::deno_permissions::{
+    Permissions, PermissionsContainer, PermissionsOptions, RuntimePermissionDescriptorParser,
+};
 use deno_runtime::deno_web::{BlobStore, InMemoryBroadcastChannel};
 use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
 use deno_runtime::FeatureChecker;
@@ -17,6 +21,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Cursor;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Once;
 use std::sync::{Arc, Mutex};
@@ -70,6 +75,7 @@ struct WorkerPool {
 
 const VEGAEMBED_GLOBAL_SNIPPET: &str =
     "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite;";
+pub const ACCESS_DENIED_MARKER: &str = "VLC_ACCESS_DENIED";
 
 impl WorkerPool {
     fn next_sender(&self) -> Option<(tokio::sync::mpsc::Sender<QueuedCommand>, OutstandingTicket)> {
@@ -166,7 +172,8 @@ fn worker_queue_capacity(num_workers: usize) -> usize {
     num_workers.saturating_mul(32).max(32)
 }
 
-fn spawn_worker_pool(num_workers: usize) -> Result<WorkerPool, AnyError> {
+fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyError> {
+    let num_workers = config.num_workers;
     if num_workers < 1 {
         bail!("num_workers must be >= 1");
     }
@@ -182,6 +189,7 @@ fn spawn_worker_pool(num_workers: usize) -> Result<WorkerPool, AnyError> {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<QueuedCommand>(per_worker_queue_capacity);
         senders.push(tx);
         let (startup_tx, startup_rx) = std::sync::mpsc::channel::<Result<(), String>>();
+        let worker_config = config.clone();
         let handle = thread::spawn(move || {
             let runtime = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -195,7 +203,7 @@ fn spawn_worker_pool(num_workers: usize) -> Result<WorkerPool, AnyError> {
             };
             let local = tokio::task::LocalSet::new();
             local.block_on(&runtime, async move {
-                let mut inner = match InnerVlConverter::try_new().await {
+                let mut inner = match InnerVlConverter::try_new(worker_config).await {
                     Ok(inner) => {
                         let _ = startup_tx.send(Ok(()));
                         inner
@@ -251,6 +259,149 @@ fn spawn_worker_pool(num_workers: usize) -> Result<WorkerPool, AnyError> {
     })
 }
 
+/// Canonicalize a path, stripping the Windows extended-length prefix (`\\?\`)
+/// that `std::fs::canonicalize` adds on Windows.
+pub(crate) fn portable_canonicalize(
+    path: &std::path::Path,
+) -> Result<std::path::PathBuf, AnyError> {
+    let canonical = std::fs::canonicalize(path)?;
+    #[cfg(target_os = "windows")]
+    {
+        let s = canonical.to_string_lossy();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            return Ok(std::path::PathBuf::from(stripped));
+        }
+    }
+    Ok(canonical)
+}
+
+fn normalize_converter_config(
+    mut config: VlConverterConfig,
+) -> Result<VlConverterConfig, AnyError> {
+    if config.num_workers < 1 {
+        bail!("num_workers must be >= 1");
+    }
+
+    if !config.allow_http_access && config.allowed_base_urls.is_some() {
+        bail!("allowed_base_urls cannot be set when HTTP access is disabled");
+    }
+
+    config.allowed_base_urls = normalize_allowed_base_urls(config.allowed_base_urls.take())?;
+
+    if let Some(root) = config.filesystem_root.take() {
+        let canonical_root = portable_canonicalize(&root).map_err(|err| {
+            anyhow!(
+                "Failed to resolve filesystem_root {}: {}",
+                root.display(),
+                err
+            )
+        })?;
+        if !canonical_root.is_dir() {
+            bail!(
+                "filesystem_root must be a directory: {}",
+                canonical_root.display()
+            );
+        }
+        config.filesystem_root = Some(canonical_root);
+    }
+
+    Ok(config)
+}
+
+fn normalize_allowed_base_urls(
+    allowed_base_urls: Option<Vec<String>>,
+) -> Result<Option<Vec<String>>, AnyError> {
+    allowed_base_urls
+        .map(|urls| {
+            if urls.is_empty() {
+                bail!("allowed_base_urls cannot be empty");
+            }
+            urls.into_iter()
+                .map(|url| normalize_allowed_base_url(&url))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()
+}
+
+fn normalize_allowed_base_url(allowed_base_url: &str) -> Result<String, AnyError> {
+    let parsed_url = Url::parse(allowed_base_url)
+        .map_err(|err| anyhow!("Invalid allowed_base_url '{}': {}", allowed_base_url, err))?;
+
+    let scheme = parsed_url.scheme();
+    if scheme != "http" && scheme != "https" {
+        bail!(
+            "allowed_base_url must use http or https scheme: {}",
+            allowed_base_url
+        );
+    }
+
+    if !parsed_url.username().is_empty() || parsed_url.password().is_some() {
+        bail!(
+            "allowed_base_url cannot include userinfo credentials: {}",
+            allowed_base_url
+        );
+    }
+
+    if parsed_url.query().is_some() {
+        bail!(
+            "allowed_base_url cannot include a query component: {}",
+            allowed_base_url
+        );
+    }
+
+    if parsed_url.fragment().is_some() {
+        bail!(
+            "allowed_base_url cannot include a fragment component: {}",
+            allowed_base_url
+        );
+    }
+
+    let mut normalized = parsed_url.to_string();
+    if !normalized.ends_with('/') {
+        normalized.push('/');
+    }
+
+    Ok(normalized)
+}
+
+fn build_permissions(config: &VlConverterConfig) -> Result<Permissions, AnyError> {
+    let allow_read = config
+        .filesystem_root
+        .as_ref()
+        .map(|root| vec![root.to_string_lossy().to_string()]);
+
+    let allow_net = if config.allow_http_access {
+        // Empty allowlist means unrestricted --allow-net.
+        Some(vec![])
+    } else {
+        None
+    };
+
+    Permissions::from_options(
+        &RuntimePermissionDescriptorParser::new(VlConvertNodeSys),
+        &PermissionsOptions {
+            allow_read,
+            allow_net,
+            prompt: false,
+            ..Default::default()
+        },
+    )
+    .map_err(|err| anyhow!("Failed to build Deno permissions: {err}"))
+}
+
+fn filesystem_root_file_url(filesystem_root: Option<&Path>) -> Result<Option<String>, AnyError> {
+    let Some(root) = filesystem_root else {
+        return Ok(None);
+    };
+    let url = Url::from_directory_path(root).map_err(|_| {
+        anyhow!(
+            "Failed to construct file URL from filesystem_root: {}",
+            root.display()
+        )
+    })?;
+    Ok(Some(url.to_string()))
+}
+
 /// A JSON value that may already be serialized to a string.
 /// When the caller already has a JSON string (e.g. from Python), this avoids
 /// a redundant parse→Value→serialize round-trip.
@@ -286,6 +437,28 @@ impl ValueOrString {
         match self {
             ValueOrString::Value(v) => Ok(v),
             ValueOrString::JsonString(s) => Ok(serde_json::from_str(&s)?),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VlConverterConfig {
+    pub num_workers: usize,
+    pub allow_http_access: bool,
+    pub filesystem_root: Option<PathBuf>,
+    /// Converter-level default HTTP allowlist. Per-request `allowed_base_urls`
+    /// values override this default when provided. Must be non-empty when set.
+    /// When configured, HTTP redirects are denied instead of followed.
+    pub allowed_base_urls: Option<Vec<String>>,
+}
+
+impl Default for VlConverterConfig {
+    fn default() -> Self {
+        Self {
+            num_workers: 1,
+            allow_http_access: true,
+            filesystem_root: None,
+            allowed_base_urls: None,
         }
     }
 }
@@ -617,6 +790,7 @@ struct InnerVlConverter {
     initialized_vl_versions: HashSet<VlVersion>,
     vega_initialized: bool,
     font_config_version: u64,
+    config: Arc<VlConverterConfig>,
 }
 
 impl InnerVlConverter {
@@ -711,27 +885,188 @@ class WarningCollector {
                 .await?;
 
             // Create and initialize svg function string
-            let function_str = r#"
-function vegaToView(vgSpec, allowedBaseUrls, errors) {
-    let runtime = vega.parse(vgSpec);
-    let baseURL = 'https://vega.github.io/vega-datasets/';
-    const loader = vega.loader({ mode: 'http', baseURL });
-    const originalHttp = loader.http.bind(loader);
+            let filesystem_base_url = serde_json::to_string(&filesystem_root_file_url(
+                self.config.filesystem_root.as_deref(),
+            )?)?;
+            let mut function_str = r#"
+const DEFAULT_HTTP_BASE_URL = 'https://vega.github.io/vega-datasets/';
+const CONVERTER_ALLOW_HTTP_ACCESS = __ALLOW_HTTP_ACCESS__;
+const CONVERTER_FILESYSTEM_BASE_URL = __FILESYSTEM_BASE_URL__;
+const ACCESS_DENIED_MARKER = __ACCESS_DENIED_MARKER__;
 
-    if (allowedBaseUrls != null) {
-        loader.http = async (uri, options) => {
-            if (
-                allowedBaseUrls.every(
-                    (allowedUrl) => !new URL(uri).href.startsWith(allowedUrl),
-                )
-            ) {
-                errors.push(`External data url not allowed: ${uri}`);
-                throw new Error(`External data url not allowed: ${uri}`);
-            }
-            return originalHttp(uri, options);
-        };
+function accessDeniedMessage(detail) {
+    return `${ACCESS_DENIED_MARKER}: ${detail}`;
+}
+
+function fileUrlToPath(urlStr) {
+    const url = new URL(urlStr);
+    if (url.protocol !== 'file:') {
+        throw new Error('Unsupported file URL protocol: ' + url.protocol);
+    }
+    let path = decodeURIComponent(url.pathname);
+    if (globalThis.Deno?.build?.os === 'windows' && path.startsWith('/')) {
+        path = path.slice(1);
+    }
+    return path;
+}
+
+function resolveUriWithBase(uri, baseURL) {
+    try {
+        return new URL(uri, baseURL).href;
+    } catch (_err) {
+        return uri;
+    }
+}
+
+function isAllowedHttpUrl(uri, allowedBaseUrls) {
+    let normalizedUrl;
+    try {
+        normalizedUrl = new URL(uri).href;
+    } catch (_err) {
+        return false;
     }
 
+    for (const allowedUrl of allowedBaseUrls) {
+        if (normalizedUrl.startsWith(allowedUrl)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function isRedirectStatus(status) {
+    return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+function isReadPermissionError(error) {
+    const name = String(error?.name ?? '').toLowerCase();
+    const message = String(error?.message ?? '').toLowerCase();
+    return (
+        name === 'permissiondenied' ||
+        message.includes('requires read access') ||
+        message.includes('permission denied')
+    );
+}
+
+async function fetchWithPolicy(uri, options, allowedBaseUrls, errors) {
+    const responseType = options?.response;
+    const fetchOptions = Object.assign({}, options ?? {});
+
+    let parsedUrl = null;
+    try {
+        parsedUrl = new URL(uri);
+    } catch (_err) {
+        parsedUrl = null;
+    }
+    const isHttpUrl =
+        parsedUrl != null && (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:');
+
+    if (isHttpUrl) {
+        if (!CONVERTER_ALLOW_HTTP_ACCESS) {
+            const message = accessDeniedMessage('HTTP access denied by converter policy: ' + uri);
+            errors.push(message);
+            throw new Error(message);
+        }
+        if (allowedBaseUrls != null && !isAllowedHttpUrl(uri, allowedBaseUrls)) {
+            const message = accessDeniedMessage('External data url not allowed: ' + uri);
+            errors.push(message);
+            throw new Error(message);
+        }
+    }
+
+    if (allowedBaseUrls != null) {
+        // Keep allowlist handling simple and deterministic: deny all redirect responses.
+        fetchOptions.redirect = 'manual';
+    }
+
+    const response = await fetch(uri, fetchOptions);
+    if (allowedBaseUrls != null && (response.type === 'opaqueredirect' || isRedirectStatus(response.status))) {
+        const message = accessDeniedMessage(
+            'Redirected HTTP URLs are not allowed when allowed_base_urls is configured: ' + uri
+        );
+        errors.push(message);
+        throw new Error(message);
+    }
+
+    if (response.ok) {
+        if (responseType != null && typeof response[responseType] === 'function') {
+            return await response[responseType]();
+        }
+        return await response.text();
+    }
+
+    throw new Error(`${response.status} ${response.statusText}`);
+}
+
+function setCanvasImagePolicy(allowedBaseUrls, errors) {
+    globalThis.__vlConvertAllowHttpAccess = CONVERTER_ALLOW_HTTP_ACCESS;
+    globalThis.__vlConvertAllowedBaseUrls = allowedBaseUrls;
+    globalThis.__vlConvertAccessDeniedMarker = ACCESS_DENIED_MARKER;
+    globalThis.__vlConvertAccessErrors = errors;
+}
+
+function clearCanvasImagePolicy() {
+    delete globalThis.__vlConvertAllowHttpAccess;
+    delete globalThis.__vlConvertAllowedBaseUrls;
+    delete globalThis.__vlConvertAccessDeniedMarker;
+    delete globalThis.__vlConvertAccessErrors;
+}
+
+function buildLoader(allowedBaseUrls, errors) {
+    const allowFilesystemAccess = CONVERTER_FILESYSTEM_BASE_URL != null;
+    let baseURL = DEFAULT_HTTP_BASE_URL;
+    if (allowFilesystemAccess) {
+        baseURL = CONVERTER_FILESYSTEM_BASE_URL;
+    }
+
+    const loaderOptions = { baseURL };
+    if (allowFilesystemAccess && !CONVERTER_ALLOW_HTTP_ACCESS) {
+        loaderOptions.mode = 'file';
+    } else if (!allowFilesystemAccess && CONVERTER_ALLOW_HTTP_ACCESS) {
+        loaderOptions.mode = 'http';
+    }
+
+    const loader = vega.loader(loaderOptions);
+    loader.http = async (uri, options) => {
+        return fetchWithPolicy(uri, options, allowedBaseUrls, errors);
+    };
+
+    loader.fileAccess = allowFilesystemAccess;
+    loader.file = async (uri, _options) => {
+        if (!allowFilesystemAccess) {
+            const message = accessDeniedMessage(
+                'Filesystem access denied by converter policy: ' + uri
+            );
+            errors.push(message);
+            throw new Error(message);
+        }
+        const resolved = resolveUriWithBase(uri, CONVERTER_FILESYSTEM_BASE_URL);
+        if (!resolved.startsWith('file://')) {
+            const message = 'Invalid filesystem URI: ' + uri;
+            errors.push(message);
+            throw new Error(message);
+        }
+        const path = fileUrlToPath(resolved);
+        try {
+            return await Deno.readTextFile(path);
+        } catch (error) {
+            if (isReadPermissionError(error)) {
+                const message = accessDeniedMessage(
+                    'Filesystem access denied by Deno permissions: ' + uri
+                );
+                errors.push(message);
+                throw new Error(message);
+            }
+            throw error;
+        }
+    };
+
+    return loader;
+}
+
+function vegaToView(vgSpec, allowedBaseUrls, errors) {
+    let runtime = vega.parse(vgSpec);
+    const loader = buildLoader(allowedBaseUrls, errors);
     return new vega.View(runtime, {renderer: 'none', loader});
 }
 
@@ -752,7 +1087,12 @@ function vegaToSvg(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, erro
         }
     }).then(() => {
         return view.runAsync().then(
-            () => view.toSVG()
+            () => {
+                if (errors != null && errors.length > 0) {
+                    throw new Error(`${errors}`);
+                }
+                return view.toSVG();
+            }
         ).finally(() => {
             view.finalize();
             vega.resetDefaultLocale();
@@ -837,6 +1177,9 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
     }).then(() => {
         return view.runAsync().then(
             () => {
+                if (errors != null && errors.length > 0) {
+                    throw new Error(`${errors}`);
+                }
                 let padding = view.padding();
                 return {
                     width: Math.max(0, view._viewWidth + padding.left + padding.right),
@@ -869,6 +1212,8 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
         vega.timeFormatLocale(timeFormatLocale);
     }
 
+    setCanvasImagePolicy(allowedBaseUrls, errors);
+
     let view = vegaToViewCanvas(vgSpec, allowedBaseUrls, errors);
     let canvasPromise = view.runAsync().then(() => {
         try {
@@ -878,21 +1223,44 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
             // No geo_interval_init_tick signal
         }
     }).then(() => {
-        return view.runAsync().then(
-            // Pass scale factor to toCanvas
-            () => view.toCanvas(scale)
-        ).finally(() => {
-            view.finalize();
-            vega.resetDefaultLocale();
-        })
+        return view.runAsync()
+            .then(() => {
+                return view.toCanvas(scale)
+                    .then((canvas) => {
+                        if (errors != null && errors.length > 0) {
+                            throw new Error(`${errors}`);
+                        }
+                        return canvas;
+                    });
+            })
+            .finally(() => {
+                view.finalize();
+                vega.resetDefaultLocale();
+            })
     });
-    return canvasPromise;
+    return canvasPromise.finally(() => {
+        clearCanvasImagePolicy();
+    });
 }
-"#;
-            self.worker.js_runtime.execute_script(
-                "ext:<anon>",
-                deno_core::FastString::from_static(function_str),
-            )?;
+"#
+            .to_string();
+            function_str = function_str.replace(
+                "__ALLOW_HTTP_ACCESS__",
+                if self.config.allow_http_access {
+                    "true"
+                } else {
+                    "false"
+                },
+            );
+            function_str =
+                function_str.replace("__FILESYSTEM_BASE_URL__", filesystem_base_url.as_str());
+            function_str = function_str.replace(
+                "__ACCESS_DENIED_MARKER__",
+                serde_json::to_string(ACCESS_DENIED_MARKER)?.as_str(),
+            );
+            self.worker
+                .js_runtime
+                .execute_script("ext:<anon>", function_str)?;
             self.worker
                 .js_runtime
                 .run_event_loop(Default::default())
@@ -982,7 +1350,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         Ok(())
     }
 
-    pub async fn try_new() -> Result<Self, AnyError> {
+    pub async fn try_new(config: Arc<VlConverterConfig>) -> Result<Self, AnyError> {
         // MainWorker's deno_tls extension panics without a global crypto provider
         let _ =
             deno_runtime::deno_tls::rustls::crypto::aws_lc_rs::default_provider().install_default();
@@ -995,6 +1363,8 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
 
         // Create permission descriptor parser using RealSys
         let descriptor_parser = Arc::new(RuntimePermissionDescriptorParser::new(VlConvertNodeSys));
+
+        let permissions = build_permissions(&config)?;
 
         // Configure WorkerServiceOptions with stub types for npm resolution (not used by vl-convert)
         let services = WorkerServiceOptions::<
@@ -1010,7 +1380,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
             module_loader,
             node_services: None, // vl-convert doesn't need Node.js compatibility
             npm_process_state_provider: None,
-            permissions: PermissionsContainer::allow_all(descriptor_parser),
+            permissions: PermissionsContainer::new(descriptor_parser, permissions),
             root_cert_store_provider: None,
             fetch_dns_resolver: Default::default(),
             shared_array_buffer_store: None,
@@ -1062,6 +1432,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
             font_config_version: initial_font_version,
+            config,
         };
 
         Ok(this)
@@ -1218,6 +1589,15 @@ vegaLiteToSvg_{ver_name:?}(
             .run_event_loop(Default::default())
             .await?;
 
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
+
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -1289,6 +1669,15 @@ vegaLiteToScenegraph_{ver_name:?}(
             .run_event_loop(Default::default())
             .await?;
 
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
+
         result.take_result()
     }
 
@@ -1356,6 +1745,15 @@ vegaToSvg(
             .run_event_loop(Default::default())
             .await?;
 
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
+
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -1411,6 +1809,15 @@ vegaToScenegraph(
             .js_runtime
             .run_event_loop(Default::default())
             .await?;
+
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
 
         result.take_result()
     }
@@ -1534,6 +1941,15 @@ vegaToCanvas(
             .run_event_loop(Default::default())
             .await?;
 
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
+
         let png_data = self.execute_script_to_bytes("canvasPngData").await?;
         Ok(png_data)
     }
@@ -1607,6 +2023,15 @@ vegaLiteToCanvas_{ver_name:?}(
             .js_runtime
             .run_event_loop(Default::default())
             .await?;
+
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
 
         let png_data = self.execute_script_to_bytes("canvasPngData").await?;
         Ok(png_data)
@@ -1875,7 +2300,7 @@ impl VlConvertCommand {
 struct VlConverterInner {
     vegaembed_bundles: Mutex<HashMap<VlVersion, String>>,
     pool: Mutex<Option<WorkerPool>>,
-    num_workers: usize,
+    config: Arc<VlConverterConfig>,
 }
 
 #[derive(Clone)]
@@ -1885,13 +2310,11 @@ pub struct VlConverter {
 
 impl VlConverter {
     pub fn new() -> Self {
-        Self::with_num_workers(1).expect("default worker count must be valid")
+        Self::with_config(VlConverterConfig::default()).expect("default converter config is valid")
     }
 
-    pub fn with_num_workers(num_workers: usize) -> Result<Self, AnyError> {
-        if num_workers < 1 {
-            bail!("num_workers must be >= 1");
-        }
+    pub fn with_config(config: VlConverterConfig) -> Result<Self, AnyError> {
+        let config = Arc::new(normalize_converter_config(config)?);
 
         // Initialize environment logger with filter to suppress noisy SWC tree-shaker spans
         // The swc_ecma_transforms_optimization module logs tracing spans at ERROR level
@@ -1905,13 +2328,42 @@ impl VlConverter {
             inner: Arc::new(VlConverterInner {
                 vegaembed_bundles: Default::default(),
                 pool: Default::default(),
-                num_workers,
+                config,
             }),
         })
     }
 
-    pub fn num_workers(&self) -> usize {
-        self.inner.num_workers
+    pub fn config(&self) -> VlConverterConfig {
+        (*self.inner.config).clone()
+    }
+
+    fn effective_allowed_base_urls(
+        &self,
+        requested_allowed_base_urls: Option<Vec<String>>,
+    ) -> Result<Option<Vec<String>>, AnyError> {
+        let requested_allowed_base_urls = normalize_allowed_base_urls(requested_allowed_base_urls)?;
+        if requested_allowed_base_urls.is_some() && !self.inner.config.allow_http_access {
+            bail!("allowed_base_urls cannot be set when HTTP access is disabled");
+        }
+
+        // Per-request allowlists override converter-level defaults. Converter-level values
+        // are used as a fallback when requests do not provide one.
+        Ok(requested_allowed_base_urls.or_else(|| self.inner.config.allowed_base_urls.clone()))
+    }
+
+    fn image_access_policy_with_allowed_base_urls(
+        &self,
+        allowed_base_urls: Option<Vec<String>>,
+    ) -> ImageAccessPolicy {
+        ImageAccessPolicy {
+            allow_http_access: self.inner.config.allow_http_access,
+            filesystem_root: self.inner.config.filesystem_root.clone(),
+            allowed_base_urls,
+        }
+    }
+
+    fn image_access_policy(&self) -> ImageAccessPolicy {
+        self.image_access_policy_with_allowed_base_urls(self.inner.config.allowed_base_urls.clone())
     }
 
     /// Eagerly start the worker pool for this converter instance.
@@ -1940,7 +2392,7 @@ impl VlConverter {
             *guard = None;
         }
 
-        let pool = spawn_worker_pool(self.inner.num_workers)?;
+        let pool = spawn_worker_pool(self.inner.config.clone())?;
         let sender = pool
             .next_sender()
             .ok_or_else(|| anyhow!("Worker pool has no senders"))?;
@@ -2004,8 +2456,10 @@ impl VlConverter {
     pub async fn vega_to_svg(
         &self,
         vg_spec: impl Into<ValueOrString>,
-        vg_opts: VgOpts,
+        mut vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
+        vg_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
         self.request(
             move |responder| VlConvertCommand::VgToSvg {
@@ -2021,8 +2475,10 @@ impl VlConverter {
     pub async fn vega_to_scenegraph(
         &self,
         vg_spec: impl Into<ValueOrString>,
-        vg_opts: VgOpts,
+        mut vg_opts: VgOpts,
     ) -> Result<serde_json::Value, AnyError> {
+        vg_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
         self.request(
             move |responder| VlConvertCommand::VgToSg {
@@ -2038,8 +2494,10 @@ impl VlConverter {
     pub async fn vega_to_scenegraph_msgpack(
         &self,
         vg_spec: impl Into<ValueOrString>,
-        vg_opts: VgOpts,
+        mut vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
+        vg_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
         self.request(
             move |responder| VlConvertCommand::VgToSgMsgpack {
@@ -2055,8 +2513,10 @@ impl VlConverter {
     pub async fn vegalite_to_svg(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
+        vl_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
         self.request(
             move |responder| VlConvertCommand::VlToSvg {
@@ -2072,8 +2532,10 @@ impl VlConverter {
     pub async fn vegalite_to_scenegraph(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
+        vl_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
         self.request(
             move |responder| VlConvertCommand::VlToSg {
@@ -2089,8 +2551,10 @@ impl VlConverter {
     pub async fn vegalite_to_scenegraph_msgpack(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
+        vl_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
         self.request(
             move |responder| VlConvertCommand::VlToSgMsgpack {
@@ -2106,10 +2570,12 @@ impl VlConverter {
     pub async fn vega_to_png(
         &self,
         vg_spec: impl Into<ValueOrString>,
-        vg_opts: VgOpts,
+        mut vg_opts: VgOpts,
         scale: Option<f32>,
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
+        vg_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
@@ -2131,10 +2597,12 @@ impl VlConverter {
     pub async fn vegalite_to_png(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
         scale: Option<f32>,
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
+        vl_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
@@ -2156,43 +2624,80 @@ impl VlConverter {
     pub async fn vega_to_jpeg(
         &self,
         vg_spec: impl Into<ValueOrString>,
-        vg_opts: VgOpts,
+        mut vg_opts: VgOpts,
         scale: Option<f32>,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
+        let effective_allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
+        let image_policy =
+            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+        vg_opts.allowed_base_urls = effective_allowed_base_urls;
         let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        svg_to_jpeg(&svg, scale, quality)
+        svg_to_jpeg_with_policy(&svg, scale, quality, &image_policy)
     }
 
     pub async fn vegalite_to_jpeg(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
         scale: Option<f32>,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
+        let effective_allowed_base_urls =
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
+        let image_policy =
+            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+        vl_opts.allowed_base_urls = effective_allowed_base_urls;
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        svg_to_jpeg(&svg, scale, quality)
+        svg_to_jpeg_with_policy(&svg, scale, quality, &image_policy)
     }
 
     pub async fn vega_to_pdf(
         &self,
         vg_spec: impl Into<ValueOrString>,
-        vg_opts: VgOpts,
+        mut vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
+        let effective_allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let image_policy =
+            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+        vg_opts.allowed_base_urls = effective_allowed_base_urls;
         let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        svg_to_pdf(&svg)
+        svg_to_pdf_with_policy(&svg, &image_policy)
     }
 
     pub async fn vegalite_to_pdf(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
+        let effective_allowed_base_urls =
+            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
+        let image_policy =
+            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+        vl_opts.allowed_base_urls = effective_allowed_base_urls;
         let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        svg_to_pdf(&svg)
+        svg_to_pdf_with_policy(&svg, &image_policy)
+    }
+
+    pub fn svg_to_png(&self, svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
+        svg_to_png_with_policy(svg, scale, ppi, &self.image_access_policy())
+    }
+
+    pub fn svg_to_jpeg(
+        &self,
+        svg: &str,
+        scale: f32,
+        quality: Option<u8>,
+    ) -> Result<Vec<u8>, AnyError> {
+        svg_to_jpeg_with_policy(svg, scale, quality, &self.image_access_policy())
+    }
+
+    pub fn svg_to_pdf(&self, svg: &str) -> Result<Vec<u8>, AnyError> {
+        svg_to_pdf_with_policy(svg, &self.image_access_policy())
     }
 
     pub async fn get_vegaembed_bundle(&self, vl_version: VlVersion) -> Result<String, AnyError> {
@@ -2391,15 +2896,33 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
     Ok(data)
 }
 
+fn default_image_access_policy() -> ImageAccessPolicy {
+    ImageAccessPolicy {
+        allow_http_access: true,
+        filesystem_root: None,
+        allowed_base_urls: None,
+    }
+}
+
 pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
+    svg_to_png_with_policy(svg, scale, ppi, &default_image_access_policy())
+}
+
+fn svg_to_png_with_policy(
+    svg: &str,
+    scale: f32,
+    ppi: Option<f32>,
+    policy: &ImageAccessPolicy,
+) -> Result<Vec<u8>, AnyError> {
     // default ppi to 72
     let ppi = ppi.unwrap_or(72.0);
     let scale = scale * ppi / 72.0;
+    let policy = policy.clone();
 
     // catch_unwind so that we don't poison Mutexes
     // if usvg/resvg panics
     let response = panic::catch_unwind(|| {
-        let rtree = match parse_svg(svg) {
+        let rtree = match parse_svg(svg, &policy) {
             Ok(rtree) => rtree,
             Err(err) => return Err(err),
         };
@@ -2422,7 +2945,16 @@ pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, An
 }
 
 pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>, AnyError> {
-    let png_bytes = svg_to_png(svg, scale, None)?;
+    svg_to_jpeg_with_policy(svg, scale, quality, &default_image_access_policy())
+}
+
+fn svg_to_jpeg_with_policy(
+    svg: &str,
+    scale: f32,
+    quality: Option<u8>,
+    policy: &ImageAccessPolicy,
+) -> Result<Vec<u8>, AnyError> {
+    let png_bytes = svg_to_png_with_policy(svg, scale, None, policy)?;
     let img = ImageReader::new(Cursor::new(png_bytes))
         .with_guessed_format()?
         .decode()?;
@@ -2442,19 +2974,23 @@ pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>
 }
 
 pub fn svg_to_pdf(svg: &str) -> Result<Vec<u8>, AnyError> {
-    let tree = parse_svg(svg)?;
+    svg_to_pdf_with_policy(svg, &default_image_access_policy())
+}
+
+fn svg_to_pdf_with_policy(svg: &str, policy: &ImageAccessPolicy) -> Result<Vec<u8>, AnyError> {
+    let tree = parse_svg(svg, policy)?;
     let pdf = svg2pdf::to_pdf(&tree, ConversionOptions::default(), PageOptions::default());
     pdf.map_err(|err| anyhow!("Failed to convert SVG to PDF: {}", err))
 }
 
 /// Helper to parse svg string to usvg Tree with more helpful error messages
-fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
+fn parse_svg(svg: &str, policy: &ImageAccessPolicy) -> Result<usvg::Tree, AnyError> {
     let xml_opt = usvg::roxmltree::ParsingOptions {
         allow_dtd: true,
         ..Default::default()
     };
 
-    let opts = USVG_OPTIONS
+    let mut opts = USVG_OPTIONS
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
 
@@ -2479,7 +3015,19 @@ fn parse_svg(svg: &str) -> Result<usvg::Tree, AnyError> {
         }
     }
 
-    Ok(usvg::Tree::from_xmltree(&doc, &opts)?)
+    let previous_resources_dir = opts.resources_dir.clone();
+    opts.resources_dir = policy.filesystem_root.clone();
+    let (result, access_errors) =
+        crate::image_loading::with_image_access_policy(policy.clone(), || {
+            usvg::Tree::from_xmltree(&doc, &opts)
+        });
+    opts.resources_dir = previous_resources_dir;
+
+    if !access_errors.is_empty() {
+        bail!("{}", access_errors.join("\n"));
+    }
+
+    Ok(result?)
 }
 
 pub fn vegalite_to_url(
@@ -2524,7 +3072,23 @@ pub fn vega_to_url(
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::collections::HashMap;
     use std::future::Future;
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::{SocketAddr, TcpListener, TcpStream};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+
+    const PNG_1X1_BYTES: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 4,
+        0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 218, 99, 252, 255, 15, 0, 2, 3,
+        1, 128, 179, 248, 175, 217, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+    const SVG_2X3_BASE64: &str =
+        "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyIiBoZWlnaHQ9IjMiPjxyZWN0IHdpZHRoPSIyIiBoZWlnaHQ9IjMiIGZpbGw9InJlZCIvPjwvc3ZnPg==";
+    const SVG_2X3_DATA_URL: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyIiBoZWlnaHQ9IjMiPjxyZWN0IHdpZHRoPSIyIiBoZWlnaHQ9IjMiIGZpbGw9InJlZCIvPjwvc3ZnPg==";
 
     fn make_test_command() -> VlConvertCommand {
         let (responder, _rx) =
@@ -2533,6 +3097,193 @@ mod tests {
     }
 
     fn assert_send_future<F: Future + Send>(_: F) {}
+
+    #[derive(Clone)]
+    struct TestHttpResponse {
+        status: u16,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+    }
+
+    impl TestHttpResponse {
+        fn ok_text(body: &str) -> Self {
+            Self {
+                status: 200,
+                headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
+                body: body.as_bytes().to_vec(),
+            }
+        }
+
+        fn ok_png(body: &[u8]) -> Self {
+            Self {
+                status: 200,
+                headers: vec![("Content-Type".to_string(), "image/png".to_string())],
+                body: body.to_vec(),
+            }
+        }
+
+        fn ok_svg(body: &str) -> Self {
+            Self {
+                status: 200,
+                headers: vec![("Content-Type".to_string(), "image/svg+xml".to_string())],
+                body: body.as_bytes().to_vec(),
+            }
+        }
+
+        fn redirect(location: &str) -> Self {
+            Self {
+                status: 302,
+                headers: vec![("Location".to_string(), location.to_string())],
+                body: Vec::new(),
+            }
+        }
+    }
+
+    struct TestHttpServer {
+        addr: SocketAddr,
+        running: Arc<AtomicBool>,
+        handle: Option<thread::JoinHandle<()>>,
+    }
+
+    impl TestHttpServer {
+        fn new(routes: Vec<(&str, TestHttpResponse)>) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let addr = listener.local_addr().unwrap();
+
+            let routes = Arc::new(
+                routes
+                    .into_iter()
+                    .map(|(path, response)| (path.to_string(), response))
+                    .collect::<HashMap<_, _>>(),
+            );
+            let running = Arc::new(AtomicBool::new(true));
+            let running_clone = running.clone();
+            let routes_clone = routes.clone();
+
+            let handle = thread::spawn(move || {
+                while running_clone.load(Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            handle_test_http_connection(stream, &routes_clone);
+                        }
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+
+            Self {
+                addr,
+                running,
+                handle: Some(handle),
+            }
+        }
+
+        fn url(&self, path: &str) -> String {
+            format!("http://{}{}", self.addr, path)
+        }
+
+        fn origin(&self) -> String {
+            format!("http://{}", self.addr)
+        }
+
+        fn base_url(&self) -> String {
+            format!("http://{}/", self.addr)
+        }
+    }
+
+    impl Drop for TestHttpServer {
+        fn drop(&mut self) {
+            self.running.store(false, Ordering::SeqCst);
+            let _ = TcpStream::connect(self.addr);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    fn handle_test_http_connection(
+        mut stream: TcpStream,
+        routes: &HashMap<String, TestHttpResponse>,
+    ) {
+        let Ok(reader_stream) = stream.try_clone() else {
+            return;
+        };
+        let mut reader = BufReader::new(reader_stream);
+
+        let mut request_line = String::new();
+        if reader.read_line(&mut request_line).is_err() {
+            return;
+        }
+        let request_target = request_line.split_whitespace().nth(1).unwrap_or("/");
+        let request_path = request_target.split('?').next().unwrap_or(request_target);
+
+        loop {
+            let mut header_line = String::new();
+            if reader.read_line(&mut header_line).is_err() {
+                return;
+            }
+            if header_line == "\r\n" || header_line == "\n" || header_line.is_empty() {
+                break;
+            }
+        }
+
+        let response = routes
+            .get(request_path)
+            .cloned()
+            .unwrap_or_else(|| TestHttpResponse {
+                status: 404,
+                headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
+                body: b"not found".to_vec(),
+            });
+
+        let mut headers = response.headers;
+        if !headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        {
+            headers.push((
+                "Content-Length".to_string(),
+                response.body.len().to_string(),
+            ));
+        }
+        if !headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("connection"))
+        {
+            headers.push(("Connection".to_string(), "close".to_string()));
+        }
+
+        let mut response_head = format!(
+            "HTTP/1.1 {} {}\r\n",
+            response.status,
+            http_reason_phrase(response.status)
+        );
+        for (name, value) in headers {
+            response_head.push_str(&format!("{name}: {value}\r\n"));
+        }
+        response_head.push_str("\r\n");
+
+        let _ = stream.write_all(response_head.as_bytes());
+        let _ = stream.write_all(&response.body);
+        let _ = stream.flush();
+    }
+
+    fn http_reason_phrase(status: u16) -> &'static str {
+        match status {
+            200 => "OK",
+            301 => "Moved Permanently",
+            302 => "Found",
+            303 => "See Other",
+            307 => "Temporary Redirect",
+            308 => "Permanent Redirect",
+            404 => "Not Found",
+            _ => "Status",
+        }
+    }
 
     #[tokio::test]
     async fn test_convert_context() {
@@ -2603,7 +3354,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_script_to_bytes_typed_array() {
-        let mut ctx = InnerVlConverter::try_new().await.unwrap();
+        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
+            .await
+            .unwrap();
         let bytes = ctx
             .execute_script_to_bytes("new Uint8Array([1, 2, 3])")
             .await
@@ -2613,7 +3366,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_canvas_png_and_image_data_are_typed_arrays() {
-        let mut ctx = InnerVlConverter::try_new().await.unwrap();
+        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
+            .await
+            .unwrap();
         let code = r#"
 const canvas = new HTMLCanvasElement(8, 8);
 const ctx2d = canvas.getContext('2d');
@@ -2658,8 +3413,232 @@ var __imageDataChecks = [
     }
 
     #[tokio::test]
+    async fn test_image_decode_and_load_events() {
+        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
+            .await
+            .unwrap();
+        let image_url = serde_json::to_string(SVG_2X3_DATA_URL).unwrap();
+        let code = format!(
+            r#"
+var __imageDecodeLoadResult = null;
+(async () => {{
+  const img = new Image();
+  let onloadCount = 0;
+  let listenerCount = 0;
+  img.onload = () => {{ onloadCount += 1; }};
+  img.addEventListener("load", () => {{ listenerCount += 1; }});
+  img.src = {image_url};
+  await img.decode();
+  __imageDecodeLoadResult = {{
+    complete: img.complete,
+    naturalWidth: img.naturalWidth,
+    naturalHeight: img.naturalHeight,
+    onloadCount,
+    listenerCount
+  }};
+}})();
+"#
+        );
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let result = ctx
+            .execute_script_to_json("__imageDecodeLoadResult")
+            .await
+            .unwrap();
+        assert_eq!(result["complete"], json!(true));
+        assert_eq!(result["naturalWidth"], json!(2));
+        assert_eq!(result["naturalHeight"], json!(3));
+        assert_eq!(result["onloadCount"], json!(1));
+        assert_eq!(result["listenerCount"], json!(1));
+    }
+
+    #[tokio::test]
+    async fn test_image_decode_rejects_and_error_events_fire() {
+        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
+            .await
+            .unwrap();
+        let marker = serde_json::to_string(ACCESS_DENIED_MARKER).unwrap();
+        let code = format!(
+            r#"
+var __imageDecodeErrorResult = null;
+(async () => {{
+  globalThis.__vlConvertAllowHttpAccess = false;
+  globalThis.__vlConvertAllowedBaseUrls = null;
+  globalThis.__vlConvertAccessDeniedMarker = {marker};
+  globalThis.__vlConvertAccessErrors = [];
+
+  const img = new Image();
+  let onerrorCount = 0;
+  let listenerCount = 0;
+  img.onerror = () => {{ onerrorCount += 1; }};
+  img.addEventListener("error", () => {{ listenerCount += 1; }});
+  img.src = "https://example.com/image.png";
+
+  let decodeMessage = "";
+  try {{
+    await img.decode();
+    decodeMessage = "resolved";
+  }} catch (err) {{
+    decodeMessage = String(err && err.message ? err.message : err);
+  }}
+
+  __imageDecodeErrorResult = {{
+    complete: img.complete,
+    naturalWidth: img.naturalWidth,
+    naturalHeight: img.naturalHeight,
+    onerrorCount,
+    listenerCount,
+    decodeMessage,
+    accessErrors: globalThis.__vlConvertAccessErrors.slice(),
+  }};
+
+  delete globalThis.__vlConvertAllowHttpAccess;
+  delete globalThis.__vlConvertAllowedBaseUrls;
+  delete globalThis.__vlConvertAccessDeniedMarker;
+  delete globalThis.__vlConvertAccessErrors;
+}})();
+"#
+        );
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let result = ctx
+            .execute_script_to_json("__imageDecodeErrorResult")
+            .await
+            .unwrap();
+        assert_eq!(result["complete"], json!(true));
+        assert_eq!(result["naturalWidth"], json!(0));
+        assert_eq!(result["naturalHeight"], json!(0));
+        assert_eq!(result["onerrorCount"], json!(1));
+        assert_eq!(result["listenerCount"], json!(1));
+        assert!(result["decodeMessage"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(ACCESS_DENIED_MARKER));
+        assert!(result["accessErrors"]
+            .as_array()
+            .and_then(|values| values.first())
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .contains(ACCESS_DENIED_MARKER));
+    }
+
+    #[tokio::test]
+    async fn test_image_decode_ignores_stale_src_results() {
+        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
+            .await
+            .unwrap();
+        let code = format!(
+            r#"
+var __imageRaceResult = null;
+(async () => {{
+  const validImageBytes = (() => {{
+    const binary = atob({SVG_2X3_BASE64:?});
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {{
+      bytes[i] = binary.charCodeAt(i);
+    }}
+    return bytes;
+  }})();
+  const invalidBytes = new TextEncoder().encode("not-a-valid-image");
+  const toArrayBuffer = (bytes) =>
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {{
+    const asString = String(url);
+    if (asString.includes("slow")) {{
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return {{
+        ok: true,
+        status: 200,
+        url: asString,
+        type: "basic",
+        redirected: false,
+        arrayBuffer: async () => toArrayBuffer(invalidBytes),
+      }};
+    }}
+    return {{
+      ok: true,
+      status: 200,
+      url: asString,
+      type: "basic",
+      redirected: false,
+      arrayBuffer: async () => toArrayBuffer(validImageBytes),
+    }};
+  }};
+
+  try {{
+    const img = new Image();
+    let onloadCount = 0;
+    let onerrorCount = 0;
+    img.onload = () => {{ onloadCount += 1; }};
+    img.onerror = () => {{ onerrorCount += 1; }};
+
+    img.src = "https://example.com/slow.png";
+    img.src = "https://example.com/fast.png";
+    await img.decode();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    __imageRaceResult = {{
+      src: img.src,
+      complete: img.complete,
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
+      onloadCount,
+      onerrorCount,
+    }};
+  }} finally {{
+    globalThis.fetch = originalFetch;
+  }}
+}})();
+"#
+        );
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let result = ctx
+            .execute_script_to_json("__imageRaceResult")
+            .await
+            .unwrap();
+        assert_eq!(result["src"], json!("https://example.com/fast.png"));
+        assert_eq!(result["complete"], json!(true));
+        assert_eq!(result["naturalWidth"], json!(2));
+        assert_eq!(result["naturalHeight"], json!(3));
+        assert_eq!(result["onloadCount"], json!(1));
+        assert_eq!(result["onerrorCount"], json!(0));
+    }
+
+    #[tokio::test]
     async fn test_polyfill_unsupported_methods_throw() {
-        let mut ctx = InnerVlConverter::try_new().await.unwrap();
+        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
+            .await
+            .unwrap();
         let code = r#"
 var __unsupportedMessages = [];
 
@@ -2859,15 +3838,680 @@ try {
     }
 
     #[test]
-    fn test_with_num_workers_rejects_zero() {
-        let err = VlConverter::with_num_workers(0).err().unwrap();
+    fn test_with_config_rejects_zero_num_workers() {
+        let err = VlConverter::with_config(VlConverterConfig {
+            num_workers: 0,
+            ..Default::default()
+        })
+        .err()
+        .unwrap();
         assert!(err.to_string().contains("num_workers must be >= 1"));
     }
 
     #[test]
-    fn test_num_workers_reports_configured_value() {
-        let converter = VlConverter::with_num_workers(4).unwrap();
-        assert_eq!(converter.num_workers(), 4);
+    fn test_config_reports_configured_num_workers() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 4,
+            ..Default::default()
+        })
+        .unwrap();
+        assert_eq!(converter.config().num_workers, 4);
+    }
+
+    fn write_test_png(path: &std::path::Path) {
+        std::fs::write(path, PNG_1X1_BYTES).unwrap();
+    }
+
+    fn svg_with_href(href: &str) -> String {
+        format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><image href="{href}" width="1" height="1"/></svg>"#
+        )
+    }
+
+    fn vega_spec_with_data_url(url: &str) -> serde_json::Value {
+        json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 20,
+            "height": 20,
+            "data": [{"name": "table", "url": url, "format": {"type": "csv"}}],
+            "scales": [
+                {"name": "x", "type": "linear", "range": "width", "domain": {"data": "table", "field": "a"}},
+                {"name": "y", "type": "linear", "range": "height", "domain": {"data": "table", "field": "b"}}
+            ],
+            "marks": [{
+                "type": "symbol",
+                "from": {"data": "table"},
+                "encode": {
+                    "enter": {
+                        "x": {"scale": "x", "field": "a"},
+                        "y": {"scale": "y", "field": "b"}
+                    }
+                }
+            }]
+        })
+    }
+
+    fn vegalite_spec_with_data_url(url: &str) -> serde_json::Value {
+        json!({
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "data": {"url": url},
+            "mark": "point",
+            "encoding": {
+                "x": {"field": "a", "type": "quantitative"},
+                "y": {"field": "b", "type": "quantitative"}
+            }
+        })
+    }
+
+    fn vegalite_spec_with_image_url(url: &str) -> serde_json::Value {
+        json!({
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "data": {
+                "values": [
+                    {"img": url}
+                ]
+            },
+            "mark": {"type": "image", "width": 20, "height": 20},
+            "encoding": {
+                "x": {"value": 10},
+                "y": {"value": 10},
+                "url": {"field": "img", "type": "nominal"}
+            }
+        })
+    }
+
+    #[test]
+    fn test_allowed_base_url_normalization_and_validation() {
+        assert_eq!(
+            normalize_allowed_base_url("https://example.com").unwrap(),
+            "https://example.com/"
+        );
+        assert_eq!(
+            normalize_allowed_base_url("https://example.com/data").unwrap(),
+            "https://example.com/data/"
+        );
+
+        assert!(normalize_allowed_base_url("ftp://example.com/").is_err());
+        assert!(normalize_allowed_base_url("https://user@example.com/").is_err());
+        assert!(normalize_allowed_base_url("https://example.com/?q=1").is_err());
+        assert!(normalize_allowed_base_url("https://example.com/#fragment").is_err());
+        assert!(normalize_allowed_base_urls(Some(vec![])).is_err());
+    }
+
+    #[test]
+    fn test_with_config_rejects_allowed_base_urls_when_http_disabled() {
+        let err = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            allowed_base_urls: Some(vec!["https://example.com".to_string()]),
+            ..Default::default()
+        })
+        .err()
+        .unwrap();
+        assert!(err
+            .to_string()
+            .contains("allowed_base_urls cannot be set when HTTP access is disabled"));
+    }
+
+    #[test]
+    fn test_with_config_rejects_empty_allowed_base_urls() {
+        let err = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec![]),
+            ..Default::default()
+        })
+        .err()
+        .unwrap();
+        assert!(err
+            .to_string()
+            .contains("allowed_base_urls cannot be empty"));
+    }
+
+    #[test]
+    fn test_effective_allowed_base_urls_override_behavior() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec!["https://config.example/".to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let fallback = converter
+            .effective_allowed_base_urls(None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(fallback, vec!["https://config.example/".to_string()]);
+
+        let request_override = converter
+            .effective_allowed_base_urls(Some(vec!["https://request.example/".to_string()]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            request_override,
+            vec!["https://request.example/".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_effective_allowed_base_urls_rejects_empty_override() {
+        let converter = VlConverter::new();
+        let err = converter
+            .effective_allowed_base_urls(Some(vec![]))
+            .err()
+            .unwrap();
+        assert!(err
+            .to_string()
+            .contains("allowed_base_urls cannot be empty"));
+    }
+
+    #[test]
+    fn test_svg_helper_denies_subdomain_and_userinfo_url_confusion() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec!["https://example.com".to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let subdomain_err = converter
+            .svg_to_png(
+                &svg_with_href("https://example.com.evil.test/image.png"),
+                1.0,
+                None,
+            )
+            .unwrap_err();
+        assert!(subdomain_err
+            .to_string()
+            .contains("External data url not allowed"));
+
+        let userinfo_err = converter
+            .svg_to_png(
+                &svg_with_href("https://example.com@evil.test/image.png"),
+                1.0,
+                None,
+            )
+            .unwrap_err();
+        assert!(userinfo_err
+            .to_string()
+            .contains("External data url not allowed"));
+    }
+
+    #[test]
+    fn test_svg_helper_denies_local_paths_without_filesystem_root() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let local_image_path = temp_dir.path().join("image.png");
+        write_test_png(&local_image_path);
+        let href = Url::from_file_path(&local_image_path).unwrap().to_string();
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            filesystem_root: None,
+            ..Default::default()
+        })
+        .unwrap();
+
+        let err = converter
+            .svg_to_png(&svg_with_href(&href), 1.0, None)
+            .unwrap_err();
+        assert!(err.to_string().contains("Filesystem access denied"));
+    }
+
+    #[test]
+    fn test_svg_helper_enforces_filesystem_root() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path().join("root");
+        std::fs::create_dir_all(&root).unwrap();
+
+        let inside_path = root.join("inside.png");
+        write_test_png(&inside_path);
+        let outside_path = temp_dir.path().join("outside.png");
+        write_test_png(&outside_path);
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            filesystem_root: Some(root.clone()),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let allowed = converter.svg_to_png(&svg_with_href("inside.png"), 1.0, None);
+        assert!(allowed.is_ok());
+
+        let outside_href = Url::from_file_path(&outside_path).unwrap().to_string();
+        let err = converter
+            .svg_to_png(&svg_with_href(&outside_href), 1.0, None)
+            .unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("filesystem_root") || message.contains("access denied"));
+
+        let err = converter
+            .svg_to_png(&svg_with_href("../outside.png"), 1.0, None)
+            .unwrap_err();
+        assert!(err.to_string().contains("filesystem_root"));
+    }
+
+    #[test]
+    fn test_svg_helper_enforces_http_access_and_allowed_base_urls() {
+        let remote_svg = svg_with_href("https://example.com/image.png");
+
+        let no_http_converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            ..Default::default()
+        })
+        .unwrap();
+        let err = no_http_converter
+            .svg_to_png(&remote_svg, 1.0, None)
+            .unwrap_err();
+        assert!(err.to_string().contains("HTTP access denied"));
+
+        let allowlisted_converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec!["https://allowed.example/".to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+        let err = allowlisted_converter
+            .svg_to_png(&remote_svg, 1.0, None)
+            .unwrap_err();
+        assert!(err.to_string().contains("External data url not allowed"));
+    }
+
+    #[test]
+    fn test_svg_helper_allows_data_uri_when_http_disabled() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            ..Default::default()
+        })
+        .unwrap();
+        let svg = svg_with_href(
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAgMBgLP4r9kAAAAASUVORK5CYII=",
+        );
+        let png = converter.svg_to_png(&svg, 1.0, None).unwrap();
+        assert!(png.starts_with(&[137, 80, 78, 71]));
+    }
+
+    #[tokio::test]
+    async fn test_vega_to_pdf_denies_http_access() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vega_spec_with_data_url("https://example.com/data.csv");
+
+        let err = converter
+            .vega_to_pdf(spec, VgOpts::default())
+            .await
+            .unwrap_err();
+        let message = err.to_string().to_ascii_lowercase();
+        assert!(
+            message.contains("http access denied")
+                || message.contains("requires net access")
+                || message.contains("permission")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_vega_loader_allows_data_uri_when_http_disabled() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vega_spec_with_data_url("data:text/csv,a,b%0A1,2");
+
+        let svg = converter
+            .vega_to_svg(spec, VgOpts::default())
+            .await
+            .unwrap();
+        assert!(svg.contains("<svg"));
+    }
+
+    #[tokio::test]
+    async fn test_vega_loader_denies_redirect_when_allowlist_configured() {
+        let disallowed_server =
+            TestHttpServer::new(vec![("/data.csv", TestHttpResponse::ok_text("a,b\n1,2\n"))]);
+        let allowed_server = TestHttpServer::new(vec![(
+            "/redirect.csv",
+            TestHttpResponse::redirect(&disallowed_server.url("/data.csv")),
+        )]);
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec![allowed_server.origin()]),
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vega_spec_with_data_url(&allowed_server.url("/redirect.csv"));
+
+        let err = converter
+            .vega_to_svg(spec, VgOpts::default())
+            .await
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Redirected HTTP URLs are not allowed"));
+    }
+
+    #[tokio::test]
+    async fn test_vega_loader_allows_redirect_when_allowlist_is_not_configured() {
+        let target_server =
+            TestHttpServer::new(vec![("/data.csv", TestHttpResponse::ok_text("a,b\n1,2\n"))]);
+        let redirect_server = TestHttpServer::new(vec![(
+            "/redirect.csv",
+            TestHttpResponse::redirect(&target_server.url("/data.csv")),
+        )]);
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: None,
+            ..Default::default()
+        })
+        .unwrap();
+
+        let svg = converter
+            .vega_to_svg(
+                vega_spec_with_data_url(&redirect_server.url("/redirect.csv")),
+                VgOpts::default(),
+            )
+            .await
+            .unwrap();
+        assert!(svg.contains("<svg"));
+    }
+
+    #[tokio::test]
+    async fn test_vegalite_to_png_canvas_image_denies_http_access() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vegalite_spec_with_image_url("https://example.com/image.png");
+
+        let err = converter
+            .vegalite_to_png(
+                spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+                Some(1.0),
+                Some(72.0),
+            )
+            .await
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains(&format!("{ACCESS_DENIED_MARKER}: HTTP access denied")));
+    }
+
+    #[tokio::test]
+    async fn test_vegalite_to_png_canvas_image_enforces_allowed_base_urls() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec!["https://allowed.example/".to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vegalite_spec_with_image_url("https://example.com/image.png");
+
+        let err = converter
+            .vegalite_to_png(
+                spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+                Some(1.0),
+                Some(72.0),
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains(&format!(
+            "{ACCESS_DENIED_MARKER}: External data url not allowed"
+        )));
+    }
+
+    #[tokio::test]
+    async fn test_vegalite_to_png_canvas_image_denies_redirect_when_allowlist_configured() {
+        let disallowed_server = TestHttpServer::new(vec![(
+            "/image.png",
+            TestHttpResponse::ok_png(PNG_1X1_BYTES),
+        )]);
+        let allowed_server = TestHttpServer::new(vec![(
+            "/redirect.png",
+            TestHttpResponse::redirect(&disallowed_server.url("/image.png")),
+        )]);
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec![allowed_server.origin()]),
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vegalite_spec_with_image_url(&allowed_server.url("/redirect.png"));
+
+        let err = converter
+            .vegalite_to_png(
+                spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+                Some(1.0),
+                Some(72.0),
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains(&format!(
+            "{ACCESS_DENIED_MARKER}: Redirected HTTP URLs are not allowed"
+        )));
+    }
+
+    #[tokio::test]
+    async fn test_vegalite_to_png_canvas_image_allows_redirect_without_allowlist() {
+        let target_server = TestHttpServer::new(vec![(
+            "/image.svg",
+            TestHttpResponse::ok_svg(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>"#,
+            ),
+        )]);
+        let redirect_server = TestHttpServer::new(vec![(
+            "/redirect.svg",
+            TestHttpResponse::redirect(&target_server.url("/image.svg")),
+        )]);
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: None,
+            ..Default::default()
+        })
+        .unwrap();
+
+        let png = converter
+            .vegalite_to_png(
+                vegalite_spec_with_image_url(&redirect_server.url("/redirect.svg")),
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+                Some(1.0),
+                Some(72.0),
+            )
+            .await
+            .unwrap();
+        assert!(png.starts_with(&[137, 80, 78, 71]));
+    }
+
+    #[test]
+    fn test_svg_helper_denies_redirect_when_allowlist_configured() {
+        let disallowed_server = TestHttpServer::new(vec![(
+            "/image.png",
+            TestHttpResponse::ok_png(PNG_1X1_BYTES),
+        )]);
+        let allowed_server = TestHttpServer::new(vec![(
+            "/redirect.png",
+            TestHttpResponse::redirect(&disallowed_server.url("/image.png")),
+        )]);
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec![allowed_server.base_url()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let err = converter
+            .svg_to_png(
+                &svg_with_href(&allowed_server.url("/redirect.png")),
+                1.0,
+                None,
+            )
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Redirected HTTP URLs are not allowed"));
+    }
+
+    #[test]
+    fn test_svg_helper_allows_redirect_without_allowlist() {
+        let target_server = TestHttpServer::new(vec![(
+            "/image.svg",
+            TestHttpResponse::ok_svg(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>"#,
+            ),
+        )]);
+        let redirect_server = TestHttpServer::new(vec![(
+            "/redirect.svg",
+            TestHttpResponse::redirect(&target_server.url("/image.svg")),
+        )]);
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: None,
+            ..Default::default()
+        })
+        .unwrap();
+
+        let png = converter
+            .svg_to_png(
+                &svg_with_href(&redirect_server.url("/redirect.svg")),
+                1.0,
+                None,
+            )
+            .unwrap();
+        assert!(png.starts_with(&[137, 80, 78, 71]));
+    }
+
+    #[tokio::test]
+    async fn test_vega_to_pdf_denies_disallowed_base_url() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec!["https://allowed.example/".to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vega_spec_with_data_url("https://example.com/data.csv");
+
+        let err = converter
+            .vega_to_pdf(spec, VgOpts::default())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("External data url not allowed"));
+    }
+
+    #[tokio::test]
+    async fn test_vegalite_to_pdf_denies_filesystem_access_outside_root() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path().join("root");
+        std::fs::create_dir_all(&root).unwrap();
+        let outside_csv = temp_dir.path().join("outside.csv");
+        std::fs::write(&outside_csv, "a,b\n1,2\n").unwrap();
+        let outside_file_url = Url::from_file_path(&outside_csv).unwrap().to_string();
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            filesystem_root: Some(root),
+            ..Default::default()
+        })
+        .unwrap();
+        let vl_spec = vegalite_spec_with_data_url(&outside_file_url);
+
+        let err = converter
+            .vegalite_to_pdf(
+                vl_spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap_err();
+        let message = err.to_string().to_ascii_lowercase();
+        assert!(
+            message.contains("filesystem access denied")
+                || message.contains("requires read access")
+                || message.contains("permission")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_loader_blocks_percent_encoded_filesystem_traversal() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path().join("root");
+        std::fs::create_dir_all(root.join("subdir")).unwrap();
+        let outside_csv = temp_dir.path().join("outside.csv");
+        std::fs::write(&outside_csv, "a,b\n1,2\n").unwrap();
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: false,
+            filesystem_root: Some(root),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let spec = vegalite_spec_with_data_url("subdir/..%2F..%2Foutside.csv");
+        let err = converter
+            .vegalite_to_svg(
+                spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains(&format!("{ACCESS_DENIED_MARKER}: Filesystem access denied")));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_vegalite_to_pdf_uses_per_request_allowlist_for_svg_rasterization() {
+        let server = TestHttpServer::new(vec![(
+            "/image.svg",
+            TestHttpResponse::ok_svg(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>"#,
+            ),
+        )]);
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec!["https://blocked.example/".to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let pdf = converter
+            .vegalite_to_pdf(
+                vegalite_spec_with_image_url(&server.url("/image.svg")),
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    allowed_base_urls: Some(vec![server.origin()]),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(pdf.starts_with(b"%PDF"));
     }
 
     #[test]
@@ -2902,7 +4546,11 @@ try {
 
     #[tokio::test]
     async fn test_get_vegaembed_bundle_caches_result() {
-        let converter = VlConverter::with_num_workers(1).unwrap();
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 1,
+            ..Default::default()
+        })
+        .unwrap();
 
         let first = converter
             .get_vegaembed_bundle(VlVersion::v5_16)
@@ -2923,7 +4571,11 @@ try {
 
     #[tokio::test]
     async fn test_bundle_vega_snippet_custom_snippet() {
-        let converter = VlConverter::with_num_workers(1).unwrap();
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 1,
+            ..Default::default()
+        })
+        .unwrap();
         let snippet = "window.__vlcBundleMarker = 'ok';";
 
         let bundle = converter
@@ -3064,9 +4716,13 @@ try {
     }
 
     #[test]
-    fn test_warm_up_respawns_closed_pool_without_explicit_reset() {
+    fn test_get_or_spawn_sender_respawns_closed_pool_without_explicit_reset() {
         let num_workers = 2;
-        let converter = VlConverter::with_num_workers(num_workers).unwrap();
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers,
+            ..Default::default()
+        })
+        .unwrap();
 
         let mut closed_senders = Vec::with_capacity(num_workers);
         for _ in 0..num_workers {
@@ -3089,32 +4745,36 @@ try {
             *guard = Some(closed_pool);
         }
 
-        converter.warm_up().unwrap();
+        let _ = converter.get_or_spawn_sender().unwrap();
 
         let guard = converter.inner.pool.lock().unwrap();
         let pool = guard
             .as_ref()
-            .expect("warm_up should replace closed pool with a live pool");
+            .expect("get_or_spawn_sender should replace closed pool with a live pool");
         assert_eq!(pool.senders.len(), num_workers);
         assert!(!pool.is_closed(), "respawned pool should be open");
     }
 
     #[test]
-    fn test_warm_up_spawns_pool_without_request() {
-        let converter = VlConverter::with_num_workers(2).unwrap();
+    fn test_get_or_spawn_sender_spawns_pool_without_request() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 2,
+            ..Default::default()
+        })
+        .unwrap();
 
         {
             let guard = converter.inner.pool.lock().unwrap();
             assert!(guard.is_none(), "pool should start uninitialized");
         }
 
-        converter.warm_up().unwrap();
+        let _ = converter.get_or_spawn_sender().unwrap();
 
         {
             let guard = converter.inner.pool.lock().unwrap();
             let pool = guard
                 .as_ref()
-                .expect("pool should be initialized by warm_up");
+                .expect("pool should be initialized by get_or_spawn_sender");
             assert_eq!(pool.senders.len(), 2);
             assert!(!pool.is_closed(), "warmed pool should have open senders");
             assert_eq!(
@@ -3123,16 +4783,20 @@ try {
                     .map(|outstanding| outstanding.load(std::sync::atomic::Ordering::Relaxed))
                     .sum::<usize>(),
                 0,
-                "warm_up should not leave outstanding reservations"
+                "get_or_spawn_sender should not leave outstanding reservations"
             );
         }
     }
 
     #[tokio::test]
-    async fn test_warm_up_is_idempotent() {
-        let converter = VlConverter::with_num_workers(2).unwrap();
-        converter.warm_up().unwrap();
-        converter.warm_up().unwrap();
+    async fn test_get_or_spawn_sender_is_idempotent() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 2,
+            ..Default::default()
+        })
+        .unwrap();
+        let _ = converter.get_or_spawn_sender().unwrap();
+        let _ = converter.get_or_spawn_sender().unwrap();
 
         let vl_spec = serde_json::json!({
             "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
@@ -3158,7 +4822,11 @@ try {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_parallel_conversions_with_shared_converter() {
-        let converter = VlConverter::with_num_workers(4).unwrap();
+        let converter = VlConverter::with_config(VlConverterConfig {
+            num_workers: 4,
+            ..Default::default()
+        })
+        .unwrap();
         let vl_spec = serde_json::json!({
             "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
             "mark": "bar",

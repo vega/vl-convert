@@ -98,14 +98,14 @@ By default, `vl-convert-python` uses `1` converter worker. You can configure thi
 ```python
 import vl_convert as vlc
 
-vlc.get_num_workers()   # 1
-vlc.set_num_workers(4)  # enable parallel worker pool
-vlc.warm_up_workers()   # optional: pre-initialize workers before first conversion
+cfg = vlc.get_converter_config()
+print(cfg["num_workers"])  # 1
+
+vlc.configure_converter(num_workers=4)  # enable parallel worker pool
+vlc.warm_up_workers()  # optional: pre-initialize workers before first conversion
 ```
 
 This setting applies to subsequent conversions and enables parallel work across Python threads.
-Calling `warm_up_workers()` is optional and only needed if you want to avoid first-request
-worker startup latency.
 
 ## Asyncio API
 An async API with matching function names is available under `vl_convert.asyncio`.
@@ -124,7 +124,7 @@ vl_spec = {
 }
 
 async def main():
-    await vlca.set_num_workers(4)
+    await vlca.configure_converter(num_workers=4)
     await vlca.warm_up_workers()  # optional
 
     svg = await vlca.vegalite_to_svg(vl_spec, "v5_16")

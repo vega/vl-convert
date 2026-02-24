@@ -121,6 +121,8 @@ function unsupported(methodName) {
   throw new Error(`${methodName} is not supported by vl-convert canvas polyfill`);
 }
 
+const DEFAULT_ACCESS_DENIED_MARKER = "VLC_ACCESS_DENIED";
+
 function uint8ArrayToBase64(bytes) {
   const chunkSize = 0x8000;
   let binary = "";
@@ -169,6 +171,10 @@ class Image {
   #imageData = null;
   #rawBytes = null;  // Store raw bytes for SVG images
   #isSvg = false;
+  #requestId = 0;
+  #loadPromise = null;
+  #lastError = null;
+  #eventListeners = new Map();
 
   constructor(width, height) {
     if (width !== undefined) this.#width = width;
@@ -183,9 +189,35 @@ class Image {
   }
 
   set src(url) {
-    this.#src = url;
+    const nextSrc = String(url);
+    this.#src = nextSrc;
+    this.#requestId += 1;
+    const requestId = this.#requestId;
+
     this.#complete = false;
-    this.#loadImage(url);
+    this.#lastError = null;
+    this.#width = 0;
+    this.#height = 0;
+    this.#imageData = null;
+    this.#rawBytes = null;
+    this.#isSvg = false;
+
+    const loadPromise = this.#loadImage(nextSrc).then((result) => {
+      if (requestId !== this.#requestId) {
+        throw new Error("Image source changed during load");
+      }
+      if (result.ok) {
+        this.#applyLoadSuccess(result);
+        this.#emitEvent("load");
+        return;
+      }
+      this.#applyLoadFailure(result.error);
+      this.#emitEvent("error", result.error);
+      throw result.error;
+    });
+
+    this.#loadPromise = loadPromise;
+    this.#loadPromise.catch(() => {});
   }
 
   get width() {
@@ -231,54 +263,309 @@ class Image {
     return this.#imageData;
   }
 
-  async #loadImage(url) {
-    try {
-      // Fetch the image
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status}`);
-      }
+  addEventListener(type, listener) {
+    if (type !== "load" && type !== "error") {
+      return;
+    }
+    const isFunctionListener = typeof listener === "function";
+    const isObjectListener =
+      listener != null &&
+      typeof listener === "object" &&
+      typeof listener.handleEvent === "function";
+    if (!isFunctionListener && !isObjectListener) {
+      return;
+    }
+    if (!this.#eventListeners.has(type)) {
+      this.#eventListeners.set(type, new Set());
+    }
+    this.#eventListeners.get(type).add(listener);
+  }
 
-      // Get image data as ArrayBuffer
-      const arrayBuffer = await response.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
+  removeEventListener(type, listener) {
+    const listeners = this.#eventListeners.get(type);
+    if (!listeners) {
+      return;
+    }
+    listeners.delete(listener);
+  }
+
+  dispatchEvent(event) {
+    if (event == null || typeof event.type !== "string") {
+      throw new TypeError("Failed to execute 'dispatchEvent': invalid event");
+    }
+    const type = event.type;
+    if (type !== "load" && type !== "error") {
+      return !event.defaultPrevented;
+    }
+
+    if (type === "load") {
+      this.#callHandler(this.onload, event);
+    } else {
+      this.#callHandler(this.onerror, event);
+    }
+
+    const listeners = this.#eventListeners.get(type);
+    if (listeners) {
+      for (const listener of [...listeners]) {
+        this.#callListener(listener, event);
+      }
+    }
+
+    return !event.defaultPrevented;
+  }
+
+  decode() {
+    if (this.#loadPromise != null) {
+      return this.#loadPromise;
+    }
+    if (this.#lastError != null) {
+      return Promise.reject(this.#lastError);
+    }
+    if (this.#complete && (this.#imageData != null || this.#rawBytes != null)) {
+      return Promise.resolve();
+    }
+    return Promise.reject(new Error("Image is not loaded"));
+  }
+
+  #callHandler(handler, event) {
+    if (typeof handler !== "function") {
+      return;
+    }
+    try {
+      handler.call(this, event);
+    } catch (_err) {
+      // Match browser behavior: event-handler exceptions don't alter load state.
+    }
+  }
+
+  #callListener(listener, event) {
+    try {
+      if (typeof listener === "function") {
+        listener.call(this, event);
+      } else if (listener && typeof listener.handleEvent === "function") {
+        listener.handleEvent(event);
+      }
+    } catch (_err) {
+      // Match browser behavior: listener exceptions don't alter load state.
+    }
+  }
+
+  #createEvent(type, error) {
+    let event;
+    if (typeof Event === "function") {
+      event = new Event(type);
+    } else {
+      event = { type };
+    }
+    if (error != null) {
+      try {
+        event.error = error;
+      } catch (_err) {
+        // Ignore if event implementation is immutable.
+      }
+      try {
+        event.message = String(error?.message ?? error);
+      } catch (_err) {
+        // Ignore if event implementation is immutable.
+      }
+    }
+    return event;
+  }
+
+  #emitEvent(type, error = null) {
+    this.dispatchEvent(this.#createEvent(type, error));
+  }
+
+  #applyLoadSuccess(result) {
+    this.#width = result.width;
+    this.#height = result.height;
+    this.#isSvg = result.isSvg;
+    this.#rawBytes = result.rawBytes;
+    this.#imageData = result.imageData;
+    this.#lastError = null;
+    this.#complete = true;
+  }
+
+  #applyLoadFailure(error) {
+    this.#width = 0;
+    this.#height = 0;
+    this.#isSvg = false;
+    this.#rawBytes = null;
+    this.#imageData = null;
+    this.#lastError = error;
+    this.#complete = true;
+  }
+
+  async #loadImage(url) {
+    const accessDeniedMarker =
+      globalThis.__vlConvertAccessDeniedMarker ?? DEFAULT_ACCESS_DENIED_MARKER;
+    const accessErrors = globalThis.__vlConvertAccessErrors;
+    const recordAccessError = (message) => {
+      if (Array.isArray(accessErrors)) {
+        accessErrors.push(message);
+      }
+    };
+
+    try {
+      const allowHttpAccess = globalThis.__vlConvertAllowHttpAccess;
+      const allowedBaseUrls = globalThis.__vlConvertAllowedBaseUrls;
+
+      const denyAccess = (detail) => {
+        const message = `${accessDeniedMarker}: ${detail}`;
+        recordAccessError(message);
+        throw new Error(message);
+      };
+
+      const hasScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(url);
+      const isWindowsPath = /^[A-Za-z]:[\\/]/.test(url);
+      const isFileUrl = url.startsWith("file://");
+      const shouldReadLocalFile =
+        isFileUrl || isWindowsPath || (!hasScheme && !url.startsWith("//"));
+
+      let bytes;
+      if (shouldReadLocalFile) {
+        let filePath = url;
+        if (isFileUrl) {
+          const fileUrl = new URL(url);
+          if (fileUrl.protocol !== "file:") {
+            throw new Error(`Unsupported file URL protocol: ${fileUrl.protocol}`);
+          }
+          filePath = decodeURIComponent(fileUrl.pathname);
+          if (globalThis.Deno?.build?.os === "windows" && filePath.startsWith("/")) {
+            filePath = filePath.slice(1);
+          }
+        }
+        bytes = await Deno.readFile(filePath);
+      } else {
+        // Only enforce policy for HTTP(S). Other schemes (e.g. data:) are handled by fetch.
+        let normalizedUrl = null;
+        let isHttpUrl = false;
+        try {
+          const parsedUrl = new URL(url);
+          normalizedUrl = parsedUrl.href;
+          isHttpUrl = parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
+        } catch (_err) {
+          // Leave invalid/non-standard URL handling to fetch.
+        }
+
+        if (isHttpUrl) {
+          if (allowHttpAccess === false) {
+            denyAccess(`HTTP access denied by converter policy: ${url}`);
+          }
+          if (
+            allowedBaseUrls != null &&
+            !allowedBaseUrls.some((allowedUrl) => normalizedUrl.startsWith(allowedUrl))
+          ) {
+            denyAccess(`External data url not allowed: ${normalizedUrl}`);
+          }
+
+          const response = await (async () => {
+            try {
+              return await fetch(normalizedUrl, {
+                redirect: allowedBaseUrls != null ? "error" : "follow",
+              });
+            } catch (error) {
+              if (allowedBaseUrls != null) {
+                const message = String(error?.message ?? error).toLowerCase();
+                if (message.includes("redirect") || message.includes("location")) {
+                  denyAccess(
+                    `Redirected HTTP URLs are not allowed when allowed_base_urls is configured: ${normalizedUrl}`,
+                  );
+                }
+              }
+              throw error;
+            }
+          })();
+          let finalUrl = normalizedUrl;
+          try {
+            if (typeof response.url === "string" && response.url.length > 0) {
+              finalUrl = new URL(response.url).href;
+            }
+          } catch (_err) {
+            // Keep requested URL when final response URL is unavailable/invalid.
+          }
+          if (
+            allowedBaseUrls != null &&
+            (
+              response.type === "opaqueredirect" ||
+              response.redirected ||
+              finalUrl !== normalizedUrl
+            )
+          ) {
+            denyAccess(
+              `Redirected HTTP URLs are not allowed when allowed_base_urls is configured: ${normalizedUrl}`,
+            );
+          }
+          if (
+            allowedBaseUrls != null &&
+            !allowedBaseUrls.some((allowedUrl) => finalUrl.startsWith(allowedUrl))
+          ) {
+            denyAccess(`External data url not allowed: ${finalUrl}`);
+          }
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          bytes = new Uint8Array(arrayBuffer);
+        } else {
+          // Fetch remote/data URL images
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          bytes = new Uint8Array(arrayBuffer);
+        }
+      }
 
       // Get image info (checks if SVG and returns native dimensions)
       const info = op_canvas_get_image_info(bytes);
 
-      this.#width = info.width;
-      this.#height = info.height;
-      this.#isSvg = info.is_svg;
-
       if (info.is_svg) {
         // For SVG, store raw bytes - decode at drawImage time for proper scaling
-        this.#rawBytes = bytes;
-        this.#imageData = null;
-      } else {
-        // For raster images, decode immediately
-        const decoded = op_canvas_decode_image(bytes);
-        const pixelData = decoded.data instanceof Uint8Array
-          ? decoded.data
-          : new Uint8Array(decoded.data);
-        this.#imageData = {
+        return {
+          ok: true,
+          width: info.width,
+          height: info.height,
+          isSvg: true,
+          rawBytes: bytes,
+          imageData: null,
+        };
+      }
+
+      // For raster images, decode immediately
+      const decoded = op_canvas_decode_image(bytes);
+      const pixelData = decoded.data instanceof Uint8Array
+        ? decoded.data
+        : new Uint8Array(decoded.data);
+
+      return {
+        ok: true,
+        width: info.width,
+        height: info.height,
+        isSvg: false,
+        rawBytes: null,
+        imageData: {
           data: pixelData,
           width: decoded.width,
           height: decoded.height,
-        };
-        this.#rawBytes = null;
-      }
-
-      this.#complete = true;
-
-      // Call onload callback
-      if (this.onload) {
-        this.onload();
-      }
+        },
+      };
     } catch (error) {
-      this.#complete = false;
-      if (this.onerror) {
-        this.onerror(error);
+      const message = String(error?.message ?? error);
+      if (!message.includes(accessDeniedMarker)) {
+        const lower = message.toLowerCase();
+        if (
+          lower.includes("requires read access") ||
+          lower.includes("requires net access") ||
+          lower.includes("permission denied") ||
+          lower.includes("access denied")
+        ) {
+          recordAccessError(`${accessDeniedMarker}: ${message}`);
+        }
       }
+      return { ok: false, error };
     }
   }
 }

@@ -29,17 +29,18 @@ def public_callable_names(module):
 
 @pytest.fixture(autouse=True)
 def reset_worker_count():
-    original = vlc.get_num_workers()
-    vlc.set_num_workers(1)
+    original = vlc.get_converter_config()
+    vlc.configure_converter(num_workers=1)
     try:
         yield
     finally:
-        vlc.set_num_workers(original)
+        vlc.configure_converter(**original)
 
 
 def test_asyncio_namespace_import_and_expected_attributes():
     assert hasattr(vlca, "vegalite_to_svg")
     assert hasattr(vlca, "vega_to_scenegraph")
+    assert hasattr(vlca, "configure_converter")
     assert hasattr(vlca, "warm_up_workers")
 
 
@@ -76,7 +77,7 @@ def test_asyncio_smoke_and_sync_parity_shapes():
 
 def test_asyncio_parallel_gather_with_workers():
     async def scenario():
-        await vlca.set_num_workers(4)
+        await vlca.configure_converter(num_workers=4)
         await vlca.warm_up_workers()
 
         results = await asyncio.gather(
@@ -91,11 +92,36 @@ def test_asyncio_parallel_gather_with_workers():
 
 def test_asyncio_worker_lifecycle_calls():
     async def scenario():
-        await vlca.set_num_workers(3)
-        assert await vlca.get_num_workers() == 3
-        await vlca.warm_up_workers()
+        await vlca.configure_converter(num_workers=3)
+        config = await vlca.get_converter_config()
+        assert config["num_workers"] == 3
         svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16")
         assert svg.lstrip().startswith("<svg")
+
+    run(scenario())
+
+
+def test_asyncio_configure_converter_round_trip(tmp_path):
+    async def scenario():
+        root = tmp_path / "root"
+        root.mkdir()
+        await vlca.configure_converter(
+            num_workers=2,
+            allow_http_access=False,
+            filesystem_root=str(root),
+        )
+        config = await vlca.get_converter_config()
+        assert config["num_workers"] == 2
+        assert config["allow_http_access"] is False
+        assert config["filesystem_root"] == str(root.resolve())
+
+    run(scenario())
+
+
+def test_asyncio_configure_converter_rejects_empty_allowed_base_urls():
+    async def scenario():
+        with pytest.raises(ValueError):
+            await vlca.configure_converter(allowed_base_urls=[])
 
     run(scenario())
 
@@ -124,8 +150,7 @@ def test_asyncio_javascript_bundle_custom_snippet():
 
 def test_asyncio_cancellation_does_not_poison_followup_requests():
     async def scenario():
-        await vlca.set_num_workers(4)
-        await vlca.warm_up_workers()
+        await vlca.configure_converter(num_workers=4)
 
         task = asyncio.ensure_future(vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16"))
         assert task.cancel()
