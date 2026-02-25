@@ -1605,6 +1605,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2218,7 +2232,7 @@ version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09af756abf2663ff667f496cfd739481dea10f190b7fd75a7a9ab9bffd444bd7"
 dependencies = [
- "dashmap",
+ "dashmap 5.5.3",
 ]
 
 [[package]]
@@ -2559,7 +2573,7 @@ dependencies = [
  "boxed_error",
  "capacity_builder",
  "chrono",
- "dashmap",
+ "dashmap 5.5.3",
  "deno_cache_dir",
  "deno_config",
  "deno_error",
@@ -3689,6 +3703,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
+name = "font-subset"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e47922b9d737f16d425c10ec7b9b9751590cf8908270b5f9647bdad960b4b979"
+dependencies = [
+ "brotli 8.0.2",
+]
+
+[[package]]
 name = "font-types"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3781,6 +3804,17 @@ dependencies = [
  "libc",
  "rustc_version 0.2.3",
  "winapi",
+]
+
+[[package]]
+name = "fs4"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8640e34b88f7652208ce9e88b1a37a2ae95227d84abec377ccd3c5cfeb141ed4"
+dependencies = [
+ "rustix 1.1.3",
+ "tokio",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5771,7 +5805,7 @@ dependencies = [
  "async-trait",
  "boxed_error",
  "capacity_builder",
- "dashmap",
+ "dashmap 5.5.3",
  "deno_error",
  "deno_maybe_sync",
  "deno_media_type",
@@ -8596,7 +8630,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49b3eba5fd24fb4cf7b5092474711a40e47e4cff973b839a7c1c69c1557b272d"
 dependencies = [
  "bytes-str",
- "dashmap",
+ "dashmap 5.5.3",
  "indexmap 2.13.0",
  "once_cell",
  "par-core",
@@ -9783,6 +9817,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "vl-convert-fontsource"
+version = "2.0.0-rc1"
+dependencies = [
+ "backon",
+ "dashmap 6.1.0",
+ "dirs",
+ "filetime",
+ "fs4",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "vl-convert-python"
 version = "2.0.0-rc1"
 dependencies = [
@@ -9811,6 +9863,7 @@ dependencies = [
  "dssim",
  "env_logger",
  "escape8259",
+ "font-subset",
  "fontdb",
  "futures",
  "futures-util",
@@ -9836,6 +9889,7 @@ dependencies = [
  "usvg",
  "vl-convert-canvas2d",
  "vl-convert-canvas2d-deno",
+ "vl-convert-fontsource",
 ]
 
 [[package]]

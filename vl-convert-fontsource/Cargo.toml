@@ -1,0 +1,23 @@
+[package]
+name = "vl-convert-fontsource"
+version = "2.0.0-rc1"
+edition = "2021"
+description = "Fontsource font downloading and caching for vl-convert"
+license = "BSD-3-Clause"
+repository = "https://github.com/vega/vl-convert"
+
+[dependencies]
+backon = { workspace = true }
+dashmap = { workspace = true }
+dirs = { workspace = true }
+filetime = { workspace = true }
+fs4 = { workspace = true }
+log = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2"
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
