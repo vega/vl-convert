@@ -1209,19 +1209,13 @@ mod tests {
     fn test_parse_generic_case_insensitive() {
         // "Sans-Serif" (title-case) should be classified as Generic
         let entries = parse_css_font_family("Sans-Serif");
-        assert_eq!(
-            entries,
-            vec![FontFamilyEntry::Generic("Sans-Serif".into())]
-        );
+        assert_eq!(entries, vec![FontFamilyEntry::Generic("Sans-Serif".into())]);
     }
 
     #[test]
     fn test_parse_generic_uppercase() {
         let entries = parse_css_font_family("MONOSPACE");
-        assert_eq!(
-            entries,
-            vec![FontFamilyEntry::Generic("MONOSPACE".into())]
-        );
+        assert_eq!(entries, vec![FontFamilyEntry::Generic("MONOSPACE".into())]);
     }
 
     // -----------------------------------------------------------------------
