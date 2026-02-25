@@ -17,7 +17,11 @@ SIMPLE_VL_SPEC = {
 @pytest.fixture(autouse=True)
 def reset_worker_count():
     original = vlc.get_converter_config()
-    vlc.configure_converter(num_workers=1)
+    vlc.configure_converter(
+        num_workers=1,
+        auto_install_fonts=False,
+        missing_fonts="fallback",
+    )
     try:
         yield
     finally:
@@ -92,6 +96,8 @@ def test_configure_converter_round_trip(tmp_path):
         allow_http_access=False,
         filesystem_root=str(root),
         allowed_base_urls=None,
+        auto_install_fonts=True,
+        missing_fonts="error",
     )
 
     config = vlc.get_converter_config()
@@ -99,6 +105,8 @@ def test_configure_converter_round_trip(tmp_path):
     assert config["allow_http_access"] is False
     assert config["filesystem_root"] == str(root.resolve())
     assert config["allowed_base_urls"] is None
+    assert config["auto_install_fonts"] is True
+    assert config["missing_fonts"] == "error"
 
 
 def test_configure_converter_num_workers_preserves_access_policy(tmp_path):
@@ -125,6 +133,8 @@ def test_configure_converter_noop_when_called_without_args():
         allow_http_access=True,
         filesystem_root=None,
         allowed_base_urls=["https://example.com/"],
+        auto_install_fonts=True,
+        missing_fonts="fallback",
     )
     before = vlc.get_converter_config()
     vlc.configure_converter()

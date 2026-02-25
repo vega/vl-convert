@@ -13,7 +13,7 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    AutoInstallFonts, FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts,
+    FormatLocale, MissingFontsPolicy, Renderer, TimeFormatLocale, ValueOrString, VgOpts,
     VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
@@ -61,10 +61,11 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .as_ref()
             .map(|root| root.to_string_lossy().to_string()),
         "allowed_base_urls": config.allowed_base_urls,
-        "auto_install_fonts": match config.auto_install_fonts {
-            AutoInstallFonts::Off => "off",
-            AutoInstallFonts::Strict => "strict",
-            AutoInstallFonts::BestEffort => "best-effort",
+        "auto_install_fonts": config.auto_install_fonts,
+        "missing_fonts": match config.missing_fonts {
+            MissingFontsPolicy::Fallback => "fallback",
+            MissingFontsPolicy::Warn => "warn",
+            MissingFontsPolicy::Error => "error",
         },
     })
 }
@@ -78,7 +79,8 @@ struct ConverterConfigOverrides {
     // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
     font_cache_size_mb: Option<u64>,
-    auto_install_fonts: Option<AutoInstallFonts>,
+    auto_install_fonts: Option<bool>,
+    missing_fonts: Option<MissingFontsPolicy>,
 }
 
 fn parse_config_overrides(
@@ -148,18 +150,28 @@ fn parse_config_overrides(
             }
             "auto_install_fonts" => {
                 if !value.is_none() {
+                    overrides.auto_install_fonts =
+                        Some(value.extract::<bool>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid auto_install_fonts value for configure_converter: {err}"
+                            )
+                        })?);
+                }
+            }
+            "missing_fonts" => {
+                if !value.is_none() {
                     let s = value.extract::<String>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
-                            "Invalid auto_install_fonts value for configure_converter: {err}"
+                            "Invalid missing_fonts value for configure_converter: {err}"
                         )
                     })?;
-                    overrides.auto_install_fonts = Some(match s.as_str() {
-                        "off" => AutoInstallFonts::Off,
-                        "strict" => AutoInstallFonts::Strict,
-                        "best-effort" => AutoInstallFonts::BestEffort,
+                    overrides.missing_fonts = Some(match s.as_str() {
+                        "fallback" => MissingFontsPolicy::Fallback,
+                        "warn" => MissingFontsPolicy::Warn,
+                        "error" => MissingFontsPolicy::Error,
                         _ => {
                             return Err(vl_convert_rs::anyhow::anyhow!(
-                                "Invalid auto_install_fonts value: {s}. Expected 'off', 'strict', or 'best-effort'"
+                                "Invalid missing_fonts value: {s}. Expected 'fallback', 'warn', or 'error'"
                             ));
                         }
                     });
@@ -195,6 +207,9 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     }
     if let Some(auto_install) = overrides.auto_install_fonts {
         config.auto_install_fonts = auto_install;
+    }
+    if let Some(missing_fonts) = overrides.missing_fonts {
+        config.missing_fonts = missing_fonts;
     }
 }
 

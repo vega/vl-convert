@@ -8,24 +8,27 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use vl_convert_rs::converter::{
-    vega_to_url, vegalite_to_url, AutoInstallFonts, FormatLocale, Renderer, TimeFormatLocale,
+    vega_to_url, vegalite_to_url, FormatLocale, MissingFontsPolicy, Renderer, TimeFormatLocale,
     VgOpts, VlConverter, VlConverterConfig, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail, install_font};
 
-#[derive(Debug, Clone, clap::ValueEnum)]
-enum AutoInstallFontsArg {
-    Strict,
-    BestEffort,
+#[derive(Debug, Clone, Copy, clap::ValueEnum, Default)]
+enum MissingFontsArg {
+    #[default]
+    Fallback,
+    Warn,
+    Error,
 }
 
-impl AutoInstallFontsArg {
-    fn to_auto_install_fonts(&self) -> AutoInstallFonts {
+impl MissingFontsArg {
+    fn to_missing_fonts_policy(self) -> MissingFontsPolicy {
         match self {
-            AutoInstallFontsArg::Strict => AutoInstallFonts::Strict,
-            AutoInstallFontsArg::BestEffort => AutoInstallFonts::BestEffort,
+            MissingFontsArg::Fallback => MissingFontsPolicy::Fallback,
+            MissingFontsArg::Warn => MissingFontsPolicy::Warn,
+            MissingFontsArg::Error => MissingFontsPolicy::Error,
         }
     }
 }
@@ -54,10 +57,13 @@ struct Cli {
     #[arg(long, global = true)]
     install_font: Vec<String>,
 
-    /// Automatically download fonts referenced in specs from the Fontsource catalog.
-    /// "strict" errors if a font is unavailable; "best-effort" warns and continues.
-    #[arg(long, global = true, value_enum)]
-    auto_install_fonts: Option<AutoInstallFontsArg>,
+    /// Automatically download missing fonts from the Fontsource catalog.
+    #[arg(long, global = true)]
+    auto_install_fonts: bool,
+
+    /// Missing-font behavior: fallback silently, warn, or error.
+    #[arg(long, global = true, value_enum, default_value_t = MissingFontsArg::Fallback)]
+    missing_fonts: MissingFontsArg,
 
     #[command(subcommand)]
     command: Commands,
@@ -597,16 +603,14 @@ async fn main() -> Result<(), anyhow::Error> {
         no_http_access,
         filesystem_root,
         install_font: install_font_families,
-        auto_install_fonts: auto_install_fonts_arg,
+        auto_install_fonts,
+        missing_fonts: missing_fonts_arg,
         command,
     } = Cli::parse();
     if no_http_access {
         allow_http_access = false;
     }
-    let auto_install_fonts = auto_install_fonts_arg
-        .as_ref()
-        .map(|a| a.to_auto_install_fonts())
-        .unwrap_or(AutoInstallFonts::Off);
+    let missing_fonts = missing_fonts_arg.to_missing_fonts_policy();
     use crate::Commands::*;
     match command {
         Vl2vg {
@@ -630,6 +634,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                missing_fonts,
             )
             .await?
         }
@@ -660,6 +665,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                missing_fonts,
             )
             .await?
         }
@@ -694,6 +700,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                missing_fonts,
             )
             .await?
         }
@@ -728,6 +735,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                missing_fonts,
             )
             .await?
         }
@@ -758,6 +766,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                missing_fonts,
             )
             .await?
         }
@@ -831,6 +840,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                missing_fonts,
             )
             .await?
         }
@@ -857,6 +867,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                missing_fonts,
             )
             .await?
         }
@@ -883,6 +894,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                missing_fonts,
             )
             .await?
         }
@@ -905,6 +917,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                missing_fonts,
             )
             .await?
         }
@@ -963,8 +976,13 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             install_fonts(&install_font_families).await?;
             let svg = read_input_string(input.as_deref())?;
-            let converter =
-                build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url, auto_install_fonts)?;
+            let converter = build_converter(
+                allow_http_access,
+                filesystem_root.clone(),
+                allowed_base_url,
+                auto_install_fonts,
+                missing_fonts,
+            )?;
             let png_data = converter.svg_to_png(&svg, scale, Some(ppi))?;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
         }
@@ -979,8 +997,13 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             install_fonts(&install_font_families).await?;
             let svg = read_input_string(input.as_deref())?;
-            let converter =
-                build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url, auto_install_fonts)?;
+            let converter = build_converter(
+                allow_http_access,
+                filesystem_root.clone(),
+                allowed_base_url,
+                auto_install_fonts,
+                missing_fonts,
+            )?;
             let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality))?;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
         }
@@ -993,8 +1016,13 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             install_fonts(&install_font_families).await?;
             let svg = read_input_string(input.as_deref())?;
-            let converter =
-                build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url, auto_install_fonts)?;
+            let converter = build_converter(
+                allow_http_access,
+                filesystem_root.clone(),
+                allowed_base_url,
+                auto_install_fonts,
+                missing_fonts,
+            )?;
             let pdf_data = converter.svg_to_pdf(&svg)?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
         }
@@ -1028,13 +1056,15 @@ fn build_converter(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     allowed_base_urls: Option<Vec<String>>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<VlConverter, anyhow::Error> {
     let config = VlConverterConfig {
         allow_http_access,
         filesystem_root: filesystem_root.map(PathBuf::from),
         allowed_base_urls,
         auto_install_fonts,
+        missing_fonts,
         ..Default::default()
     };
 
@@ -1326,7 +1356,8 @@ async fn vl_2_vg(
     show_warnings: bool,
     allow_http_access: bool,
     filesystem_root: Option<String>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1341,7 +1372,13 @@ async fn vl_2_vg(
     let config = read_config_json(config)?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_install_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_install_fonts,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let vega_json = match converter
@@ -1390,7 +1427,8 @@ async fn vg_2_svg(
     time_format_locale: Option<String>,
     allow_http_access: bool,
     filesystem_root: Option<String>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1402,7 +1440,13 @@ async fn vg_2_svg(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_install_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_install_fonts,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let svg = match converter
@@ -1439,7 +1483,8 @@ async fn vg_2_png(
     time_format_locale: Option<String>,
     allow_http_access: bool,
     filesystem_root: Option<String>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1451,7 +1496,13 @@ async fn vg_2_png(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_install_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_install_fonts,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let png_data = match converter
@@ -1490,7 +1541,8 @@ async fn vg_2_jpeg(
     time_format_locale: Option<String>,
     allow_http_access: bool,
     filesystem_root: Option<String>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1502,7 +1554,13 @@ async fn vg_2_jpeg(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_install_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_install_fonts,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let jpeg_data = match converter
@@ -1538,7 +1596,8 @@ async fn vg_2_pdf(
     time_format_locale: Option<String>,
     allow_http_access: bool,
     filesystem_root: Option<String>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1550,7 +1609,13 @@ async fn vg_2_pdf(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_install_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_install_fonts,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let pdf_data = match converter
@@ -1589,7 +1654,8 @@ async fn vl_2_svg(
     time_format_locale: Option<String>,
     allow_http_access: bool,
     filesystem_root: Option<String>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1607,7 +1673,13 @@ async fn vl_2_svg(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_install_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_install_fonts,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let svg = match converter
@@ -1652,7 +1724,8 @@ async fn vl_2_png(
     time_format_locale: Option<String>,
     allow_http_access: bool,
     filesystem_root: Option<String>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1670,7 +1743,13 @@ async fn vl_2_png(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_install_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_install_fonts,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let png_data = match converter
@@ -1717,7 +1796,8 @@ async fn vl_2_jpeg(
     time_format_locale: Option<String>,
     allow_http_access: bool,
     filesystem_root: Option<String>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1735,7 +1815,13 @@ async fn vl_2_jpeg(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_install_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_install_fonts,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let jpeg_data = match converter
@@ -1780,7 +1866,8 @@ async fn vl_2_pdf(
     time_format_locale: Option<String>,
     allow_http_access: bool,
     filesystem_root: Option<String>,
-    auto_install_fonts: AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1798,7 +1885,13 @@ async fn vl_2_pdf(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_install_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_install_fonts,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let pdf_data = match converter

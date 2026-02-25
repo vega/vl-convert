@@ -133,7 +133,8 @@ if TYPE_CHECKING:
         allow_http_access: bool
         filesystem_root: str | None
         allowed_base_urls: list[str] | None
-        auto_install_fonts: Literal["off", "strict", "best-effort"]
+        auto_install_fonts: bool
+        missing_fonts: Literal["fallback", "warn", "error"]
 
 __all__ = [
     "asyncio",
@@ -294,7 +295,8 @@ def configure_converter(
     filesystem_root: str | None = None,
     allowed_base_urls: list[str] | None = None,
     font_cache_size_mb: int | None = None,
-    auto_install_fonts: Literal["off", "strict", "best-effort"] | None = None,
+    auto_install_fonts: bool | None = None,
+    missing_fonts: Literal["fallback", "warn", "error"] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -318,7 +320,9 @@ def configure_converter(
     font_cache_size_mb
         Maximum font cache size in megabytes. If ``None``, keep current value.
     auto_install_fonts
-        Automatic font downloading mode. One of ``"off"``, ``"strict"``, or ``"best-effort"``.
+        Whether missing fonts may be downloaded from Fontsource. If ``None``, keep current value.
+    missing_fonts
+        Missing-font policy: ``"fallback"``, ``"warn"``, or ``"error"``.
         If ``None``, keep current value.
     """
     ...
@@ -979,7 +983,8 @@ if TYPE_CHECKING:
             filesystem_root: str | None = None,
             allowed_base_urls: list[str] | None = None,
             font_cache_size_mb: int | None = None,
-            auto_install_fonts: Literal["off", "strict", "best-effort"] | None = None,
+            auto_install_fonts: bool | None = None,
+            missing_fonts: Literal["fallback", "warn", "error"] | None = None,
         ) -> None:
             """Async version of ``configure_converter``. See sync function for full documentation."""
             ...

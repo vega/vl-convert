@@ -191,6 +191,8 @@ def reset_converter_config():
         allow_http_access=True,
         filesystem_root=None,
         allowed_base_urls=None,
+        auto_install_fonts=False,
+        missing_fonts="fallback",
     )
     try:
         yield
@@ -200,6 +202,8 @@ def reset_converter_config():
             allow_http_access=True,
             filesystem_root=None,
             allowed_base_urls=None,
+            auto_install_fonts=False,
+            missing_fonts="fallback",
         )
 
 

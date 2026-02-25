@@ -447,19 +447,12 @@ impl ValueOrString {
     }
 }
 
-/// Controls automatic font downloading from the Fontsource catalog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum AutoInstallFonts {
-    /// Disabled (default).
+pub enum MissingFontsPolicy {
     #[default]
-    Off,
-    /// Only examines the first font in each CSS font-family string.
-    /// If it is not on the system and not in the Fontsource catalog,
-    /// the conversion fails with an error.
-    Strict,
-    /// Same first-font-only logic as `Strict`, but logs warnings for
-    /// unavailable fonts instead of failing.
-    BestEffort,
+    Fallback,
+    Warn,
+    Error,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -471,8 +464,10 @@ pub struct VlConverterConfig {
     /// values override this default when provided. Must be non-empty when set.
     /// When configured, HTTP redirects are denied instead of followed.
     pub allowed_base_urls: Option<Vec<String>>,
-    /// Controls automatic font downloading from the Fontsource catalog.
-    pub auto_install_fonts: AutoInstallFonts,
+    /// Whether to auto-download missing fonts from the Fontsource catalog.
+    pub auto_install_fonts: bool,
+    /// How to handle missing fonts: silently fallback, warn, or error.
+    pub missing_fonts: MissingFontsPolicy,
 }
 
 impl Default for VlConverterConfig {
@@ -482,7 +477,8 @@ impl Default for VlConverterConfig {
             allow_http_access: true,
             filesystem_root: None,
             allowed_base_urls: None,
-            auto_install_fonts: AutoInstallFonts::Off,
+            auto_install_fonts: false,
+            missing_fonts: MissingFontsPolicy::Fallback,
         }
     }
 }
@@ -2322,18 +2318,20 @@ impl VlConvertCommand {
 ///     println!("{}", vega_spec)
 /// ```
 ///
-/// Automatically download missing fonts referenced in a compiled Vega spec.
+/// Validate font availability and optionally auto-install missing fonts from
+/// the Fontsource catalog.
 ///
 /// This function extracts font-family strings from the spec, classifies the
-/// first font in each string, then downloads any that need it.
-///
-/// In `Strict` mode, returns an error listing any fonts that are neither on
-/// the system nor in the Fontsource catalog — before any downloads begin.
-/// In `BestEffort` mode, logs warnings for unavailable fonts and continues.
-async fn auto_download_fonts(
+/// first font in each string, and optionally downloads missing fonts.
+async fn preprocess_fonts(
     vega_spec: &serde_json::Value,
-    mode: &AutoInstallFonts,
+    auto_install_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
 ) -> Result<Vec<FontForHtml>, AnyError> {
+    if !auto_install_fonts && missing_fonts == MissingFontsPolicy::Fallback {
+        return Ok(Vec::new());
+    }
+
     let font_strings = extract_fonts_from_vega(vega_spec);
     if font_strings.is_empty() {
         return Ok(Vec::new());
@@ -2342,7 +2340,7 @@ async fn auto_download_fonts(
     // Get currently available font families from fontdb
     let available: HashSet<String> = USVG_OPTIONS
         .lock()
-        .map_err(|e| anyhow!("auto_install_fonts: failed to lock USVG_OPTIONS: {e}"))?
+        .map_err(|e| anyhow!("font_preprocessing: failed to lock USVG_OPTIONS: {e}"))?
         .fontdb
         .faces()
         .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
@@ -2350,32 +2348,32 @@ async fn auto_download_fonts(
 
     let font_string_vec: Vec<String> = font_strings.into_iter().collect();
 
-    // Check which first-fonts are known to Fontsource (only those not already available)
     let mut downloadable_set: HashSet<String> = HashSet::new();
-    let mut api_errors: Vec<(String, String)> = Vec::new();
-    for font_string in &font_string_vec {
-        let entries = crate::extract::parse_css_font_family(font_string);
-        if let Some(crate::extract::FontFamilyEntry::Named(ref name)) = entries.first() {
-            if !is_available(name, &available) {
-                if let Some(font_id) = family_to_id(name) {
-                    match FONTSOURCE_CACHE.is_known_font(&font_id).await {
-                        Ok(true) => {
-                            downloadable_set.insert(name.clone());
-                        }
-                        Ok(false) => {}
-                        Err(e) => {
-                            api_errors.push((name.clone(), e.to_string()));
+    if auto_install_fonts {
+        // Check which first-fonts are known to Fontsource (only those not already available)
+        let mut api_errors: Vec<(String, String)> = Vec::new();
+        for font_string in &font_string_vec {
+            let entries = crate::extract::parse_css_font_family(font_string);
+            if let Some(crate::extract::FontFamilyEntry::Named(ref name)) = entries.first() {
+                if !is_available(name, &available) {
+                    if let Some(font_id) = family_to_id(name) {
+                        match FONTSOURCE_CACHE.is_known_font(&font_id).await {
+                            Ok(true) => {
+                                downloadable_set.insert(name.clone());
+                            }
+                            Ok(false) => {}
+                            Err(e) => {
+                                api_errors.push((name.clone(), e.to_string()));
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    // Report API errors (network issues) distinctly from "not in catalog"
-    if !api_errors.is_empty() {
-        match mode {
-            AutoInstallFonts::Strict => {
+        // Report API errors (network issues) distinctly from "not in catalog"
+        if !api_errors.is_empty() {
+            if missing_fonts == MissingFontsPolicy::Error {
                 let details: Vec<String> = api_errors
                     .iter()
                     .map(|(name, err)| format!("'{name}': {err}"))
@@ -2385,8 +2383,7 @@ async fn auto_download_fonts(
                      the following fonts: {}",
                     details.join(", ")
                 ));
-            }
-            _ => {
+            } else if missing_fonts == MissingFontsPolicy::Warn {
                 for (name, err) in &api_errors {
                     log::warn!(
                         "auto_install_fonts: could not reach Fontsource API for '{name}': {err}"
@@ -2398,7 +2395,7 @@ async fn auto_download_fonts(
 
     // Classify each font string by its first entry
     let statuses = resolve_first_fonts(&font_string_vec, &available, |family| {
-        downloadable_set.contains(family)
+        auto_install_fonts && downloadable_set.contains(family)
     });
 
     // Collect unavailable fonts — report before any downloads
@@ -2411,34 +2408,47 @@ async fn auto_download_fonts(
         .collect();
 
     if !unavailable.is_empty() {
-        match mode {
-            AutoInstallFonts::Strict => {
-                let details: Vec<String> = unavailable
-                    .iter()
-                    .map(|(name, css)| {
-                        if *name == *css {
-                            format!("'{name}'")
-                        } else {
-                            format!("'{name}' (from \"{css}\")")
-                        }
-                    })
-                    .collect();
+        let details: Vec<String> = unavailable
+            .iter()
+            .map(|(name, css)| {
+                if *name == *css {
+                    format!("'{name}'")
+                } else {
+                    format!("'{name}' (from \"{css}\")")
+                }
+            })
+            .collect();
+        if missing_fonts == MissingFontsPolicy::Error {
+            if auto_install_fonts {
                 return Err(anyhow!(
                     "auto_install_fonts: the following fonts are not available on the system \
                      and not found in the Fontsource catalog: {}",
                     details.join(", ")
                 ));
+            } else {
+                return Err(anyhow!(
+                    "missing_fonts=error: the following fonts are not available on the system: {}. \
+                     Install them with install_font() or enable auto_install_fonts.",
+                    details.join(", ")
+                ));
             }
-            AutoInstallFonts::BestEffort => {
-                for (name, _css) in &unavailable {
+        }
+        if missing_fonts == MissingFontsPolicy::Warn {
+            for (name, _css) in &unavailable {
+                if auto_install_fonts {
                     log::warn!(
                         "auto_install_fonts: font '{name}' is not available on the system \
                          and not found in the Fontsource catalog, skipping"
                     );
+                } else {
+                    log::warn!("missing_fonts=warn: font '{name}' is not available on the system");
                 }
             }
-            AutoInstallFonts::Off => return Ok(vec![]),
         }
+    }
+
+    if !auto_install_fonts {
+        return Ok(Vec::new());
     }
 
     // Download and register fonts that need it
@@ -2457,16 +2467,15 @@ async fn auto_download_fonts(
                         font_type: outcome.font_type.unwrap_or_else(|| "google".to_string()),
                     });
                 }
-                Err(e) => match mode {
-                    AutoInstallFonts::Strict => {
+                Err(e) => {
+                    if missing_fonts == MissingFontsPolicy::Error {
                         return Err(anyhow!(
                             "auto_install_fonts: failed to download '{name}': {e}"
                         ));
-                    }
-                    _ => {
+                    } else if missing_fonts == MissingFontsPolicy::Warn {
                         log::warn!("auto_install_fonts: failed to install '{name}': {e}");
                     }
-                },
+                }
             }
         }
     }
@@ -2641,16 +2650,21 @@ impl VlConverter {
         .await
     }
 
-    /// If `auto_install_fonts` is enabled, compile VL→Vega and download any missing fonts.
+    fn should_preprocess_fonts(&self) -> bool {
+        self.inner.config.auto_install_fonts
+            || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
+    }
+
+    /// If font preprocessing is enabled, compile VL→Vega and process referenced fonts.
     ///
     /// Returns `Some((vega_spec, vg_opts))` with the compiled Vega spec and options
-    /// for the caller to render directly, or `None` if auto-install is disabled.
-    async fn maybe_compile_vl_with_auto_fonts(
+    /// for the caller to render directly, or `None` when both font options are disabled.
+    async fn maybe_compile_vl_with_preprocessed_fonts(
         &self,
         vl_spec: &ValueOrString,
         vl_opts: &VlOpts,
     ) -> Result<Option<(serde_json::Value, VgOpts)>, AnyError> {
-        if self.inner.config.auto_install_fonts == AutoInstallFonts::Off {
+        if !self.should_preprocess_fonts() {
             return Ok(None);
         }
         let vg_opts = VgOpts {
@@ -2658,26 +2672,38 @@ impl VlConverter {
             format_locale: vl_opts.format_locale.clone(),
             time_format_locale: vl_opts.time_format_locale.clone(),
         };
-        let vega_spec = self.vegalite_to_vega(vl_spec.clone(), vl_opts.clone()).await?;
+        let vega_spec = self
+            .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
+            .await?;
         // Return value (Vec<FontForHtml>) will be consumed in PR #247 (HTML font embedding)
-        let _ = auto_download_fonts(&vega_spec, &self.inner.config.auto_install_fonts).await?;
+        let _ = preprocess_fonts(
+            &vega_spec,
+            self.inner.config.auto_install_fonts,
+            self.inner.config.missing_fonts,
+        )
+        .await?;
         Ok(Some((vega_spec, vg_opts)))
     }
 
-    /// If `auto_install_fonts` is enabled, parse the Vega spec and download any missing fonts.
+    /// If font preprocessing is enabled, parse the Vega spec and process missing fonts.
     ///
     /// Note: font downloads are governed solely by `auto_install_fonts`, independently
     /// of `allow_http_access`. The two settings control different concerns:
     /// `allow_http_access` governs data-fetching URLs in specs, while `auto_install_fonts`
     /// governs on-demand font installation from Fontsource.
-    async fn maybe_auto_download_vega(&self, spec: &ValueOrString) -> Result<(), AnyError> {
-        if self.inner.config.auto_install_fonts != AutoInstallFonts::Off {
+    async fn maybe_preprocess_vega_fonts(&self, spec: &ValueOrString) -> Result<(), AnyError> {
+        if self.should_preprocess_fonts() {
             let spec_value: serde_json::Value = match spec {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
                 ValueOrString::Value(v) => v.clone(),
             };
             // Return value (Vec<FontForHtml>) will be consumed in PR #247 (HTML font embedding)
-            let _ = auto_download_fonts(&spec_value, &self.inner.config.auto_install_fonts).await?;
+            let _ = preprocess_fonts(
+                &spec_value,
+                self.inner.config.auto_install_fonts,
+                self.inner.config.missing_fonts,
+            )
+            .await?;
         }
         Ok(())
     }
@@ -2690,7 +2716,7 @@ impl VlConverter {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
-        self.maybe_auto_download_vega(&vg_spec).await?;
+        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
 
         self.request(
             move |responder| VlConvertCommand::VgToSvg {
@@ -2711,7 +2737,7 @@ impl VlConverter {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
-        self.maybe_auto_download_vega(&vg_spec).await?;
+        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         self.request(
             move |responder| VlConvertCommand::VgToSg {
                 vg_spec,
@@ -2731,7 +2757,7 @@ impl VlConverter {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
-        self.maybe_auto_download_vega(&vg_spec).await?;
+        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         self.request(
             move |responder| VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
@@ -2753,7 +2779,7 @@ impl VlConverter {
         let vl_spec = vl_spec.into();
 
         if let Some((vega_spec, vg_opts)) = self
-            .maybe_compile_vl_with_auto_fonts(&vl_spec, &vl_opts)
+            .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
@@ -2789,7 +2815,7 @@ impl VlConverter {
         let vl_spec = vl_spec.into();
 
         if let Some((vega_spec, vg_opts)) = self
-            .maybe_compile_vl_with_auto_fonts(&vl_spec, &vl_opts)
+            .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
@@ -2825,7 +2851,7 @@ impl VlConverter {
         let vl_spec = vl_spec.into();
 
         if let Some((vega_spec, vg_opts)) = self
-            .maybe_compile_vl_with_auto_fonts(&vl_spec, &vl_opts)
+            .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
@@ -2865,7 +2891,7 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
         let vg_spec = vg_spec.into();
 
-        self.maybe_auto_download_vega(&vg_spec).await?;
+        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
 
         self.request(
             move |responder| VlConvertCommand::VgToPng {
@@ -2895,7 +2921,7 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
 
         if let Some((vega_spec, vg_opts)) = self
-            .maybe_compile_vl_with_auto_fonts(&vl_spec, &vl_opts)
+            .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();

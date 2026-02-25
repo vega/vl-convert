@@ -30,7 +30,11 @@ def public_callable_names(module):
 @pytest.fixture(autouse=True)
 def reset_worker_count():
     original = vlc.get_converter_config()
-    vlc.configure_converter(num_workers=1)
+    vlc.configure_converter(
+        num_workers=1,
+        auto_install_fonts=False,
+        missing_fonts="fallback",
+    )
     try:
         yield
     finally:
@@ -109,11 +113,15 @@ def test_asyncio_configure_converter_round_trip(tmp_path):
             num_workers=2,
             allow_http_access=False,
             filesystem_root=str(root),
+            auto_install_fonts=True,
+            missing_fonts="error",
         )
         config = await vlca.get_converter_config()
         assert config["num_workers"] == 2
         assert config["allow_http_access"] is False
         assert config["filesystem_root"] == str(root.resolve())
+        assert config["auto_install_fonts"] is True
+        assert config["missing_fonts"] == "error"
 
     run(scenario())
 
