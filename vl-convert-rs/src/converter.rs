@@ -42,7 +42,9 @@ use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::extract::{extract_fonts_from_vega, resolve_first_fonts, FirstFontStatus, FontForHtml};
+use crate::extract::{
+    extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus, FontForHtml,
+};
 use crate::text::{
     fetch_and_register_font, FONTSOURCE_CACHE, FONT_CONFIG, FONT_CONFIG_VERSION, USVG_OPTIONS,
 };
@@ -2319,6 +2321,7 @@ impl VlConvertCommand {
 ///
 ///     println!("{}", vega_spec)
 /// ```
+///
 /// Automatically download missing fonts referenced in a compiled Vega spec.
 ///
 /// This function extracts font-family strings from the spec, classifies the
@@ -2349,10 +2352,11 @@ async fn auto_download_fonts(
 
     // Check which first-fonts are known to Fontsource (only those not already available)
     let mut downloadable_set: HashSet<String> = HashSet::new();
+    let mut api_errors: Vec<(String, String)> = Vec::new();
     for font_string in &font_string_vec {
         let entries = crate::extract::parse_css_font_family(font_string);
         if let Some(crate::extract::FontFamilyEntry::Named(ref name)) = entries.first() {
-            if !is_available_in_fontdb(name, &available) {
+            if !is_available(name, &available) {
                 if let Some(font_id) = family_to_id(name) {
                     match FONTSOURCE_CACHE.is_known_font(&font_id).await {
                         Ok(true) => {
@@ -2360,12 +2364,33 @@ async fn auto_download_fonts(
                         }
                         Ok(false) => {}
                         Err(e) => {
-                            log::warn!(
-                                "auto_install_fonts: failed to check if '{}' is known: {e}",
-                                name
-                            );
+                            api_errors.push((name.clone(), e.to_string()));
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // Report API errors (network issues) distinctly from "not in catalog"
+    if !api_errors.is_empty() {
+        match mode {
+            AutoInstallFonts::Strict => {
+                let details: Vec<String> = api_errors
+                    .iter()
+                    .map(|(name, err)| format!("'{name}': {err}"))
+                    .collect();
+                return Err(anyhow!(
+                    "auto_install_fonts: could not reach the Fontsource API to check \
+                     the following fonts: {}",
+                    details.join(", ")
+                ));
+            }
+            _ => {
+                for (name, err) in &api_errors {
+                    log::warn!(
+                        "auto_install_fonts: could not reach Fontsource API for '{name}': {err}"
+                    );
                 }
             }
         }
@@ -2412,7 +2437,7 @@ async fn auto_download_fonts(
                     );
                 }
             }
-            AutoInstallFonts::Off => unreachable!(),
+            AutoInstallFonts::Off => return Ok(vec![]),
         }
     }
 
@@ -2432,9 +2457,16 @@ async fn auto_download_fonts(
                         font_type: outcome.font_type.unwrap_or_else(|| "google".to_string()),
                     });
                 }
-                Err(e) => {
-                    log::warn!("auto_install_fonts: failed to install '{name}': {e}");
-                }
+                Err(e) => match mode {
+                    AutoInstallFonts::Strict => {
+                        return Err(anyhow!(
+                            "auto_install_fonts: failed to download '{name}': {e}"
+                        ));
+                    }
+                    _ => {
+                        log::warn!("auto_install_fonts: failed to install '{name}': {e}");
+                    }
+                },
             }
         }
     }
@@ -2451,15 +2483,6 @@ async fn auto_download_fonts(
     html_fonts.sort_by(|a, b| a.family.cmp(&b.family));
 
     Ok(html_fonts)
-}
-
-/// Case-insensitive check if a font name is available in fontdb.
-fn is_available_in_fontdb(name: &str, available: &HashSet<String>) -> bool {
-    if available.contains(name) {
-        return true;
-    }
-    let lower = name.to_lowercase();
-    available.iter().any(|a| a.to_lowercase() == lower)
 }
 
 struct VlConverterInner {
@@ -2620,34 +2643,40 @@ impl VlConverter {
 
     /// If `auto_install_fonts` is enabled, compile VL→Vega and download any missing fonts.
     ///
-    /// Returns `Ok((vega_spec, vg_opts))` with the compiled Vega spec and options
-    /// for the caller to render directly, or `Err(vl_spec)` returning the original
-    /// spec if auto-install is disabled.
+    /// Returns `Some((vega_spec, vg_opts))` with the compiled Vega spec and options
+    /// for the caller to render directly, or `None` if auto-install is disabled.
     async fn maybe_compile_vl_with_auto_fonts(
         &self,
-        vl_spec: ValueOrString,
+        vl_spec: &ValueOrString,
         vl_opts: &VlOpts,
-    ) -> Result<Result<(serde_json::Value, VgOpts), ValueOrString>, AnyError> {
+    ) -> Result<Option<(serde_json::Value, VgOpts)>, AnyError> {
         if self.inner.config.auto_install_fonts == AutoInstallFonts::Off {
-            return Ok(Err(vl_spec));
+            return Ok(None);
         }
         let vg_opts = VgOpts {
             allowed_base_urls: vl_opts.allowed_base_urls.clone(),
             format_locale: vl_opts.format_locale.clone(),
             time_format_locale: vl_opts.time_format_locale.clone(),
         };
-        let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?;
+        let vega_spec = self.vegalite_to_vega(vl_spec.clone(), vl_opts.clone()).await?;
+        // Return value (Vec<FontForHtml>) will be consumed in PR #247 (HTML font embedding)
         let _ = auto_download_fonts(&vega_spec, &self.inner.config.auto_install_fonts).await?;
-        Ok(Ok((vega_spec, vg_opts)))
+        Ok(Some((vega_spec, vg_opts)))
     }
 
     /// If `auto_install_fonts` is enabled, parse the Vega spec and download any missing fonts.
+    ///
+    /// Note: font downloads are governed solely by `auto_install_fonts`, independently
+    /// of `allow_http_access`. The two settings control different concerns:
+    /// `allow_http_access` governs data-fetching URLs in specs, while `auto_install_fonts`
+    /// governs on-demand font installation from Fontsource.
     async fn maybe_auto_download_vega(&self, spec: &ValueOrString) -> Result<(), AnyError> {
         if self.inner.config.auto_install_fonts != AutoInstallFonts::Off {
             let spec_value: serde_json::Value = match spec {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
                 ValueOrString::Value(v) => v.clone(),
             };
+            // Return value (Vec<FontForHtml>) will be consumed in PR #247 (HTML font embedding)
             let _ = auto_download_fonts(&spec_value, &self.inner.config.auto_install_fonts).await?;
         }
         Ok(())
@@ -2682,6 +2711,7 @@ impl VlConverter {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
+        self.maybe_auto_download_vega(&vg_spec).await?;
         self.request(
             move |responder| VlConvertCommand::VgToSg {
                 vg_spec,
@@ -2701,6 +2731,7 @@ impl VlConverter {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
+        self.maybe_auto_download_vega(&vg_spec).await?;
         self.request(
             move |responder| VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
@@ -2721,33 +2752,30 @@ impl VlConverter {
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
-        match self
-            .maybe_compile_vl_with_auto_fonts(vl_spec, &vl_opts)
+        if let Some((vega_spec, vg_opts)) = self
+            .maybe_compile_vl_with_auto_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            Ok((vega_spec, vg_opts)) => {
-                let vg_spec: ValueOrString = vega_spec.into();
-                self.request(
-                    move |responder| VlConvertCommand::VgToSvg {
-                        vg_spec,
-                        vg_opts,
-                        responder,
-                    },
-                    "Vega to SVG conversion",
-                )
-                .await
-            }
-            Err(vl_spec) => {
-                self.request(
-                    move |responder| VlConvertCommand::VlToSvg {
-                        vl_spec,
-                        vl_opts,
-                        responder,
-                    },
-                    "Vega-Lite to SVG conversion",
-                )
-                .await
-            }
+            let vg_spec: ValueOrString = vega_spec.into();
+            self.request(
+                move |responder| VlConvertCommand::VgToSvg {
+                    vg_spec,
+                    vg_opts,
+                    responder,
+                },
+                "Vega to SVG conversion",
+            )
+            .await
+        } else {
+            self.request(
+                move |responder| VlConvertCommand::VlToSvg {
+                    vl_spec,
+                    vl_opts,
+                    responder,
+                },
+                "Vega-Lite to SVG conversion",
+            )
+            .await
         }
     }
 
@@ -2759,15 +2787,32 @@ impl VlConverter {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
-        self.request(
-            move |responder| VlConvertCommand::VlToSg {
-                vl_spec,
-                vl_opts,
-                responder,
-            },
-            "Vega-Lite to Scenegraph conversion",
-        )
-        .await
+
+        if let Some((vega_spec, vg_opts)) = self
+            .maybe_compile_vl_with_auto_fonts(&vl_spec, &vl_opts)
+            .await?
+        {
+            let vg_spec: ValueOrString = vega_spec.into();
+            self.request(
+                move |responder| VlConvertCommand::VgToSg {
+                    vg_spec,
+                    vg_opts,
+                    responder,
+                },
+                "Vega to Scenegraph conversion",
+            )
+            .await
+        } else {
+            self.request(
+                move |responder| VlConvertCommand::VlToSg {
+                    vl_spec,
+                    vl_opts,
+                    responder,
+                },
+                "Vega-Lite to Scenegraph conversion",
+            )
+            .await
+        }
     }
 
     pub async fn vegalite_to_scenegraph_msgpack(
@@ -2778,15 +2823,32 @@ impl VlConverter {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
-        self.request(
-            move |responder| VlConvertCommand::VlToSgMsgpack {
-                vl_spec,
-                vl_opts,
-                responder,
-            },
-            "Vega-Lite to Scenegraph conversion",
-        )
-        .await
+
+        if let Some((vega_spec, vg_opts)) = self
+            .maybe_compile_vl_with_auto_fonts(&vl_spec, &vl_opts)
+            .await?
+        {
+            let vg_spec: ValueOrString = vega_spec.into();
+            self.request(
+                move |responder| VlConvertCommand::VgToSgMsgpack {
+                    vg_spec,
+                    vg_opts,
+                    responder,
+                },
+                "Vega to Scenegraph conversion",
+            )
+            .await
+        } else {
+            self.request(
+                move |responder| VlConvertCommand::VlToSgMsgpack {
+                    vl_spec,
+                    vl_opts,
+                    responder,
+                },
+                "Vega-Lite to Scenegraph conversion",
+            )
+            .await
+        }
     }
 
     pub async fn vega_to_png(
@@ -2832,37 +2894,34 @@ impl VlConverter {
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
 
-        match self
-            .maybe_compile_vl_with_auto_fonts(vl_spec, &vl_opts)
+        if let Some((vega_spec, vg_opts)) = self
+            .maybe_compile_vl_with_auto_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            Ok((vega_spec, vg_opts)) => {
-                let vg_spec: ValueOrString = vega_spec.into();
-                self.request(
-                    move |responder| VlConvertCommand::VgToPng {
-                        vg_spec,
-                        vg_opts,
-                        scale: effective_scale,
-                        ppi,
-                        responder,
-                    },
-                    "Vega to PNG conversion",
-                )
-                .await
-            }
-            Err(vl_spec) => {
-                self.request(
-                    move |responder| VlConvertCommand::VlToPng {
-                        vl_spec,
-                        vl_opts,
-                        scale: effective_scale,
-                        ppi,
-                        responder,
-                    },
-                    "Vega-Lite to PNG conversion",
-                )
-                .await
-            }
+            let vg_spec: ValueOrString = vega_spec.into();
+            self.request(
+                move |responder| VlConvertCommand::VgToPng {
+                    vg_spec,
+                    vg_opts,
+                    scale: effective_scale,
+                    ppi,
+                    responder,
+                },
+                "Vega to PNG conversion",
+            )
+            .await
+        } else {
+            self.request(
+                move |responder| VlConvertCommand::VlToPng {
+                    vl_spec,
+                    vl_opts,
+                    scale: effective_scale,
+                    ppi,
+                    responder,
+                },
+                "Vega-Lite to PNG conversion",
+            )
+            .await
         }
     }
 

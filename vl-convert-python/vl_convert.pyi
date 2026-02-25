@@ -133,7 +133,7 @@ if TYPE_CHECKING:
         allow_http_access: bool
         filesystem_root: str | None
         allowed_base_urls: list[str] | None
-        auto_install_fonts: str
+        auto_install_fonts: Literal["off", "strict", "best-effort"]
 
 __all__ = [
     "asyncio",
@@ -294,7 +294,7 @@ def configure_converter(
     filesystem_root: str | None = None,
     allowed_base_urls: list[str] | None = None,
     font_cache_size_mb: int | None = None,
-    auto_install_fonts: str | None = None,
+    auto_install_fonts: Literal["off", "strict", "best-effort"] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -979,7 +979,7 @@ if TYPE_CHECKING:
             filesystem_root: str | None = None,
             allowed_base_urls: list[str] | None = None,
             font_cache_size_mb: int | None = None,
-            auto_install_fonts: str | None = None,
+            auto_install_fonts: Literal["off", "strict", "best-effort"] | None = None,
         ) -> None:
             """Async version of ``configure_converter``. See sync function for full documentation."""
             ...

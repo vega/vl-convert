@@ -77,7 +77,8 @@ pub fn parse_css_font_family(s: &str) -> Vec<FontFamilyEntry> {
                 return None;
             }
 
-            if GENERIC_FAMILIES.contains(&unquoted) {
+            let lower = unquoted.to_lowercase();
+            if GENERIC_FAMILIES.iter().any(|g| g.to_lowercase() == lower) {
                 Some(FontFamilyEntry::Generic(unquoted.to_string()))
             } else {
                 Some(FontFamilyEntry::Named(unquoted.to_string()))
@@ -162,6 +163,10 @@ const AXIS_CONFIG_KEYS: &[&str] = &[
     "axisLeft",
     "axisRight",
     "axisBand",
+    "axisDiscrete",
+    "axisPoint",
+    "axisQuantitative",
+    "axisTemporal",
 ];
 
 /// Vega mark types whose config can carry a `font` property.
@@ -193,6 +198,22 @@ fn extract_config_fonts(config: &Value, fonts: &mut HashSet<String>) {
     for &key in MARK_TYPE_KEYS {
         if let Some(mark_cfg) = config.get(key) {
             collect_if_string(mark_cfg, "font", fonts);
+        }
+    }
+
+    // Top-level default font
+    collect_if_string(config, "font", fonts);
+
+    // Mark default: config.mark.font
+    if let Some(mark) = config.get("mark") {
+        collect_if_string(mark, "font", fonts);
+    }
+
+    // Header variants
+    for &key in &["header", "headerColumn", "headerRow", "headerFacet"] {
+        if let Some(header) = config.get(key) {
+            collect_if_string(header, "labelFont", fonts);
+            collect_if_string(header, "titleFont", fonts);
         }
     }
 
@@ -261,25 +282,23 @@ fn extract_axes_fonts(axes: &Value, fonts: &mut HashSet<String>) {
         collect_if_string(axis, "labelFont", fonts);
         collect_if_string(axis, "titleFont", fonts);
 
-        // Encode paths: encode.labels.update.font.value, encode.title.update.font.value
+        // Encode paths: encode.{labels,title}.{state}.font.value
         if let Some(encode) = axis.get("encode") {
-            if let Some(font_val) = encode
-                .get("labels")
-                .and_then(|l| l.get("update"))
-                .and_then(|u| u.get("font"))
-                .and_then(|f| f.get("value"))
-                .and_then(Value::as_str)
-            {
-                fonts.insert(font_val.to_string());
-            }
-            if let Some(font_val) = encode
-                .get("title")
-                .and_then(|t| t.get("update"))
-                .and_then(|u| u.get("font"))
-                .and_then(|f| f.get("value"))
-                .and_then(Value::as_str)
-            {
-                fonts.insert(font_val.to_string());
+            for &part in &["labels", "title"] {
+                if let Some(part_obj) = encode.get(part) {
+                    for &state in &[
+                        "enter", "update", "hover", "exit", "leave", "select", "release",
+                    ] {
+                        if let Some(font_val) = part_obj
+                            .get(state)
+                            .and_then(|s| s.get("font"))
+                            .and_then(|f| f.get("value"))
+                            .and_then(Value::as_str)
+                        {
+                            fonts.insert(font_val.to_string());
+                        }
+                    }
+                }
             }
         }
     }
@@ -298,17 +317,22 @@ fn extract_legends_fonts(legends: &Value, fonts: &mut HashSet<String>) {
         collect_if_string(legend, "labelFont", fonts);
         collect_if_string(legend, "titleFont", fonts);
 
-        // Encode paths: encode.labels.update.font.value, encode.title.update.font.value
+        // Encode paths: encode.{labels,title}.{state}.font.value
         if let Some(encode) = legend.get("encode") {
             for &part in &["labels", "title"] {
-                if let Some(font_val) = encode
-                    .get(part)
-                    .and_then(|l| l.get("update"))
-                    .and_then(|u| u.get("font"))
-                    .and_then(|f| f.get("value"))
-                    .and_then(Value::as_str)
-                {
-                    fonts.insert(font_val.to_string());
+                if let Some(part_obj) = encode.get(part) {
+                    for &state in &[
+                        "enter", "update", "hover", "exit", "leave", "select", "release",
+                    ] {
+                        if let Some(font_val) = part_obj
+                            .get(state)
+                            .and_then(|s| s.get("font"))
+                            .and_then(|f| f.get("value"))
+                            .and_then(Value::as_str)
+                        {
+                            fonts.insert(font_val.to_string());
+                        }
+                    }
                 }
             }
         }
@@ -325,17 +349,22 @@ fn extract_title_fonts(title: &Value, fonts: &mut HashSet<String>) {
     collect_if_string(title, "font", fonts);
     collect_if_string(title, "subtitleFont", fonts);
 
-    // Encode paths: encode.title.update.font.value, encode.subtitle.update.font.value
+    // Encode paths: encode.{title,subtitle}.{state}.font.value
     if let Some(encode) = title.get("encode") {
         for &part in &["title", "subtitle"] {
-            if let Some(font_val) = encode
-                .get(part)
-                .and_then(|l| l.get("update"))
-                .and_then(|u| u.get("font"))
-                .and_then(|f| f.get("value"))
-                .and_then(Value::as_str)
-            {
-                fonts.insert(font_val.to_string());
+            if let Some(part_obj) = encode.get(part) {
+                for &state in &[
+                    "enter", "update", "hover", "exit", "leave", "select", "release",
+                ] {
+                    if let Some(font_val) = part_obj
+                        .get(state)
+                        .and_then(|s| s.get("font"))
+                        .and_then(|f| f.get("value"))
+                        .and_then(Value::as_str)
+                    {
+                        fonts.insert(font_val.to_string());
+                    }
+                }
             }
         }
     }
@@ -437,7 +466,7 @@ pub fn resolve_first_fonts(
 /// The `available` set is expected to contain font names in their original
 /// casing (as reported by fontdb). We check both the exact name and a
 /// lowercased version.
-fn is_available(name: &str, available: &HashSet<String>) -> bool {
+pub fn is_available(name: &str, available: &HashSet<String>) -> bool {
     if available.contains(name) {
         return true;
     }
@@ -1170,6 +1199,146 @@ mod tests {
         let result = resolve_first_fonts(&font_strings, &available, downloadable);
 
         assert!(result.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Case-insensitive generic matching tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_generic_case_insensitive() {
+        // "Sans-Serif" (title-case) should be classified as Generic
+        let entries = parse_css_font_family("Sans-Serif");
+        assert_eq!(
+            entries,
+            vec![FontFamilyEntry::Generic("Sans-Serif".into())]
+        );
+    }
+
+    #[test]
+    fn test_parse_generic_uppercase() {
+        let entries = parse_css_font_family("MONOSPACE");
+        assert_eq!(
+            entries,
+            vec![FontFamilyEntry::Generic("MONOSPACE".into())]
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Missing config keys tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_extract_config_font_top_level() {
+        let spec = json!({
+            "config": {
+                "font": "Global Font"
+            }
+        });
+        let fonts = extract_fonts_from_vega(&spec);
+        assert!(fonts.contains("Global Font"));
+    }
+
+    #[test]
+    fn test_extract_config_mark_font() {
+        let spec = json!({
+            "config": {
+                "mark": { "font": "Mark Default Font" }
+            }
+        });
+        let fonts = extract_fonts_from_vega(&spec);
+        assert!(fonts.contains("Mark Default Font"));
+    }
+
+    #[test]
+    fn test_extract_config_header_fonts() {
+        let spec = json!({
+            "config": {
+                "header": { "labelFont": "Header Label", "titleFont": "Header Title" },
+                "headerColumn": { "labelFont": "ColHeader Label" },
+                "headerRow": { "titleFont": "RowHeader Title" },
+                "headerFacet": { "labelFont": "FacetHeader Label" }
+            }
+        });
+        let fonts = extract_fonts_from_vega(&spec);
+        assert!(fonts.contains("Header Label"));
+        assert!(fonts.contains("Header Title"));
+        assert!(fonts.contains("ColHeader Label"));
+        assert!(fonts.contains("RowHeader Title"));
+        assert!(fonts.contains("FacetHeader Label"));
+    }
+
+    #[test]
+    fn test_extract_config_axis_discrete_point_quantitative_temporal() {
+        let spec = json!({
+            "config": {
+                "axisDiscrete": { "labelFont": "Discrete Font" },
+                "axisPoint": { "titleFont": "Point Font" },
+                "axisQuantitative": { "labelFont": "Quant Font" },
+                "axisTemporal": { "titleFont": "Temporal Font" }
+            }
+        });
+        let fonts = extract_fonts_from_vega(&spec);
+        assert!(fonts.contains("Discrete Font"));
+        assert!(fonts.contains("Point Font"));
+        assert!(fonts.contains("Quant Font"));
+        assert!(fonts.contains("Temporal Font"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Encode traversal: non-update states
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_extract_axis_encode_enter_state() {
+        let spec = json!({
+            "axes": [{
+                "encode": {
+                    "labels": {
+                        "enter": {
+                            "font": { "value": "Enter Font" }
+                        }
+                    }
+                }
+            }]
+        });
+        let fonts = extract_fonts_from_vega(&spec);
+        assert!(fonts.contains("Enter Font"));
+    }
+
+    #[test]
+    fn test_extract_legend_encode_hover_state() {
+        let spec = json!({
+            "legends": [{
+                "encode": {
+                    "title": {
+                        "hover": {
+                            "font": { "value": "Hover Font" }
+                        }
+                    }
+                }
+            }]
+        });
+        let fonts = extract_fonts_from_vega(&spec);
+        assert!(fonts.contains("Hover Font"));
+    }
+
+    #[test]
+    fn test_extract_title_encode_enter_state() {
+        let spec = json!({
+            "title": {
+                "text": "Chart",
+                "encode": {
+                    "subtitle": {
+                        "enter": {
+                            "font": { "value": "Subtitle Enter Font" }
+                        }
+                    }
+                }
+            }
+        });
+        let fonts = extract_fonts_from_vega(&spec);
+        assert!(fonts.contains("Subtitle Enter Font"));
     }
 
     #[test]
