@@ -18,6 +18,7 @@ pub use converter::VlConverter;
 pub use deno_core::anyhow;
 pub use module_loader::import_map::VlVersion;
 pub use serde_json;
+pub use text::{configure_font_cache, install_font};
 
 /// V8 snapshot containing the pre-compiled deno_runtime extensions plus our
 /// vl_convert_runtime extension. Generated at build time for container

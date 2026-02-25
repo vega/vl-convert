@@ -12,6 +12,7 @@ keywords = ["Visualization", "Vega", "Vega-Lite"]
 [dependencies]
 vl-convert-canvas2d = { path = "../vl-convert-canvas2d", version = "2.0.0-rc1" }
 vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", version = "2.0.0-rc1", features = ["svg"] }
+vl-convert-fontsource = { path = "../vl-convert-fontsource", version = "2.0.0-rc1" }
 
 deno_runtime = { workspace = true }
 deno_core = { workspace = true }

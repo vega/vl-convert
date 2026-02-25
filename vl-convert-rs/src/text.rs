@@ -11,6 +11,7 @@ use usvg::{
     ImageHrefResolver,
 };
 use vl_convert_canvas2d::font_config::{font_config_to_fontdb, CustomFont, FontConfig};
+use vl_convert_fontsource::FontsourceCache;
 
 /// Monotonically increasing version counter for font configuration changes.
 /// Incremented each time `register_font_directory` is called.
@@ -19,6 +20,8 @@ pub static FONT_CONFIG_VERSION: AtomicU64 = AtomicU64::new(0);
 lazy_static! {
     pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
     pub static ref FONT_CONFIG: Mutex<FontConfig> = Mutex::new(build_default_font_config());
+    pub static ref FONTSOURCE_CACHE: FontsourceCache =
+        FontsourceCache::new(None, None).expect("Failed to initialize FontsourceCache");
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -290,4 +293,140 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
     FONT_CONFIG_VERSION.fetch_add(1, Ordering::Release);
 
     Ok(())
+}
+
+/// Result of attempting to register a font directory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RegisterResult {
+    /// The directory was newly registered.
+    Registered,
+    /// The directory was already registered.
+    AlreadyRegistered,
+    /// The directory does not exist or contains no `.ttf` files.
+    DirectoryMissing,
+}
+
+/// Register a font directory if it has not already been registered and
+/// contains at least one `.ttf` file.
+///
+/// This function acquires the `FONT_CONFIG` and `USVG_OPTIONS` locks
+/// internally. It is intended to be called from within
+/// `FONTSOURCE_CACHE.with_cache_lock(...)` so that the filesystem state
+/// is stable while we check for TTF files.
+pub fn register_font_directory_if_new(dir: &str) -> Result<RegisterResult, anyhow::Error> {
+    let path = PathBuf::from(dir);
+
+    // Hold FONT_CONFIG lock for the entire check+register sequence to prevent
+    // duplicate entries from concurrent callers.
+    let mut font_config = FONT_CONFIG
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
+
+    if font_config.font_dirs.contains(&path) {
+        return Ok(RegisterResult::AlreadyRegistered);
+    }
+
+    // Check directory exists and has at least one .ttf file
+    if !path.is_dir() {
+        return Ok(RegisterResult::DirectoryMissing);
+    }
+    let has_ttf = std::fs::read_dir(&path)
+        .map(|entries| {
+            entries.filter_map(|e| e.ok()).any(|e| {
+                e.path()
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext.eq_ignore_ascii_case("ttf"))
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false);
+    if !has_ttf {
+        return Ok(RegisterResult::DirectoryMissing);
+    }
+
+    // Register the directory (still under the same lock)
+    font_config.font_dirs.push(path);
+    drop(font_config);
+
+    {
+        let mut opts = USVG_OPTIONS
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
+        let font_db = Arc::make_mut(&mut opts.fontdb);
+        font_db.load_fonts_dir(dir);
+        setup_default_fonts(font_db);
+    }
+
+    FONT_CONFIG_VERSION.fetch_add(1, Ordering::Release);
+
+    Ok(RegisterResult::Registered)
+}
+
+/// Fetch a font from Fontsource, register it with fontdb, and handle stale-cache recovery.
+///
+/// Returns the `FetchOutcome` on success. If the cache directory is missing after
+/// the initial fetch (stale cache), performs a forced re-download and retries registration.
+pub(crate) async fn fetch_and_register_font(
+    family: &str,
+) -> Result<vl_convert_fontsource::FetchOutcome, anyhow::Error> {
+    let mut outcome = FONTSOURCE_CACHE.fetch(family).await?;
+    let dir_str = outcome
+        .path
+        .to_str()
+        .ok_or_else(|| anyhow!("Font path is not valid UTF-8"))?
+        .to_string();
+
+    let result = FONTSOURCE_CACHE.with_cache_lock(|| register_font_directory_if_new(&dir_str))?;
+    let result = result?;
+
+    if result == RegisterResult::DirectoryMissing {
+        // Stale cache — force re-download
+        outcome = FONTSOURCE_CACHE.refetch(family).await?;
+        let dir_str = outcome
+            .path
+            .to_str()
+            .ok_or_else(|| anyhow!("Font path is not valid UTF-8"))?
+            .to_string();
+
+        let result =
+            FONTSOURCE_CACHE.with_cache_lock(|| register_font_directory_if_new(&dir_str))?;
+        let result = result?;
+
+        if result == RegisterResult::DirectoryMissing {
+            return Err(anyhow!(
+                "Font directory for '{}' is missing after re-download",
+                family
+            ));
+        }
+    }
+
+    Ok(outcome)
+}
+
+/// Download and install a font by family name from Fontsource.
+///
+/// Uses the global `FONTSOURCE_CACHE` to fetch the font, then registers
+/// the font directory in the fontdb. If the directory appears missing
+/// after a cache hit (stale cache), performs a forced re-download.
+pub async fn install_font(family: &str) -> Result<(), anyhow::Error> {
+    let outcome = fetch_and_register_font(family).await?;
+
+    // Evict LRU fonts if cache limit is set and a download occurred
+    if outcome.downloaded {
+        let max_bytes = FONTSOURCE_CACHE.max_cache_bytes();
+        if max_bytes > 0 {
+            let exempt = HashSet::from([outcome.font_id.clone()]);
+            FONTSOURCE_CACHE.evict_lru_until_size(max_bytes, &exempt)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Configure the maximum size of the Fontsource font cache.
+///
+/// Pass `None` or `Some(0)` to disable cache size limits (unbounded).
+pub fn configure_font_cache(max_cache_bytes: Option<u64>) {
+    FONTSOURCE_CACHE.set_max_cache_bytes(max_cache_bytes.unwrap_or(0));
 }

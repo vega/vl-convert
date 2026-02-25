@@ -441,6 +441,22 @@ impl ValueOrString {
     }
 }
 
+/// Controls automatic font downloading from the Fontsource catalog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AutoInstallFonts {
+    /// Disabled (default).
+    #[default]
+    Off,
+    /// Only examines the first font in each CSS font-family string.
+    /// If it is not on the system and not in the Fontsource catalog,
+    /// the conversion fails with an error.
+    Strict,
+    /// Same first-font-only logic as `Strict`, but logs warnings for
+    /// unavailable fonts instead of failing.
+    BestEffort,
+}
+
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlConverterConfig {
     pub num_workers: usize,
@@ -450,6 +466,8 @@ pub struct VlConverterConfig {
     /// values override this default when provided. Must be non-empty when set.
     /// When configured, HTTP redirects are denied instead of followed.
     pub allowed_base_urls: Option<Vec<String>>,
+    /// Controls automatic font downloading from the Fontsource catalog.
+    pub auto_install_fonts: AutoInstallFonts,
 }
 
 impl Default for VlConverterConfig {
@@ -459,6 +477,7 @@ impl Default for VlConverterConfig {
             allow_http_access: true,
             filesystem_root: None,
             allowed_base_urls: None,
+            auto_install_fonts: AutoInstallFonts::Off,
         }
     }
 }
