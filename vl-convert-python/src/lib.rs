@@ -11,6 +11,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
+use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
     FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts,
     ACCESS_DENIED_MARKER,
@@ -20,7 +21,6 @@ use vl_convert_rs::module_loader::import_map::{
 };
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
-use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::text::install_font as install_font_rs;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
 use vl_convert_rs::VlConverter as VlConverterRs;
@@ -1244,9 +1244,7 @@ fn install_font(font_family: &str) -> PyResult<()> {
         py.allow_threads(move || {
             PYTHON_RUNTIME
                 .block_on(async move { install_font_rs(&font_family).await })
-                .map_err(|err| {
-                    PyValueError::new_err(format!("Failed to install font: {}", err))
-                })
+                .map_err(|err| PyValueError::new_err(format!("Failed to install font: {}", err)))
         })
     })
 }
@@ -2145,8 +2143,7 @@ fn install_font_asyncio<'py>(py: Python<'py>, font_family: &str) -> PyResult<Bou
     let font_family = font_family.to_string();
     future_into_py_object(py, async move {
         tokio::task::spawn_blocking(move || {
-            PYTHON_RUNTIME
-                .block_on(async move { install_font_rs(&font_family).await })
+            PYTHON_RUNTIME.block_on(async move { install_font_rs(&font_family).await })
         })
         .await
         .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
