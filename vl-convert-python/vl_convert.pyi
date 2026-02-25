@@ -134,6 +134,7 @@ if TYPE_CHECKING:
         filesystem_root: str | None
         allowed_base_urls: list[str] | None
         auto_install_fonts: bool
+        embed_local_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
 
 __all__ = [
@@ -296,6 +297,7 @@ def configure_converter(
     allowed_base_urls: list[str] | None = None,
     font_cache_size_mb: int | None = None,
     auto_install_fonts: bool | None = None,
+    embed_local_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
 ) -> None:
     """
@@ -321,6 +323,9 @@ def configure_converter(
         Maximum font cache size in megabytes. If ``None``, keep current value.
     auto_install_fonts
         Whether missing fonts may be downloaded from Fontsource. If ``None``, keep current value.
+    embed_local_fonts
+        Whether locally-available fonts (system, font-dir) should be embedded as
+        @font-face CSS in HTML output. If ``None``, keep current value.
     missing_fonts
         Missing-font policy: ``"fallback"``, ``"warn"``, or ``"error"``.
         If ``None``, keep current value.
@@ -985,6 +990,7 @@ if TYPE_CHECKING:
             font_cache_size_mb: int | None = None,
             auto_install_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
+            embed_local_fonts: bool | None = None,
         ) -> None:
             """Async version of ``configure_converter``. See sync function for full documentation."""
             ...

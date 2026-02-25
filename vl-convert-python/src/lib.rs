@@ -62,6 +62,7 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .map(|root| root.to_string_lossy().to_string()),
         "allowed_base_urls": config.allowed_base_urls,
         "auto_install_fonts": config.auto_install_fonts,
+        "embed_local_fonts": config.embed_local_fonts,
         "missing_fonts": match config.missing_fonts {
             MissingFontsPolicy::Fallback => "fallback",
             MissingFontsPolicy::Warn => "warn",
@@ -80,6 +81,7 @@ struct ConverterConfigOverrides {
     allowed_base_urls: Option<Option<Vec<String>>>,
     font_cache_size_mb: Option<u64>,
     auto_install_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
     missing_fonts: Option<MissingFontsPolicy>,
 }
 
@@ -158,6 +160,15 @@ fn parse_config_overrides(
                         })?);
                 }
             }
+            "embed_local_fonts" => {
+                if !value.is_none() {
+                    overrides.embed_local_fonts = Some(value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid embed_local_fonts value for configure_converter: {err}"
+                        )
+                    })?);
+                }
+            }
             "missing_fonts" => {
                 if !value.is_none() {
                     let s = value.extract::<String>().map_err(|err| {
@@ -207,6 +218,9 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     }
     if let Some(auto_install) = overrides.auto_install_fonts {
         config.auto_install_fonts = auto_install;
+    }
+    if let Some(embed_local) = overrides.embed_local_fonts {
+        config.embed_local_fonts = embed_local;
     }
     if let Some(missing_fonts) = overrides.missing_fonts {
         config.missing_fonts = missing_fonts;

@@ -1,6 +1,6 @@
 use crate::converter::ValueOrString;
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
-use crate::extract::FontForHtml;
+use crate::extract::{FontForHtml, FontSource};
 use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
@@ -76,12 +76,20 @@ import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
 /// Google fonts use the Google Fonts CSS2 API (automatic subsetting).
 /// Non-Google Fontsource fonts use the Fontsource jsDelivr CDN.
 pub fn generate_font_tags(fonts: &[FontForHtml]) -> String {
-    if fonts.is_empty() {
+    // Only Fontsource fonts have CDN URLs; local fonts are handled via @font-face CSS.
+    let fontsource_fonts: Vec<&FontForHtml> = fonts
+        .iter()
+        .filter(|f| matches!(&f.source, FontSource::Fontsource { .. }))
+        .collect();
+
+    if fontsource_fonts.is_empty() {
         return String::new();
     }
 
-    let (google_fonts, other_fonts): (Vec<_>, Vec<_>) =
-        fonts.iter().partition(|f| f.font_type == "google");
+    let (google_fonts, other_fonts): (Vec<&FontForHtml>, Vec<&FontForHtml>) =
+        fontsource_fonts.into_iter().partition(|f| {
+            matches!(&f.source, FontSource::Fontsource { font_type, .. } if font_type == "google")
+        });
 
     let has_google = !google_fonts.is_empty();
 
@@ -112,11 +120,11 @@ pub fn generate_font_tags(fonts: &[FontForHtml]) -> String {
 
     // Fontsource CDN: one <link> per font
     for font in &other_fonts {
-        let url = format!(
-            "https://cdn.jsdelivr.net/fontsource/fonts/{}@latest/index.css",
-            font.font_id
-        );
-        result.push(format!(r#"    <link rel="stylesheet" href="{url}">"#));
+        if let FontSource::Fontsource { font_id, .. } = &font.source {
+            let url =
+                format!("https://cdn.jsdelivr.net/fontsource/fonts/{font_id}@latest/index.css",);
+            result.push(format!(r#"    <link rel="stylesheet" href="{url}">"#));
+        }
     }
 
     format!("{}\n", result.join("\n"))
@@ -139,16 +147,20 @@ mod tests {
     fn google_font(family: &str, font_id: &str) -> FontForHtml {
         FontForHtml {
             family: family.to_string(),
-            font_id: font_id.to_string(),
-            font_type: "google".to_string(),
+            source: FontSource::Fontsource {
+                font_id: font_id.to_string(),
+                font_type: "google".to_string(),
+            },
         }
     }
 
     fn other_font(family: &str, font_id: &str) -> FontForHtml {
         FontForHtml {
             family: family.to_string(),
-            font_id: font_id.to_string(),
-            font_type: "other".to_string(),
+            source: FontSource::Fontsource {
+                font_id: font_id.to_string(),
+                font_type: "other".to_string(),
+            },
         }
     }
 

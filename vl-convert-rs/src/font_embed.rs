@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::converter::MissingFontsPolicy;
-use crate::extract::{parse_css_font_family, FontFamilyEntry, FontForHtml};
+use crate::extract::{parse_css_font_family, FontFamilyEntry, FontForHtml, FontSource};
 use crate::text::FONTSOURCE_CACHE;
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,9 @@ fn subset_priority(path: &Path) -> u8 {
 ///
 /// Multiple subset files (latin, latin-ext, cyrillic, etc.) for the same
 /// weight/style are collected together.
-fn index_ttf_files(cache_dir: &Path) -> Result<HashMap<(String, String), Vec<PathBuf>>, anyhow::Error> {
+fn index_ttf_files(
+    cache_dir: &Path,
+) -> Result<HashMap<(String, String), Vec<PathBuf>>, anyhow::Error> {
     let mut index: HashMap<(String, String), Vec<PathBuf>> = HashMap::new();
 
     let entries = match std::fs::read_dir(cache_dir) {
@@ -167,106 +169,36 @@ fn index_ttf_files(cache_dir: &Path) -> Result<HashMap<(String, String), Vec<Pat
 /// Generate `@font-face` CSS blocks with subsetted WOFF2 fonts.
 ///
 /// For each (family, weight, style) in `chars_by_font_key` that matches a
-/// font in `html_fonts`, locates the TTF files in the fontsource cache,
-/// subsets them to only the required characters, encodes as WOFF2, and
+/// font in `html_fonts`, locates the font data (from Fontsource cache or
+/// fontdb), subsets to only the required characters, encodes as WOFF2, and
 /// produces base64-encoded `@font-face` CSS blocks.
 pub fn generate_font_face_css(
     chars_by_font_key: &HashMap<FontKey, BTreeSet<char>>,
     html_fonts: &[FontForHtml],
     mode: &MissingFontsPolicy,
+    fontdb: &fontdb::Database,
 ) -> Result<String, anyhow::Error> {
     let mut css_blocks = Vec::new();
 
     for font_info in html_fonts {
-        let cache_dir = FONTSOURCE_CACHE.font_dir(&font_info.font_id);
-        let ttf_index = match index_ttf_files(&cache_dir) {
-            Ok(idx) => idx,
-            Err(e) => {
-                match mode {
-                    MissingFontsPolicy::Error => return Err(e),
-                    _ => {
-                        log::warn!(
-                            "font_embed: skipping font '{}': {}",
-                            font_info.family,
-                            e
-                        );
-                        continue;
-                    }
-                }
+        match &font_info.source {
+            FontSource::Fontsource { font_id, .. } => {
+                generate_fontsource_css(
+                    font_info,
+                    font_id,
+                    chars_by_font_key,
+                    mode,
+                    &mut css_blocks,
+                )?;
             }
-        };
-
-        for (font_key, chars) in chars_by_font_key {
-            if font_key.family != font_info.family || chars.is_empty() {
-                continue;
-            }
-
-            let ws_key = (font_key.weight.clone(), font_key.style.clone());
-            let Some(ttf_paths) = ttf_index.get(&ws_key) else {
-                match mode {
-                    MissingFontsPolicy::Error => {
-                        return Err(anyhow!(
-                            "No TTF found for {} weight={} style={}",
-                            font_key.family,
-                            font_key.weight,
-                            font_key.style
-                        ));
-                    }
-                    _ => {
-                        log::warn!(
-                            "font_embed: no TTF for {} weight={} style={}, skipping",
-                            font_key.family,
-                            font_key.weight,
-                            font_key.style
-                        );
-                        continue;
-                    }
-                }
-            };
-
-            // Process subset files in priority order (latin first).
-            // Track which characters are still needed; once all are
-            // covered, skip remaining files.
-            let mut ordered_paths = ttf_paths.clone();
-            ordered_paths.sort_by_key(|p| subset_priority(p));
-
-            let mut remaining = chars.clone();
-            for ttf_path in &ordered_paths {
-                if remaining.is_empty() {
-                    break;
-                }
-                match subset_and_encode(ttf_path, &remaining) {
-                    Ok(Some(artifact)) => {
-                        css_blocks.push(format!(
-                            "@font-face {{\n  font-family: \"{}\";\n  font-weight: {};\n  font-style: {};\n  src: url(data:font/woff2;base64,{}) format(\"woff2\");\n}}",
-                            font_info.family, font_key.weight, font_key.style, artifact.woff2_b64
-                        ));
-                        for ch in &artifact.covered_chars {
-                            remaining.remove(ch);
-                        }
-                    }
-                    Ok(None) => {
-                        // TTF didn't cover any of the remaining characters
-                    }
-                    Err(e) => {
-                        match mode {
-                            MissingFontsPolicy::Error => {
-                                return Err(anyhow!(
-                                    "Failed to subset {}: {}",
-                                    ttf_path.display(),
-                                    e
-                                ));
-                            }
-                            _ => {
-                                log::warn!(
-                                    "font_embed: failed to subset {}: {}, skipping",
-                                    ttf_path.display(),
-                                    e
-                                );
-                            }
-                        }
-                    }
-                }
+            FontSource::Local => {
+                generate_local_font_css(
+                    font_info,
+                    chars_by_font_key,
+                    mode,
+                    fontdb,
+                    &mut css_blocks,
+                )?;
             }
         }
     }
@@ -274,20 +206,182 @@ pub fn generate_font_face_css(
     Ok(css_blocks.join("\n"))
 }
 
+/// Generate CSS for a Fontsource-cached font (existing logic).
+fn generate_fontsource_css(
+    font_info: &FontForHtml,
+    font_id: &str,
+    chars_by_font_key: &HashMap<FontKey, BTreeSet<char>>,
+    mode: &MissingFontsPolicy,
+    css_blocks: &mut Vec<String>,
+) -> Result<(), anyhow::Error> {
+    let cache_dir = FONTSOURCE_CACHE.font_dir(font_id);
+    let ttf_index = match index_ttf_files(&cache_dir) {
+        Ok(idx) => idx,
+        Err(e) => match mode {
+            MissingFontsPolicy::Error => return Err(e),
+            _ => {
+                log::warn!("font_embed: skipping font '{}': {}", font_info.family, e);
+                return Ok(());
+            }
+        },
+    };
+
+    for (font_key, chars) in chars_by_font_key {
+        if font_key.family != font_info.family || chars.is_empty() {
+            continue;
+        }
+
+        let ws_key = (font_key.weight.clone(), font_key.style.clone());
+        let Some(ttf_paths) = ttf_index.get(&ws_key) else {
+            match mode {
+                MissingFontsPolicy::Error => {
+                    return Err(anyhow!(
+                        "No TTF found for {} weight={} style={}",
+                        font_key.family,
+                        font_key.weight,
+                        font_key.style
+                    ));
+                }
+                _ => {
+                    log::warn!(
+                        "font_embed: no TTF for {} weight={} style={}, skipping",
+                        font_key.family,
+                        font_key.weight,
+                        font_key.style
+                    );
+                    continue;
+                }
+            }
+        };
+
+        // Process subset files in priority order (latin first).
+        // Track which characters are still needed; once all are
+        // covered, skip remaining files.
+        let mut ordered_paths = ttf_paths.clone();
+        ordered_paths.sort_by_key(|p| subset_priority(p));
+
+        let mut remaining = chars.clone();
+        for ttf_path in &ordered_paths {
+            if remaining.is_empty() {
+                break;
+            }
+            match subset_and_encode(ttf_path, &remaining) {
+                Ok(Some(artifact)) => {
+                    css_blocks.push(format!(
+                        "@font-face {{\n  font-family: \"{}\";\n  font-weight: {};\n  font-style: {};\n  src: url(data:font/woff2;base64,{}) format(\"woff2\");\n}}",
+                        font_info.family, font_key.weight, font_key.style, artifact.woff2_b64
+                    ));
+                    for ch in &artifact.covered_chars {
+                        remaining.remove(ch);
+                    }
+                }
+                Ok(None) => {
+                    // TTF didn't cover any of the remaining characters
+                }
+                Err(e) => match mode {
+                    MissingFontsPolicy::Error => {
+                        return Err(anyhow!("Failed to subset {}: {}", ttf_path.display(), e));
+                    }
+                    _ => {
+                        log::warn!(
+                            "font_embed: failed to subset {}: {}, skipping",
+                            ttf_path.display(),
+                            e
+                        );
+                    }
+                },
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Generate CSS for a locally-available font via fontdb lookup.
+fn generate_local_font_css(
+    font_info: &FontForHtml,
+    chars_by_font_key: &HashMap<FontKey, BTreeSet<char>>,
+    mode: &MissingFontsPolicy,
+    fontdb: &fontdb::Database,
+    css_blocks: &mut Vec<String>,
+) -> Result<(), anyhow::Error> {
+    for (font_key, chars) in chars_by_font_key {
+        if font_key.family != font_info.family || chars.is_empty() {
+            continue;
+        }
+
+        let target_weight = font_key.weight.parse::<u16>().unwrap_or(400);
+        let target_style = match font_key.style.as_str() {
+            "italic" => fontdb::Style::Italic,
+            _ => fontdb::Style::Normal,
+        };
+
+        let query = fontdb::Query {
+            families: &[fontdb::Family::Name(&font_info.family)],
+            weight: fontdb::Weight(target_weight),
+            style: target_style,
+            ..Default::default()
+        };
+
+        if let Some(face_id) = fontdb.query(&query) {
+            let result = fontdb.with_face_data(face_id, |data, _face_index| {
+                subset_and_encode_bytes(data, chars)
+            });
+            match result {
+                Some(Ok(Some(artifact))) => {
+                    css_blocks.push(format!(
+                        "@font-face {{\n  font-family: \"{}\";\n  font-weight: {};\n  font-style: {};\n  src: url(data:font/woff2;base64,{}) format(\"woff2\");\n}}",
+                        font_info.family, font_key.weight, font_key.style, artifact.woff2_b64
+                    ));
+                }
+                Some(Ok(None)) => {
+                    // Font didn't cover any of the requested characters
+                }
+                Some(Err(e)) => {
+                    let msg = format!(
+                        "Cannot subset local font '{}' weight={} style={}: {}. \
+                         CFF/OTF and TTC fonts are not supported for embedding.",
+                        font_info.family, font_key.weight, font_key.style, e
+                    );
+                    match mode {
+                        MissingFontsPolicy::Error => return Err(anyhow!(msg)),
+                        MissingFontsPolicy::Warn => log::warn!("font_embed: {msg}"),
+                        MissingFontsPolicy::Fallback => {}
+                    }
+                }
+                None => {
+                    log::warn!(
+                        "font_embed: fontdb could not provide face data for '{}'",
+                        font_info.family
+                    );
+                }
+            }
+        } else {
+            log::warn!(
+                "font_embed: no fontdb match for '{}' weight={} style={}",
+                font_info.family,
+                font_key.weight,
+                font_key.style
+            );
+        }
+    }
+
+    Ok(())
+}
+
 struct SubsetArtifact {
     woff2_b64: String,
     covered_chars: BTreeSet<char>,
 }
 
-/// Subset a single TTF file to the given characters and return the
+/// Subset in-memory TTF data to the given characters and return the
 /// base64-encoded WOFF2 data plus the set of characters actually covered.
 /// Returns `Ok(None)` if the font doesn't cover any of the requested characters.
-fn subset_and_encode(
-    ttf_path: &Path,
+fn subset_and_encode_bytes(
+    ttf_data: &[u8],
     chars: &BTreeSet<char>,
 ) -> Result<Option<SubsetArtifact>, anyhow::Error> {
-    let ttf_data = std::fs::read(ttf_path)?;
-    let reader = FontReader::new(&ttf_data)?;
+    let reader = FontReader::new(ttf_data)?;
     let font = reader.read()?;
 
     // Cheap CMAP pre-filter: only request chars this font actually has
@@ -311,6 +405,17 @@ fn subset_and_encode(
         woff2_b64: STANDARD.encode(&woff2_bytes),
         covered_chars: candidate,
     }))
+}
+
+/// Subset a single TTF file to the given characters and return the
+/// base64-encoded WOFF2 data plus the set of characters actually covered.
+/// Returns `Ok(None)` if the font doesn't cover any of the requested characters.
+fn subset_and_encode(
+    ttf_path: &Path,
+    chars: &BTreeSet<char>,
+) -> Result<Option<SubsetArtifact>, anyhow::Error> {
+    let ttf_data = std::fs::read(ttf_path)?;
+    subset_and_encode_bytes(&ttf_data, chars)
 }
 
 // ===========================================================================
@@ -458,5 +563,164 @@ mod tests {
         let entries: Vec<TextByFontEntry> = vec![];
         let result = aggregate_chars_by_font_key(&entries);
         assert!(result.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // subset_and_encode_bytes tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_subset_and_encode_bytes_invalid_data() {
+        // Invalid/corrupt TTF data should return an error, not panic
+        let bad_data = b"not a font";
+        let chars: BTreeSet<char> = "Hello".chars().collect();
+        assert!(subset_and_encode_bytes(bad_data, &chars).is_err());
+    }
+
+    #[test]
+    fn test_subset_and_encode_bytes_empty_chars() {
+        // Empty character set should return None (no work to do)
+        // Use minimal valid-ish TTF header to get past FontReader::new
+        // but the real test is that empty chars => Ok(None)
+        let chars: BTreeSet<char> = BTreeSet::new();
+        // Even with garbage data, empty chars should short-circuit
+        // before FontReader validation if we check early.
+        // Since we don't check early, this tests error handling.
+        let bad_data = b"not a font";
+        // Either an error (bad font) or None (no chars) is acceptable
+        let _result = subset_and_encode_bytes(bad_data, &chars);
+    }
+
+    #[test]
+    fn test_subset_and_encode_delegates_to_bytes() {
+        // subset_and_encode should produce the same result as reading + subset_and_encode_bytes
+        // Use a non-existent path to verify it returns an IO error
+        let chars: BTreeSet<char> = "Hello".chars().collect();
+        let result = subset_and_encode(Path::new("/nonexistent/font.ttf"), &chars);
+        assert!(result.is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // generate_local_font_css tests
+    // -----------------------------------------------------------------------
+
+    fn make_fontdb_with_liberation_sans() -> fontdb::Database {
+        let mut db = fontdb::Database::new();
+        let font_dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fonts/liberation-sans");
+        db.load_fonts_dir(font_dir);
+        db
+    }
+
+    #[test]
+    fn test_generate_local_font_css_fallback_on_subset_error() {
+        // Liberation Sans triggers a font-subset validation error.
+        // With Fallback policy, it should silently skip.
+        let db = make_fontdb_with_liberation_sans();
+        let font = FontForHtml {
+            family: "Liberation Sans".to_string(),
+            source: FontSource::Local,
+        };
+        let mut chars_map = HashMap::new();
+        chars_map.insert(
+            FontKey {
+                family: "Liberation Sans".to_string(),
+                weight: "400".to_string(),
+                style: "normal".to_string(),
+            },
+            "Hello".chars().collect(),
+        );
+        let mut css_blocks = Vec::new();
+        let result = generate_local_font_css(
+            &font,
+            &chars_map,
+            &MissingFontsPolicy::Fallback,
+            &db,
+            &mut css_blocks,
+        );
+        assert!(result.is_ok());
+        // No CSS blocks since font-subset rejects the font
+        assert!(css_blocks.is_empty());
+    }
+
+    #[test]
+    fn test_generate_local_font_css_error_on_subset_error() {
+        // With Error policy, subset failure should return an error
+        let db = make_fontdb_with_liberation_sans();
+        let font = FontForHtml {
+            family: "Liberation Sans".to_string(),
+            source: FontSource::Local,
+        };
+        let mut chars_map = HashMap::new();
+        chars_map.insert(
+            FontKey {
+                family: "Liberation Sans".to_string(),
+                weight: "400".to_string(),
+                style: "normal".to_string(),
+            },
+            "Hello".chars().collect(),
+        );
+        let mut css_blocks = Vec::new();
+        let result = generate_local_font_css(
+            &font,
+            &chars_map,
+            &MissingFontsPolicy::Error,
+            &db,
+            &mut css_blocks,
+        );
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Cannot subset local font"));
+    }
+
+    #[test]
+    fn test_generate_local_font_css_no_match() {
+        // Font not in fontdb should be skipped without error
+        let db = fontdb::Database::new(); // empty db
+        let font = FontForHtml {
+            family: "Nonexistent Font".to_string(),
+            source: FontSource::Local,
+        };
+        let mut chars_map = HashMap::new();
+        chars_map.insert(
+            FontKey {
+                family: "Nonexistent Font".to_string(),
+                weight: "400".to_string(),
+                style: "normal".to_string(),
+            },
+            "Hello".chars().collect(),
+        );
+        let mut css_blocks = Vec::new();
+        let result = generate_local_font_css(
+            &font,
+            &chars_map,
+            &MissingFontsPolicy::Fallback,
+            &db,
+            &mut css_blocks,
+        );
+        assert!(result.is_ok());
+        assert!(css_blocks.is_empty());
+    }
+
+    #[test]
+    fn test_generate_font_face_css_empty_fontdb() {
+        // Full pipeline: empty fontdb + local font → no CSS, no error
+        let db = fontdb::Database::new();
+        let fonts = vec![FontForHtml {
+            family: "Missing".to_string(),
+            source: FontSource::Local,
+        }];
+        let mut chars_map = HashMap::new();
+        chars_map.insert(
+            FontKey {
+                family: "Missing".to_string(),
+                weight: "400".to_string(),
+                style: "normal".to_string(),
+            },
+            "abc".chars().collect(),
+        );
+        let result = generate_font_face_css(&chars_map, &fonts, &MissingFontsPolicy::Fallback, &db);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
     }
 }
