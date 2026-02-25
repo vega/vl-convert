@@ -133,6 +133,7 @@ if TYPE_CHECKING:
         allow_http_access: bool
         filesystem_root: str | None
         allowed_base_urls: list[str] | None
+        auto_install_fonts: str
 
 __all__ = [
     "asyncio",
@@ -293,6 +294,7 @@ def configure_converter(
     filesystem_root: str | None = None,
     allowed_base_urls: list[str] | None = None,
     font_cache_size_mb: int | None = None,
+    auto_install_fonts: str | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -315,6 +317,9 @@ def configure_converter(
         this converter-level default when provided.
     font_cache_size_mb
         Maximum font cache size in megabytes. If ``None``, keep current value.
+    auto_install_fonts
+        Automatic font downloading mode. One of ``"off"``, ``"strict"``, or ``"best-effort"``.
+        If ``None``, keep current value.
     """
     ...
 
@@ -974,6 +979,7 @@ if TYPE_CHECKING:
             filesystem_root: str | None = None,
             allowed_base_urls: list[str] | None = None,
             font_cache_size_mb: int | None = None,
+            auto_install_fonts: str | None = None,
         ) -> None:
             """Async version of ``configure_converter``. See sync function for full documentation."""
             ...

@@ -13,8 +13,8 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts,
-    ACCESS_DENIED_MARKER,
+    AutoInstallFonts, FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts,
+    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -61,6 +61,11 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .as_ref()
             .map(|root| root.to_string_lossy().to_string()),
         "allowed_base_urls": config.allowed_base_urls,
+        "auto_install_fonts": match config.auto_install_fonts {
+            AutoInstallFonts::Off => "off",
+            AutoInstallFonts::Strict => "strict",
+            AutoInstallFonts::BestEffort => "best-effort",
+        },
     })
 }
 
@@ -73,6 +78,7 @@ struct ConverterConfigOverrides {
     // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
     font_cache_size_mb: Option<u64>,
+    auto_install_fonts: Option<AutoInstallFonts>,
 }
 
 fn parse_config_overrides(
@@ -140,6 +146,25 @@ fn parse_config_overrides(
                     })?);
                 }
             }
+            "auto_install_fonts" => {
+                if !value.is_none() {
+                    let s = value.extract::<String>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid auto_install_fonts value for configure_converter: {err}"
+                        )
+                    })?;
+                    overrides.auto_install_fonts = Some(match s.as_str() {
+                        "off" => AutoInstallFonts::Off,
+                        "strict" => AutoInstallFonts::Strict,
+                        "best-effort" => AutoInstallFonts::BestEffort,
+                        _ => {
+                            return Err(vl_convert_rs::anyhow::anyhow!(
+                                "Invalid auto_install_fonts value: {s}. Expected 'off', 'strict', or 'best-effort'"
+                            ));
+                        }
+                    });
+                }
+            }
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
                     "Unknown configure_converter argument: {other}"
@@ -167,6 +192,9 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     if let Some(mb) = overrides.font_cache_size_mb {
         let bytes = mb.saturating_mul(1024 * 1024);
         configure_font_cache_rs(Some(bytes));
+    }
+    if let Some(auto_install) = overrides.auto_install_fonts {
+        config.auto_install_fonts = auto_install;
     }
 }
 
