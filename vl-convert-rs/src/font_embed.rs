@@ -5,7 +5,7 @@ use serde::Deserialize;
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
-use crate::converter::AutoInstallFonts;
+use crate::converter::MissingFontsPolicy;
 use crate::extract::{parse_css_font_family, FontFamilyEntry, FontForHtml};
 use crate::text::FONTSOURCE_CACHE;
 
@@ -173,7 +173,7 @@ fn index_ttf_files(cache_dir: &Path) -> Result<HashMap<(String, String), Vec<Pat
 pub fn generate_font_face_css(
     chars_by_font_key: &HashMap<FontKey, BTreeSet<char>>,
     html_fonts: &[FontForHtml],
-    mode: &AutoInstallFonts,
+    mode: &MissingFontsPolicy,
 ) -> Result<String, anyhow::Error> {
     let mut css_blocks = Vec::new();
 
@@ -183,7 +183,7 @@ pub fn generate_font_face_css(
             Ok(idx) => idx,
             Err(e) => {
                 match mode {
-                    AutoInstallFonts::Strict => return Err(e),
+                    MissingFontsPolicy::Error => return Err(e),
                     _ => {
                         log::warn!(
                             "font_embed: skipping font '{}': {}",
@@ -204,7 +204,7 @@ pub fn generate_font_face_css(
             let ws_key = (font_key.weight.clone(), font_key.style.clone());
             let Some(ttf_paths) = ttf_index.get(&ws_key) else {
                 match mode {
-                    AutoInstallFonts::Strict => {
+                    MissingFontsPolicy::Error => {
                         return Err(anyhow!(
                             "No TTF found for {} weight={} style={}",
                             font_key.family,
@@ -250,7 +250,7 @@ pub fn generate_font_face_css(
                     }
                     Err(e) => {
                         match mode {
-                            AutoInstallFonts::Strict => {
+                            MissingFontsPolicy::Error => {
                                 return Err(anyhow!(
                                     "Failed to subset {}: {}",
                                     ttf_path.display(),
