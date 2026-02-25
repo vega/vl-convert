@@ -11,16 +11,16 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
-use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    AutoInstallFonts, FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts,
-    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
+    FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts,
+    ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
 };
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
+use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::text::install_font as install_font_rs;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
 use vl_convert_rs::VlConverter as VlConverterRs;
@@ -53,11 +53,6 @@ fn converter_config() -> Result<VlConverterConfig, vl_convert_rs::anyhow::Error>
 }
 
 fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
-    let auto_install_fonts_value = match &config.auto_install_fonts {
-        AutoInstallFonts::Off => serde_json::Value::Bool(false),
-        AutoInstallFonts::Strict => serde_json::Value::String("strict".to_string()),
-        AutoInstallFonts::BestEffort => serde_json::Value::String("best_effort".to_string()),
-    };
     serde_json::json!({
         "num_workers": config.num_workers,
         "allow_http_access": config.allow_http_access,
@@ -66,7 +61,6 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .as_ref()
             .map(|root| root.to_string_lossy().to_string()),
         "allowed_base_urls": config.allowed_base_urls,
-        "auto_install_fonts": auto_install_fonts_value,
     })
 }
 
@@ -78,7 +72,6 @@ struct ConverterConfigOverrides {
     filesystem_root: Option<Option<PathBuf>>,
     // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
-    auto_install_fonts: Option<AutoInstallFonts>,
     font_cache_size_mb: Option<u64>,
 }
 
@@ -138,33 +131,6 @@ fn parse_config_overrides(
                         })?));
                 }
             }
-            "auto_install_fonts" => {
-                if value.is_none() {
-                    // None → no change (keep current)
-                } else if let Ok(b) = value.extract::<bool>() {
-                    // True → Strict (backwards compat), False → Off
-                    overrides.auto_install_fonts = Some(if b {
-                        AutoInstallFonts::Strict
-                    } else {
-                        AutoInstallFonts::Off
-                    });
-                } else if let Ok(s) = value.extract::<String>() {
-                    overrides.auto_install_fonts = Some(match s.as_str() {
-                        "strict" => AutoInstallFonts::Strict,
-                        "best_effort" => AutoInstallFonts::BestEffort,
-                        other => {
-                            return Err(vl_convert_rs::anyhow::anyhow!(
-                                "Invalid auto_install_fonts value: '{other}'. \
-                                 Expected 'strict', 'best_effort', True, False, or None"
-                            ));
-                        }
-                    });
-                } else {
-                    return Err(vl_convert_rs::anyhow::anyhow!(
-                        "Invalid auto_install_fonts value: expected bool, str, or None"
-                    ));
-                }
-            }
             "font_cache_size_mb" => {
                 if !value.is_none() {
                     overrides.font_cache_size_mb = Some(value.extract::<u64>().map_err(|err| {
@@ -185,44 +151,36 @@ fn parse_config_overrides(
     Ok(overrides)
 }
 
-fn apply_config_overrides(config: &mut VlConverterConfig, overrides: &ConverterConfigOverrides) {
+fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterConfigOverrides) {
     if let Some(num_workers) = overrides.num_workers {
         config.num_workers = num_workers;
     }
     if let Some(allow_http_access) = overrides.allow_http_access {
         config.allow_http_access = allow_http_access;
     }
-    if let Some(filesystem_root) = overrides.filesystem_root.clone() {
+    if let Some(filesystem_root) = overrides.filesystem_root {
         config.filesystem_root = filesystem_root;
     }
-    if let Some(allowed_base_urls) = overrides.allowed_base_urls.clone() {
+    if let Some(allowed_base_urls) = overrides.allowed_base_urls {
         config.allowed_base_urls = allowed_base_urls;
     }
-    if let Some(auto_install_fonts) = overrides.auto_install_fonts {
-        config.auto_install_fonts = auto_install_fonts;
+    if let Some(mb) = overrides.font_cache_size_mb {
+        let bytes = mb.saturating_mul(1024 * 1024);
+        configure_font_cache_rs(Some(bytes));
     }
 }
 
 fn configure_converter_with_config_overrides(
     overrides: ConverterConfigOverrides,
 ) -> Result<(), vl_convert_rs::anyhow::Error> {
-    // Reconfigure the converter first — only apply cache size if this succeeds
     let mut guard = VL_CONVERTER.write().map_err(|e| {
         vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
     })?;
 
     let mut config = guard.config();
-    apply_config_overrides(&mut config, &overrides);
+    apply_config_overrides(&mut config, overrides);
     let converter = VlConverterRs::with_config(config)?;
     *guard = Arc::new(converter);
-    drop(guard);
-
-    // Apply cache size after successful reconfiguration
-    if let Some(font_cache_size_mb) = overrides.font_cache_size_mb {
-        let bytes = font_cache_size_mb.saturating_mul(1024 * 1024);
-        configure_font_cache_rs(Some(bytes));
-    }
-
     Ok(())
 }
 
@@ -1275,27 +1233,22 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
     Ok(())
 }
 
-/// Download, cache, and register a font by family name.
-///
 /// Downloads font files from the Fontsource catalog (which includes
 /// Google Fonts and other open-source fonts) and registers them for
 /// use in subsequent conversions.
-///
-/// Args:
-///     font_family (str): Font family name (e.g. "Roboto", "Playfair Display")
-///
-/// Returns:
-///     None
 #[pyfunction]
 #[pyo3(signature = (font_family))]
 fn install_font(font_family: &str) -> PyResult<()> {
     let font_family = font_family.to_string();
-    run_converter_future(move |_converter| {
-        let font_family = font_family.clone();
-        async move { install_font_rs(&font_family).await }
+    Python::with_gil(|py| {
+        py.allow_threads(move || {
+            PYTHON_RUNTIME
+                .block_on(async move { install_font_rs(&font_family).await })
+                .map_err(|err| {
+                    PyValueError::new_err(format!("Failed to install font: {}", err))
+                })
+        })
     })
-    .map_err(|err| prefixed_py_error("Font installation failed", err))?;
-    Ok(())
 }
 
 /// Configure converter options for subsequent requests
@@ -2190,15 +2143,16 @@ fn register_font_directory_asyncio<'py>(
 #[pyo3(signature = (font_family))]
 fn install_font_asyncio<'py>(py: Python<'py>, font_family: &str) -> PyResult<Bound<'py, PyAny>> {
     let font_family = font_family.to_string();
-    run_converter_future_async(
-        py,
-        move |_converter| {
-            let font_family = font_family.clone();
-            async move { install_font_rs(&font_family).await }
-        },
-        "Font installation failed",
-        |py, ()| Ok(py.None().into()),
-    )
+    future_into_py_object(py, async move {
+        tokio::task::spawn_blocking(move || {
+            PYTHON_RUNTIME
+                .block_on(async move { install_font_rs(&font_family).await })
+        })
+        .await
+        .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
+        .map_err(|err| PyValueError::new_err(format!("Failed to install font: {err}")))?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
 }
 
 #[doc = async_variant_doc!("configure_converter")]
