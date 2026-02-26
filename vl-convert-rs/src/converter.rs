@@ -37,7 +37,7 @@ use png::{PixelDimensions, Unit};
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-use crate::html::{generate_font_tags, get_vega_or_vegalite_script};
+use crate::html::{font_cdn_url, font_import_rule, font_link_tag, get_vega_or_vegalite_script};
 use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
@@ -455,6 +455,37 @@ pub enum MissingFontsPolicy {
     Fallback,
     Warn,
     Error,
+}
+
+/// Output format for font information returned by `vega_fonts` / `vegalite_fonts`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FontFormat {
+    /// Just the font family name (e.g. "Roboto")
+    Name,
+    /// CDN stylesheet URL
+    Url,
+    /// HTML `<link rel="stylesheet">` tag
+    LinkTag,
+    /// CSS `@import url(...)` rule
+    ImportRule,
+    /// CSS `@font-face` block with embedded base64 WOFF2 data
+    FontFace,
+}
+
+impl std::str::FromStr for FontFormat {
+    type Err = AnyError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "name" => Ok(FontFormat::Name),
+            "url" => Ok(FontFormat::Url),
+            "link_tag" => Ok(FontFormat::LinkTag),
+            "import_rule" => Ok(FontFormat::ImportRule),
+            "font_face" => Ok(FontFormat::FontFace),
+            _ => Err(anyhow!(
+                "Invalid font format: '{s}'. Expected one of: name, url, link_tag, import_rule, font_face"
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3327,6 +3358,86 @@ impl VlConverter {
         ))
     }
 
+    /// Return font information for a Vega spec in the requested format.
+    ///
+    /// The `auto_install_fonts` and `embed_local_fonts` parameters control
+    /// which fonts are discovered. The converter-level `missing_fonts` policy
+    /// is always respected.
+    pub async fn vega_fonts(
+        &self,
+        vg_spec: impl Into<ValueOrString>,
+        vg_opts: VgOpts,
+        format: FontFormat,
+        auto_install_fonts: bool,
+        embed_local_fonts: bool,
+    ) -> Result<Vec<String>, AnyError> {
+        let vg_spec = vg_spec.into();
+        let spec_value: serde_json::Value = match &vg_spec {
+            ValueOrString::JsonString(s) => serde_json::from_str(s)?,
+            ValueOrString::Value(v) => v.clone(),
+        };
+
+        let missing = self.inner.config.missing_fonts;
+        let html_fonts =
+            preprocess_fonts(&spec_value, auto_install_fonts, embed_local_fonts, missing).await?;
+
+        match format {
+            FontFormat::Name => Ok(html_fonts.iter().map(|f| f.family.clone()).collect()),
+            FontFormat::Url => Ok(html_fonts.iter().filter_map(|f| font_cdn_url(f)).collect()),
+            FontFormat::LinkTag => Ok(html_fonts.iter().filter_map(|f| font_link_tag(f)).collect()),
+            FontFormat::ImportRule => Ok(html_fonts
+                .iter()
+                .filter_map(|f| font_import_rule(f))
+                .collect()),
+            FontFormat::FontFace => {
+                if html_fonts.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let text_json = self.vega_to_text_by_font(spec_value, vg_opts).await?;
+                let text_entries: Vec<TextByFontEntry> = serde_json::from_str(&text_json)?;
+                let chars_by_key = aggregate_chars_by_font_key(&text_entries);
+                let fontdb = USVG_OPTIONS
+                    .lock()
+                    .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
+                    .fontdb
+                    .clone();
+                Ok(generate_font_face_css(
+                    &chars_by_key,
+                    &html_fonts,
+                    &missing,
+                    &fontdb,
+                )?)
+            }
+        }
+    }
+
+    /// Return font information for a Vega-Lite spec in the requested format.
+    ///
+    /// Compiles the spec to Vega first, then delegates to [`vega_fonts`].
+    pub async fn vegalite_fonts(
+        &self,
+        vl_spec: impl Into<ValueOrString>,
+        vl_opts: VlOpts,
+        format: FontFormat,
+        auto_install_fonts: bool,
+        embed_local_fonts: bool,
+    ) -> Result<Vec<String>, AnyError> {
+        let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?;
+        let vg_opts = VgOpts {
+            allowed_base_urls: vl_opts.allowed_base_urls,
+            format_locale: vl_opts.format_locale,
+            time_format_locale: vl_opts.time_format_locale,
+        };
+        self.vega_fonts(
+            vega_spec,
+            vg_opts,
+            format,
+            auto_install_fonts,
+            embed_local_fonts,
+        )
+        .await
+    }
+
     pub async fn vegalite_to_html(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -3339,50 +3450,63 @@ impl VlConverter {
 
         let auto_install = self.inner.config.auto_install_fonts;
         let embed_local = self.inner.config.embed_local_fonts;
-        let missing = self.inner.config.missing_fonts;
 
-        let font_tags = if auto_install || embed_local || missing != MissingFontsPolicy::Fallback {
+        let font_tags = if auto_install
+            || embed_local
+            || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
+        {
+            // Compile VL to Vega once for font analysis
             let vega_spec = self
                 .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
                 .await?;
-            let html_fonts =
-                preprocess_fonts(&vega_spec, auto_install, embed_local, missing).await?;
-            if html_fonts.is_empty() {
-                String::new()
+            let vg_opts = VgOpts {
+                allowed_base_urls: vl_opts.allowed_base_urls.clone(),
+                format_locale: vl_opts.format_locale.clone(),
+                time_format_locale: vl_opts.time_format_locale.clone(),
+            };
+
+            if bundle {
+                // Bundle mode: embed all fonts as @font-face CSS
+                let blocks = self
+                    .vega_fonts(
+                        vega_spec,
+                        vg_opts,
+                        FontFormat::FontFace,
+                        auto_install,
+                        embed_local,
+                    )
+                    .await?;
+                if blocks.is_empty() {
+                    String::new()
+                } else {
+                    let css = blocks.join("\n");
+                    format!("    <style>\n{css}\n    </style>\n")
+                }
             } else {
-                let has_local = html_fonts
-                    .iter()
-                    .any(|f| matches!(f.source, FontSource::Local));
-                let needs_embed = bundle || has_local;
                 let mut parts = Vec::new();
 
-                if !bundle {
-                    // CDN mode: <link> tags for Fontsource fonts
-                    let cdn_tags = generate_font_tags(&html_fonts);
-                    if !cdn_tags.is_empty() {
-                        parts.push(cdn_tags);
-                    }
+                // CDN mode: <link> tags for auto-installed fonts
+                let link_tags = self
+                    .vega_fonts(
+                        vega_spec.clone(),
+                        vg_opts.clone(),
+                        FontFormat::LinkTag,
+                        auto_install,
+                        false,
+                    )
+                    .await?;
+                for tag in &link_tags {
+                    parts.push(format!("    {tag}\n"));
                 }
 
-                if needs_embed {
-                    // Embed mode: @font-face CSS for bundle or local fonts
-                    let vg_opts = VgOpts {
-                        allowed_base_urls: vl_opts.allowed_base_urls.clone(),
-                        format_locale: vl_opts.format_locale.clone(),
-                        time_format_locale: vl_opts.time_format_locale.clone(),
-                    };
-                    let text_json = self.vega_to_text_by_font(vega_spec, vg_opts).await?;
-                    let text_entries: Vec<TextByFontEntry> = serde_json::from_str(&text_json)?;
-                    let chars_by_key = aggregate_chars_by_font_key(&text_entries);
-                    let fontdb = USVG_OPTIONS
-                        .lock()
-                        .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
-                        .fontdb
-                        .clone();
-                    let font_css =
-                        generate_font_face_css(&chars_by_key, &html_fonts, &missing, &fontdb)?;
-                    if !font_css.is_empty() {
-                        parts.push(format!("    <style>\n{font_css}\n    </style>\n"));
+                // Embed local fonts as @font-face CSS if enabled
+                if embed_local {
+                    let blocks = self
+                        .vega_fonts(vega_spec, vg_opts, FontFormat::FontFace, false, true)
+                        .await?;
+                    if !blocks.is_empty() {
+                        let css = blocks.join("\n");
+                        parts.push(format!("    <style>\n{css}\n    </style>\n"));
                     }
                 }
 
@@ -3407,48 +3531,64 @@ impl VlConverter {
 
         let auto_install = self.inner.config.auto_install_fonts;
         let embed_local = self.inner.config.embed_local_fonts;
-        let missing = self.inner.config.missing_fonts;
 
-        let font_tags = if auto_install || embed_local || missing != MissingFontsPolicy::Fallback {
+        let font_tags = if auto_install
+            || embed_local
+            || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
+        {
             let spec_value: serde_json::Value = match &vg_spec {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
                 ValueOrString::Value(v) => v.clone(),
             };
-            let html_fonts =
-                preprocess_fonts(&spec_value, auto_install, embed_local, missing).await?;
-            if html_fonts.is_empty() {
-                String::new()
+
+            if bundle {
+                // Bundle mode: embed all fonts as @font-face CSS
+                let blocks = self
+                    .vega_fonts(
+                        spec_value,
+                        vg_opts.clone(),
+                        FontFormat::FontFace,
+                        auto_install,
+                        embed_local,
+                    )
+                    .await?;
+                if blocks.is_empty() {
+                    String::new()
+                } else {
+                    let css = blocks.join("\n");
+                    format!("    <style>\n{css}\n    </style>\n")
+                }
             } else {
-                let has_local = html_fonts
-                    .iter()
-                    .any(|f| matches!(f.source, FontSource::Local));
-                let needs_embed = bundle || has_local;
                 let mut parts = Vec::new();
 
-                if !bundle {
-                    // CDN mode: <link> tags for Fontsource fonts
-                    let cdn_tags = generate_font_tags(&html_fonts);
-                    if !cdn_tags.is_empty() {
-                        parts.push(cdn_tags);
-                    }
+                // CDN mode: <link> tags for auto-installed fonts
+                let link_tags = self
+                    .vega_fonts(
+                        spec_value.clone(),
+                        vg_opts.clone(),
+                        FontFormat::LinkTag,
+                        auto_install,
+                        false,
+                    )
+                    .await?;
+                for tag in &link_tags {
+                    parts.push(format!("    {tag}\n"));
                 }
 
-                if needs_embed {
-                    // Embed mode: @font-face CSS for bundle or local fonts
-                    let text_json = self
-                        .vega_to_text_by_font(spec_value, vg_opts.clone())
+                // Embed local fonts as @font-face CSS if enabled
+                if embed_local {
+                    let blocks = self
+                        .vega_fonts(
+                            spec_value,
+                            vg_opts.clone(),
+                            FontFormat::FontFace,
+                            false,
+                            true,
+                        )
                         .await?;
-                    let text_entries: Vec<TextByFontEntry> = serde_json::from_str(&text_json)?;
-                    let chars_by_key = aggregate_chars_by_font_key(&text_entries);
-                    let fontdb = USVG_OPTIONS
-                        .lock()
-                        .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
-                        .fontdb
-                        .clone();
-                    let font_css =
-                        generate_font_face_css(&chars_by_key, &html_fonts, &missing, &fontdb)?;
-                    if !font_css.is_empty() {
-                        parts.push(format!("    <style>\n{font_css}\n    </style>\n"));
+                    if !blocks.is_empty() {
+                        let css = blocks.join("\n");
+                        parts.push(format!("    <style>\n{css}\n    </style>\n"));
                     }
                 }
 
@@ -3730,6 +3870,25 @@ mod tests {
     }
 
     fn assert_send_future<F: Future + Send>(_: F) {}
+
+    #[test]
+    fn test_font_format_from_str() {
+        assert_eq!("name".parse::<FontFormat>().unwrap(), FontFormat::Name);
+        assert_eq!("url".parse::<FontFormat>().unwrap(), FontFormat::Url);
+        assert_eq!(
+            "link_tag".parse::<FontFormat>().unwrap(),
+            FontFormat::LinkTag
+        );
+        assert_eq!(
+            "import_rule".parse::<FontFormat>().unwrap(),
+            FontFormat::ImportRule
+        );
+        assert_eq!(
+            "font_face".parse::<FontFormat>().unwrap(),
+            FontFormat::FontFace
+        );
+        assert!("invalid".parse::<FontFormat>().is_err());
+    }
 
     #[derive(Clone)]
     struct TestHttpResponse {

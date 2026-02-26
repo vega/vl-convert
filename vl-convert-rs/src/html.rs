@@ -71,73 +71,41 @@ import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
     bundle_script(script.to_string(), vl_version).await
 }
 
-/// Generate HTML `<link>` tags for loading fonts from CDN.
+/// Return the CDN stylesheet URL for a font.
 ///
-/// Google fonts use the Google Fonts CSS2 API (automatic subsetting).
-/// Non-Google Fontsource fonts use the Fontsource jsDelivr CDN.
-pub fn generate_font_tags(fonts: &[FontForHtml]) -> String {
-    // Only Fontsource fonts have CDN URLs; local fonts are handled via @font-face CSS.
-    let fontsource_fonts: Vec<&FontForHtml> = fonts
-        .iter()
-        .filter(|f| matches!(&f.source, FontSource::Fontsource { .. }))
-        .collect();
-
-    if fontsource_fonts.is_empty() {
-        return String::new();
-    }
-
-    let (google_fonts, other_fonts): (Vec<&FontForHtml>, Vec<&FontForHtml>) =
-        fontsource_fonts.into_iter().partition(|f| {
-            matches!(&f.source, FontSource::Fontsource { font_type, .. } if font_type == "google")
-        });
-
-    let has_google = !google_fonts.is_empty();
-
-    let mut result = Vec::new();
-
-    // Preconnect hints for Google Fonts
-    if has_google {
-        result
-            .push(r#"    <link rel="preconnect" href="https://fonts.googleapis.com">"#.to_string());
-        result.push(
-            r#"    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>"#
-                .to_string(),
-        );
-    }
-
-    // Google Fonts: single <link> with multiple families
-    if has_google {
-        let families: Vec<String> = google_fonts
-            .iter()
-            .map(|f| format_google_font_family(f))
-            .collect();
-        let url = format!(
-            "https://fonts.googleapis.com/css2?{}&display=swap",
-            families.join("&")
-        );
-        result.push(format!(r#"    <link href="{url}" rel="stylesheet">"#));
-    }
-
-    // Fontsource CDN: one <link> per font
-    for font in &other_fonts {
-        if let FontSource::Fontsource { font_id, .. } = &font.source {
-            let url =
-                format!("https://cdn.jsdelivr.net/fontsource/fonts/{font_id}@latest/index.css",);
-            result.push(format!(r#"    <link rel="stylesheet" href="{url}">"#));
+/// Google fonts use the Google Fonts CSS2 API. Non-Google Fontsource fonts
+/// use the Fontsource jsDelivr CDN. Returns `None` for local fonts.
+pub fn font_cdn_url(font: &FontForHtml) -> Option<String> {
+    match &font.source {
+        FontSource::Fontsource { font_id, font_type } => {
+            if font_type == "google" {
+                let name = font.family.replace(' ', "+");
+                let tuples = "0,400;0,700;1,400;1,700";
+                Some(format!(
+                    "https://fonts.googleapis.com/css2?family={name}:ital,wght@{tuples}&display=swap"
+                ))
+            } else {
+                Some(format!(
+                    "https://cdn.jsdelivr.net/fontsource/fonts/{font_id}@latest/index.css"
+                ))
+            }
         }
+        FontSource::Local => None,
     }
-
-    format!("{}\n", result.join("\n"))
 }
 
-/// Format a single font family for the Google Fonts CSS2 API.
-///
-/// Uses weights 400 and 700 (matching default_variants) with both
-/// normal and italic styles.
-fn format_google_font_family(font: &FontForHtml) -> String {
-    let name = font.family.replace(' ', "+");
-    let tuples = "0,400;0,700;1,400;1,700";
-    format!("family={name}:ital,wght@{tuples}")
+/// Return an HTML `<link rel="stylesheet">` tag for a font.
+/// Returns `None` for local fonts.
+pub fn font_link_tag(font: &FontForHtml) -> Option<String> {
+    let url = font_cdn_url(font)?;
+    Some(format!(r#"<link rel="stylesheet" href="{url}">"#))
+}
+
+/// Return a CSS `@import` rule for a font.
+/// Returns `None` for local fonts.
+pub fn font_import_rule(font: &FontForHtml) -> Option<String> {
+    let url = font_cdn_url(font)?;
+    Some(format!(r#"@import url("{url}");"#))
 }
 
 #[cfg(test)]
@@ -164,69 +132,86 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_generate_font_tags_empty() {
-        assert_eq!(generate_font_tags(&[]), "");
+    fn local_font(family: &str) -> FontForHtml {
+        FontForHtml {
+            family: family.to_string(),
+            source: FontSource::Local,
+        }
     }
 
-    #[test]
-    fn test_generate_font_tags_single_google() {
-        let fonts = vec![google_font("Roboto", "roboto")];
-        let result = generate_font_tags(&fonts);
-        assert!(result.contains(r#"rel="preconnect" href="https://fonts.googleapis.com""#));
-        assert!(result.contains(r#"rel="preconnect" href="https://fonts.gstatic.com""#));
-        assert!(result.contains("fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap"));
-    }
+    // font_cdn_url tests
 
     #[test]
-    fn test_generate_font_tags_single_other() {
-        let fonts = vec![other_font("Custom Font", "custom-font")];
-        let result = generate_font_tags(&fonts);
-        // No preconnect for non-Google fonts
-        assert!(!result.contains("preconnect"));
-        assert!(result.contains("cdn.jsdelivr.net/fontsource/fonts/custom-font@latest/index.css"));
-    }
-
-    #[test]
-    fn test_generate_font_tags_mixed() {
-        let fonts = vec![
-            google_font("Roboto", "roboto"),
-            other_font("Custom Font", "custom-font"),
-        ];
-        let result = generate_font_tags(&fonts);
-        assert!(result.contains("preconnect"));
-        assert!(result.contains("fonts.googleapis.com/css2"));
-        assert!(result.contains("cdn.jsdelivr.net/fontsource/fonts/custom-font@latest/index.css"));
-    }
-
-    #[test]
-    fn test_generate_font_tags_multiple_google() {
-        let fonts = vec![
-            google_font("Roboto", "roboto"),
-            google_font("Open Sans", "open-sans"),
-        ];
-        let result = generate_font_tags(&fonts);
-        // Both families in a single <link> tag
-        assert!(result.contains("family=Roboto:ital,wght@"));
-        assert!(result.contains("family=Open+Sans:ital,wght@"));
-        // Only one googleapis link tag
-        assert_eq!(result.matches("fonts.googleapis.com/css2").count(), 1);
-    }
-
-    #[test]
-    fn test_format_google_font_family_multi_word() {
-        let font = google_font("Playfair Display", "playfair-display");
-        let result = format_google_font_family(&font);
+    fn test_cdn_url_google_font() {
+        let font = google_font("Roboto", "roboto");
+        let url = font_cdn_url(&font).unwrap();
         assert_eq!(
-            result,
-            "family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700"
+            url,
+            "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap"
         );
     }
 
     #[test]
-    fn test_format_google_font_family_single_word() {
+    fn test_cdn_url_google_font_multi_word() {
+        let font = google_font("Playfair Display", "playfair-display");
+        let url = font_cdn_url(&font).unwrap();
+        assert!(url.contains("family=Playfair+Display:ital,wght@"));
+    }
+
+    #[test]
+    fn test_cdn_url_other_fontsource() {
+        let font = other_font("Custom Font", "custom-font");
+        let url = font_cdn_url(&font).unwrap();
+        assert_eq!(
+            url,
+            "https://cdn.jsdelivr.net/fontsource/fonts/custom-font@latest/index.css"
+        );
+    }
+
+    #[test]
+    fn test_cdn_url_local_font() {
+        assert!(font_cdn_url(&local_font("Arial")).is_none());
+    }
+
+    // font_link_tag tests
+
+    #[test]
+    fn test_link_tag_google_font() {
         let font = google_font("Roboto", "roboto");
-        let result = format_google_font_family(&font);
-        assert_eq!(result, "family=Roboto:ital,wght@0,400;0,700;1,400;1,700");
+        let tag = font_link_tag(&font).unwrap();
+        assert_eq!(
+            tag,
+            r#"<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap">"#
+        );
+    }
+
+    #[test]
+    fn test_link_tag_local_font() {
+        assert!(font_link_tag(&local_font("Arial")).is_none());
+    }
+
+    // font_import_rule tests
+
+    #[test]
+    fn test_import_rule_google_font() {
+        let font = google_font("Roboto", "roboto");
+        let rule = font_import_rule(&font).unwrap();
+        assert!(rule.starts_with("@import url(\"https://fonts.googleapis.com/css2?"));
+        assert!(rule.ends_with("\");"));
+    }
+
+    #[test]
+    fn test_import_rule_other_fontsource() {
+        let font = other_font("Custom Font", "custom-font");
+        let rule = font_import_rule(&font).unwrap();
+        assert_eq!(
+            rule,
+            r#"@import url("https://cdn.jsdelivr.net/fontsource/fonts/custom-font@latest/index.css");"#
+        );
+    }
+
+    #[test]
+    fn test_import_rule_local_font() {
+        assert!(font_import_rule(&local_font("Arial")).is_none());
     }
 }

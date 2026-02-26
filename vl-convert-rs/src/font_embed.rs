@@ -177,7 +177,7 @@ pub fn generate_font_face_css(
     html_fonts: &[FontForHtml],
     mode: &MissingFontsPolicy,
     fontdb: &fontdb::Database,
-) -> Result<String, anyhow::Error> {
+) -> Result<Vec<String>, anyhow::Error> {
     let mut css_blocks = Vec::new();
 
     for font_info in html_fonts {
@@ -203,7 +203,7 @@ pub fn generate_font_face_css(
         }
     }
 
-    Ok(css_blocks.join("\n"))
+    Ok(css_blocks)
 }
 
 /// Generate CSS for a Fontsource-cached font (existing logic).
@@ -721,6 +721,6 @@ mod tests {
         );
         let result = generate_font_face_css(&chars_map, &fonts, &MissingFontsPolicy::Fallback, &db);
         assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
+        assert!(result.unwrap().is_empty()); // empty Vec
     }
 }

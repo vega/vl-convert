@@ -13,8 +13,8 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    FormatLocale, MissingFontsPolicy, Renderer, TimeFormatLocale, ValueOrString, VgOpts,
-    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
+    FontFormat, FormatLocale, MissingFontsPolicy, Renderer, TimeFormatLocale, ValueOrString,
+    VgOpts, VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -1082,6 +1082,117 @@ fn vega_to_html(
     .map_err(|err| prefixed_py_error("Vega to HTML conversion failed", err))
 }
 
+/// Return font information for a Vega-Lite spec.
+///
+/// Args:
+///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
+///     vl_version (str): Vega-Lite library version string (e.g. 'v5.15')
+///         (default to latest)
+///     config (dict | None): Chart configuration object to apply during conversion
+///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     format (str): Output format. One of 'name' (default), 'url', 'link_tag',
+///         'import_rule', or 'font_face'
+///     auto_install_fonts (bool | None): Whether to auto-install fonts from
+///         Fontsource. Defaults to converter config value
+///     embed_local_fonts (bool | None): Whether to include locally-available
+///         fonts. Defaults to converter config value
+/// Returns:
+///     list[str]: Font information in the requested format
+#[pyfunction]
+#[pyo3(
+    signature = (vl_spec, vl_version=None, config=None, theme=None, format_locale=None, time_format_locale=None, format=None, auto_install_fonts=None, embed_local_fonts=None)
+)]
+fn vegalite_fonts(
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+    format: Option<&str>,
+    auto_install_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
+) -> PyResult<Vec<String>> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config_obj = parse_optional_config(config)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let format = FontFormat::from_str(format.unwrap_or("name"))?;
+    let converter_cfg = converter_config()?;
+    let auto_install = auto_install_fonts.unwrap_or(converter_cfg.auto_install_fonts);
+    let embed_local = embed_local_fonts.unwrap_or(converter_cfg.embed_local_fonts);
+    let vl_opts = VlOpts {
+        vl_version,
+        config: config_obj,
+        theme,
+        show_warnings: false,
+        allowed_base_urls: None,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future(move |converter| async move {
+        converter
+            .vegalite_fonts(vl_spec, vl_opts, format, auto_install, embed_local)
+            .await
+    })
+    .map_err(|err| prefixed_py_error("Vega-Lite font extraction failed", err))
+}
+
+/// Return font information for a Vega spec.
+///
+/// Args:
+///     vg_spec (str | dict): Vega JSON specification string or dict
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     format (str): Output format. One of 'name' (default), 'url', 'link_tag',
+///         'import_rule', or 'font_face'
+///     auto_install_fonts (bool | None): Whether to auto-install fonts from
+///         Fontsource. Defaults to converter config value
+///     embed_local_fonts (bool | None): Whether to include locally-available
+///         fonts. Defaults to converter config value
+/// Returns:
+///     list[str]: Font information in the requested format
+#[pyfunction]
+#[pyo3(
+    signature = (vg_spec, format_locale=None, time_format_locale=None, format=None, auto_install_fonts=None, embed_local_fonts=None)
+)]
+fn vega_fonts(
+    vg_spec: PyObject,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+    format: Option<&str>,
+    auto_install_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
+) -> PyResult<Vec<String>> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let format = FontFormat::from_str(format.unwrap_or("name"))?;
+    let converter_cfg = converter_config()?;
+    let auto_install = auto_install_fonts.unwrap_or(converter_cfg.auto_install_fonts);
+    let embed_local = embed_local_fonts.unwrap_or(converter_cfg.embed_local_fonts);
+    let vg_opts = VgOpts {
+        allowed_base_urls: None,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future(move |converter| async move {
+        converter
+            .vega_fonts(vg_spec, vg_opts, format, auto_install, embed_local)
+            .await
+    })
+    .map_err(|err| prefixed_py_error("Vega font extraction failed", err))
+}
+
 /// Convert an SVG image string to PNG image data
 ///
 /// Args:
@@ -2107,6 +2218,105 @@ fn vega_to_html_asyncio<'py>(
     )
 }
 
+#[doc = async_variant_doc!("vegalite_fonts")]
+#[pyfunction(name = "vegalite_fonts")]
+#[pyo3(
+    signature = (vl_spec, vl_version=None, config=None, theme=None, format_locale=None, time_format_locale=None, format=None, auto_install_fonts=None, embed_local_fonts=None)
+)]
+fn vegalite_fonts_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: PyObject,
+    vl_version: Option<&str>,
+    config: Option<PyObject>,
+    theme: Option<String>,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+    format: Option<&str>,
+    auto_install_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vl_version = if let Some(vl_version) = vl_version {
+        VlVersion::from_str(vl_version)?
+    } else {
+        Default::default()
+    };
+    let vl_spec = parse_json_spec(vl_spec)?;
+    let config_obj = parse_optional_config(config)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let format = FontFormat::from_str(format.unwrap_or("name"))?;
+    let converter_cfg = converter_config()?;
+    let auto_install = auto_install_fonts.unwrap_or(converter_cfg.auto_install_fonts);
+    let embed_local = embed_local_fonts.unwrap_or(converter_cfg.embed_local_fonts);
+    let vl_opts = VlOpts {
+        vl_version,
+        config: config_obj,
+        theme,
+        show_warnings: false,
+        allowed_base_urls: None,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move {
+            converter
+                .vegalite_fonts(vl_spec, vl_opts, format, auto_install, embed_local)
+                .await
+        },
+        "Vega-Lite font extraction failed",
+        |py, value| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        },
+    )
+}
+
+#[doc = async_variant_doc!("vega_fonts")]
+#[pyfunction(name = "vega_fonts")]
+#[pyo3(
+    signature = (vg_spec, format_locale=None, time_format_locale=None, format=None, auto_install_fonts=None, embed_local_fonts=None)
+)]
+fn vega_fonts_asyncio<'py>(
+    py: Python<'py>,
+    vg_spec: PyObject,
+    format_locale: Option<PyObject>,
+    time_format_locale: Option<PyObject>,
+    format: Option<&str>,
+    auto_install_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let vg_spec = parse_json_spec(vg_spec)?;
+    let format_locale = parse_option_format_locale(format_locale)?;
+    let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let format = FontFormat::from_str(format.unwrap_or("name"))?;
+    let converter_cfg = converter_config()?;
+    let auto_install = auto_install_fonts.unwrap_or(converter_cfg.auto_install_fonts);
+    let embed_local = embed_local_fonts.unwrap_or(converter_cfg.embed_local_fonts);
+    let vg_opts = VgOpts {
+        allowed_base_urls: None,
+        format_locale,
+        time_format_locale,
+    };
+
+    run_converter_future_async(
+        py,
+        move |converter| async move {
+            converter
+                .vega_fonts(vg_spec, vg_opts, format, auto_install, embed_local)
+                .await
+        },
+        "Vega font extraction failed",
+        |py, value| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        },
+    )
+}
+
 #[doc = async_variant_doc!("svg_to_png")]
 #[pyfunction(name = "svg_to_png")]
 #[pyo3(signature = (svg, scale=None, ppi=None))]
@@ -2444,6 +2654,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(vegalite_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vegalite_to_url_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vegalite_to_html_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vegalite_fonts_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vega_to_svg_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vega_to_scenegraph_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vega_to_png_asyncio, &asyncio)?)?;
@@ -2451,6 +2662,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(vega_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vega_to_url_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vega_to_html_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(vega_fonts_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(svg_to_png_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(svg_to_jpeg_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
@@ -2487,6 +2699,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vegalite_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_url, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_html, m)?)?;
+    m.add_function(wrap_pyfunction!(vegalite_fonts, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_scenegraph, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_png, m)?)?;
@@ -2494,6 +2707,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(vega_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_url, m)?)?;
     m.add_function(wrap_pyfunction!(vega_to_html, m)?)?;
+    m.add_function(wrap_pyfunction!(vega_fonts, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_png, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
