@@ -61,6 +61,10 @@ struct Cli {
     #[arg(long, global = true)]
     auto_install_fonts: bool,
 
+    /// Embed locally-available fonts (system, --font-dir) as @font-face CSS in HTML output.
+    #[arg(long, global = true)]
+    embed_local_fonts: bool,
+
     /// Missing-font behavior: fallback silently, warn, or error.
     #[arg(long, global = true, value_enum, default_value_t = MissingFontsArg::Fallback)]
     missing_fonts: MissingFontsArg,
@@ -604,6 +608,7 @@ async fn main() -> Result<(), anyhow::Error> {
         filesystem_root,
         install_font: install_font_families,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts: missing_fonts_arg,
         command,
     } = Cli::parse();
@@ -634,6 +639,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )
             .await?
@@ -665,6 +671,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )
             .await?
@@ -700,6 +707,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )
             .await?
@@ -735,6 +743,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )
             .await?
@@ -766,6 +775,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )
             .await?
@@ -840,6 +850,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )
             .await?
@@ -867,6 +878,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )
             .await?
@@ -894,6 +906,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )
             .await?
@@ -917,6 +930,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allow_http_access,
                 filesystem_root.clone(),
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )
             .await?
@@ -981,6 +995,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 allowed_base_url,
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )?;
             let png_data = converter.svg_to_png(&svg, scale, Some(ppi))?;
@@ -1002,6 +1017,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 allowed_base_url,
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )?;
             let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality))?;
@@ -1021,6 +1037,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 allowed_base_url,
                 auto_install_fonts,
+                embed_local_fonts,
                 missing_fonts,
             )?;
             let pdf_data = converter.svg_to_pdf(&svg)?;
@@ -1057,6 +1074,7 @@ fn build_converter(
     filesystem_root: Option<String>,
     allowed_base_urls: Option<Vec<String>>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<VlConverter, anyhow::Error> {
     let config = VlConverterConfig {
@@ -1064,6 +1082,7 @@ fn build_converter(
         filesystem_root: filesystem_root.map(PathBuf::from),
         allowed_base_urls,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
         ..Default::default()
     };
@@ -1357,6 +1376,7 @@ async fn vl_2_vg(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -1377,6 +1397,7 @@ async fn vl_2_vg(
         filesystem_root,
         None,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
     )?;
 
@@ -1428,6 +1449,7 @@ async fn vg_2_svg(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Read input file
@@ -1445,6 +1467,7 @@ async fn vg_2_svg(
         filesystem_root,
         None,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
     )?;
 
@@ -1484,6 +1507,7 @@ async fn vg_2_png(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Read input file
@@ -1501,6 +1525,7 @@ async fn vg_2_png(
         filesystem_root,
         None,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
     )?;
 
@@ -1542,6 +1567,7 @@ async fn vg_2_jpeg(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Read input file
@@ -1559,6 +1585,7 @@ async fn vg_2_jpeg(
         filesystem_root,
         None,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
     )?;
 
@@ -1597,6 +1624,7 @@ async fn vg_2_pdf(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Read input file
@@ -1614,6 +1642,7 @@ async fn vg_2_pdf(
         filesystem_root,
         None,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
     )?;
 
@@ -1655,6 +1684,7 @@ async fn vl_2_svg(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -1678,6 +1708,7 @@ async fn vl_2_svg(
         filesystem_root,
         None,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
     )?;
 
@@ -1725,6 +1756,7 @@ async fn vl_2_png(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -1748,6 +1780,7 @@ async fn vl_2_png(
         filesystem_root,
         None,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
     )?;
 
@@ -1797,6 +1830,7 @@ async fn vl_2_jpeg(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -1820,6 +1854,7 @@ async fn vl_2_jpeg(
         filesystem_root,
         None,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
     )?;
 
@@ -1867,6 +1902,7 @@ async fn vl_2_pdf(
     allow_http_access: bool,
     filesystem_root: Option<String>,
     auto_install_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -1890,6 +1926,7 @@ async fn vl_2_pdf(
         filesystem_root,
         None,
         auto_install_fonts,
+        embed_local_fonts,
         missing_fonts,
     )?;
 

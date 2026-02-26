@@ -123,6 +123,9 @@ if TYPE_CHECKING:
         "urbaninstitute",
         "vox",
     ]
+    FontFormat: TypeAlias = Literal[
+        "name", "url", "link_tag", "import_rule", "font_face"
+    ]
     Renderer: TypeAlias = Literal["canvas", "hybrid", "svg"]
     FormatLocale: TypeAlias = FormatLocaleName | dict[str, Any]
     TimeFormatLocale: TypeAlias = TimeFormatLocaleName | dict[str, Any]
@@ -134,6 +137,7 @@ if TYPE_CHECKING:
         filesystem_root: str | None
         allowed_base_urls: list[str] | None
         auto_install_fonts: bool
+        embed_local_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
 
 __all__ = [
@@ -151,6 +155,7 @@ __all__ = [
     "svg_to_jpeg",
     "svg_to_pdf",
     "svg_to_png",
+    "vega_fonts",
     "vega_to_html",
     "vega_to_jpeg",
     "vega_to_pdf",
@@ -158,6 +163,7 @@ __all__ = [
     "vega_to_scenegraph",
     "vega_to_svg",
     "vega_to_url",
+    "vegalite_fonts",
     "vegalite_to_html",
     "vegalite_to_jpeg",
     "vegalite_to_pdf",
@@ -296,6 +302,7 @@ def configure_converter(
     allowed_base_urls: list[str] | None = None,
     font_cache_size_mb: int | None = None,
     auto_install_fonts: bool | None = None,
+    embed_local_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
 ) -> None:
     """
@@ -321,6 +328,9 @@ def configure_converter(
         Maximum font cache size in megabytes. If ``None``, keep current value.
     auto_install_fonts
         Whether missing fonts may be downloaded from Fontsource. If ``None``, keep current value.
+    embed_local_fonts
+        Whether locally-available fonts (system, font-dir) should be embedded as
+        @font-face CSS in HTML output. If ``None``, keep current value.
     missing_fonts
         Missing-font policy: ``"fallback"``, ``"warn"``, or ``"error"``.
         If ``None``, keep current value.
@@ -431,6 +441,41 @@ def vega_to_html(
     Returns
     -------
     HTML document.
+    """
+    ...
+
+def vega_fonts(
+    vg_spec: VlSpec,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
+    format: FontFormat | None = None,
+    auto_install_fonts: bool | None = None,
+    embed_local_fonts: bool | None = None,
+) -> list[str]:
+    """
+    Return font information for a Vega spec.
+
+    Parameters
+    ----------
+    vg_spec
+        Vega JSON specification string or dict
+    format_locale
+        d3-format locale name or dictionary
+    time_format_locale
+        d3-time-format locale name or dictionary
+    format
+        Output format. One of 'name' (default), 'url', 'link_tag',
+        'import_rule', or 'font_face'
+    auto_install_fonts
+        Whether to auto-install fonts from Fontsource.
+        Defaults to converter config value
+    embed_local_fonts
+        Whether to include locally-available fonts.
+        Defaults to converter config value
+
+    Returns
+    -------
+    Font information in the requested format.
     """
     ...
 
@@ -643,6 +688,51 @@ def vegalite_to_html(
     Returns
     -------
     HTML document.
+    """
+    ...
+
+def vegalite_fonts(
+    vl_spec: VlSpec,
+    vl_version: str | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
+    format: FontFormat | None = None,
+    auto_install_fonts: bool | None = None,
+    embed_local_fonts: bool | None = None,
+) -> list[str]:
+    """
+    Return font information for a Vega-Lite spec.
+
+    Parameters
+    ----------
+    vl_spec
+        Vega-Lite JSON specification string or dict
+    vl_version
+        Vega-Lite library version string (e.g. 'v5.15')
+        (default to latest)
+    config
+        Chart configuration object to apply during conversion
+    theme
+        Named theme (e.g. "dark") to apply during conversion
+    format_locale
+        d3-format locale name or dictionary
+    time_format_locale
+        d3-time-format locale name or dictionary
+    format
+        Output format. One of 'name' (default), 'url', 'link_tag',
+        'import_rule', or 'font_face'
+    auto_install_fonts
+        Whether to auto-install fonts from Fontsource.
+        Defaults to converter config value
+    embed_local_fonts
+        Whether to include locally-available fonts.
+        Defaults to converter config value
+
+    Returns
+    -------
+    Font information in the requested format.
     """
     ...
 
@@ -985,6 +1075,7 @@ if TYPE_CHECKING:
             font_cache_size_mb: int | None = None,
             auto_install_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
+            embed_local_fonts: bool | None = None,
         ) -> None:
             """Async version of ``configure_converter``. See sync function for full documentation."""
             ...
@@ -1016,6 +1107,17 @@ if TYPE_CHECKING:
             renderer: Renderer | None = None,
         ) -> str:
             """Async version of ``vega_to_html``. See sync function for full documentation."""
+            ...
+        async def vega_fonts(
+            self,
+            vg_spec: VlSpec,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            format: FontFormat | None = None,
+            auto_install_fonts: bool | None = None,
+            embed_local_fonts: bool | None = None,
+        ) -> list[str]:
+            """Async version of ``vega_fonts``. See sync function for full documentation."""
             ...
         async def vega_to_jpeg(
             self,
@@ -1085,6 +1187,20 @@ if TYPE_CHECKING:
             renderer: Renderer | None = None,
         ) -> str:
             """Async version of ``vegalite_to_html``. See sync function for full documentation."""
+            ...
+        async def vegalite_fonts(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+            format: FontFormat | None = None,
+            auto_install_fonts: bool | None = None,
+            embed_local_fonts: bool | None = None,
+        ) -> list[str]:
+            """Async version of ``vegalite_fonts``. See sync function for full documentation."""
             ...
         async def vegalite_to_jpeg(
             self,

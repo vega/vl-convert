@@ -1,15 +1,22 @@
 use serde_json::Value;
 use std::collections::HashSet;
 
-/// Metadata for a font that should be loaded via CDN in HTML output.
+/// Where a font's data originates.
+#[derive(Debug, Clone)]
+pub enum FontSource {
+    /// Font was downloaded from Fontsource. `font_id` identifies the cache directory.
+    Fontsource { font_id: String, font_type: String },
+    /// Font is already available in fontdb (system font, --font-dir, vendored).
+    Local,
+}
+
+/// Metadata for a font that should be embedded or linked in HTML output.
 #[derive(Debug, Clone)]
 pub struct FontForHtml {
     /// The font family name (e.g., "Roboto", "Playfair Display").
     pub family: String,
-    /// The Fontsource font ID (e.g., "roboto", "playfair-display").
-    pub font_id: String,
-    /// Whether this is a Google font ("google") or other ("other").
-    pub font_type: String,
+    /// Where the font data comes from.
+    pub source: FontSource,
 }
 
 // ---------------------------------------------------------------------------
