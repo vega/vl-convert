@@ -3383,11 +3383,11 @@ impl VlConverter {
 
         match format {
             FontFormat::Name => Ok(html_fonts.iter().map(|f| f.family.clone()).collect()),
-            FontFormat::Url => Ok(html_fonts.iter().filter_map(|f| font_cdn_url(f)).collect()),
-            FontFormat::LinkTag => Ok(html_fonts.iter().filter_map(|f| font_link_tag(f)).collect()),
+            FontFormat::Url => Ok(html_fonts.iter().filter_map(font_cdn_url).collect()),
+            FontFormat::LinkTag => Ok(html_fonts.iter().filter_map(font_link_tag).collect()),
             FontFormat::ImportRule => Ok(html_fonts
                 .iter()
-                .filter_map(|f| font_import_rule(f))
+                .filter_map(font_import_rule)
                 .collect()),
             FontFormat::FontFace => {
                 if html_fonts.is_empty() {
