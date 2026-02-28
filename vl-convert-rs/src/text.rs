@@ -1,24 +1,52 @@
 use crate::anyhow;
 use crate::anyhow::anyhow;
 use crate::image_loading::custom_string_resolver;
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use usvg::fontdb::Database;
 use usvg::{
     FallbackSelectionFn, FontFamily, FontResolver, FontSelectionFn, FontStretch, FontStyle,
     ImageHrefResolver,
 };
-use vl_convert_canvas2d::font_config::{font_config_to_fontdb, CustomFont, FontConfig};
+use vl_convert_canvas2d::font_config::{CustomFont, FontConfig, ResolvedFontConfig};
+use vl_convert_fontsource_fontdb::{FontsourceClient, LoadedFontBatch, VariantRequest};
 
 /// Monotonically increasing version counter for font configuration changes.
-/// Incremented each time `register_font_directory` is called.
+/// Incremented each time font configuration is modified.
 pub static FONT_CONFIG_VERSION: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Clone)]
+pub struct FontBaselineSnapshot {
+    resolved: Arc<ResolvedFontConfig>,
+    version: u64,
+}
+
+impl FontBaselineSnapshot {
+    pub fn resolved(&self) -> Arc<ResolvedFontConfig> {
+        self.resolved.clone()
+    }
+
+    pub fn clone_fontdb(&self) -> Database {
+        self.resolved.clone_fontdb()
+    }
+
+    pub fn hinting_enabled(&self) -> bool {
+        self.resolved.hinting_enabled()
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+}
+
 lazy_static! {
-    pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
     pub static ref FONT_CONFIG: Mutex<FontConfig> = Mutex::new(build_default_font_config());
+    pub static ref FONT_BASELINE: RwLock<FontBaselineSnapshot> = RwLock::new(
+        build_font_baseline_snapshot(&build_default_font_config(), 0),
+    );
+    pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
+    pub static ref FONTSOURCE_CLIENT: FontsourceClient = FontsourceClient::default();
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -59,7 +87,21 @@ pub fn build_default_font_config() -> FontConfig {
     }
 }
 
-fn init_usvg_options() -> usvg::Options<'static> {
+fn build_font_baseline_snapshot(config: &FontConfig, version: u64) -> FontBaselineSnapshot {
+    FontBaselineSnapshot {
+        resolved: Arc::new(config.resolve()),
+        version,
+    }
+}
+
+pub fn get_font_baseline_snapshot() -> Result<FontBaselineSnapshot, anyhow::Error> {
+    FONT_BASELINE
+        .read()
+        .map_err(|err| anyhow!("Failed to acquire font baseline lock: {err}"))
+        .map(|snapshot| snapshot.clone())
+}
+
+pub fn build_usvg_options_with_fontdb(fontdb: Database) -> usvg::Options<'static> {
     let image_href_resolver = ImageHrefResolver {
         resolve_string: custom_string_resolver(),
         ..Default::default()
@@ -70,9 +112,6 @@ fn init_usvg_options() -> usvg::Options<'static> {
         select_fallback: custom_fallback_selector(),
     };
 
-    let font_config = build_default_font_config();
-    let fontdb = font_config_to_fontdb(&font_config);
-
     usvg::Options {
         image_href_resolver,
         fontdb: Arc::new(fontdb),
@@ -81,50 +120,38 @@ fn init_usvg_options() -> usvg::Options<'static> {
     }
 }
 
-fn setup_default_fonts(fontdb: &mut Database) {
-    // Collect set of system font families
-    let families: HashSet<String> = fontdb
-        .faces()
-        .flat_map(|face| {
-            face.families
-                .iter()
-                .map(|(fam, _lang)| fam.clone())
-                .collect::<Vec<_>>()
-        })
-        .collect();
+fn init_usvg_options() -> usvg::Options<'static> {
+    let snapshot =
+        get_font_baseline_snapshot().expect("Failed to load baseline snapshot for usvg options");
+    build_usvg_options_with_fontdb(snapshot.clone_fontdb())
+}
 
-    for family in ["Arial", "Helvetica", "Liberation Sans"] {
-        if families.contains(family) {
-            fontdb.set_sans_serif_family(family);
-            break;
-        }
-    }
+fn refresh_font_baseline_after_config_update() -> Result<(), anyhow::Error> {
+    let config = {
+        FONT_CONFIG
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?
+            .clone()
+    };
 
-    // Set default monospace font family
-    for family in [
-        "Courier New",
-        "Courier",
-        "Liberation Mono",
-        "DejaVu Sans Mono",
-    ] {
-        if families.contains(family) {
-            fontdb.set_monospace_family(family);
-            break;
-        }
-    }
+    let resolved = Arc::new(config.resolve());
 
-    // Set default serif font family
-    for family in [
-        "Times New Roman",
-        "Times",
-        "Liberation Serif",
-        "DejaVu Serif",
-    ] {
-        if families.contains(family) {
-            fontdb.set_serif_family(family);
-            break;
-        }
-    }
+    let mut baseline = FONT_BASELINE
+        .write()
+        .map_err(|err| anyhow!("Failed to acquire font baseline lock: {err}"))?;
+    let mut opts = USVG_OPTIONS
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
+
+    let next_version = FONT_CONFIG_VERSION.fetch_add(1, Ordering::AcqRel) + 1;
+    let snapshot = FontBaselineSnapshot {
+        resolved: resolved.clone(),
+        version: next_version,
+    };
+    *baseline = snapshot;
+    *opts = build_usvg_options_with_fontdb(resolved.clone_fontdb());
+
+    Ok(())
 }
 
 pub fn custom_font_selector() -> FontSelectionFn<'static> {
@@ -263,7 +290,6 @@ pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
 }
 
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
-    // Update FONT_CONFIG so new canvas contexts see the registered directory
     {
         let mut font_config = FONT_CONFIG
             .lock()
@@ -271,23 +297,59 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
         font_config.font_dirs.push(PathBuf::from(dir));
     }
 
-    // Update USVG_OPTIONS fontdb incrementally (no full rebuild)
+    refresh_font_baseline_after_config_update()
+}
+
+fn collect_custom_fonts_from_batch(
+    batch: &LoadedFontBatch,
+) -> Result<Vec<CustomFont>, anyhow::Error> {
+    let mut custom_fonts = Vec::with_capacity(batch.sources().len());
+    for source in batch.sources() {
+        let bytes = match source {
+            fontdb::Source::Binary(data) => data.as_ref().as_ref().to_vec(),
+            _ => {
+                return Err(anyhow!(
+                    "Unexpected non-binary source returned from FontsourceClient"
+                ));
+            }
+        };
+
+        custom_fonts.push(CustomFont {
+            data: Arc::new(bytes),
+            family_name: None,
+        });
+    }
+    Ok(custom_fonts)
+}
+
+/// Download and install a font by family name from Fontsource.
+///
+/// Fontsource TTF files are loaded into `fontdb` as in-memory binary sources.
+/// The same bytes are also appended to `FONT_CONFIG.custom_fonts` so worker
+/// font refreshes keep the newly-installed fonts.
+pub async fn install_font(
+    family: &str,
+    variants: Option<&[VariantRequest]>,
+) -> Result<(), anyhow::Error> {
+    let batch = FONTSOURCE_CLIENT.load(family, variants).await?;
+    let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch)?;
+
     {
-        let mut opts = USVG_OPTIONS
+        let mut font_config = FONT_CONFIG
             .lock()
-            .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
-
-        // Get mutable reference to font_db. Use Arc::make_mut which will clone the
-        // database if there are other references (e.g., from canvas contexts).
-        let font_db = Arc::make_mut(&mut opts.fontdb);
-
-        // Load fonts incrementally
-        font_db.load_fonts_dir(dir);
-        setup_default_fonts(font_db);
+            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
+        font_config.custom_fonts.extend(loaded_custom_fonts);
     }
 
-    // Bump version so the shared worker knows to refresh its cached SharedFontConfig
-    FONT_CONFIG_VERSION.fetch_add(1, Ordering::Release);
+    drop(batch);
+    refresh_font_baseline_after_config_update()
+}
 
-    Ok(())
+/// Configure the max on-disk Fontsource cache size in bytes.
+///
+/// `None` keeps the existing configured value.
+pub fn configure_font_cache(max_cache_bytes: Option<u64>) {
+    if let Some(bytes) = max_cache_bytes {
+        FONTSOURCE_CLIENT.set_max_cache_bytes(bytes);
+    }
 }
