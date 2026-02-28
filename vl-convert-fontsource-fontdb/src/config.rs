@@ -11,6 +11,11 @@ const DEFAULT_MAX_RETRIES: usize = 3;
 /// Set to `"none"` to disable persistent caching entirely (in-memory only).
 const ENV_FONT_CACHE_DIR: &str = "VL_CONVERT_FONT_CACHE_DIR";
 
+/// Environment variable to override the Fontsource metadata API base URL.
+///
+/// Set to a URL to use a custom mirror (e.g., `"https://my-mirror.example.com/v1/fonts"`).
+const ENV_FONTSOURCE_API_URL: &str = "VL_CONVERT_FONTSOURCE_API_URL";
+
 /// Runtime configuration for [`FontsourceClient`](crate::FontsourceClient).
 ///
 /// When `cache_dir` is `None`, the client operates without persistent caching:
@@ -55,7 +60,8 @@ impl Default for ClientConfig {
             request_timeout_secs: DEFAULT_TIMEOUT_SECS,
             max_retries: DEFAULT_MAX_RETRIES,
             user_agent: "vl-convert".to_string(),
-            metadata_base_url: "https://api.fontsource.org/v1/fonts".to_string(),
+            metadata_base_url: std::env::var(ENV_FONTSOURCE_API_URL)
+                .unwrap_or_else(|_| "https://api.fontsource.org/v1/fonts".to_string()),
         }
     }
 }
