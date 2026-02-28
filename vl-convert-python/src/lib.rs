@@ -21,7 +21,7 @@ use vl_convert_rs::module_loader::import_map::{
 };
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
-use vl_convert_rs::text::install_font as install_font_rs;
+use vl_convert_rs::text::register_fontsource_font as register_fontsource_font_rs;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
 use vl_convert_rs::VlConverter as VlConverterRs;
 use vl_convert_rs::{FontStyle, VariantRequest};
@@ -295,6 +295,7 @@ fn vegalite_to_vega(
         allowed_base_urls: None,
         format_locale: None,
         time_format_locale: None,
+        ..Default::default()
     };
 
     let vega_spec = match run_converter_future(move |converter| async move {
@@ -341,6 +342,7 @@ fn vega_to_svg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     let svg = match run_converter_future(move |converter| async move {
@@ -379,6 +381,7 @@ fn vega_to_scenegraph(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     match format {
@@ -459,6 +462,7 @@ fn vegalite_to_svg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     let svg = match run_converter_future(move |converter| async move {
@@ -520,6 +524,7 @@ fn vegalite_to_scenegraph(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     match format {
@@ -585,6 +590,7 @@ fn vega_to_png(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     let png_data = match run_converter_future(move |converter| async move {
@@ -651,6 +657,7 @@ fn vegalite_to_png(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     let png_data = match run_converter_future(move |converter| async move {
@@ -699,6 +706,7 @@ fn vega_to_jpeg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     let jpeg_data = match run_converter_future(move |converter| async move {
@@ -767,6 +775,7 @@ fn vegalite_to_jpeg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     let jpeg_data = match run_converter_future(move |converter| async move {
@@ -817,6 +826,7 @@ fn vega_to_pdf(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     let pdf_bytes = match run_converter_future(move |converter| async move {
@@ -879,6 +889,7 @@ fn vegalite_to_pdf(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     let pdf_data = match run_converter_future(move |converter| async move {
@@ -977,6 +988,7 @@ fn vegalite_to_html(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future(move |converter| async move {
@@ -1017,6 +1029,7 @@ fn vega_to_html(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
     run_converter_future(move |converter| async move {
         converter
@@ -1265,16 +1278,16 @@ fn parse_variant_args(
 /// use in subsequent conversions.
 #[pyfunction]
 #[pyo3(signature = (font_family, variants=None))]
-fn install_font(font_family: &str, variants: Option<Vec<(u16, String)>>) -> PyResult<()> {
+fn register_fontsource_font(font_family: &str, variants: Option<Vec<(u16, String)>>) -> PyResult<()> {
     let font_family = font_family.to_string();
     let variant_requests = parse_variant_args(variants)?;
     Python::with_gil(|py| {
         py.allow_threads(move || {
             PYTHON_RUNTIME
                 .block_on(async move {
-                    install_font_rs(&font_family, variant_requests.as_deref()).await
+                    register_fontsource_font_rs(&font_family, variant_requests.as_deref()).await
                 })
-                .map_err(|err| PyValueError::new_err(format!("Failed to install font: {}", err)))
+                .map_err(|err| PyValueError::new_err(format!("Failed to register font: {}", err)))
         })
     })
 }
@@ -1504,6 +1517,7 @@ fn vegalite_to_vega_asyncio<'py>(
         allowed_base_urls: None,
         format_locale: None,
         time_format_locale: None,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -1535,6 +1549,7 @@ fn vega_to_svg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -1566,6 +1581,7 @@ fn vega_to_scenegraph_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     match format {
@@ -1632,6 +1648,7 @@ fn vegalite_to_svg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -1679,6 +1696,7 @@ fn vegalite_to_scenegraph_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     match format {
@@ -1735,6 +1753,7 @@ fn vega_to_png_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -1780,6 +1799,7 @@ fn vegalite_to_png_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -1815,6 +1835,7 @@ fn vega_to_jpeg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -1864,6 +1885,7 @@ fn vegalite_to_jpeg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -1897,6 +1919,7 @@ fn vega_to_pdf_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -1941,6 +1964,7 @@ fn vegalite_to_pdf_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2024,6 +2048,7 @@ fn vegalite_to_html_asyncio<'py>(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2062,6 +2087,7 @@ fn vega_to_html_asyncio<'py>(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2166,10 +2192,10 @@ fn register_font_directory_asyncio<'py>(
     })
 }
 
-#[doc = async_variant_doc!("install_font")]
-#[pyfunction(name = "install_font")]
+#[doc = async_variant_doc!("register_fontsource_font")]
+#[pyfunction(name = "register_fontsource_font")]
 #[pyo3(signature = (font_family, variants=None))]
-fn install_font_asyncio<'py>(
+fn register_fontsource_font_asyncio<'py>(
     py: Python<'py>,
     font_family: &str,
     variants: Option<Vec<(u16, String)>>,
@@ -2177,9 +2203,9 @@ fn install_font_asyncio<'py>(
     let font_family = font_family.to_string();
     let variant_requests = parse_variant_args(variants)?;
     future_into_py_object(py, async move {
-        install_font_rs(&font_family, variant_requests.as_deref())
+        register_fontsource_font_rs(&font_family, variant_requests.as_deref())
             .await
-            .map_err(|err| PyValueError::new_err(format!("Failed to install font: {err}")))?;
+            .map_err(|err| PyValueError::new_err(format!("Failed to register font: {err}")))?;
         Python::with_gil(|py| Ok(py.None().into()))
     })
 }
@@ -2430,7 +2456,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(svg_to_jpeg_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(install_font_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(register_fontsource_font_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(configure_converter_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_converter_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
@@ -2473,7 +2499,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
-    m.add_function(wrap_pyfunction!(install_font, m)?)?;
+    m.add_function(wrap_pyfunction!(register_fontsource_font, m)?)?;
     m.add_function(wrap_pyfunction!(configure_converter, m)?)?;
     m.add_function(wrap_pyfunction!(get_converter_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;

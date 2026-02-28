@@ -1,153 +1,173 @@
 use crate::error::FontsourceFontdbError;
-use crate::types::{FontStyle, FontsourceFont, VariantRequest};
+use crate::types::FontsourceFont;
 use filetime::FileTime;
 use fs4::fs_std::FileExt;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-pub(crate) const METADATA_FILENAME: &str = "fontsource-metadata.json";
+// ---------------------------------------------------------------------------
+// Metadata cache
+// ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy)]
-struct ParsedTtfFile {
-    weight: u16,
-    style: FontStyle,
-}
-
-fn parse_cached_filename(filename: &str) -> Option<ParsedTtfFile> {
-    let stem = filename.strip_suffix(".ttf")?;
-    let parts: Vec<&str> = stem.rsplitn(3, '-').collect();
-    if parts.len() < 3 {
-        return None;
-    }
-
-    let style = match parts[0] {
-        "normal" => FontStyle::Normal,
-        "italic" => FontStyle::Italic,
-        _ => return None,
-    };
-
-    let weight = parts[1].parse().ok()?;
-    Some(ParsedTtfFile { weight, style })
-}
-
-pub(crate) fn metadata_path(font_dir: &Path) -> PathBuf {
-    font_dir.join(METADATA_FILENAME)
-}
-
-pub(crate) fn read_local_metadata(font_dir: &Path) -> Option<FontsourceFont> {
-    let metadata_path = metadata_path(font_dir);
-    let bytes = std::fs::read(&metadata_path).ok()?;
+pub(crate) fn read_metadata(font_id: &str, metadata_cache_dir: &Path) -> Option<FontsourceFont> {
+    let path = metadata_cache_dir.join(format!("{font_id}.json"));
+    let bytes = std::fs::read(&path).ok()?;
     serde_json::from_slice(&bytes).ok()
 }
 
-pub(crate) fn write_local_metadata(
-    font_dir: &Path,
+pub(crate) fn write_metadata_if_absent(
+    font_id: &str,
+    metadata_cache_dir: &Path,
     metadata: &FontsourceFont,
 ) -> Result<(), FontsourceFontdbError> {
+    let path = metadata_cache_dir.join(format!("{font_id}.json"));
+    if path.exists() {
+        return Ok(());
+    }
     let data = serde_json::to_vec_pretty(metadata)?;
-    let path = metadata_path(font_dir);
     atomic_write_bytes(&path, &data)
 }
 
-pub(crate) fn has_any_ttf_files(font_dir: &Path) -> bool {
-    let entries = match std::fs::read_dir(font_dir) {
-        Ok(entries) => entries,
-        Err(_) => return false,
-    };
+// ---------------------------------------------------------------------------
+// Blob cache
+// ---------------------------------------------------------------------------
 
-    for entry in entries.flatten() {
-        if entry
-            .path()
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .map(|ext| ext.eq_ignore_ascii_case("ttf"))
-            .unwrap_or(false)
-        {
-            return true;
-        }
-    }
-
-    false
+/// Derive a human-readable blob key from font_id and the resolved filename.
+///
+/// The resolver produces filenames like `{subset}-{weight}-{style}.ttf`.
+/// Combined with `font_id`, the key becomes `{font_id}--{subset}-{weight}-{style}.ttf`.
+pub(crate) fn blob_key(font_id: &str, filename: &str) -> String {
+    let stem = filename.strip_suffix(".ttf").unwrap_or(filename);
+    format!("{font_id}--{stem}.ttf")
 }
 
-pub(crate) fn has_requested_variants(
-    font_dir: &Path,
-    variants: &[VariantRequest],
-) -> Result<bool, FontsourceFontdbError> {
-    let entries = std::fs::read_dir(font_dir)?;
-    let mut found: HashSet<(u16, FontStyle)> = HashSet::new();
-
-    for entry in entries.flatten() {
-        let filename = match entry.file_name().to_str() {
-            Some(name) => name.to_string(),
-            None => continue,
-        };
-
-        if let Some(parsed) = parse_cached_filename(&filename) {
-            found.insert((parsed.weight, parsed.style));
-            if variants
-                .iter()
-                .all(|v| found.contains(&(v.weight, v.style)))
-            {
-                return Ok(true);
-            }
-        }
-    }
-
-    Ok(variants
-        .iter()
-        .all(|v| found.contains(&(v.weight, v.style))))
+pub(crate) fn blob_path(key: &str, blob_cache_dir: &Path) -> PathBuf {
+    blob_cache_dir.join(key)
 }
 
-pub(crate) fn list_variant_ttf_paths(
-    font_dir: &Path,
-    variants: &[VariantRequest],
-) -> Result<Vec<PathBuf>, FontsourceFontdbError> {
-    let targets: HashSet<(u16, FontStyle)> = variants.iter().map(|v| (v.weight, v.style)).collect();
+pub(crate) fn read_blob(
+    key: &str,
+    blob_cache_dir: &Path,
+) -> Result<Option<Vec<u8>>, FontsourceFontdbError> {
+    let path = blob_path(key, blob_cache_dir);
+    match std::fs::read(&path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(_) => {
+            // Treat any read failure as a miss — delete the corrupt blob.
+            let _ = std::fs::remove_file(&path);
+            Ok(None)
+        }
+    }
+}
 
-    let mut paths = Vec::new();
-    let entries = std::fs::read_dir(font_dir)?;
-    for entry in entries.flatten() {
+pub(crate) fn write_blob_if_absent(
+    key: &str,
+    blob_cache_dir: &Path,
+    bytes: &[u8],
+) -> Result<(), FontsourceFontdbError> {
+    let path = blob_path(key, blob_cache_dir);
+    atomic_write_bytes(&path, bytes)
+}
+
+pub(crate) fn touch_blob(key: &str, blob_cache_dir: &Path) -> Result<(), FontsourceFontdbError> {
+    let path = blob_path(key, blob_cache_dir);
+    let _ = filetime::set_file_mtime(&path, FileTime::now());
+    Ok(())
+}
+
+pub(crate) fn calculate_blob_cache_size_bytes(
+    blob_cache_dir: &Path,
+) -> Result<u64, FontsourceFontdbError> {
+    if !blob_cache_dir.exists() {
+        return Ok(0);
+    }
+
+    let mut total = 0u64;
+    for entry in std::fs::read_dir(blob_cache_dir)? {
+        let entry = entry?;
         let path = entry.path();
-        let filename = match path.file_name().and_then(|f| f.to_str()) {
-            Some(name) => name,
-            None => continue,
-        };
-
-        if let Some(parsed) = parse_cached_filename(filename) {
-            if targets.contains(&(parsed.weight, parsed.style)) {
-                paths.push(path);
-            }
+        if path.is_file()
+            && path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.eq_ignore_ascii_case("ttf"))
+                .unwrap_or(false)
+        {
+            total = total.saturating_add(entry.metadata()?.len());
         }
     }
 
-    paths.sort();
-    Ok(paths)
+    Ok(total)
 }
 
-pub(crate) fn has_all_downloadable_ttf_files(font_dir: &Path, metadata: &FontsourceFont) -> bool {
-    for (weight_key, styles) in &metadata.variants {
-        for (style_key, subsets) in styles {
-            for (subset, urls) in subsets {
-                if urls.url.ttf.is_some() {
-                    let filename = format!("{}-{}-{}.ttf", subset, weight_key, style_key);
-                    if !font_dir.join(filename).exists() {
-                        return false;
-                    }
-                }
+pub(crate) fn evict_blob_lru_until_size(
+    blob_cache_dir: &Path,
+    target_bytes: u64,
+    exempt_keys: &HashSet<String>,
+) -> Result<(), FontsourceFontdbError> {
+    with_exclusive_cache_lock(blob_cache_dir, || {
+        let mut entries: Vec<(String, PathBuf, u64, std::time::SystemTime)> = Vec::new();
+        let mut total_size = 0u64;
+
+        if !blob_cache_dir.exists() {
+            return Ok(());
+        }
+
+        for entry in std::fs::read_dir(blob_cache_dir)? {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let key = match path.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+
+            let meta = match entry.metadata() {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+
+            let size = meta.len();
+            let mtime = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
+            total_size = total_size.saturating_add(size);
+            entries.push((key, path, size, mtime));
+        }
+
+        if total_size <= target_bytes {
+            return Ok(());
+        }
+
+        // Sort oldest first for LRU eviction.
+        entries.sort_by(|a, b| a.3.cmp(&b.3));
+
+        for (key, path, size, _) in entries {
+            if total_size <= target_bytes {
+                break;
+            }
+            if exempt_keys.contains(&key) {
+                continue;
+            }
+
+            // Tolerate ENOENT from concurrent deletion.
+            if std::fs::remove_file(&path).is_ok() {
+                total_size = total_size.saturating_sub(size);
             }
         }
-    }
-    true
+
+        Ok(())
+    })
 }
 
-pub(crate) fn all_filenames_exist(font_dir: &Path, filenames: &[String]) -> bool {
-    filenames.iter().all(|name| font_dir.join(name).exists())
-}
-
-pub(crate) fn touch_dir_mtime(font_dir: &Path) {
-    let _ = filetime::set_file_mtime(font_dir, FileTime::now());
-}
+// ---------------------------------------------------------------------------
+// Shared primitives (kept from original)
+// ---------------------------------------------------------------------------
 
 pub(crate) fn atomic_write_bytes(dst: &Path, bytes: &[u8]) -> Result<(), FontsourceFontdbError> {
     let parent = dst.parent().ok_or_else(|| {
@@ -198,92 +218,6 @@ pub(crate) fn atomic_write_bytes(dst: &Path, bytes: &[u8]) -> Result<(), Fontsou
     }
 }
 
-pub(crate) fn calculate_cache_size_bytes(cache_dir: &Path) -> Result<u64, FontsourceFontdbError> {
-    let mut total = 0u64;
-    if !cache_dir.exists() {
-        return Ok(0);
-    }
-
-    for entry in std::fs::read_dir(cache_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-
-        for sub_entry in std::fs::read_dir(path)? {
-            let sub_entry = sub_entry?;
-            let sub_path = sub_entry.path();
-            if sub_path.is_file() {
-                total = total.saturating_add(sub_entry.metadata()?.len());
-            }
-        }
-    }
-
-    Ok(total)
-}
-
-pub(crate) fn evict_lru_until_size(
-    cache_dir: &Path,
-    target_bytes: u64,
-    exempt_font_id: &str,
-) -> Result<(), FontsourceFontdbError> {
-    with_exclusive_cache_lock(cache_dir, || {
-        let mut font_entries: Vec<(String, PathBuf, u64, std::time::SystemTime)> = Vec::new();
-        let mut total_size = 0u64;
-
-        if !cache_dir.exists() {
-            return Ok(());
-        }
-
-        for entry in std::fs::read_dir(cache_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-
-            let font_id = match path.file_name().and_then(|n| n.to_str()) {
-                Some(name) => name.to_string(),
-                None => continue,
-            };
-
-            let mut dir_size = 0u64;
-            for sub_entry in std::fs::read_dir(&path)? {
-                let sub_entry = sub_entry?;
-                if sub_entry.path().is_file() {
-                    dir_size = dir_size.saturating_add(sub_entry.metadata()?.len());
-                }
-            }
-
-            let mtime = path.metadata()?.modified().unwrap_or(std::time::UNIX_EPOCH);
-            total_size = total_size.saturating_add(dir_size);
-            font_entries.push((font_id, path, dir_size, mtime));
-        }
-
-        if total_size <= target_bytes {
-            return Ok(());
-        }
-
-        font_entries.sort_by(|a, b| a.3.cmp(&b.3));
-
-        for (font_id, path, size, _) in font_entries {
-            if total_size <= target_bytes {
-                break;
-            }
-            if font_id == exempt_font_id {
-                continue;
-            }
-
-            if std::fs::remove_dir_all(&path).is_ok() {
-                total_size = total_size.saturating_sub(size);
-            }
-        }
-
-        Ok(())
-    })
-}
-
 fn with_exclusive_cache_lock<F, R>(cache_dir: &Path, f: F) -> Result<R, FontsourceFontdbError>
 where
     F: FnOnce() -> Result<R, FontsourceFontdbError>,
@@ -305,27 +239,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_has_requested_variants_ignores_tmp_files() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("latin-400-normal.ttf"), b"ok").unwrap();
-        std::fs::write(tmp.path().join("latin-700-normal.ttf.12345.tmp"), b"tmp").unwrap();
-
-        let requested = [
-            VariantRequest {
-                weight: 400,
-                style: FontStyle::Normal,
-            },
-            VariantRequest {
-                weight: 700,
-                style: FontStyle::Normal,
-            },
-        ];
-
-        let hit = has_requested_variants(tmp.path(), &requested).unwrap();
-        assert!(!hit);
-    }
-
-    #[test]
     fn test_atomic_write_bytes_existing_file_preserved() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("font.ttf");
@@ -335,5 +248,39 @@ mod tests {
 
         let bytes = std::fs::read(&path).unwrap();
         assert_eq!(bytes, b"first");
+    }
+
+    #[test]
+    fn test_blob_key_deterministic() {
+        let key1 = blob_key("roboto", "latin-400-normal.ttf");
+        let key2 = blob_key("roboto", "latin-400-normal.ttf");
+        assert_eq!(key1, key2);
+        assert_eq!(key1, "roboto--latin-400-normal.ttf");
+    }
+
+    #[test]
+    fn test_read_write_blob_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let key = "roboto--latin-400-normal.ttf";
+        let data = b"fake ttf data";
+
+        assert!(read_blob(key, tmp.path()).unwrap().is_none());
+
+        write_blob_if_absent(key, tmp.path(), data).unwrap();
+
+        let read_back = read_blob(key, tmp.path()).unwrap().unwrap();
+        assert_eq!(read_back, data);
+    }
+
+    #[test]
+    fn test_write_blob_no_overwrite() {
+        let tmp = tempfile::tempdir().unwrap();
+        let key = "roboto--latin-400-normal.ttf";
+
+        write_blob_if_absent(key, tmp.path(), b"first").unwrap();
+        write_blob_if_absent(key, tmp.path(), b"second").unwrap();
+
+        let read_back = read_blob(key, tmp.path()).unwrap().unwrap();
+        assert_eq!(read_back, b"first");
     }
 }

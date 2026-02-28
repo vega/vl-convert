@@ -144,7 +144,7 @@ __all__ = [
     "get_time_format_locale",
     "javascript_bundle",
     "register_font_directory",
-    "install_font",
+    "register_fontsource_font",
     "warm_up_workers",
     "svg_to_jpeg",
     "svg_to_pdf",
@@ -268,12 +268,12 @@ def register_font_directory(font_dir: str) -> None:
     """
     ...
 
-def install_font(
+def register_fontsource_font(
     font_family: str,
     variants: list[tuple[int, str]] | None = None,
 ) -> None:
     """
-    Download, cache, and register a font by family name.
+    Download, cache, and register a font by family name from Fontsource.
 
     Downloads font files from the Fontsource catalog (which includes
     Google Fonts and other open-source fonts) and registers them for
@@ -972,12 +972,12 @@ if TYPE_CHECKING:
         async def register_font_directory(self, font_dir: str) -> None:
             """Async version of ``register_font_directory``. See sync function for full documentation."""
             ...
-        async def install_font(
+        async def register_fontsource_font(
             self,
             font_family: str,
             variants: list[tuple[int, str]] | None = None,
         ) -> None:
-            """Async version of ``install_font``. See sync function for full documentation."""
+            """Async version of ``register_fontsource_font``. See sync function for full documentation."""
             ...
         async def configure_converter(
             self,

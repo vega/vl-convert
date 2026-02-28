@@ -327,7 +327,7 @@ fn collect_custom_fonts_from_batch(
 /// Fontsource TTF files are loaded into `fontdb` as in-memory binary sources.
 /// The same bytes are also appended to `FONT_CONFIG.custom_fonts` so worker
 /// font refreshes keep the newly-installed fonts.
-pub async fn install_font(
+pub async fn register_fontsource_font(
     family: &str,
     variants: Option<&[VariantRequest]>,
 ) -> Result<(), anyhow::Error> {
@@ -350,6 +350,6 @@ pub async fn install_font(
 /// `None` keeps the existing configured value.
 pub fn configure_font_cache(max_cache_bytes: Option<u64>) {
     if let Some(bytes) = max_cache_bytes {
-        FONTSOURCE_CLIENT.set_max_cache_bytes(bytes);
+        FONTSOURCE_CLIENT.set_max_blob_cache_bytes(bytes);
     }
 }
