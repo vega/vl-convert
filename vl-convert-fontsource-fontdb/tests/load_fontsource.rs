@@ -279,15 +279,13 @@ fn build_roboto_routes(base_url: &str) -> HashMap<String, Vec<u8>> {
 }
 
 fn make_client(
-    metadata_dir: &Path,
-    blob_dir: &Path,
+    cache_dir: &Path,
     base_url: &str,
     max_parallel_downloads: usize,
     max_blob_cache_bytes: u64,
 ) -> FontsourceClient {
     let config = ClientConfig {
-        metadata_cache_dir: metadata_dir.to_path_buf(),
-        blob_cache_dir: blob_dir.to_path_buf(),
+        cache_dir: Some(cache_dir.to_path_buf()),
         metadata_base_url: format!("{}/v1/fonts", base_url),
         max_parallel_downloads,
         max_blob_cache_bytes,
@@ -296,27 +294,11 @@ fn make_client(
     FontsourceClient::new(config).unwrap()
 }
 
-/// Helper: create a client using subdirectories of a single temp path.
-fn make_client_from_temp(
-    temp: &Path,
-    base_url: &str,
-    max_parallel_downloads: usize,
-    max_blob_cache_bytes: u64,
-) -> FontsourceClient {
-    make_client(
-        &temp.join("metadata"),
-        &temp.join("blobs"),
-        base_url,
-        max_parallel_downloads,
-        max_blob_cache_bytes,
-    )
-}
-
 #[test]
 fn test_empty_variants_returns_error_blocking() {
     let server = TestServer::new(|_| HashMap::new(), HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
-    let client = make_client_from_temp(temp.path(), server.base_url(), 8, u64::MAX);
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
     let err = client.load_blocking("Roboto", Some(&[])).unwrap_err();
     assert!(matches!(err, FontsourceFontdbError::NoVariantsRequested));
@@ -326,7 +308,7 @@ fn test_empty_variants_returns_error_blocking() {
 fn test_variants_not_available_error_blocking() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
-    let client = make_client_from_temp(temp.path(), server.base_url(), 8, u64::MAX);
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
     let requested = [VariantRequest {
         weight: 900,
@@ -347,7 +329,7 @@ fn test_variants_not_available_error_blocking() {
 fn test_none_variants_loads_all_downloadable_ttf() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
-    let client = make_client_from_temp(temp.path(), server.base_url(), 8, u64::MAX);
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
     let batch = client.load_blocking("Roboto", None).unwrap();
 
@@ -372,7 +354,7 @@ fn test_none_variants_loads_all_downloadable_ttf() {
 fn test_register_batch_returns_ids_and_per_source_ids() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
-    let client = make_client_from_temp(temp.path(), server.base_url(), 8, u64::MAX);
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
     let requested = [VariantRequest {
         weight: 400,
@@ -395,7 +377,7 @@ fn test_register_batch_returns_ids_and_per_source_ids() {
 fn test_append_only_duplicate_register_returns_distinct_ids() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
-    let client = make_client_from_temp(temp.path(), server.base_url(), 8, u64::MAX);
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
     let requested = [VariantRequest {
         weight: 400,
@@ -422,9 +404,9 @@ async fn test_async_and_blocking_parity() {
     let temp_async = tempfile::tempdir().unwrap();
     let temp_blocking = tempfile::tempdir().unwrap();
 
-    let async_client = make_client_from_temp(temp_async.path(), server.base_url(), 8, u64::MAX);
+    let async_client = make_client(temp_async.path(), server.base_url(), 8, u64::MAX);
     let blocking_client =
-        make_client_from_temp(temp_blocking.path(), server.base_url(), 8, u64::MAX);
+        make_client(temp_blocking.path(), server.base_url(), 8, u64::MAX);
 
     let requested = [VariantRequest {
         weight: 400,
@@ -459,7 +441,7 @@ async fn test_async_and_blocking_parity() {
 fn test_cache_hit_avoids_network() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
-    let client = make_client_from_temp(temp.path(), server.base_url(), 8, u64::MAX);
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
     let requested = [VariantRequest {
         weight: 400,
@@ -490,7 +472,7 @@ async fn test_in_process_dedupe_same_file_concurrent_loads() {
     let server = TestServer::new(build_roboto_routes, delayed, 150);
     let temp = tempfile::tempdir().unwrap();
 
-    let client = Arc::new(make_client_from_temp(
+    let client = Arc::new(make_client(
         temp.path(),
         server.base_url(),
         8,
@@ -530,7 +512,7 @@ async fn test_parallel_download_bounded() {
 
     let server = TestServer::new(build_roboto_routes, delayed, 150);
     let temp = tempfile::tempdir().unwrap();
-    let client = make_client_from_temp(temp.path(), server.base_url(), 2, u64::MAX);
+    let client = make_client(temp.path(), server.base_url(), 2, u64::MAX);
 
     let _ = client.load("Roboto", None).await.unwrap();
 
@@ -549,13 +531,13 @@ async fn test_parallel_download_bounded() {
 fn test_corrupt_metadata_fallbacks_to_network() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
-    let metadata_dir = temp.path().join("metadata");
-    let blob_dir = temp.path().join("blobs");
+    let cache_dir = temp.path();
+    let metadata_dir = cache_dir.join("metadata");
     std::fs::create_dir_all(&metadata_dir).unwrap();
     // Write corrupt metadata file in the new flat layout
     std::fs::write(metadata_dir.join("roboto.json"), b"{bad json").unwrap();
 
-    let client = make_client(&metadata_dir, &blob_dir, server.base_url(), 8, u64::MAX);
+    let client = make_client(cache_dir, server.base_url(), 8, u64::MAX);
     let requested = [VariantRequest {
         weight: 400,
         style: FontStyle::Normal,
@@ -572,7 +554,7 @@ fn test_corrupt_metadata_fallbacks_to_network() {
 fn test_unregister_batch_removes_faces_and_is_idempotent() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
-    let client = make_client_from_temp(temp.path(), server.base_url(), 8, u64::MAX);
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
     let requested = [VariantRequest {
         weight: 400,
@@ -628,10 +610,10 @@ fn test_eviction_keeps_current_font() {
     );
 
     let temp = tempfile::tempdir().unwrap();
-    let metadata_dir = temp.path().join("metadata");
-    let blob_dir = temp.path().join("blobs");
+    let cache_dir = temp.path();
+    let blob_dir = cache_dir.join("blobs");
     let max_cache = REGULAR_TTF.len() as u64 + 16;
-    let client = make_client(&metadata_dir, &blob_dir, server.base_url(), 8, max_cache);
+    let client = make_client(cache_dir, server.base_url(), 8, max_cache);
 
     let _ = client.load_blocking("Roboto", None).unwrap();
 
@@ -655,7 +637,7 @@ fn test_eviction_keeps_current_font() {
 fn test_cached_metadata_avoids_refetch() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
-    let client = make_client_from_temp(temp.path(), server.base_url(), 8, u64::MAX);
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
     let _ = client.load_blocking("Roboto", None).unwrap();
 

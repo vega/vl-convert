@@ -5,11 +5,19 @@ const DEFAULT_MAX_PARALLEL_DOWNLOADS: usize = 8;
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_MAX_RETRIES: usize = 3;
 
+/// Environment variable to override the font cache root directory.
+///
+/// Set to a path to override the default cache location.
+/// Set to `"none"` to disable persistent caching entirely (in-memory only).
+const ENV_FONT_CACHE_DIR: &str = "VL_CONVERT_FONT_CACHE_DIR";
+
 /// Runtime configuration for [`FontsourceClient`](crate::FontsourceClient).
+///
+/// When `cache_dir` is `None`, the client operates without persistent caching:
+/// metadata is always fetched from the network and blobs are never written to disk.
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
-    pub metadata_cache_dir: PathBuf,
-    pub blob_cache_dir: PathBuf,
+    pub cache_dir: Option<PathBuf>,
     pub max_blob_cache_bytes: u64,
     pub max_parallel_downloads: usize,
     pub request_timeout_secs: u64,
@@ -18,13 +26,30 @@ pub struct ClientConfig {
     pub metadata_base_url: String,
 }
 
+impl ClientConfig {
+    /// Returns the metadata subdirectory, or `None` if caching is disabled.
+    pub fn metadata_dir(&self) -> Option<PathBuf> {
+        self.cache_dir.as_ref().map(|d| d.join("metadata"))
+    }
+
+    /// Returns the blob subdirectory, or `None` if caching is disabled.
+    pub fn blob_dir(&self) -> Option<PathBuf> {
+        self.cache_dir.as_ref().map(|d| d.join("blobs"))
+    }
+}
+
 impl Default for ClientConfig {
     fn default() -> Self {
-        let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-        let vl_convert = base.join("vl-convert");
+        let cache_dir = match std::env::var(ENV_FONT_CACHE_DIR) {
+            Ok(val) if val.eq_ignore_ascii_case("none") => None,
+            Ok(val) => Some(PathBuf::from(val)),
+            Err(_) => {
+                let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
+                Some(base.join("vl-convert").join("fontsource"))
+            }
+        };
         Self {
-            metadata_cache_dir: vl_convert.join("fontsource-metadata"),
-            blob_cache_dir: vl_convert.join("fontsource-blobs"),
+            cache_dir,
             max_blob_cache_bytes: DEFAULT_MAX_BLOB_CACHE_BYTES,
             max_parallel_downloads: DEFAULT_MAX_PARALLEL_DOWNLOADS,
             request_timeout_secs: DEFAULT_TIMEOUT_SECS,

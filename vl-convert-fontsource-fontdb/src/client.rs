@@ -34,15 +34,13 @@ impl FontsourceClient {
             config.max_parallel_downloads = 1;
         }
 
-        if !config.metadata_cache_dir.is_absolute() {
-            config.metadata_cache_dir = std::env::current_dir()?.join(&config.metadata_cache_dir);
+        if let Some(ref mut dir) = config.cache_dir {
+            if !dir.is_absolute() {
+                *dir = std::env::current_dir()?.join(&*dir);
+            }
+            std::fs::create_dir_all(dir.join("metadata"))?;
+            std::fs::create_dir_all(dir.join("blobs"))?;
         }
-        if !config.blob_cache_dir.is_absolute() {
-            config.blob_cache_dir = std::env::current_dir()?.join(&config.blob_cache_dir);
-        }
-
-        std::fs::create_dir_all(&config.metadata_cache_dir)?;
-        std::fs::create_dir_all(&config.blob_cache_dir)?;
 
         let async_client = reqwest::Client::builder()
             .user_agent(&config.user_agent)
@@ -57,10 +55,6 @@ impl FontsourceClient {
             blocking_client: Mutex::new(None),
             download_gates: DashMap::new(),
         })
-    }
-
-    pub fn default() -> Self {
-        Self::new(ClientConfig::default()).expect("Failed to construct default FontsourceClient")
     }
 
     pub fn set_max_blob_cache_bytes(&self, bytes: u64) {
@@ -128,11 +122,17 @@ impl FontsourceClient {
         }
 
         // 1. Metadata: read from cache or fetch
-        let metadata = match cache::read_metadata(&font_id, &self.config.metadata_cache_dir) {
+        let metadata_dir = self.config.metadata_dir();
+        let cached_meta = metadata_dir
+            .as_deref()
+            .and_then(|dir| cache::read_metadata(&font_id, dir));
+        let metadata = match cached_meta {
             Some(m) => m,
             None => {
                 let m = self.fetch_metadata_async(&font_id).await?;
-                cache::write_metadata_if_absent(&font_id, &self.config.metadata_cache_dir, &m)?;
+                if let Some(dir) = metadata_dir.as_deref() {
+                    cache::write_metadata_if_absent(&font_id, dir, &m)?;
+                }
                 m
             }
         };
@@ -199,11 +199,14 @@ impl FontsourceClient {
         file: &ResolvedTtfFile,
     ) -> Result<(Vec<u8>, String, bool), FontsourceFontdbError> {
         let key = cache::blob_key(font_id, &file.filename);
+        let blob_dir = self.config.blob_dir();
 
         // Fast path: blob already cached
-        if let Some(bytes) = cache::read_blob(&key, &self.config.blob_cache_dir)? {
-            let _ = cache::touch_blob(&key, &self.config.blob_cache_dir);
-            return Ok((bytes, key, false));
+        if let Some(ref dir) = blob_dir {
+            if let Some(bytes) = cache::read_blob(&key, dir)? {
+                let _ = cache::touch_blob(&key, dir);
+                return Ok((bytes, key, false));
+            }
         }
 
         // Gate by blob key for in-process dedup
@@ -211,13 +214,17 @@ impl FontsourceClient {
         let _guard = gate.lock().await;
 
         // Re-check after acquiring gate
-        if let Some(bytes) = cache::read_blob(&key, &self.config.blob_cache_dir)? {
-            let _ = cache::touch_blob(&key, &self.config.blob_cache_dir);
-            return Ok((bytes, key, false));
+        if let Some(ref dir) = blob_dir {
+            if let Some(bytes) = cache::read_blob(&key, dir)? {
+                let _ = cache::touch_blob(&key, dir);
+                return Ok((bytes, key, false));
+            }
         }
 
         let bytes = self.get_bytes_with_retry_async(&file.url).await?;
-        cache::write_blob_if_absent(&key, &self.config.blob_cache_dir, &bytes)?;
+        if let Some(ref dir) = blob_dir {
+            cache::write_blob_if_absent(&key, dir, &bytes)?;
+        }
         Ok((bytes, key, true))
     }
 
@@ -240,11 +247,17 @@ impl FontsourceClient {
         }
 
         // 1. Metadata: read from cache or fetch
-        let metadata = match cache::read_metadata(&font_id, &self.config.metadata_cache_dir) {
+        let metadata_dir = self.config.metadata_dir();
+        let cached_meta = metadata_dir
+            .as_deref()
+            .and_then(|dir| cache::read_metadata(&font_id, dir));
+        let metadata = match cached_meta {
             Some(m) => m,
             None => {
                 let m = self.fetch_metadata_blocking(&font_id)?;
-                cache::write_metadata_if_absent(&font_id, &self.config.metadata_cache_dir, &m)?;
+                if let Some(dir) = metadata_dir.as_deref() {
+                    cache::write_metadata_if_absent(&font_id, dir, &m)?;
+                }
                 m
             }
         };
@@ -375,11 +388,14 @@ impl FontsourceClient {
         file: &ResolvedTtfFile,
     ) -> Result<(Vec<u8>, String, bool), FontsourceFontdbError> {
         let key = cache::blob_key(font_id, &file.filename);
+        let blob_dir = self.config.blob_dir();
 
         // Fast path: blob already cached
-        if let Some(bytes) = cache::read_blob(&key, &self.config.blob_cache_dir)? {
-            let _ = cache::touch_blob(&key, &self.config.blob_cache_dir);
-            return Ok((bytes, key, false));
+        if let Some(ref dir) = blob_dir {
+            if let Some(bytes) = cache::read_blob(&key, dir)? {
+                let _ = cache::touch_blob(&key, dir);
+                return Ok((bytes, key, false));
+            }
         }
 
         // Gate by blob key for in-process dedup
@@ -387,13 +403,17 @@ impl FontsourceClient {
         let _guard = gate.blocking_lock();
 
         // Re-check after acquiring gate
-        if let Some(bytes) = cache::read_blob(&key, &self.config.blob_cache_dir)? {
-            let _ = cache::touch_blob(&key, &self.config.blob_cache_dir);
-            return Ok((bytes, key, false));
+        if let Some(ref dir) = blob_dir {
+            if let Some(bytes) = cache::read_blob(&key, dir)? {
+                let _ = cache::touch_blob(&key, dir);
+                return Ok((bytes, key, false));
+            }
         }
 
         let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
-        cache::write_blob_if_absent(&key, &self.config.blob_cache_dir, &bytes)?;
+        if let Some(ref dir) = blob_dir {
+            cache::write_blob_if_absent(&key, dir, &bytes)?;
+        }
         Ok((bytes, key, true))
     }
 
@@ -532,17 +552,20 @@ impl FontsourceClient {
     // -----------------------------------------------------------------------
 
     fn evict_if_needed(&self, exempt_keys: &HashSet<String>) -> Result<(), FontsourceFontdbError> {
+        let Some(blob_dir) = self.config.blob_dir() else {
+            return Ok(());
+        };
         let max_bytes = self.max_blob_cache_bytes();
         if max_bytes == 0 {
             return Ok(());
         }
 
-        let size = cache::calculate_blob_cache_size_bytes(&self.config.blob_cache_dir)?;
+        let size = cache::calculate_blob_cache_size_bytes(&blob_dir)?;
         if size <= max_bytes {
             return Ok(());
         }
 
-        cache::evict_blob_lru_until_size(&self.config.blob_cache_dir, max_bytes, exempt_keys)
+        cache::evict_blob_lru_until_size(&blob_dir, max_bytes, exempt_keys)
     }
 
     // -----------------------------------------------------------------------
