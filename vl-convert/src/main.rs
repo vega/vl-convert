@@ -1,4 +1,5 @@
 #![allow(clippy::uninlined_format_args)]
+#![allow(clippy::too_many_arguments)]
 #![doc = include_str!("../README.md")]
 
 use clap::{Parser, Subcommand};
@@ -12,7 +13,7 @@ use vl_convert_rs::converter::{
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
-use vl_convert_rs::{anyhow, anyhow::bail};
+use vl_convert_rs::{anyhow, anyhow::bail, install_font, FontStyle, VariantRequest};
 
 const DEFAULT_VL_VERSION: &str = "6.4";
 const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
@@ -32,6 +33,17 @@ struct Cli {
     /// Root directory for local filesystem access. If omitted, filesystem access is disabled.
     #[arg(long, global = true)]
     filesystem_root: Option<String>,
+
+    /// Install a font by family name from the Fontsource catalog before conversion.
+    /// May be specified multiple times.
+    #[arg(long, global = true)]
+    install_font: Vec<String>,
+
+    /// Only download specific font variants. Format: "weight:style" pairs,
+    /// comma-separated (e.g., "400:normal,700:italic").
+    /// If omitted, all variants are downloaded. Only used with --install-font.
+    #[arg(long, global = true)]
+    install_font_variants: Option<String>,
 
     #[command(subcommand)]
     command: Commands,
@@ -570,11 +582,18 @@ async fn main() -> Result<(), anyhow::Error> {
         mut allow_http_access,
         no_http_access,
         filesystem_root,
+        install_font: install_font_families,
+        install_font_variants,
         command,
     } = Cli::parse();
     if no_http_access {
         allow_http_access = false;
     }
+
+    let variants = install_font_variants
+        .as_deref()
+        .map(parse_variants)
+        .transpose()?;
     use crate::Commands::*;
     match command {
         Vl2vg {
@@ -586,6 +605,7 @@ async fn main() -> Result<(), anyhow::Error> {
             pretty,
             show_warnings,
         } => {
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             vl_2_vg(
                 input_vegalite_file.as_deref(),
                 output_vega_file.as_deref(),
@@ -612,6 +632,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             vl_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -642,6 +663,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             vl_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -674,6 +696,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             vl_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -704,6 +727,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             vl_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -740,6 +764,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
             renderer,
         } => {
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             // Initialize converter
             let vl_str = read_input_string(input.as_deref())?;
             let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
@@ -778,6 +803,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             vg_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -800,6 +826,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             vg_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -824,6 +851,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             vg_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -846,6 +874,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             vg_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -875,6 +904,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
             renderer,
         } => {
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             // Initialize converter
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
@@ -909,6 +939,7 @@ async fn main() -> Result<(), anyhow::Error> {
             allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             let svg = read_input_string(input.as_deref())?;
             let converter =
                 build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
@@ -924,6 +955,7 @@ async fn main() -> Result<(), anyhow::Error> {
             allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             let svg = read_input_string(input.as_deref())?;
             let converter =
                 build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
@@ -937,6 +969,7 @@ async fn main() -> Result<(), anyhow::Error> {
             allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
+            install_fonts(&install_font_families, variants.as_deref()).await?;
             let svg = read_input_string(input.as_deref())?;
             let converter =
                 build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
@@ -955,6 +988,49 @@ fn register_font_dir(dir: Option<String>) -> Result<(), anyhow::Error> {
         register_font_directory(&dir)?
     }
     Ok(())
+}
+
+async fn install_fonts(
+    fonts: &[String],
+    variants: Option<&[VariantRequest]>,
+) -> Result<(), anyhow::Error> {
+    for family in fonts {
+        install_font(family, variants).await?;
+    }
+    Ok(())
+}
+
+fn parse_variants(input: &str) -> Result<Vec<VariantRequest>, anyhow::Error> {
+    let mut variants = Vec::new();
+    for pair in input.split(',') {
+        let pair = pair.trim();
+        if pair.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = pair.split(':').collect();
+        if parts.len() != 2 {
+            anyhow::bail!(
+                "Invalid variant format '{}'. Expected 'weight:style' (e.g., '400:normal')",
+                pair
+            );
+        }
+        let weight: u16 = parts[0].parse().map_err(|_| {
+            anyhow::anyhow!(
+                "Invalid weight '{}'. Must be a number (e.g., 400, 700)",
+                parts[0]
+            )
+        })?;
+        let style = match parts[1] {
+            "normal" => FontStyle::Normal,
+            "italic" => FontStyle::Italic,
+            other => anyhow::bail!("Invalid style '{}'. Must be 'normal' or 'italic'", other),
+        };
+        variants.push(VariantRequest { weight, style });
+    }
+    if variants.is_empty() {
+        anyhow::bail!("No variants specified in --install-font-variants");
+    }
+    Ok(variants)
 }
 
 fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
