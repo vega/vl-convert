@@ -7,7 +7,8 @@ members = [
     "vl-convert-python",
     "vl-convert-vendor",
     "vl-convert-canvas2d",
-    "vl-convert-canvas2d-deno"
+    "vl-convert-canvas2d-deno",
+    "vl-convert-fontsource-fontdb",
 ]
 
 [profile.release]
@@ -33,10 +34,14 @@ deno_ast = { version = "0.52.0", features = ["bundler", "codegen", "transforms",
 deno_semver = "0.9.1"
 sys_traits = { version = "0.1.22", features = ["real", "libc"] }
 
+dashmap = "6"
 dircpy = "0.3"
+dirs = "6"
 dssim = "3.2.4"
 env_logger = "0.11.8"
+filetime = "0.2"
 fontdb = { version = "0.23.0", features = ["fontconfig"] }
+fs4 = { version = "0.13", features = ["tokio", "sync"] }
 futures = "0.3.30"
 futures-util = "0.3.30"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
@@ -60,6 +65,7 @@ shellexpand = "3.1.0"
 svg2pdf = "0.13.0"
 tempfile = "3.8.0"
 tiny-skia = "0.11.4"
+tinyvec = "1"
 tokio = { version = "1.36", features = ["macros", "rt-multi-thread"] }
 ttf-parser = "0.25.1"
 usvg = "0.45.1"
