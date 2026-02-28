@@ -144,6 +144,7 @@ __all__ = [
     "get_time_format_locale",
     "javascript_bundle",
     "register_font_directory",
+    "install_font",
     "warm_up_workers",
     "svg_to_jpeg",
     "svg_to_pdf",
@@ -267,11 +268,39 @@ def register_font_directory(font_dir: str) -> None:
     """
     ...
 
+def install_font(
+    font_family: str,
+    variants: list[tuple[int, str]] | None = None,
+) -> None:
+    """
+    Download, cache, and register a font by family name.
+
+    Downloads font files from the Fontsource catalog (which includes
+    Google Fonts and other open-source fonts) and registers them for
+    use in subsequent conversions.
+
+    Parameters
+    ----------
+    font_family
+        Font family name (e.g. "Roboto", "Playfair Display")
+    variants
+        Optional list of (weight, style) tuples to download.
+        Style must be "normal" or "italic".
+        If None, downloads all available variants.
+        Example: [(400, "normal"), (700, "normal"), (400, "italic"), (700, "italic")]
+
+    Returns
+    -------
+    None
+    """
+    ...
+
 def configure_converter(
     num_workers: int | None = None,
     allow_http_access: bool | None = None,
     filesystem_root: str | None = None,
     allowed_base_urls: list[str] | None = None,
+    font_cache_size_mb: int | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -292,6 +321,8 @@ def configure_converter(
         When configured, HTTP redirects are denied instead of followed.
         Per-call ``allowed_base_urls`` arguments on conversion functions override
         this converter-level default when provided.
+    font_cache_size_mb
+        Maximum font cache size in megabytes. If ``None``, keep current value.
     """
     ...
 
@@ -941,12 +972,20 @@ if TYPE_CHECKING:
         async def register_font_directory(self, font_dir: str) -> None:
             """Async version of ``register_font_directory``. See sync function for full documentation."""
             ...
+        async def install_font(
+            self,
+            font_family: str,
+            variants: list[tuple[int, str]] | None = None,
+        ) -> None:
+            """Async version of ``install_font``. See sync function for full documentation."""
+            ...
         async def configure_converter(
             self,
             num_workers: int | None = None,
             allow_http_access: bool | None = None,
             filesystem_root: str | None = None,
             allowed_base_urls: list[str] | None = None,
+            font_cache_size_mb: int | None = None,
         ) -> None:
             """Async version of ``configure_converter``. See sync function for full documentation."""
             ...

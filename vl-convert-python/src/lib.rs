@@ -11,6 +11,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
+use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
     FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts,
     ACCESS_DENIED_MARKER,
@@ -20,8 +21,10 @@ use vl_convert_rs::module_loader::import_map::{
 };
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
+use vl_convert_rs::text::install_font as install_font_rs;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
 use vl_convert_rs::VlConverter as VlConverterRs;
+use vl_convert_rs::{FontStyle, VariantRequest};
 
 #[macro_use]
 extern crate lazy_static;
@@ -70,6 +73,7 @@ struct ConverterConfigOverrides {
     filesystem_root: Option<Option<PathBuf>>,
     // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
+    font_cache_size_mb: Option<u64>,
 }
 
 fn parse_config_overrides(
@@ -128,6 +132,15 @@ fn parse_config_overrides(
                         })?));
                 }
             }
+            "font_cache_size_mb" => {
+                if !value.is_none() {
+                    overrides.font_cache_size_mb = Some(value.extract::<u64>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid font_cache_size_mb value for configure_converter: {err}"
+                        )
+                    })?);
+                }
+            }
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
                     "Unknown configure_converter argument: {other}"
@@ -151,6 +164,10 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     }
     if let Some(allowed_base_urls) = overrides.allowed_base_urls {
         config.allowed_base_urls = allowed_base_urls;
+    }
+    if let Some(mb) = overrides.font_cache_size_mb {
+        let bytes = mb.saturating_mul(1024 * 1024);
+        configure_font_cache_rs(Some(bytes));
     }
 }
 
@@ -1217,6 +1234,51 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
     Ok(())
 }
 
+/// Parse Python variant tuples into VariantRequest vec.
+fn parse_variant_args(
+    variants: Option<Vec<(u16, String)>>,
+) -> PyResult<Option<Vec<VariantRequest>>> {
+    match variants {
+        None => Ok(None),
+        Some(tuples) => {
+            let mut requests = Vec::with_capacity(tuples.len());
+            for (weight, style_str) in tuples {
+                let style = match style_str.as_str() {
+                    "normal" => FontStyle::Normal,
+                    "italic" => FontStyle::Italic,
+                    other => {
+                        return Err(PyValueError::new_err(format!(
+                            "Invalid font style '{}'. Must be 'normal' or 'italic'",
+                            other
+                        )))
+                    }
+                };
+                requests.push(VariantRequest { weight, style });
+            }
+            Ok(Some(requests))
+        }
+    }
+}
+
+/// Downloads font files from the Fontsource catalog (which includes
+/// Google Fonts and other open-source fonts) and registers them for
+/// use in subsequent conversions.
+#[pyfunction]
+#[pyo3(signature = (font_family, variants=None))]
+fn install_font(font_family: &str, variants: Option<Vec<(u16, String)>>) -> PyResult<()> {
+    let font_family = font_family.to_string();
+    let variant_requests = parse_variant_args(variants)?;
+    Python::with_gil(|py| {
+        py.allow_threads(move || {
+            PYTHON_RUNTIME
+                .block_on(async move {
+                    install_font_rs(&font_family, variant_requests.as_deref()).await
+                })
+                .map_err(|err| PyValueError::new_err(format!("Failed to install font: {}", err)))
+        })
+    })
+}
+
 /// Configure converter options for subsequent requests
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -2104,6 +2166,24 @@ fn register_font_directory_asyncio<'py>(
     })
 }
 
+#[doc = async_variant_doc!("install_font")]
+#[pyfunction(name = "install_font")]
+#[pyo3(signature = (font_family, variants=None))]
+fn install_font_asyncio<'py>(
+    py: Python<'py>,
+    font_family: &str,
+    variants: Option<Vec<(u16, String)>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let font_family = font_family.to_string();
+    let variant_requests = parse_variant_args(variants)?;
+    future_into_py_object(py, async move {
+        install_font_rs(&font_family, variant_requests.as_deref())
+            .await
+            .map_err(|err| PyValueError::new_err(format!("Failed to install font: {err}")))?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
 #[doc = async_variant_doc!("configure_converter")]
 #[pyfunction(name = "configure_converter")]
 #[pyo3(signature = (**kwargs))]
@@ -2350,6 +2430,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(svg_to_jpeg_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(install_font_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(configure_converter_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_converter_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
@@ -2392,6 +2473,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(install_font, m)?)?;
     m.add_function(wrap_pyfunction!(configure_converter, m)?)?;
     m.add_function(wrap_pyfunction!(get_converter_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
