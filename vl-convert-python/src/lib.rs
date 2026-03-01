@@ -21,8 +21,8 @@ use vl_convert_rs::module_loader::import_map::{
 };
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
-use vl_convert_rs::text::register_fontsource_font as register_fontsource_font_rs;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
+use vl_convert_rs::text::register_fontsource_font as register_fontsource_font_rs;
 use vl_convert_rs::VlConverter as VlConverterRs;
 use vl_convert_rs::{FontStyle, VariantRequest};
 
@@ -1278,7 +1278,10 @@ fn parse_variant_args(
 /// use in subsequent conversions.
 #[pyfunction]
 #[pyo3(signature = (font_family, variants=None))]
-fn register_fontsource_font(font_family: &str, variants: Option<Vec<(u16, String)>>) -> PyResult<()> {
+fn register_fontsource_font(
+    font_family: &str,
+    variants: Option<Vec<(u16, String)>>,
+) -> PyResult<()> {
     let font_family = font_family.to_string();
     let variant_requests = parse_variant_args(variants)?;
     Python::with_gil(|py| {
@@ -2456,7 +2459,10 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(svg_to_jpeg_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(register_fontsource_font_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(
+        register_fontsource_font_asyncio,
+        &asyncio
+    )?)?;
     asyncio.add_function(wrap_pyfunction!(configure_converter_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_converter_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;

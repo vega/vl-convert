@@ -2218,6 +2218,20 @@ vegaLiteToCanvas_{ver_name:?}(
     }
 
     async fn handle_command(&mut self, cmd: VlConvertCommand) {
+        // Apply a fontsource font overlay, execute `$work`, then clear the overlay.
+        macro_rules! with_font_overlay {
+            ($self:expr, $sources:expr, $work:expr) => {{
+                if !$sources.is_empty() {
+                    $self.apply_fontsource_font_overlay(&$sources);
+                }
+                let result = $work;
+                if !$sources.is_empty() {
+                    $self.clear_fontsource_font_overlay();
+                }
+                result
+            }};
+        }
+
         match cmd {
             VlConvertCommand::VlToVg {
                 vl_spec,
@@ -2233,15 +2247,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 fontsource_font_sources,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let svg_result = self.vega_to_svg(vg_spec, vg_opts).await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(svg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vega_to_svg(vg_spec, vg_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VgToSg {
                 vg_spec,
@@ -2249,15 +2260,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 fontsource_font_sources,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let sg_result = self.vega_to_scenegraph(vg_spec, vg_opts).await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(sg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vega_to_scenegraph(vg_spec, vg_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
@@ -2265,15 +2273,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 fontsource_font_sources,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let sg_result = self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(sg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToSvg {
                 vl_spec,
@@ -2281,15 +2286,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 fontsource_font_sources,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let svg_result = self.vegalite_to_svg(vl_spec, vl_opts).await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(svg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vegalite_to_svg(vl_spec, vl_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToSg {
                 vl_spec,
@@ -2297,15 +2299,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 fontsource_font_sources,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let sg_result = self.vegalite_to_scenegraph(vl_spec, vl_opts).await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(sg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vegalite_to_scenegraph(vl_spec, vl_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToSgMsgpack {
                 vl_spec,
@@ -2313,15 +2312,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 fontsource_font_sources,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let sg_result = self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(sg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VgToPng {
                 vg_spec,
@@ -2331,18 +2327,15 @@ vegaLiteToCanvas_{ver_name:?}(
                 ppi,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let png_result = match vg_spec.to_value() {
-                    Ok(v) => self.vega_to_png(&v, vg_opts, scale, ppi).await,
-                    Err(e) => Err(e),
-                };
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(png_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    match vg_spec.to_value() {
+                        Ok(v) => self.vega_to_png(&v, vg_opts, scale, ppi).await,
+                        Err(e) => Err(e),
+                    }
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VgToJpeg {
                 vg_spec,
@@ -2353,17 +2346,13 @@ vegaLiteToCanvas_{ver_name:?}(
                 image_policy,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let jpeg_result = self
-                    .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
-                    .await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(jpeg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
+                        .await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VgToPdf {
                 vg_spec,
@@ -2372,15 +2361,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 image_policy,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let pdf_result = self.vega_to_pdf(vg_spec, vg_opts, image_policy).await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(pdf_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vega_to_pdf(vg_spec, vg_opts, image_policy).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToPng {
                 vl_spec,
@@ -2390,18 +2376,15 @@ vegaLiteToCanvas_{ver_name:?}(
                 ppi,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let png_result = match vl_spec.to_value() {
-                    Ok(v) => self.vegalite_to_png(&v, vl_opts, scale, ppi).await,
-                    Err(e) => Err(e),
-                };
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(png_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    match vl_spec.to_value() {
+                        Ok(v) => self.vegalite_to_png(&v, vl_opts, scale, ppi).await,
+                        Err(e) => Err(e),
+                    }
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToJpeg {
                 vl_spec,
@@ -2412,17 +2395,13 @@ vegaLiteToCanvas_{ver_name:?}(
                 image_policy,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let jpeg_result = self
-                    .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
-                    .await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(jpeg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
+                        .await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToPdf {
                 vl_spec,
@@ -2431,15 +2410,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 image_policy,
                 responder,
             } => {
-                let has_overlay = !fontsource_font_sources.is_empty();
-                if has_overlay {
-                    self.apply_fontsource_font_overlay(&fontsource_font_sources);
-                }
-                let pdf_result = self.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await;
-                if has_overlay {
-                    self.clear_fontsource_font_overlay();
-                }
-                responder.send(pdf_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_sources,
+                    self.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::SvgToPng {
                 svg,
@@ -5184,7 +5160,6 @@ try {
             VlOpts {
                 vl_version: VlVersion::v5_16,
                 ..Default::default()
-                ..Default::default()
             },
             true,
             Renderer::Svg,
@@ -5495,7 +5470,6 @@ try {
                         VlOpts {
                             vl_version: VlVersion::v5_16,
                             ..Default::default()
-                            ..Default::default()
                         },
                     )
                     .await
@@ -5530,7 +5504,6 @@ try {
             VlOpts {
                 vl_version: VlVersion::v5_16,
                 ..Default::default()
-                ..Default::default()
             },
         )
         .await
@@ -5554,7 +5527,6 @@ try {
             vl_spec,
             VlOpts {
                 vl_version: VlVersion::v5_16,
-                ..Default::default()
                 ..Default::default()
             },
         )

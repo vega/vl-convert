@@ -837,6 +837,7 @@ mod test_png_theme_config {
                     allowed_base_urls: None,
                     format_locale: None,
                     time_format_locale: None,
+                    fontsource_fonts: None,
                 },
                 Some(scale),
                 None
@@ -863,6 +864,7 @@ mod test_png_theme_config {
                     allowed_base_urls: None,
                     format_locale: None,
                     time_format_locale: None,
+                    fontsource_fonts: None,
                 },
                 Some(scale),
                 None

@@ -405,8 +405,7 @@ async fn test_async_and_blocking_parity() {
     let temp_blocking = tempfile::tempdir().unwrap();
 
     let async_client = make_client(temp_async.path(), server.base_url(), 8, u64::MAX);
-    let blocking_client =
-        make_client(temp_blocking.path(), server.base_url(), 8, u64::MAX);
+    let blocking_client = make_client(temp_blocking.path(), server.base_url(), 8, u64::MAX);
 
     let requested = [VariantRequest {
         weight: 400,
@@ -472,12 +471,7 @@ async fn test_in_process_dedupe_same_file_concurrent_loads() {
     let server = TestServer::new(build_roboto_routes, delayed, 150);
     let temp = tempfile::tempdir().unwrap();
 
-    let client = Arc::new(make_client(
-        temp.path(),
-        server.base_url(),
-        8,
-        u64::MAX,
-    ));
+    let client = Arc::new(make_client(temp.path(), server.base_url(), 8, u64::MAX));
     let requested = vec![VariantRequest {
         weight: 400,
         style: FontStyle::Normal,

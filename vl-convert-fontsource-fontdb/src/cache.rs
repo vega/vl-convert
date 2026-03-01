@@ -76,6 +76,15 @@ pub(crate) fn touch_blob(key: &str, blob_cache_dir: &Path) -> Result<(), Fontsou
     Ok(())
 }
 
+fn is_ttf_file(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("ttf"))
+            .unwrap_or(false)
+}
+
 pub(crate) fn calculate_blob_cache_size_bytes(
     blob_cache_dir: &Path,
 ) -> Result<u64, FontsourceFontdbError> {
@@ -87,13 +96,7 @@ pub(crate) fn calculate_blob_cache_size_bytes(
     for entry in std::fs::read_dir(blob_cache_dir)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file()
-            && path
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.eq_ignore_ascii_case("ttf"))
-                .unwrap_or(false)
-        {
+        if is_ttf_file(&path) {
             total = total.saturating_add(entry.metadata()?.len());
         }
     }
@@ -120,7 +123,7 @@ pub(crate) fn evict_blob_lru_until_size(
                 Err(_) => continue,
             };
             let path = entry.path();
-            if !path.is_file() {
+            if !is_ttf_file(&path) {
                 continue;
             }
 

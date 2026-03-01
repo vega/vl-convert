@@ -3,6 +3,7 @@ use crate::config::ClientConfig;
 use crate::error::FontsourceFontdbError;
 use crate::resolve::{dedupe_variants, resolve_download_plan, ResolvedTtfFile};
 use crate::types::{family_to_id, LoadedFontBatch, VariantRequest};
+use backon::{BlockingRetryable, ExponentialBuilder, Retryable};
 use dashmap::DashMap;
 use futures_util::stream::{self, StreamExt};
 use reqwest::StatusCode;
@@ -478,29 +479,19 @@ impl FontsourceClient {
         &self,
         url: &str,
     ) -> Result<Vec<u8>, FontsourceFontdbError> {
-        let mut attempts = 0usize;
-        loop {
-            match self.get_bytes_once_async(url).await {
-                Ok(bytes) => return Ok(bytes),
-                Err(err) if err.is_retryable() && attempts < self.config.max_retries => {
-                    attempts += 1;
-                }
-                Err(err) => return Err(err),
-            }
-        }
+        let backoff = ExponentialBuilder::default().with_max_times(self.config.max_retries);
+        (|| self.get_bytes_once_async(url))
+            .retry(backoff)
+            .when(|e| e.is_retryable())
+            .await
     }
 
     fn get_bytes_with_retry_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceFontdbError> {
-        let mut attempts = 0usize;
-        loop {
-            match self.get_bytes_once_blocking(url) {
-                Ok(bytes) => return Ok(bytes),
-                Err(err) if err.is_retryable() && attempts < self.config.max_retries => {
-                    attempts += 1;
-                }
-                Err(err) => return Err(err),
-            }
-        }
+        let backoff = ExponentialBuilder::default().with_max_times(self.config.max_retries);
+        (|| self.get_bytes_once_blocking(url))
+            .retry(backoff)
+            .when(|e| e.is_retryable())
+            .call()
     }
 
     async fn get_bytes_once_async(&self, url: &str) -> Result<Vec<u8>, FontsourceFontdbError> {
