@@ -269,8 +269,7 @@ def register_font_directory(font_dir: str) -> None:
     ...
 
 def register_fontsource_font(
-    font_family: str,
-    variants: list[tuple[int, str]] | None = None,
+    font_family: str, variants: list[tuple[int, str]] | None = None
 ) -> None:
     """
     Download, cache, and register a font by family name from Fontsource.
@@ -973,9 +972,7 @@ if TYPE_CHECKING:
             """Async version of ``register_font_directory``. See sync function for full documentation."""
             ...
         async def register_fontsource_font(
-            self,
-            font_family: str,
-            variants: list[tuple[int, str]] | None = None,
+            self, font_family: str, variants: list[tuple[int, str]] | None = None
         ) -> None:
             """Async version of ``register_fontsource_font``. See sync function for full documentation."""
             ...
