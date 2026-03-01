@@ -171,7 +171,7 @@ impl FontsourceClient {
         let limit = self.config.max_parallel_downloads.max(1);
         let font_id_owned = font_id.to_string();
 
-        let results = stream::iter(files.iter().cloned().map(|file| {
+        let results = stream::iter(files.iter().map(|file| {
             let font_id = font_id_owned.clone();
             async move { self.ensure_blob_async(&font_id, &file).await }
         }))
