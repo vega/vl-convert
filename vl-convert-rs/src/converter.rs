@@ -3624,7 +3624,7 @@ fn parse_svg_with_options(
     opts.resources_dir = policy.filesystem_root.clone();
     let (result, access_errors) =
         crate::image_loading::with_image_access_policy(policy.clone(), || {
-            usvg::Tree::from_xmltree(&doc, &opts)
+            usvg::Tree::from_xmltree(&doc, opts)
         });
     opts.resources_dir = previous_resources_dir;
 
