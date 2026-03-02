@@ -130,7 +130,7 @@ pub(crate) fn resolve_download_plan(
                 };
 
                 for style_key in sorted_style_keys(styles) {
-                    let Some(style) = FontStyle::from_api_style(&style_key) else {
+                    let Ok(style) = style_key.parse::<FontStyle>() else {
                         continue;
                     };
                     let Some(subsets) = styles.get(&style_key) else {

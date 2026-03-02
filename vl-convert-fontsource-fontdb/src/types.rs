@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
 use tinyvec::TinyVec;
 
 /// CSS font style.
@@ -16,12 +17,16 @@ impl FontStyle {
             FontStyle::Italic => "italic",
         }
     }
+}
 
-    pub(crate) fn from_api_style(value: &str) -> Option<Self> {
-        match value {
-            "normal" => Some(FontStyle::Normal),
-            "italic" => Some(FontStyle::Italic),
-            _ => None,
+impl FromStr for FontStyle {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "normal" => Ok(FontStyle::Normal),
+            "italic" => Ok(FontStyle::Italic),
+            _ => Err(()),
         }
     }
 }
