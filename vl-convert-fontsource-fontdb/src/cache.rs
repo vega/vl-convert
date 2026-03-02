@@ -62,7 +62,15 @@ pub(crate) fn read_blob(
 ) -> Result<Option<Vec<u8>>, FontsourceFontdbError> {
     let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
     match std::fs::read(&path) {
-        Ok(bytes) => Ok(Some(bytes)),
+        Ok(bytes) => {
+            if has_ttf_magic_bytes(&bytes) {
+                Ok(Some(bytes))
+            } else {
+                // Corrupt or truncated — delete and treat as a miss.
+                remove_path_if_present(&path);
+                Ok(None)
+            }
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_) => {
             // Treat any read failure as a miss — delete the corrupt blob.
@@ -70,6 +78,14 @@ pub(crate) fn read_blob(
             Ok(None)
         }
     }
+}
+
+/// Check whether `bytes` starts with a recognised font magic number.
+fn has_ttf_magic_bytes(bytes: &[u8]) -> bool {
+    bytes.len() >= 4
+        && (bytes[..4] == [0, 1, 0, 0]  // TrueType
+            || bytes[..4] == *b"OTTO"    // OpenType/CFF
+            || bytes[..4] == *b"ttcf")   // TrueType Collection
 }
 
 pub(crate) fn write_blob_if_absent(
@@ -303,15 +319,22 @@ mod tests {
         assert!(key1.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
+    /// Fake TTF bytes with a valid TrueType magic header.
+    fn fake_ttf(payload: &[u8]) -> Vec<u8> {
+        let mut v = vec![0x00, 0x01, 0x00, 0x00];
+        v.extend_from_slice(payload);
+        v
+    }
+
     #[test]
     fn test_read_write_blob_roundtrip() {
         let tmp = tempfile::tempdir().unwrap();
         let url = "https://cdn.example/fonts/latin-400-normal.ttf";
-        let data = b"fake ttf data";
+        let data = fake_ttf(b"font data");
 
         assert!(read_blob(url, tmp.path()).unwrap().is_none());
 
-        write_blob_if_absent(url, tmp.path(), data).unwrap();
+        write_blob_if_absent(url, tmp.path(), &data).unwrap();
 
         let read_back = read_blob(url, tmp.path()).unwrap().unwrap();
         assert_eq!(read_back, data);
@@ -321,12 +344,26 @@ mod tests {
     fn test_write_blob_no_overwrite() {
         let tmp = tempfile::tempdir().unwrap();
         let url = "https://cdn.example/fonts/latin-400-normal.ttf";
+        let first = fake_ttf(b"first");
+        let second = fake_ttf(b"second");
 
-        write_blob_if_absent(url, tmp.path(), b"first").unwrap();
-        write_blob_if_absent(url, tmp.path(), b"second").unwrap();
+        write_blob_if_absent(url, tmp.path(), &first).unwrap();
+        write_blob_if_absent(url, tmp.path(), &second).unwrap();
 
         let read_back = read_blob(url, tmp.path()).unwrap().unwrap();
-        assert_eq!(read_back, b"first");
+        assert_eq!(read_back, first);
+    }
+
+    #[test]
+    fn test_read_blob_bad_magic_bytes_treated_as_miss_and_cleaned() {
+        let tmp = tempfile::tempdir().unwrap();
+        let url = "https://cdn.example/fonts/latin-400-normal.ttf";
+        let key = blob_key(url);
+        let path = tmp.path().join(format!("{key}.{BLOB_EXTENSION}"));
+
+        std::fs::write(&path, b"not a font file").unwrap();
+        assert!(read_blob(url, tmp.path()).unwrap().is_none());
+        assert!(!path.exists());
     }
 
     #[test]
@@ -339,6 +376,17 @@ mod tests {
         std::fs::create_dir_all(&path).unwrap();
         assert!(read_blob(url, tmp.path()).unwrap().is_none());
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn test_has_ttf_magic_bytes() {
+        assert!(has_ttf_magic_bytes(&[0, 1, 0, 0]));
+        assert!(has_ttf_magic_bytes(b"OTTO"));
+        assert!(has_ttf_magic_bytes(b"ttcf"));
+        assert!(has_ttf_magic_bytes(&[0, 1, 0, 0, 0xFF, 0xFF]));
+        assert!(!has_ttf_magic_bytes(b""));
+        assert!(!has_ttf_magic_bytes(b"PK\x03\x04"));
+        assert!(!has_ttf_magic_bytes(b"\x00\x00\x00"));
     }
 
     #[test]
