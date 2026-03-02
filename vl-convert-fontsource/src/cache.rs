@@ -1,4 +1,4 @@
-use crate::error::FontsourceFontdbError;
+use crate::error::FontsourceError;
 use crate::types::FontsourceFont;
 use filetime::FileTime;
 use fs4::fs_std::FileExt;
@@ -31,7 +31,7 @@ pub(crate) fn write_metadata_if_absent(
     font_id: &str,
     metadata_cache_dir: &Path,
     metadata: &FontsourceFont,
-) -> Result<(), FontsourceFontdbError> {
+) -> Result<(), FontsourceError> {
     let path = metadata_cache_dir.join(format!("{font_id}.json"));
     if path.exists() {
         return Ok(());
@@ -59,7 +59,7 @@ fn blob_path_from_key(key: &str, blob_cache_dir: &Path) -> PathBuf {
 pub(crate) fn read_blob(
     url: &str,
     blob_cache_dir: &Path,
-) -> Result<Option<Vec<u8>>, FontsourceFontdbError> {
+) -> Result<Option<Vec<u8>>, FontsourceError> {
     let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
     match std::fs::read(&path) {
         Ok(bytes) => {
@@ -92,7 +92,7 @@ pub(crate) fn write_blob_if_absent(
     url: &str,
     blob_cache_dir: &Path,
     bytes: &[u8],
-) -> Result<(), FontsourceFontdbError> {
+) -> Result<(), FontsourceError> {
     let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
     // If a corrupt path exists as a non-file (e.g. directory), clear it and
     // treat this write as filling a miss.
@@ -104,7 +104,7 @@ pub(crate) fn write_blob_if_absent(
     atomic_write_bytes(&path, bytes)
 }
 
-pub(crate) fn touch_blob(url: &str, blob_cache_dir: &Path) -> Result<(), FontsourceFontdbError> {
+pub(crate) fn touch_blob(url: &str, blob_cache_dir: &Path) -> Result<(), FontsourceError> {
     let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
     match filetime::set_file_mtime(&path, FileTime::now()) {
         Ok(()) => Ok(()),
@@ -124,7 +124,7 @@ fn is_blob_file(path: &Path) -> bool {
 
 pub(crate) fn calculate_blob_cache_size_bytes(
     blob_cache_dir: &Path,
-) -> Result<u64, FontsourceFontdbError> {
+) -> Result<u64, FontsourceError> {
     if !blob_cache_dir.exists() {
         return Ok(0);
     }
@@ -154,7 +154,7 @@ pub(crate) fn evict_blob_lru_until_size(
     blob_cache_dir: &Path,
     target_bytes: u64,
     exempt_keys: &HashSet<String>,
-) -> Result<(), FontsourceFontdbError> {
+) -> Result<(), FontsourceError> {
     with_exclusive_cache_lock(blob_cache_dir, || {
         let mut entries: Vec<(String, PathBuf, u64, std::time::SystemTime)> = Vec::new();
         let mut total_size = 0u64;
@@ -205,9 +205,7 @@ pub(crate) fn evict_blob_lru_until_size(
             }
 
             // Tolerate ENOENT from concurrent deletion.
-            if std::fs::remove_file(&path).is_ok() {
-                total_size = total_size.saturating_sub(size);
-            } else if !path.exists() {
+            if std::fs::remove_file(&path).is_ok() || !path.exists() {
                 total_size = total_size.saturating_sub(size);
             }
         }
@@ -217,9 +215,9 @@ pub(crate) fn evict_blob_lru_until_size(
 }
 
 
-pub(crate) fn atomic_write_bytes(dst: &Path, bytes: &[u8]) -> Result<(), FontsourceFontdbError> {
+pub(crate) fn atomic_write_bytes(dst: &Path, bytes: &[u8]) -> Result<(), FontsourceError> {
     let parent = dst.parent().ok_or_else(|| {
-        FontsourceFontdbError::Internal(format!("No parent directory for {}", dst.display()))
+        FontsourceError::Internal(format!("No parent directory for {}", dst.display()))
     })?;
 
     std::fs::create_dir_all(parent)?;
@@ -278,9 +276,9 @@ fn remove_path_if_present(path: &Path) {
     }
 }
 
-fn with_exclusive_cache_lock<F, R>(cache_dir: &Path, f: F) -> Result<R, FontsourceFontdbError>
+fn with_exclusive_cache_lock<F, R>(cache_dir: &Path, f: F) -> Result<R, FontsourceError>
 where
-    F: FnOnce() -> Result<R, FontsourceFontdbError>,
+    F: FnOnce() -> Result<R, FontsourceError>,
 {
     std::fs::create_dir_all(cache_dir)?;
     let lock_path = cache_dir.join(".cache-lock");

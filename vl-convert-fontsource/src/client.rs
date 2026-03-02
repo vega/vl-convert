@@ -1,6 +1,6 @@
 use crate::cache;
 use crate::config::ClientConfig;
-use crate::error::FontsourceFontdbError;
+use crate::error::FontsourceError;
 use crate::resolve::{dedupe_variants, resolve_download_plan, ResolvedTtfFile};
 use crate::types::{family_to_id, LoadedFontBatch, VariantRequest};
 use backon::{BlockingRetryable, ExponentialBuilder, Retryable};
@@ -12,11 +12,14 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+/// Return type for `ensure_blobs_*`: (font data, blob keys used, whether any were downloaded).
+type EnsureBlobsResult = Result<(Vec<Arc<Vec<u8>>>, HashSet<String>, bool), FontsourceError>;
+
 struct PreparedLoad {
     font_id: String,
     font_type: Option<String>,
     loaded_variants: Vec<VariantRequest>,
-    sources: Vec<fontdb::Source>,
+    font_data: Vec<Arc<Vec<u8>>>,
     ttf_file_count: usize,
 }
 
@@ -44,7 +47,7 @@ pub struct FontsourceClient {
 }
 
 impl FontsourceClient {
-    pub fn new(mut config: ClientConfig) -> Result<Self, FontsourceFontdbError> {
+    pub fn new(mut config: ClientConfig) -> Result<Self, FontsourceError> {
         if config.max_parallel_downloads == 0 {
             config.max_parallel_downloads = 1;
         }
@@ -61,7 +64,7 @@ impl FontsourceClient {
             .user_agent(&config.user_agent)
             .timeout(Duration::from_secs(config.request_timeout_secs))
             .build()
-            .map_err(|e| FontsourceFontdbError::Http(e.to_string()))?;
+            .map_err(|e| FontsourceError::Http(e.to_string()))?;
 
         Ok(Self {
             max_blob_cache_bytes: AtomicU64::new(config.max_blob_cache_bytes),
@@ -80,14 +83,14 @@ impl FontsourceClient {
         &self,
         family: &str,
         variants: Option<&[VariantRequest]>,
-    ) -> Result<LoadedFontBatch, FontsourceFontdbError> {
+    ) -> Result<LoadedFontBatch, FontsourceError> {
         let prepared = self.prepare_load_async(family, variants).await?;
         Ok(LoadedFontBatch::new(
             prepared.font_id,
             prepared.font_type,
             prepared.loaded_variants,
             prepared.ttf_file_count,
-            prepared.sources,
+            prepared.font_data,
         ))
     }
 
@@ -95,14 +98,14 @@ impl FontsourceClient {
         &self,
         family: &str,
         variants: Option<&[VariantRequest]>,
-    ) -> Result<LoadedFontBatch, FontsourceFontdbError> {
+    ) -> Result<LoadedFontBatch, FontsourceError> {
         let prepared = self.prepare_load_blocking(family, variants)?;
         Ok(LoadedFontBatch::new(
             prepared.font_id,
             prepared.font_type,
             prepared.loaded_variants,
             prepared.ttf_file_count,
-            prepared.sources,
+            prepared.font_data,
         ))
     }
 
@@ -126,13 +129,13 @@ impl FontsourceClient {
         &self,
         family: &str,
         variants: Option<&[VariantRequest]>,
-    ) -> Result<PreparedLoad, FontsourceFontdbError> {
+    ) -> Result<PreparedLoad, FontsourceError> {
         let font_id = family_to_id(family)
-            .ok_or_else(|| FontsourceFontdbError::InvalidFontId(family.to_string()))?;
+            .ok_or_else(|| FontsourceError::InvalidFontId(family.to_string()))?;
 
         if let Some(requested) = variants {
             if requested.is_empty() {
-                return Err(FontsourceFontdbError::NoVariantsRequested);
+                return Err(FontsourceError::NoVariantsRequested);
             }
         }
 
@@ -156,7 +159,8 @@ impl FontsourceClient {
         let plan = resolve_download_plan(&font_id, &metadata, variants)?;
 
         // 3. For each resolved file: check blob cache or download
-        let (sources, exempt_keys, downloaded_any) = self.ensure_blobs_async(&plan.files).await?;
+        let (font_data, exempt_keys, downloaded_any) =
+            self.ensure_blobs_async(&plan.files).await?;
 
         // 4. Evict if any new blobs written
         if downloaded_any {
@@ -171,15 +175,15 @@ impl FontsourceClient {
             } else {
                 plan.loaded_variants
             },
-            ttf_file_count: sources.len(),
-            sources,
+            ttf_file_count: font_data.len(),
+            font_data,
         })
     }
 
     async fn ensure_blobs_async(
         &self,
         files: &[ResolvedTtfFile],
-    ) -> Result<(Vec<fontdb::Source>, HashSet<String>, bool), FontsourceFontdbError> {
+    ) -> EnsureBlobsResult {
         let limit = self.config.max_parallel_downloads.max(1);
 
         let results = stream::iter(files.iter().cloned().enumerate().map(
@@ -199,24 +203,23 @@ impl FontsourceClient {
         }
         result_vec.sort_by_key(|(idx, _, _, _)| *idx);
 
-        let mut sources = Vec::with_capacity(files.len());
+        let mut font_data = Vec::with_capacity(files.len());
         let mut exempt_keys = HashSet::new();
         let mut downloaded_any = false;
 
         for (_, bytes, key, was_downloaded) in result_vec {
-            let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(bytes);
-            sources.push(fontdb::Source::Binary(data));
+            font_data.push(Arc::new(bytes));
             exempt_keys.insert(key);
             downloaded_any |= was_downloaded;
         }
 
-        Ok((sources, exempt_keys, downloaded_any))
+        Ok((font_data, exempt_keys, downloaded_any))
     }
 
     async fn ensure_blob_async(
         &self,
         file: &ResolvedTtfFile,
-    ) -> Result<(Vec<u8>, String, bool), FontsourceFontdbError> {
+    ) -> Result<(Vec<u8>, String, bool), FontsourceError> {
         let key = cache::blob_key(&file.url);
         let blob_dir = self.config.blob_dir();
 
@@ -260,13 +263,13 @@ impl FontsourceClient {
         &self,
         family: &str,
         variants: Option<&[VariantRequest]>,
-    ) -> Result<PreparedLoad, FontsourceFontdbError> {
+    ) -> Result<PreparedLoad, FontsourceError> {
         let font_id = family_to_id(family)
-            .ok_or_else(|| FontsourceFontdbError::InvalidFontId(family.to_string()))?;
+            .ok_or_else(|| FontsourceError::InvalidFontId(family.to_string()))?;
 
         if let Some(requested) = variants {
             if requested.is_empty() {
-                return Err(FontsourceFontdbError::NoVariantsRequested);
+                return Err(FontsourceError::NoVariantsRequested);
             }
         }
 
@@ -290,7 +293,7 @@ impl FontsourceClient {
         let plan = resolve_download_plan(&font_id, &metadata, variants)?;
 
         // 3. For each resolved file: check blob cache or download
-        let (sources, exempt_keys, downloaded_any) = self.ensure_blobs_blocking(&plan.files)?;
+        let (font_data, exempt_keys, downloaded_any) = self.ensure_blobs_blocking(&plan.files)?;
 
         // 4. Evict if any new blobs written
         if downloaded_any {
@@ -305,15 +308,15 @@ impl FontsourceClient {
             } else {
                 plan.loaded_variants
             },
-            ttf_file_count: sources.len(),
-            sources,
+            ttf_file_count: font_data.len(),
+            font_data,
         })
     }
 
     fn ensure_blobs_blocking(
         &self,
         files: &[ResolvedTtfFile],
-    ) -> Result<(Vec<fontdb::Source>, HashSet<String>, bool), FontsourceFontdbError> {
+    ) -> EnsureBlobsResult {
         if files.is_empty() {
             return Ok((Vec::new(), HashSet::new(), false));
         }
@@ -327,7 +330,7 @@ impl FontsourceClient {
                 .collect::<VecDeque<(usize, ResolvedTtfFile)>>(),
         ));
         let downloaded = Arc::new(AtomicUsize::new(0));
-        let first_error = Arc::new(Mutex::new(None::<FontsourceFontdbError>));
+        let first_error = Arc::new(Mutex::new(None::<FontsourceError>));
 
         // Collect results: (index, bytes, key, was_downloaded)
         type BlobResult = (usize, Vec<u8>, String, bool);
@@ -389,22 +392,21 @@ impl FontsourceClient {
             .collect::<Vec<_>>();
         result_vec.sort_by_key(|(idx, _, _, _)| *idx);
 
-        let mut sources = Vec::with_capacity(result_vec.len());
+        let mut font_data = Vec::with_capacity(result_vec.len());
         let mut exempt_keys = HashSet::new();
 
         for (_, bytes, key, _) in result_vec {
-            let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(bytes);
-            sources.push(fontdb::Source::Binary(data));
+            font_data.push(Arc::new(bytes));
             exempt_keys.insert(key);
         }
 
-        Ok((sources, exempt_keys, downloaded_any))
+        Ok((font_data, exempt_keys, downloaded_any))
     }
 
     fn ensure_blob_blocking(
         &self,
         file: &ResolvedTtfFile,
-    ) -> Result<(Vec<u8>, String, bool), FontsourceFontdbError> {
+    ) -> Result<(Vec<u8>, String, bool), FontsourceError> {
         let key = cache::blob_key(&file.url);
         let blob_dir = self.config.blob_dir();
 
@@ -481,13 +483,13 @@ impl FontsourceClient {
     async fn fetch_metadata_async(
         &self,
         font_id: &str,
-    ) -> Result<crate::types::FontsourceFont, FontsourceFontdbError> {
+    ) -> Result<crate::types::FontsourceFont, FontsourceError> {
         let url = self.metadata_url(font_id);
         let bytes = match self.get_bytes_with_retry_async(&url).await {
-            Err(FontsourceFontdbError::HttpStatus { status, .. })
+            Err(FontsourceError::HttpStatus { status, .. })
                 if status == StatusCode::NOT_FOUND.as_u16() =>
             {
-                return Err(FontsourceFontdbError::FontNotFound(font_id.to_string()));
+                return Err(FontsourceError::FontNotFound(font_id.to_string()));
             }
             Err(err) => return Err(err),
             Ok(bytes) => bytes,
@@ -500,13 +502,13 @@ impl FontsourceClient {
     fn fetch_metadata_blocking(
         &self,
         font_id: &str,
-    ) -> Result<crate::types::FontsourceFont, FontsourceFontdbError> {
+    ) -> Result<crate::types::FontsourceFont, FontsourceError> {
         let url = self.metadata_url(font_id);
         let bytes = match self.get_bytes_with_retry_blocking(&url) {
-            Err(FontsourceFontdbError::HttpStatus { status, .. })
+            Err(FontsourceError::HttpStatus { status, .. })
                 if status == StatusCode::NOT_FOUND.as_u16() =>
             {
-                return Err(FontsourceFontdbError::FontNotFound(font_id.to_string()));
+                return Err(FontsourceError::FontNotFound(font_id.to_string()));
             }
             Err(err) => return Err(err),
             Ok(bytes) => bytes,
@@ -523,7 +525,7 @@ impl FontsourceClient {
     async fn get_bytes_with_retry_async(
         &self,
         url: &str,
-    ) -> Result<Vec<u8>, FontsourceFontdbError> {
+    ) -> Result<Vec<u8>, FontsourceError> {
         let backoff = ExponentialBuilder::default().with_max_times(self.config.max_retries);
         (|| self.get_bytes_once_async(url))
             .retry(backoff)
@@ -531,7 +533,7 @@ impl FontsourceClient {
             .await
     }
 
-    fn get_bytes_with_retry_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceFontdbError> {
+    fn get_bytes_with_retry_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let backoff = ExponentialBuilder::default().with_max_times(self.config.max_retries);
         (|| self.get_bytes_once_blocking(url))
             .retry(backoff)
@@ -539,17 +541,17 @@ impl FontsourceClient {
             .call()
     }
 
-    async fn get_bytes_once_async(&self, url: &str) -> Result<Vec<u8>, FontsourceFontdbError> {
+    async fn get_bytes_once_async(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let response = self
             .async_client
             .get(url)
             .send()
             .await
-            .map_err(|e| FontsourceFontdbError::from_reqwest(url, e))?;
+            .map_err(|e| FontsourceError::from_reqwest(url, e))?;
 
         let status = response.status();
         if !status.is_success() {
-            return Err(FontsourceFontdbError::HttpStatus {
+            return Err(FontsourceError::HttpStatus {
                 url: url.to_string(),
                 status: status.as_u16(),
             });
@@ -559,19 +561,19 @@ impl FontsourceClient {
             .bytes()
             .await
             .map(|b| b.to_vec())
-            .map_err(|e| FontsourceFontdbError::from_reqwest(url, e))
+            .map_err(|e| FontsourceError::from_reqwest(url, e))
     }
 
-    fn get_bytes_once_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceFontdbError> {
+    fn get_bytes_once_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let client = self.get_blocking_client_clone()?;
         let response = client
             .get(url)
             .send()
-            .map_err(|e| FontsourceFontdbError::from_reqwest(url, e))?;
+            .map_err(|e| FontsourceError::from_reqwest(url, e))?;
 
         let status = response.status();
         if !status.is_success() {
-            return Err(FontsourceFontdbError::HttpStatus {
+            return Err(FontsourceError::HttpStatus {
                 url: url.to_string(),
                 status: status.as_u16(),
             });
@@ -580,14 +582,14 @@ impl FontsourceClient {
         response
             .bytes()
             .map(|b| b.to_vec())
-            .map_err(|e| FontsourceFontdbError::from_reqwest(url, e))
+            .map_err(|e| FontsourceError::from_reqwest(url, e))
     }
 
     // -----------------------------------------------------------------------
     // Eviction
     // -----------------------------------------------------------------------
 
-    fn evict_if_needed(&self, exempt_keys: &HashSet<String>) -> Result<(), FontsourceFontdbError> {
+    fn evict_if_needed(&self, exempt_keys: &HashSet<String>) -> Result<(), FontsourceError> {
         let Some(blob_dir) = self.config.blob_dir() else {
             return Ok(());
         };
@@ -610,9 +612,9 @@ impl FontsourceClient {
 
     fn get_blocking_client_clone(
         &self,
-    ) -> Result<reqwest::blocking::Client, FontsourceFontdbError> {
+    ) -> Result<reqwest::blocking::Client, FontsourceError> {
         let mut guard = self.blocking_client.lock().map_err(|_| {
-            FontsourceFontdbError::Internal("Blocking client lock poisoned".to_string())
+            FontsourceError::Internal("Blocking client lock poisoned".to_string())
         })?;
 
         if let Some(client) = guard.as_ref() {
@@ -627,11 +629,11 @@ impl FontsourceClient {
                 .user_agent(user_agent)
                 .timeout(Duration::from_secs(timeout_secs))
                 .build()
-                .map_err(|e| FontsourceFontdbError::Http(e.to_string()))
+                .map_err(|e| FontsourceError::Http(e.to_string()))
         })
         .join()
         .map_err(|_| {
-            FontsourceFontdbError::Internal(
+            FontsourceError::Internal(
                 "Failed to join blocking client init thread".to_string(),
             )
         })??;

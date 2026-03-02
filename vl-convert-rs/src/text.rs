@@ -10,7 +10,7 @@ use usvg::{
     ImageHrefResolver,
 };
 use vl_convert_canvas2d::font_config::{CustomFont, FontConfig, ResolvedFontConfig};
-use vl_convert_fontsource_fontdb::{FontsourceClient, LoadedFontBatch, VariantRequest};
+use vl_convert_fontsource::{FontsourceClient, LoadedFontBatch, VariantRequest};
 
 /// Monotonically increasing version counter for font configuration changes.
 /// Incremented each time font configuration is modified.
@@ -300,26 +300,15 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
     refresh_font_baseline_after_config_update()
 }
 
-fn collect_custom_fonts_from_batch(
-    batch: &LoadedFontBatch,
-) -> Result<Vec<CustomFont>, anyhow::Error> {
-    let mut custom_fonts = Vec::with_capacity(batch.sources().len());
-    for source in batch.sources() {
-        let bytes = match source {
-            fontdb::Source::Binary(data) => data.as_ref().as_ref().to_vec(),
-            _ => {
-                return Err(anyhow!(
-                    "Unexpected non-binary source returned from FontsourceClient"
-                ));
-            }
-        };
-
-        custom_fonts.push(CustomFont {
-            data: Arc::new(bytes),
+fn collect_custom_fonts_from_batch(batch: &LoadedFontBatch) -> Vec<CustomFont> {
+    batch
+        .font_data()
+        .iter()
+        .map(|data| CustomFont {
+            data: Arc::clone(data),
             family_name: None,
-        });
-    }
-    Ok(custom_fonts)
+        })
+        .collect()
 }
 
 /// Download and install a font by family name from Fontsource.
@@ -332,7 +321,7 @@ pub async fn register_fontsource_font(
     variants: Option<&[VariantRequest]>,
 ) -> Result<(), anyhow::Error> {
     let batch = FONTSOURCE_CLIENT.load(family, variants).await?;
-    let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch)?;
+    let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
 
     {
         let mut font_config = FONT_CONFIG

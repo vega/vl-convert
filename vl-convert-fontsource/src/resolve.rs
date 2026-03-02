@@ -1,4 +1,4 @@
-use crate::error::FontsourceFontdbError;
+use crate::error::FontsourceError;
 use crate::types::{FontStyle, FontsourceFont, VariantRequest};
 use std::collections::{HashMap, HashSet};
 
@@ -58,11 +58,11 @@ pub(crate) fn resolve_download_plan(
     font_id: &str,
     metadata: &FontsourceFont,
     variants: Option<&[VariantRequest]>,
-) -> Result<ResolvedDownloadPlan, FontsourceFontdbError> {
+) -> Result<ResolvedDownloadPlan, FontsourceError> {
     match variants {
         Some(requested) => {
             if requested.is_empty() {
-                return Err(FontsourceFontdbError::NoVariantsRequested);
+                return Err(FontsourceError::NoVariantsRequested);
             }
 
             let deduped = dedupe_variants(requested);
@@ -103,7 +103,7 @@ pub(crate) fn resolve_download_plan(
             }
 
             if !unavailable.is_empty() {
-                return Err(FontsourceFontdbError::VariantsNotAvailable {
+                return Err(FontsourceError::VariantsNotAvailable {
                     font_id: font_id.to_string(),
                     unavailable,
                 });

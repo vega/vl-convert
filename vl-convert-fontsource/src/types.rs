@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
-use tinyvec::TinyVec;
+use std::sync::Arc;
 
 /// CSS font style.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -112,7 +112,7 @@ pub struct LoadedFontBatch {
     pub font_type: Option<String>,
     pub loaded_variants: Vec<VariantRequest>,
     pub ttf_file_count: usize,
-    sources: Vec<fontdb::Source>,
+    font_data: Vec<Arc<Vec<u8>>>,
 }
 
 impl LoadedFontBatch {
@@ -121,53 +121,23 @@ impl LoadedFontBatch {
         font_type: Option<String>,
         loaded_variants: Vec<VariantRequest>,
         ttf_file_count: usize,
-        sources: Vec<fontdb::Source>,
+        font_data: Vec<Arc<Vec<u8>>>,
     ) -> Self {
         Self {
             font_id,
             font_type,
             loaded_variants,
             ttf_file_count,
-            sources,
+            font_data,
         }
     }
 
-    pub fn sources(&self) -> &[fontdb::Source] {
-        &self.sources
+    pub fn font_data(&self) -> &[Arc<Vec<u8>>] {
+        &self.font_data
     }
 
-    pub fn into_sources(self) -> Vec<fontdb::Source> {
-        self.sources
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RegisteredFontBatch {
-    per_source_ids: Vec<TinyVec<[fontdb::ID; 8]>>,
-    all_ids: Vec<fontdb::ID>,
-}
-
-impl RegisteredFontBatch {
-    pub(crate) fn new(
-        per_source_ids: Vec<TinyVec<[fontdb::ID; 8]>>,
-        all_ids: Vec<fontdb::ID>,
-    ) -> Self {
-        Self {
-            per_source_ids,
-            all_ids,
-        }
-    }
-
-    pub fn per_source_ids(&self) -> &[TinyVec<[fontdb::ID; 8]>] {
-        &self.per_source_ids
-    }
-
-    pub fn face_ids(&self) -> &[fontdb::ID] {
-        &self.all_ids
-    }
-
-    pub(crate) fn into_face_ids(self) -> Vec<fontdb::ID> {
-        self.all_ids
+    pub fn into_font_data(self) -> Vec<Arc<Vec<u8>>> {
+        self.font_data
     }
 }
 

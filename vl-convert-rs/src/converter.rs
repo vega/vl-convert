@@ -47,7 +47,7 @@ use crate::text::{
     FONT_CONFIG_VERSION, USVG_OPTIONS,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
-use vl_convert_fontsource_fontdb::VariantRequest;
+use vl_convert_fontsource::VariantRequest;
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
 // Canvas 2D ops are now in the separate vl_convert_canvas2d extension from vl-convert-canvas2d-deno
@@ -858,16 +858,19 @@ impl InnerVlConverter {
         Ok(())
     }
 
-    fn apply_fontsource_font_overlay(&mut self, fontsource_font_sources: &[fontdb::Source]) {
-        if fontsource_font_sources.is_empty() {
+    fn apply_fontsource_font_overlay(&mut self, fontsource_font_data: &[Arc<Vec<u8>>]) {
+        if fontsource_font_data.is_empty() {
             return;
         }
         debug_assert!(
             self.font_state.overlay_face_ids.is_empty(),
             "overlay face IDs should be empty before applying a new request overlay"
         );
-        for source in fontsource_font_sources {
-            let ids = self.font_state.db.load_font_source(source.clone());
+        for data in fontsource_font_data {
+            let source = fontdb::Source::Binary(
+                Arc::clone(data) as Arc<dyn AsRef<[u8]> + Send + Sync>,
+            );
+            let ids = self.font_state.db.load_font_source(source);
             self.font_state.overlay_face_ids.extend(ids.iter().copied());
         }
         self.publish_worker_font_state_to_opstate();
@@ -2244,12 +2247,12 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VgToSvg {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vega_to_svg(vg_spec, vg_opts).await
                 );
                 responder.send(result).ok();
@@ -2257,12 +2260,12 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VgToSg {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vega_to_scenegraph(vg_spec, vg_opts).await
                 );
                 responder.send(result).ok();
@@ -2270,12 +2273,12 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
                 );
                 responder.send(result).ok();
@@ -2283,12 +2286,12 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VlToSvg {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vegalite_to_svg(vl_spec, vl_opts).await
                 );
                 responder.send(result).ok();
@@ -2296,12 +2299,12 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VlToSg {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vegalite_to_scenegraph(vl_spec, vl_opts).await
                 );
                 responder.send(result).ok();
@@ -2309,12 +2312,12 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VlToSgMsgpack {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await
                 );
                 responder.send(result).ok();
@@ -2322,14 +2325,14 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VgToPng {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 scale,
                 ppi,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     match vg_spec.to_value() {
                         Ok(v) => self.vega_to_png(&v, vg_opts, scale, ppi).await,
                         Err(e) => Err(e),
@@ -2340,7 +2343,7 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VgToJpeg {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 scale,
                 quality,
                 image_policy,
@@ -2348,7 +2351,7 @@ vegaLiteToCanvas_{ver_name:?}(
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                         .await
                 );
@@ -2357,13 +2360,13 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VgToPdf {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 image_policy,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vega_to_pdf(vg_spec, vg_opts, image_policy).await
                 );
                 responder.send(result).ok();
@@ -2371,14 +2374,14 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VlToPng {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 scale,
                 ppi,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     match vl_spec.to_value() {
                         Ok(v) => self.vegalite_to_png(&v, vl_opts, scale, ppi).await,
                         Err(e) => Err(e),
@@ -2389,7 +2392,7 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VlToJpeg {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 scale,
                 quality,
                 image_policy,
@@ -2397,7 +2400,7 @@ vegaLiteToCanvas_{ver_name:?}(
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
                         .await
                 );
@@ -2406,13 +2409,13 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VlToPdf {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 image_policy,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    fontsource_font_sources,
+                    fontsource_font_data,
                     self.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
                 );
                 responder.send(result).ok();
@@ -2484,37 +2487,37 @@ pub enum VlConvertCommand {
     VgToSvg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VgToSg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToSgMsgpack {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSvg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VlToSg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToPng {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         scale: f32,
         ppi: f32,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
@@ -2522,7 +2525,7 @@ pub enum VlConvertCommand {
     VgToJpeg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         scale: f32,
         quality: Option<u8>,
         image_policy: ImageAccessPolicy,
@@ -2531,14 +2534,14 @@ pub enum VlConvertCommand {
     VgToPdf {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         image_policy: ImageAccessPolicy,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToPng {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         scale: f32,
         ppi: f32,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
@@ -2546,7 +2549,7 @@ pub enum VlConvertCommand {
     VlToJpeg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         scale: f32,
         quality: Option<u8>,
         image_policy: ImageAccessPolicy,
@@ -2555,14 +2558,14 @@ pub enum VlConvertCommand {
     VlToPdf {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         image_policy: ImageAccessPolicy,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSgMsgpack {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        fontsource_font_sources: Vec<fontdb::Source>,
+        fontsource_font_data: Vec<Arc<Vec<u8>>>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     SvgToPng {
@@ -2852,8 +2855,8 @@ impl VlConverter {
                     .iter()
                     .map(|variant| {
                         let style = match variant.style {
-                            vl_convert_fontsource_fontdb::FontStyle::Normal => "normal",
-                            vl_convert_fontsource_fontdb::FontStyle::Italic => "italic",
+                            vl_convert_fontsource::FontStyle::Normal => "normal",
+                            vl_convert_fontsource::FontStyle::Italic => "italic",
                         };
                         (variant.weight, style)
                     })
@@ -2873,7 +2876,7 @@ impl VlConverter {
     async fn resolve_fontsource_fonts(
         &self,
         request_fonts: Option<Vec<FontsourceFontRequest>>,
-    ) -> Result<Vec<fontdb::Source>, AnyError> {
+    ) -> Result<Vec<Arc<Vec<u8>>>, AnyError> {
         let Some(request_fonts) = request_fonts else {
             return Ok(Vec::new());
         };
@@ -2887,7 +2890,7 @@ impl VlConverter {
             unique.entry(key).or_insert(request);
         }
 
-        let mut sources = Vec::new();
+        let mut font_data = Vec::new();
         for request in unique.into_values() {
             let batch = FONTSOURCE_CLIENT
                 .load(&request.family, request.variants.as_deref())
@@ -2898,9 +2901,9 @@ impl VlConverter {
                         request.family
                     )
                 })?;
-            sources.extend(batch.into_sources());
+            font_data.extend(batch.into_font_data());
         }
-        Ok(sources)
+        Ok(font_data)
     }
 
     fn request_blocking<R>(
@@ -2939,7 +2942,7 @@ impl VlConverter {
     ) -> Result<String, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
             .await?;
         let vg_spec = vg_spec.into();
@@ -2947,7 +2950,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToSvg {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             },
             "Vega to SVG conversion",
@@ -2962,7 +2965,7 @@ impl VlConverter {
     ) -> Result<serde_json::Value, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
             .await?;
         let vg_spec = vg_spec.into();
@@ -2970,7 +2973,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToSg {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             },
             "Vega to Scenegraph conversion",
@@ -2985,7 +2988,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
             .await?;
         let vg_spec = vg_spec.into();
@@ -2993,7 +2996,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             },
             "Vega to Scenegraph conversion",
@@ -3008,7 +3011,7 @@ impl VlConverter {
     ) -> Result<String, AnyError> {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
             .await?;
         let vl_spec = vl_spec.into();
@@ -3016,7 +3019,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VlToSvg {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             },
             "Vega-Lite to SVG conversion",
@@ -3031,7 +3034,7 @@ impl VlConverter {
     ) -> Result<serde_json::Value, AnyError> {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
             .await?;
         let vl_spec = vl_spec.into();
@@ -3039,7 +3042,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VlToSg {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             },
             "Vega-Lite to Scenegraph conversion",
@@ -3054,7 +3057,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
             .await?;
         let vl_spec = vl_spec.into();
@@ -3062,7 +3065,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VlToSgMsgpack {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 responder,
             },
             "Vega-Lite to Scenegraph conversion",
@@ -3079,7 +3082,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
             .await?;
         let scale = scale.unwrap_or(1.0);
@@ -3091,7 +3094,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToPng {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 scale: effective_scale,
                 ppi,
                 responder,
@@ -3110,7 +3113,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
             .await?;
         let scale = scale.unwrap_or(1.0);
@@ -3122,7 +3125,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VlToPng {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 scale: effective_scale,
                 ppi,
                 responder,
@@ -3142,7 +3145,7 @@ impl VlConverter {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
             .await?;
         let image_policy =
@@ -3153,7 +3156,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToJpeg {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 scale,
                 quality,
                 image_policy,
@@ -3174,7 +3177,7 @@ impl VlConverter {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
             .await?;
         let image_policy =
@@ -3185,7 +3188,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VlToJpeg {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 scale,
                 quality,
                 image_policy,
@@ -3203,7 +3206,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
             .await?;
         let image_policy =
@@ -3214,7 +3217,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToPdf {
                 vg_spec,
                 vg_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 image_policy,
                 responder,
             },
@@ -3230,7 +3233,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
-        let fontsource_font_sources = self
+        let fontsource_font_data = self
             .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
             .await?;
         let image_policy =
@@ -3241,7 +3244,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VlToPdf {
                 vl_spec,
                 vl_opts,
-                fontsource_font_sources,
+                fontsource_font_data,
                 image_policy,
                 responder,
             },

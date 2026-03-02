@@ -7,10 +7,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use vl_convert_fontsource_fontdb::{
-    ClientConfig, FontStyle, FontsourceClient, FontsourceDatabaseExt, FontsourceFontdbError,
-    VariantRequest,
-};
+use vl_convert_fontsource::{ClientConfig, FontStyle, FontsourceClient, FontsourceError, VariantRequest};
+
+#[cfg(feature = "fontdb")]
+use vl_convert_fontsource::FontsourceDatabaseExt;
 
 const REGULAR_TTF: &[u8] =
     include_bytes!("../../vl-convert-rs/tests/fonts/matter/Matter-Regular.ttf");
@@ -301,7 +301,7 @@ fn test_empty_variants_returns_error_blocking() {
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
     let err = client.load_blocking("Roboto", Some(&[])).unwrap_err();
-    assert!(matches!(err, FontsourceFontdbError::NoVariantsRequested));
+    assert!(matches!(err, FontsourceError::NoVariantsRequested));
 }
 
 #[test]
@@ -321,7 +321,7 @@ fn test_variants_not_available_error_blocking() {
 
     assert!(matches!(
         err,
-        FontsourceFontdbError::VariantsNotAvailable { .. }
+        FontsourceError::VariantsNotAvailable { .. }
     ));
 }
 
@@ -343,13 +343,11 @@ fn test_none_variants_loads_all_downloadable_ttf() {
         weight: 700,
         style: FontStyle::Normal,
     }));
-    assert_eq!(batch.sources().len(), 3);
-    assert!(batch
-        .sources()
-        .iter()
-        .all(|source| matches!(source, fontdb::Source::Binary(_))));
+    assert_eq!(batch.font_data().len(), 3);
+    assert!(batch.font_data().iter().all(|data| !data.is_empty()));
 }
 
+#[cfg(feature = "fontdb")]
 #[test]
 fn test_register_batch_returns_ids_and_per_source_ids() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
@@ -373,6 +371,7 @@ fn test_register_batch_returns_ids_and_per_source_ids() {
         .all(|ids| !ids.is_empty()));
 }
 
+#[cfg(feature = "fontdb")]
 #[test]
 fn test_append_only_duplicate_register_returns_distinct_ids() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
@@ -429,11 +428,11 @@ async fn test_async_and_blocking_parity() {
     assert_eq!(async_result.ttf_file_count, blocking_result.ttf_file_count);
     assert_eq!(async_result.ttf_file_count, 2);
     assert_eq!(
-        async_result.sources().len(),
-        blocking_result.sources().len()
+        async_result.font_data().len(),
+        blocking_result.font_data().len()
     );
-    assert!(!async_result.sources().is_empty());
-    assert!(!blocking_result.sources().is_empty());
+    assert!(!async_result.font_data().is_empty());
+    assert!(!blocking_result.font_data().is_empty());
 }
 
 #[test]
@@ -554,6 +553,7 @@ fn test_corrupt_metadata_fallbacks_to_network() {
     );
 }
 
+#[cfg(feature = "fontdb")]
 #[test]
 fn test_unregister_batch_removes_faces_and_is_idempotent() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);

@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum FontsourceFontdbError {
+pub enum FontsourceError {
     #[error("Font not found: \"{0}\"")]
     FontNotFound(String),
 
@@ -33,7 +33,7 @@ pub enum FontsourceFontdbError {
     Internal(String),
 }
 
-impl FontsourceFontdbError {
+impl FontsourceError {
     pub(crate) fn is_retryable(&self) -> bool {
         match self {
             Self::Http(_) => true,

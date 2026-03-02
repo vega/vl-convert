@@ -1,17 +1,20 @@
 [package]
-name = "vl-convert-fontsource-fontdb"
+name = "vl-convert-fontsource"
 version = "2.0.0-rc1"
 edition = "2021"
-description = "Fontsource loading helpers for fontdb"
+description = "Fontsource font downloading and caching"
 license = "BSD-3-Clause"
 repository = "https://github.com/vega/vl-convert"
+
+[features]
+fontdb = ["dep:fontdb", "dep:tinyvec"]
 
 [dependencies]
 backon = { workspace = true }
 dashmap = { workspace = true }
 dirs = { workspace = true }
 filetime = { workspace = true }
-fontdb = { workspace = true }
+fontdb = { workspace = true, optional = true }
 futures-util = { workspace = true }
 fs4 = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
@@ -19,9 +22,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"
 thiserror = "2"
-tinyvec = { workspace = true }
+tinyvec = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["sync", "fs", "rt-multi-thread"] }
 
 [dev-dependencies]
+fontdb = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
