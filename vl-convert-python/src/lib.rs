@@ -86,14 +86,14 @@ fn parse_config_overrides(
 
     for (key, value) in kwargs.iter() {
         let key_str: String = key.extract().map_err(|err| {
-            vl_convert_rs::anyhow::anyhow!("configure_converter keyword parsing failed: {err}")
+            vl_convert_rs::anyhow::anyhow!("configure keyword parsing failed: {err}")
         })?;
         match key_str.as_str() {
             "num_workers" => {
                 if !value.is_none() {
                     overrides.num_workers = Some(value.extract::<usize>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
-                            "Invalid num_workers value for configure_converter: {err}"
+                            "Invalid num_workers value for configure: {err}"
                         )
                     })?);
                 }
@@ -102,7 +102,7 @@ fn parse_config_overrides(
                 if !value.is_none() {
                     overrides.allow_http_access = Some(value.extract::<bool>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
-                            "Invalid allow_http_access value for configure_converter: {err}"
+                            "Invalid allow_http_access value for configure: {err}"
                         )
                     })?);
                 }
@@ -114,7 +114,7 @@ fn parse_config_overrides(
                     overrides.filesystem_root = Some(Some(PathBuf::from(
                         value.extract::<String>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
-                                "Invalid filesystem_root value for configure_converter: {err}"
+                                "Invalid filesystem_root value for configure: {err}"
                             )
                         })?,
                     )));
@@ -127,7 +127,7 @@ fn parse_config_overrides(
                     overrides.allowed_base_urls =
                         Some(Some(value.extract::<Vec<String>>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
-                                "Invalid allowed_base_urls value for configure_converter: {err}"
+                                "Invalid allowed_base_urls value for configure: {err}"
                             )
                         })?));
                 }
@@ -136,14 +136,14 @@ fn parse_config_overrides(
                 if !value.is_none() {
                     overrides.fontsource_cache_size_mb = Some(value.extract::<u64>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
-                            "Invalid fontsource_cache_size_mb value for configure_converter: {err}"
+                            "Invalid fontsource_cache_size_mb value for configure: {err}"
                         )
                     })?);
                 }
             }
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
-                    "Unknown configure_converter argument: {other}"
+                    "Unknown configure argument: {other}"
                 ));
             }
         }
@@ -1298,7 +1298,7 @@ fn register_fontsource_font(
 /// Configure converter options for subsequent requests
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn configure_converter(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
+fn configure(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
     let overrides = parse_config_overrides(kwargs)
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
     configure_converter_with_config_overrides(overrides)
@@ -2213,10 +2213,10 @@ fn register_fontsource_font_asyncio<'py>(
     })
 }
 
-#[doc = async_variant_doc!("configure_converter")]
-#[pyfunction(name = "configure_converter")]
+#[doc = async_variant_doc!("configure")]
+#[pyfunction(name = "configure")]
 #[pyo3(signature = (**kwargs))]
-fn configure_converter_asyncio<'py>(
+fn configure_asyncio<'py>(
     py: Python<'py>,
     kwargs: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -2463,7 +2463,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
         register_fontsource_font_asyncio,
         &asyncio
     )?)?;
-    asyncio.add_function(wrap_pyfunction!(configure_converter_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_converter_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
@@ -2506,7 +2506,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(register_fontsource_font, m)?)?;
-    m.add_function(wrap_pyfunction!(configure_converter, m)?)?;
+    m.add_function(wrap_pyfunction!(configure, m)?)?;
     m.add_function(wrap_pyfunction!(get_converter_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;

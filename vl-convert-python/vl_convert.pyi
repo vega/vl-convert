@@ -136,7 +136,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "asyncio",
-    "configure_converter",
+    "configure",
     "get_format_locale",
     "get_converter_config",
     "get_local_tz",
@@ -294,7 +294,7 @@ def register_fontsource_font(
     """
     ...
 
-def configure_converter(
+def configure(
     num_workers: int | None = None,
     allow_http_access: bool | None = None,
     filesystem_root: str | None = None,
@@ -976,7 +976,7 @@ if TYPE_CHECKING:
         ) -> None:
             """Async version of ``register_fontsource_font``. See sync function for full documentation."""
             ...
-        async def configure_converter(
+        async def configure(
             self,
             num_workers: int | None = None,
             allow_http_access: bool | None = None,
@@ -984,7 +984,7 @@ if TYPE_CHECKING:
             allowed_base_urls: list[str] | None = None,
             fontsource_cache_size_mb: int | None = None,
         ) -> None:
-            """Async version of ``configure_converter``. See sync function for full documentation."""
+            """Async version of ``configure``. See sync function for full documentation."""
             ...
         async def get_converter_config(self) -> ConverterConfig:
             """Async version of ``get_converter_config``. See sync function for full documentation."""
