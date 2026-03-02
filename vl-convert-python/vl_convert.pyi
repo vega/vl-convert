@@ -299,7 +299,7 @@ def configure_converter(
     allow_http_access: bool | None = None,
     filesystem_root: str | None = None,
     allowed_base_urls: list[str] | None = None,
-    font_cache_size_mb: int | None = None,
+    fontsource_cache_size_mb: int | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -320,7 +320,7 @@ def configure_converter(
         When configured, HTTP redirects are denied instead of followed.
         Per-call ``allowed_base_urls`` arguments on conversion functions override
         this converter-level default when provided.
-    font_cache_size_mb
+    fontsource_cache_size_mb
         Maximum font cache size in megabytes. If ``None``, keep current value.
     """
     ...
@@ -982,7 +982,7 @@ if TYPE_CHECKING:
             allow_http_access: bool | None = None,
             filesystem_root: str | None = None,
             allowed_base_urls: list[str] | None = None,
-            font_cache_size_mb: int | None = None,
+            fontsource_cache_size_mb: int | None = None,
         ) -> None:
             """Async version of ``configure_converter``. See sync function for full documentation."""
             ...

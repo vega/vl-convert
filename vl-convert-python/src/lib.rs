@@ -73,7 +73,7 @@ struct ConverterConfigOverrides {
     filesystem_root: Option<Option<PathBuf>>,
     // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
-    font_cache_size_mb: Option<u64>,
+    fontsource_cache_size_mb: Option<u64>,
 }
 
 fn parse_config_overrides(
@@ -132,11 +132,11 @@ fn parse_config_overrides(
                         })?));
                 }
             }
-            "font_cache_size_mb" => {
+            "fontsource_cache_size_mb" => {
                 if !value.is_none() {
-                    overrides.font_cache_size_mb = Some(value.extract::<u64>().map_err(|err| {
+                    overrides.fontsource_cache_size_mb = Some(value.extract::<u64>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
-                            "Invalid font_cache_size_mb value for configure_converter: {err}"
+                            "Invalid fontsource_cache_size_mb value for configure_converter: {err}"
                         )
                     })?);
                 }
@@ -165,7 +165,7 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     if let Some(allowed_base_urls) = overrides.allowed_base_urls {
         config.allowed_base_urls = allowed_base_urls;
     }
-    if let Some(mb) = overrides.font_cache_size_mb {
+    if let Some(mb) = overrides.fontsource_cache_size_mb {
         let bytes = mb.saturating_mul(1024 * 1024);
         configure_font_cache_rs(Some(bytes));
     }
