@@ -40,12 +40,10 @@ pub struct VariantRequest {
 
 /// Convert a font family name to a Fontsource font ID.
 ///
-/// Rules:
-/// 1. Trim whitespace
-/// 2. Lowercase
-/// 3. Replace spaces with hyphens
+/// Mirrors Fontsource's [`normalizeKebabCase`][ref] with an extra validation
+/// step: the result must match `^[a-z0-9][a-z0-9_-]*$` or `None` is returned.
 ///
-/// Returns `None` if the resulting ID doesn't match `^[a-z0-9][a-z0-9_-]*$`.
+/// [ref]: https://github.com/fontsource/fontsource/blob/9b536498e689d90a8dd77b4638bb60ff7b6756c0/packages/core/src/utils.ts#L4
 pub fn family_to_id(family: &str) -> Option<String> {
     let id = family.trim().to_lowercase().replace(' ', "-");
     if is_valid_font_id(&id) {
