@@ -38,28 +38,6 @@ pub struct VariantRequest {
     pub style: FontStyle,
 }
 
-/// Default variants to load: 400/700 normal, 400/700 italic.
-pub fn default_variants() -> Vec<VariantRequest> {
-    vec![
-        VariantRequest {
-            weight: 400,
-            style: FontStyle::Normal,
-        },
-        VariantRequest {
-            weight: 700,
-            style: FontStyle::Normal,
-        },
-        VariantRequest {
-            weight: 400,
-            style: FontStyle::Italic,
-        },
-        VariantRequest {
-            weight: 700,
-            style: FontStyle::Italic,
-        },
-    ]
-}
-
 /// Convert a font family name to a Fontsource font ID.
 ///
 /// Rules:
@@ -202,25 +180,4 @@ mod tests {
         assert_eq!(family_to_id("-invalid"), None);
     }
 
-    #[test]
-    fn test_default_variants() {
-        let variants = default_variants();
-        assert_eq!(variants.len(), 4);
-        assert!(variants.contains(&VariantRequest {
-            weight: 400,
-            style: FontStyle::Normal,
-        }));
-        assert!(variants.contains(&VariantRequest {
-            weight: 700,
-            style: FontStyle::Normal,
-        }));
-        assert!(variants.contains(&VariantRequest {
-            weight: 400,
-            style: FontStyle::Italic,
-        }));
-        assert!(variants.contains(&VariantRequest {
-            weight: 700,
-            style: FontStyle::Italic,
-        }));
-    }
 }

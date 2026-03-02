@@ -11,5 +11,5 @@ pub use config::ClientConfig;
 pub use error::FontsourceFontdbError;
 pub use ext::FontsourceDatabaseExt;
 pub use types::{
-    default_variants, family_to_id, FontStyle, LoadedFontBatch, RegisteredFontBatch, VariantRequest,
+    family_to_id, FontStyle, LoadedFontBatch, RegisteredFontBatch, VariantRequest,
 };
