@@ -7,7 +7,7 @@ use backon::{BlockingRetryable, ExponentialBuilder, Retryable};
 use dashmap::DashMap;
 use futures_util::stream::{self, StreamExt};
 use reqwest::StatusCode;
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -315,82 +315,36 @@ impl FontsourceClient {
         }
 
         let workers = self.config.max_parallel_downloads.max(1).min(files.len());
-        let queue = Arc::new(Mutex::new(
+        let chunk_size = files.len().div_ceil(workers);
+
+        let thread_results: Vec<Vec<_>> = std::thread::scope(|scope| {
             files
-                .iter()
-                .cloned()
-                .enumerate()
-                .collect::<VecDeque<(usize, ResolvedTtfFile)>>(),
-        ));
-        let downloaded = Arc::new(AtomicUsize::new(0));
-        let first_error = Arc::new(Mutex::new(None::<FontsourceError>));
-
-        // Collect results: (index, bytes, key, was_downloaded)
-        type BlobResult = (usize, Vec<u8>, String, bool);
-        let results: Arc<Mutex<Vec<BlobResult>>> = Arc::new(Mutex::new(Vec::new()));
-        std::thread::scope(|scope| {
-            for _ in 0..workers {
-                let queue = Arc::clone(&queue);
-                let downloaded = Arc::clone(&downloaded);
-                let first_error = Arc::clone(&first_error);
-                let results = Arc::clone(&results);
-
-                scope.spawn(move || loop {
-                    if first_error.lock().expect("poisoned").is_some() {
-                        break;
-                    }
-
-                    let (idx, next) = {
-                        let mut guard = queue.lock().expect("poisoned");
-                        match guard.pop_front() {
-                            Some((idx, file)) => (idx, file),
-                            None => break,
-                        }
-                    };
-
-                    match self.ensure_blob_blocking(&next) {
-                        Ok((bytes, key, was_downloaded)) => {
-                            if was_downloaded {
-                                downloaded.fetch_add(1, Ordering::Relaxed);
-                            }
-                            results.lock().expect("poisoned").push((
-                                idx,
-                                bytes,
-                                key,
-                                was_downloaded,
-                            ));
-                        }
-                        Err(err) => {
-                            let mut guard = first_error.lock().expect("poisoned");
-                            if guard.is_none() {
-                                *guard = Some(err);
-                            }
-                            break;
-                        }
-                    }
-                });
-            }
+                .chunks(chunk_size)
+                .map(|chunk| {
+                    scope.spawn(|| {
+                        chunk
+                            .iter()
+                            .map(|file| self.ensure_blob_blocking(file))
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|h| h.join().expect("thread panicked"))
+                .collect()
         });
 
-        if let Some(err) = first_error.lock().expect("poisoned").take() {
-            return Err(err);
-        }
-
-        let downloaded_any = downloaded.load(Ordering::Relaxed) > 0;
-
-        let mut result_vec = results
-            .lock()
-            .expect("poisoned")
-            .drain(..)
-            .collect::<Vec<_>>();
-        result_vec.sort_by_key(|(idx, _, _, _)| *idx);
-
-        let mut font_data = Vec::with_capacity(result_vec.len());
+        let mut font_data = Vec::with_capacity(files.len());
         let mut exempt_keys = HashSet::new();
+        let mut downloaded_any = false;
 
-        for (_, bytes, key, _) in result_vec {
-            font_data.push(Arc::new(bytes));
-            exempt_keys.insert(key);
+        for chunk in thread_results {
+            for result in chunk {
+                let (bytes, key, was_downloaded) = result?;
+                font_data.push(Arc::new(bytes));
+                exempt_keys.insert(key);
+                downloaded_any |= was_downloaded;
+            }
         }
 
         Ok((font_data, exempt_keys, downloaded_any))
