@@ -30,8 +30,11 @@ impl RegisteredFontBatch {
 /// Extension trait for registering/unregistering Fontsource batches
 /// with a `fontdb::Database`.
 pub trait FontsourceDatabaseExt {
+    /// Register a `LoadedFontBatch`, returning a `RegisteredFontBatch`
+    /// with per-source ID tracking.
     fn register_fontsource_batch(&mut self, batch: LoadedFontBatch) -> RegisteredFontBatch;
 
+    /// Unregister all faces from a `RegisteredFontBatch`.
     fn unregister_fontsource_batch(&mut self, registration: RegisteredFontBatch);
 }
 
