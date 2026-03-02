@@ -66,7 +66,7 @@ pub(crate) fn resolve_download_plan(
             }
 
             let deduped = dedupe_variants(requested);
-            let mut unavailable = Vec::new();
+            let mut unavailable: Vec<VariantRequest> = Vec::new();
             let mut files = Vec::new();
 
             for req in &deduped {
@@ -79,7 +79,7 @@ pub(crate) fn resolve_download_plan(
                     .and_then(|styles| styles.get(style_key));
 
                 let Some(subsets) = maybe_subsets else {
-                    unavailable.push(format!("{}-{}", req.weight, style_key));
+                    unavailable.push(req.clone());
                     continue;
                 };
 
@@ -98,7 +98,7 @@ pub(crate) fn resolve_download_plan(
                 }
 
                 if !found_ttf {
-                    unavailable.push(format!("{}-{}", req.weight, style_key));
+                    unavailable.push(req.clone());
                 }
             }
 

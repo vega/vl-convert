@@ -11,7 +11,7 @@ pub enum FontsourceFontdbError {
     #[error("Requested variants not available for font \"{font_id}\": {unavailable:?}")]
     VariantsNotAvailable {
         font_id: String,
-        unavailable: Vec<String>,
+        unavailable: Vec<crate::types::VariantRequest>,
     },
 
     #[error("No variants requested (empty list)")]

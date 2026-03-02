@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 use std::str::FromStr;
 use tinyvec::TinyVec;
 
@@ -38,6 +39,12 @@ pub struct VariantRequest {
     pub style: FontStyle,
 }
 
+impl fmt::Display for VariantRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}-{}", self.weight, self.style.as_str())
+    }
+}
+
 /// Convert a font family name to a Fontsource font ID.
 ///
 /// Mirrors Fontsource's [`normalizeKebabCase`][ref] with an extra validation
@@ -69,6 +76,9 @@ pub fn is_valid_font_id(id: &str) -> bool {
         .all(|&b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
+/// weight (string) -> style -> subset -> urls
+pub type VariantMap = HashMap<String, HashMap<String, HashMap<String, FontsourceUrls>>>;
+
 /// Top-level response from `GET /v1/fonts/{id}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,8 +91,7 @@ pub struct FontsourceFont {
     pub version: String,
     #[serde(rename = "type")]
     pub font_type: String,
-    /// weight (string) -> style -> subset -> urls
-    pub variants: HashMap<String, HashMap<String, HashMap<String, FontsourceUrls>>>,
+    pub variants: VariantMap,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
