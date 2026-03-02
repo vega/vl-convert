@@ -15,14 +15,6 @@ use std::time::Duration;
 /// Return type for `ensure_blobs_*`: (font data, blob keys used, whether any were downloaded).
 type EnsureBlobsResult = Result<(Vec<Arc<Vec<u8>>>, HashSet<String>, bool), FontsourceError>;
 
-struct PreparedLoad {
-    font_id: String,
-    font_type: Option<String>,
-    loaded_variants: Vec<VariantRequest>,
-    font_data: Vec<Arc<Vec<u8>>>,
-    ttf_file_count: usize,
-}
-
 struct DownloadGate {
     mutex: tokio::sync::Mutex<()>,
     active_users: AtomicUsize,
@@ -47,6 +39,7 @@ pub struct FontsourceClient {
 }
 
 impl FontsourceClient {
+    /// Create a new client from the given configuration.
     pub fn new(mut config: ClientConfig) -> Result<Self, FontsourceError> {
         if config.max_parallel_downloads == 0 {
             config.max_parallel_downloads = 1;
@@ -75,40 +68,164 @@ impl FontsourceClient {
         })
     }
 
+    /// Update the maximum blob cache size (in bytes) at runtime.
     pub fn set_max_blob_cache_bytes(&self, bytes: u64) {
         self.max_blob_cache_bytes.store(bytes, Ordering::Relaxed);
     }
 
+    /// Load a font family from Fontsource (async).
     pub async fn load(
         &self,
         family: &str,
         variants: Option<&[VariantRequest]>,
     ) -> Result<LoadedFontBatch, FontsourceError> {
-        let prepared = self.prepare_load_async(family, variants).await?;
+        let font_id = Self::validate_load_request(family, variants)?;
+
+        let metadata = match self.try_read_cached_metadata(&font_id) {
+            Some(m) => m,
+            None => {
+                let m = self.fetch_metadata_async(&font_id).await?;
+                self.cache_metadata(&font_id, &m)?;
+                m
+            }
+        };
+
+        let plan = resolve_download_plan(&font_id, &metadata, variants)?;
+        let (font_data, exempt_keys, downloaded_any) =
+            self.ensure_blobs_async(&plan.files).await?;
+
+        if downloaded_any {
+            self.evict_if_needed(&exempt_keys)?;
+        }
+
         Ok(LoadedFontBatch::new(
-            prepared.font_id,
-            prepared.font_type,
-            prepared.loaded_variants,
-            prepared.ttf_file_count,
-            prepared.font_data,
+            font_id,
+            Some(metadata.font_type),
+            if let Some(v) = variants {
+                dedupe_variants(v)
+            } else {
+                plan.loaded_variants
+            },
+            font_data.len(),
+            font_data,
         ))
     }
 
+    /// Load a font family from Fontsource (blocking).
     pub fn load_blocking(
         &self,
         family: &str,
         variants: Option<&[VariantRequest]>,
     ) -> Result<LoadedFontBatch, FontsourceError> {
-        let prepared = self.prepare_load_blocking(family, variants)?;
+        let font_id = Self::validate_load_request(family, variants)?;
+
+        let metadata = match self.try_read_cached_metadata(&font_id) {
+            Some(m) => m,
+            None => {
+                let m = self.fetch_metadata_blocking(&font_id)?;
+                self.cache_metadata(&font_id, &m)?;
+                m
+            }
+        };
+
+        let plan = resolve_download_plan(&font_id, &metadata, variants)?;
+        let (font_data, exempt_keys, downloaded_any) = self.ensure_blobs_blocking(&plan.files)?;
+
+        if downloaded_any {
+            self.evict_if_needed(&exempt_keys)?;
+        }
+
         Ok(LoadedFontBatch::new(
-            prepared.font_id,
-            prepared.font_type,
-            prepared.loaded_variants,
-            prepared.ttf_file_count,
-            prepared.font_data,
+            font_id,
+            Some(metadata.font_type),
+            if let Some(v) = variants {
+                dedupe_variants(v)
+            } else {
+                plan.loaded_variants
+            },
+            font_data.len(),
+            font_data,
         ))
     }
 
+    /// Validate load arguments and return the normalized font ID.
+    fn validate_load_request(
+        family: &str,
+        variants: Option<&[VariantRequest]>,
+    ) -> Result<String, FontsourceError> {
+        let font_id = family_to_id(family)
+            .ok_or_else(|| FontsourceError::InvalidFontId(family.to_string()))?;
+        if let Some(requested) = variants {
+            if requested.is_empty() {
+                return Err(FontsourceError::NoVariantsRequested);
+            }
+        }
+        Ok(font_id)
+    }
+
+    /// Read cached metadata or return `None`.
+    fn try_read_cached_metadata(&self, font_id: &str) -> Option<crate::types::FontsourceFont> {
+        self.config
+            .metadata_dir()
+            .as_deref()
+            .and_then(|dir| cache::read_metadata(font_id, dir))
+    }
+
+    /// Write metadata to cache if a cache directory is configured.
+    fn cache_metadata(
+        &self,
+        font_id: &str,
+        metadata: &crate::types::FontsourceFont,
+    ) -> Result<(), FontsourceError> {
+        if let Some(dir) = self.config.metadata_dir() {
+            cache::write_metadata_if_absent(font_id, &dir, metadata)?;
+        }
+        Ok(())
+    }
+
+    /// Map a raw HTTP result to a parsed `FontsourceFont`, converting 404 to `FontNotFound`.
+    fn parse_metadata_response(
+        font_id: &str,
+        result: Result<Vec<u8>, FontsourceError>,
+    ) -> Result<crate::types::FontsourceFont, FontsourceError> {
+        let bytes = match result {
+            Err(FontsourceError::HttpStatus { status, .. })
+                if status == StatusCode::NOT_FOUND.as_u16() =>
+            {
+                return Err(FontsourceError::FontNotFound(font_id.to_string()));
+            }
+            other => other?,
+        };
+        Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    /// Try to read a blob from the cache, touching its mtime on hit.
+    fn try_read_cached_blob(
+        url: &str,
+        blob_dir: &Option<std::path::PathBuf>,
+    ) -> Result<Option<Vec<u8>>, FontsourceError> {
+        if let Some(ref dir) = blob_dir {
+            if let Some(bytes) = cache::read_blob(url, dir)? {
+                let _ = cache::touch_blob(url, dir);
+                return Ok(Some(bytes));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Write a downloaded blob to the cache if a cache directory is configured.
+    fn cache_blob(
+        url: &str,
+        blob_dir: &Option<std::path::PathBuf>,
+        bytes: &[u8],
+    ) -> Result<(), FontsourceError> {
+        if let Some(ref dir) = blob_dir {
+            cache::write_blob_if_absent(url, dir, bytes)?;
+        }
+        Ok(())
+    }
+
+    /// Build the Fontsource metadata API URL for a font ID.
     fn metadata_url(&self, font_id: &str) -> String {
         format!(
             "{}/{}",
@@ -117,69 +234,12 @@ impl FontsourceClient {
         )
     }
 
+    /// Read the current blob cache size limit.
     fn max_blob_cache_bytes(&self) -> u64 {
         self.max_blob_cache_bytes.load(Ordering::Relaxed)
     }
 
-    // -----------------------------------------------------------------------
-    // Async pipeline
-    // -----------------------------------------------------------------------
-
-    async fn prepare_load_async(
-        &self,
-        family: &str,
-        variants: Option<&[VariantRequest]>,
-    ) -> Result<PreparedLoad, FontsourceError> {
-        let font_id = family_to_id(family)
-            .ok_or_else(|| FontsourceError::InvalidFontId(family.to_string()))?;
-
-        if let Some(requested) = variants {
-            if requested.is_empty() {
-                return Err(FontsourceError::NoVariantsRequested);
-            }
-        }
-
-        // 1. Metadata: read from cache or fetch
-        let metadata_dir = self.config.metadata_dir();
-        let cached_meta = metadata_dir
-            .as_deref()
-            .and_then(|dir| cache::read_metadata(&font_id, dir));
-        let metadata = match cached_meta {
-            Some(m) => m,
-            None => {
-                let m = self.fetch_metadata_async(&font_id).await?;
-                if let Some(dir) = metadata_dir.as_deref() {
-                    cache::write_metadata_if_absent(&font_id, dir, &m)?;
-                }
-                m
-            }
-        };
-
-        // 2. Resolve download plan
-        let plan = resolve_download_plan(&font_id, &metadata, variants)?;
-
-        // 3. For each resolved file: check blob cache or download
-        let (font_data, exempt_keys, downloaded_any) =
-            self.ensure_blobs_async(&plan.files).await?;
-
-        // 4. Evict if any new blobs written
-        if downloaded_any {
-            self.evict_if_needed(&exempt_keys)?;
-        }
-
-        Ok(PreparedLoad {
-            font_id,
-            font_type: Some(metadata.font_type),
-            loaded_variants: if let Some(v) = variants {
-                dedupe_variants(v)
-            } else {
-                plan.loaded_variants
-            },
-            ttf_file_count: font_data.len(),
-            font_data,
-        })
-    }
-
+    /// Download or retrieve from cache all resolved TTF files in parallel (async).
     async fn ensure_blobs_async(
         &self,
         files: &[ResolvedTtfFile],
@@ -216,6 +276,7 @@ impl FontsourceClient {
         Ok((font_data, exempt_keys, downloaded_any))
     }
 
+    /// Return a single blob from cache or download it, using a gate for dedup (async).
     async fn ensure_blob_async(
         &self,
         file: &ResolvedTtfFile,
@@ -223,31 +284,20 @@ impl FontsourceClient {
         let key = cache::blob_key(&file.url);
         let blob_dir = self.config.blob_dir();
 
-        // Fast path: blob already cached
-        if let Some(ref dir) = blob_dir {
-            if let Some(bytes) = cache::read_blob(&file.url, dir)? {
-                let _ = cache::touch_blob(&file.url, dir);
-                return Ok((bytes, key, false));
-            }
+        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+            return Ok((bytes, key, false));
         }
 
-        // Gate by blob key for in-process dedup
         let gate = self.acquire_download_gate(&key);
         let result = async {
             let _guard = gate.mutex.lock().await;
 
-            // Re-check after acquiring gate
-            if let Some(ref dir) = blob_dir {
-                if let Some(bytes) = cache::read_blob(&file.url, dir)? {
-                    let _ = cache::touch_blob(&file.url, dir);
-                    return Ok((bytes, key.clone(), false));
-                }
+            if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+                return Ok((bytes, key.clone(), false));
             }
 
             let bytes = self.get_bytes_with_retry_async(&file.url).await?;
-            if let Some(ref dir) = blob_dir {
-                cache::write_blob_if_absent(&file.url, dir, &bytes)?;
-            }
+            Self::cache_blob(&file.url, &blob_dir, &bytes)?;
             Ok((bytes, key.clone(), true))
         }
         .await;
@@ -255,64 +305,7 @@ impl FontsourceClient {
         result
     }
 
-    // -----------------------------------------------------------------------
-    // Blocking pipeline
-    // -----------------------------------------------------------------------
-
-    fn prepare_load_blocking(
-        &self,
-        family: &str,
-        variants: Option<&[VariantRequest]>,
-    ) -> Result<PreparedLoad, FontsourceError> {
-        let font_id = family_to_id(family)
-            .ok_or_else(|| FontsourceError::InvalidFontId(family.to_string()))?;
-
-        if let Some(requested) = variants {
-            if requested.is_empty() {
-                return Err(FontsourceError::NoVariantsRequested);
-            }
-        }
-
-        // 1. Metadata: read from cache or fetch
-        let metadata_dir = self.config.metadata_dir();
-        let cached_meta = metadata_dir
-            .as_deref()
-            .and_then(|dir| cache::read_metadata(&font_id, dir));
-        let metadata = match cached_meta {
-            Some(m) => m,
-            None => {
-                let m = self.fetch_metadata_blocking(&font_id)?;
-                if let Some(dir) = metadata_dir.as_deref() {
-                    cache::write_metadata_if_absent(&font_id, dir, &m)?;
-                }
-                m
-            }
-        };
-
-        // 2. Resolve download plan
-        let plan = resolve_download_plan(&font_id, &metadata, variants)?;
-
-        // 3. For each resolved file: check blob cache or download
-        let (font_data, exempt_keys, downloaded_any) = self.ensure_blobs_blocking(&plan.files)?;
-
-        // 4. Evict if any new blobs written
-        if downloaded_any {
-            self.evict_if_needed(&exempt_keys)?;
-        }
-
-        Ok(PreparedLoad {
-            font_id,
-            font_type: Some(metadata.font_type),
-            loaded_variants: if let Some(v) = variants {
-                dedupe_variants(v)
-            } else {
-                plan.loaded_variants
-            },
-            ttf_file_count: font_data.len(),
-            font_data,
-        })
-    }
-
+    /// Download or retrieve from cache all resolved TTF files in parallel (blocking).
     fn ensure_blobs_blocking(
         &self,
         files: &[ResolvedTtfFile],
@@ -403,6 +396,7 @@ impl FontsourceClient {
         Ok((font_data, exempt_keys, downloaded_any))
     }
 
+    /// Return a single blob from cache or download it, using a gate for dedup (blocking).
     fn ensure_blob_blocking(
         &self,
         file: &ResolvedTtfFile,
@@ -410,41 +404,27 @@ impl FontsourceClient {
         let key = cache::blob_key(&file.url);
         let blob_dir = self.config.blob_dir();
 
-        // Fast path: blob already cached
-        if let Some(ref dir) = blob_dir {
-            if let Some(bytes) = cache::read_blob(&file.url, dir)? {
-                let _ = cache::touch_blob(&file.url, dir);
-                return Ok((bytes, key, false));
-            }
+        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+            return Ok((bytes, key, false));
         }
 
-        // Gate by blob key for in-process dedup
         let gate = self.acquire_download_gate(&key);
         let result = (|| {
             let _guard = gate.mutex.blocking_lock();
 
-            // Re-check after acquiring gate
-            if let Some(ref dir) = blob_dir {
-                if let Some(bytes) = cache::read_blob(&file.url, dir)? {
-                    let _ = cache::touch_blob(&file.url, dir);
-                    return Ok((bytes, key.clone(), false));
-                }
+            if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+                return Ok((bytes, key.clone(), false));
             }
 
             let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
-            if let Some(ref dir) = blob_dir {
-                cache::write_blob_if_absent(&file.url, dir, &bytes)?;
-            }
+            Self::cache_blob(&file.url, &blob_dir, &bytes)?;
             Ok((bytes, key.clone(), true))
         })();
         self.release_download_gate(&key, &gate);
         result
     }
 
-    // -----------------------------------------------------------------------
-    // Download gate
-    // -----------------------------------------------------------------------
-
+    /// Acquire (or create) a per-key download gate for in-process dedup.
     fn acquire_download_gate(&self, key: &str) -> Arc<DownloadGate> {
         let entry = self
             .download_gates
@@ -456,6 +436,7 @@ impl FontsourceClient {
         gate
     }
 
+    /// Release a download gate, removing it from the map when the last user drops.
     fn release_download_gate(&self, key: &str, gate: &Arc<DownloadGate>) {
         let prev = gate.active_users.fetch_sub(1, Ordering::AcqRel);
         debug_assert!(
@@ -476,52 +457,25 @@ impl FontsourceClient {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Metadata fetching
-    // -----------------------------------------------------------------------
-
+    /// Fetch and deserialize font metadata from the Fontsource API (async).
     async fn fetch_metadata_async(
         &self,
         font_id: &str,
     ) -> Result<crate::types::FontsourceFont, FontsourceError> {
         let url = self.metadata_url(font_id);
-        let bytes = match self.get_bytes_with_retry_async(&url).await {
-            Err(FontsourceError::HttpStatus { status, .. })
-                if status == StatusCode::NOT_FOUND.as_u16() =>
-            {
-                return Err(FontsourceError::FontNotFound(font_id.to_string()));
-            }
-            Err(err) => return Err(err),
-            Ok(bytes) => bytes,
-        };
-
-        let metadata: crate::types::FontsourceFont = serde_json::from_slice(&bytes)?;
-        Ok(metadata)
+        Self::parse_metadata_response(font_id, self.get_bytes_with_retry_async(&url).await)
     }
 
+    /// Fetch and deserialize font metadata from the Fontsource API (blocking).
     fn fetch_metadata_blocking(
         &self,
         font_id: &str,
     ) -> Result<crate::types::FontsourceFont, FontsourceError> {
         let url = self.metadata_url(font_id);
-        let bytes = match self.get_bytes_with_retry_blocking(&url) {
-            Err(FontsourceError::HttpStatus { status, .. })
-                if status == StatusCode::NOT_FOUND.as_u16() =>
-            {
-                return Err(FontsourceError::FontNotFound(font_id.to_string()));
-            }
-            Err(err) => return Err(err),
-            Ok(bytes) => bytes,
-        };
-
-        let metadata: crate::types::FontsourceFont = serde_json::from_slice(&bytes)?;
-        Ok(metadata)
+        Self::parse_metadata_response(font_id, self.get_bytes_with_retry_blocking(&url))
     }
 
-    // -----------------------------------------------------------------------
-    // HTTP retry + single-request helpers (unchanged)
-    // -----------------------------------------------------------------------
-
+    /// GET a URL as bytes with exponential-backoff retry (async).
     async fn get_bytes_with_retry_async(
         &self,
         url: &str,
@@ -533,6 +487,7 @@ impl FontsourceClient {
             .await
     }
 
+    /// GET a URL as bytes with exponential-backoff retry (blocking).
     fn get_bytes_with_retry_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let backoff = ExponentialBuilder::default().with_max_times(self.config.max_retries);
         (|| self.get_bytes_once_blocking(url))
@@ -541,6 +496,7 @@ impl FontsourceClient {
             .call()
     }
 
+    /// Execute a single GET request and return the response body (async).
     async fn get_bytes_once_async(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let response = self
             .async_client
@@ -564,6 +520,7 @@ impl FontsourceClient {
             .map_err(|e| FontsourceError::from_reqwest(url, e))
     }
 
+    /// Execute a single GET request and return the response body (blocking).
     fn get_bytes_once_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let client = self.get_blocking_client_clone()?;
         let response = client
@@ -585,10 +542,7 @@ impl FontsourceClient {
             .map_err(|e| FontsourceError::from_reqwest(url, e))
     }
 
-    // -----------------------------------------------------------------------
-    // Eviction
-    // -----------------------------------------------------------------------
-
+    /// Run LRU eviction on the blob cache if it exceeds the configured limit.
     fn evict_if_needed(&self, exempt_keys: &HashSet<String>) -> Result<(), FontsourceError> {
         let Some(blob_dir) = self.config.blob_dir() else {
             return Ok(());
@@ -606,10 +560,7 @@ impl FontsourceClient {
         cache::evict_blob_lru_until_size(&blob_dir, max_bytes, exempt_keys)
     }
 
-    // -----------------------------------------------------------------------
-    // Blocking client helper (unchanged)
-    // -----------------------------------------------------------------------
-
+    /// Lazily initialize and clone the blocking HTTP client.
     fn get_blocking_client_clone(
         &self,
     ) -> Result<reqwest::blocking::Client, FontsourceError> {
