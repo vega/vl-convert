@@ -279,13 +279,13 @@ fn build_roboto_routes(base_url: &str) -> HashMap<String, Vec<u8>> {
 }
 
 fn make_client(
-    cache_dir: &Path,
+    cache_root: &Path,
     base_url: &str,
     max_parallel_downloads: usize,
     max_blob_cache_bytes: u64,
 ) -> FontsourceClient {
     let config = ClientConfig {
-        cache_dir: Some(cache_dir.to_path_buf()),
+        cache_dir: Some(cache_root.to_path_buf()),
         metadata_base_url: format!("{}/v1/fonts", base_url),
         max_parallel_downloads,
         max_blob_cache_bytes,
@@ -540,8 +540,18 @@ fn test_corrupt_metadata_fallbacks_to_network() {
     let batch = client.load_blocking("Roboto", Some(&requested)).unwrap();
 
     assert_eq!(batch.ttf_file_count, 2);
-    assert!(server.hit_count("/v1/fonts/roboto") >= 1);
+    assert_eq!(server.hit_count("/v1/fonts/roboto"), 1);
     assert!(server.hit_count("/fonts/latin-400-normal.ttf") >= 1);
+
+    let healed = std::fs::read(metadata_dir.join("roboto.json")).unwrap();
+    serde_json::from_slice::<serde_json::Value>(&healed).unwrap();
+
+    let _ = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    assert_eq!(
+        server.hit_count("/v1/fonts/roboto"),
+        1,
+        "metadata should be healed on first load and reused after"
+    );
 }
 
 #[test]
@@ -615,16 +625,33 @@ fn test_eviction_keeps_current_font() {
 
     let _ = client.load_blocking("Open Sans", None).unwrap();
 
-    // Roboto blob should be evicted, Open Sans blob should remain.
-    // Blob filenames: {font_id}--{subset}-{weight}-{style}.ttf
-    assert!(
-        !blob_dir.join("roboto--latin-400-normal.ttf").exists(),
-        "roboto blob should have been evicted"
-    );
-    assert!(
-        blob_dir.join("open-sans--latin-400-normal.ttf").exists(),
-        "open-sans blob should still exist"
-    );
+    let roboto_hits = server.hit_count("/fonts/roboto.ttf");
+    let open_sans_hits = server.hit_count("/fonts/open-sans.ttf");
+    assert_eq!(roboto_hits, 1);
+    assert_eq!(open_sans_hits, 1);
+
+    // Current font blobs should be exempt from eviction.
+    let _ = client.load_blocking("Open Sans", None).unwrap();
+    assert_eq!(server.hit_count("/fonts/open-sans.ttf"), open_sans_hits);
+
+    // Earlier font should have been evicted under the tight size budget.
+    let _ = client.load_blocking("Roboto", None).unwrap();
+    assert_eq!(server.hit_count("/fonts/roboto.ttf"), roboto_hits + 1);
+
+    // At least one blob should exist for the currently-loaded font.
+    let blob_count = std::fs::read_dir(&blob_dir)
+        .unwrap()
+        .flatten()
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("blob"))
+                .unwrap_or(false)
+        })
+        .count();
+    assert!(blob_count >= 1);
 }
 
 #[test]
@@ -645,4 +672,46 @@ fn test_cached_metadata_avoids_refetch() {
         first_meta_hits,
         "metadata should not be re-fetched on second load"
     );
+}
+
+#[test]
+fn test_corrupt_blob_fallbacks_to_network() {
+    let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
+    let temp = tempfile::tempdir().unwrap();
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
+
+    let requested = [VariantRequest {
+        weight: 400,
+        style: FontStyle::Normal,
+    }];
+
+    let _ = client.load_blocking("Roboto", Some(&requested)).unwrap();
+
+    let blob_dir = temp.path().join("blobs");
+    let mut blobs: Vec<_> = std::fs::read_dir(&blob_dir)
+        .unwrap()
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("blob"))
+                .unwrap_or(false)
+        })
+        .collect();
+    blobs.sort();
+    assert!(!blobs.is_empty());
+
+    let corrupt_path = blobs[0].clone();
+    std::fs::remove_file(&corrupt_path).unwrap();
+    std::fs::create_dir_all(&corrupt_path).unwrap();
+
+    let hits_before = server.hit_count("/fonts/latin-400-normal.ttf")
+        + server.hit_count("/fonts/latin-ext-400-normal.ttf");
+    let _ = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let hits_after = server.hit_count("/fonts/latin-400-normal.ttf")
+        + server.hit_count("/fonts/latin-ext-400-normal.ttf");
+
+    assert_eq!(hits_after, hits_before + 1);
+    assert!(corrupt_path.is_file());
 }

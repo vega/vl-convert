@@ -48,10 +48,8 @@ impl Default for ClientConfig {
         let cache_dir = match std::env::var(ENV_FONT_CACHE_DIR) {
             Ok(val) if val.eq_ignore_ascii_case("none") => None,
             Ok(val) => Some(PathBuf::from(val)),
-            Err(_) => {
-                let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-                Some(base.join("vl-convert").join("fontsource"))
-            }
+            Err(_) => dirs::cache_dir()
+                .map(|base| base.join("vl-convert").join("fontsource")),
         };
         Self {
             cache_dir,

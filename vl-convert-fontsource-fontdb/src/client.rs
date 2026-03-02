@@ -20,13 +20,27 @@ struct PreparedLoad {
     ttf_file_count: usize,
 }
 
+struct DownloadGate {
+    mutex: tokio::sync::Mutex<()>,
+    active_users: AtomicUsize,
+}
+
+impl DownloadGate {
+    fn new() -> Self {
+        Self {
+            mutex: tokio::sync::Mutex::new(()),
+            active_users: AtomicUsize::new(0),
+        }
+    }
+}
+
 /// Client-first Fontsource loader API.
 pub struct FontsourceClient {
     config: ClientConfig,
     async_client: reqwest::Client,
     blocking_client: Mutex<Option<reqwest::blocking::Client>>,
     max_blob_cache_bytes: AtomicU64,
-    download_gates: DashMap<String, Arc<tokio::sync::Mutex<()>>>,
+    download_gates: DashMap<String, Arc<DownloadGate>>,
 }
 
 impl FontsourceClient {
@@ -142,8 +156,7 @@ impl FontsourceClient {
         let plan = resolve_download_plan(&font_id, &metadata, variants)?;
 
         // 3. For each resolved file: check blob cache or download
-        let (sources, exempt_keys, downloaded_any) =
-            self.ensure_blobs_async(&font_id, &plan.files).await?;
+        let (sources, exempt_keys, downloaded_any) = self.ensure_blobs_async(&plan.files).await?;
 
         // 4. Evict if any new blobs written
         if downloaded_any {
@@ -165,27 +178,32 @@ impl FontsourceClient {
 
     async fn ensure_blobs_async(
         &self,
-        font_id: &str,
         files: &[ResolvedTtfFile],
     ) -> Result<(Vec<fontdb::Source>, HashSet<String>, bool), FontsourceFontdbError> {
         let limit = self.config.max_parallel_downloads.max(1);
-        let font_id_owned = font_id.to_string();
 
-        #[allow(clippy::redundant_iter_cloned)]
-        let results = stream::iter(files.iter().cloned().map(|file| {
-            let font_id = font_id_owned.clone();
-            async move { self.ensure_blob_async(&font_id, &file).await }
-        }))
+        let results = stream::iter(files.iter().cloned().enumerate().map(
+            |(index, file)| async move {
+                self.ensure_blob_async(&file)
+                    .await
+                    .map(|(bytes, key, was_downloaded)| (index, bytes, key, was_downloaded))
+            },
+        ))
         .buffer_unordered(limit)
         .collect::<Vec<_>>()
         .await;
+
+        let mut result_vec = Vec::with_capacity(results.len());
+        for result in results {
+            result_vec.push(result?);
+        }
+        result_vec.sort_by_key(|(idx, _, _, _)| *idx);
 
         let mut sources = Vec::with_capacity(files.len());
         let mut exempt_keys = HashSet::new();
         let mut downloaded_any = false;
 
-        for result in results {
-            let (bytes, key, was_downloaded) = result?;
+        for (_, bytes, key, was_downloaded) in result_vec {
             let data: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(bytes);
             sources.push(fontdb::Source::Binary(data));
             exempt_keys.insert(key);
@@ -197,37 +215,41 @@ impl FontsourceClient {
 
     async fn ensure_blob_async(
         &self,
-        font_id: &str,
         file: &ResolvedTtfFile,
     ) -> Result<(Vec<u8>, String, bool), FontsourceFontdbError> {
-        let key = cache::blob_key(font_id, &file.filename);
+        let key = cache::blob_key(&file.url);
         let blob_dir = self.config.blob_dir();
 
         // Fast path: blob already cached
         if let Some(ref dir) = blob_dir {
-            if let Some(bytes) = cache::read_blob(&key, dir)? {
-                let _ = cache::touch_blob(&key, dir);
+            if let Some(bytes) = cache::read_blob(&file.url, dir)? {
+                let _ = cache::touch_blob(&file.url, dir);
                 return Ok((bytes, key, false));
             }
         }
 
         // Gate by blob key for in-process dedup
-        let gate = self.download_gate_for(&key);
-        let _guard = gate.lock().await;
+        let gate = self.acquire_download_gate(&key);
+        let result = async {
+            let _guard = gate.mutex.lock().await;
 
-        // Re-check after acquiring gate
-        if let Some(ref dir) = blob_dir {
-            if let Some(bytes) = cache::read_blob(&key, dir)? {
-                let _ = cache::touch_blob(&key, dir);
-                return Ok((bytes, key, false));
+            // Re-check after acquiring gate
+            if let Some(ref dir) = blob_dir {
+                if let Some(bytes) = cache::read_blob(&file.url, dir)? {
+                    let _ = cache::touch_blob(&file.url, dir);
+                    return Ok((bytes, key.clone(), false));
+                }
             }
-        }
 
-        let bytes = self.get_bytes_with_retry_async(&file.url).await?;
-        if let Some(ref dir) = blob_dir {
-            cache::write_blob_if_absent(&key, dir, &bytes)?;
+            let bytes = self.get_bytes_with_retry_async(&file.url).await?;
+            if let Some(ref dir) = blob_dir {
+                cache::write_blob_if_absent(&file.url, dir, &bytes)?;
+            }
+            Ok((bytes, key.clone(), true))
         }
-        Ok((bytes, key, true))
+        .await;
+        self.release_download_gate(&key, &gate);
+        result
     }
 
     // -----------------------------------------------------------------------
@@ -268,8 +290,7 @@ impl FontsourceClient {
         let plan = resolve_download_plan(&font_id, &metadata, variants)?;
 
         // 3. For each resolved file: check blob cache or download
-        let (sources, exempt_keys, downloaded_any) =
-            self.ensure_blobs_blocking(&font_id, &plan.files)?;
+        let (sources, exempt_keys, downloaded_any) = self.ensure_blobs_blocking(&plan.files)?;
 
         // 4. Evict if any new blobs written
         if downloaded_any {
@@ -291,7 +312,6 @@ impl FontsourceClient {
 
     fn ensure_blobs_blocking(
         &self,
-        font_id: &str,
         files: &[ResolvedTtfFile],
     ) -> Result<(Vec<fontdb::Source>, HashSet<String>, bool), FontsourceFontdbError> {
         if files.is_empty() {
@@ -299,43 +319,40 @@ impl FontsourceClient {
         }
 
         let workers = self.config.max_parallel_downloads.max(1).min(files.len());
-        let queue = Arc::new(Mutex::new(VecDeque::from(files.to_vec())));
+        let queue = Arc::new(Mutex::new(
+            files
+                .iter()
+                .cloned()
+                .enumerate()
+                .collect::<VecDeque<(usize, ResolvedTtfFile)>>(),
+        ));
         let downloaded = Arc::new(AtomicUsize::new(0));
         let first_error = Arc::new(Mutex::new(None::<FontsourceFontdbError>));
 
         // Collect results: (index, bytes, key, was_downloaded)
         type BlobResult = (usize, Vec<u8>, String, bool);
         let results: Arc<Mutex<Vec<BlobResult>>> = Arc::new(Mutex::new(Vec::new()));
-        let index_counter = Arc::new(AtomicUsize::new(0));
-
-        let font_id_owned = font_id.to_string();
-
         std::thread::scope(|scope| {
             for _ in 0..workers {
                 let queue = Arc::clone(&queue);
                 let downloaded = Arc::clone(&downloaded);
                 let first_error = Arc::clone(&first_error);
                 let results = Arc::clone(&results);
-                let index_counter = Arc::clone(&index_counter);
-                let font_id = font_id_owned.clone();
 
                 scope.spawn(move || loop {
                     if first_error.lock().expect("poisoned").is_some() {
                         break;
                     }
 
-                    let (next, idx) = {
+                    let (idx, next) = {
                         let mut guard = queue.lock().expect("poisoned");
                         match guard.pop_front() {
-                            Some(file) => {
-                                let idx = index_counter.fetch_add(1, Ordering::Relaxed);
-                                (file, idx)
-                            }
+                            Some((idx, file)) => (idx, file),
                             None => break,
                         }
                     };
 
-                    match self.ensure_blob_blocking(&font_id, &next) {
+                    match self.ensure_blob_blocking(&next) {
                         Ok((bytes, key, was_downloaded)) => {
                             if was_downloaded {
                                 downloaded.fetch_add(1, Ordering::Relaxed);
@@ -386,48 +403,75 @@ impl FontsourceClient {
 
     fn ensure_blob_blocking(
         &self,
-        font_id: &str,
         file: &ResolvedTtfFile,
     ) -> Result<(Vec<u8>, String, bool), FontsourceFontdbError> {
-        let key = cache::blob_key(font_id, &file.filename);
+        let key = cache::blob_key(&file.url);
         let blob_dir = self.config.blob_dir();
 
         // Fast path: blob already cached
         if let Some(ref dir) = blob_dir {
-            if let Some(bytes) = cache::read_blob(&key, dir)? {
-                let _ = cache::touch_blob(&key, dir);
+            if let Some(bytes) = cache::read_blob(&file.url, dir)? {
+                let _ = cache::touch_blob(&file.url, dir);
                 return Ok((bytes, key, false));
             }
         }
 
         // Gate by blob key for in-process dedup
-        let gate = self.download_gate_for(&key);
-        let _guard = gate.blocking_lock();
+        let gate = self.acquire_download_gate(&key);
+        let result = (|| {
+            let _guard = gate.mutex.blocking_lock();
 
-        // Re-check after acquiring gate
-        if let Some(ref dir) = blob_dir {
-            if let Some(bytes) = cache::read_blob(&key, dir)? {
-                let _ = cache::touch_blob(&key, dir);
-                return Ok((bytes, key, false));
+            // Re-check after acquiring gate
+            if let Some(ref dir) = blob_dir {
+                if let Some(bytes) = cache::read_blob(&file.url, dir)? {
+                    let _ = cache::touch_blob(&file.url, dir);
+                    return Ok((bytes, key.clone(), false));
+                }
             }
-        }
 
-        let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
-        if let Some(ref dir) = blob_dir {
-            cache::write_blob_if_absent(&key, dir, &bytes)?;
-        }
-        Ok((bytes, key, true))
+            let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
+            if let Some(ref dir) = blob_dir {
+                cache::write_blob_if_absent(&file.url, dir, &bytes)?;
+            }
+            Ok((bytes, key.clone(), true))
+        })();
+        self.release_download_gate(&key, &gate);
+        result
     }
 
     // -----------------------------------------------------------------------
     // Download gate
     // -----------------------------------------------------------------------
 
-    fn download_gate_for(&self, key: &str) -> Arc<tokio::sync::Mutex<()>> {
-        self.download_gates
+    fn acquire_download_gate(&self, key: &str) -> Arc<DownloadGate> {
+        let entry = self
+            .download_gates
             .entry(key.to_string())
-            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
-            .clone()
+            .or_insert_with(|| Arc::new(DownloadGate::new()));
+
+        let gate = entry.clone();
+        gate.active_users.fetch_add(1, Ordering::AcqRel);
+        gate
+    }
+
+    fn release_download_gate(&self, key: &str, gate: &Arc<DownloadGate>) {
+        let prev = gate.active_users.fetch_sub(1, Ordering::AcqRel);
+        debug_assert!(
+            prev > 0,
+            "release_download_gate called without matching acquire"
+        );
+
+        if prev != 1 {
+            return;
+        }
+
+        if let dashmap::mapref::entry::Entry::Occupied(entry) =
+            self.download_gates.entry(key.to_string())
+        {
+            if Arc::ptr_eq(entry.get(), gate) && gate.active_users.load(Ordering::Acquire) == 0 {
+                entry.remove();
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -611,5 +655,74 @@ impl Drop for FontsourceClient {
 impl Default for FontsourceClient {
     fn default() -> Self {
         Self::new(ClientConfig::default()).expect("Failed to construct default FontsourceClient")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn make_test_client(temp_root: &std::path::Path) -> FontsourceClient {
+        let config = ClientConfig {
+            cache_dir: Some(temp_root.to_path_buf()),
+            metadata_base_url: "http://127.0.0.1:1/v1/fonts".to_string(),
+            ..ClientConfig::default()
+        };
+        FontsourceClient::new(config).unwrap()
+    }
+
+    #[test]
+    fn test_download_gate_pruned_when_last_user_released() {
+        let temp = tempdir().unwrap();
+        let client = make_test_client(temp.path());
+        let key = "roboto--latin-400-normal";
+
+        let gate = client.acquire_download_gate(key);
+        assert!(client.download_gates.contains_key(key));
+
+        client.release_download_gate(key, &gate);
+        assert!(!client.download_gates.contains_key(key));
+        assert_eq!(gate.active_users.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn test_download_gate_retained_while_other_users_exist() {
+        let temp = tempdir().unwrap();
+        let client = make_test_client(temp.path());
+        let key = "roboto--latin-400-normal";
+
+        let gate_a = client.acquire_download_gate(key);
+        let gate_b = client.acquire_download_gate(key);
+        assert!(Arc::ptr_eq(&gate_a, &gate_b));
+
+        client.release_download_gate(key, &gate_a);
+        assert!(client.download_gates.contains_key(key));
+
+        client.release_download_gate(key, &gate_b);
+        assert!(!client.download_gates.contains_key(key));
+    }
+
+    #[test]
+    fn test_download_gate_not_pruned_when_map_points_to_different_gate() {
+        let temp = tempdir().unwrap();
+        let client = make_test_client(temp.path());
+        let key = "roboto--latin-400-normal";
+
+        let old_gate = client.acquire_download_gate(key);
+
+        let replacement = Arc::new(DownloadGate::new());
+        replacement.active_users.store(1, Ordering::Release);
+        client
+            .download_gates
+            .insert(key.to_string(), replacement.clone());
+
+        client.release_download_gate(key, &old_gate);
+        let current = client.download_gates.get(key).unwrap();
+        assert!(Arc::ptr_eq(current.value(), &replacement));
+        drop(current);
+
+        client.release_download_gate(key, &replacement);
+        assert!(!client.download_gates.contains_key(key));
     }
 }

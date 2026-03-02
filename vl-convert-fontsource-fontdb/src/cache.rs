@@ -2,8 +2,11 @@ use crate::error::FontsourceFontdbError;
 use crate::types::FontsourceFont;
 use filetime::FileTime;
 use fs4::fs_std::FileExt;
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+
+const BLOB_EXTENSION: &str = "blob";
 
 // ---------------------------------------------------------------------------
 // Metadata cache
@@ -11,8 +14,20 @@ use std::path::{Path, PathBuf};
 
 pub(crate) fn read_metadata(font_id: &str, metadata_cache_dir: &Path) -> Option<FontsourceFont> {
     let path = metadata_cache_dir.join(format!("{font_id}.json"));
-    let bytes = std::fs::read(&path).ok()?;
-    serde_json::from_slice(&bytes).ok()
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(_) => return None,
+    };
+
+    match serde_json::from_slice(&bytes) {
+        Ok(metadata) => Some(metadata),
+        Err(_) => {
+            // Self-heal a corrupt metadata cache entry.
+            remove_path_if_present(&path);
+            None
+        }
+    }
 }
 
 pub(crate) fn write_metadata_if_absent(
@@ -32,56 +47,68 @@ pub(crate) fn write_metadata_if_absent(
 // Blob cache
 // ---------------------------------------------------------------------------
 
-/// Derive a human-readable blob key from font_id and the resolved filename.
-///
-/// The resolver produces filenames like `{subset}-{weight}-{style}.ttf`.
-/// Combined with `font_id`, the key becomes `{font_id}--{subset}-{weight}-{style}.ttf`.
-pub(crate) fn blob_key(font_id: &str, filename: &str) -> String {
-    let stem = filename.strip_suffix(".ttf").unwrap_or(filename);
-    format!("{font_id}--{stem}.ttf")
+/// Stable blob key derived from URL bytes as lowercase SHA-256 hex.
+pub(crate) fn blob_key(url: &str) -> String {
+    let digest = Sha256::digest(url.as_bytes());
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
 }
 
-pub(crate) fn blob_path(key: &str, blob_cache_dir: &Path) -> PathBuf {
-    blob_cache_dir.join(key)
+fn blob_path_from_key(key: &str, blob_cache_dir: &Path) -> PathBuf {
+    blob_cache_dir.join(format!("{key}.{BLOB_EXTENSION}"))
 }
 
 pub(crate) fn read_blob(
-    key: &str,
+    url: &str,
     blob_cache_dir: &Path,
 ) -> Result<Option<Vec<u8>>, FontsourceFontdbError> {
-    let path = blob_path(key, blob_cache_dir);
+    let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
     match std::fs::read(&path) {
         Ok(bytes) => Ok(Some(bytes)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_) => {
             // Treat any read failure as a miss — delete the corrupt blob.
-            let _ = std::fs::remove_file(&path);
+            remove_path_if_present(&path);
             Ok(None)
         }
     }
 }
 
 pub(crate) fn write_blob_if_absent(
-    key: &str,
+    url: &str,
     blob_cache_dir: &Path,
     bytes: &[u8],
 ) -> Result<(), FontsourceFontdbError> {
-    let path = blob_path(key, blob_cache_dir);
+    let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
+    // If a corrupt path exists as a non-file (e.g. directory), clear it and
+    // treat this write as filling a miss.
+    if let Ok(meta) = std::fs::symlink_metadata(&path) {
+        if !meta.is_file() {
+            remove_path_if_present(&path);
+        }
+    }
     atomic_write_bytes(&path, bytes)
 }
 
-pub(crate) fn touch_blob(key: &str, blob_cache_dir: &Path) -> Result<(), FontsourceFontdbError> {
-    let path = blob_path(key, blob_cache_dir);
-    let _ = filetime::set_file_mtime(&path, FileTime::now());
-    Ok(())
+pub(crate) fn touch_blob(url: &str, blob_cache_dir: &Path) -> Result<(), FontsourceFontdbError> {
+    let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
+    match filetime::set_file_mtime(&path, FileTime::now()) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
-fn is_ttf_file(path: &Path) -> bool {
+fn is_blob_file(path: &Path) -> bool {
     path.is_file()
         && path
             .extension()
             .and_then(|e| e.to_str())
-            .map(|e| e.eq_ignore_ascii_case("ttf"))
+            .map(|e| e.eq_ignore_ascii_case(BLOB_EXTENSION))
             .unwrap_or(false)
 }
 
@@ -94,10 +121,19 @@ pub(crate) fn calculate_blob_cache_size_bytes(
 
     let mut total = 0u64;
     for entry in std::fs::read_dir(blob_cache_dir)? {
-        let entry = entry?;
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e.into()),
+        };
         let path = entry.path();
-        if is_ttf_file(&path) {
-            total = total.saturating_add(entry.metadata()?.len());
+        if is_blob_file(&path) {
+            let meta = match entry.metadata() {
+                Ok(m) => m,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(e.into()),
+            };
+            total = total.saturating_add(meta.len());
         }
     }
 
@@ -123,7 +159,7 @@ pub(crate) fn evict_blob_lru_until_size(
                 Err(_) => continue,
             };
             let path = entry.path();
-            if !is_ttf_file(&path) {
+            if !is_blob_file(&path) {
                 continue;
             }
 
@@ -160,6 +196,8 @@ pub(crate) fn evict_blob_lru_until_size(
 
             // Tolerate ENOENT from concurrent deletion.
             if std::fs::remove_file(&path).is_ok() {
+                total_size = total_size.saturating_sub(size);
+            } else if !path.exists() {
                 total_size = total_size.saturating_sub(size);
             }
         }
@@ -221,6 +259,18 @@ pub(crate) fn atomic_write_bytes(dst: &Path, bytes: &[u8]) -> Result<(), Fontsou
     }
 }
 
+fn remove_path_if_present(path: &Path) {
+    if std::fs::remove_file(path).is_ok() {
+        return;
+    }
+
+    if let Ok(meta) = std::fs::symlink_metadata(path) {
+        if meta.is_dir() {
+            let _ = std::fs::remove_dir_all(path);
+        }
+    }
+}
+
 fn with_exclusive_cache_lock<F, R>(cache_dir: &Path, f: F) -> Result<R, FontsourceFontdbError>
 where
     F: FnOnce() -> Result<R, FontsourceFontdbError>,
@@ -255,35 +305,58 @@ mod tests {
 
     #[test]
     fn test_blob_key_deterministic() {
-        let key1 = blob_key("roboto", "latin-400-normal.ttf");
-        let key2 = blob_key("roboto", "latin-400-normal.ttf");
+        let key1 = blob_key("https://cdn.example/fonts/latin-400-normal.ttf");
+        let key2 = blob_key("https://cdn.example/fonts/latin-400-normal.ttf");
         assert_eq!(key1, key2);
-        assert_eq!(key1, "roboto--latin-400-normal.ttf");
+        assert_eq!(key1.len(), 64);
+        assert!(key1.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
     #[test]
     fn test_read_write_blob_roundtrip() {
         let tmp = tempfile::tempdir().unwrap();
-        let key = "roboto--latin-400-normal.ttf";
+        let url = "https://cdn.example/fonts/latin-400-normal.ttf";
         let data = b"fake ttf data";
 
-        assert!(read_blob(key, tmp.path()).unwrap().is_none());
+        assert!(read_blob(url, tmp.path()).unwrap().is_none());
 
-        write_blob_if_absent(key, tmp.path(), data).unwrap();
+        write_blob_if_absent(url, tmp.path(), data).unwrap();
 
-        let read_back = read_blob(key, tmp.path()).unwrap().unwrap();
+        let read_back = read_blob(url, tmp.path()).unwrap().unwrap();
         assert_eq!(read_back, data);
     }
 
     #[test]
     fn test_write_blob_no_overwrite() {
         let tmp = tempfile::tempdir().unwrap();
-        let key = "roboto--latin-400-normal.ttf";
+        let url = "https://cdn.example/fonts/latin-400-normal.ttf";
 
-        write_blob_if_absent(key, tmp.path(), b"first").unwrap();
-        write_blob_if_absent(key, tmp.path(), b"second").unwrap();
+        write_blob_if_absent(url, tmp.path(), b"first").unwrap();
+        write_blob_if_absent(url, tmp.path(), b"second").unwrap();
 
-        let read_back = read_blob(key, tmp.path()).unwrap().unwrap();
+        let read_back = read_blob(url, tmp.path()).unwrap().unwrap();
         assert_eq!(read_back, b"first");
+    }
+
+    #[test]
+    fn test_read_blob_corrupt_directory_treated_as_miss_and_cleaned() {
+        let tmp = tempfile::tempdir().unwrap();
+        let url = "https://cdn.example/fonts/latin-400-normal.ttf";
+        let key = blob_key(url);
+        let path = tmp.path().join(format!("{key}.{BLOB_EXTENSION}"));
+
+        std::fs::create_dir_all(&path).unwrap();
+        assert!(read_blob(url, tmp.path()).unwrap().is_none());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn test_read_metadata_corrupt_file_treated_as_miss_and_cleaned() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("roboto.json");
+        std::fs::write(&path, b"{bad json").unwrap();
+
+        assert!(read_metadata("roboto", tmp.path()).is_none());
+        assert!(!path.exists());
     }
 }

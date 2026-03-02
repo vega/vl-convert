@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedTtfFile {
-    pub filename: String,
     pub url: String,
 }
 
@@ -93,7 +92,6 @@ pub(crate) fn resolve_download_plan(
                     if let Some(ttf_url) = &subset_urls.url.ttf {
                         found_ttf = true;
                         files.push(ResolvedTtfFile {
-                            filename: format!("{}-{}-{}.ttf", subset_key, weight_key, style_key),
                             url: ttf_url.clone(),
                         });
                     }
@@ -148,10 +146,6 @@ pub(crate) fn resolve_download_plan(
                         if let Some(ttf_url) = &subset_urls.url.ttf {
                             has_ttf = true;
                             files.push(ResolvedTtfFile {
-                                filename: format!(
-                                    "{}-{}-{}.ttf",
-                                    subset_key, weight_key, style_key
-                                ),
                                 url: ttf_url.clone(),
                             });
                         }
