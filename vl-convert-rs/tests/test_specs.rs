@@ -797,6 +797,52 @@ mod test_png_no_theme {
 }
 
 #[rustfmt::skip]
+mod test_png_fontsource {
+    use crate::*;
+    use futures::executor::block_on;
+    use std::sync::Once;
+    use vl_convert_rs::converter::VlOpts;
+    use vl_convert_rs::register_fontsource_font_blocking;
+    use vl_convert_rs::VlConverter;
+
+    static INIT_FONTSOURCE: Once = Once::new();
+
+    fn initialize_fontsource() {
+        initialize();
+        INIT_FONTSOURCE.call_once(|| {
+            register_fontsource_font_blocking("Bangers", None)
+                .expect("Failed to register Bangers");
+            register_fontsource_font_blocking("Lugrasimo", None)
+                .expect("Failed to register Lugrasimo");
+        });
+    }
+
+    #[test]
+    fn test() {
+        initialize_fontsource();
+
+        let vl_version = VlVersion::v5_8;
+        let vl_spec = load_vl_spec("fontsource_fonts");
+        let converter = VlConverter::new();
+
+        let vg_spec = block_on(
+            converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})
+        ).unwrap();
+
+        let png_data = block_on(converter.vega_to_png(vg_spec, Default::default(), Some(2.0), None)).unwrap();
+        check_png("fontsource_fonts", vl_version, None, png_data.as_slice());
+
+        let png_data = block_on(
+            converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(2.0), None)
+        ).unwrap();
+        check_png("fontsource_fonts", vl_version, None, png_data.as_slice());
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[rustfmt::skip]
 mod test_png_theme_config {
     use crate::*;
     use futures::executor::block_on;

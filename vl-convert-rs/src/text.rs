@@ -136,12 +136,15 @@ fn refresh_font_baseline_after_config_update() -> Result<(), anyhow::Error> {
 
     let resolved = Arc::new(config.resolve());
 
-    let mut baseline = FONT_BASELINE
-        .write()
-        .map_err(|err| anyhow!("Failed to acquire font baseline lock: {err}"))?;
+    // Acquire USVG_OPTIONS before FONT_BASELINE: USVG_OPTIONS is a lazy_static
+    // whose initializer reads FONT_BASELINE. Taking the write lock first would
+    // deadlock if USVG_OPTIONS hasn't been initialized yet.
     let mut opts = USVG_OPTIONS
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
+    let mut baseline = FONT_BASELINE
+        .write()
+        .map_err(|err| anyhow!("Failed to acquire font baseline lock: {err}"))?;
 
     let next_version = FONT_CONFIG_VERSION.fetch_add(1, Ordering::AcqRel) + 1;
     let snapshot = FontBaselineSnapshot {
@@ -321,6 +324,24 @@ pub async fn register_fontsource_font(
     variants: Option<&[VariantRequest]>,
 ) -> Result<(), anyhow::Error> {
     let batch = FONTSOURCE_CLIENT.load(family, variants).await?;
+    let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
+
+    {
+        let mut font_config = FONT_CONFIG
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
+        font_config.custom_fonts.extend(loaded_custom_fonts);
+    }
+
+    refresh_font_baseline_after_config_update()
+}
+
+/// Blocking variant of [`register_fontsource_font`].
+pub fn register_fontsource_font_blocking(
+    family: &str,
+    variants: Option<&[VariantRequest]>,
+) -> Result<(), anyhow::Error> {
+    let batch = FONTSOURCE_CLIENT.load_blocking(family, variants)?;
     let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
 
     {

@@ -18,7 +18,7 @@ pub use converter::{FontsourceFontRequest, VlConverter};
 pub use deno_core::anyhow;
 pub use module_loader::import_map::VlVersion;
 pub use serde_json;
-pub use text::{configure_font_cache, register_fontsource_font};
+pub use text::{configure_font_cache, register_fontsource_font, register_fontsource_font_blocking};
 pub use vl_convert_fontsource::{FontStyle, VariantRequest};
 
 /// V8 snapshot containing the pre-compiled deno_runtime extensions plus our

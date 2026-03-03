@@ -416,6 +416,49 @@ mod test_vl2png {
 }
 
 #[rustfmt::skip]
+mod test_vl2png_fontsource {
+    use std::process::Command;
+    use crate::*;
+
+    #[test]
+    fn test() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        let vl_version = "5_8";
+        let output_filename = format!("{}_fontsource_fonts.png", vl_version);
+
+        let vl_path = vl_spec_path("fontsource_fonts");
+        let output = output_path(&output_filename);
+
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let cmd = cmd.arg("vl2png")
+            .arg("-i").arg(vl_path)
+            .arg("-o").arg(&output)
+            .arg("--vl-version").arg(vl_version)
+            .arg("--fontsource-font").arg("Bangers")
+            .arg("--fontsource-font").arg("Lugrasimo")
+            .arg("--scale").arg("2");
+
+        cmd.assert().success();
+
+        let expected_png = load_expected_png("fontsource_fonts", vl_version, None).unwrap();
+        let output_png = dssim::load_image(&Dssim::new(), &output).unwrap();
+
+        let attr = Dssim::new();
+        let (diff, _) = attr.compare(&expected_png, output_png);
+
+        if diff > 0.0001 {
+            panic!(
+                "Images don't match for fontsource_fonts.png with diff {}",
+                diff
+            )
+        }
+
+        Ok(())
+    }
+}
+
+#[rustfmt::skip]
 mod test_vl2png_theme_config {
     use std::process::Command;
     use crate::*;
