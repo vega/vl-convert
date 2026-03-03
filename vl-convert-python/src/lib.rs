@@ -296,7 +296,7 @@ fn vegalite_to_vega(
         allowed_base_urls: None,
         format_locale: None,
         time_format_locale: None,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     let vega_spec = match run_converter_future(move |converter| async move {
@@ -343,7 +343,7 @@ fn vega_to_svg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     let svg = match run_converter_future(move |converter| async move {
@@ -382,7 +382,7 @@ fn vega_to_scenegraph(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     match format {
@@ -463,7 +463,7 @@ fn vegalite_to_svg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     let svg = match run_converter_future(move |converter| async move {
@@ -525,7 +525,7 @@ fn vegalite_to_scenegraph(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     match format {
@@ -591,7 +591,7 @@ fn vega_to_png(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     let png_data = match run_converter_future(move |converter| async move {
@@ -658,7 +658,7 @@ fn vegalite_to_png(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     let png_data = match run_converter_future(move |converter| async move {
@@ -707,7 +707,7 @@ fn vega_to_jpeg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     let jpeg_data = match run_converter_future(move |converter| async move {
@@ -776,7 +776,7 @@ fn vegalite_to_jpeg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     let jpeg_data = match run_converter_future(move |converter| async move {
@@ -827,7 +827,7 @@ fn vega_to_pdf(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     let pdf_bytes = match run_converter_future(move |converter| async move {
@@ -890,7 +890,7 @@ fn vegalite_to_pdf(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     let pdf_data = match run_converter_future(move |converter| async move {
@@ -989,7 +989,7 @@ fn vegalite_to_html(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future(move |converter| async move {
@@ -1030,7 +1030,7 @@ fn vega_to_html(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
     run_converter_future(move |converter| async move {
         converter
@@ -1521,7 +1521,7 @@ fn vegalite_to_vega_asyncio<'py>(
         allowed_base_urls: None,
         format_locale: None,
         time_format_locale: None,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1553,7 +1553,7 @@ fn vega_to_svg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1585,7 +1585,7 @@ fn vega_to_scenegraph_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     match format {
@@ -1652,7 +1652,7 @@ fn vegalite_to_svg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1700,7 +1700,7 @@ fn vegalite_to_scenegraph_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     match format {
@@ -1757,7 +1757,7 @@ fn vega_to_png_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1803,7 +1803,7 @@ fn vegalite_to_png_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1839,7 +1839,7 @@ fn vega_to_jpeg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1889,7 +1889,7 @@ fn vegalite_to_jpeg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1923,7 +1923,7 @@ fn vega_to_pdf_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1968,7 +1968,7 @@ fn vegalite_to_pdf_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -2052,7 +2052,7 @@ fn vegalite_to_html_asyncio<'py>(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -2091,7 +2091,7 @@ fn vega_to_html_asyncio<'py>(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
-        ..Default::default()
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(

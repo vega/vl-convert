@@ -775,7 +775,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         allowed_base_urls: None,
                         format_locale,
                         time_format_locale,
-                        ..Default::default()
+                        fontsource_fonts: None,
                     },
                     bundle,
                     Renderer::from_str(&renderer)?,
@@ -912,7 +912,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         allowed_base_urls: None,
                         format_locale,
                         time_format_locale,
-                        ..Default::default()
+                        fontsource_fonts: None,
                     },
                     bundle,
                     Renderer::from_str(&renderer)?,
@@ -1320,7 +1320,7 @@ async fn vl_2_vg(
                 allowed_base_urls: None,
                 format_locale: None,
                 time_format_locale: None,
-                ..Default::default()
+                fontsource_fonts: None,
             },
         )
         .await
@@ -1377,7 +1377,7 @@ async fn vg_2_svg(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
-                ..Default::default()
+                fontsource_fonts: None,
             },
         )
         .await
@@ -1426,7 +1426,7 @@ async fn vg_2_png(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
-                ..Default::default()
+                fontsource_fonts: None,
             },
             Some(scale),
             Some(ppi),
@@ -1477,7 +1477,7 @@ async fn vg_2_jpeg(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
-                ..Default::default()
+                fontsource_fonts: None,
             },
             Some(scale),
             Some(quality),
@@ -1525,7 +1525,7 @@ async fn vg_2_pdf(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
-                ..Default::default()
+                fontsource_fonts: None,
             },
         )
         .await
@@ -1586,7 +1586,7 @@ async fn vl_2_svg(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
-                ..Default::default()
+                fontsource_fonts: None,
             },
         )
         .await
@@ -1649,7 +1649,7 @@ async fn vl_2_png(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
-                ..Default::default()
+                fontsource_fonts: None,
             },
             Some(scale),
             Some(ppi),
@@ -1714,7 +1714,7 @@ async fn vl_2_jpeg(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
-                ..Default::default()
+                fontsource_fonts: None,
             },
             Some(scale),
             Some(quality),
@@ -1777,7 +1777,7 @@ async fn vl_2_pdf(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
-                ..Default::default()
+                fontsource_fonts: None,
             },
         )
         .await
