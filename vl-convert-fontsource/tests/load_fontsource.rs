@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use vl_convert_fontsource::{ClientConfig, FontStyle, FontsourceClient, FontsourceError, VariantRequest};
+use vl_convert_fontsource::{
+    ClientConfig, FontStyle, FontsourceClient, FontsourceError, VariantRequest,
+};
 
 #[cfg(feature = "fontdb")]
 use vl_convert_fontsource::FontsourceDatabaseExt;
@@ -319,10 +321,7 @@ fn test_variants_not_available_error_blocking() {
         .load_blocking("Roboto", Some(&requested))
         .unwrap_err();
 
-    assert!(matches!(
-        err,
-        FontsourceError::VariantsNotAvailable { .. }
-    ));
+    assert!(matches!(err, FontsourceError::VariantsNotAvailable { .. }));
 }
 
 #[test]

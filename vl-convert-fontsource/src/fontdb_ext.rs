@@ -44,8 +44,7 @@ impl FontsourceDatabaseExt for fontdb::Database {
         let mut all_ids = Vec::new();
 
         for data in batch.into_font_data() {
-            let source =
-                fontdb::Source::Binary(data as Arc<dyn AsRef<[u8]> + Send + Sync>);
+            let source = fontdb::Source::Binary(data as Arc<dyn AsRef<[u8]> + Send + Sync>);
             let ids = self.load_font_source(source);
             all_ids.extend(ids.iter().copied());
             per_source_ids.push(ids);

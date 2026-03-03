@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 
 const BLOB_EXTENSION: &str = "blob";
 
-
 pub(crate) fn read_metadata(font_id: &str, metadata_cache_dir: &Path) -> Option<FontsourceFont> {
     let path = metadata_cache_dir.join(format!("{font_id}.json"));
     let bytes = match std::fs::read(&path) {
@@ -39,7 +38,6 @@ pub(crate) fn write_metadata_if_absent(
     let data = serde_json::to_vec_pretty(metadata)?;
     atomic_write_bytes(&path, &data)
 }
-
 
 /// Stable blob key derived from URL bytes as lowercase SHA-256 hex.
 pub(crate) fn blob_key(url: &str) -> String {
@@ -85,7 +83,7 @@ fn has_ttf_magic_bytes(bytes: &[u8]) -> bool {
     bytes.len() >= 4
         && (bytes[..4] == [0, 1, 0, 0]  // TrueType
             || bytes[..4] == *b"OTTO"    // OpenType/CFF
-            || bytes[..4] == *b"ttcf")   // TrueType Collection
+            || bytes[..4] == *b"ttcf") // TrueType Collection
 }
 
 pub(crate) fn write_blob_if_absent(
@@ -213,7 +211,6 @@ pub(crate) fn evict_blob_lru_until_size(
         Ok(())
     })
 }
-
 
 pub(crate) fn atomic_write_bytes(dst: &Path, bytes: &[u8]) -> Result<(), FontsourceError> {
     let parent = dst.parent().ok_or_else(|| {

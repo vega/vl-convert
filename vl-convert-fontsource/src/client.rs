@@ -91,8 +91,7 @@ impl FontsourceClient {
         };
 
         let plan = resolve_download_plan(&font_id, &metadata, variants)?;
-        let (font_data, exempt_keys, downloaded_any) =
-            self.ensure_blobs_async(&plan.files).await?;
+        let (font_data, exempt_keys, downloaded_any) = self.ensure_blobs_async(&plan.files).await?;
 
         if downloaded_any {
             self.evict_if_needed(&exempt_keys)?;
@@ -240,10 +239,7 @@ impl FontsourceClient {
     }
 
     /// Download or retrieve from cache all resolved TTF files in parallel (async).
-    async fn ensure_blobs_async(
-        &self,
-        files: &[ResolvedTtfFile],
-    ) -> EnsureBlobsResult {
+    async fn ensure_blobs_async(&self, files: &[ResolvedTtfFile]) -> EnsureBlobsResult {
         let limit = self.config.max_parallel_downloads.max(1);
 
         let results = stream::iter(files.iter().cloned().enumerate().map(
@@ -306,10 +302,7 @@ impl FontsourceClient {
     }
 
     /// Download or retrieve from cache all resolved TTF files in parallel (blocking).
-    fn ensure_blobs_blocking(
-        &self,
-        files: &[ResolvedTtfFile],
-    ) -> EnsureBlobsResult {
+    fn ensure_blobs_blocking(&self, files: &[ResolvedTtfFile]) -> EnsureBlobsResult {
         if files.is_empty() {
             return Ok((Vec::new(), HashSet::new(), false));
         }
@@ -430,10 +423,7 @@ impl FontsourceClient {
     }
 
     /// GET a URL as bytes with exponential-backoff retry (async).
-    async fn get_bytes_with_retry_async(
-        &self,
-        url: &str,
-    ) -> Result<Vec<u8>, FontsourceError> {
+    async fn get_bytes_with_retry_async(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let backoff = ExponentialBuilder::default().with_max_times(self.config.max_retries);
         (|| self.get_bytes_once_async(url))
             .retry(backoff)
@@ -515,12 +505,11 @@ impl FontsourceClient {
     }
 
     /// Lazily initialize and clone the blocking HTTP client.
-    fn get_blocking_client_clone(
-        &self,
-    ) -> Result<reqwest::blocking::Client, FontsourceError> {
-        let mut guard = self.blocking_client.lock().map_err(|_| {
-            FontsourceError::Internal("Blocking client lock poisoned".to_string())
-        })?;
+    fn get_blocking_client_clone(&self) -> Result<reqwest::blocking::Client, FontsourceError> {
+        let mut guard = self
+            .blocking_client
+            .lock()
+            .map_err(|_| FontsourceError::Internal("Blocking client lock poisoned".to_string()))?;
 
         if let Some(client) = guard.as_ref() {
             return Ok(client.clone());
@@ -538,9 +527,7 @@ impl FontsourceClient {
         })
         .join()
         .map_err(|_| {
-            FontsourceError::Internal(
-                "Failed to join blocking client init thread".to_string(),
-            )
+            FontsourceError::Internal("Failed to join blocking client init thread".to_string())
         })??;
 
         let client = built.clone();

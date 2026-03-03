@@ -80,7 +80,7 @@ struct WorkerPool {
 }
 
 const VEGAEMBED_GLOBAL_SNIPPET: &str =
-    "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite;";
+    "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite; window.lodashDebounce=lodashDebounce;";
 pub const ACCESS_DENIED_MARKER: &str = "VLC_ACCESS_DENIED";
 
 impl WorkerPool {

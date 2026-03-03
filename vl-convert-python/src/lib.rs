@@ -134,11 +134,12 @@ fn parse_config_overrides(
             }
             "fontsource_cache_size_mb" => {
                 if !value.is_none() {
-                    overrides.fontsource_cache_size_mb = Some(value.extract::<u64>().map_err(|err| {
-                        vl_convert_rs::anyhow::anyhow!(
-                            "Invalid fontsource_cache_size_mb value for configure: {err}"
-                        )
-                    })?);
+                    overrides.fontsource_cache_size_mb =
+                        Some(value.extract::<u64>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid fontsource_cache_size_mb value for configure: {err}"
+                            )
+                        })?);
                 }
             }
             other => {
