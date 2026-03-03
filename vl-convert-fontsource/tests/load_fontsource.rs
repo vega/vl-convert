@@ -296,6 +296,15 @@ fn make_client(
     FontsourceClient::new(config).unwrap()
 }
 
+fn make_cacheless_client(base_url: &str) -> FontsourceClient {
+    let config = ClientConfig {
+        cache_dir: None,
+        metadata_base_url: format!("{}/v1/fonts", base_url),
+        ..ClientConfig::default()
+    };
+    FontsourceClient::new(config).unwrap()
+}
+
 #[test]
 fn test_empty_variants_returns_error_blocking() {
     let server = TestServer::new(|_| HashMap::new(), HashSet::new(), 0);
@@ -713,4 +722,27 @@ fn test_corrupt_blob_fallbacks_to_network() {
 
     assert_eq!(hits_after, hits_before + 1);
     assert!(corrupt_path.is_file());
+}
+
+#[test]
+fn test_no_cache_dir_always_downloads() {
+    let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
+    let client = make_cacheless_client(server.base_url());
+
+    let requested = [VariantRequest {
+        weight: 400,
+        style: FontStyle::Normal,
+    }];
+
+    let first = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    assert_eq!(first.ttf_file_count, 2);
+
+    let latin_hits = server.hit_count("/fonts/latin-400-normal.ttf");
+    let meta_hits = server.hit_count("/v1/fonts/roboto");
+
+    // Without a cache dir, every load re-fetches metadata and blobs.
+    let second = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    assert_eq!(second.ttf_file_count, 2);
+    assert_eq!(server.hit_count("/fonts/latin-400-normal.ttf"), latin_hits * 2);
+    assert_eq!(server.hit_count("/v1/fonts/roboto"), meta_hits * 2);
 }
