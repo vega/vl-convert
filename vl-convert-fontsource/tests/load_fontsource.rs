@@ -743,6 +743,9 @@ fn test_no_cache_dir_always_downloads() {
     // Without a cache dir, every load re-fetches metadata and blobs.
     let second = client.load_blocking("Roboto", Some(&requested)).unwrap();
     assert_eq!(second.ttf_file_count, 2);
-    assert_eq!(server.hit_count("/fonts/latin-400-normal.ttf"), latin_hits * 2);
+    assert_eq!(
+        server.hit_count("/fonts/latin-400-normal.ttf"),
+        latin_hits * 2
+    );
     assert_eq!(server.hit_count("/v1/fonts/roboto"), meta_hits * 2);
 }

@@ -379,6 +379,8 @@ impl FontsourceClient {
 
         let gate = self.acquire_download_gate(&key);
         let result = (|| {
+            // Uses tokio::sync::Mutex so the same gate works for both async
+            // and blocking callers within the same process.
             let _guard = gate.mutex.blocking_lock();
 
             if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
