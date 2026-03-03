@@ -22,12 +22,19 @@ const ENV_FONTSOURCE_API_URL: &str = "VL_CONVERT_FONTSOURCE_API_URL";
 /// metadata is always fetched from the network and blobs are never written to disk.
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
+    /// Absolute path to the cache root. `None` disables persistent caching.
     pub cache_dir: Option<PathBuf>,
+    /// Maximum size of the on-disk blob cache in bytes. `0` disables eviction.
     pub max_blob_cache_bytes: u64,
+    /// Maximum number of concurrent font file downloads.
     pub max_parallel_downloads: usize,
+    /// Per-request HTTP timeout in seconds.
     pub request_timeout_secs: u64,
+    /// Number of retries for transient HTTP failures.
     pub max_retries: usize,
+    /// HTTP `User-Agent` header value.
     pub user_agent: String,
+    /// Base URL for the Fontsource metadata API.
     pub metadata_base_url: String,
 }
 

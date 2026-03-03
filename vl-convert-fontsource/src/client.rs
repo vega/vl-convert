@@ -107,6 +107,7 @@ impl FontsourceClient {
             font_id,
             Some(metadata.font_type),
             if let Some(v) = variants {
+                // Dedupe user-supplied variants; plan.loaded_variants is already unique.
                 dedupe_variants(v)
             } else {
                 plan.loaded_variants
@@ -144,6 +145,7 @@ impl FontsourceClient {
             font_id,
             Some(metadata.font_type),
             if let Some(v) = variants {
+                // Dedupe user-supplied variants; plan.loaded_variants is already unique.
                 dedupe_variants(v)
             } else {
                 plan.loaded_variants
@@ -558,6 +560,8 @@ impl FontsourceClient {
 
 impl Drop for FontsourceClient {
     fn drop(&mut self) {
+        // Drop the blocking client on a dedicated thread: its internal tokio
+        // runtime shutdown might deadlock if run on an async worker thread.
         if let Ok(mut guard) = self.blocking_client.lock() {
             if let Some(client) = guard.take() {
                 let _ = std::thread::spawn(move || drop(client)).join();
