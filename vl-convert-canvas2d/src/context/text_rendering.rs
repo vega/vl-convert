@@ -108,6 +108,16 @@ impl Canvas2dContext {
         // Use weight from post_script_name match if available, otherwise use parsed CSS weight
         let weight = resolution.weight_override.unwrap_or(font.weight);
 
+        // Resolve to the nearest available weight so cosmic-text (which requires exact matches)
+        // doesn't fall back to a completely different font family.
+        let weight = crate::text::resolve_nearest_weight(
+            &self.font_system,
+            resolution.family,
+            weight,
+            font.style,
+            font.stretch.into(),
+        );
+
         // Build attributes including letter spacing if set
         let letter_spacing = self.state.letter_spacing;
         let cache_key_flags = if self.hinting_enabled {
