@@ -286,6 +286,7 @@ where
         .open(lock_path)?;
     lock_file.lock_exclusive()?;
 
+    // Lock released when `lock_file` is dropped on return
     f()
 }
 
