@@ -29,6 +29,9 @@ pub enum FontsourceError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[error("Cache directory must be an absolute path, got: {0:?}")]
+    RelativeCacheDir(std::path::PathBuf),
+
     #[error("Internal error: {0}")]
     Internal(String),
 }

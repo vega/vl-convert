@@ -34,7 +34,11 @@ impl DownloadGate {
 /// Client-first Fontsource loader API.
 pub struct FontsourceClient {
     config: ClientConfig,
+    /// Built eagerly — unlike the blocking client, this is safe to construct
+    /// inside an async context.
     async_client: reqwest::Client,
+    /// Lazily initialized: creates an internal tokio runtime, so must not be
+    /// built inside an async context.
     blocking_client: Mutex<Option<reqwest::blocking::Client>>,
     max_blob_cache_bytes: AtomicU64,
     download_gates: DashMap<String, Arc<DownloadGate>>,
@@ -47,9 +51,9 @@ impl FontsourceClient {
             config.max_parallel_downloads = 1;
         }
 
-        if let Some(ref mut dir) = config.cache_dir {
+        if let Some(ref dir) = config.cache_dir {
             if !dir.is_absolute() {
-                *dir = std::env::current_dir()?.join(&*dir);
+                return Err(FontsourceError::RelativeCacheDir(dir.clone()));
             }
             std::fs::create_dir_all(dir.join("metadata"))?;
             std::fs::create_dir_all(dir.join("blobs"))?;
