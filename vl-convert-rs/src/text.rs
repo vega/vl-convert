@@ -330,7 +330,6 @@ pub async fn register_fontsource_font(
         font_config.custom_fonts.extend(loaded_custom_fonts);
     }
 
-    drop(batch);
     refresh_font_baseline_after_config_update()
 }
 
