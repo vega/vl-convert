@@ -15,6 +15,8 @@ use std::time::Duration;
 /// Return type for `ensure_blobs_*`: (font data, blob keys used, whether any were downloaded).
 type EnsureBlobsResult = Result<(Vec<Arc<Vec<u8>>>, HashSet<String>, bool), FontsourceError>;
 
+/// Per-blob-key mutex that serializes concurrent download/load of the same font file
+/// to avoid repeated simultaneous downloads.
 struct DownloadGate {
     mutex: tokio::sync::Mutex<()>,
     active_users: AtomicUsize,
@@ -284,6 +286,13 @@ impl FontsourceClient {
             return Ok((bytes, key, false));
         }
 
+        // Without a cache dir, the gate can't deduplicate (waiters would just
+        // re-download anyway), so skip it and download directly.
+        if blob_dir.is_none() {
+            let bytes = self.get_bytes_with_retry_async(&file.url).await?;
+            return Ok((bytes, key, true));
+        }
+
         let gate = self.acquire_download_gate(&key);
         let result = async {
             let _guard = gate.mutex.lock().await;
@@ -353,6 +362,13 @@ impl FontsourceClient {
 
         if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
             return Ok((bytes, key, false));
+        }
+
+        // Without a cache dir, the gate can't deduplicate (waiters would just
+        // re-download anyway), so skip it and download directly.
+        if blob_dir.is_none() {
+            let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
+            return Ok((bytes, key, true));
         }
 
         let gate = self.acquire_download_gate(&key);
