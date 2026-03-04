@@ -4,7 +4,6 @@ use crate::error::Canvas2dResult;
 use crate::font_parser::ParsedFont;
 use crate::style::{TextAlign, TextBaseline};
 use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Weight};
-use fontdb;
 
 /// Text metrics returned by measureText().
 #[derive(Debug, Clone, Default)]
