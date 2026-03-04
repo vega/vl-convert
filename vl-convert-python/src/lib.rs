@@ -22,6 +22,7 @@ use vl_convert_rs::module_loader::import_map::{
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
+use vl_convert_rs::text::register_fontsource_font as register_fontsource_font_rs;
 use vl_convert_rs::text::register_fontsource_font_blocking as register_fontsource_font_blocking_rs;
 use vl_convert_rs::VlConverter as VlConverterRs;
 use vl_convert_rs::{FontStyle, VariantRequest};
@@ -2204,12 +2205,9 @@ fn register_fontsource_font_asyncio<'py>(
     let font_family = font_family.to_string();
     let variant_requests = parse_variant_args(variants)?;
     future_into_py_object(py, async move {
-        tokio::task::spawn_blocking(move || {
-            register_fontsource_font_blocking_rs(&font_family, variant_requests.as_deref())
-        })
-        .await
-        .map_err(|err| PyValueError::new_err(format!("Failed to register font: {err}")))?
-        .map_err(|err| PyValueError::new_err(format!("Failed to register font: {err}")))?;
+        register_fontsource_font_rs(&font_family, variant_requests.as_deref())
+            .await
+            .map_err(|err| PyValueError::new_err(format!("Failed to register font: {err}")))?;
         Python::with_gil(|py| Ok(py.None().into()))
     })
 }
