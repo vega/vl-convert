@@ -127,14 +127,17 @@ fn init_usvg_options() -> usvg::Options<'static> {
 }
 
 fn refresh_font_baseline_after_config_update() -> Result<(), anyhow::Error> {
+    eprintln!("[fontsource::refresh] acquiring FONT_CONFIG lock...");
     let config = {
         FONT_CONFIG
             .lock()
             .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?
             .clone()
     };
+    eprintln!("[fontsource::refresh] FONT_CONFIG cloned, resolving fontdb...");
 
     let resolved = Arc::new(config.resolve());
+    eprintln!("[fontsource::refresh] fontdb resolved, acquiring USVG_OPTIONS lock...");
 
     // Acquire USVG_OPTIONS before FONT_BASELINE: USVG_OPTIONS is a lazy_static
     // whose initializer reads FONT_BASELINE. Taking the write lock first would
@@ -142,9 +145,11 @@ fn refresh_font_baseline_after_config_update() -> Result<(), anyhow::Error> {
     let mut opts = USVG_OPTIONS
         .lock()
         .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
+    eprintln!("[fontsource::refresh] USVG_OPTIONS locked, acquiring FONT_BASELINE write lock...");
     let mut baseline = FONT_BASELINE
         .write()
         .map_err(|err| anyhow!("Failed to acquire font baseline lock: {err}"))?;
+    eprintln!("[fontsource::refresh] FONT_BASELINE locked, updating snapshot...");
 
     let next_version = FONT_CONFIG_VERSION.fetch_add(1, Ordering::AcqRel) + 1;
     let snapshot = FontBaselineSnapshot {
@@ -153,6 +158,7 @@ fn refresh_font_baseline_after_config_update() -> Result<(), anyhow::Error> {
     };
     *baseline = snapshot;
     *opts = build_usvg_options_with_fontdb(resolved.clone_fontdb());
+    eprintln!("[fontsource::refresh] done, version={next_version}");
 
     Ok(())
 }
@@ -341,17 +347,25 @@ pub fn register_fontsource_font_blocking(
     family: &str,
     variants: Option<&[VariantRequest]>,
 ) -> Result<(), anyhow::Error> {
+    eprintln!("[fontsource] register_fontsource_font_blocking: start family={family:?}");
+    eprintln!("[fontsource] calling FONTSOURCE_CLIENT.load_blocking...");
     let batch = FONTSOURCE_CLIENT.load_blocking(family, variants)?;
+    eprintln!("[fontsource] load_blocking complete, {} font files loaded", batch.font_data().len());
     let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
 
     {
+        eprintln!("[fontsource] acquiring FONT_CONFIG lock...");
         let mut font_config = FONT_CONFIG
             .lock()
             .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
         font_config.custom_fonts.extend(loaded_custom_fonts);
+        eprintln!("[fontsource] FONT_CONFIG updated, releasing lock");
     }
 
-    refresh_font_baseline_after_config_update()
+    eprintln!("[fontsource] calling refresh_font_baseline_after_config_update...");
+    let result = refresh_font_baseline_after_config_update();
+    eprintln!("[fontsource] refresh_font_baseline_after_config_update complete");
+    result
 }
 
 /// Configure the max on-disk Fontsource cache size in bytes.

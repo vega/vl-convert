@@ -256,8 +256,14 @@ def test_png(name, scale, as_dict):
 
 
 def test_png_fontsource():
+    import sys, time
+    print(f"[test_png_fontsource] starting at {time.time()}", file=sys.stderr, flush=True)
+    print(f"[test_png_fontsource] registering Bangers...", file=sys.stderr, flush=True)
     vlc.register_fontsource_font("Bangers")
+    print(f"[test_png_fontsource] Bangers registered at {time.time()}", file=sys.stderr, flush=True)
+    print(f"[test_png_fontsource] registering Lugrasimo...", file=sys.stderr, flush=True)
     vlc.register_fontsource_font("Lugrasimo")
+    print(f"[test_png_fontsource] Lugrasimo registered at {time.time()}", file=sys.stderr, flush=True)
 
     vl_version = "v5_8"
     vl_spec = load_vl_spec("fontsource_fonts")

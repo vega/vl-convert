@@ -123,19 +123,28 @@ impl FontsourceClient {
         family: &str,
         variants: Option<&[VariantRequest]>,
     ) -> Result<LoadedFontBatch, FontsourceError> {
+        eprintln!("[fontsource::load_blocking] start family={family:?}");
         let font_id = Self::validate_load_request(family, variants)?;
 
+        eprintln!("[fontsource::load_blocking] fetching metadata for {font_id}...");
         let metadata = match self.try_read_cached_metadata(&font_id) {
-            Some(m) => m,
+            Some(m) => {
+                eprintln!("[fontsource::load_blocking] metadata cache hit");
+                m
+            }
             None => {
+                eprintln!("[fontsource::load_blocking] metadata cache miss, fetching from API...");
                 let m = self.fetch_metadata_blocking(&font_id)?;
+                eprintln!("[fontsource::load_blocking] metadata fetched, caching...");
                 self.cache_metadata(&font_id, &m)?;
                 m
             }
         };
 
         let plan = resolve_download_plan(&font_id, &metadata, variants)?;
+        eprintln!("[fontsource::load_blocking] download plan: {} files", plan.files.len());
         let (font_data, exempt_keys, downloaded_any) = self.ensure_blobs_blocking(&plan.files)?;
+        eprintln!("[fontsource::load_blocking] blobs done, downloaded_any={downloaded_any}");
 
         if downloaded_any {
             self.evict_if_needed(&exempt_keys)?;
@@ -365,33 +374,44 @@ impl FontsourceClient {
     ) -> Result<(Vec<u8>, String, bool), FontsourceError> {
         let key = cache::blob_key(&file.url);
         let blob_dir = self.config.blob_dir();
+        eprintln!("[fontsource::ensure_blob_blocking] key={key} blob_dir={blob_dir:?}");
 
         if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+            eprintln!("[fontsource::ensure_blob_blocking] cache hit for {key}");
             return Ok((bytes, key, false));
         }
 
         // Without a cache dir, the gate can't deduplicate (waiters would just
         // re-download anyway), so skip it and download directly.
         if blob_dir.is_none() {
+            eprintln!("[fontsource::ensure_blob_blocking] no cache dir, downloading {key} directly...");
             let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
+            eprintln!("[fontsource::ensure_blob_blocking] direct download done, {} bytes", bytes.len());
             return Ok((bytes, key, true));
         }
 
+        eprintln!("[fontsource::ensure_blob_blocking] acquiring download gate for {key}...");
         let gate = self.acquire_download_gate(&key);
+        eprintln!("[fontsource::ensure_blob_blocking] gate acquired, taking blocking_lock...");
         let result = (|| {
             // Uses tokio::sync::Mutex so the same gate works for both async
             // and blocking callers within the same process.
             let _guard = gate.mutex.blocking_lock();
+            eprintln!("[fontsource::ensure_blob_blocking] blocking_lock acquired for {key}");
 
             if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+                eprintln!("[fontsource::ensure_blob_blocking] cache hit after gate for {key}");
                 return Ok((bytes, key.clone(), false));
             }
 
+            eprintln!("[fontsource::ensure_blob_blocking] downloading {key}...");
             let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
+            eprintln!("[fontsource::ensure_blob_blocking] downloaded {} bytes for {key}", bytes.len());
             Self::cache_blob(&file.url, &blob_dir, &bytes)?;
             Ok((bytes, key.clone(), true))
         })();
         self.release_download_gate(&key, &gate);
+        eprintln!("[fontsource::ensure_blob_blocking] gate released for {key}");
         result
     }
 
@@ -490,11 +510,14 @@ impl FontsourceClient {
 
     /// Execute a single GET request and return the response body (blocking).
     fn get_bytes_once_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
+        eprintln!("[fontsource::get_bytes_once_blocking] GET {url}");
         let client = self.get_blocking_client_clone()?;
+        eprintln!("[fontsource::get_bytes_once_blocking] sending request...");
         let response = client
             .get(url)
             .send()
             .map_err(|e| FontsourceError::from_reqwest(url, e))?;
+        eprintln!("[fontsource::get_bytes_once_blocking] response status={}", response.status());
 
         let status = response.status();
         if !status.is_success() {
@@ -504,10 +527,12 @@ impl FontsourceClient {
             });
         }
 
-        response
+        let bytes = response
             .bytes()
             .map(|b| b.to_vec())
-            .map_err(|e| FontsourceError::from_reqwest(url, e))
+            .map_err(|e| FontsourceError::from_reqwest(url, e))?;
+        eprintln!("[fontsource::get_bytes_once_blocking] received {} bytes", bytes.len());
+        Ok(bytes)
     }
 
     /// Run LRU eviction on the blob cache if it exceeds the configured limit.
@@ -536,9 +561,11 @@ impl FontsourceClient {
             .map_err(|_| FontsourceError::Internal("Blocking client lock poisoned".to_string()))?;
 
         if let Some(client) = guard.as_ref() {
+            eprintln!("[fontsource::get_blocking_client_clone] reusing existing client");
             return Ok(client.clone());
         }
 
+        eprintln!("[fontsource::get_blocking_client_clone] building new blocking client on separate thread...");
         let user_agent = self.config.user_agent.clone();
         let timeout_secs = self.config.request_timeout_secs;
 
@@ -553,6 +580,7 @@ impl FontsourceClient {
         .map_err(|_| {
             FontsourceError::Internal("Failed to join blocking client init thread".to_string())
         })??;
+        eprintln!("[fontsource::get_blocking_client_clone] blocking client built successfully");
 
         let client = built.clone();
         *guard = Some(built);
