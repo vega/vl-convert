@@ -11,7 +11,6 @@ use std::future::Future;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tokio::task;
 use usvg::{ImageHrefResolver, Options};
 
 static VL_CONVERT_USER_AGENT: &str =
@@ -281,42 +280,53 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
             let allowed_base_urls = policy
                 .as_ref()
                 .and_then(|policy| policy.allowed_base_urls.as_deref());
-            let fetch_outcome = task::block_in_place(move || {
-                block_on_image_runtime(async {
-                    let result =
-                        (|| async { fetch_http_with_policy(href, allowed_base_urls).await })
-                            .retry(
-                                ExponentialBuilder::default()
-                                    .with_min_delay(Duration::from_millis(500))
-                                    .with_max_delay(Duration::from_secs(10))
-                                    .with_max_times(4),
-                            )
-                            .when(|e| {
-                                // Retry on network errors (no status) and transient HTTP errors.
-                                e.status()
-                                    .map(|s| {
-                                        s.is_server_error() || s == StatusCode::TOO_MANY_REQUESTS
-                                    })
-                                    .unwrap_or(true)
-                            })
-                            .notify(|err, dur| {
-                                warn!(
-                                    "Retrying image load from {} in {:.1}s: {}",
-                                    href,
-                                    dur.as_secs_f32(),
-                                    err
-                                );
-                            })
-                            .await;
+            // Run the HTTP fetch on a dedicated thread to avoid
+            // "cannot call block_in_place from a current_thread runtime" panics.
+            // The worker pool uses single-threaded Tokio runtimes, so we cannot use
+            // task::block_in_place(). A scoped thread has no Tokio context, so
+            // block_on_image_runtime (which creates its own thread-local runtime)
+            // works without conflict.
+            let fetch_outcome = std::thread::scope(|s| {
+                s.spawn(move || {
+                    block_on_image_runtime(async {
+                        let result =
+                            (|| async { fetch_http_with_policy(href, allowed_base_urls).await })
+                                .retry(
+                                    ExponentialBuilder::default()
+                                        .with_min_delay(Duration::from_millis(500))
+                                        .with_max_delay(Duration::from_secs(10))
+                                        .with_max_times(4),
+                                )
+                                .when(|e| {
+                                    // Retry on network errors (no status) and transient HTTP errors.
+                                    e.status()
+                                        .map(|s| {
+                                            s.is_server_error()
+                                                || s == StatusCode::TOO_MANY_REQUESTS
+                                        })
+                                        .unwrap_or(true)
+                                })
+                                .notify(|err, dur| {
+                                    warn!(
+                                        "Retrying image load from {} in {:.1}s: {}",
+                                        href,
+                                        dur.as_secs_f32(),
+                                        err
+                                    );
+                                })
+                                .await;
 
-                    match result {
-                        Ok(outcome) => outcome,
-                        Err(e) => {
-                            error!("Failed to load image from url {}: {}", href, e);
-                            HttpFetchOutcome::Failed
+                        match result {
+                            Ok(outcome) => outcome,
+                            Err(e) => {
+                                error!("Failed to load image from url {}: {}", href, e);
+                                HttpFetchOutcome::Failed
+                            }
                         }
-                    }
+                    })
                 })
+                .join()
+                .expect("Image fetch thread panicked")
             });
 
             let (bytes, content_type) = match fetch_outcome {
