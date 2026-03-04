@@ -933,10 +933,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let svg = read_input_string(input.as_deref())?;
             let converter =
                 build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
-            let png_data = tokio::task::spawn_blocking(move || {
-                converter.svg_to_png(&svg, scale, Some(ppi))
-            })
-            .await??;
+            let png_data =
+                tokio::task::spawn_blocking(move || converter.svg_to_png(&svg, scale, Some(ppi)))
+                    .await??;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
         }
         Svg2jpeg {
