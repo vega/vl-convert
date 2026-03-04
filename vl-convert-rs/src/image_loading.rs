@@ -19,11 +19,15 @@ static VL_CONVERT_USER_AGENT: &str =
 lazy_static! {
     static ref REQWEST_CLIENT_FOLLOW_REDIRECTS: Client = reqwest::ClientBuilder::new()
         .user_agent(VL_CONVERT_USER_AGENT)
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
         .build()
         .expect("Failed to construct reqwest client");
     static ref REQWEST_CLIENT_NO_REDIRECTS: Client = reqwest::ClientBuilder::new()
         .user_agent(VL_CONVERT_USER_AGENT)
         .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
         .build()
         .expect("Failed to construct reqwest client");
 }
