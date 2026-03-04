@@ -32,9 +32,9 @@ jobs:
         uses: ilammy/setup-nasm@v1
       - name: Build package
         run: pixi run dev-py
-      - name: Run fontsource test only
+      - name: Run all Python tests
         run: |
-          pixi run pytest vl-convert-python/tests/test_specs.py::test_png_fontsource -v -s
+          pixi run test-py -v -s
       - name: Upload failed images
         uses: actions/upload-artifact@v6
         if: failure()
