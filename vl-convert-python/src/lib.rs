@@ -13,8 +13,8 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts,
-    ACCESS_DENIED_MARKER,
+    FormatLocale, MissingFontsPolicy, Renderer, TimeFormatLocale, ValueOrString, VgOpts,
+    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -63,6 +63,12 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .as_ref()
             .map(|root| root.to_string_lossy().to_string()),
         "allowed_base_urls": config.allowed_base_urls,
+        "auto_fontsource": config.auto_fontsource,
+        "missing_fonts": match config.missing_fonts {
+            MissingFontsPolicy::Fallback => "fallback",
+            MissingFontsPolicy::Warn => "warn",
+            MissingFontsPolicy::Error => "error",
+        },
         "fontsource_cache_dir": vl_convert_rs::fontsource_cache_dir()
             .map(|p| p.to_string_lossy().into_owned()),
     })
@@ -77,6 +83,8 @@ struct ConverterConfigOverrides {
     // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
     fontsource_cache_size_mb: Option<u64>,
+    auto_fontsource: Option<bool>,
+    missing_fonts: Option<MissingFontsPolicy>,
 }
 
 fn parse_config_overrides(
@@ -145,6 +153,34 @@ fn parse_config_overrides(
                         })?);
                 }
             }
+            "auto_fontsource" => {
+                if !value.is_none() {
+                    overrides.auto_fontsource = Some(value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid auto_fontsource value for configure: {err}"
+                        )
+                    })?);
+                }
+            }
+            "missing_fonts" => {
+                if !value.is_none() {
+                    let s = value.extract::<String>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid missing_fonts value for configure: {err}"
+                        )
+                    })?;
+                    overrides.missing_fonts = Some(match s.as_str() {
+                        "fallback" => MissingFontsPolicy::Fallback,
+                        "warn" => MissingFontsPolicy::Warn,
+                        "error" => MissingFontsPolicy::Error,
+                        _ => {
+                            return Err(vl_convert_rs::anyhow::anyhow!(
+                                "Invalid missing_fonts value: {s}. Expected 'fallback', 'warn', or 'error'"
+                            ));
+                        }
+                    });
+                }
+            }
             // Read-only config fields returned by get_converter_config() are
             // silently ignored so that `configure(**get_converter_config())` works.
             "fontsource_cache_dir" => {}
@@ -175,6 +211,12 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     if let Some(mb) = overrides.fontsource_cache_size_mb {
         let bytes = mb.saturating_mul(1024 * 1024);
         configure_font_cache_rs(Some(bytes));
+    }
+    if let Some(auto_fontsource) = overrides.auto_fontsource {
+        config.auto_fontsource = auto_fontsource;
+    }
+    if let Some(missing_fonts) = overrides.missing_fonts {
+        config.missing_fonts = missing_fonts;
     }
 }
 

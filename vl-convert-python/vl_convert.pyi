@@ -133,6 +133,8 @@ if TYPE_CHECKING:
         allow_http_access: bool
         filesystem_root: str | None
         allowed_base_urls: list[str] | None
+        auto_fontsource: bool
+        missing_fonts: Literal["fallback", "warn", "error"]
         fontsource_cache_dir: str | None
 
 __all__ = [
@@ -301,6 +303,8 @@ def configure(
     filesystem_root: str | None = None,
     allowed_base_urls: list[str] | None = None,
     fontsource_cache_size_mb: int | None = None,
+    auto_fontsource: bool | None = None,
+    missing_fonts: Literal["fallback", "warn", "error"] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -323,6 +327,11 @@ def configure(
         this converter-level default when provided.
     fontsource_cache_size_mb
         Maximum font cache size in megabytes. If ``None``, keep current value.
+    auto_fontsource
+        Automatically download missing fonts from Fontsource. If ``None``, keep current value.
+    missing_fonts
+        Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
+        If ``None``, keep current value.
     """
     ...
 
@@ -984,6 +993,8 @@ if TYPE_CHECKING:
             filesystem_root: str | None = None,
             allowed_base_urls: list[str] | None = None,
             fontsource_cache_size_mb: int | None = None,
+            auto_fontsource: bool | None = None,
+            missing_fonts: Literal["fallback", "warn", "error"] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...
