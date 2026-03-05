@@ -122,6 +122,24 @@ impl ResolvedFontConfig {
             hinting_enabled: config.hinting_enabled,
         }
     }
+
+    /// Construct a resolved font configuration from an existing database.
+    pub fn from_parts(fontdb: fontdb::Database, hinting_enabled: bool) -> Self {
+        Self {
+            fontdb,
+            hinting_enabled,
+        }
+    }
+
+    /// Clone the underlying font database.
+    pub fn clone_fontdb(&self) -> fontdb::Database {
+        self.fontdb.clone()
+    }
+
+    /// Return whether hinting is enabled.
+    pub fn hinting_enabled(&self) -> bool {
+        self.hinting_enabled
+    }
 }
 
 /// Convert a [`FontConfig`] into a [`fontdb::Database`].

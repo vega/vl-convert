@@ -101,7 +101,7 @@ import vl_convert as vlc
 cfg = vlc.get_converter_config()
 print(cfg["num_workers"])  # 1
 
-vlc.configure_converter(num_workers=4)  # enable parallel worker pool
+vlc.configure(num_workers=4)  # enable parallel worker pool
 vlc.warm_up_workers()  # optional: pre-initialize workers before first conversion
 ```
 
@@ -124,7 +124,7 @@ vl_spec = {
 }
 
 async def main():
-    await vlca.configure_converter(num_workers=4)
+    await vlca.configure(num_workers=4)
     await vlca.warm_up_workers()  # optional
 
     svg = await vlca.vegalite_to_svg(vl_spec, "v5_16")

@@ -1,4 +1,5 @@
 #![allow(clippy::uninlined_format_args)]
+#![allow(clippy::too_many_arguments)]
 #![doc = include_str!("../README.md")]
 
 use clap::{Parser, Subcommand};
@@ -12,7 +13,7 @@ use vl_convert_rs::converter::{
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
-use vl_convert_rs::{anyhow, anyhow::bail};
+use vl_convert_rs::{anyhow, anyhow::bail, register_fontsource_font};
 
 const DEFAULT_VL_VERSION: &str = "6.4";
 const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
@@ -32,6 +33,11 @@ struct Cli {
     /// Root directory for local filesystem access. If omitted, filesystem access is disabled.
     #[arg(long, global = true)]
     filesystem_root: Option<String>,
+
+    /// Register a font by family name from the Fontsource catalog for this conversion.
+    /// May be specified multiple times. All variants are downloaded.
+    #[arg(long = "fontsource-font", global = true)]
+    fontsource_font: Vec<String>,
 
     #[command(subcommand)]
     command: Commands,
@@ -570,6 +576,7 @@ async fn main() -> Result<(), anyhow::Error> {
         mut allow_http_access,
         no_http_access,
         filesystem_root,
+        fontsource_font: fontsource_families,
         command,
     } = Cli::parse();
     if no_http_access {
@@ -586,6 +593,7 @@ async fn main() -> Result<(), anyhow::Error> {
             pretty,
             show_warnings,
         } => {
+            register_fontsource_fonts(&fontsource_families).await?;
             vl_2_vg(
                 input_vegalite_file.as_deref(),
                 output_vega_file.as_deref(),
@@ -612,6 +620,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             vl_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -642,6 +651,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             vl_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -674,6 +684,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             vl_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -704,6 +715,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             vl_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -740,6 +752,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
             renderer,
         } => {
+            register_fontsource_fonts(&fontsource_families).await?;
             // Initialize converter
             let vl_str = read_input_string(input.as_deref())?;
             let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
@@ -762,6 +775,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         allowed_base_urls: None,
                         format_locale,
                         time_format_locale,
+                        fontsource_fonts: None,
                     },
                     bundle,
                     Renderer::from_str(&renderer)?,
@@ -778,6 +792,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             vg_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -800,6 +815,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             vg_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -824,6 +840,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             vg_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -846,6 +863,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             vg_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -875,6 +893,7 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
             renderer,
         } => {
+            register_fontsource_fonts(&fontsource_families).await?;
             // Initialize converter
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
@@ -893,6 +912,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         allowed_base_urls: None,
                         format_locale,
                         time_format_locale,
+                        fontsource_fonts: None,
                     },
                     bundle,
                     Renderer::from_str(&renderer)?,
@@ -909,10 +929,13 @@ async fn main() -> Result<(), anyhow::Error> {
             allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             let svg = read_input_string(input.as_deref())?;
             let converter =
                 build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
-            let png_data = converter.svg_to_png(&svg, scale, Some(ppi))?;
+            let png_data =
+                tokio::task::spawn_blocking(move || converter.svg_to_png(&svg, scale, Some(ppi)))
+                    .await??;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
         }
         Svg2jpeg {
@@ -924,10 +947,14 @@ async fn main() -> Result<(), anyhow::Error> {
             allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             let svg = read_input_string(input.as_deref())?;
             let converter =
                 build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
-            let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality))?;
+            let jpeg_data = tokio::task::spawn_blocking(move || {
+                converter.svg_to_jpeg(&svg, scale, Some(quality))
+            })
+            .await??;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
         }
         Svg2pdf {
@@ -937,10 +964,12 @@ async fn main() -> Result<(), anyhow::Error> {
             allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
+            register_fontsource_fonts(&fontsource_families).await?;
             let svg = read_input_string(input.as_deref())?;
             let converter =
                 build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url)?;
-            let pdf_data = converter.svg_to_pdf(&svg)?;
+            let pdf_data =
+                tokio::task::spawn_blocking(move || converter.svg_to_pdf(&svg)).await??;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
         }
         LsThemes => list_themes().await?,
@@ -953,6 +982,13 @@ async fn main() -> Result<(), anyhow::Error> {
 fn register_font_dir(dir: Option<String>) -> Result<(), anyhow::Error> {
     if let Some(dir) = dir {
         register_font_directory(&dir)?
+    }
+    Ok(())
+}
+
+async fn register_fontsource_fonts(fonts: &[String]) -> Result<(), anyhow::Error> {
+    for family in fonts {
+        register_fontsource_font(family, None).await?;
     }
     Ok(())
 }
@@ -1290,6 +1326,7 @@ async fn vl_2_vg(
                 allowed_base_urls: None,
                 format_locale: None,
                 time_format_locale: None,
+                fontsource_fonts: None,
             },
         )
         .await
@@ -1346,6 +1383,7 @@ async fn vg_2_svg(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
+                fontsource_fonts: None,
             },
         )
         .await
@@ -1394,6 +1432,7 @@ async fn vg_2_png(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
+                fontsource_fonts: None,
             },
             Some(scale),
             Some(ppi),
@@ -1444,6 +1483,7 @@ async fn vg_2_jpeg(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
+                fontsource_fonts: None,
             },
             Some(scale),
             Some(quality),
@@ -1491,6 +1531,7 @@ async fn vg_2_pdf(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
+                fontsource_fonts: None,
             },
         )
         .await
@@ -1551,6 +1592,7 @@ async fn vl_2_svg(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
+                fontsource_fonts: None,
             },
         )
         .await
@@ -1613,6 +1655,7 @@ async fn vl_2_png(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
+                fontsource_fonts: None,
             },
             Some(scale),
             Some(ppi),
@@ -1677,6 +1720,7 @@ async fn vl_2_jpeg(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
+                fontsource_fonts: None,
             },
             Some(scale),
             Some(quality),
@@ -1739,6 +1783,7 @@ async fn vl_2_pdf(
                 allowed_base_urls,
                 format_locale,
                 time_format_locale,
+                fontsource_fonts: None,
             },
         )
         .await

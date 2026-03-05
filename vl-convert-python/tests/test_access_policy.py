@@ -186,7 +186,7 @@ def make_vegalite_data_url_spec(url: str) -> dict:
 
 @pytest.fixture(autouse=True)
 def reset_converter_config():
-    vlc.configure_converter(
+    vlc.configure(
         num_workers=1,
         allow_http_access=True,
         filesystem_root=None,
@@ -195,7 +195,7 @@ def reset_converter_config():
     try:
         yield
     finally:
-        vlc.configure_converter(
+        vlc.configure(
             num_workers=1,
             allow_http_access=True,
             filesystem_root=None,
@@ -204,7 +204,7 @@ def reset_converter_config():
 
 
 def test_sync_denied_http_and_filesystem_access(tmp_path: Path):
-    vlc.configure_converter(allow_http_access=False)
+    vlc.configure(allow_http_access=False)
 
     with pytest.raises(PermissionError):
         vlc.vega_to_svg(make_vega_data_url_spec("https://example.com/data.csv"))
@@ -214,7 +214,7 @@ def test_sync_denied_http_and_filesystem_access(tmp_path: Path):
     outside_csv = tmp_path / "outside.csv"
     outside_csv.write_text("a,b\n1,2\n", encoding="utf8")
 
-    vlc.configure_converter(
+    vlc.configure(
         allow_http_access=False,
         filesystem_root=str(root),
     )
@@ -227,7 +227,7 @@ def test_sync_denied_http_and_filesystem_access(tmp_path: Path):
 
 
 def test_sync_svg_helpers_raise_permission_error(tmp_path: Path):
-    vlc.configure_converter(allow_http_access=False)
+    vlc.configure(allow_http_access=False)
     http_svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">'
         '<image href="https://example.com/image.png" width="1" height="1"/>'
@@ -252,7 +252,7 @@ def test_sync_filesystem_root_allows_under_root(tmp_path: Path):
     root.mkdir()
     (root / "table.csv").write_text("a,b\n1,2\n", encoding="utf8")
 
-    vlc.configure_converter(allow_http_access=False, filesystem_root=str(root))
+    vlc.configure(allow_http_access=False, filesystem_root=str(root))
     svg = vlc.vegalite_to_svg(
         make_vegalite_data_url_spec("table.csv"),
         vl_version="v5_16",
@@ -271,7 +271,7 @@ def test_sync_redirect_to_disallowed_url_raises_permission_error():
                 )
             }
         ) as allowed_base:
-            vlc.configure_converter(
+            vlc.configure(
                 allow_http_access=True,
                 allowed_base_urls=[allowed_base],
             )
@@ -283,7 +283,7 @@ def test_sync_per_request_allowlist_override_for_svg_rasterization():
     with run_test_http_server(
         {"/image.png": _route(200, PNG_1X1, {"Content-Type": "image/png"})}
     ) as base_url:
-        vlc.configure_converter(
+        vlc.configure(
             allow_http_access=True,
             allowed_base_urls=["https://blocked.example/"],
         )
@@ -296,7 +296,7 @@ def test_sync_per_request_allowlist_override_for_svg_rasterization():
 
 
 def test_sync_data_uri_pass_through_when_http_disabled():
-    vlc.configure_converter(allow_http_access=False)
+    vlc.configure(allow_http_access=False)
 
     svg = vlc.vega_to_svg(make_vega_data_url_spec("data:text/csv,a,b%0A1,2"))
     assert "<svg" in svg
@@ -313,7 +313,7 @@ def test_sync_data_uri_pass_through_when_http_disabled():
 
 def test_asyncio_denied_access_raises_permission_error(tmp_path: Path):
     async def scenario():
-        await vlca.configure_converter(allow_http_access=False)
+        await vlca.configure(allow_http_access=False)
 
         with pytest.raises(PermissionError):
             await vlca.vega_to_svg(make_vega_data_url_spec("https://example.com/data.csv"))
@@ -323,7 +323,7 @@ def test_asyncio_denied_access_raises_permission_error(tmp_path: Path):
         outside_csv = tmp_path / "outside.csv"
         outside_csv.write_text("a,b\n1,2\n", encoding="utf8")
 
-        await vlca.configure_converter(
+        await vlca.configure(
             allow_http_access=False,
             filesystem_root=str(root),
         )
@@ -334,7 +334,7 @@ def test_asyncio_denied_access_raises_permission_error(tmp_path: Path):
                 vl_version="v5_16",
             )
 
-        await vlca.configure_converter(allow_http_access=False)
+        await vlca.configure(allow_http_access=False)
 
         http_svg = (
             '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">'

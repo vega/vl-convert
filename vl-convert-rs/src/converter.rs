@@ -42,8 +42,14 @@ use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::text::{FONT_CONFIG, FONT_CONFIG_VERSION, USVG_OPTIONS};
+use crate::text::{
+    build_usvg_options_with_fontdb, get_font_baseline_snapshot, FONTSOURCE_CLIENT,
+    FONT_CONFIG_VERSION, USVG_OPTIONS,
+};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use vl_convert_fontsource::{
+    FontsourceDatabaseExt, LoadedFontBatch, RegisteredFontBatch, VariantRequest,
+};
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
 // Canvas 2D ops are now in the separate vl_convert_canvas2d extension from vl-convert-canvas2d-deno
@@ -74,7 +80,7 @@ struct WorkerPool {
 }
 
 const VEGAEMBED_GLOBAL_SNIPPET: &str =
-    "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite;";
+    "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite; window.lodashDebounce=lodashDebounce;";
 pub const ACCESS_DENIED_MARKER: &str = "VLC_ACCESS_DENIED";
 
 impl WorkerPool {
@@ -178,6 +184,7 @@ fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyEr
         bail!("num_workers must be >= 1");
     }
     ensure_v8_platform_initialized();
+    let initial_font_baseline = get_font_baseline_snapshot()?;
 
     let total_queue_capacity = worker_queue_capacity(num_workers);
     let per_worker_queue_capacity = (total_queue_capacity / num_workers).max(1);
@@ -190,6 +197,7 @@ fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyEr
         senders.push(tx);
         let (startup_tx, startup_rx) = std::sync::mpsc::channel::<Result<(), String>>();
         let worker_config = config.clone();
+        let worker_font_baseline = initial_font_baseline.clone();
         let handle = thread::spawn(move || {
             let runtime = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -203,16 +211,17 @@ fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyEr
             };
             let local = tokio::task::LocalSet::new();
             local.block_on(&runtime, async move {
-                let mut inner = match InnerVlConverter::try_new(worker_config).await {
-                    Ok(inner) => {
-                        let _ = startup_tx.send(Ok(()));
-                        inner
-                    }
-                    Err(err) => {
-                        let _ = startup_tx.send(Err(err.to_string()));
-                        return;
-                    }
-                };
+                let mut inner =
+                    match InnerVlConverter::try_new(worker_config, worker_font_baseline).await {
+                        Ok(inner) => {
+                            let _ = startup_tx.send(Ok(()));
+                            inner
+                        }
+                        Err(err) => {
+                            let _ = startup_tx.send(Err(err.to_string()));
+                            return;
+                        }
+                    };
 
                 while let Some(queued_cmd) = rx.recv().await {
                     // Keep the ticket alive for the full loop iteration so outstanding
@@ -463,11 +472,18 @@ impl Default for VlConverterConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FontsourceFontRequest {
+    pub family: String,
+    pub variants: Option<Vec<VariantRequest>>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct VgOpts {
     pub allowed_base_urls: Option<Vec<String>>,
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
+    pub fontsource_fonts: Option<Vec<FontsourceFontRequest>>,
 }
 
 impl VgOpts {
@@ -573,6 +589,7 @@ pub struct VlOpts {
     pub allowed_base_urls: Option<Vec<String>>,
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
+    pub fontsource_fonts: Option<Vec<FontsourceFontRequest>>,
 }
 
 impl VlOpts {
@@ -783,35 +800,89 @@ fn op_set_msgpack_result(
     Ok(())
 }
 
+struct WorkerFontState {
+    db: fontdb::Database,
+    baseline_version: u64,
+    shared_config_epoch: u64,
+    hinting_enabled: bool,
+    overlay_registrations: Vec<RegisteredFontBatch>,
+}
+
+impl WorkerFontState {
+    fn from_baseline(snapshot: &crate::text::FontBaselineSnapshot) -> Self {
+        Self {
+            db: snapshot.clone_fontdb(),
+            baseline_version: snapshot.version(),
+            shared_config_epoch: snapshot.version(),
+            hinting_enabled: snapshot.hinting_enabled(),
+            overlay_registrations: Vec::new(),
+        }
+    }
+}
+
 /// Struct that interacts directly with the Deno JavaScript runtime. Not Sendable
 struct InnerVlConverter {
     worker: MainWorker,
     transfer_state: WorkerTransferStateHandle,
     initialized_vl_versions: HashSet<VlVersion>,
     vega_initialized: bool,
-    font_config_version: u64,
+    font_state: WorkerFontState,
+    usvg_options: usvg::Options<'static>,
     config: Arc<VlConverterConfig>,
 }
 
 impl InnerVlConverter {
-    /// Refresh the SharedFontConfig in OpState if fonts have been registered
-    /// since the worker was created (or since the last refresh).
+    fn publish_worker_font_state_to_opstate(&mut self) {
+        self.font_state.shared_config_epoch = self.font_state.shared_config_epoch.wrapping_add(1);
+        let resolved = vl_convert_canvas2d::ResolvedFontConfig::from_parts(
+            self.font_state.db.clone(),
+            self.font_state.hinting_enabled,
+        );
+        let shared_config = vl_convert_canvas2d_deno::SharedFontConfig::new(
+            resolved,
+            self.font_state.shared_config_epoch,
+        );
+        self.usvg_options.fontdb = Arc::new(self.font_state.db.clone());
+        self.worker
+            .js_runtime
+            .op_state()
+            .borrow_mut()
+            .put(shared_config);
+    }
+
     fn refresh_font_config_if_needed(&mut self) -> Result<(), AnyError> {
         let current = FONT_CONFIG_VERSION.load(Ordering::Acquire);
-        if current != self.font_config_version {
-            let font_config = FONT_CONFIG
-                .lock()
-                .map_err(|e| anyhow!("Failed to acquire FONT_CONFIG lock: {}", e))?;
-            let resolved = font_config.resolve();
-            let shared_config = vl_convert_canvas2d_deno::SharedFontConfig::new(resolved, current);
-            self.worker
-                .js_runtime
-                .op_state()
-                .borrow_mut()
-                .put(shared_config);
-            self.font_config_version = current;
+        if current != self.font_state.baseline_version {
+            let snapshot = get_font_baseline_snapshot()?;
+            self.font_state = WorkerFontState::from_baseline(&snapshot);
+            self.publish_worker_font_state_to_opstate();
         }
         Ok(())
+    }
+
+    fn apply_fontsource_font_overlay(&mut self, batches: Vec<LoadedFontBatch>) {
+        if batches.is_empty() {
+            return;
+        }
+        debug_assert!(
+            self.font_state.overlay_registrations.is_empty(),
+            "overlay registrations should be empty before applying a new request overlay"
+        );
+        for batch in batches {
+            let registration = self.font_state.db.register_fontsource_batch(batch);
+            self.font_state.overlay_registrations.push(registration);
+        }
+        self.publish_worker_font_state_to_opstate();
+    }
+
+    fn clear_fontsource_font_overlay(&mut self) {
+        if self.font_state.overlay_registrations.is_empty() {
+            return;
+        }
+        for registration in self.font_state.overlay_registrations.drain(..) {
+            self.font_state.db.unregister_fontsource_batch(registration);
+        }
+        self.publish_worker_font_state_to_opstate();
     }
 
     async fn init_vega(&mut self) -> Result<(), AnyError> {
@@ -1350,7 +1421,10 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         Ok(())
     }
 
-    pub async fn try_new(config: Arc<VlConverterConfig>) -> Result<Self, AnyError> {
+    pub async fn try_new(
+        config: Arc<VlConverterConfig>,
+        initial_font_baseline: crate::text::FontBaselineSnapshot,
+    ) -> Result<Self, AnyError> {
         // MainWorker's deno_tls extension panics without a global crypto provider
         let _ =
             deno_runtime::deno_tls::rustls::crypto::aws_lc_rs::default_provider().install_default();
@@ -1412,26 +1486,25 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
             .borrow_mut()
             .put(transfer_state.clone());
 
-        // Add shared font config to OpState so canvas contexts use the same fonts as SVG rendering.
-        // We resolve the FontConfig into a fontdb once here; each canvas context then clones
-        // the cached database instead of re-scanning system fonts.
-        let initial_font_version = FONT_CONFIG_VERSION.load(Ordering::Acquire);
-        {
-            let font_config = FONT_CONFIG
-                .lock()
-                .map_err(|e| anyhow!("Failed to acquire FONT_CONFIG lock: {}", e))?;
-            let resolved = font_config.resolve();
-            let shared_config =
-                vl_convert_canvas2d_deno::SharedFontConfig::new(resolved, initial_font_version);
-            worker.js_runtime.op_state().borrow_mut().put(shared_config);
-        }
+        let mut font_state = WorkerFontState::from_baseline(&initial_font_baseline);
+        font_state.shared_config_epoch = font_state.baseline_version;
+        let resolved = vl_convert_canvas2d::ResolvedFontConfig::from_parts(
+            font_state.db.clone(),
+            font_state.hinting_enabled,
+        );
+        let shared_config = vl_convert_canvas2d_deno::SharedFontConfig::new(
+            resolved,
+            font_state.shared_config_epoch,
+        );
+        worker.js_runtime.op_state().borrow_mut().put(shared_config);
 
         let this = Self {
             worker,
             transfer_state,
             initialized_vl_versions: Default::default(),
             vega_initialized: false,
-            font_config_version: initial_font_version,
+            usvg_options: build_usvg_options_with_fontdb(font_state.db.clone()),
+            font_state,
             config,
         };
 
@@ -2037,7 +2110,128 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(png_data)
     }
 
+    fn parse_svg_with_worker_options(
+        &mut self,
+        svg: &str,
+        policy: &ImageAccessPolicy,
+    ) -> Result<usvg::Tree, AnyError> {
+        parse_svg_with_options(svg, policy, &mut self.usvg_options)
+    }
+
+    fn svg_to_png_with_worker_options(
+        &mut self,
+        svg: &str,
+        scale: f32,
+        ppi: Option<f32>,
+        policy: &ImageAccessPolicy,
+    ) -> Result<Vec<u8>, AnyError> {
+        let ppi = ppi.unwrap_or(72.0);
+        let scale = scale * ppi / 72.0;
+        let tree = self.parse_svg_with_worker_options(svg, policy)?;
+
+        let mut pixmap = tiny_skia::Pixmap::new(
+            (tree.size().width() * scale) as u32,
+            (tree.size().height() * scale) as u32,
+        )
+        .ok_or_else(|| anyhow!("Failed to allocate pixmap for SVG render"))?;
+
+        let transform = tiny_skia::Transform::from_scale(scale, scale);
+        render(&tree, transform, &mut pixmap.as_mut());
+        encode_png(pixmap, ppi)
+    }
+
+    fn svg_to_jpeg_with_worker_options(
+        &mut self,
+        svg: &str,
+        scale: f32,
+        quality: Option<u8>,
+        policy: &ImageAccessPolicy,
+    ) -> Result<Vec<u8>, AnyError> {
+        let png_bytes = self.svg_to_png_with_worker_options(svg, scale, None, policy)?;
+        let img = ImageReader::new(Cursor::new(png_bytes))
+            .with_guessed_format()?
+            .decode()?;
+
+        let quality = quality.unwrap_or(90);
+        if quality > 100 {
+            bail!(
+                "JPEG quality parameter must be between 0 and 100 inclusive. Received: {quality}"
+            );
+        }
+
+        let mut jpeg_bytes: Vec<u8> = Vec::new();
+        let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_bytes, quality);
+        encoder.encode_image(&img)?;
+        Ok(jpeg_bytes)
+    }
+
+    fn svg_to_pdf_with_worker_options(
+        &mut self,
+        svg: &str,
+        policy: &ImageAccessPolicy,
+    ) -> Result<Vec<u8>, AnyError> {
+        let tree = self.parse_svg_with_worker_options(svg, policy)?;
+        let pdf = svg2pdf::to_pdf(&tree, ConversionOptions::default(), PageOptions::default());
+        pdf.map_err(|err| anyhow!("Failed to convert SVG to PDF: {}", err))
+    }
+
+    pub async fn vega_to_jpeg(
+        &mut self,
+        vg_spec: ValueOrString,
+        vg_opts: VgOpts,
+        scale: f32,
+        quality: Option<u8>,
+        policy: ImageAccessPolicy,
+    ) -> Result<Vec<u8>, AnyError> {
+        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
+        self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &policy)
+    }
+
+    pub async fn vegalite_to_jpeg(
+        &mut self,
+        vl_spec: ValueOrString,
+        vl_opts: VlOpts,
+        scale: f32,
+        quality: Option<u8>,
+        policy: ImageAccessPolicy,
+    ) -> Result<Vec<u8>, AnyError> {
+        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
+        self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &policy)
+    }
+
+    pub async fn vega_to_pdf(
+        &mut self,
+        vg_spec: ValueOrString,
+        vg_opts: VgOpts,
+        policy: ImageAccessPolicy,
+    ) -> Result<Vec<u8>, AnyError> {
+        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
+        self.svg_to_pdf_with_worker_options(&svg, &policy)
+    }
+
+    pub async fn vegalite_to_pdf(
+        &mut self,
+        vl_spec: ValueOrString,
+        vl_opts: VlOpts,
+        policy: ImageAccessPolicy,
+    ) -> Result<Vec<u8>, AnyError> {
+        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
+        self.svg_to_pdf_with_worker_options(&svg, &policy)
+    }
+
     async fn handle_command(&mut self, cmd: VlConvertCommand) {
+        // Apply a fontsource font overlay, execute `$work`, then clear the overlay.
+        macro_rules! with_font_overlay {
+            ($self:expr, $batches:expr, $work:expr) => {{
+                if !$batches.is_empty() {
+                    $self.apply_fontsource_font_overlay($batches);
+                }
+                let result = $work;
+                $self.clear_fontsource_font_overlay();
+                result
+            }};
+        }
+
         match cmd {
             VlConvertCommand::VlToVg {
                 vl_spec,
@@ -2050,76 +2244,208 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::VgToSvg {
                 vg_spec,
                 vg_opts,
+                fontsource_font_batches,
                 responder,
             } => {
-                let svg_result = self.vega_to_svg(vg_spec, vg_opts).await;
-                responder.send(svg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vega_to_svg(vg_spec, vg_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VgToSg {
                 vg_spec,
                 vg_opts,
+                fontsource_font_batches,
                 responder,
             } => {
-                let sg_result = self.vega_to_scenegraph(vg_spec, vg_opts).await;
-                responder.send(sg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vega_to_scenegraph(vg_spec, vg_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
                 vg_opts,
+                fontsource_font_batches,
                 responder,
             } => {
-                let sg_result = self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await;
-                responder.send(sg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToSvg {
                 vl_spec,
                 vl_opts,
+                fontsource_font_batches,
                 responder,
             } => {
-                let svg_result = self.vegalite_to_svg(vl_spec, vl_opts).await;
-                responder.send(svg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vegalite_to_svg(vl_spec, vl_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToSg {
                 vl_spec,
                 vl_opts,
+                fontsource_font_batches,
                 responder,
             } => {
-                let sg_result = self.vegalite_to_scenegraph(vl_spec, vl_opts).await;
-                responder.send(sg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vegalite_to_scenegraph(vl_spec, vl_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToSgMsgpack {
                 vl_spec,
                 vl_opts,
+                fontsource_font_batches,
                 responder,
             } => {
-                let sg_result = self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await;
-                responder.send(sg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VgToPng {
                 vg_spec,
                 vg_opts,
+                fontsource_font_batches,
                 scale,
                 ppi,
                 responder,
             } => {
-                let png_result = match vg_spec.to_value() {
-                    Ok(v) => self.vega_to_png(&v, vg_opts, scale, ppi).await,
-                    Err(e) => Err(e),
-                };
-                responder.send(png_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    match vg_spec.to_value() {
+                        Ok(v) => self.vega_to_png(&v, vg_opts, scale, ppi).await,
+                        Err(e) => Err(e),
+                    }
+                );
+                responder.send(result).ok();
+            }
+            VlConvertCommand::VgToJpeg {
+                vg_spec,
+                vg_opts,
+                fontsource_font_batches,
+                scale,
+                quality,
+                image_policy,
+                responder,
+            } => {
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
+                        .await
+                );
+                responder.send(result).ok();
+            }
+            VlConvertCommand::VgToPdf {
+                vg_spec,
+                vg_opts,
+                fontsource_font_batches,
+                image_policy,
+                responder,
+            } => {
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vega_to_pdf(vg_spec, vg_opts, image_policy).await
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::VlToPng {
                 vl_spec,
                 vl_opts,
+                fontsource_font_batches,
                 scale,
                 ppi,
                 responder,
             } => {
-                let png_result = match vl_spec.to_value() {
-                    Ok(v) => self.vegalite_to_png(&v, vl_opts, scale, ppi).await,
-                    Err(e) => Err(e),
-                };
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    match vl_spec.to_value() {
+                        Ok(v) => self.vegalite_to_png(&v, vl_opts, scale, ppi).await,
+                        Err(e) => Err(e),
+                    }
+                );
+                responder.send(result).ok();
+            }
+            VlConvertCommand::VlToJpeg {
+                vl_spec,
+                vl_opts,
+                fontsource_font_batches,
+                scale,
+                quality,
+                image_policy,
+                responder,
+            } => {
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
+                        .await
+                );
+                responder.send(result).ok();
+            }
+            VlConvertCommand::VlToPdf {
+                vl_spec,
+                vl_opts,
+                fontsource_font_batches,
+                image_policy,
+                responder,
+            } => {
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
+                );
+                responder.send(result).ok();
+            }
+            VlConvertCommand::SvgToPng {
+                svg,
+                scale,
+                ppi,
+                image_policy,
+                responder,
+            } => {
+                let png_result =
+                    self.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy);
                 responder.send(png_result).ok();
+            }
+            VlConvertCommand::SvgToJpeg {
+                svg,
+                scale,
+                quality,
+                image_policy,
+                responder,
+            } => {
+                let jpeg_result =
+                    self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy);
+                responder.send(jpeg_result).ok();
+            }
+            VlConvertCommand::SvgToPdf {
+                svg,
+                image_policy,
+                responder,
+            } => {
+                let pdf_result = self.svg_to_pdf_with_worker_options(&svg, &image_policy);
+                responder.send(pdf_result).ok();
             }
             VlConvertCommand::GetLocalTz { responder } => {
                 let local_tz = self.get_local_tz().await;
@@ -2158,45 +2484,104 @@ pub enum VlConvertCommand {
     VgToSvg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VgToSg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToSgMsgpack {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSvg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VlToSg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToPng {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         ppi: f32,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    VgToJpeg {
+        vg_spec: ValueOrString,
+        vg_opts: VgOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
+        scale: f32,
+        quality: Option<u8>,
+        image_policy: ImageAccessPolicy,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    VgToPdf {
+        vg_spec: ValueOrString,
+        vg_opts: VgOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
+        image_policy: ImageAccessPolicy,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToPng {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         ppi: f32,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    VlToJpeg {
+        vl_spec: ValueOrString,
+        vl_opts: VlOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
+        scale: f32,
+        quality: Option<u8>,
+        image_policy: ImageAccessPolicy,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    VlToPdf {
+        vl_spec: ValueOrString,
+        vl_opts: VlOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
+        image_policy: ImageAccessPolicy,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSgMsgpack {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    SvgToPng {
+        svg: String,
+        scale: f32,
+        ppi: Option<f32>,
+        image_policy: ImageAccessPolicy,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    SvgToJpeg {
+        svg: String,
+        scale: f32,
+        quality: Option<u8>,
+        image_policy: ImageAccessPolicy,
+        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    SvgToPdf {
+        svg: String,
+        image_policy: ImageAccessPolicy,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     GetLocalTz {
@@ -2244,10 +2629,31 @@ impl VlConvertCommand {
             Self::VgToPng { responder, .. } => {
                 responder.send(Err(err)).ok();
             }
+            Self::VgToJpeg { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
+            Self::VgToPdf { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
             Self::VlToPng { responder, .. } => {
                 responder.send(Err(err)).ok();
             }
+            Self::VlToJpeg { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
+            Self::VlToPdf { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
             Self::GetLocalTz { responder } => {
+                responder.send(Err(err)).ok();
+            }
+            Self::SvgToPng { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
+            Self::SvgToJpeg { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
+            Self::SvgToPdf { responder, .. } => {
                 responder.send(Err(err)).ok();
             }
             Self::GetThemes { responder } => {
@@ -2436,6 +2842,79 @@ impl VlConverter {
         }
     }
 
+    fn request_font_key(request: &FontsourceFontRequest) -> String {
+        let mut key = request.family.trim().to_lowercase();
+        key.push('|');
+        match &request.variants {
+            None => key.push_str("all"),
+            Some(variants) => {
+                let mut pairs: Vec<(u16, &'static str)> = variants
+                    .iter()
+                    .map(|variant| {
+                        let style = match variant.style {
+                            vl_convert_fontsource::FontStyle::Normal => "normal",
+                            vl_convert_fontsource::FontStyle::Italic => "italic",
+                        };
+                        (variant.weight, style)
+                    })
+                    .collect();
+                pairs.sort_unstable();
+                for (idx, (weight, style)) in pairs.iter().enumerate() {
+                    if idx > 0 {
+                        key.push(',');
+                    }
+                    key.push_str(&format!("{weight}:{style}"));
+                }
+            }
+        }
+        key
+    }
+
+    async fn resolve_fontsource_fonts(
+        &self,
+        request_fonts: Option<Vec<FontsourceFontRequest>>,
+    ) -> Result<Vec<LoadedFontBatch>, AnyError> {
+        let Some(request_fonts) = request_fonts else {
+            return Ok(Vec::new());
+        };
+        if request_fonts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut unique: HashMap<String, FontsourceFontRequest> = HashMap::new();
+        for request in request_fonts {
+            let key = Self::request_font_key(&request);
+            unique.entry(key).or_insert(request);
+        }
+
+        let mut batches = Vec::new();
+        for request in unique.into_values() {
+            let batch = FONTSOURCE_CLIENT
+                .load(&request.family, request.variants.as_deref())
+                .await
+                .map_err(|err| {
+                    anyhow!(
+                        "Failed to load request font '{}' from Fontsource: {err}",
+                        request.family
+                    )
+                })?;
+            batches.push(batch);
+        }
+        Ok(batches)
+    }
+
+    fn request_blocking<R>(
+        &self,
+        make_cmd: impl FnOnce(oneshot::Sender<Result<R, AnyError>>) -> VlConvertCommand,
+        request_name: &str,
+    ) -> Result<R, AnyError> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|err| anyhow!("Failed to construct blocking runtime: {err}"))?;
+        runtime.block_on(self.request(make_cmd, request_name))
+    }
+
     pub async fn vegalite_to_vega(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -2460,11 +2939,15 @@ impl VlConverter {
     ) -> Result<String, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
+            .await?;
         let vg_spec = vg_spec.into();
         self.request(
             move |responder| VlConvertCommand::VgToSvg {
                 vg_spec,
                 vg_opts,
+                fontsource_font_batches,
                 responder,
             },
             "Vega to SVG conversion",
@@ -2479,11 +2962,15 @@ impl VlConverter {
     ) -> Result<serde_json::Value, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
+            .await?;
         let vg_spec = vg_spec.into();
         self.request(
             move |responder| VlConvertCommand::VgToSg {
                 vg_spec,
                 vg_opts,
+                fontsource_font_batches,
                 responder,
             },
             "Vega to Scenegraph conversion",
@@ -2498,11 +2985,15 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
+            .await?;
         let vg_spec = vg_spec.into();
         self.request(
             move |responder| VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
                 vg_opts,
+                fontsource_font_batches,
                 responder,
             },
             "Vega to Scenegraph conversion",
@@ -2517,11 +3008,15 @@ impl VlConverter {
     ) -> Result<String, AnyError> {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
+            .await?;
         let vl_spec = vl_spec.into();
         self.request(
             move |responder| VlConvertCommand::VlToSvg {
                 vl_spec,
                 vl_opts,
+                fontsource_font_batches,
                 responder,
             },
             "Vega-Lite to SVG conversion",
@@ -2536,11 +3031,15 @@ impl VlConverter {
     ) -> Result<serde_json::Value, AnyError> {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
+            .await?;
         let vl_spec = vl_spec.into();
         self.request(
             move |responder| VlConvertCommand::VlToSg {
                 vl_spec,
                 vl_opts,
+                fontsource_font_batches,
                 responder,
             },
             "Vega-Lite to Scenegraph conversion",
@@ -2555,11 +3054,15 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
+            .await?;
         let vl_spec = vl_spec.into();
         self.request(
             move |responder| VlConvertCommand::VlToSgMsgpack {
                 vl_spec,
                 vl_opts,
+                fontsource_font_batches,
                 responder,
             },
             "Vega-Lite to Scenegraph conversion",
@@ -2576,6 +3079,9 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
+            .await?;
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
@@ -2585,6 +3091,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToPng {
                 vg_spec,
                 vg_opts,
+                fontsource_font_batches,
                 scale: effective_scale,
                 ppi,
                 responder,
@@ -2603,6 +3110,9 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
+            .await?;
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
@@ -2612,6 +3122,7 @@ impl VlConverter {
             move |responder| VlConvertCommand::VlToPng {
                 vl_spec,
                 vl_opts,
+                fontsource_font_batches,
                 scale: effective_scale,
                 ppi,
                 responder,
@@ -2631,11 +3142,26 @@ impl VlConverter {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
+            .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vg_opts.allowed_base_urls = effective_allowed_base_urls;
-        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        svg_to_jpeg_with_policy(&svg, scale, quality, &image_policy)
+        let vg_spec = vg_spec.into();
+        self.request(
+            move |responder| VlConvertCommand::VgToJpeg {
+                vg_spec,
+                vg_opts,
+                fontsource_font_batches,
+                scale,
+                quality,
+                image_policy,
+                responder,
+            },
+            "Vega to JPEG conversion",
+        )
+        .await
     }
 
     pub async fn vegalite_to_jpeg(
@@ -2648,11 +3174,26 @@ impl VlConverter {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
+            .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vl_opts.allowed_base_urls = effective_allowed_base_urls;
-        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        svg_to_jpeg_with_policy(&svg, scale, quality, &image_policy)
+        let vl_spec = vl_spec.into();
+        self.request(
+            move |responder| VlConvertCommand::VlToJpeg {
+                vl_spec,
+                vl_opts,
+                fontsource_font_batches,
+                scale,
+                quality,
+                image_policy,
+                responder,
+            },
+            "Vega-Lite to JPEG conversion",
+        )
+        .await
     }
 
     pub async fn vega_to_pdf(
@@ -2662,11 +3203,24 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
+            .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vg_opts.allowed_base_urls = effective_allowed_base_urls;
-        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        svg_to_pdf_with_policy(&svg, &image_policy)
+        let vg_spec = vg_spec.into();
+        self.request(
+            move |responder| VlConvertCommand::VgToPdf {
+                vg_spec,
+                vg_opts,
+                fontsource_font_batches,
+                image_policy,
+                responder,
+            },
+            "Vega to PDF conversion",
+        )
+        .await
     }
 
     pub async fn vegalite_to_pdf(
@@ -2676,15 +3230,39 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
+        let fontsource_font_batches = self
+            .resolve_fontsource_fonts(vl_opts.fontsource_fonts.take())
+            .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vl_opts.allowed_base_urls = effective_allowed_base_urls;
-        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        svg_to_pdf_with_policy(&svg, &image_policy)
+        let vl_spec = vl_spec.into();
+        self.request(
+            move |responder| VlConvertCommand::VlToPdf {
+                vl_spec,
+                vl_opts,
+                fontsource_font_batches,
+                image_policy,
+                responder,
+            },
+            "Vega-Lite to PDF conversion",
+        )
+        .await
     }
 
     pub fn svg_to_png(&self, svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
-        svg_to_png_with_policy(svg, scale, ppi, &self.image_access_policy())
+        let image_policy = self.image_access_policy();
+        let svg = svg.to_string();
+        self.request_blocking(
+            move |responder| VlConvertCommand::SvgToPng {
+                svg,
+                scale,
+                ppi,
+                image_policy,
+                responder,
+            },
+            "SVG to PNG conversion",
+        )
     }
 
     pub fn svg_to_jpeg(
@@ -2693,11 +3271,31 @@ impl VlConverter {
         scale: f32,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
-        svg_to_jpeg_with_policy(svg, scale, quality, &self.image_access_policy())
+        let image_policy = self.image_access_policy();
+        let svg = svg.to_string();
+        self.request_blocking(
+            move |responder| VlConvertCommand::SvgToJpeg {
+                svg,
+                scale,
+                quality,
+                image_policy,
+                responder,
+            },
+            "SVG to JPEG conversion",
+        )
     }
 
     pub fn svg_to_pdf(&self, svg: &str) -> Result<Vec<u8>, AnyError> {
-        svg_to_pdf_with_policy(svg, &self.image_access_policy())
+        let image_policy = self.image_access_policy();
+        let svg = svg.to_string();
+        self.request_blocking(
+            move |responder| VlConvertCommand::SvgToPdf {
+                svg,
+                image_policy,
+                responder,
+            },
+            "SVG to PDF conversion",
+        )
     }
 
     pub async fn get_vegaembed_bundle(&self, vl_version: VlVersion) -> Result<String, AnyError> {
@@ -2985,14 +3583,21 @@ fn svg_to_pdf_with_policy(svg: &str, policy: &ImageAccessPolicy) -> Result<Vec<u
 
 /// Helper to parse svg string to usvg Tree with more helpful error messages
 fn parse_svg(svg: &str, policy: &ImageAccessPolicy) -> Result<usvg::Tree, AnyError> {
+    let mut opts = USVG_OPTIONS
+        .lock()
+        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
+    parse_svg_with_options(svg, policy, &mut opts)
+}
+
+fn parse_svg_with_options(
+    svg: &str,
+    policy: &ImageAccessPolicy,
+    opts: &mut usvg::Options<'static>,
+) -> Result<usvg::Tree, AnyError> {
     let xml_opt = usvg::roxmltree::ParsingOptions {
         allow_dtd: true,
         ..Default::default()
     };
-
-    let mut opts = USVG_OPTIONS
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
 
     let doc = usvg::roxmltree::Document::parse_with_options(svg, xml_opt)?;
 
@@ -3019,7 +3624,7 @@ fn parse_svg(svg: &str, policy: &ImageAccessPolicy) -> Result<usvg::Tree, AnyErr
     opts.resources_dir = policy.filesystem_root.clone();
     let (result, access_errors) =
         crate::image_loading::with_image_access_policy(policy.clone(), || {
-            usvg::Tree::from_xmltree(&doc, &opts)
+            usvg::Tree::from_xmltree(&doc, opts)
         });
     opts.resources_dir = previous_resources_dir;
 
@@ -3354,9 +3959,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_script_to_bytes_typed_array() {
-        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
-            .await
-            .unwrap();
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(VlConverterConfig::default()),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
         let bytes = ctx
             .execute_script_to_bytes("new Uint8Array([1, 2, 3])")
             .await
@@ -3366,9 +3974,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_canvas_png_and_image_data_are_typed_arrays() {
-        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
-            .await
-            .unwrap();
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(VlConverterConfig::default()),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
         let code = r#"
 const canvas = new HTMLCanvasElement(8, 8);
 const ctx2d = canvas.getContext('2d');
@@ -3414,9 +4025,12 @@ var __imageDataChecks = [
 
     #[tokio::test]
     async fn test_image_decode_and_load_events() {
-        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
-            .await
-            .unwrap();
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(VlConverterConfig::default()),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
         let image_url = serde_json::to_string(SVG_2X3_DATA_URL).unwrap();
         let code = format!(
             r#"
@@ -3463,9 +4077,12 @@ var __imageDecodeLoadResult = null;
 
     #[tokio::test]
     async fn test_image_decode_rejects_and_error_events_fire() {
-        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
-            .await
-            .unwrap();
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(VlConverterConfig::default()),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
         let marker = serde_json::to_string(ACCESS_DENIED_MARKER).unwrap();
         let code = format!(
             r#"
@@ -3542,9 +4159,12 @@ var __imageDecodeErrorResult = null;
 
     #[tokio::test]
     async fn test_image_decode_ignores_stale_src_results() {
-        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
-            .await
-            .unwrap();
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(VlConverterConfig::default()),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
         let code = format!(
             r#"
 var __imageRaceResult = null;
@@ -3636,9 +4256,12 @@ var __imageRaceResult = null;
 
     #[tokio::test]
     async fn test_polyfill_unsupported_methods_throw() {
-        let mut ctx = InnerVlConverter::try_new(std::sync::Arc::new(VlConverterConfig::default()))
-            .await
-            .unwrap();
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(VlConverterConfig::default()),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
         let code = r#"
 var __unsupportedMessages = [];
 

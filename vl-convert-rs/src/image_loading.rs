@@ -1,49 +1,42 @@
 use crate::converter::ACCESS_DENIED_MARKER;
-use backon::{ExponentialBuilder, Retryable};
+use backon::{BlockingRetryable, ExponentialBuilder};
 use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use deno_core::url::Url;
 use log::{error, info, warn};
-use reqwest::{header::CONTENT_TYPE, Client, StatusCode};
+use reqwest::header::CONTENT_TYPE;
+use reqwest::StatusCode;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::future::Future;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tokio::task;
 use usvg::{ImageHrefResolver, Options};
 
 static VL_CONVERT_USER_AGENT: &str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 lazy_static! {
-    static ref REQWEST_CLIENT_FOLLOW_REDIRECTS: Client = reqwest::ClientBuilder::new()
-        .user_agent(VL_CONVERT_USER_AGENT)
-        .build()
-        .expect("Failed to construct reqwest client");
-    static ref REQWEST_CLIENT_NO_REDIRECTS: Client = reqwest::ClientBuilder::new()
-        .user_agent(VL_CONVERT_USER_AGENT)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .expect("Failed to construct reqwest client");
+    static ref BLOCKING_CLIENT_FOLLOW_REDIRECTS: reqwest::blocking::Client =
+        reqwest::blocking::ClientBuilder::new()
+            .user_agent(VL_CONVERT_USER_AGENT)
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Failed to construct blocking reqwest client");
+    static ref BLOCKING_CLIENT_NO_REDIRECTS: reqwest::blocking::Client =
+        reqwest::blocking::ClientBuilder::new()
+            .user_agent(VL_CONVERT_USER_AGENT)
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .expect("Failed to construct blocking reqwest client");
 }
 
 thread_local! {
-    static IMAGE_TOKIO_RUNTIME: tokio::runtime::Runtime =
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to construct image loader runtime");
     static IMAGE_ACCESS_POLICY: RefCell<Option<ImageAccessPolicy>> = const { RefCell::new(None) };
     static IMAGE_ACCESS_ERRORS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
-}
-
-fn block_on_image_runtime<F>(future: F) -> F::Output
-where
-    F: Future,
-{
-    IMAGE_TOKIO_RUNTIME.with(|runtime| runtime.block_on(future))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -187,7 +180,7 @@ enum HttpFetchOutcome {
     Failed,
 }
 
-async fn fetch_http_with_policy(
+fn fetch_http_blocking(
     href: &str,
     allowed_base_urls: Option<&[String]>,
 ) -> Result<HttpFetchOutcome, reqwest::Error> {
@@ -199,11 +192,13 @@ async fn fetch_http_with_policy(
         }
     }
 
-    let response = if allowed_base_urls.is_some() {
-        REQWEST_CLIENT_NO_REDIRECTS.get(href).send().await?
+    let client = if allowed_base_urls.is_some() {
+        &*BLOCKING_CLIENT_NO_REDIRECTS
     } else {
-        REQWEST_CLIENT_FOLLOW_REDIRECTS.get(href).send().await?
+        &*BLOCKING_CLIENT_FOLLOW_REDIRECTS
     };
+
+    let response = client.get(href).send()?;
     let status = response.status();
     let content_type = response
         .headers()
@@ -220,7 +215,7 @@ async fn fetch_http_with_policy(
 
     match status {
         StatusCode::OK => {
-            let bytes = response.bytes().await?;
+            let bytes = response.bytes()?;
             Ok(HttpFetchOutcome::Success {
                 bytes: bytes.to_vec(),
                 content_type,
@@ -232,7 +227,7 @@ async fn fetch_http_with_policy(
         }
         s => {
             // Permanent HTTP error — log and short-circuit without retrying.
-            let body = match response.bytes().await {
+            let body = match response.bytes() {
                 Ok(bytes) => String::from_utf8_lossy(bytes.as_ref()).to_string(),
                 Err(_) => String::new(),
             };
@@ -277,37 +272,34 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
                 }
             }
 
-            // Download image to temporary file with reqwest, retrying on transient errors
+            // Download image using blocking reqwest on a dedicated thread to avoid
+            // interfering with the worker pool's single-threaded Tokio runtime.
             let allowed_base_urls = policy
                 .as_ref()
                 .and_then(|policy| policy.allowed_base_urls.as_deref());
-            let fetch_outcome = task::block_in_place(move || {
-                block_on_image_runtime(async {
-                    let result =
-                        (|| async { fetch_http_with_policy(href, allowed_base_urls).await })
-                            .retry(
-                                ExponentialBuilder::default()
-                                    .with_min_delay(Duration::from_millis(500))
-                                    .with_max_delay(Duration::from_secs(10))
-                                    .with_max_times(4),
-                            )
-                            .when(|e| {
-                                // Retry on network errors (no status) and transient HTTP errors.
-                                e.status()
-                                    .map(|s| {
-                                        s.is_server_error() || s == StatusCode::TOO_MANY_REQUESTS
-                                    })
-                                    .unwrap_or(true)
-                            })
-                            .notify(|err, dur| {
-                                warn!(
-                                    "Retrying image load from {} in {:.1}s: {}",
-                                    href,
-                                    dur.as_secs_f32(),
-                                    err
-                                );
-                            })
-                            .await;
+            let fetch_outcome = std::thread::scope(|s| {
+                s.spawn(move || {
+                    let result = (|| fetch_http_blocking(href, allowed_base_urls))
+                        .retry(
+                            ExponentialBuilder::default()
+                                .with_min_delay(Duration::from_millis(500))
+                                .with_max_delay(Duration::from_secs(10))
+                                .with_max_times(4),
+                        )
+                        .when(|e| {
+                            e.status()
+                                .map(|s| s.is_server_error() || s == StatusCode::TOO_MANY_REQUESTS)
+                                .unwrap_or(true)
+                        })
+                        .notify(|err, dur| {
+                            warn!(
+                                "Retrying image load from {} in {:.1}s: {}",
+                                href,
+                                dur.as_secs_f32(),
+                                err
+                            );
+                        })
+                        .call();
 
                     match result {
                         Ok(outcome) => outcome,
@@ -317,6 +309,8 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
                         }
                     }
                 })
+                .join()
+                .expect("Image fetch thread panicked")
             });
 
             let (bytes, content_type) = match fetch_outcome {
@@ -439,22 +433,5 @@ mod tests {
         assert_eq!(outer_errors, vec!["outer-error".to_string()]);
         assert_eq!(current_access_policy(), None);
         assert!(IMAGE_ACCESS_ERRORS.with(|slot| slot.borrow().is_empty()));
-    }
-
-    #[test]
-    fn block_on_image_runtime_supports_multiple_threads() {
-        let mut handles = Vec::new();
-        for _ in 0..4 {
-            handles.push(std::thread::spawn(|| {
-                for _ in 0..50 {
-                    let value = block_on_image_runtime(async { 42usize });
-                    assert_eq!(value, 42);
-                }
-            }));
-        }
-
-        for handle in handles {
-            handle.join().unwrap();
-        }
     }
 }

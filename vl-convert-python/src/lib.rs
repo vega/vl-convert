@@ -11,6 +11,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
+use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
     FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts,
     ACCESS_DENIED_MARKER,
@@ -21,7 +22,10 @@ use vl_convert_rs::module_loader::import_map::{
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
+use vl_convert_rs::text::register_fontsource_font as register_fontsource_font_rs;
+use vl_convert_rs::text::register_fontsource_font_blocking as register_fontsource_font_blocking_rs;
 use vl_convert_rs::VlConverter as VlConverterRs;
+use vl_convert_rs::{FontStyle, VariantRequest};
 
 #[macro_use]
 extern crate lazy_static;
@@ -59,6 +63,8 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .as_ref()
             .map(|root| root.to_string_lossy().to_string()),
         "allowed_base_urls": config.allowed_base_urls,
+        "fontsource_cache_dir": vl_convert_rs::fontsource_cache_dir()
+            .map(|p| p.to_string_lossy().into_owned()),
     })
 }
 
@@ -70,6 +76,7 @@ struct ConverterConfigOverrides {
     filesystem_root: Option<Option<PathBuf>>,
     // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
+    fontsource_cache_size_mb: Option<u64>,
 }
 
 fn parse_config_overrides(
@@ -82,14 +89,14 @@ fn parse_config_overrides(
 
     for (key, value) in kwargs.iter() {
         let key_str: String = key.extract().map_err(|err| {
-            vl_convert_rs::anyhow::anyhow!("configure_converter keyword parsing failed: {err}")
+            vl_convert_rs::anyhow::anyhow!("configure keyword parsing failed: {err}")
         })?;
         match key_str.as_str() {
             "num_workers" => {
                 if !value.is_none() {
                     overrides.num_workers = Some(value.extract::<usize>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
-                            "Invalid num_workers value for configure_converter: {err}"
+                            "Invalid num_workers value for configure: {err}"
                         )
                     })?);
                 }
@@ -98,7 +105,7 @@ fn parse_config_overrides(
                 if !value.is_none() {
                     overrides.allow_http_access = Some(value.extract::<bool>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
-                            "Invalid allow_http_access value for configure_converter: {err}"
+                            "Invalid allow_http_access value for configure: {err}"
                         )
                     })?);
                 }
@@ -110,7 +117,7 @@ fn parse_config_overrides(
                     overrides.filesystem_root = Some(Some(PathBuf::from(
                         value.extract::<String>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
-                                "Invalid filesystem_root value for configure_converter: {err}"
+                                "Invalid filesystem_root value for configure: {err}"
                             )
                         })?,
                     )));
@@ -123,14 +130,27 @@ fn parse_config_overrides(
                     overrides.allowed_base_urls =
                         Some(Some(value.extract::<Vec<String>>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
-                                "Invalid allowed_base_urls value for configure_converter: {err}"
+                                "Invalid allowed_base_urls value for configure: {err}"
                             )
                         })?));
                 }
             }
+            "fontsource_cache_size_mb" => {
+                if !value.is_none() {
+                    overrides.fontsource_cache_size_mb =
+                        Some(value.extract::<u64>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid fontsource_cache_size_mb value for configure: {err}"
+                            )
+                        })?);
+                }
+            }
+            // Read-only config fields returned by get_converter_config() are
+            // silently ignored so that `configure(**get_converter_config())` works.
+            "fontsource_cache_dir" => {}
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
-                    "Unknown configure_converter argument: {other}"
+                    "Unknown configure argument: {other}"
                 ));
             }
         }
@@ -151,6 +171,10 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     }
     if let Some(allowed_base_urls) = overrides.allowed_base_urls {
         config.allowed_base_urls = allowed_base_urls;
+    }
+    if let Some(mb) = overrides.fontsource_cache_size_mb {
+        let bytes = mb.saturating_mul(1024 * 1024);
+        configure_font_cache_rs(Some(bytes));
     }
 }
 
@@ -278,6 +302,7 @@ fn vegalite_to_vega(
         allowed_base_urls: None,
         format_locale: None,
         time_format_locale: None,
+        fontsource_fonts: None,
     };
 
     let vega_spec = match run_converter_future(move |converter| async move {
@@ -324,6 +349,7 @@ fn vega_to_svg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     let svg = match run_converter_future(move |converter| async move {
@@ -362,6 +388,7 @@ fn vega_to_scenegraph(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     match format {
@@ -442,6 +469,7 @@ fn vegalite_to_svg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     let svg = match run_converter_future(move |converter| async move {
@@ -503,6 +531,7 @@ fn vegalite_to_scenegraph(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     match format {
@@ -568,6 +597,7 @@ fn vega_to_png(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     let png_data = match run_converter_future(move |converter| async move {
@@ -634,6 +664,7 @@ fn vegalite_to_png(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     let png_data = match run_converter_future(move |converter| async move {
@@ -682,6 +713,7 @@ fn vega_to_jpeg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     let jpeg_data = match run_converter_future(move |converter| async move {
@@ -750,6 +782,7 @@ fn vegalite_to_jpeg(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     let jpeg_data = match run_converter_future(move |converter| async move {
@@ -800,6 +833,7 @@ fn vega_to_pdf(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     let pdf_bytes = match run_converter_future(move |converter| async move {
@@ -862,6 +896,7 @@ fn vegalite_to_pdf(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     let pdf_data = match run_converter_future(move |converter| async move {
@@ -960,6 +995,7 @@ fn vegalite_to_html(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future(move |converter| async move {
@@ -1000,6 +1036,7 @@ fn vega_to_html(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
     run_converter_future(move |converter| async move {
         converter
@@ -1217,10 +1254,55 @@ fn register_font_directory(font_dir: &str) -> PyResult<()> {
     Ok(())
 }
 
+/// Parse Python variant tuples into VariantRequest vec.
+fn parse_variant_args(
+    variants: Option<Vec<(u16, String)>>,
+) -> PyResult<Option<Vec<VariantRequest>>> {
+    match variants {
+        None => Ok(None),
+        Some(tuples) => {
+            let mut requests = Vec::with_capacity(tuples.len());
+            for (weight, style_str) in tuples {
+                let style = match style_str.as_str() {
+                    "normal" => FontStyle::Normal,
+                    "italic" => FontStyle::Italic,
+                    other => {
+                        return Err(PyValueError::new_err(format!(
+                            "Invalid font style '{}'. Must be 'normal' or 'italic'",
+                            other
+                        )))
+                    }
+                };
+                requests.push(VariantRequest { weight, style });
+            }
+            Ok(Some(requests))
+        }
+    }
+}
+
+/// Downloads font files from the Fontsource catalog (which includes
+/// Google Fonts and other open-source fonts) and registers them for
+/// use in subsequent conversions.
+#[pyfunction]
+#[pyo3(signature = (font_family, variants=None))]
+fn register_fontsource_font(
+    font_family: &str,
+    variants: Option<Vec<(u16, String)>>,
+) -> PyResult<()> {
+    let font_family = font_family.to_string();
+    let variant_requests = parse_variant_args(variants)?;
+    Python::with_gil(|py| {
+        py.allow_threads(move || {
+            register_fontsource_font_blocking_rs(&font_family, variant_requests.as_deref())
+                .map_err(|err| PyValueError::new_err(format!("Failed to register font: {}", err)))
+        })
+    })
+}
+
 /// Configure converter options for subsequent requests
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn configure_converter(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
+fn configure(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
     let overrides = parse_config_overrides(kwargs)
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
     configure_converter_with_config_overrides(overrides)
@@ -1442,6 +1524,7 @@ fn vegalite_to_vega_asyncio<'py>(
         allowed_base_urls: None,
         format_locale: None,
         time_format_locale: None,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1473,6 +1556,7 @@ fn vega_to_svg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1504,6 +1588,7 @@ fn vega_to_scenegraph_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     match format {
@@ -1570,6 +1655,7 @@ fn vegalite_to_svg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1617,6 +1703,7 @@ fn vegalite_to_scenegraph_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     match format {
@@ -1673,6 +1760,7 @@ fn vega_to_png_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1718,6 +1806,7 @@ fn vegalite_to_png_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1753,6 +1842,7 @@ fn vega_to_jpeg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1802,6 +1892,7 @@ fn vegalite_to_jpeg_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1835,6 +1926,7 @@ fn vega_to_pdf_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1879,6 +1971,7 @@ fn vegalite_to_pdf_asyncio<'py>(
         allowed_base_urls,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -1962,6 +2055,7 @@ fn vegalite_to_html_asyncio<'py>(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -2000,6 +2094,7 @@ fn vega_to_html_asyncio<'py>(
         allowed_base_urls: None,
         format_locale,
         time_format_locale,
+        fontsource_fonts: None,
     };
 
     run_converter_future_async(
@@ -2104,10 +2199,28 @@ fn register_font_directory_asyncio<'py>(
     })
 }
 
-#[doc = async_variant_doc!("configure_converter")]
-#[pyfunction(name = "configure_converter")]
+#[doc = async_variant_doc!("register_fontsource_font")]
+#[pyfunction(name = "register_fontsource_font")]
+#[pyo3(signature = (font_family, variants=None))]
+fn register_fontsource_font_asyncio<'py>(
+    py: Python<'py>,
+    font_family: &str,
+    variants: Option<Vec<(u16, String)>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let font_family = font_family.to_string();
+    let variant_requests = parse_variant_args(variants)?;
+    future_into_py_object(py, async move {
+        register_fontsource_font_rs(&font_family, variant_requests.as_deref())
+            .await
+            .map_err(|err| PyValueError::new_err(format!("Failed to register font: {err}")))?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
+#[doc = async_variant_doc!("configure")]
+#[pyfunction(name = "configure")]
 #[pyo3(signature = (**kwargs))]
-fn configure_converter_asyncio<'py>(
+fn configure_asyncio<'py>(
     py: Python<'py>,
     kwargs: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -2350,7 +2463,11 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(svg_to_jpeg_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(configure_converter_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(
+        register_fontsource_font_asyncio,
+        &asyncio
+    )?)?;
+    asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_converter_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
@@ -2392,7 +2509,8 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
-    m.add_function(wrap_pyfunction!(configure_converter, m)?)?;
+    m.add_function(wrap_pyfunction!(register_fontsource_font, m)?)?;
+    m.add_function(wrap_pyfunction!(configure, m)?)?;
     m.add_function(wrap_pyfunction!(get_converter_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;

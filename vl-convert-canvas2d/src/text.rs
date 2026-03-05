@@ -127,6 +127,37 @@ pub fn get_family_with_fallback<'a>(
     }
 }
 
+/// Resolve the nearest available font weight for a given family using fontdb's
+/// CSS-style font matching.
+///
+/// cosmic-text requires an exact weight match when selecting fonts. If the requested
+/// weight isn't available (e.g., bold/700 requested but only regular/400 exists),
+/// cosmic-text falls back to a completely different font family instead of using
+/// the nearest weight. This function uses fontdb's `query` method — which implements
+/// the full CSS font matching algorithm including nearest-weight selection — to find
+/// the actual weight of the best-matching face.
+pub fn resolve_nearest_weight(
+    font_system: &FontSystem,
+    family: Family<'_>,
+    weight: Weight,
+    style: cosmic_text::Style,
+    stretch: cosmic_text::Stretch,
+) -> Weight {
+    let families = [family];
+    let query = fontdb::Query {
+        families: &families,
+        weight: fontdb::Weight(weight.0),
+        stretch,
+        style,
+    };
+    if let Some(id) = font_system.db().query(&query) {
+        if let Some(face) = font_system.db().face(id) {
+            return Weight(face.weight.0);
+        }
+    }
+    weight
+}
+
 /// Measure text using cosmic-text.
 pub fn measure_text(
     font_system: &mut FontSystem,
@@ -153,6 +184,16 @@ pub fn measure_text(
     // This handles cases like "bold 13px Matter SemiBold" where the CSS "bold" (700) should
     // be overridden by the actual font weight (600) from "Matter-SemiBold".
     let weight = resolution.weight_override.unwrap_or(font.weight);
+
+    // Resolve to the nearest available weight so cosmic-text (which requires exact matches)
+    // doesn't fall back to a completely different font family.
+    let weight = resolve_nearest_weight(
+        font_system,
+        resolution.family,
+        weight,
+        font.style,
+        font.stretch.into(),
+    );
 
     let attrs = Attrs::new()
         .family(resolution.family)
