@@ -42,9 +42,7 @@ use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::extract::{
-    extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus,
-};
+use crate::extract::{extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus};
 use crate::text::{
     build_usvg_options_with_fontdb, get_font_baseline_snapshot, register_fontsource_font,
     FONTSOURCE_CLIENT, FONT_CONFIG_VERSION, USVG_OPTIONS,
@@ -2864,9 +2862,7 @@ async fn preprocess_fonts(
                 Ok(_batch) => {}
                 Err(e) => {
                     if missing_fonts == MissingFontsPolicy::Error {
-                        return Err(anyhow!(
-                            "auto_fontsource: failed to download '{name}': {e}"
-                        ));
+                        return Err(anyhow!("auto_fontsource: failed to download '{name}': {e}"));
                     } else if missing_fonts == MissingFontsPolicy::Warn {
                         log::warn!("auto_fontsource: failed to install '{name}': {e}");
                     }

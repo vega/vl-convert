@@ -978,8 +978,13 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             register_fontsource_fonts(&fontsource_families).await?;
             let svg = read_input_string(input.as_deref())?;
-            let converter =
-                build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url, auto_fontsource, missing_fonts)?;
+            let converter = build_converter(
+                allow_http_access,
+                filesystem_root.clone(),
+                allowed_base_url,
+                auto_fontsource,
+                missing_fonts,
+            )?;
             let png_data =
                 tokio::task::spawn_blocking(move || converter.svg_to_png(&svg, scale, Some(ppi)))
                     .await??;
@@ -996,8 +1001,13 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             register_fontsource_fonts(&fontsource_families).await?;
             let svg = read_input_string(input.as_deref())?;
-            let converter =
-                build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url, auto_fontsource, missing_fonts)?;
+            let converter = build_converter(
+                allow_http_access,
+                filesystem_root.clone(),
+                allowed_base_url,
+                auto_fontsource,
+                missing_fonts,
+            )?;
             let jpeg_data = tokio::task::spawn_blocking(move || {
                 converter.svg_to_jpeg(&svg, scale, Some(quality))
             })
@@ -1013,8 +1023,13 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             register_fontsource_fonts(&fontsource_families).await?;
             let svg = read_input_string(input.as_deref())?;
-            let converter =
-                build_converter(allow_http_access, filesystem_root.clone(), allowed_base_url, auto_fontsource, missing_fonts)?;
+            let converter = build_converter(
+                allow_http_access,
+                filesystem_root.clone(),
+                allowed_base_url,
+                auto_fontsource,
+                missing_fonts,
+            )?;
             let pdf_data =
                 tokio::task::spawn_blocking(move || converter.svg_to_pdf(&svg)).await??;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
@@ -1365,7 +1380,13 @@ async fn vl_2_vg(
     let config = read_config_json(config)?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_fontsource, missing_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_fontsource,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let vega_json = match converter
@@ -1428,7 +1449,13 @@ async fn vg_2_svg(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_fontsource, missing_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_fontsource,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let svg = match converter
@@ -1479,7 +1506,13 @@ async fn vg_2_png(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_fontsource, missing_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_fontsource,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let png_data = match converter
@@ -1532,7 +1565,13 @@ async fn vg_2_jpeg(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_fontsource, missing_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_fontsource,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let jpeg_data = match converter
@@ -1582,7 +1621,13 @@ async fn vg_2_pdf(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_fontsource, missing_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_fontsource,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let pdf_data = match converter
@@ -1641,7 +1686,13 @@ async fn vl_2_svg(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_fontsource, missing_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_fontsource,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let svg = match converter
@@ -1706,7 +1757,13 @@ async fn vl_2_png(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_fontsource, missing_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_fontsource,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let png_data = match converter
@@ -1773,7 +1830,13 @@ async fn vl_2_jpeg(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_fontsource, missing_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_fontsource,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let jpeg_data = match converter
@@ -1838,7 +1901,13 @@ async fn vl_2_pdf(
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     // Initialize converter
-    let converter = build_converter(allow_http_access, filesystem_root, None, auto_fontsource, missing_fonts)?;
+    let converter = build_converter(
+        allow_http_access,
+        filesystem_root,
+        None,
+        auto_fontsource,
+        missing_fonts,
+    )?;
 
     // Perform conversion
     let pdf_data = match converter
