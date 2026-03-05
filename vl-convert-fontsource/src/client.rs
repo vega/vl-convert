@@ -155,6 +155,40 @@ impl FontsourceClient {
         ))
     }
 
+    /// Check whether a font exists on Fontsource without downloading blobs (async).
+    ///
+    /// Returns `Ok(true)` if the font metadata was successfully fetched (from
+    /// cache or API), `Ok(false)` if the API returned 404, and `Err` for
+    /// transient/network errors.
+    pub async fn is_known_font(&self, font_id: &str) -> Result<bool, FontsourceError> {
+        if self.try_read_cached_metadata(font_id).is_some() {
+            return Ok(true);
+        }
+        match self.fetch_metadata_async(font_id).await {
+            Ok(metadata) => {
+                self.cache_metadata(font_id, &metadata)?;
+                Ok(true)
+            }
+            Err(FontsourceError::FontNotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Check whether a font exists on Fontsource without downloading blobs (blocking).
+    pub fn is_known_font_blocking(&self, font_id: &str) -> Result<bool, FontsourceError> {
+        if self.try_read_cached_metadata(font_id).is_some() {
+            return Ok(true);
+        }
+        match self.fetch_metadata_blocking(font_id) {
+            Ok(metadata) => {
+                self.cache_metadata(font_id, &metadata)?;
+                Ok(true)
+            }
+            Err(FontsourceError::FontNotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Validate load arguments and return the normalized font ID.
     fn validate_load_request(
         family: &str,
