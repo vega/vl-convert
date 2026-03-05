@@ -145,6 +145,9 @@ fn parse_config_overrides(
                         })?);
                 }
             }
+            // Read-only config fields returned by get_converter_config() are
+            // silently ignored so that `configure(**get_converter_config())` works.
+            "fontsource_cache_dir" => {}
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
                     "Unknown configure argument: {other}"
