@@ -2,11 +2,8 @@ use crate::error::FontsourceError;
 use crate::types::FontsourceFont;
 use filetime::FileTime;
 use fs4::fs_std::FileExt;
-use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-
-const BLOB_EXTENSION: &str = "blob";
 
 pub(crate) fn read_metadata(font_id: &str, metadata_cache_dir: &Path) -> Option<FontsourceFont> {
     let path = metadata_cache_dir.join(format!("{font_id}.json"));
@@ -39,26 +36,30 @@ pub(crate) fn write_metadata_if_absent(
     atomic_write_bytes(&path, &data)
 }
 
-/// Stable blob key derived from URL bytes as lowercase SHA-256 hex.
+/// Human-readable blob key derived from the URL path.
+///
+/// Given `https://cdn.jsdelivr.net/fontsource/fonts/bangers@latest/latin-400-normal.ttf`,
+/// returns `bangers-latest--latin-400-normal.ttf`.
+///
+/// Falls back to sanitizing the full URL if the `fontsource/fonts/` segment is absent.
 pub(crate) fn blob_key(url: &str) -> String {
-    let digest = Sha256::digest(url.as_bytes());
-    let mut out = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        use std::fmt::Write as _;
-        let _ = write!(&mut out, "{byte:02x}");
-    }
-    out
+    let raw = if let Some(idx) = url.find("fontsource/fonts/") {
+        &url[idx + "fontsource/fonts/".len()..]
+    } else {
+        url
+    };
+    raw.replace('@', "-").replace('/', "--")
 }
 
-fn blob_path_from_key(key: &str, blob_cache_dir: &Path) -> PathBuf {
-    blob_cache_dir.join(format!("{key}.{BLOB_EXTENSION}"))
+fn blob_path(url: &str, blob_cache_dir: &Path) -> PathBuf {
+    blob_cache_dir.join(blob_key(url))
 }
 
 pub(crate) fn read_blob(
     url: &str,
     blob_cache_dir: &Path,
 ) -> Result<Option<Vec<u8>>, FontsourceError> {
-    let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
+    let path = blob_path(url, blob_cache_dir);
     match std::fs::read(&path) {
         Ok(bytes) => {
             if has_ttf_magic_bytes(&bytes) {
@@ -91,7 +92,7 @@ pub(crate) fn write_blob_if_absent(
     blob_cache_dir: &Path,
     bytes: &[u8],
 ) -> Result<(), FontsourceError> {
-    let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
+    let path = blob_path(url, blob_cache_dir);
     // If a corrupt path exists as a non-file (e.g. directory), clear it and
     // treat this write as filling a miss.
     if let Ok(meta) = std::fs::symlink_metadata(&path) {
@@ -103,7 +104,7 @@ pub(crate) fn write_blob_if_absent(
 }
 
 pub(crate) fn touch_blob(url: &str, blob_cache_dir: &Path) -> Result<(), FontsourceError> {
-    let path = blob_path_from_key(&blob_key(url), blob_cache_dir);
+    let path = blob_path(url, blob_cache_dir);
     match filetime::set_file_mtime(&path, FileTime::now()) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -116,7 +117,7 @@ fn is_blob_file(path: &Path) -> bool {
         && path
             .extension()
             .and_then(|e| e.to_str())
-            .map(|e| e.eq_ignore_ascii_case(BLOB_EXTENSION))
+            .map(|e| e.eq_ignore_ascii_case("ttf"))
             .unwrap_or(false)
 }
 
@@ -307,12 +308,17 @@ mod tests {
     }
 
     #[test]
+    fn test_blob_key_human_readable() {
+        let key = blob_key(
+            "https://cdn.jsdelivr.net/fontsource/fonts/bangers@latest/latin-400-normal.ttf",
+        );
+        assert_eq!(key, "bangers-latest--latin-400-normal.ttf");
+    }
+
+    #[test]
     fn test_blob_key_deterministic() {
-        let key1 = blob_key("https://cdn.example/fonts/latin-400-normal.ttf");
-        let key2 = blob_key("https://cdn.example/fonts/latin-400-normal.ttf");
-        assert_eq!(key1, key2);
-        assert_eq!(key1.len(), 64);
-        assert!(key1.chars().all(|c| c.is_ascii_hexdigit()));
+        let url = "https://cdn.jsdelivr.net/fontsource/fonts/bangers@latest/latin-400-normal.ttf";
+        assert_eq!(blob_key(url), blob_key(url));
     }
 
     /// Fake TTF bytes with a valid TrueType magic header.
@@ -325,7 +331,7 @@ mod tests {
     #[test]
     fn test_read_write_blob_roundtrip() {
         let tmp = tempfile::tempdir().unwrap();
-        let url = "https://cdn.example/fonts/latin-400-normal.ttf";
+        let url = "https://cdn.example/fontsource/fonts/test@latest/latin-400-normal.ttf";
         let data = fake_ttf(b"font data");
 
         assert!(read_blob(url, tmp.path()).unwrap().is_none());
@@ -339,7 +345,7 @@ mod tests {
     #[test]
     fn test_write_blob_no_overwrite() {
         let tmp = tempfile::tempdir().unwrap();
-        let url = "https://cdn.example/fonts/latin-400-normal.ttf";
+        let url = "https://cdn.example/fontsource/fonts/test@latest/latin-400-normal.ttf";
         let first = fake_ttf(b"first");
         let second = fake_ttf(b"second");
 
@@ -353,9 +359,8 @@ mod tests {
     #[test]
     fn test_read_blob_bad_magic_bytes_treated_as_miss_and_cleaned() {
         let tmp = tempfile::tempdir().unwrap();
-        let url = "https://cdn.example/fonts/latin-400-normal.ttf";
-        let key = blob_key(url);
-        let path = tmp.path().join(format!("{key}.{BLOB_EXTENSION}"));
+        let url = "https://cdn.example/fontsource/fonts/test@latest/latin-400-normal.ttf";
+        let path = tmp.path().join(blob_key(url));
 
         std::fs::write(&path, b"not a font file").unwrap();
         assert!(read_blob(url, tmp.path()).unwrap().is_none());
@@ -365,9 +370,8 @@ mod tests {
     #[test]
     fn test_read_blob_corrupt_directory_treated_as_miss_and_cleaned() {
         let tmp = tempfile::tempdir().unwrap();
-        let url = "https://cdn.example/fonts/latin-400-normal.ttf";
-        let key = blob_key(url);
-        let path = tmp.path().join(format!("{key}.{BLOB_EXTENSION}"));
+        let url = "https://cdn.example/fontsource/fonts/test@latest/latin-400-normal.ttf";
+        let path = tmp.path().join(blob_key(url));
 
         std::fs::create_dir_all(&path).unwrap();
         assert!(read_blob(url, tmp.path()).unwrap().is_none());

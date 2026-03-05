@@ -655,7 +655,7 @@ fn test_eviction_keeps_current_font() {
                 .path()
                 .extension()
                 .and_then(|ext| ext.to_str())
-                .map(|ext| ext.eq_ignore_ascii_case("blob"))
+                .map(|ext| ext.eq_ignore_ascii_case("ttf"))
                 .unwrap_or(false)
         })
         .count();
@@ -703,7 +703,7 @@ fn test_corrupt_blob_fallbacks_to_network() {
         .filter(|path| {
             path.extension()
                 .and_then(|ext| ext.to_str())
-                .map(|ext| ext.eq_ignore_ascii_case("blob"))
+                .map(|ext| ext.eq_ignore_ascii_case("ttf"))
                 .unwrap_or(false)
         })
         .collect();

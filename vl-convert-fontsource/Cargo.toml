@@ -20,7 +20,6 @@ fs4 = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10"
 thiserror = "2"
 tinyvec = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["sync", "fs", "rt-multi-thread"] }
