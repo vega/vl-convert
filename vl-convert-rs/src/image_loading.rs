@@ -1,9 +1,11 @@
 use crate::converter::ACCESS_DENIED_MARKER;
+use backon::{BlockingRetryable, ExponentialBuilder};
 use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use deno_core::url::Url;
 use log::{error, info, warn};
 use reqwest::header::CONTENT_TYPE;
+use reqwest::StatusCode;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::io::Write;
@@ -178,12 +180,15 @@ enum HttpFetchOutcome {
     Failed,
 }
 
-fn fetch_http_blocking(href: &str, allowed_base_urls: Option<&[String]>) -> HttpFetchOutcome {
+fn fetch_http_blocking(
+    href: &str,
+    allowed_base_urls: Option<&[String]>,
+) -> Result<HttpFetchOutcome, reqwest::Error> {
     if let Some(allowed_base_urls) = allowed_base_urls {
         if !is_url_allowed(href, allowed_base_urls) {
-            return HttpFetchOutcome::AccessDenied {
+            return Ok(HttpFetchOutcome::AccessDenied {
                 message: access_denied_message(format!("External data url not allowed: {href}")),
-            };
+            });
         }
     }
 
@@ -193,102 +198,46 @@ fn fetch_http_blocking(href: &str, allowed_base_urls: Option<&[String]>) -> Http
         &*BLOCKING_CLIENT_FOLLOW_REDIRECTS
     };
 
-    // Retry with exponential backoff on transient errors
-    let mut delay = Duration::from_millis(500);
-    let max_delay = Duration::from_secs(10);
-    let max_retries = 4;
+    let response = client.get(href).send()?;
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|h| h.to_str().ok().map(|c| c.to_string()));
 
-    for attempt in 0..=max_retries {
-        let response = match client.get(href).send() {
-            Ok(resp) => resp,
-            Err(e) => {
-                if attempt < max_retries {
-                    warn!(
-                        "Retrying image load from {} in {:.1}s (attempt {}/{}): {}",
-                        href,
-                        delay.as_secs_f32(),
-                        attempt + 1,
-                        max_retries,
-                        e
-                    );
-                    std::thread::sleep(delay);
-                    delay = (delay * 2).min(max_delay);
-                    continue;
-                }
-                error!("Failed to load image from url {}: {}", href, e);
-                return HttpFetchOutcome::Failed;
-            }
-        };
-
-        let status = response.status();
-        let content_type = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|h| h.to_str().ok().map(|c| c.to_string()));
-
-        if allowed_base_urls.is_some() && status.is_redirection() {
-            return HttpFetchOutcome::AccessDenied {
-                message: access_denied_message(format!(
-                    "Redirected HTTP URLs are not allowed when allowed_base_urls is configured: {href}"
-                )),
-            };
-        }
-
-        if status == reqwest::StatusCode::OK {
-            match response.bytes() {
-                Ok(bytes) => {
-                    return HttpFetchOutcome::Success {
-                        bytes: bytes.to_vec(),
-                        content_type,
-                    };
-                }
-                Err(e) => {
-                    if attempt < max_retries {
-                        warn!(
-                            "Retrying image load from {} in {:.1}s: {}",
-                            href,
-                            delay.as_secs_f32(),
-                            e
-                        );
-                        std::thread::sleep(delay);
-                        delay = (delay * 2).min(max_delay);
-                        continue;
-                    }
-                    error!("Failed to read image bytes from url {}: {}", href, e);
-                    return HttpFetchOutcome::Failed;
-                }
-            }
-        }
-
-        if (status.is_server_error() || status == reqwest::StatusCode::TOO_MANY_REQUESTS)
-            && attempt < max_retries
-        {
-            warn!(
-                "Retrying image load from {} in {:.1}s (status {}): attempt {}/{}",
-                href,
-                delay.as_secs_f32(),
-                status,
-                attempt + 1,
-                max_retries,
-            );
-            std::thread::sleep(delay);
-            delay = (delay * 2).min(max_delay);
-            continue;
-        }
-
-        // Permanent HTTP error
-        let body = match response.bytes() {
-            Ok(bytes) => String::from_utf8_lossy(bytes.as_ref()).to_string(),
-            Err(_) => String::new(),
-        };
-        error!(
-            "Failed to load image from url {} with status code {:?}\n{}",
-            href, status, body
-        );
-        return HttpFetchOutcome::Failed;
+    if allowed_base_urls.is_some() && status.is_redirection() {
+        return Ok(HttpFetchOutcome::AccessDenied {
+            message: access_denied_message(format!(
+                "Redirected HTTP URLs are not allowed when allowed_base_urls is configured: {href}"
+            )),
+        });
     }
 
-    HttpFetchOutcome::Failed
+    match status {
+        StatusCode::OK => {
+            let bytes = response.bytes()?;
+            Ok(HttpFetchOutcome::Success {
+                bytes: bytes.to_vec(),
+                content_type,
+            })
+        }
+        s if s.is_server_error() || s == StatusCode::TOO_MANY_REQUESTS => {
+            // Transient HTTP error — signal for retry.
+            Err(response.error_for_status().unwrap_err())
+        }
+        s => {
+            // Permanent HTTP error — log and short-circuit without retrying.
+            let body = match response.bytes() {
+                Ok(bytes) => String::from_utf8_lossy(bytes.as_ref()).to_string(),
+                Err(_) => String::new(),
+            };
+            error!(
+                "Failed to load image from url {} with status code {:?}\n{}",
+                href, s, body
+            );
+            Ok(HttpFetchOutcome::Failed)
+        }
+    }
 }
 
 /// Custom image url string resolver that handles downloading remote files
@@ -329,9 +278,39 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
                 .as_ref()
                 .and_then(|policy| policy.allowed_base_urls.as_deref());
             let fetch_outcome = std::thread::scope(|s| {
-                s.spawn(move || fetch_http_blocking(href, allowed_base_urls))
-                    .join()
-                    .expect("Image fetch thread panicked")
+                s.spawn(move || {
+                    let result = (|| fetch_http_blocking(href, allowed_base_urls))
+                        .retry(
+                            ExponentialBuilder::default()
+                                .with_min_delay(Duration::from_millis(500))
+                                .with_max_delay(Duration::from_secs(10))
+                                .with_max_times(4),
+                        )
+                        .when(|e| {
+                            e.status()
+                                .map(|s| s.is_server_error() || s == StatusCode::TOO_MANY_REQUESTS)
+                                .unwrap_or(true)
+                        })
+                        .notify(|err, dur| {
+                            warn!(
+                                "Retrying image load from {} in {:.1}s: {}",
+                                href,
+                                dur.as_secs_f32(),
+                                err
+                            );
+                        })
+                        .call();
+
+                    match result {
+                        Ok(outcome) => outcome,
+                        Err(e) => {
+                            error!("Failed to load image from url {}: {}", href, e);
+                            HttpFetchOutcome::Failed
+                        }
+                    }
+                })
+                .join()
+                .expect("Image fetch thread panicked")
             });
 
             let (bytes, content_type) = match fetch_outcome {
