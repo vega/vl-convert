@@ -50,15 +50,24 @@ impl ClientConfig {
     }
 }
 
+/// Returns the resolved fontsource cache directory, or `None` if caching is disabled.
+///
+/// Resolution order:
+/// 1. `VL_CONVERT_FONT_CACHE_DIR` env var set to `"none"` → `None`
+/// 2. `VL_CONVERT_FONT_CACHE_DIR` env var set to a path → `Some(path)`
+/// 3. OS cache dir fallback → `Some(<cache_dir>/vl-convert/fontsource)`
+pub fn fontsource_cache_dir() -> Option<PathBuf> {
+    match std::env::var(ENV_FONT_CACHE_DIR) {
+        Ok(val) if val.eq_ignore_ascii_case("none") => None,
+        Ok(val) => Some(PathBuf::from(val)),
+        Err(_) => dirs::cache_dir().map(|base| base.join("vl-convert").join("fontsource")),
+    }
+}
+
 impl Default for ClientConfig {
     fn default() -> Self {
-        let cache_dir = match std::env::var(ENV_FONT_CACHE_DIR) {
-            Ok(val) if val.eq_ignore_ascii_case("none") => None,
-            Ok(val) => Some(PathBuf::from(val)),
-            Err(_) => dirs::cache_dir().map(|base| base.join("vl-convert").join("fontsource")),
-        };
         Self {
-            cache_dir,
+            cache_dir: fontsource_cache_dir(),
             max_blob_cache_bytes: DEFAULT_MAX_BLOB_CACHE_BYTES,
             max_parallel_downloads: DEFAULT_MAX_PARALLEL_DOWNLOADS,
             request_timeout_secs: DEFAULT_TIMEOUT_SECS,

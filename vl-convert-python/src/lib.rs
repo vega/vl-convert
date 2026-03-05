@@ -63,6 +63,8 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .as_ref()
             .map(|root| root.to_string_lossy().to_string()),
         "allowed_base_urls": config.allowed_base_urls,
+        "fontsource_cache_dir": vl_convert_rs::fontsource_cache_dir()
+            .map(|p| p.to_string_lossy().into_owned()),
     })
 }
 

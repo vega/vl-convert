@@ -133,6 +133,7 @@ if TYPE_CHECKING:
         allow_http_access: bool
         filesystem_root: str | None
         allowed_base_urls: list[str] | None
+        fontsource_cache_dir: str | None
 
 __all__ = [
     "asyncio",

@@ -5,7 +5,7 @@ pub mod error;
 mod resolve;
 pub mod types;
 pub use client::FontsourceClient;
-pub use config::ClientConfig;
+pub use config::{fontsource_cache_dir, ClientConfig};
 pub use error::FontsourceError;
 
 #[cfg(feature = "fontdb")]
