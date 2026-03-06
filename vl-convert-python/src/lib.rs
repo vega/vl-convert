@@ -2532,6 +2532,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    pyo3_log::init();
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;
