@@ -1,5 +1,6 @@
 use serde_json::Value;
 use std::collections::HashSet;
+use usvg::roxmltree;
 
 /// Metadata for a font that should be loaded via CDN in HTML output.
 #[derive(Debug, Clone)]
@@ -78,6 +79,92 @@ pub fn parse_css_font_family(s: &str) -> Vec<FontFamilyEntry> {
             }
         })
         .collect()
+}
+
+/// Extract all font-family CSS strings from an SVG document.
+///
+/// Parses the SVG as XML and collects `font-family` values from:
+/// - Direct `font-family` attributes on any element
+/// - `font-family:` declarations inside inline `style` attributes
+/// - `font-family:` declarations inside `<style>` element text
+///
+/// Returns an empty set on parse error (usvg will provide a better error later).
+pub fn extract_fonts_from_svg(svg: &str) -> HashSet<String> {
+    let xml_opt = roxmltree::ParsingOptions {
+        allow_dtd: true,
+        ..Default::default()
+    };
+
+    let doc = match roxmltree::Document::parse_with_options(svg, xml_opt) {
+        Ok(doc) => doc,
+        Err(_) => return HashSet::new(),
+    };
+
+    let mut fonts = HashSet::new();
+
+    for node in doc.descendants() {
+        if node.is_element() {
+            // Direct font-family attribute
+            if let Some(ff) = node.attribute("font-family") {
+                fonts.insert(ff.to_string());
+            }
+
+            // Inline style attribute: look for font-family declarations
+            if let Some(style) = node.attribute("style") {
+                extract_font_family_from_css_text(style, &mut fonts);
+            }
+        }
+
+        // <style> element text content
+        if node.is_element() && node.tag_name().name() == "style" {
+            if let Some(text_node) = node.first_child().filter(|c| c.is_text()) {
+                if let Some(text) = text_node.text() {
+                    extract_font_family_from_css_text(text, &mut fonts);
+                }
+            }
+        }
+    }
+
+    fonts
+}
+
+/// Extract `font-family` values from CSS text (inline style or style block).
+///
+/// Looks for `font-family:` followed by a value terminated by `;` or end of
+/// the relevant context. This is a naive parser sufficient for Vega-generated
+/// SVGs; it does not handle all CSS edge cases.
+fn extract_font_family_from_css_text(css: &str, fonts: &mut HashSet<String>) {
+    let lower = css.to_lowercase();
+    let mut search_from = 0;
+
+    while let Some(pos) = lower[search_from..].find("font-family") {
+        let abs_pos = search_from + pos;
+        let after_key = abs_pos + "font-family".len();
+
+        // Skip whitespace and colon
+        let rest = &css[after_key..];
+        let rest = rest.trim_start();
+        let rest = match rest.strip_prefix(':') {
+            Some(r) => r.trim_start(),
+            None => {
+                search_from = after_key;
+                continue;
+            }
+        };
+
+        // Value ends at ';', '}', or end of string
+        let end = rest
+            .find([';', '}'])
+            .unwrap_or(rest.len());
+        let value = rest[..end].trim();
+
+        if !value.is_empty() {
+            fonts.insert(value.to_string());
+        }
+
+        search_from =
+            after_key + (rest.as_ptr() as usize - css[after_key..].as_ptr() as usize) + end;
+    }
 }
 
 /// Extract all font-family CSS strings from a compiled Vega specification.
@@ -1243,5 +1330,86 @@ mod tests {
                 name: "Pacifico".into()
             }
         );
+    }
+
+    #[test]
+    fn test_svg_font_family_attribute() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg">
+            <text font-family="Roboto, sans-serif">Hello</text>
+        </svg>"#;
+        let fonts = extract_fonts_from_svg(svg);
+        assert!(fonts.contains("Roboto, sans-serif"));
+        assert_eq!(fonts.len(), 1);
+    }
+
+    #[test]
+    fn test_svg_inline_style() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg">
+            <text style="font-family: Playfair Display; font-size: 14px;">Hello</text>
+        </svg>"#;
+        let fonts = extract_fonts_from_svg(svg);
+        assert!(fonts.contains("Playfair Display"));
+        assert_eq!(fonts.len(), 1);
+    }
+
+    #[test]
+    fn test_svg_style_block() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg">
+            <style>
+                .title { font-family: Montserrat, sans-serif; font-size: 16px; }
+                .label { font-family: Fira Code; }
+            </style>
+            <text class="title">Title</text>
+        </svg>"#;
+        let fonts = extract_fonts_from_svg(svg);
+        assert!(fonts.contains("Montserrat, sans-serif"));
+        assert!(fonts.contains("Fira Code"));
+        assert_eq!(fonts.len(), 2);
+    }
+
+    #[test]
+    fn test_svg_deduplication() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg">
+            <text font-family="Roboto">One</text>
+            <text font-family="Roboto">Two</text>
+        </svg>"#;
+        let fonts = extract_fonts_from_svg(svg);
+        assert!(fonts.contains("Roboto"));
+        assert_eq!(fonts.len(), 1);
+    }
+
+    #[test]
+    fn test_svg_empty() {
+        let fonts = extract_fonts_from_svg("");
+        assert!(fonts.is_empty());
+    }
+
+    #[test]
+    fn test_svg_invalid() {
+        let fonts = extract_fonts_from_svg("<not valid xml");
+        assert!(fonts.is_empty());
+    }
+
+    #[test]
+    fn test_svg_no_fonts() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="red"/>
+        </svg>"#;
+        let fonts = extract_fonts_from_svg(svg);
+        assert!(fonts.is_empty());
+    }
+
+    #[test]
+    fn test_svg_mixed_sources() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg">
+            <style>.cls { font-family: Lato; }</style>
+            <text font-family="Roboto">Attr</text>
+            <text style="font-family: Open Sans;">Inline</text>
+        </svg>"#;
+        let fonts = extract_fonts_from_svg(svg);
+        assert!(fonts.contains("Lato"));
+        assert!(fonts.contains("Roboto"));
+        assert!(fonts.contains("Open Sans"));
+        assert_eq!(fonts.len(), 3);
     }
 }
