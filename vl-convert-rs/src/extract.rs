@@ -178,7 +178,7 @@ pub fn extract_fonts_from_vega(spec: &Value) -> HashSet<String> {
 
 // ---- Config extraction ----------------------------------------------------
 
-/// Axis config key variants (per Vega's AxisConfigKeys type).
+/// Axis config key variants (matches Vega's AxisConfigKeys type).
 const AXIS_CONFIG_KEYS: &[&str] = &[
     "axis",
     "axisX",
@@ -188,10 +188,6 @@ const AXIS_CONFIG_KEYS: &[&str] = &[
     "axisLeft",
     "axisRight",
     "axisBand",
-    "axisDiscrete",
-    "axisPoint",
-    "axisQuantitative",
-    "axisTemporal",
 ];
 
 /// Vega mark types whose config can carry a `font` property.
@@ -226,20 +222,9 @@ fn extract_config_fonts(config: &Value, fonts: &mut HashSet<String>) {
         }
     }
 
-    // Top-level default font
-    collect_if_string(config, "font", fonts);
-
     // Mark default: config.mark.font
     if let Some(mark) = config.get("mark") {
         collect_if_string(mark, "font", fonts);
-    }
-
-    // Header variants
-    for &key in &["header", "headerColumn", "headerRow", "headerFacet"] {
-        if let Some(header) = config.get(key) {
-            collect_if_string(header, "labelFont", fonts);
-            collect_if_string(header, "titleFont", fonts);
-        }
     }
 
     // Named styles: config.style is an object { styleName: { font, ... } }
@@ -1243,21 +1228,6 @@ mod tests {
         assert_eq!(entries, vec![FontFamilyEntry::Generic("MONOSPACE".into())]);
     }
 
-    // -----------------------------------------------------------------------
-    // Missing config keys tests
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_extract_config_font_top_level() {
-        let spec = json!({
-            "config": {
-                "font": "Global Font"
-            }
-        });
-        let fonts = extract_fonts_from_vega(&spec);
-        assert!(fonts.contains("Global Font"));
-    }
-
     #[test]
     fn test_extract_config_mark_font() {
         let spec = json!({
@@ -1267,41 +1237,6 @@ mod tests {
         });
         let fonts = extract_fonts_from_vega(&spec);
         assert!(fonts.contains("Mark Default Font"));
-    }
-
-    #[test]
-    fn test_extract_config_header_fonts() {
-        let spec = json!({
-            "config": {
-                "header": { "labelFont": "Header Label", "titleFont": "Header Title" },
-                "headerColumn": { "labelFont": "ColHeader Label" },
-                "headerRow": { "titleFont": "RowHeader Title" },
-                "headerFacet": { "labelFont": "FacetHeader Label" }
-            }
-        });
-        let fonts = extract_fonts_from_vega(&spec);
-        assert!(fonts.contains("Header Label"));
-        assert!(fonts.contains("Header Title"));
-        assert!(fonts.contains("ColHeader Label"));
-        assert!(fonts.contains("RowHeader Title"));
-        assert!(fonts.contains("FacetHeader Label"));
-    }
-
-    #[test]
-    fn test_extract_config_axis_discrete_point_quantitative_temporal() {
-        let spec = json!({
-            "config": {
-                "axisDiscrete": { "labelFont": "Discrete Font" },
-                "axisPoint": { "titleFont": "Point Font" },
-                "axisQuantitative": { "labelFont": "Quant Font" },
-                "axisTemporal": { "titleFont": "Temporal Font" }
-            }
-        });
-        let fonts = extract_fonts_from_vega(&spec);
-        assert!(fonts.contains("Discrete Font"));
-        assert!(fonts.contains("Point Font"));
-        assert!(fonts.contains("Quant Font"));
-        assert!(fonts.contains("Temporal Font"));
     }
 
     // -----------------------------------------------------------------------
