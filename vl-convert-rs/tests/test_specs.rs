@@ -1079,3 +1079,28 @@ mod test_vega_label_transform {
     #[test]
     fn test_marker() {} // Help IDE detect test module
 }
+
+#[tokio::test]
+async fn test_svg_to_png_auto_fontsource() {
+    initialize();
+
+    let vl_version = VlVersion::v5_8;
+    let name = "svg_auto_fontsource";
+
+    // SVG that references a distinctive Fontsource-available font (Bangers)
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="250" height="60">
+  <rect width="250" height="60" fill="#f0f0f0"/>
+  <text x="10" y="40" font-family="Bangers" font-size="28" fill="#333">Hello Bangers</text>
+</svg>"##;
+
+    let converter = VlConverter::with_config(
+        vl_convert_rs::converter::VlConverterConfig {
+            auto_fontsource: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let png_data = converter.svg_to_png(svg, 2.0, None).await.unwrap();
+    check_png(name, vl_version, None, png_data.as_slice());
+}
