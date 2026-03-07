@@ -452,14 +452,19 @@ impl ValueOrString {
 }
 
 /// How to handle fonts referenced in a spec but not available on the system.
+///
+/// Only the **first** non-generic font in each CSS `font-family` string is
+/// checked (e.g. for `"Roboto, Arial, sans-serif"` only `Roboto` is examined).
+/// This matches Vega's rendering behavior, which tries the first font and falls
+/// back to system generics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MissingFontsPolicy {
-    /// Silently fall back to the default font (default behavior).
+    /// Silently fall back to the default font (no validation).
     #[default]
     Fallback,
-    /// Log a warning for each missing font but continue rendering.
+    /// Log a warning for each missing first-choice font but continue rendering.
     Warn,
-    /// Return an error if any referenced font is missing.
+    /// Return an error if any first-choice font is missing.
     Error,
 }
 
@@ -474,7 +479,7 @@ pub struct VlConverterConfig {
     pub allowed_base_urls: Option<Vec<String>>,
     /// Whether to auto-download missing fonts from the Fontsource catalog.
     pub auto_fontsource: bool,
-    /// How to handle missing fonts: silently fallback, warn, or error.
+    /// How to handle missing first-choice fonts: silently fallback, warn, or error.
     pub missing_fonts: MissingFontsPolicy,
 }
 
@@ -2725,8 +2730,10 @@ impl VlConvertCommand {
 /// Validate font availability and optionally auto-download missing fonts from
 /// the Fontsource catalog.
 ///
-/// Extracts font-family strings from the compiled Vega spec, classifies the
-/// first font in each string, and optionally downloads missing fonts.
+/// Extracts font-family strings from the compiled Vega spec and classifies the
+/// **first** non-generic font in each string (the rest of the CSS fallback
+/// chain is ignored). Missing fonts are downloaded, warned about, or treated
+/// as errors depending on the `auto_fontsource` and `missing_fonts` settings.
 async fn preprocess_fonts(
     vega_spec: &serde_json::Value,
     auto_fontsource: bool,
