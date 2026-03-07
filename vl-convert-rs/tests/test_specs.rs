@@ -1092,12 +1092,10 @@ async fn test_svg_to_png_auto_fontsource() {
   <text x="10" y="40" font-family="Bangers" font-size="28" fill="#333">Hello Bangers</text>
 </svg>"##;
 
-    let converter = VlConverter::with_config(
-        vl_convert_rs::converter::VlConverterConfig {
-            auto_fontsource: true,
-            ..Default::default()
-        },
-    )
+    let converter = VlConverter::with_config(vl_convert_rs::converter::VlConverterConfig {
+        auto_fontsource: true,
+        ..Default::default()
+    })
     .unwrap();
 
     let png_data = converter.svg_to_png(svg, 2.0, None).await.unwrap();
