@@ -417,10 +417,6 @@ pub fn is_available(name: &str, available: &HashSet<String>) -> bool {
     available.iter().any(|a| a.to_lowercase() == lower)
 }
 
-// ===========================================================================
-// Tests
-// ===========================================================================
-
 #[cfg(test)]
 mod tests {
     use super::*;
