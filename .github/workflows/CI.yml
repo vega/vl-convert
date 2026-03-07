@@ -17,7 +17,7 @@ jobs:
     outputs:
       v8-version: ${{ steps.v8-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Get V8 version from Cargo.lock
         id: v8-version
@@ -101,7 +101,7 @@ jobs:
     outputs:
       v8-version: ${{ steps.v8-version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Get V8 version from Cargo.lock
         id: v8-version
@@ -183,7 +183,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.47.0
@@ -197,7 +197,7 @@ jobs:
       RUSTFLAGS: "-D warnings"
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -221,7 +221,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.47.0
@@ -238,7 +238,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
@@ -363,7 +363,7 @@ jobs:
         if: runner.os == 'Windows'
         run: git config --system core.longpaths true
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
@@ -396,7 +396,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Set up Python
@@ -469,7 +469,7 @@ jobs:
         if: runner.os == 'Windows'
         run: git config --system core.longpaths true
       - name: Check out repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.47.0
@@ -497,7 +497,7 @@ jobs:
     needs: [build-v8-linux-aarch64]
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Get V8 version from Cargo.lock
         id: v8-version

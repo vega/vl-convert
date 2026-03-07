@@ -10,7 +10,7 @@ jobs:
   build-cli-linux-x86:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install protoc
@@ -37,7 +37,7 @@ jobs:
   build-cli-linux-aarch64:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install protoc
@@ -68,7 +68,7 @@ jobs:
     steps:
       - name: Enable long paths
         run: git config --system core.longpaths true
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install Protoc
@@ -103,7 +103,7 @@ jobs:
   build-cli-osx-64:
     runs-on: macos-15-intel
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install Protoc
@@ -130,7 +130,7 @@ jobs:
   build-cli-osx-arm64:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install Protoc
@@ -157,7 +157,7 @@ jobs:
   build-wheels-linux-x86_64:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Get V8 version from Cargo.lock
         id: v8-version
@@ -213,7 +213,7 @@ jobs:
   build-wheels-linux-aarch64:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Get V8 version from Cargo.lock
         id: v8-version
@@ -271,7 +271,7 @@ jobs:
     steps:
       - name: Enable long paths
         run: git config --system core.longpaths true
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -297,7 +297,7 @@ jobs:
   build-wheels-osx-64:
     runs-on: macos-15-intel
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -325,7 +325,7 @@ jobs:
   build-wheels-osx-arm64:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
         with:
