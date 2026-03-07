@@ -12,10 +12,8 @@ pub struct FontForHtml {
     pub font_type: String,
 }
 
-// ---------------------------------------------------------------------------
-// CSS generic family keywords (case-sensitive, per CSS spec)
-// ---------------------------------------------------------------------------
-
+// CSS generic family keywords per CSS Fonts Module Level 4:
+// https://www.w3.org/TR/css-fonts-4/#generic-font-families
 const GENERIC_FAMILIES: &[&str] = &[
     "serif",
     "sans-serif",
@@ -41,16 +39,11 @@ pub enum FontFamilyEntry {
     Generic(String),
 }
 
-// ---------------------------------------------------------------------------
-// 1. CSS font-family parser
-// ---------------------------------------------------------------------------
-
 /// Parse a CSS `font-family` string into a list of [`FontFamilyEntry`] values.
 ///
 /// Uses `svgtypes::parse_font_families` for spec-compliant parsing (handles
-/// quoting, escaping, and multi-word unquoted names). Falls back to naive
-/// comma splitting if svgtypes rejects the input (e.g. non-standard idents
-/// that appear in real-world Vega specs).
+/// quoting, escaping, and multi-word unquoted names). Returns an empty list
+/// if the input is not valid CSS.
 ///
 /// # Examples
 ///
@@ -64,70 +57,28 @@ pub enum FontFamilyEntry {
 /// ]);
 /// ```
 pub fn parse_css_font_family(s: &str) -> Vec<FontFamilyEntry> {
-    match svgtypes::parse_font_families(s) {
-        Ok(families) => families
-            .into_iter()
-            .map(|f| match f {
-                svgtypes::FontFamily::Serif => FontFamilyEntry::Generic("serif".into()),
-                svgtypes::FontFamily::SansSerif => FontFamilyEntry::Generic("sans-serif".into()),
-                svgtypes::FontFamily::Cursive => FontFamilyEntry::Generic("cursive".into()),
-                svgtypes::FontFamily::Fantasy => FontFamilyEntry::Generic("fantasy".into()),
-                svgtypes::FontFamily::Monospace => FontFamilyEntry::Generic("monospace".into()),
-                svgtypes::FontFamily::Named(name) => {
-                    let lower = name.to_lowercase();
-                    if GENERIC_FAMILIES.iter().any(|g| *g == lower) {
-                        FontFamilyEntry::Generic(name)
-                    } else {
-                        FontFamilyEntry::Named(name)
-                    }
+    let Ok(families) = svgtypes::parse_font_families(s) else {
+        return Vec::new();
+    };
+    families
+        .into_iter()
+        .map(|f| match f {
+            svgtypes::FontFamily::Serif => FontFamilyEntry::Generic("serif".into()),
+            svgtypes::FontFamily::SansSerif => FontFamilyEntry::Generic("sans-serif".into()),
+            svgtypes::FontFamily::Cursive => FontFamilyEntry::Generic("cursive".into()),
+            svgtypes::FontFamily::Fantasy => FontFamilyEntry::Generic("fantasy".into()),
+            svgtypes::FontFamily::Monospace => FontFamilyEntry::Generic("monospace".into()),
+            svgtypes::FontFamily::Named(name) => {
+                let lower = name.to_lowercase();
+                if GENERIC_FAMILIES.iter().any(|g| *g == lower) {
+                    FontFamilyEntry::Generic(name)
+                } else {
+                    FontFamilyEntry::Named(name)
                 }
-            })
-            .collect(),
-        Err(_) => {
-            // Fallback: naive comma splitting for non-standard idents
-            parse_css_font_family_naive(s)
-        }
-    }
-}
-
-/// Naive comma-splitting fallback for inputs that svgtypes rejects.
-fn parse_css_font_family_naive(s: &str) -> Vec<FontFamilyEntry> {
-    s.split(',')
-        .filter_map(|segment| {
-            let trimmed = segment.trim();
-            if trimmed.is_empty() {
-                return None;
-            }
-            let unquoted = strip_quotes(trimmed);
-            if unquoted.is_empty() {
-                return None;
-            }
-            let lower = unquoted.to_lowercase();
-            if GENERIC_FAMILIES.iter().any(|g| *g == lower) {
-                Some(FontFamilyEntry::Generic(unquoted.to_string()))
-            } else {
-                Some(FontFamilyEntry::Named(unquoted.to_string()))
             }
         })
         .collect()
 }
-
-/// Strip matching outer single or double quotes from a string.
-fn strip_quotes(s: &str) -> &str {
-    if s.len() >= 2 {
-        let bytes = s.as_bytes();
-        if (bytes[0] == b'\'' && bytes[bytes.len() - 1] == b'\'')
-            || (bytes[0] == b'"' && bytes[bytes.len() - 1] == b'"')
-        {
-            return &s[1..s.len() - 1];
-        }
-    }
-    s
-}
-
-// ---------------------------------------------------------------------------
-// 2. Font extraction from compiled Vega specs
-// ---------------------------------------------------------------------------
 
 /// Extract all font-family CSS strings from a compiled Vega specification.
 ///
@@ -175,8 +126,6 @@ pub fn extract_fonts_from_vega(spec: &Value) -> HashSet<String> {
 
     fonts
 }
-
-// ---- Config extraction ----------------------------------------------------
 
 /// Axis config key variants (matches Vega's AxisConfigKeys type).
 const AXIS_CONFIG_KEYS: &[&str] = &[
@@ -237,8 +186,6 @@ fn extract_config_fonts(config: &Value, fonts: &mut HashSet<String>) {
     }
 }
 
-// ---- Mark extraction (recursive) ------------------------------------------
-
 fn extract_marks_fonts(marks: &Value, fonts: &mut HashSet<String>) {
     let arr = match marks.as_array() {
         Some(a) => a,
@@ -279,8 +226,6 @@ fn extract_marks_fonts(marks: &Value, fonts: &mut HashSet<String>) {
     }
 }
 
-// ---- Axis extraction ------------------------------------------------------
-
 fn extract_axes_fonts(axes: &Value, fonts: &mut HashSet<String>) {
     let arr = match axes.as_array() {
         Some(a) => a,
@@ -313,8 +258,6 @@ fn extract_axes_fonts(axes: &Value, fonts: &mut HashSet<String>) {
         }
     }
 }
-
-// ---- Legend extraction -----------------------------------------------------
 
 fn extract_legends_fonts(legends: &Value, fonts: &mut HashSet<String>) {
     let arr = match legends.as_array() {
@@ -349,8 +292,6 @@ fn extract_legends_fonts(legends: &Value, fonts: &mut HashSet<String>) {
     }
 }
 
-// ---- Title extraction -----------------------------------------------------
-
 fn extract_title_fonts(title: &Value, fonts: &mut HashSet<String>) {
     // Title can be a string (no font info) or an object.
     if title.is_string() {
@@ -380,8 +321,6 @@ fn extract_title_fonts(title: &Value, fonts: &mut HashSet<String>) {
     }
 }
 
-// ---- Transform extraction -------------------------------------------------
-
 fn extract_transform_fonts(transform: &Value, fonts: &mut HashSet<String>) {
     // Wordcloud transforms: { "type": "wordcloud", "font": "..." }
     let is_wordcloud = transform
@@ -395,7 +334,6 @@ fn extract_transform_fonts(transform: &Value, fonts: &mut HashSet<String>) {
     }
 }
 
-// ---- Shared helper --------------------------------------------------------
 
 /// If `obj[key]` is a JSON string, insert it into `fonts`.
 fn collect_if_string(obj: &Value, key: &str, fonts: &mut HashSet<String>) {
@@ -405,10 +343,6 @@ fn collect_if_string(obj: &Value, key: &str, fonts: &mut HashSet<String>) {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// 3. Resolution: determine which fonts to download
-// ---------------------------------------------------------------------------
 
 /// Classification of the first font in a CSS `font-family` string.
 #[derive(Debug, Clone, PartialEq, Eq)]
