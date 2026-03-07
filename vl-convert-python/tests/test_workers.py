@@ -16,7 +16,7 @@ SIMPLE_VL_SPEC = {
 
 @pytest.fixture(autouse=True)
 def reset_worker_count():
-    original = vlc.get_converter_config()
+    original = vlc.get_config()
     vlc.configure(num_workers=1)
     try:
         yield
@@ -24,8 +24,8 @@ def reset_worker_count():
         vlc.configure(**original)
 
 
-def test_get_converter_config_reports_default_num_workers():
-    assert vlc.get_converter_config()["num_workers"] == 1
+def test_get_config_reports_default_num_workers():
+    assert vlc.get_config()["num_workers"] == 1
 
 
 def test_configure_rejects_zero_num_workers():
@@ -94,7 +94,7 @@ def test_configure_round_trip(tmp_path):
         allowed_base_urls=None,
     )
 
-    config = vlc.get_converter_config()
+    config = vlc.get_config()
     assert config["num_workers"] == 2
     assert config["allow_http_access"] is False
     assert config["filesystem_root"] == str(root.resolve())
@@ -112,7 +112,7 @@ def test_configure_num_workers_preserves_access_policy(tmp_path):
         allowed_base_urls=None,
     )
     vlc.configure(num_workers=3)
-    config = vlc.get_converter_config()
+    config = vlc.get_config()
 
     assert config["num_workers"] == 3
     assert config["allow_http_access"] is False
@@ -126,7 +126,7 @@ def test_configure_noop_when_called_without_args():
         filesystem_root=None,
         allowed_base_urls=["https://example.com/"],
     )
-    before = vlc.get_converter_config()
+    before = vlc.get_config()
     vlc.configure()
-    after = vlc.get_converter_config()
+    after = vlc.get_config()
     assert after == before

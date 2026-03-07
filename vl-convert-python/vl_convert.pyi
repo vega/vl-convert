@@ -141,7 +141,7 @@ __all__ = [
     "asyncio",
     "configure",
     "get_format_locale",
-    "get_converter_config",
+    "get_config",
     "get_local_tz",
     "get_themes",
     "get_time_format_locale",
@@ -335,7 +335,7 @@ def configure(
     """
     ...
 
-def get_converter_config() -> ConverterConfig:
+def get_config() -> ConverterConfig:
     """
     Get the active converter worker/access configuration.
 
@@ -998,8 +998,8 @@ if TYPE_CHECKING:
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...
-        async def get_converter_config(self) -> ConverterConfig:
-            """Async version of ``get_converter_config``. See sync function for full documentation."""
+        async def get_config(self) -> ConverterConfig:
+            """Async version of ``get_config``. See sync function for full documentation."""
             ...
         async def warm_up_workers(self) -> None:
             """Async version of ``warm_up_workers``. See sync function for full documentation."""

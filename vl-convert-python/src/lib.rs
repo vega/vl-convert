@@ -181,8 +181,8 @@ fn parse_config_overrides(
                     });
                 }
             }
-            // Read-only config fields returned by get_converter_config() are
-            // silently ignored so that `configure(**get_converter_config())` works.
+            // Read-only config fields returned by get_config() are
+            // silently ignored so that `configure(**get_config())` works.
             "fontsource_cache_dir" => {}
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
@@ -1352,9 +1352,9 @@ fn configure(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
 }
 
 /// Get the currently configured converter options.
-#[pyfunction]
+#[pyfunction(name = "get_config")]
 #[pyo3(signature = ())]
-fn get_converter_config() -> PyResult<PyObject> {
+fn get_config() -> PyResult<PyObject> {
     let config = converter_config()
         .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
     Python::with_gil(|py| {
@@ -2275,10 +2275,10 @@ fn configure_asyncio<'py>(
     })
 }
 
-#[doc = async_variant_doc!("get_converter_config")]
-#[pyfunction(name = "get_converter_config")]
+#[doc = async_variant_doc!("get_config")]
+#[pyfunction(name = "get_config")]
 #[pyo3(signature = ())]
-fn get_converter_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+fn get_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     future_into_py_object(py, async move {
         let config = converter_config()
             .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
@@ -2510,7 +2510,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
         &asyncio
     )?)?;
     asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_converter_config_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_themes_asyncio, &asyncio)?)?;
@@ -2554,7 +2554,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(register_fontsource_font, m)?)?;
     m.add_function(wrap_pyfunction!(configure, m)?)?;
-    m.add_function(wrap_pyfunction!(get_converter_config, m)?)?;
+    m.add_function(wrap_pyfunction!(get_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
