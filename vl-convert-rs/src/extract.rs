@@ -427,10 +427,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // -----------------------------------------------------------------------
-    // 1. CSS parser tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn test_parse_single_named() {
         assert_eq!(
@@ -489,8 +485,21 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_whitespace_only() {
+        assert!(parse_css_font_family("   ").is_empty());
+    }
+
+    #[test]
     fn test_parse_only_commas() {
         assert!(parse_css_font_family(",,,").is_empty());
+    }
+
+    #[test]
+    fn test_parse_quoted_font_with_comma() {
+        let entries = parse_css_font_family("'Font, With Comma', serif");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0], FontFamilyEntry::Named("Font, With Comma".into()));
+        assert_eq!(entries[1], FontFamilyEntry::Generic("serif".into()));
     }
 
     #[test]
@@ -537,10 +546,6 @@ mod tests {
             ]
         );
     }
-
-    // -----------------------------------------------------------------------
-    // 2. Extraction tests
-    // -----------------------------------------------------------------------
 
     #[test]
     fn test_extract_config_fonts() {
@@ -989,10 +994,6 @@ mod tests {
         assert_eq!(fonts, expected);
     }
 
-    // -----------------------------------------------------------------------
-    // 3. Resolution tests (first-font-only semantics)
-    // -----------------------------------------------------------------------
-
     #[test]
     fn test_resolve_first_font_generic() {
         // "serif" → first entry is generic → Generic
@@ -1145,10 +1146,6 @@ mod tests {
         assert!(result.is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // Case-insensitive generic matching tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn test_parse_generic_case_insensitive() {
         // "Sans-Serif" (title-case) should be classified as Generic
@@ -1172,10 +1169,6 @@ mod tests {
         let fonts = extract_fonts_from_vega(&spec);
         assert!(fonts.contains("Mark Default Font"));
     }
-
-    // -----------------------------------------------------------------------
-    // Encode traversal: non-update states
-    // -----------------------------------------------------------------------
 
     #[test]
     fn test_extract_axis_encode_enter_state() {
