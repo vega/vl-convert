@@ -332,14 +332,14 @@ jobs:
           echo "All bundled HTML files validated successfully"
 
       - name: Upload HTML validation screenshots
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: html-validation-screenshots
           path: html-validation/
 
       - name: Upload test failures
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: failed-images-linux
@@ -383,7 +383,7 @@ jobs:
       - name: Run CLI tests
         run: cargo test -p vl-convert -- --test-threads=1
       - name: Upload test failures
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: failed-images-${{ matrix.os }}
@@ -486,7 +486,7 @@ jobs:
       - name: Run tests
         run: pixi run test-py
       - name: Upload failed images
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: failed-images-python-${{ matrix.options[0] }}
@@ -580,7 +580,7 @@ jobs:
             "
 
       - name: Upload test output images
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: aarch64-test-output
