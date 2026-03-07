@@ -44,8 +44,8 @@ use resvg::render;
 
 use crate::extract::{extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus};
 use crate::text::{
-    build_usvg_options_with_fontdb, get_font_baseline_snapshot, register_fontsource_font,
-    FONTSOURCE_CLIENT, FONT_CONFIG_VERSION, USVG_OPTIONS,
+    build_usvg_options_with_fontdb, get_font_baseline_snapshot, FONTSOURCE_CLIENT,
+    FONT_CONFIG_VERSION, USVG_OPTIONS,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use vl_convert_fontsource::{
@@ -2727,25 +2727,26 @@ impl VlConvertCommand {
 ///
 ///     println!("{}", vega_spec)
 /// ```
-/// Validate font availability and optionally auto-download missing fonts from
-/// the Fontsource catalog.
+/// Validate font availability and optionally identify missing fonts to download
+/// from the Fontsource catalog.
 ///
 /// Extracts font-family strings from the compiled Vega spec and classifies the
 /// **first** non-generic font in each string (the rest of the CSS fallback
-/// chain is ignored). Missing fonts are downloaded, warned about, or treated
-/// as errors depending on the `auto_fontsource` and `missing_fonts` settings.
+/// chain is ignored). Returns font requests for downloadable fonts so the
+/// caller can add them to `VgOpts.fontsource_fonts` for per-request overlay.
+/// Missing fonts are warned about or treated as errors depending on settings.
 async fn preprocess_fonts(
     vega_spec: &serde_json::Value,
     auto_fontsource: bool,
     missing_fonts: MissingFontsPolicy,
-) -> Result<(), AnyError> {
+) -> Result<Vec<FontsourceFontRequest>, AnyError> {
     if !auto_fontsource && missing_fonts == MissingFontsPolicy::Fallback {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     let font_strings = extract_fonts_from_vega(vega_spec);
     if font_strings.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     // Get currently available font families from fontdb
@@ -2859,26 +2860,21 @@ async fn preprocess_fonts(
     }
 
     if !auto_fontsource {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
-    // Download and register fonts that need it
+    // Collect downloadable fonts as requests for the caller to add to VgOpts
+    let mut requests: Vec<FontsourceFontRequest> = Vec::new();
     for (_css_string, status) in &statuses {
         if let FirstFontStatus::NeedsDownload { name } = status {
-            match register_fontsource_font(name, None).await {
-                Ok(_batch) => {}
-                Err(e) => {
-                    if missing_fonts == MissingFontsPolicy::Error {
-                        return Err(anyhow!("auto_fontsource: failed to download '{name}': {e}"));
-                    } else if missing_fonts == MissingFontsPolicy::Warn {
-                        log::warn!("auto_fontsource: failed to install '{name}': {e}");
-                    }
-                }
-            }
+            requests.push(FontsourceFontRequest {
+                family: name.clone(),
+                variants: None,
+            });
         }
     }
 
-    Ok(())
+    Ok(requests)
 }
 
 struct VlConverterInner {
@@ -3110,7 +3106,7 @@ impl VlConverter {
         if !self.should_preprocess_fonts() {
             return Ok(None);
         }
-        let vg_opts = VgOpts {
+        let mut vg_opts = VgOpts {
             allowed_base_urls: vl_opts.allowed_base_urls.clone(),
             format_locale: vl_opts.format_locale.clone(),
             time_format_locale: vl_opts.time_format_locale.clone(),
@@ -3119,12 +3115,18 @@ impl VlConverter {
         let vega_spec = self
             .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
             .await?;
-        preprocess_fonts(
+        let auto_requests = preprocess_fonts(
             &vega_spec,
             self.inner.config.auto_fontsource,
             self.inner.config.missing_fonts,
         )
         .await?;
+        if !auto_requests.is_empty() {
+            vg_opts
+                .fontsource_fonts
+                .get_or_insert_with(Vec::new)
+                .extend(auto_requests);
+        }
         Ok(Some((vega_spec, vg_opts)))
     }
 
@@ -3134,7 +3136,10 @@ impl VlConverter {
     /// of `allow_http_access`. The two settings control different concerns:
     /// `allow_http_access` governs data-fetching URLs in specs, while `auto_fontsource`
     /// governs on-demand font installation from Fontsource.
-    async fn maybe_preprocess_vega_fonts(&self, spec: &ValueOrString) -> Result<(), AnyError> {
+    async fn maybe_preprocess_vega_fonts(
+        &self,
+        spec: &ValueOrString,
+    ) -> Result<Vec<FontsourceFontRequest>, AnyError> {
         if self.should_preprocess_fonts() {
             let spec_value: serde_json::Value = match spec {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
@@ -3145,9 +3150,10 @@ impl VlConverter {
                 self.inner.config.auto_fontsource,
                 self.inner.config.missing_fonts,
             )
-            .await?;
+            .await
+        } else {
+            Ok(Vec::new())
         }
-        Ok(())
     }
 
     pub async fn vegalite_to_vega(
@@ -3174,11 +3180,17 @@ impl VlConverter {
     ) -> Result<String, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let vg_spec = vg_spec.into();
+        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !auto_requests.is_empty() {
+            vg_opts
+                .fontsource_fonts
+                .get_or_insert_with(Vec::new)
+                .extend(auto_requests);
+        }
         let fontsource_font_batches = self
             .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
             .await?;
-        let vg_spec = vg_spec.into();
-        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         self.request(
             move |responder| VlConvertCommand::VgToSvg {
                 vg_spec,
@@ -3198,11 +3210,17 @@ impl VlConverter {
     ) -> Result<serde_json::Value, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let vg_spec = vg_spec.into();
+        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !auto_requests.is_empty() {
+            vg_opts
+                .fontsource_fonts
+                .get_or_insert_with(Vec::new)
+                .extend(auto_requests);
+        }
         let fontsource_font_batches = self
             .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
             .await?;
-        let vg_spec = vg_spec.into();
-        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         self.request(
             move |responder| VlConvertCommand::VgToSg {
                 vg_spec,
@@ -3222,11 +3240,17 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let vg_spec = vg_spec.into();
+        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !auto_requests.is_empty() {
+            vg_opts
+                .fontsource_fonts
+                .get_or_insert_with(Vec::new)
+                .extend(auto_requests);
+        }
         let fontsource_font_batches = self
             .resolve_fontsource_fonts(vg_opts.fontsource_fonts.take())
             .await?;
-        let vg_spec = vg_spec.into();
-        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         self.request(
             move |responder| VlConvertCommand::VgToSgMsgpack {
                 vg_spec,

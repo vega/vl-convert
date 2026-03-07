@@ -334,7 +334,6 @@ fn extract_transform_fonts(transform: &Value, fonts: &mut HashSet<String>) {
     }
 }
 
-
 /// If `obj[key]` is a JSON string, insert it into `fonts`.
 fn collect_if_string(obj: &Value, key: &str, fonts: &mut HashSet<String>) {
     if let Some(val) = obj.get(key).and_then(Value::as_str) {
@@ -498,7 +497,10 @@ mod tests {
     fn test_parse_quoted_font_with_comma() {
         let entries = parse_css_font_family("'Font, With Comma', serif");
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0], FontFamilyEntry::Named("Font, With Comma".into()));
+        assert_eq!(
+            entries[0],
+            FontFamilyEntry::Named("Font, With Comma".into())
+        );
         assert_eq!(entries[1], FontFamilyEntry::Generic("serif".into()));
     }
 
