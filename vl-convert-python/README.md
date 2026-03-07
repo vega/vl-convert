@@ -98,7 +98,7 @@ By default, `vl-convert-python` uses `1` converter worker. You can configure thi
 ```python
 import vl_convert as vlc
 
-cfg = vlc.get_converter_config()
+cfg = vlc.get_config()
 print(cfg["num_workers"])  # 1
 
 vlc.configure(num_workers=4)  # enable parallel worker pool

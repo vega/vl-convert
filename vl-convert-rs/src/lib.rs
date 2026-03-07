@@ -3,6 +3,7 @@
 pub mod converter;
 pub mod deno_emit;
 pub mod deno_stubs;
+pub mod extract;
 pub mod html;
 pub mod image_loading;
 pub mod module_loader;

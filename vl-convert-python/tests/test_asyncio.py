@@ -29,7 +29,7 @@ def public_callable_names(module):
 
 @pytest.fixture(autouse=True)
 def reset_worker_count():
-    original = vlc.get_converter_config()
+    original = vlc.get_config()
     vlc.configure(num_workers=1)
     try:
         yield
@@ -93,7 +93,7 @@ def test_asyncio_parallel_gather_with_workers():
 def test_asyncio_worker_lifecycle_calls():
     async def scenario():
         await vlca.configure(num_workers=3)
-        config = await vlca.get_converter_config()
+        config = await vlca.get_config()
         assert config["num_workers"] == 3
         svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16")
         assert svg.lstrip().startswith("<svg")
@@ -110,7 +110,7 @@ def test_asyncio_configure_round_trip(tmp_path):
             allow_http_access=False,
             filesystem_root=str(root),
         )
-        config = await vlca.get_converter_config()
+        config = await vlca.get_config()
         assert config["num_workers"] == 2
         assert config["allow_http_access"] is False
         assert config["filesystem_root"] == str(root.resolve())

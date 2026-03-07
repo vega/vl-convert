@@ -13,8 +13,8 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    FormatLocale, Renderer, TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts,
-    ACCESS_DENIED_MARKER,
+    FormatLocale, MissingFontsPolicy, Renderer, TimeFormatLocale, ValueOrString, VgOpts,
+    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -63,6 +63,12 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .as_ref()
             .map(|root| root.to_string_lossy().to_string()),
         "allowed_base_urls": config.allowed_base_urls,
+        "auto_fontsource": config.auto_fontsource,
+        "missing_fonts": match config.missing_fonts {
+            MissingFontsPolicy::Fallback => "fallback",
+            MissingFontsPolicy::Warn => "warn",
+            MissingFontsPolicy::Error => "error",
+        },
         "fontsource_cache_dir": vl_convert_rs::fontsource_cache_dir()
             .map(|p| p.to_string_lossy().into_owned()),
     })
@@ -77,6 +83,8 @@ struct ConverterConfigOverrides {
     // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
     fontsource_cache_size_mb: Option<u64>,
+    auto_fontsource: Option<bool>,
+    missing_fonts: Option<MissingFontsPolicy>,
 }
 
 fn parse_config_overrides(
@@ -145,8 +153,36 @@ fn parse_config_overrides(
                         })?);
                 }
             }
-            // Read-only config fields returned by get_converter_config() are
-            // silently ignored so that `configure(**get_converter_config())` works.
+            "auto_fontsource" => {
+                if !value.is_none() {
+                    overrides.auto_fontsource = Some(value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid auto_fontsource value for configure: {err}"
+                        )
+                    })?);
+                }
+            }
+            "missing_fonts" => {
+                if !value.is_none() {
+                    let s = value.extract::<String>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid missing_fonts value for configure: {err}"
+                        )
+                    })?;
+                    overrides.missing_fonts = Some(match s.as_str() {
+                        "fallback" => MissingFontsPolicy::Fallback,
+                        "warn" => MissingFontsPolicy::Warn,
+                        "error" => MissingFontsPolicy::Error,
+                        _ => {
+                            return Err(vl_convert_rs::anyhow::anyhow!(
+                                "Invalid missing_fonts value: {s}. Expected 'fallback', 'warn', or 'error'"
+                            ));
+                        }
+                    });
+                }
+            }
+            // Read-only config fields returned by get_config() are
+            // silently ignored so that `configure(**get_config())` works.
             "fontsource_cache_dir" => {}
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
@@ -175,6 +211,12 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     if let Some(mb) = overrides.fontsource_cache_size_mb {
         let bytes = mb.saturating_mul(1024 * 1024);
         configure_font_cache_rs(Some(bytes));
+    }
+    if let Some(auto_fontsource) = overrides.auto_fontsource {
+        config.auto_fontsource = auto_fontsource;
+    }
+    if let Some(missing_fonts) = overrides.missing_fonts {
+        config.missing_fonts = missing_fonts;
     }
 }
 
@@ -1310,9 +1352,9 @@ fn configure(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
 }
 
 /// Get the currently configured converter options.
-#[pyfunction]
+#[pyfunction(name = "get_config")]
 #[pyo3(signature = ())]
-fn get_converter_config() -> PyResult<PyObject> {
+fn get_config() -> PyResult<PyObject> {
     let config = converter_config()
         .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
     Python::with_gil(|py| {
@@ -2233,10 +2275,10 @@ fn configure_asyncio<'py>(
     })
 }
 
-#[doc = async_variant_doc!("get_converter_config")]
-#[pyfunction(name = "get_converter_config")]
+#[doc = async_variant_doc!("get_config")]
+#[pyfunction(name = "get_config")]
 #[pyo3(signature = ())]
-fn get_converter_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+fn get_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     future_into_py_object(py, async move {
         let config = converter_config()
             .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
@@ -2468,7 +2510,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
         &asyncio
     )?)?;
     asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_converter_config_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_themes_asyncio, &asyncio)?)?;
@@ -2490,6 +2532,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
 /// Convert Vega-Lite specifications to other formats
 #[pymodule]
 fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    pyo3_log::init();
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;
@@ -2511,7 +2554,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(register_fontsource_font, m)?)?;
     m.add_function(wrap_pyfunction!(configure, m)?)?;
-    m.add_function(wrap_pyfunction!(get_converter_config, m)?)?;
+    m.add_function(wrap_pyfunction!(get_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
