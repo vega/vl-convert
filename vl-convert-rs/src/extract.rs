@@ -109,17 +109,26 @@ pub fn extract_fonts_from_svg(svg: &str) -> HashSet<String> {
                 fonts.insert(ff.to_string());
             }
 
-            // Inline style attribute: look for font-family declarations
+            // Inline style attribute: tokenize declarations with simplecss
             if let Some(style) = node.attribute("style") {
-                extract_font_family_from_css_text(style, &mut fonts);
+                collect_font_family_from_declarations(
+                    simplecss::DeclarationTokenizer::from(style),
+                    &mut fonts,
+                );
             }
         }
 
-        // <style> element text content
+        // <style> element text content: parse as a full stylesheet
         if node.is_element() && node.tag_name().name() == "style" {
             if let Some(text_node) = node.first_child().filter(|c| c.is_text()) {
                 if let Some(text) = text_node.text() {
-                    extract_font_family_from_css_text(text, &mut fonts);
+                    let sheet = simplecss::StyleSheet::parse(text);
+                    for rule in &sheet.rules {
+                        collect_font_family_from_declarations(
+                            rule.declarations.iter().copied(),
+                            &mut fonts,
+                        );
+                    }
                 }
             }
         }
@@ -128,42 +137,18 @@ pub fn extract_fonts_from_svg(svg: &str) -> HashSet<String> {
     fonts
 }
 
-/// Extract `font-family` values from CSS text (inline style or style block).
-///
-/// Looks for `font-family:` followed by a value terminated by `;` or end of
-/// the relevant context. This is a naive parser sufficient for Vega-generated
-/// SVGs; it does not handle all CSS edge cases.
-fn extract_font_family_from_css_text(css: &str, fonts: &mut HashSet<String>) {
-    let lower = css.to_lowercase();
-    let mut search_from = 0;
-
-    while let Some(pos) = lower[search_from..].find("font-family") {
-        let abs_pos = search_from + pos;
-        let after_key = abs_pos + "font-family".len();
-
-        // Skip whitespace and colon
-        let rest = &css[after_key..];
-        let rest = rest.trim_start();
-        let rest = match rest.strip_prefix(':') {
-            Some(r) => r.trim_start(),
-            None => {
-                search_from = after_key;
-                continue;
+/// Collect `font-family` values from an iterator of CSS declarations.
+fn collect_font_family_from_declarations<'a>(
+    declarations: impl Iterator<Item = simplecss::Declaration<'a>>,
+    fonts: &mut HashSet<String>,
+) {
+    for decl in declarations {
+        if decl.name == "font-family" {
+            let value = decl.value.trim();
+            if !value.is_empty() {
+                fonts.insert(value.to_string());
             }
-        };
-
-        // Value ends at ';', '}', or end of string
-        let end = rest
-            .find([';', '}'])
-            .unwrap_or(rest.len());
-        let value = rest[..end].trim();
-
-        if !value.is_empty() {
-            fonts.insert(value.to_string());
         }
-
-        search_from =
-            after_key + (rest.as_ptr() as usize - css[after_key..].as_ptr() as usize) + end;
     }
 }
 

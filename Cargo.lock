@@ -9893,6 +9893,7 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
+ "simplecss",
  "svg2pdf",
  "svgtypes 0.15.3",
  "sys_traits",
