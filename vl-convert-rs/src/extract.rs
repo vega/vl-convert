@@ -47,9 +47,10 @@ pub enum FontFamilyEntry {
 
 /// Parse a CSS `font-family` string into a list of [`FontFamilyEntry`] values.
 ///
-/// The input is a comma-separated list of family names, each optionally
-/// enclosed in single or double quotes. Generic family keywords are
-/// recognised case-sensitively.
+/// Uses `svgtypes::parse_font_families` for spec-compliant parsing (handles
+/// quoting, escaping, and multi-word unquoted names). Falls back to naive
+/// comma splitting if svgtypes rejects the input (e.g. non-standard idents
+/// that appear in real-world Vega specs).
 ///
 /// # Examples
 ///
@@ -63,22 +64,46 @@ pub enum FontFamilyEntry {
 /// ]);
 /// ```
 pub fn parse_css_font_family(s: &str) -> Vec<FontFamilyEntry> {
+    match svgtypes::parse_font_families(s) {
+        Ok(families) => families
+            .into_iter()
+            .map(|f| match f {
+                svgtypes::FontFamily::Serif => FontFamilyEntry::Generic("serif".into()),
+                svgtypes::FontFamily::SansSerif => FontFamilyEntry::Generic("sans-serif".into()),
+                svgtypes::FontFamily::Cursive => FontFamilyEntry::Generic("cursive".into()),
+                svgtypes::FontFamily::Fantasy => FontFamilyEntry::Generic("fantasy".into()),
+                svgtypes::FontFamily::Monospace => FontFamilyEntry::Generic("monospace".into()),
+                svgtypes::FontFamily::Named(name) => {
+                    let lower = name.to_lowercase();
+                    if GENERIC_FAMILIES.iter().any(|g| *g == lower) {
+                        FontFamilyEntry::Generic(name)
+                    } else {
+                        FontFamilyEntry::Named(name)
+                    }
+                }
+            })
+            .collect(),
+        Err(_) => {
+            // Fallback: naive comma splitting for non-standard idents
+            parse_css_font_family_naive(s)
+        }
+    }
+}
+
+/// Naive comma-splitting fallback for inputs that svgtypes rejects.
+fn parse_css_font_family_naive(s: &str) -> Vec<FontFamilyEntry> {
     s.split(',')
         .filter_map(|segment| {
             let trimmed = segment.trim();
             if trimmed.is_empty() {
                 return None;
             }
-
-            // Strip matching outer quotes (single or double).
             let unquoted = strip_quotes(trimmed);
-
             if unquoted.is_empty() {
                 return None;
             }
-
             let lower = unquoted.to_lowercase();
-            if GENERIC_FAMILIES.iter().any(|g| g.to_lowercase() == lower) {
+            if GENERIC_FAMILIES.iter().any(|g| *g == lower) {
                 Some(FontFamilyEntry::Generic(unquoted.to_string()))
             } else {
                 Some(FontFamilyEntry::Named(unquoted.to_string()))

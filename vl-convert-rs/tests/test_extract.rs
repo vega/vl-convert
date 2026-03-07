@@ -15,11 +15,11 @@ fn test_css_parser_edge_cases() {
     // Only commas
     assert!(parse_css_font_family(",,,").is_empty());
 
-    // Quoted font with commas inside — parser splits on commas naively,
-    // which is acceptable since real font families never contain commas.
-    // This test documents the behavior rather than asserting ideal parsing.
+    // Quoted font with commas inside — svgtypes handles this correctly.
     let entries = parse_css_font_family("'Font, With Comma', serif");
-    assert_eq!(entries.len(), 3); // 'Font | With Comma' | serif
+    assert_eq!(entries.len(), 2);
+    assert!(matches!(&entries[0], FontFamilyEntry::Named(n) if n == "Font, With Comma"));
+    assert!(matches!(&entries[1], FontFamilyEntry::Generic(g) if g == "serif"));
 
     // Double-quoted
     let entries = parse_css_font_family(r#""Playfair Display", sans-serif"#);

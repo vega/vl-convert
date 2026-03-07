@@ -9894,6 +9894,7 @@ dependencies = [
  "serde",
  "serde_json",
  "svg2pdf",
+ "svgtypes 0.15.3",
  "sys_traits",
  "tempfile",
  "tiny-skia",
