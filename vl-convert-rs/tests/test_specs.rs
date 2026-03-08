@@ -1086,10 +1086,10 @@ async fn test_svg_to_png_auto_fontsource() {
 
     let name = "svg_auto_fontsource";
 
-    // SVG that references a distinctive Fontsource-available font (Bangers)
+    // SVG that references a distinctive Fontsource-available font (Kalam)
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="250" height="60">
   <rect width="250" height="60" fill="#f0f0f0"/>
-  <text x="10" y="40" font-family="Bangers" font-size="28" fill="#333">Hello Bangers</text>
+  <text x="10" y="40" font-family="Kalam" font-size="28" fill="#333">Hello Kalam</text>
 </svg>"##;
 
     let converter = VlConverter::with_config(vl_convert_rs::converter::VlConverterConfig {
