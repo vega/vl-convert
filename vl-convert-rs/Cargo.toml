@@ -44,6 +44,7 @@ svgtypes = { workspace = true }
 tempfile = { workspace = true }
 lazy_static = { workspace = true }
 backon = { workspace = true }
+simplecss = "0.2.2"
 rmp-serde = "1.3.0"
 base64 = "0.22.1"
 escape8259 = "0.5.3"

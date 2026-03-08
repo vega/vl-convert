@@ -2446,30 +2446,43 @@ vegaLiteToCanvas_{ver_name:?}(
                 scale,
                 ppi,
                 image_policy,
+                fontsource_font_batches,
                 responder,
             } => {
-                let png_result =
-                    self.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy);
-                responder.send(png_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::SvgToJpeg {
                 svg,
                 scale,
                 quality,
                 image_policy,
+                fontsource_font_batches,
                 responder,
             } => {
-                let jpeg_result =
-                    self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy);
-                responder.send(jpeg_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::SvgToPdf {
                 svg,
                 image_policy,
+                fontsource_font_batches,
                 responder,
             } => {
-                let pdf_result = self.svg_to_pdf_with_worker_options(&svg, &image_policy);
-                responder.send(pdf_result).ok();
+                let result = with_font_overlay!(
+                    self,
+                    fontsource_font_batches,
+                    self.svg_to_pdf_with_worker_options(&svg, &image_policy)
+                );
+                responder.send(result).ok();
             }
             VlConvertCommand::GetLocalTz { responder } => {
                 let local_tz = self.get_local_tz().await;
@@ -2594,6 +2607,7 @@ pub enum VlConvertCommand {
         scale: f32,
         ppi: Option<f32>,
         image_policy: ImageAccessPolicy,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     SvgToJpeg {
@@ -2601,11 +2615,13 @@ pub enum VlConvertCommand {
         scale: f32,
         quality: Option<u8>,
         image_policy: ImageAccessPolicy,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     SvgToPdf {
         svg: String,
         image_policy: ImageAccessPolicy,
+        fontsource_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     GetLocalTz {
@@ -2735,16 +2751,15 @@ impl VlConvertCommand {
 /// chain is ignored). Returns font requests for downloadable fonts so the
 /// caller can add them to `VgOpts.fontsource_fonts` for per-request overlay.
 /// Missing fonts are warned about or treated as errors depending on settings.
-async fn preprocess_fonts(
-    vega_spec: &serde_json::Value,
+/// Classify a set of font-family CSS strings and return Fontsource download
+/// requests for any that need downloading.
+///
+/// Shared logic used by both Vega spec preprocessing and SVG font preprocessing.
+async fn classify_and_request_fonts(
+    font_strings: HashSet<String>,
     auto_fontsource: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<Vec<FontsourceFontRequest>, AnyError> {
-    if !auto_fontsource && missing_fonts == MissingFontsPolicy::Fallback {
-        return Ok(Vec::new());
-    }
-
-    let font_strings = extract_fonts_from_vega(vega_spec);
     if font_strings.is_empty() {
         return Ok(Vec::new());
     }
@@ -2875,6 +2890,23 @@ async fn preprocess_fonts(
     }
 
     Ok(requests)
+}
+
+/// Preprocess fonts from a compiled Vega specification.
+///
+/// Extracts font-family strings from the spec, then classifies and requests
+/// fonts via [`classify_and_request_fonts`].
+async fn preprocess_fonts(
+    vega_spec: &serde_json::Value,
+    auto_fontsource: bool,
+    missing_fonts: MissingFontsPolicy,
+) -> Result<Vec<FontsourceFontRequest>, AnyError> {
+    if !auto_fontsource && missing_fonts == MissingFontsPolicy::Fallback {
+        return Ok(Vec::new());
+    }
+
+    let font_strings = extract_fonts_from_vega(vega_spec);
+    classify_and_request_fonts(font_strings, auto_fontsource, missing_fonts).await
 }
 
 struct VlConverterInner {
@@ -3077,18 +3109,6 @@ impl VlConverter {
         Ok(batches)
     }
 
-    fn request_blocking<R>(
-        &self,
-        make_cmd: impl FnOnce(oneshot::Sender<Result<R, AnyError>>) -> VlConvertCommand,
-        request_name: &str,
-    ) -> Result<R, AnyError> {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|err| anyhow!("Failed to construct blocking runtime: {err}"))?;
-        runtime.block_on(self.request(make_cmd, request_name))
-    }
-
     fn should_preprocess_fonts(&self) -> bool {
         self.inner.config.auto_fontsource
             || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
@@ -3154,6 +3174,29 @@ impl VlConverter {
         } else {
             Ok(Vec::new())
         }
+    }
+
+    /// If font preprocessing is enabled, extract fonts from the SVG and resolve
+    /// them via Fontsource. Returns loaded font batches ready for overlay.
+    async fn preprocess_svg_fonts(&self, svg: &str) -> Result<Vec<LoadedFontBatch>, AnyError> {
+        if !self.should_preprocess_fonts() {
+            return Ok(Vec::new());
+        }
+
+        let font_strings = crate::extract::extract_fonts_from_svg(svg);
+        let auto_requests = classify_and_request_fonts(
+            font_strings,
+            self.inner.config.auto_fontsource,
+            self.inner.config.missing_fonts,
+        )
+        .await?;
+
+        self.resolve_fontsource_fonts(if auto_requests.is_empty() {
+            None
+        } else {
+            Some(auto_requests)
+        })
+        .await
     }
 
     pub async fn vegalite_to_vega(
@@ -3646,52 +3689,66 @@ impl VlConverter {
         }
     }
 
-    pub fn svg_to_png(&self, svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_png(
+        &self,
+        svg: &str,
+        scale: f32,
+        ppi: Option<f32>,
+    ) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
+        let fontsource_font_batches = self.preprocess_svg_fonts(svg).await?;
         let svg = svg.to_string();
-        self.request_blocking(
+        self.request(
             move |responder| VlConvertCommand::SvgToPng {
                 svg,
                 scale,
                 ppi,
                 image_policy,
+                fontsource_font_batches,
                 responder,
             },
             "SVG to PNG conversion",
         )
+        .await
     }
 
-    pub fn svg_to_jpeg(
+    pub async fn svg_to_jpeg(
         &self,
         svg: &str,
         scale: f32,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
+        let fontsource_font_batches = self.preprocess_svg_fonts(svg).await?;
         let svg = svg.to_string();
-        self.request_blocking(
+        self.request(
             move |responder| VlConvertCommand::SvgToJpeg {
                 svg,
                 scale,
                 quality,
                 image_policy,
+                fontsource_font_batches,
                 responder,
             },
             "SVG to JPEG conversion",
         )
+        .await
     }
 
-    pub fn svg_to_pdf(&self, svg: &str) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_pdf(&self, svg: &str) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
+        let fontsource_font_batches = self.preprocess_svg_fonts(svg).await?;
         let svg = svg.to_string();
-        self.request_blocking(
+        self.request(
             move |responder| VlConvertCommand::SvgToPdf {
                 svg,
                 image_policy,
+                fontsource_font_batches,
                 responder,
             },
             "SVG to PDF conversion",
         )
+        .await
     }
 
     pub async fn get_vegaembed_bundle(&self, vl_version: VlVersion) -> Result<String, AnyError> {
@@ -5022,8 +5079,8 @@ try {
             .contains("allowed_base_urls cannot be empty"));
     }
 
-    #[test]
-    fn test_svg_helper_denies_subdomain_and_userinfo_url_confusion() {
+    #[tokio::test]
+    async fn test_svg_helper_denies_subdomain_and_userinfo_url_confusion() {
         let converter = VlConverter::with_config(VlConverterConfig {
             allow_http_access: true,
             allowed_base_urls: Some(vec!["https://example.com".to_string()]),
@@ -5037,6 +5094,7 @@ try {
                 1.0,
                 None,
             )
+            .await
             .unwrap_err();
         assert!(subdomain_err
             .to_string()
@@ -5048,14 +5106,15 @@ try {
                 1.0,
                 None,
             )
+            .await
             .unwrap_err();
         assert!(userinfo_err
             .to_string()
             .contains("External data url not allowed"));
     }
 
-    #[test]
-    fn test_svg_helper_denies_local_paths_without_filesystem_root() {
+    #[tokio::test]
+    async fn test_svg_helper_denies_local_paths_without_filesystem_root() {
         let temp_dir = tempfile::tempdir().unwrap();
         let local_image_path = temp_dir.path().join("image.png");
         write_test_png(&local_image_path);
@@ -5070,12 +5129,13 @@ try {
 
         let err = converter
             .svg_to_png(&svg_with_href(&href), 1.0, None)
+            .await
             .unwrap_err();
         assert!(err.to_string().contains("Filesystem access denied"));
     }
 
-    #[test]
-    fn test_svg_helper_enforces_filesystem_root() {
+    #[tokio::test]
+    async fn test_svg_helper_enforces_filesystem_root() {
         let temp_dir = tempfile::tempdir().unwrap();
         let root = temp_dir.path().join("root");
         std::fs::create_dir_all(&root).unwrap();
@@ -5092,24 +5152,28 @@ try {
         })
         .unwrap();
 
-        let allowed = converter.svg_to_png(&svg_with_href("inside.png"), 1.0, None);
+        let allowed = converter
+            .svg_to_png(&svg_with_href("inside.png"), 1.0, None)
+            .await;
         assert!(allowed.is_ok());
 
         let outside_href = Url::from_file_path(&outside_path).unwrap().to_string();
         let err = converter
             .svg_to_png(&svg_with_href(&outside_href), 1.0, None)
+            .await
             .unwrap_err();
         let message = err.to_string();
         assert!(message.contains("filesystem_root") || message.contains("access denied"));
 
         let err = converter
             .svg_to_png(&svg_with_href("../outside.png"), 1.0, None)
+            .await
             .unwrap_err();
         assert!(err.to_string().contains("filesystem_root"));
     }
 
-    #[test]
-    fn test_svg_helper_enforces_http_access_and_allowed_base_urls() {
+    #[tokio::test]
+    async fn test_svg_helper_enforces_http_access_and_allowed_base_urls() {
         let remote_svg = svg_with_href("https://example.com/image.png");
 
         let no_http_converter = VlConverter::with_config(VlConverterConfig {
@@ -5119,6 +5183,7 @@ try {
         .unwrap();
         let err = no_http_converter
             .svg_to_png(&remote_svg, 1.0, None)
+            .await
             .unwrap_err();
         assert!(err.to_string().contains("HTTP access denied"));
 
@@ -5130,12 +5195,13 @@ try {
         .unwrap();
         let err = allowlisted_converter
             .svg_to_png(&remote_svg, 1.0, None)
+            .await
             .unwrap_err();
         assert!(err.to_string().contains("External data url not allowed"));
     }
 
-    #[test]
-    fn test_svg_helper_allows_data_uri_when_http_disabled() {
+    #[tokio::test]
+    async fn test_svg_helper_allows_data_uri_when_http_disabled() {
         let converter = VlConverter::with_config(VlConverterConfig {
             allow_http_access: false,
             ..Default::default()
@@ -5144,7 +5210,7 @@ try {
         let svg = svg_with_href(
             "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAgMBgLP4r9kAAAAASUVORK5CYII=",
         );
-        let png = converter.svg_to_png(&svg, 1.0, None).unwrap();
+        let png = converter.svg_to_png(&svg, 1.0, None).await.unwrap();
         assert!(png.starts_with(&[137, 80, 78, 71]));
     }
 
@@ -5361,8 +5427,8 @@ try {
         assert!(png.starts_with(&[137, 80, 78, 71]));
     }
 
-    #[test]
-    fn test_svg_helper_denies_redirect_when_allowlist_configured() {
+    #[tokio::test]
+    async fn test_svg_helper_denies_redirect_when_allowlist_configured() {
         let disallowed_server = TestHttpServer::new(vec![(
             "/image.png",
             TestHttpResponse::ok_png(PNG_1X1_BYTES),
@@ -5385,14 +5451,15 @@ try {
                 1.0,
                 None,
             )
+            .await
             .unwrap_err();
         assert!(err
             .to_string()
             .contains("Redirected HTTP URLs are not allowed"));
     }
 
-    #[test]
-    fn test_svg_helper_allows_redirect_without_allowlist() {
+    #[tokio::test]
+    async fn test_svg_helper_allows_redirect_without_allowlist() {
         let target_server = TestHttpServer::new(vec![(
             "/image.svg",
             TestHttpResponse::ok_svg(
@@ -5417,6 +5484,7 @@ try {
                 1.0,
                 None,
             )
+            .await
             .unwrap();
         assert!(png.starts_with(&[137, 80, 78, 71]));
     }

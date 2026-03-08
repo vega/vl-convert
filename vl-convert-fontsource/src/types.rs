@@ -88,10 +88,16 @@ pub struct FontsourceFont {
     pub subsets: Vec<String>,
     pub weights: Vec<u16>,
     pub styles: Vec<String>,
+    #[serde(default = "default_subset")]
+    pub def_subset: String,
     pub version: String,
     #[serde(rename = "type")]
     pub font_type: String,
     pub variants: VariantMap,
+}
+
+fn default_subset() -> String {
+    "latin".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

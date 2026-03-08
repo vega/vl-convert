@@ -1079,3 +1079,52 @@ mod test_vega_label_transform {
     #[test]
     fn test_marker() {} // Help IDE detect test module
 }
+
+#[tokio::test]
+async fn test_svg_to_png_auto_fontsource() {
+    initialize();
+
+    let name = "svg_auto_fontsource";
+
+    // SVG that references a distinctive Fontsource-available font (Kalam)
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="250" height="60">
+  <rect width="250" height="60" fill="#f0f0f0"/>
+  <text x="10" y="40" font-family="Kalam" font-size="28" fill="#333">Hello Kalam</text>
+</svg>"##;
+
+    let converter = VlConverter::with_config(vl_convert_rs::converter::VlConverterConfig {
+        auto_fontsource: true,
+        ..Default::default()
+    })
+    .unwrap();
+
+    let png_data = converter.svg_to_png(svg, 2.0, None).await.unwrap();
+
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let expected_path = root_path
+        .join("tests")
+        .join("svg-specs")
+        .join("expected")
+        .join(format!("{name}.png"));
+
+    if expected_path.exists() {
+        let expected_dssim = dssim::load_image(&Dssim::new(), &expected_path).unwrap();
+        let actual_dssim = to_dssim(png_data.as_slice()).unwrap();
+        let (diff, _) = Dssim::new().compare(&expected_dssim, actual_dssim);
+        if diff > 0.00011 {
+            let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
+            fs::create_dir_all(&failed_dir).unwrap();
+            let failed_path = failed_dir.join(format!("{name}.png"));
+            fs::write(&failed_path, &png_data).unwrap();
+            panic!("DSSIM diff {diff} for {name}.png. Failed image written to {failed_path:?}");
+        }
+    } else {
+        let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
+        fs::create_dir_all(&failed_dir).unwrap();
+        let failed_path = failed_dir.join(format!("{name}.png"));
+        fs::write(&failed_path, &png_data).unwrap();
+        panic!(
+            "Baseline image does not exist for {name}.png. Failed image written to {failed_path:?}"
+        );
+    }
+}

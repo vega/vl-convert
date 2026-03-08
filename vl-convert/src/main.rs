@@ -985,9 +985,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_fontsource,
                 missing_fonts,
             )?;
-            let png_data =
-                tokio::task::spawn_blocking(move || converter.svg_to_png(&svg, scale, Some(ppi)))
-                    .await??;
+            let png_data = converter.svg_to_png(&svg, scale, Some(ppi)).await?;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
         }
         Svg2jpeg {
@@ -1008,10 +1006,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_fontsource,
                 missing_fonts,
             )?;
-            let jpeg_data = tokio::task::spawn_blocking(move || {
-                converter.svg_to_jpeg(&svg, scale, Some(quality))
-            })
-            .await??;
+            let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality)).await?;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
         }
         Svg2pdf {
@@ -1030,8 +1025,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_fontsource,
                 missing_fonts,
             )?;
-            let pdf_data =
-                tokio::task::spawn_blocking(move || converter.svg_to_pdf(&svg)).await??;
+            let pdf_data = converter.svg_to_pdf(&svg).await?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
         }
         LsThemes => list_themes().await?,

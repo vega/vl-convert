@@ -1099,11 +1099,9 @@ fn vega_to_html(
 #[pyfunction]
 #[pyo3(signature = (svg, scale=None, ppi=None))]
 fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
-    let converter = converter_read_handle()
-        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
     let svg = svg.to_string();
-    let png_data = Python::with_gil(|py| {
-        py.allow_threads(move || converter.svg_to_png(&svg, scale.unwrap_or(1.0), ppi))
+    let png_data = run_converter_future(move |converter| async move {
+        converter.svg_to_png(&svg, scale.unwrap_or(1.0), ppi).await
     })
     .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
@@ -1122,11 +1120,11 @@ fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObj
 #[pyfunction]
 #[pyo3(signature = (svg, scale=None, quality=None))]
 fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
-    let converter = converter_read_handle()
-        .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
     let svg = svg.to_string();
-    let jpeg_data = Python::with_gil(|py| {
-        py.allow_threads(move || converter.svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality))
+    let jpeg_data = run_converter_future(move |converter| async move {
+        converter
+            .svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality)
+            .await
     })
     .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
@@ -1145,11 +1143,10 @@ fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<P
 #[pyo3(signature = (svg, scale=None))]
 fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
-    let converter = converter_read_handle()
-        .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
     let svg = svg.to_string();
-    let pdf_data = Python::with_gil(|py| py.allow_threads(move || converter.svg_to_pdf(&svg)))
-        .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
+    let pdf_data =
+        run_converter_future(move |converter| async move { converter.svg_to_pdf(&svg).await })
+            .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
         PyBytes::new(py, pdf_data.as_slice()).into()
     }))
@@ -2165,17 +2162,12 @@ fn svg_to_png_asyncio<'py>(
     ppi: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let svg = svg.to_string();
-    let converter = converter_read_handle()
-        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
-    future_into_py_object(py, async move {
-        let png_data = tokio::task::spawn_blocking(move || {
-            converter.svg_to_png(&svg, scale.unwrap_or(1.0), ppi)
-        })
-        .await
-        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?
-        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
-        Python::with_gil(|py| Ok(PyBytes::new(py, png_data.as_slice()).into()))
-    })
+    run_converter_future_async(
+        py,
+        move |converter| async move { converter.svg_to_png(&svg, scale.unwrap_or(1.0), ppi).await },
+        "SVG to PNG conversion failed",
+        |py, data| Ok(PyBytes::new(py, data.as_slice()).into()),
+    )
 }
 
 #[doc = async_variant_doc!("svg_to_jpeg")]
@@ -2188,17 +2180,16 @@ fn svg_to_jpeg_asyncio<'py>(
     quality: Option<u8>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let svg = svg.to_string();
-    let converter = converter_read_handle()
-        .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
-    future_into_py_object(py, async move {
-        let jpeg_data = tokio::task::spawn_blocking(move || {
-            converter.svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality)
-        })
-        .await
-        .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?
-        .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
-        Python::with_gil(|py| Ok(PyBytes::new(py, jpeg_data.as_slice()).into()))
-    })
+    run_converter_future_async(
+        py,
+        move |converter| async move {
+            converter
+                .svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality)
+                .await
+        },
+        "SVG to JPEG conversion failed",
+        |py, data| Ok(PyBytes::new(py, data.as_slice()).into()),
+    )
 }
 
 #[doc = async_variant_doc!("svg_to_pdf")]
@@ -2211,15 +2202,12 @@ fn svg_to_pdf_asyncio<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let svg = svg.to_string();
-    let converter = converter_read_handle()
-        .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
-    future_into_py_object(py, async move {
-        let pdf_data = tokio::task::spawn_blocking(move || converter.svg_to_pdf(&svg))
-            .await
-            .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?
-            .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
-        Python::with_gil(|py| Ok(PyBytes::new(py, pdf_data.as_slice()).into()))
-    })
+    run_converter_future_async(
+        py,
+        move |converter| async move { converter.svg_to_pdf(&svg).await },
+        "SVG to PDF conversion failed",
+        |py, data| Ok(PyBytes::new(py, data.as_slice()).into()),
+    )
 }
 
 #[doc = async_variant_doc!("register_font_directory")]
