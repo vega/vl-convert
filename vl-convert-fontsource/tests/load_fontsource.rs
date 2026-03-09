@@ -286,13 +286,13 @@ fn make_client(
     cache_root: &Path,
     base_url: &str,
     max_parallel_downloads: usize,
-    max_blob_cache_bytes: u64,
+    max_cache_bytes: u64,
 ) -> FontsourceClient {
     let config = ClientConfig {
         cache_dir: Some(cache_root.to_path_buf()),
         metadata_base_url: format!("{}/v1/fonts", base_url),
         max_parallel_downloads,
-        max_blob_cache_bytes,
+        max_cache_bytes,
         ..ClientConfig::default()
     };
     FontsourceClient::new(config).unwrap()
@@ -343,7 +343,8 @@ fn test_none_variants_loads_all_downloadable_ttf() {
 
     let batch = client.load_blocking("Roboto", None).unwrap();
 
-    assert_eq!(batch.ttf_file_count, 3);
+    // After merging: 400-normal (latin+latin-ext → 1 merged) + 700-normal (latin → 1 passthrough) = 2
+    assert_eq!(batch.ttf_file_count, 2);
     assert_eq!(batch.loaded_variants.len(), 2);
     assert!(batch.loaded_variants.contains(&VariantRequest {
         weight: 400,
@@ -353,7 +354,7 @@ fn test_none_variants_loads_all_downloadable_ttf() {
         weight: 700,
         style: FontStyle::Normal,
     }));
-    assert_eq!(batch.font_data().len(), 3);
+    assert_eq!(batch.font_data().len(), 2);
     assert!(batch.font_data().iter().all(|data| !data.is_empty()));
 }
 
@@ -374,7 +375,8 @@ fn test_register_batch_returns_ids_and_per_source_ids() {
     let mut db = fontdb::Database::new();
     let registration = db.register_fontsource_batch(batch);
     assert!(!registration.face_ids().is_empty());
-    assert_eq!(registration.per_source_ids().len(), 2);
+    // After merging: 400-normal (latin+latin-ext) → 1 merged font
+    assert_eq!(registration.per_source_ids().len(), 1);
     assert!(registration
         .per_source_ids()
         .iter()
@@ -436,7 +438,7 @@ async fn test_async_and_blocking_parity() {
         blocking_result.loaded_variants
     );
     assert_eq!(async_result.ttf_file_count, blocking_result.ttf_file_count);
-    assert_eq!(async_result.ttf_file_count, 2);
+    assert_eq!(async_result.ttf_file_count, 1);
     assert_eq!(
         async_result.font_data().len(),
         blocking_result.font_data().len()
@@ -548,7 +550,7 @@ fn test_corrupt_metadata_fallbacks_to_network() {
 
     let batch = client.load_blocking("Roboto", Some(&requested)).unwrap();
 
-    assert_eq!(batch.ttf_file_count, 2);
+    assert_eq!(batch.ttf_file_count, 1);
     assert_eq!(server.hit_count("/v1/fonts/roboto"), 1);
     assert!(server.hit_count("/fonts/latin-400-normal.ttf") >= 1);
 
@@ -625,7 +627,7 @@ fn test_eviction_keeps_current_font() {
 
     let temp = tempfile::tempdir().unwrap();
     let cache_dir = temp.path();
-    let blob_dir = cache_dir.join("blobs");
+    let fonts_dir = cache_dir.join("fonts");
     let max_cache = REGULAR_TTF.len() as u64 + 16;
     let client = make_client(cache_dir, server.base_url(), 8, max_cache);
 
@@ -640,7 +642,7 @@ fn test_eviction_keeps_current_font() {
     assert_eq!(roboto_hits, 1);
     assert_eq!(open_sans_hits, 1);
 
-    // Current font blobs should be exempt from eviction.
+    // Current merged fonts should be exempt from eviction.
     let _ = client.load_blocking("Open Sans", None).unwrap();
     assert_eq!(server.hit_count("/fonts/open-sans.ttf"), open_sans_hits);
 
@@ -648,8 +650,8 @@ fn test_eviction_keeps_current_font() {
     let _ = client.load_blocking("Roboto", None).unwrap();
     assert_eq!(server.hit_count("/fonts/roboto.ttf"), roboto_hits + 1);
 
-    // At least one blob should exist for the currently-loaded font.
-    let blob_count = std::fs::read_dir(&blob_dir)
+    // At least one cached TTF should exist for the currently-loaded font.
+    let font_count = std::fs::read_dir(&fonts_dir)
         .unwrap()
         .flatten()
         .filter(|entry| {
@@ -661,7 +663,7 @@ fn test_eviction_keeps_current_font() {
                 .unwrap_or(false)
         })
         .count();
-    assert!(blob_count >= 1);
+    assert!(font_count >= 1);
 }
 
 #[test]
@@ -685,7 +687,7 @@ fn test_cached_metadata_avoids_refetch() {
 }
 
 #[test]
-fn test_corrupt_blob_fallbacks_to_network() {
+fn test_corrupt_merged_fallbacks_to_network() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
@@ -697,8 +699,8 @@ fn test_corrupt_blob_fallbacks_to_network() {
 
     let _ = client.load_blocking("Roboto", Some(&requested)).unwrap();
 
-    let blob_dir = temp.path().join("blobs");
-    let mut blobs: Vec<_> = std::fs::read_dir(&blob_dir)
+    let fonts_dir = temp.path().join("fonts");
+    let mut cached_files: Vec<_> = std::fs::read_dir(&fonts_dir)
         .unwrap()
         .flatten()
         .map(|entry| entry.path())
@@ -709,10 +711,10 @@ fn test_corrupt_blob_fallbacks_to_network() {
                 .unwrap_or(false)
         })
         .collect();
-    blobs.sort();
-    assert!(!blobs.is_empty());
+    cached_files.sort();
+    assert!(!cached_files.is_empty());
 
-    let corrupt_path = blobs[0].clone();
+    let corrupt_path = cached_files[0].clone();
     std::fs::remove_file(&corrupt_path).unwrap();
     std::fs::create_dir_all(&corrupt_path).unwrap();
 
@@ -722,7 +724,8 @@ fn test_corrupt_blob_fallbacks_to_network() {
     let hits_after = server.hit_count("/fonts/latin-400-normal.ttf")
         + server.hit_count("/fonts/latin-ext-400-normal.ttf");
 
-    assert_eq!(hits_after, hits_before + 1);
+    // Corrupting the merged file forces re-download of all subsets for that variant.
+    assert_eq!(hits_after, hits_before + 2);
     assert!(corrupt_path.is_file());
 }
 
@@ -737,14 +740,14 @@ fn test_no_cache_dir_always_downloads() {
     }];
 
     let first = client.load_blocking("Roboto", Some(&requested)).unwrap();
-    assert_eq!(first.ttf_file_count, 2);
+    assert_eq!(first.ttf_file_count, 1);
 
     let latin_hits = server.hit_count("/fonts/latin-400-normal.ttf");
     let meta_hits = server.hit_count("/v1/fonts/roboto");
 
-    // Without a cache dir, every load re-fetches metadata and blobs.
+    // Without a cache dir, every load re-fetches metadata and font files.
     let second = client.load_blocking("Roboto", Some(&requested)).unwrap();
-    assert_eq!(second.ttf_file_count, 2);
+    assert_eq!(second.ttf_file_count, 1);
     assert_eq!(
         server.hit_count("/fonts/latin-400-normal.ttf"),
         latin_hits * 2
