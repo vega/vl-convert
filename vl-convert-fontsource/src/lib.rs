@@ -2,6 +2,7 @@ mod cache;
 mod client;
 mod config;
 pub mod error;
+mod merge;
 mod resolve;
 pub mod types;
 pub use client::FontsourceClient;
