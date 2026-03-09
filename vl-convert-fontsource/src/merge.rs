@@ -109,6 +109,12 @@ pub(crate) fn merge_subsets(
     collect_gsub_closure_glyphs(&fonts[0], &mut glyph_map, &mut glyph_order, &mut next_gid);
 
     let total_glyphs = next_gid;
+    if total_glyphs > u16::MAX as u32 {
+        return Err(make_err(format!(
+            "Merged glyph count ({total_glyphs}) exceeds maximum of {}",
+            u16::MAX
+        )));
+    }
 
     // === Step 4: Build glyf and loca tables from raw bytes ===
     let mut glyf_buf = Vec::new();
@@ -250,7 +256,7 @@ fn raw_glyph_bytes<'a>(font: &FontRef<'a>, gid: u32) -> Option<&'a [u8]> {
         (s, e)
     };
 
-    if start == end || end > glyf_data.len() {
+    if start >= end || end > glyf_data.len() {
         return None; // empty glyph
     }
     Some(&glyf_data[start..end])

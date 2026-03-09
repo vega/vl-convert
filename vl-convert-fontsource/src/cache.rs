@@ -95,8 +95,11 @@ pub(crate) fn font_cache_key(
     style: FontStyle,
     last_modified: &str,
 ) -> String {
+    // Sanitize inputs to prevent path traversal from API metadata.
+    let safe_id = font_id.replace(['/', '\\', '.'], "_");
+    let safe_modified = last_modified.replace(['/', '\\', '.'], "_");
     format!(
-        "{font_id}--{weight}-{}--{last_modified}.ttf",
+        "{safe_id}--{weight}-{}--{safe_modified}.ttf",
         style.as_str()
     )
 }

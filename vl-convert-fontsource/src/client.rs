@@ -264,7 +264,7 @@ impl FontsourceClient {
 
         let results: Vec<Result<Vec<u8>, FontsourceError>> = stream::iter(urls)
             .map(|url| async move { self.get_bytes_with_retry_async(&url).await })
-            .buffer_unordered(self.config.max_parallel_downloads)
+            .buffered(self.config.max_parallel_downloads)
             .collect()
             .await;
 
