@@ -206,9 +206,18 @@ pub(crate) fn merge_subsets(
     // If remapping fails but the table exists, add an empty entry to prevent
     // copy_missing_tables from copying the stale original (which has pre-remap GIDs).
     for (tag_bytes, remap_fn) in [
-        (b"GSUB", remap_gsub_table as fn(&FontRef, &BTreeMap<u32, u32>) -> Option<Vec<u8>>),
-        (b"GPOS", remap_gpos_table as fn(&FontRef, &BTreeMap<u32, u32>) -> Option<Vec<u8>>),
-        (b"GDEF", remap_gdef_table as fn(&FontRef, &BTreeMap<u32, u32>) -> Option<Vec<u8>>),
+        (
+            b"GSUB",
+            remap_gsub_table as fn(&FontRef, &BTreeMap<u32, u32>) -> Option<Vec<u8>>,
+        ),
+        (
+            b"GPOS",
+            remap_gpos_table as fn(&FontRef, &BTreeMap<u32, u32>) -> Option<Vec<u8>>,
+        ),
+        (
+            b"GDEF",
+            remap_gdef_table as fn(&FontRef, &BTreeMap<u32, u32>) -> Option<Vec<u8>>,
+        ),
     ] {
         let tag = read_fonts::types::Tag::new(tag_bytes);
         if let Some(remapped) = remap_fn(base, &base_gid_remap) {
