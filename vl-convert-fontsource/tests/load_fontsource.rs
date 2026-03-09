@@ -186,6 +186,7 @@ fn roboto_metadata_json(base_url: &str) -> Vec<u8> {
         "weights": [400, 700],
         "styles": ["normal", "italic"],
         "version": "v1",
+        "lastModified": "2026-01-01",
         "type": "google",
         "variants": {
             "400": {
@@ -240,6 +241,7 @@ fn single_file_metadata_json(base_url: &str, id: &str, family: &str, file_path: 
         "weights": [400],
         "styles": ["normal"],
         "version": "v1",
+        "lastModified": "2026-01-01",
         "type": "google",
         "variants": {
             "400": {

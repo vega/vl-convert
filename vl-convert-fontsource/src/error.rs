@@ -32,6 +32,14 @@ pub enum FontsourceError {
     #[error("Cache directory must be an absolute path, got: {0:?}")]
     RelativeCacheDir(std::path::PathBuf),
 
+    #[error("Font merge error for \"{font_id}\" ({weight}-{style}): {message}")]
+    FontMerge {
+        font_id: String,
+        weight: u16,
+        style: String,
+        message: String,
+    },
+
     #[error("Internal error: {0}")]
     Internal(String),
 }

@@ -5,7 +5,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 /// CSS font style.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum FontStyle {
     Normal,
     Italic,
@@ -91,6 +91,8 @@ pub struct FontsourceFont {
     #[serde(default = "default_subset")]
     pub def_subset: String,
     pub version: String,
+    #[serde(default)]
+    pub last_modified: Option<String>,
     #[serde(rename = "type")]
     pub font_type: String,
     pub variants: VariantMap,
