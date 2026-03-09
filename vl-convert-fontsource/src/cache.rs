@@ -162,9 +162,7 @@ fn is_ttf_file(path: &Path) -> bool {
             .unwrap_or(false)
 }
 
-pub(crate) fn calculate_cache_size_bytes(
-    fonts_dir: &Path,
-) -> Result<u64, FontsourceError> {
+pub(crate) fn calculate_cache_size_bytes(fonts_dir: &Path) -> Result<u64, FontsourceError> {
     if !fonts_dir.exists() {
         return Ok(0);
     }
