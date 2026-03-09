@@ -2,21 +2,18 @@ use crate::cache;
 use crate::config::ClientConfig;
 use crate::error::FontsourceError;
 use crate::resolve::{dedupe_variants, resolve_download_plan, ResolvedTtfFile};
-use crate::types::{family_to_id, LoadedFontBatch, VariantRequest};
+use crate::types::{family_to_id, FontStyle, FontsourceFont, LoadedFontBatch, VariantRequest};
 use backon::{BlockingRetryable, ExponentialBuilder, Retryable};
 use dashmap::DashMap;
 use futures_util::stream::{self, StreamExt};
 use reqwest::StatusCode;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// Return type for `ensure_blobs_*`: (font data, blob keys used, whether any were downloaded).
-type EnsureBlobsResult = Result<(Vec<Arc<Vec<u8>>>, HashSet<String>, bool), FontsourceError>;
-
-/// Per-blob-key mutex that serializes concurrent download/load of the same font file
-/// to avoid repeated simultaneous downloads.
+/// Per-variant mutex that serializes concurrent download+merge of the same
+/// font variant to avoid duplicate work.
 struct DownloadGate {
     mutex: tokio::sync::Mutex<()>,
     active_users: AtomicUsize,
@@ -40,7 +37,7 @@ pub struct FontsourceClient {
     /// Lazily initialized: creates an internal tokio runtime, so must not be
     /// built inside an async context.
     blocking_client: Mutex<Option<reqwest::blocking::Client>>,
-    max_blob_cache_bytes: AtomicU64,
+    max_cache_bytes: AtomicU64,
     download_gates: DashMap<String, Arc<DownloadGate>>,
 }
 
@@ -55,8 +52,7 @@ impl FontsourceClient {
             if !dir.is_absolute() {
                 return Err(FontsourceError::RelativeCacheDir(dir.clone()));
             }
-            std::fs::create_dir_all(dir.join("metadata"))?;
-            std::fs::create_dir_all(dir.join("blobs"))?;
+            cache::check_or_init_cache_format(dir)?;
         }
 
         let async_client = reqwest::Client::builder()
@@ -66,7 +62,7 @@ impl FontsourceClient {
             .map_err(|e| FontsourceError::Http(e.to_string()))?;
 
         Ok(Self {
-            max_blob_cache_bytes: AtomicU64::new(config.max_blob_cache_bytes),
+            max_cache_bytes: AtomicU64::new(config.max_cache_bytes),
             config,
             async_client,
             blocking_client: Mutex::new(None),
@@ -74,9 +70,9 @@ impl FontsourceClient {
         })
     }
 
-    /// Update the maximum blob cache size (in bytes) at runtime.
-    pub fn set_max_blob_cache_bytes(&self, bytes: u64) {
-        self.max_blob_cache_bytes.store(bytes, Ordering::Relaxed);
+    /// Update the maximum font cache size (in bytes) at runtime.
+    pub fn set_max_cache_bytes(&self, bytes: u64) {
+        self.max_cache_bytes.store(bytes, Ordering::Relaxed);
     }
 
     /// Load a font family from Fontsource (async).
@@ -97,7 +93,11 @@ impl FontsourceClient {
         };
 
         let plan = resolve_download_plan(&font_id, &metadata, variants)?;
-        let (font_data, exempt_keys, downloaded_any) = self.ensure_blobs_async(&plan.files).await?;
+        let variant_groups = group_files_by_variant(&plan.files);
+
+        let (font_data, exempt_keys, downloaded_any) = self
+            .load_font_variants_async(&font_id, &metadata, &plan.files, &variant_groups)
+            .await?;
 
         if downloaded_any {
             self.evict_if_needed(&exempt_keys)?;
@@ -107,7 +107,6 @@ impl FontsourceClient {
             font_id,
             Some(metadata.font_type),
             if let Some(v) = variants {
-                // Dedupe user-supplied variants; plan.loaded_variants is already unique.
                 dedupe_variants(v)
             } else {
                 plan.loaded_variants
@@ -135,7 +134,10 @@ impl FontsourceClient {
         };
 
         let plan = resolve_download_plan(&font_id, &metadata, variants)?;
-        let (font_data, exempt_keys, downloaded_any) = self.ensure_blobs_blocking(&plan.files)?;
+        let variant_groups = group_files_by_variant(&plan.files);
+
+        let (font_data, exempt_keys, downloaded_any) =
+            self.load_font_variants_blocking(&font_id, &metadata, &plan.files, &variant_groups)?;
 
         if downloaded_any {
             self.evict_if_needed(&exempt_keys)?;
@@ -145,7 +147,6 @@ impl FontsourceClient {
             font_id,
             Some(metadata.font_type),
             if let Some(v) = variants {
-                // Dedupe user-supplied variants; plan.loaded_variants is already unique.
                 dedupe_variants(v)
             } else {
                 plan.loaded_variants
@@ -155,11 +156,232 @@ impl FontsourceClient {
         ))
     }
 
-    /// Check whether a font exists on Fontsource without downloading blobs (async).
-    ///
-    /// Returns `Ok(true)` if the font metadata was successfully fetched (from
-    /// cache or API), `Ok(false)` if the API returned 404, and `Err` for
-    /// transient/network errors.
+    /// For each (weight, style) variant, check the font cache or
+    /// download+merge+cache. Returns (font data, exempt keys, downloaded_any).
+    #[allow(clippy::type_complexity)]
+    async fn load_font_variants_async(
+        &self,
+        font_id: &str,
+        metadata: &FontsourceFont,
+        files: &[ResolvedTtfFile],
+        variant_groups: &BTreeMap<(u16, FontStyle), Vec<usize>>,
+    ) -> Result<(Vec<Arc<Vec<u8>>>, HashSet<String>, bool), FontsourceError> {
+        let fonts_dir = self.config.fonts_dir();
+        let can_cache = metadata.last_modified.is_some();
+        let mut results = Vec::with_capacity(variant_groups.len());
+        let mut exempt_keys = HashSet::new();
+        let mut downloaded_any = false;
+
+        for &(weight, style) in variant_groups.keys() {
+            let cache_key = metadata
+                .last_modified
+                .as_ref()
+                .map(|lm| cache::font_cache_key(font_id, weight, style, lm));
+
+            // Fast path: check font cache before acquiring gate.
+            if let Some(ref key) = cache_key {
+                if let Some(ref dir) = fonts_dir {
+                    if let Some(bytes) = cache::read_cached_font(key, dir)? {
+                        let _ = cache::touch_cached_font(key, dir);
+                        exempt_keys.insert(key.clone());
+                        results.push(Arc::new(bytes));
+                        continue;
+                    }
+                }
+            }
+
+            // Slow path: acquire gate, double-check, download+merge.
+            let gate_key = match &cache_key {
+                Some(k) => k.clone(),
+                None => format!("{font_id}--{weight}-{}", style.as_str()),
+            };
+
+            let gate = self.acquire_download_gate(&gate_key);
+            let variant_result: Result<(Arc<Vec<u8>>, String, bool), FontsourceError> = async {
+                let _guard = gate.mutex.lock().await;
+
+                // Double-check: another caller may have filled the cache.
+                if can_cache {
+                    if let Some(ref key) = cache_key {
+                        if let Some(ref dir) = fonts_dir {
+                            if let Some(bytes) = cache::read_cached_font(key, dir)? {
+                                let _ = cache::touch_cached_font(key, dir);
+                                return Ok((Arc::new(bytes), key.clone(), false));
+                            }
+                        }
+                    }
+                }
+
+                // Download all subsets for this variant.
+                let subset_data = self
+                    .download_variant_subsets_async(font_id, weight, style, files, variant_groups)
+                    .await?;
+
+                let subset_refs: Vec<&[u8]> = subset_data.iter().map(|d| d.as_slice()).collect();
+                let merged = crate::merge::merge_subsets(font_id, weight, style, &subset_refs)?;
+
+                // Cache the merged result if we have a stable key.
+                let key_used = if let Some(ref key) = cache_key {
+                    if let Some(ref dir) = fonts_dir {
+                        cache::write_cached_font_if_absent(key, dir, &merged)?;
+                    }
+                    key.clone()
+                } else {
+                    gate_key.clone()
+                };
+
+                Ok((Arc::new(merged), key_used, true))
+            }
+            .await;
+            self.release_download_gate(&gate_key, &gate);
+
+            let (data, key_used, was_downloaded) = variant_result?;
+            exempt_keys.insert(key_used);
+            downloaded_any |= was_downloaded;
+            results.push(data);
+        }
+
+        Ok((results, exempt_keys, downloaded_any))
+    }
+
+    /// Download all subset files for a single (weight, style) variant (async).
+    async fn download_variant_subsets_async(
+        &self,
+        font_id: &str,
+        weight: u16,
+        style: FontStyle,
+        files: &[ResolvedTtfFile],
+        variant_groups: &BTreeMap<(u16, FontStyle), Vec<usize>>,
+    ) -> Result<Vec<Vec<u8>>, FontsourceError> {
+        let file_indices = variant_groups.get(&(weight, style)).ok_or_else(|| {
+            FontsourceError::Internal(format!(
+                "No files for variant {font_id} {weight}-{}",
+                style.as_str()
+            ))
+        })?;
+
+        let urls: Vec<String> = file_indices.iter().map(|&i| files[i].url.clone()).collect();
+
+        let results: Vec<Result<Vec<u8>, FontsourceError>> = stream::iter(urls)
+            .map(|url| async move { self.get_bytes_with_retry_async(&url).await })
+            .buffer_unordered(self.config.max_parallel_downloads)
+            .collect()
+            .await;
+
+        results.into_iter().collect()
+    }
+
+    /// Blocking counterpart of `load_font_variants_async`.
+    #[allow(clippy::type_complexity)]
+    fn load_font_variants_blocking(
+        &self,
+        font_id: &str,
+        metadata: &FontsourceFont,
+        files: &[ResolvedTtfFile],
+        variant_groups: &BTreeMap<(u16, FontStyle), Vec<usize>>,
+    ) -> Result<(Vec<Arc<Vec<u8>>>, HashSet<String>, bool), FontsourceError> {
+        let fonts_dir = self.config.fonts_dir();
+        let can_cache = metadata.last_modified.is_some();
+        let mut results = Vec::with_capacity(variant_groups.len());
+        let mut exempt_keys = HashSet::new();
+        let mut downloaded_any = false;
+
+        for &(weight, style) in variant_groups.keys() {
+            let cache_key = metadata
+                .last_modified
+                .as_ref()
+                .map(|lm| cache::font_cache_key(font_id, weight, style, lm));
+
+            // Fast path: check font cache.
+            if let Some(ref key) = cache_key {
+                if let Some(ref dir) = fonts_dir {
+                    if let Some(bytes) = cache::read_cached_font(key, dir)? {
+                        let _ = cache::touch_cached_font(key, dir);
+                        exempt_keys.insert(key.clone());
+                        results.push(Arc::new(bytes));
+                        continue;
+                    }
+                }
+            }
+
+            // Slow path: acquire gate, double-check, download+merge.
+            let gate_key = match &cache_key {
+                Some(k) => k.clone(),
+                None => format!("{font_id}--{weight}-{}", style.as_str()),
+            };
+
+            let gate = self.acquire_download_gate(&gate_key);
+            let variant_result: Result<(Arc<Vec<u8>>, String, bool), FontsourceError> = (|| {
+                let _guard = gate.mutex.blocking_lock();
+
+                if can_cache {
+                    if let Some(ref key) = cache_key {
+                        if let Some(ref dir) = fonts_dir {
+                            if let Some(bytes) = cache::read_cached_font(key, dir)? {
+                                let _ = cache::touch_cached_font(key, dir);
+                                return Ok((Arc::new(bytes), key.clone(), false));
+                            }
+                        }
+                    }
+                }
+
+                let subset_data = self.download_variant_subsets_blocking(
+                    font_id,
+                    weight,
+                    style,
+                    files,
+                    variant_groups,
+                )?;
+
+                let subset_refs: Vec<&[u8]> = subset_data.iter().map(|d| d.as_slice()).collect();
+                let merged = crate::merge::merge_subsets(font_id, weight, style, &subset_refs)?;
+
+                let key_used = if let Some(ref key) = cache_key {
+                    if let Some(ref dir) = fonts_dir {
+                        cache::write_cached_font_if_absent(key, dir, &merged)?;
+                    }
+                    key.clone()
+                } else {
+                    gate_key.clone()
+                };
+
+                Ok((Arc::new(merged), key_used, true))
+            })(
+            );
+            self.release_download_gate(&gate_key, &gate);
+
+            let (data, key_used, was_downloaded) = variant_result?;
+            exempt_keys.insert(key_used);
+            downloaded_any |= was_downloaded;
+            results.push(data);
+        }
+
+        Ok((results, exempt_keys, downloaded_any))
+    }
+
+    /// Download all subset files for a single variant (blocking).
+    fn download_variant_subsets_blocking(
+        &self,
+        font_id: &str,
+        weight: u16,
+        style: FontStyle,
+        files: &[ResolvedTtfFile],
+        variant_groups: &BTreeMap<(u16, FontStyle), Vec<usize>>,
+    ) -> Result<Vec<Vec<u8>>, FontsourceError> {
+        let file_indices = variant_groups.get(&(weight, style)).ok_or_else(|| {
+            FontsourceError::Internal(format!(
+                "No files for variant {font_id} {weight}-{}",
+                style.as_str()
+            ))
+        })?;
+
+        file_indices
+            .iter()
+            .map(|&i| self.get_bytes_with_retry_blocking(&files[i].url))
+            .collect()
+    }
+
+    /// Check whether a font exists on Fontsource without downloading font files (async).
     pub async fn is_known_font(&self, font_id: &str) -> Result<bool, FontsourceError> {
         if self.try_read_cached_metadata(font_id).is_some() {
             return Ok(true);
@@ -174,7 +396,7 @@ impl FontsourceClient {
         }
     }
 
-    /// Check whether a font exists on Fontsource without downloading blobs (blocking).
+    /// Check whether a font exists on Fontsource without downloading font files (blocking).
     pub fn is_known_font_blocking(&self, font_id: &str) -> Result<bool, FontsourceError> {
         if self.try_read_cached_metadata(font_id).is_some() {
             return Ok(true);
@@ -189,7 +411,6 @@ impl FontsourceClient {
         }
     }
 
-    /// Validate load arguments and return the normalized font ID.
     fn validate_load_request(
         family: &str,
         variants: Option<&[VariantRequest]>,
@@ -204,19 +425,17 @@ impl FontsourceClient {
         Ok(font_id)
     }
 
-    /// Read cached metadata or return `None`.
-    fn try_read_cached_metadata(&self, font_id: &str) -> Option<crate::types::FontsourceFont> {
+    fn try_read_cached_metadata(&self, font_id: &str) -> Option<FontsourceFont> {
         self.config
             .metadata_dir()
             .as_deref()
             .and_then(|dir| cache::read_metadata(font_id, dir))
     }
 
-    /// Write metadata to cache if a cache directory is configured.
     fn cache_metadata(
         &self,
         font_id: &str,
-        metadata: &crate::types::FontsourceFont,
+        metadata: &FontsourceFont,
     ) -> Result<(), FontsourceError> {
         if let Some(dir) = self.config.metadata_dir() {
             cache::write_metadata_if_absent(font_id, &dir, metadata)?;
@@ -224,11 +443,10 @@ impl FontsourceClient {
         Ok(())
     }
 
-    /// Map a raw HTTP result to a parsed `FontsourceFont`, converting 404 to `FontNotFound`.
     fn parse_metadata_response(
         font_id: &str,
         result: Result<Vec<u8>, FontsourceError>,
-    ) -> Result<crate::types::FontsourceFont, FontsourceError> {
+    ) -> Result<FontsourceFont, FontsourceError> {
         let bytes = match result {
             Err(FontsourceError::HttpStatus { status, .. })
                 if status == StatusCode::NOT_FOUND.as_u16() =>
@@ -240,33 +458,6 @@ impl FontsourceClient {
         Ok(serde_json::from_slice(&bytes)?)
     }
 
-    /// Try to read a blob from the cache, touching its mtime on hit.
-    fn try_read_cached_blob(
-        url: &str,
-        blob_dir: &Option<std::path::PathBuf>,
-    ) -> Result<Option<Vec<u8>>, FontsourceError> {
-        if let Some(ref dir) = blob_dir {
-            if let Some(bytes) = cache::read_blob(url, dir)? {
-                let _ = cache::touch_blob(url, dir);
-                return Ok(Some(bytes));
-            }
-        }
-        Ok(None)
-    }
-
-    /// Write a downloaded blob to the cache if a cache directory is configured.
-    fn cache_blob(
-        url: &str,
-        blob_dir: &Option<std::path::PathBuf>,
-        bytes: &[u8],
-    ) -> Result<(), FontsourceError> {
-        if let Some(ref dir) = blob_dir {
-            cache::write_blob_if_absent(url, dir, bytes)?;
-        }
-        Ok(())
-    }
-
-    /// Build the Fontsource metadata API URL for a font ID.
     fn metadata_url(&self, font_id: &str) -> String {
         format!(
             "{}/{}",
@@ -275,161 +466,27 @@ impl FontsourceClient {
         )
     }
 
-    /// Read the current blob cache size limit.
-    fn max_blob_cache_bytes(&self) -> u64 {
-        self.max_blob_cache_bytes.load(Ordering::Relaxed)
+    fn max_cache_bytes(&self) -> u64 {
+        self.max_cache_bytes.load(Ordering::Relaxed)
     }
 
-    /// Download or retrieve from cache all resolved TTF files in parallel (async).
-    async fn ensure_blobs_async(&self, files: &[ResolvedTtfFile]) -> EnsureBlobsResult {
-        let limit = self.config.max_parallel_downloads.max(1);
-
-        let results = stream::iter(files.iter().cloned().enumerate().map(
-            |(index, file)| async move {
-                self.ensure_blob_async(&file)
-                    .await
-                    .map(|(bytes, key, was_downloaded)| (index, bytes, key, was_downloaded))
-            },
-        ))
-        .buffer_unordered(limit)
-        .collect::<Vec<_>>()
-        .await;
-
-        let mut result_vec = Vec::with_capacity(results.len());
-        for result in results {
-            result_vec.push(result?);
-        }
-        result_vec.sort_by_key(|(idx, _, _, _)| *idx);
-
-        let mut font_data = Vec::with_capacity(files.len());
-        let mut exempt_keys = HashSet::new();
-        let mut downloaded_any = false;
-
-        for (_, bytes, key, was_downloaded) in result_vec {
-            font_data.push(Arc::new(bytes));
-            exempt_keys.insert(key);
-            downloaded_any |= was_downloaded;
+    fn evict_if_needed(&self, exempt_keys: &HashSet<String>) -> Result<(), FontsourceError> {
+        let Some(fonts_dir) = self.config.fonts_dir() else {
+            return Ok(());
+        };
+        let max_bytes = self.max_cache_bytes();
+        if max_bytes == 0 {
+            return Ok(());
         }
 
-        Ok((font_data, exempt_keys, downloaded_any))
+        let size = cache::calculate_cache_size_bytes(&fonts_dir)?;
+        if size <= max_bytes {
+            return Ok(());
+        }
+
+        cache::evict_lru_until_size(&fonts_dir, max_bytes, exempt_keys)
     }
 
-    /// Return a single blob from cache or download it, using a gate for dedup (async).
-    async fn ensure_blob_async(
-        &self,
-        file: &ResolvedTtfFile,
-    ) -> Result<(Vec<u8>, String, bool), FontsourceError> {
-        let key = cache::blob_key(&file.url);
-        let blob_dir = self.config.blob_dir();
-
-        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
-            return Ok((bytes, key, false));
-        }
-
-        // Without a cache dir, the gate can't deduplicate (waiters would just
-        // re-download anyway), so skip it and download directly.
-        if blob_dir.is_none() {
-            let bytes = self.get_bytes_with_retry_async(&file.url).await?;
-            return Ok((bytes, key, true));
-        }
-
-        let gate = self.acquire_download_gate(&key);
-        let result = async {
-            let _guard = gate.mutex.lock().await;
-
-            if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
-                return Ok((bytes, key.clone(), false));
-            }
-
-            let bytes = self.get_bytes_with_retry_async(&file.url).await?;
-            Self::cache_blob(&file.url, &blob_dir, &bytes)?;
-            Ok((bytes, key.clone(), true))
-        }
-        .await;
-        self.release_download_gate(&key, &gate);
-        result
-    }
-
-    /// Download or retrieve from cache all resolved TTF files in parallel (blocking).
-    fn ensure_blobs_blocking(&self, files: &[ResolvedTtfFile]) -> EnsureBlobsResult {
-        if files.is_empty() {
-            return Ok((Vec::new(), HashSet::new(), false));
-        }
-
-        let workers = self.config.max_parallel_downloads.max(1).min(files.len());
-        let chunk_size = files.len().div_ceil(workers);
-
-        let thread_results: Vec<Vec<_>> = std::thread::scope(|scope| {
-            files
-                .chunks(chunk_size)
-                .map(|chunk| {
-                    scope.spawn(|| {
-                        chunk
-                            .iter()
-                            .map(|file| self.ensure_blob_blocking(file))
-                            .collect::<Vec<_>>()
-                    })
-                })
-                .collect::<Vec<_>>()
-                .into_iter()
-                .map(|h| h.join().expect("thread panicked"))
-                .collect()
-        });
-
-        let mut font_data = Vec::with_capacity(files.len());
-        let mut exempt_keys = HashSet::new();
-        let mut downloaded_any = false;
-
-        for chunk in thread_results {
-            for result in chunk {
-                let (bytes, key, was_downloaded) = result?;
-                font_data.push(Arc::new(bytes));
-                exempt_keys.insert(key);
-                downloaded_any |= was_downloaded;
-            }
-        }
-
-        Ok((font_data, exempt_keys, downloaded_any))
-    }
-
-    /// Return a single blob from cache or download it, using a gate for dedup (blocking).
-    fn ensure_blob_blocking(
-        &self,
-        file: &ResolvedTtfFile,
-    ) -> Result<(Vec<u8>, String, bool), FontsourceError> {
-        let key = cache::blob_key(&file.url);
-        let blob_dir = self.config.blob_dir();
-
-        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
-            return Ok((bytes, key, false));
-        }
-
-        // Without a cache dir, the gate can't deduplicate (waiters would just
-        // re-download anyway), so skip it and download directly.
-        if blob_dir.is_none() {
-            let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
-            return Ok((bytes, key, true));
-        }
-
-        let gate = self.acquire_download_gate(&key);
-        let result = (|| {
-            // Uses tokio::sync::Mutex so the same gate works for both async
-            // and blocking callers within the same process.
-            let _guard = gate.mutex.blocking_lock();
-
-            if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
-                return Ok((bytes, key.clone(), false));
-            }
-
-            let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
-            Self::cache_blob(&file.url, &blob_dir, &bytes)?;
-            Ok((bytes, key.clone(), true))
-        })();
-        self.release_download_gate(&key, &gate);
-        result
-    }
-
-    /// Acquire (or create) a per-key download gate for in-process dedup.
     fn acquire_download_gate(&self, key: &str) -> Arc<DownloadGate> {
         let entry = self
             .download_gates
@@ -441,7 +498,6 @@ impl FontsourceClient {
         gate
     }
 
-    /// Release a download gate, removing it from the map when the last user drops.
     fn release_download_gate(&self, key: &str, gate: &Arc<DownloadGate>) {
         let prev = gate.active_users.fetch_sub(1, Ordering::AcqRel);
         debug_assert!(
@@ -462,25 +518,16 @@ impl FontsourceClient {
         }
     }
 
-    /// Fetch and deserialize font metadata from the Fontsource API (async).
-    async fn fetch_metadata_async(
-        &self,
-        font_id: &str,
-    ) -> Result<crate::types::FontsourceFont, FontsourceError> {
+    async fn fetch_metadata_async(&self, font_id: &str) -> Result<FontsourceFont, FontsourceError> {
         let url = self.metadata_url(font_id);
         Self::parse_metadata_response(font_id, self.get_bytes_with_retry_async(&url).await)
     }
 
-    /// Fetch and deserialize font metadata from the Fontsource API (blocking).
-    fn fetch_metadata_blocking(
-        &self,
-        font_id: &str,
-    ) -> Result<crate::types::FontsourceFont, FontsourceError> {
+    fn fetch_metadata_blocking(&self, font_id: &str) -> Result<FontsourceFont, FontsourceError> {
         let url = self.metadata_url(font_id);
         Self::parse_metadata_response(font_id, self.get_bytes_with_retry_blocking(&url))
     }
 
-    /// GET a URL as bytes with exponential-backoff retry (async).
     async fn get_bytes_with_retry_async(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let backoff = ExponentialBuilder::default().with_max_times(self.config.max_retries);
         (|| self.get_bytes_once_async(url))
@@ -489,7 +536,6 @@ impl FontsourceClient {
             .await
     }
 
-    /// GET a URL as bytes with exponential-backoff retry (blocking).
     fn get_bytes_with_retry_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let backoff = ExponentialBuilder::default().with_max_times(self.config.max_retries);
         (|| self.get_bytes_once_blocking(url))
@@ -498,7 +544,6 @@ impl FontsourceClient {
             .call()
     }
 
-    /// Execute a single GET request and return the response body (async).
     async fn get_bytes_once_async(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let response = self
             .async_client
@@ -522,7 +567,6 @@ impl FontsourceClient {
             .map_err(|e| FontsourceError::from_reqwest(url, e))
     }
 
-    /// Execute a single GET request and return the response body (blocking).
     fn get_bytes_once_blocking(&self, url: &str) -> Result<Vec<u8>, FontsourceError> {
         let client = self.get_blocking_client_clone()?;
         let response = client
@@ -544,25 +588,6 @@ impl FontsourceClient {
             .map_err(|e| FontsourceError::from_reqwest(url, e))
     }
 
-    /// Run LRU eviction on the blob cache if it exceeds the configured limit.
-    fn evict_if_needed(&self, exempt_keys: &HashSet<String>) -> Result<(), FontsourceError> {
-        let Some(blob_dir) = self.config.blob_dir() else {
-            return Ok(());
-        };
-        let max_bytes = self.max_blob_cache_bytes();
-        if max_bytes == 0 {
-            return Ok(());
-        }
-
-        let size = cache::calculate_blob_cache_size_bytes(&blob_dir)?;
-        if size <= max_bytes {
-            return Ok(());
-        }
-
-        cache::evict_blob_lru_until_size(&blob_dir, max_bytes, exempt_keys)
-    }
-
-    /// Lazily initialize and clone the blocking HTTP client.
     fn get_blocking_client_clone(&self) -> Result<reqwest::blocking::Client, FontsourceError> {
         let mut guard = self
             .blocking_client
@@ -596,8 +621,6 @@ impl FontsourceClient {
 
 impl Drop for FontsourceClient {
     fn drop(&mut self) {
-        // Drop the blocking client on a dedicated thread: its internal tokio
-        // runtime shutdown might deadlock if run on an async worker thread.
         if let Ok(mut guard) = self.blocking_client.lock() {
             if let Some(client) = guard.take() {
                 let _ = std::thread::spawn(move || drop(client)).join();
@@ -610,6 +633,16 @@ impl Default for FontsourceClient {
     fn default() -> Self {
         Self::new(ClientConfig::default()).expect("Failed to construct default FontsourceClient")
     }
+}
+
+/// Group resolved files by (weight, style), storing indices into the original
+/// `files` slice. The BTreeMap gives deterministic ordering (weight then style).
+fn group_files_by_variant(files: &[ResolvedTtfFile]) -> BTreeMap<(u16, FontStyle), Vec<usize>> {
+    let mut groups: BTreeMap<(u16, FontStyle), Vec<usize>> = BTreeMap::new();
+    for (i, file) in files.iter().enumerate() {
+        groups.entry((file.weight, file.style)).or_default().push(i);
+    }
+    groups
 }
 
 #[cfg(test)]
@@ -630,7 +663,7 @@ mod tests {
     fn test_download_gate_pruned_when_last_user_released() {
         let temp = tempdir().unwrap();
         let client = make_test_client(temp.path());
-        let key = "roboto--latin-400-normal";
+        let key = "roboto--400-normal--2026-02-19";
 
         let gate = client.acquire_download_gate(key);
         assert!(client.download_gates.contains_key(key));
@@ -644,7 +677,7 @@ mod tests {
     fn test_download_gate_retained_while_other_users_exist() {
         let temp = tempdir().unwrap();
         let client = make_test_client(temp.path());
-        let key = "roboto--latin-400-normal";
+        let key = "roboto--400-normal--2026-02-19";
 
         let gate_a = client.acquire_download_gate(key);
         let gate_b = client.acquire_download_gate(key);
@@ -661,7 +694,7 @@ mod tests {
     fn test_download_gate_not_pruned_when_map_points_to_different_gate() {
         let temp = tempdir().unwrap();
         let client = make_test_client(temp.path());
-        let key = "roboto--latin-400-normal";
+        let key = "roboto--400-normal--2026-02-19";
 
         let old_gate = client.acquire_download_gate(key);
 

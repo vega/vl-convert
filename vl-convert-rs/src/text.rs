@@ -359,6 +359,6 @@ pub fn register_fontsource_font_blocking(
 /// `None` keeps the existing configured value.
 pub fn configure_font_cache(max_cache_bytes: Option<u64>) {
     if let Some(bytes) = max_cache_bytes {
-        FONTSOURCE_CLIENT.set_max_blob_cache_bytes(bytes);
+        FONTSOURCE_CLIENT.set_max_cache_bytes(bytes);
     }
 }
