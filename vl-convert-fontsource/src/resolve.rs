@@ -3,12 +3,10 @@ use crate::types::{FontStyle, FontsourceFont, VariantRequest};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct ResolvedTtfFile {
     pub url: String,
     pub weight: u16,
     pub style: FontStyle,
-    pub subset: String,
 }
 
 #[derive(Debug, Clone)]
@@ -118,7 +116,6 @@ pub(crate) fn resolve_download_plan(
                             url: ttf_url.clone(),
                             weight: req.weight,
                             style: req.style,
-                            subset: subset_key.clone(),
                         });
                     }
                 }
@@ -175,7 +172,6 @@ pub(crate) fn resolve_download_plan(
                                 url: ttf_url.clone(),
                                 weight,
                                 style,
-                                subset: subset_key.clone(),
                             });
                         }
                     }

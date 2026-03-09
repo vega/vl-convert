@@ -272,6 +272,38 @@ fn to_dssim(img: &[u8]) -> Result<DssimImage<f32>, Box<dyn std::error::Error>> {
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
+fn assert_svg_png_matches_baseline(name: &str, png_data: &[u8]) {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let expected_path = root_path
+        .join("tests")
+        .join("svg-specs")
+        .join("expected")
+        .join(format!("{name}.png"));
+
+    let write_failed = |data: &[u8]| -> PathBuf {
+        let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
+        fs::create_dir_all(&failed_dir).unwrap();
+        let path = failed_dir.join(format!("{name}.png"));
+        fs::write(&path, data).unwrap();
+        path
+    };
+
+    if expected_path.exists() {
+        let expected_dssim = dssim::load_image(&Dssim::new(), &expected_path).unwrap();
+        let actual_dssim = to_dssim(png_data).unwrap();
+        let (diff, _) = Dssim::new().compare(&expected_dssim, actual_dssim);
+        if diff > 0.00011 {
+            let failed_path = write_failed(png_data);
+            panic!("DSSIM diff {diff} for {name}.png. Failed image written to {failed_path:?}");
+        }
+    } else {
+        let failed_path = write_failed(png_data);
+        panic!(
+            "Baseline image does not exist for {name}.png. Rendered image written to {failed_path:?}"
+        );
+    }
+}
+
 fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) -> PathBuf {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let failed_dir = root_path
@@ -1108,33 +1140,7 @@ async fn test_svg_fontsource_multi_subset() {
 
     let png_data = converter.svg_to_png(svg, 2.0, None).await.unwrap();
 
-    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let expected_path = root_path
-        .join("tests")
-        .join("svg-specs")
-        .join("expected")
-        .join(format!("{name}.png"));
-
-    if expected_path.exists() {
-        let expected_dssim = dssim::load_image(&Dssim::new(), &expected_path).unwrap();
-        let actual_dssim = to_dssim(png_data.as_slice()).unwrap();
-        let (diff, _) = Dssim::new().compare(&expected_dssim, actual_dssim);
-        if diff > 0.00011 {
-            let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
-            fs::create_dir_all(&failed_dir).unwrap();
-            let failed_path = failed_dir.join(format!("{name}.png"));
-            fs::write(&failed_path, &png_data).unwrap();
-            panic!("DSSIM diff {diff} for {name}.png. Failed image written to {failed_path:?}");
-        }
-    } else {
-        let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
-        fs::create_dir_all(&failed_dir).unwrap();
-        let failed_path = failed_dir.join(format!("{name}.png"));
-        fs::write(&failed_path, &png_data).unwrap();
-        panic!(
-            "Baseline image does not exist for {name}.png. Rendered image written to {failed_path:?}"
-        );
-    }
+    assert_svg_png_matches_baseline(name, &png_data);
 }
 
 /// Test Pacifico (cursive font) with multi-subset characters to verify
@@ -1161,33 +1167,7 @@ async fn test_svg_fontsource_pacifico_multi_subset() {
 
     let png_data = converter.svg_to_png(svg, 2.0, None).await.unwrap();
 
-    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let expected_path = root_path
-        .join("tests")
-        .join("svg-specs")
-        .join("expected")
-        .join(format!("{name}.png"));
-
-    if expected_path.exists() {
-        let expected_dssim = dssim::load_image(&Dssim::new(), &expected_path).unwrap();
-        let actual_dssim = to_dssim(png_data.as_slice()).unwrap();
-        let (diff, _) = Dssim::new().compare(&expected_dssim, actual_dssim);
-        if diff > 0.00011 {
-            let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
-            fs::create_dir_all(&failed_dir).unwrap();
-            let failed_path = failed_dir.join(format!("{name}.png"));
-            fs::write(&failed_path, &png_data).unwrap();
-            panic!("DSSIM diff {diff} for {name}.png. Failed image written to {failed_path:?}");
-        }
-    } else {
-        let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
-        fs::create_dir_all(&failed_dir).unwrap();
-        let failed_path = failed_dir.join(format!("{name}.png"));
-        fs::write(&failed_path, &png_data).unwrap();
-        panic!(
-            "Baseline image does not exist for {name}.png. Rendered image written to {failed_path:?}"
-        );
-    }
+    assert_svg_png_matches_baseline(name, &png_data);
 }
 
 #[tokio::test]
@@ -1210,31 +1190,5 @@ async fn test_svg_to_png_auto_fontsource() {
 
     let png_data = converter.svg_to_png(svg, 2.0, None).await.unwrap();
 
-    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let expected_path = root_path
-        .join("tests")
-        .join("svg-specs")
-        .join("expected")
-        .join(format!("{name}.png"));
-
-    if expected_path.exists() {
-        let expected_dssim = dssim::load_image(&Dssim::new(), &expected_path).unwrap();
-        let actual_dssim = to_dssim(png_data.as_slice()).unwrap();
-        let (diff, _) = Dssim::new().compare(&expected_dssim, actual_dssim);
-        if diff > 0.00011 {
-            let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
-            fs::create_dir_all(&failed_dir).unwrap();
-            let failed_path = failed_dir.join(format!("{name}.png"));
-            fs::write(&failed_path, &png_data).unwrap();
-            panic!("DSSIM diff {diff} for {name}.png. Failed image written to {failed_path:?}");
-        }
-    } else {
-        let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
-        fs::create_dir_all(&failed_dir).unwrap();
-        let failed_path = failed_dir.join(format!("{name}.png"));
-        fs::write(&failed_path, &png_data).unwrap();
-        panic!(
-            "Baseline image does not exist for {name}.png. Failed image written to {failed_path:?}"
-        );
-    }
+    assert_svg_png_matches_baseline(name, &png_data);
 }

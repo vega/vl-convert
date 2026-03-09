@@ -202,15 +202,21 @@ pub(crate) fn merge_subsets(
     builder.add_raw(read_fonts::types::Tag::new(b"hmtx"), hmtx_bytes);
 
     // Remap and add GSUB/GPOS/GDEF before copy_missing_tables so originals
-    // are not copied (copy_missing_tables skips tags already present)
-    if let Some(remapped) = remap_gsub_table(base, &base_gid_remap) {
-        builder.add_raw(read_fonts::types::Tag::new(b"GSUB"), remapped);
-    }
-    if let Some(remapped) = remap_gpos_table(base, &base_gid_remap) {
-        builder.add_raw(read_fonts::types::Tag::new(b"GPOS"), remapped);
-    }
-    if let Some(remapped) = remap_gdef_table(base, &base_gid_remap) {
-        builder.add_raw(read_fonts::types::Tag::new(b"GDEF"), remapped);
+    // are not copied (copy_missing_tables skips tags already present).
+    // If remapping fails but the table exists, add an empty entry to prevent
+    // copy_missing_tables from copying the stale original (which has pre-remap GIDs).
+    for (tag_bytes, remap_fn) in [
+        (b"GSUB", remap_gsub_table as fn(&FontRef, &BTreeMap<u32, u32>) -> Option<Vec<u8>>),
+        (b"GPOS", remap_gpos_table as fn(&FontRef, &BTreeMap<u32, u32>) -> Option<Vec<u8>>),
+        (b"GDEF", remap_gdef_table as fn(&FontRef, &BTreeMap<u32, u32>) -> Option<Vec<u8>>),
+    ] {
+        let tag = read_fonts::types::Tag::new(tag_bytes);
+        if let Some(remapped) = remap_fn(base, &base_gid_remap) {
+            builder.add_raw(tag, remapped);
+        } else if base.data_for_tag(tag).is_some() {
+            // Table exists but remap failed — drop it rather than copying stale GIDs
+            builder.add_raw(tag, vec![]);
+        }
     }
 
     // Build a format 3.0 post table (no glyph names) to replace the base font's
@@ -1406,7 +1412,6 @@ mod tests {
             url: "test".to_string(),
             weight: 400,
             style: FontStyle::Normal,
-            subset: "latin".to_string(),
         }];
         let font_data = vec![Arc::new(ttf_bytes.to_vec())];
 
@@ -1426,13 +1431,11 @@ mod tests {
                 url: "latin".to_string(),
                 weight: 400,
                 style: FontStyle::Normal,
-                subset: "latin".to_string(),
             },
             ResolvedTtfFile {
                 url: "latin-ext".to_string(),
                 weight: 400,
                 style: FontStyle::Normal,
-                subset: "latin-ext".to_string(),
             },
         ];
         let font_data = vec![Arc::new(ttf1.to_vec()), Arc::new(ttf2.to_vec())];
@@ -1456,13 +1459,11 @@ mod tests {
                 url: "bad".to_string(),
                 weight: 400,
                 style: FontStyle::Normal,
-                subset: "latin".to_string(),
             },
             ResolvedTtfFile {
                 url: "bad2".to_string(),
                 weight: 400,
                 style: FontStyle::Normal,
-                subset: "latin-ext".to_string(),
             },
         ];
         let font_data = vec![
@@ -1490,13 +1491,11 @@ mod tests {
                 url: "latin".to_string(),
                 weight: 400,
                 style: FontStyle::Normal,
-                subset: "latin".to_string(),
             },
             ResolvedTtfFile {
                 url: "latin-ext".to_string(),
                 weight: 400,
                 style: FontStyle::Normal,
-                subset: "latin-ext".to_string(),
             },
         ];
         let font_data = vec![Arc::new(ttf1.to_vec()), Arc::new(ttf2.to_vec())];
@@ -1525,13 +1524,11 @@ mod tests {
                 url: "latin-400".to_string(),
                 weight: 400,
                 style: FontStyle::Normal,
-                subset: "latin".to_string(),
             },
             ResolvedTtfFile {
                 url: "latin-700".to_string(),
                 weight: 700,
                 style: FontStyle::Normal,
-                subset: "latin".to_string(),
             },
         ];
         let font_data = vec![Arc::new(ttf1.to_vec()), Arc::new(ttf2.to_vec())];

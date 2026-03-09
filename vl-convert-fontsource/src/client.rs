@@ -272,6 +272,11 @@ impl FontsourceClient {
     }
 
     /// Blocking counterpart of `load_font_variants_async`.
+    ///
+    /// # Panics
+    /// Uses `tokio::sync::Mutex::blocking_lock()` internally, which will panic
+    /// if called from within an active tokio runtime context. This method must
+    /// only be called from purely synchronous code paths.
     #[allow(clippy::type_complexity)]
     fn load_font_variants_blocking(
         &self,
