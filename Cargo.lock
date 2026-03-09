@@ -9838,13 +9838,16 @@ dependencies = [
  "fontdb",
  "fs4",
  "futures-util",
+ "read-fonts 0.35.0",
  "reqwest",
  "serde",
  "serde_json",
+ "skrifa 0.37.0",
  "tempfile",
  "thiserror 2.0.18",
  "tinyvec",
  "tokio",
+ "write-fonts",
 ]
 
 [[package]]

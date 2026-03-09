@@ -22,7 +22,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2"
 tinyvec = { workspace = true, optional = true }
+read-fonts = { workspace = true }
+skrifa = { workspace = true }
 tokio = { workspace = true, features = ["sync", "fs", "rt-multi-thread"] }
+write-fonts = { workspace = true }
 
 [dev-dependencies]
 fontdb = { workspace = true }
