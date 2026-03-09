@@ -127,12 +127,6 @@ The cache uses:
 - **LRU eviction** — when total size exceeds `max_cache_bytes`, least-recently-used files are evicted (current load is exempt)
 - **Cross-process safety** — file-level locking via `fs4` prevents corruption from concurrent processes
 
-## Known limitations
-
-- **65,535 glyph cap** — TrueType uses u16 glyph IDs; fonts with very large Unicode coverage across many subsets may hit this limit
-- **Single-pass GSUB closure** — glyph closure for OpenType substitution lookups runs once; deeply chained substitutions may miss some glyphs
-- **Stale DSIG tables** — digital signature tables are not updated after merging
-
 ## License
 
 BSD-3-Clause
