@@ -15,6 +15,7 @@ __pycache__/
 /vl-convert/tests/output/
 /vl-convert-rs/tests/specs/failed/
 /vl-convert-rs/tests/vl-specs/failed/
+/vl-convert-rs/tests/svg-specs/failed/
 
 .pixi/
 

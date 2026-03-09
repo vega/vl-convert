@@ -1080,6 +1080,116 @@ mod test_vega_label_transform {
     fn test_marker() {} // Help IDE detect test module
 }
 
+/// Test that characters from multiple Fontsource Unicode subsets (latin, latin-ext,
+/// vietnamese) render correctly together using a single merged font.
+#[tokio::test]
+async fn test_svg_fontsource_multi_subset() {
+    initialize();
+
+    let name = "svg_fontsource_multi_subset";
+
+    // SVG with a Fontsource font and characters from three subsets:
+    // - Latin: "Hello World" (U+0041..U+007A)
+    // - Latin-ext: ą (U+0105), ę (U+0119), ł (U+0142), ś (U+015B), ż (U+017C)
+    // - Vietnamese: ệ (U+1EC7), ứ (U+1EE9), ờ (U+1EDD)
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="500" height="200">
+  <rect width="500" height="200" fill="#f8f8f8"/>
+  <text x="20" y="40" font-family="Bangers" font-size="28" fill="#222">Hello World!</text>
+  <text x="20" y="85" font-family="Bangers" font-size="28" fill="#222">Latin-ext: ąęłść żółw</text>
+  <text x="20" y="130" font-family="Bangers" font-size="28" fill="#222">Vietnamese: Việt Nam ứờệ</text>
+  <text x="20" y="175" font-family="Bangers" font-size="28" fill="#222">Mixed: ąść Việt xyz</text>
+</svg>"##;
+
+    let converter = VlConverter::with_config(vl_convert_rs::converter::VlConverterConfig {
+        auto_fontsource: true,
+        ..Default::default()
+    })
+    .unwrap();
+
+    let png_data = converter.svg_to_png(svg, 2.0, None).await.unwrap();
+
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let expected_path = root_path
+        .join("tests")
+        .join("svg-specs")
+        .join("expected")
+        .join(format!("{name}.png"));
+
+    if expected_path.exists() {
+        let expected_dssim = dssim::load_image(&Dssim::new(), &expected_path).unwrap();
+        let actual_dssim = to_dssim(png_data.as_slice()).unwrap();
+        let (diff, _) = Dssim::new().compare(&expected_dssim, actual_dssim);
+        if diff > 0.00011 {
+            let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
+            fs::create_dir_all(&failed_dir).unwrap();
+            let failed_path = failed_dir.join(format!("{name}.png"));
+            fs::write(&failed_path, &png_data).unwrap();
+            panic!("DSSIM diff {diff} for {name}.png. Failed image written to {failed_path:?}");
+        }
+    } else {
+        let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
+        fs::create_dir_all(&failed_dir).unwrap();
+        let failed_path = failed_dir.join(format!("{name}.png"));
+        fs::write(&failed_path, &png_data).unwrap();
+        panic!(
+            "Baseline image does not exist for {name}.png. Rendered image written to {failed_path:?}"
+        );
+    }
+}
+
+/// Test Pacifico (cursive font) with multi-subset characters to verify
+/// GSUB/GPOS GID remapping works correctly for cursive fonts.
+#[tokio::test]
+async fn test_svg_fontsource_pacifico_multi_subset() {
+    initialize();
+
+    let name = "svg_fontsource_pacifico_multi_subset";
+
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="500" height="200">
+  <rect width="500" height="200" fill="#f8f8f8"/>
+  <text x="20" y="40" font-family="Pacifico" font-size="28" fill="#222">Hello World!</text>
+  <text x="20" y="85" font-family="Pacifico" font-size="28" fill="#222">Latin-ext: ąęłść żółw</text>
+  <text x="20" y="130" font-family="Pacifico" font-size="28" fill="#222">Vietnamese: Việt Nam ứờệ</text>
+  <text x="20" y="175" font-family="Pacifico" font-size="28" fill="#222">Mixed: ąść Việt xyz</text>
+</svg>"##;
+
+    let converter = VlConverter::with_config(vl_convert_rs::converter::VlConverterConfig {
+        auto_fontsource: true,
+        ..Default::default()
+    })
+    .unwrap();
+
+    let png_data = converter.svg_to_png(svg, 2.0, None).await.unwrap();
+
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let expected_path = root_path
+        .join("tests")
+        .join("svg-specs")
+        .join("expected")
+        .join(format!("{name}.png"));
+
+    if expected_path.exists() {
+        let expected_dssim = dssim::load_image(&Dssim::new(), &expected_path).unwrap();
+        let actual_dssim = to_dssim(png_data.as_slice()).unwrap();
+        let (diff, _) = Dssim::new().compare(&expected_dssim, actual_dssim);
+        if diff > 0.00011 {
+            let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
+            fs::create_dir_all(&failed_dir).unwrap();
+            let failed_path = failed_dir.join(format!("{name}.png"));
+            fs::write(&failed_path, &png_data).unwrap();
+            panic!("DSSIM diff {diff} for {name}.png. Failed image written to {failed_path:?}");
+        }
+    } else {
+        let failed_dir = root_path.join("tests").join("svg-specs").join("failed");
+        fs::create_dir_all(&failed_dir).unwrap();
+        let failed_path = failed_dir.join(format!("{name}.png"));
+        fs::write(&failed_path, &png_data).unwrap();
+        panic!(
+            "Baseline image does not exist for {name}.png. Rendered image written to {failed_path:?}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn test_svg_to_png_auto_fontsource() {
     initialize();
