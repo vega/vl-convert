@@ -3445,14 +3445,20 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let vg_spec = vg_spec.into();
+        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !auto_requests.is_empty() {
+            vg_opts
+                .google_fonts
+                .get_or_insert_with(Vec::new)
+                .extend(auto_requests);
+        }
         let google_font_batches = self
             .resolve_google_fonts(vg_opts.google_fonts.take())
             .await?;
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
-        let vg_spec = vg_spec.into();
-        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
 
         self.request(
             move |responder| VlConvertCommand::VgToPng {
@@ -3531,14 +3537,20 @@ impl VlConverter {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
+        let vg_spec = vg_spec.into();
+        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !auto_requests.is_empty() {
+            vg_opts
+                .google_fonts
+                .get_or_insert_with(Vec::new)
+                .extend(auto_requests);
+        }
         let google_font_batches = self
             .resolve_google_fonts(vg_opts.google_fonts.take())
             .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vg_opts.allowed_base_urls = effective_allowed_base_urls;
-        let vg_spec = vg_spec.into();
-        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         self.request(
             move |responder| VlConvertCommand::VgToJpeg {
                 vg_spec,
@@ -3617,14 +3629,20 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let vg_spec = vg_spec.into();
+        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !auto_requests.is_empty() {
+            vg_opts
+                .google_fonts
+                .get_or_insert_with(Vec::new)
+                .extend(auto_requests);
+        }
         let google_font_batches = self
             .resolve_google_fonts(vg_opts.google_fonts.take())
             .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vg_opts.allowed_base_urls = effective_allowed_base_urls;
-        let vg_spec = vg_spec.into();
-        self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         self.request(
             move |responder| VlConvertCommand::VgToPdf {
                 vg_spec,

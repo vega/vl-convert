@@ -29,15 +29,45 @@ pub(crate) fn blob_key(url: &str) -> String {
         .replace('/', "--")
 }
 
-fn blob_path(url: &str, blob_cache_dir: &Path) -> PathBuf {
-    blob_cache_dir.join(blob_key(url))
+/// Join `blob_key(url)` onto `blob_cache_dir`, then verify the resolved path
+/// is still inside the cache directory. Returns an error on path traversal.
+fn blob_path(url: &str, blob_cache_dir: &Path) -> Result<PathBuf, GoogleFontsError> {
+    let key = blob_key(url);
+    let joined = blob_cache_dir.join(&key);
+    // Normalize away any `.` / `..` components without requiring the path to
+    // exist on disk (unlike `canonicalize`).
+    let resolved = normalize_path(&joined);
+    let cache_dir_resolved = normalize_path(blob_cache_dir);
+    if !resolved.starts_with(&cache_dir_resolved) {
+        return Err(GoogleFontsError::Internal(format!(
+            "Blob key {key:?} escapes cache directory"
+        )));
+    }
+    Ok(resolved)
+}
+
+/// Pure-logical path normalization: resolves `.` and `..` without touching
+/// the filesystem, preserving the absolute/relative nature of the input.
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
 }
 
 pub(crate) fn read_blob(
     url: &str,
     blob_cache_dir: &Path,
 ) -> Result<Option<Vec<u8>>, GoogleFontsError> {
-    let path = blob_path(url, blob_cache_dir);
+    let path = blob_path(url, blob_cache_dir)?;
     match std::fs::read(&path) {
         Ok(bytes) => {
             if has_ttf_magic_bytes(&bytes) {
@@ -67,7 +97,7 @@ pub(crate) fn write_blob_if_absent(
     blob_cache_dir: &Path,
     bytes: &[u8],
 ) -> Result<(), GoogleFontsError> {
-    let path = blob_path(url, blob_cache_dir);
+    let path = blob_path(url, blob_cache_dir)?;
     // If a corrupt path exists as a non-file (e.g. directory), clear it and
     // treat this write as filling a miss.
     if let Ok(meta) = std::fs::symlink_metadata(&path) {
@@ -79,7 +109,7 @@ pub(crate) fn write_blob_if_absent(
 }
 
 pub(crate) fn touch_blob(url: &str, blob_cache_dir: &Path) -> Result<(), GoogleFontsError> {
-    let path = blob_path(url, blob_cache_dir);
+    let path = blob_path(url, blob_cache_dir)?;
     match filetime::set_file_mtime(&path, FileTime::now()) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -306,6 +336,29 @@ mod tests {
         let key = blob_key("https://example.com/fonts/test.ttf");
         assert!(!key.contains('/'));
         assert!(key.contains("example.com"));
+    }
+
+    #[test]
+    fn test_blob_path_rejects_traversal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = blob_path(
+            "https://fonts.gstatic.com/s/roboto/v30/../../../../etc/passwd",
+            tmp.path(),
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("escapes cache directory"), "{err}");
+    }
+
+    #[test]
+    fn test_blob_path_accepts_normal_url() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = blob_path(
+            "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf",
+            tmp.path(),
+        );
+        assert!(result.is_ok());
+        assert!(result.unwrap().starts_with(tmp.path()));
     }
 
     /// Fake TTF bytes with a valid TrueType magic header.
