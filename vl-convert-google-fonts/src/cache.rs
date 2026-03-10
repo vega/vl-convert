@@ -68,6 +68,21 @@ pub(crate) fn read_blob(
     blob_cache_dir: &Path,
 ) -> Result<Option<Vec<u8>>, GoogleFontsError> {
     let path = blob_path(url, blob_cache_dir)?;
+
+    // Reject symlinks and other non-regular entries without following them.
+    match std::fs::symlink_metadata(&path) {
+        Ok(meta) if !meta.is_file() => {
+            remove_path_if_present(&path);
+            return Ok(None);
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => {
+            remove_path_if_present(&path);
+            return Ok(None);
+        }
+        Ok(_) => {} // regular file — proceed
+    }
+
     match std::fs::read(&path) {
         Ok(bytes) => {
             if has_ttf_magic_bytes(&bytes) {
@@ -98,18 +113,26 @@ pub(crate) fn write_blob_if_absent(
     bytes: &[u8],
 ) -> Result<(), GoogleFontsError> {
     let path = blob_path(url, blob_cache_dir)?;
-    // If a corrupt path exists as a non-file (e.g. directory), clear it and
-    // treat this write as filling a miss.
     if let Ok(meta) = std::fs::symlink_metadata(&path) {
-        if !meta.is_file() {
-            remove_path_if_present(&path);
+        if meta.is_file() {
+            // Already present as a regular file — nothing to do.
+            return Ok(());
         }
+        // Non-file entry (symlink, directory, etc.) — remove before writing.
+        remove_path_if_present(&path);
     }
     atomic_write_bytes(&path, bytes)
 }
 
 pub(crate) fn touch_blob(url: &str, blob_cache_dir: &Path) -> Result<(), GoogleFontsError> {
     let path = blob_path(url, blob_cache_dir)?;
+
+    // Only touch regular files; skip symlinks and other non-file entries.
+    match std::fs::symlink_metadata(&path) {
+        Ok(meta) if meta.is_file() => {}
+        _ => return Ok(()),
+    }
+
     match filetime::set_file_mtime(&path, FileTime::now()) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -118,7 +141,10 @@ pub(crate) fn touch_blob(url: &str, blob_cache_dir: &Path) -> Result<(), GoogleF
 }
 
 fn is_blob_file(path: &Path) -> bool {
-    path.is_file()
+    // Use symlink_metadata so symlinks are not followed.
+    std::fs::symlink_metadata(path)
+        .map(|m| m.is_file())
+        .unwrap_or(false)
         && path
             .extension()
             .and_then(|e| e.to_str())
@@ -416,6 +442,26 @@ mod tests {
         std::fs::create_dir_all(&path).unwrap();
         assert!(read_blob(url, tmp.path()).unwrap().is_none());
         assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_read_blob_symlink_treated_as_miss_and_cleaned() {
+        let tmp = tempfile::tempdir().unwrap();
+        let url = "https://fonts.gstatic.com/s/testfont/v1/abc123.ttf";
+        let blob = tmp.path().join(blob_key(url));
+
+        // Create a symlink where the blob should be.
+        let target = tmp.path().join("target.ttf");
+        std::fs::write(&target, fake_ttf(b"payload")).unwrap();
+        std::os::unix::fs::symlink(&target, &blob).unwrap();
+        assert!(blob.exists()); // follows symlink
+
+        // read_blob must reject the symlink and remove it.
+        let result = read_blob(url, tmp.path()).unwrap();
+        assert!(result.is_none());
+        assert!(!blob.symlink_metadata().is_ok()); // symlink removed
+        assert!(target.exists()); // target untouched
     }
 
     #[test]

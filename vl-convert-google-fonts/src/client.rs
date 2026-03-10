@@ -37,6 +37,20 @@ impl DownloadGate {
     }
 }
 
+/// RAII guard that calls `release_download_gate` on drop, ensuring cleanup
+/// even on early return, error, or async cancellation.
+struct DownloadGateGuard<'a> {
+    client: &'a GoogleFontsClient,
+    key: String,
+    gate: Arc<DownloadGate>,
+}
+
+impl Drop for DownloadGateGuard<'_> {
+    fn drop(&mut self) {
+        self.client.release_download_gate(&self.key, &self.gate);
+    }
+}
+
 /// Google Fonts font loader client.
 pub struct GoogleFontsClient {
     config: ClientConfig,
@@ -297,21 +311,20 @@ impl GoogleFontsClient {
             return Ok((bytes, key, true));
         }
 
-        let gate = self.acquire_download_gate(&key);
-        let result = async {
-            let _guard = gate.mutex.lock().await;
+        let gate_guard = DownloadGateGuard {
+            client: self,
+            key: key.clone(),
+            gate: self.acquire_download_gate(&key),
+        };
+        let _lock = gate_guard.gate.mutex.lock().await;
 
-            if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
-                return Ok((bytes, key.clone(), false));
-            }
-
-            let bytes = self.get_bytes_with_retry_async(&file.url).await?;
-            Self::cache_blob(&file.url, &blob_dir, &bytes)?;
-            Ok((bytes, key.clone(), true))
+        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+            return Ok((bytes, key, false));
         }
-        .await;
-        self.release_download_gate(&key, &gate);
-        result
+
+        let bytes = self.get_bytes_with_retry_async(&file.url).await?;
+        Self::cache_blob(&file.url, &blob_dir, &bytes)?;
+        Ok((bytes, key, true))
     }
 
     /// Download or retrieve from cache all resolved TTF files in parallel (blocking).
@@ -390,22 +403,28 @@ impl GoogleFontsClient {
             return Ok((bytes, key, true));
         }
 
-        let gate = self.acquire_download_gate(&key);
-        let result = (|| {
-            // Uses tokio::sync::Mutex so the same gate works for both async
-            // and blocking callers within the same process.
-            let _guard = gate.mutex.blocking_lock();
+        let gate_guard = DownloadGateGuard {
+            client: self,
+            key: key.clone(),
+            gate: self.acquire_download_gate(&key),
+        };
 
-            if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
-                return Ok((bytes, key.clone(), false));
-            }
+        // blocking_lock() panics if called from a Tokio async execution context.
+        // ensure_blob_blocking is only reached from std::thread::scope threads,
+        // which do not inherit a Tokio runtime handle.
+        debug_assert!(
+            tokio::runtime::Handle::try_current().is_err(),
+            "ensure_blob_blocking must not be called from a Tokio runtime context"
+        );
+        let _lock = gate_guard.gate.mutex.blocking_lock();
 
-            let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
-            Self::cache_blob(&file.url, &blob_dir, &bytes)?;
-            Ok((bytes, key.clone(), true))
-        })();
-        self.release_download_gate(&key, &gate);
-        result
+        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+            return Ok((bytes, key, false));
+        }
+
+        let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
+        Self::cache_blob(&file.url, &blob_dir, &bytes)?;
+        Ok((bytes, key, true))
     }
 
     /// Acquire (or create) a per-key download gate for in-process dedup.
@@ -615,6 +634,25 @@ mod tests {
         assert!(client.download_gates.contains_key(key));
 
         client.release_download_gate(key, &gate_b);
+        assert!(!client.download_gates.contains_key(key));
+    }
+
+    #[test]
+    fn test_download_gate_guard_releases_on_drop() {
+        let temp = tempdir().unwrap();
+        let client = make_test_client(temp.path());
+        let key = "roboto--KFOmCnqEu92Fr1Mu4mxK.ttf";
+
+        {
+            let _guard = DownloadGateGuard {
+                client: &client,
+                key: key.to_string(),
+                gate: client.acquire_download_gate(key),
+            };
+            assert!(client.download_gates.contains_key(key));
+            // guard dropped here
+        }
+
         assert!(!client.download_gates.contains_key(key));
     }
 
