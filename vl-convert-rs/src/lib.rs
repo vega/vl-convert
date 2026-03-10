@@ -15,12 +15,14 @@ extern crate lazy_static;
 // extern crate deno_core makes it available at crate root for op2 and extension! macros
 extern crate deno_core;
 
-pub use converter::{FontsourceFontRequest, VlConverter};
+pub use converter::{GoogleFontRequest, VlConverter};
 pub use deno_core::anyhow;
 pub use module_loader::import_map::VlVersion;
 pub use serde_json;
-pub use text::{configure_font_cache, register_fontsource_font, register_fontsource_font_blocking};
-pub use vl_convert_fontsource::{fontsource_cache_dir, FontStyle, VariantRequest};
+pub use text::{
+    configure_font_cache, register_google_fonts_font, register_google_fonts_font_blocking,
+};
+pub use vl_convert_google_fonts::{google_fonts_cache_dir, FontStyle, VariantRequest};
 
 /// V8 snapshot containing the pre-compiled deno_runtime extensions plus our
 /// vl_convert_runtime extension. Generated at build time for container

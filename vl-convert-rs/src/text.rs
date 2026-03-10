@@ -10,7 +10,7 @@ use usvg::{
     ImageHrefResolver,
 };
 use vl_convert_canvas2d::font_config::{CustomFont, FontConfig, ResolvedFontConfig};
-use vl_convert_fontsource::{FontsourceClient, LoadedFontBatch, VariantRequest};
+use vl_convert_google_fonts::{GoogleFontsClient, LoadedFontBatch, VariantRequest};
 
 /// Monotonically increasing version counter for font configuration changes.
 /// Incremented each time font configuration is modified.
@@ -46,7 +46,7 @@ lazy_static! {
         build_font_baseline_snapshot(&build_default_font_config(), 0),
     );
     pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
-    pub static ref FONTSOURCE_CLIENT: FontsourceClient = FontsourceClient::default();
+    pub static ref GOOGLE_FONTS_CLIENT: GoogleFontsClient = GoogleFontsClient::default();
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -314,16 +314,16 @@ fn collect_custom_fonts_from_batch(batch: &LoadedFontBatch) -> Vec<CustomFont> {
         .collect()
 }
 
-/// Download and install a font by family name from Fontsource.
+/// Download and install a font by family name from Google Fonts.
 ///
-/// Fontsource TTF files are loaded into `fontdb` as in-memory binary sources.
+/// Google Fonts TTF files are loaded into `fontdb` as in-memory binary sources.
 /// The same bytes are also appended to `FONT_CONFIG.custom_fonts` so worker
 /// font refreshes keep the newly-installed fonts.
-pub async fn register_fontsource_font(
+pub async fn register_google_fonts_font(
     family: &str,
     variants: Option<&[VariantRequest]>,
 ) -> Result<(), anyhow::Error> {
-    let batch = FONTSOURCE_CLIENT.load(family, variants).await?;
+    let batch = GOOGLE_FONTS_CLIENT.load(family, variants).await?;
     let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
 
     {
@@ -336,12 +336,12 @@ pub async fn register_fontsource_font(
     refresh_font_baseline_after_config_update()
 }
 
-/// Blocking variant of [`register_fontsource_font`].
-pub fn register_fontsource_font_blocking(
+/// Blocking variant of [`register_google_fonts_font`].
+pub fn register_google_fonts_font_blocking(
     family: &str,
     variants: Option<&[VariantRequest]>,
 ) -> Result<(), anyhow::Error> {
-    let batch = FONTSOURCE_CLIENT.load_blocking(family, variants)?;
+    let batch = GOOGLE_FONTS_CLIENT.load_blocking(family, variants)?;
     let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
 
     {
@@ -354,11 +354,11 @@ pub fn register_fontsource_font_blocking(
     refresh_font_baseline_after_config_update()
 }
 
-/// Configure the max on-disk Fontsource cache size in bytes.
+/// Configure the max on-disk Google Fonts cache size in bytes.
 ///
 /// `None` keeps the existing configured value.
 pub fn configure_font_cache(max_cache_bytes: Option<u64>) {
     if let Some(bytes) = max_cache_bytes {
-        FONTSOURCE_CLIENT.set_max_blob_cache_bytes(bytes);
+        GOOGLE_FONTS_CLIENT.set_max_blob_cache_bytes(bytes);
     }
 }

@@ -416,7 +416,7 @@ mod test_vl2png {
 }
 
 #[rustfmt::skip]
-mod test_vl2png_fontsource {
+mod test_vl2png_google_fonts {
     use std::process::Command;
     use crate::*;
 
@@ -425,9 +425,9 @@ mod test_vl2png_fontsource {
         initialize();
 
         let vl_version = "5_8";
-        let output_filename = format!("{}_fontsource_fonts.png", vl_version);
+        let output_filename = format!("{}_google_fonts.png", vl_version);
 
-        let vl_path = vl_spec_path("fontsource_fonts");
+        let vl_path = vl_spec_path("google_fonts");
         let output = output_path(&output_filename);
 
         let mut cmd = Command::cargo_bin("vl-convert")?;
@@ -435,13 +435,13 @@ mod test_vl2png_fontsource {
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
             .arg("--vl-version").arg(vl_version)
-            .arg("--fontsource-font").arg("Bangers")
-            .arg("--fontsource-font").arg("Lugrasimo")
+            .arg("--google-font").arg("Bangers")
+            .arg("--google-font").arg("Lugrasimo")
             .arg("--scale").arg("2");
 
         cmd.assert().success();
 
-        let expected_png = load_expected_png("fontsource_fonts", vl_version, None).unwrap();
+        let expected_png = load_expected_png("google_fonts", vl_version, None).unwrap();
         let output_png = dssim::load_image(&Dssim::new(), &output).unwrap();
 
         let attr = Dssim::new();
@@ -449,7 +449,7 @@ mod test_vl2png_fontsource {
 
         if diff > 0.0001 {
             panic!(
-                "Images don't match for fontsource_fonts.png with diff {}",
+                "Images don't match for google_fonts.png with diff {}",
                 diff
             )
         }

@@ -133,9 +133,9 @@ if TYPE_CHECKING:
         allow_http_access: bool
         filesystem_root: str | None
         allowed_base_urls: list[str] | None
-        auto_fontsource: bool
+        auto_google_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
-        fontsource_cache_dir: str | None
+        google_fonts_cache_dir: str | None
 
 __all__ = [
     "asyncio",
@@ -147,7 +147,7 @@ __all__ = [
     "get_time_format_locale",
     "javascript_bundle",
     "register_font_directory",
-    "register_fontsource_font",
+    "register_google_fonts_font",
     "warm_up_workers",
     "svg_to_jpeg",
     "svg_to_pdf",
@@ -271,13 +271,13 @@ def register_font_directory(font_dir: str) -> None:
     """
     ...
 
-def register_fontsource_font(
+def register_google_fonts_font(
     font_family: str, variants: list[tuple[int, str]] | None = None
 ) -> None:
     """
-    Download, cache, and register a font by family name from Fontsource.
+    Download, cache, and register a font by family name from Google Fonts.
 
-    Downloads font files from the Fontsource catalog (which includes
+    Downloads font files from the Google Fonts catalog (which includes
     Google Fonts and other open-source fonts) and registers them for
     use in subsequent conversions.
 
@@ -302,8 +302,8 @@ def configure(
     allow_http_access: bool | None = None,
     filesystem_root: str | None = None,
     allowed_base_urls: list[str] | None = None,
-    fontsource_cache_size_mb: int | None = None,
-    auto_fontsource: bool | None = None,
+    google_fonts_cache_size_mb: int | None = None,
+    auto_google_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
 ) -> None:
     """
@@ -325,10 +325,10 @@ def configure(
         When configured, HTTP redirects are denied instead of followed.
         Per-call ``allowed_base_urls`` arguments on conversion functions override
         this converter-level default when provided.
-    fontsource_cache_size_mb
+    google_fonts_cache_size_mb
         Maximum font cache size in megabytes. If ``None``, keep current value.
-    auto_fontsource
-        Automatically download missing fonts from Fontsource. If ``None``, keep current value.
+    auto_google_fonts
+        Automatically download missing fonts from Google Fonts. If ``None``, keep current value.
     missing_fonts
         Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
         If ``None``, keep current value.
@@ -981,10 +981,10 @@ if TYPE_CHECKING:
         async def register_font_directory(self, font_dir: str) -> None:
             """Async version of ``register_font_directory``. See sync function for full documentation."""
             ...
-        async def register_fontsource_font(
+        async def register_google_fonts_font(
             self, font_family: str, variants: list[tuple[int, str]] | None = None
         ) -> None:
-            """Async version of ``register_fontsource_font``. See sync function for full documentation."""
+            """Async version of ``register_google_fonts_font``. See sync function for full documentation."""
             ...
         async def configure(
             self,
@@ -992,8 +992,8 @@ if TYPE_CHECKING:
             allow_http_access: bool | None = None,
             filesystem_root: str | None = None,
             allowed_base_urls: list[str] | None = None,
-            fontsource_cache_size_mb: int | None = None,
-            auto_fontsource: bool | None = None,
+            google_fonts_cache_size_mb: int | None = None,
+            auto_google_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""

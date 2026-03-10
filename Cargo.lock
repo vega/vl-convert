@@ -9828,7 +9828,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vl-convert-fontsource"
+name = "vl-convert-google-fonts"
 version = "2.0.0-rc1"
 dependencies = [
  "backon",
@@ -9904,7 +9904,7 @@ dependencies = [
  "usvg",
  "vl-convert-canvas2d",
  "vl-convert-canvas2d-deno",
- "vl-convert-fontsource",
+ "vl-convert-google-fonts",
 ]
 
 [[package]]
