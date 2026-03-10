@@ -86,7 +86,7 @@ pub struct LoadedFontBatch {
     pub font_id: String,
     pub loaded_variants: Vec<VariantRequest>,
     pub ttf_file_count: usize,
-    font_data: Vec<Arc<Vec<u8>>>,
+    pub font_data: Vec<Arc<Vec<u8>>>,
 }
 
 impl LoadedFontBatch {
@@ -102,14 +102,6 @@ impl LoadedFontBatch {
             ttf_file_count,
             font_data,
         }
-    }
-
-    pub fn font_data(&self) -> &[Arc<Vec<u8>>] {
-        &self.font_data
-    }
-
-    pub fn into_font_data(self) -> Vec<Arc<Vec<u8>>> {
-        self.font_data
     }
 }
 

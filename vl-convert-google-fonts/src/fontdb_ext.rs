@@ -43,7 +43,7 @@ impl GoogleFontsDatabaseExt for fontdb::Database {
         let mut per_source_ids = Vec::new();
         let mut all_ids = Vec::new();
 
-        for data in batch.into_font_data() {
+        for data in batch.font_data {
             let source = fontdb::Source::Binary(data as Arc<dyn AsRef<[u8]> + Send + Sync>);
             let ids = self.load_font_source(source);
             all_ids.extend(ids.iter().copied());

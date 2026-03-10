@@ -352,8 +352,8 @@ fn test_none_variants_loads_all_available() {
         weight: 400,
         style: FontStyle::Italic,
     }));
-    assert_eq!(batch.font_data().len(), 3);
-    assert!(batch.font_data().iter().all(|data| !data.is_empty()));
+    assert_eq!(batch.font_data.len(), 3);
+    assert!(batch.font_data.iter().all(|data| !data.is_empty()));
 }
 
 #[cfg(feature = "fontdb")]
@@ -438,11 +438,11 @@ async fn test_async_and_blocking_parity() {
     // Single weight 400 normal → 1 TTF file (1:1 mapping, no subsets)
     assert_eq!(async_result.ttf_file_count, 1);
     assert_eq!(
-        async_result.font_data().len(),
-        blocking_result.font_data().len()
+        async_result.font_data.len(),
+        blocking_result.font_data.len()
     );
-    assert!(!async_result.font_data().is_empty());
-    assert!(!blocking_result.font_data().is_empty());
+    assert!(!async_result.font_data.is_empty());
+    assert!(!blocking_result.font_data.is_empty());
 }
 
 #[test]
@@ -714,6 +714,59 @@ fn test_no_cache_dir_always_downloads() {
         server.hit_count("/s/roboto/v30/regular.ttf"),
         regular_hits * 2
     );
+}
+
+#[tokio::test]
+async fn test_is_known_font_returns_true() {
+    let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
+    let temp = tempfile::tempdir().unwrap();
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
+
+    assert!(client.is_known_font("Roboto").await.unwrap());
+}
+
+#[tokio::test]
+async fn test_is_known_font_returns_false_for_unknown() {
+    let server = TestServer::new(
+        |_| Routes {
+            exact: HashMap::new(),
+            css2_families: HashMap::new(),
+        },
+        HashSet::new(),
+        0,
+    );
+    let temp = tempfile::tempdir().unwrap();
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
+
+    // Server returns 404 → HttpStatus 404 → is_known_font returns error (not 400)
+    // or FontNotFound. Either way, the font is not known.
+    let result = client.is_known_font("Nonexistent").await;
+    match result {
+        Ok(found) => assert!(!found),
+        Err(_) => {} // HTTP error for unknown font is also acceptable
+    }
+}
+
+#[tokio::test]
+async fn test_is_known_font_empty_css_response() {
+    // Server returns 200 with no @font-face blocks
+    let server = TestServer::new(
+        |_| {
+            let mut css2_families = HashMap::new();
+            css2_families.insert("emptyfont".to_string(), b"/* no fonts */".to_vec());
+            Routes {
+                exact: HashMap::new(),
+                css2_families,
+            }
+        },
+        HashSet::new(),
+        0,
+    );
+    let temp = tempfile::tempdir().unwrap();
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
+
+    let result = client.is_known_font("EmptyFont").await.unwrap();
+    assert!(!result);
 }
 
 #[test]

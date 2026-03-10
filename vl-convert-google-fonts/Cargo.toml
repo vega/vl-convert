@@ -19,8 +19,8 @@ futures-util = { workspace = true }
 fs4 = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
 serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = "2"
+urlencoding = { workspace = true }
 tinyvec = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["sync", "fs", "rt-multi-thread"] }
 

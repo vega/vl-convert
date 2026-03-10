@@ -43,21 +43,18 @@ pub(crate) fn read_blob(
             if has_ttf_magic_bytes(&bytes) {
                 Ok(Some(bytes))
             } else {
-                // Corrupt or truncated — delete and treat as a miss.
                 remove_path_if_present(&path);
                 Ok(None)
             }
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_) => {
-            // Treat any read failure as a miss — delete the corrupt blob.
             remove_path_if_present(&path);
             Ok(None)
         }
     }
 }
 
-/// Check whether `bytes` starts with a recognised font magic number.
 fn has_ttf_magic_bytes(bytes: &[u8]) -> bool {
     bytes.len() >= 4
         && (bytes[..4] == [0, 1, 0, 0]  // TrueType

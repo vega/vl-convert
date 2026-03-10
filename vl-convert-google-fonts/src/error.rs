@@ -26,9 +26,6 @@ pub enum GoogleFontsError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("JSON error: {0}")]
-    Json(#[from] serde_json::Error),
-
     #[error("Cache directory must be an absolute path, got: {0:?}")]
     RelativeCacheDir(std::path::PathBuf),
 

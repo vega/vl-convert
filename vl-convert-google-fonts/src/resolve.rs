@@ -1,6 +1,7 @@
 use crate::error::GoogleFontsError;
 use crate::types::{FontStyle, ResolvedFont, VariantRequest};
 use std::collections::HashSet;
+use urlencoding::encode;
 
 /// A single TTF file to download, with its URL.
 #[derive(Debug, Clone)]
@@ -40,7 +41,7 @@ pub(crate) fn build_css2_url(base_url: &str, family: &str, variants: &[VariantRe
     format!(
         "{}?family={}:ital,wght@{}&display=swap",
         base_url.trim_end_matches('/'),
-        family,
+        encode(family),
         tuple_str.join(";")
     )
 }
@@ -59,7 +60,7 @@ pub(crate) fn build_css2_url_all_variants(base_url: &str, family: &str) -> Strin
     format!(
         "{}?family={}:ital,wght@{}&display=swap",
         base_url.trim_end_matches('/'),
-        family,
+        encode(family),
         tuples.join(";")
     )
 }
@@ -110,13 +111,8 @@ pub(crate) fn parse_css2_response(css: &str) -> Result<Vec<ResolvedFont>, Google
 /// Extract a single integer font-weight value.
 /// Returns `None` for variable font weight ranges (e.g., "100 900").
 fn extract_font_weight(body: &str) -> Option<u16> {
-    // Find "font-weight" followed by optional whitespace and colon
-    let idx = body.find("font-weight")?;
-    let after = &body[idx + "font-weight".len()..];
-
-    // Skip whitespace and colon
-    let after = after.trim_start();
-    let after = after.strip_prefix(':')?;
+    let idx = body.find("font-weight:")?;
+    let after = &body[idx + "font-weight:".len()..];
     let after = after.trim_start();
 
     // Read the numeric value
@@ -141,10 +137,8 @@ fn extract_font_weight(body: &str) -> Option<u16> {
 
 /// Extract `font-style: normal|italic` from a `@font-face` block body.
 fn extract_font_style(body: &str) -> Option<FontStyle> {
-    let idx = body.find("font-style")?;
-    let after = &body[idx + "font-style".len()..];
-    let after = after.trim_start();
-    let after = after.strip_prefix(':')?;
+    let idx = body.find("font-style:")?;
+    let after = &body[idx + "font-style:".len()..];
     let after = after.trim_start();
 
     if after.starts_with("italic") {
@@ -158,18 +152,14 @@ fn extract_font_style(body: &str) -> Option<FontStyle> {
 
 /// Extract the URL from `src: url(...)` in a `@font-face` block body.
 fn extract_src_url(body: &str) -> Option<String> {
-    let idx = body.find("src")?;
-    let after = &body[idx + 3..];
-    let after = after.trim_start();
-    let after = after.strip_prefix(':')?;
+    let idx = body.find("src:")?;
+    let after = &body[idx + 4..];
     let after = after.trim_start();
 
-    // Find url( ... )
     let url_idx = after.find("url(")?;
     let after_url = &after[url_idx + 4..];
     let after_url = after_url.trim_start();
 
-    // Handle optional quotes
     let (url_content, _) = if after_url.starts_with('\'') || after_url.starts_with('"') {
         let quote = after_url.as_bytes()[0] as char;
         let rest = &after_url[1..];
@@ -405,6 +395,36 @@ mod tests {
         assert!(url.contains("0,900;"));
         assert!(url.contains("1,100;"));
         assert!(url.ends_with("1,900&display=swap"));
+    }
+
+    #[test]
+    fn test_parse_css2_with_src_in_font_family() {
+        let css = r#"
+@font-face {
+  font-family: 'Nosrc Test';
+  font-style: normal;
+  font-weight: 400;
+  src: url(https://fonts.gstatic.com/s/nosrctest/v1/abc.ttf) format('truetype');
+}
+"#;
+        let fonts = parse_css2_response(css).unwrap();
+        assert_eq!(fonts.len(), 1);
+        assert_eq!(fonts[0].weight, 400);
+        assert!(fonts[0].url.contains("abc.ttf"));
+    }
+
+    #[test]
+    fn test_build_css2_url_encodes_family_name() {
+        let variants = vec![VariantRequest {
+            weight: 400,
+            style: FontStyle::Normal,
+        }];
+        let url = build_css2_url(
+            "https://fonts.googleapis.com/css2",
+            "Source Sans Pro",
+            &variants,
+        );
+        assert!(url.contains("family=Source%20Sans%20Pro:"));
     }
 
     #[test]

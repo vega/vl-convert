@@ -14,8 +14,12 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// Return type for `ensure_blobs_*`: (font data, blob keys used, whether any were downloaded).
-type EnsureBlobsResult = Result<(Vec<Arc<Vec<u8>>>, HashSet<String>, bool), GoogleFontsError>;
+/// Result of downloading/loading font blobs from cache or network.
+struct EnsureBlobsResult {
+    font_data: Vec<Arc<Vec<u8>>>,
+    blob_keys: HashSet<String>,
+    downloaded_any: bool,
+}
 
 /// Per-blob-key mutex that serializes concurrent download/load of the same font file
 /// to avoid repeated simultaneous downloads.
@@ -105,10 +109,10 @@ impl GoogleFontsClient {
         }
 
         let plan = resolve_from_css2(&font_id, &css, variants)?;
-        let (font_data, exempt_keys, downloaded_any) = self.ensure_blobs_async(&plan.files).await?;
+        let blobs = self.ensure_blobs_async(&plan.files).await?;
 
-        if downloaded_any {
-            self.evict_if_needed(&exempt_keys)?;
+        if blobs.downloaded_any {
+            self.evict_if_needed(&blobs.blob_keys)?;
         }
 
         Ok(LoadedFontBatch::new(
@@ -118,8 +122,8 @@ impl GoogleFontsClient {
             } else {
                 plan.loaded_variants
             },
-            font_data.len(),
-            font_data,
+            blobs.font_data.len(),
+            blobs.font_data,
         ))
     }
 
@@ -148,10 +152,10 @@ impl GoogleFontsClient {
         }
 
         let plan = resolve_from_css2(&font_id, &css, variants)?;
-        let (font_data, exempt_keys, downloaded_any) = self.ensure_blobs_blocking(&plan.files)?;
+        let blobs = self.ensure_blobs_blocking(&plan.files)?;
 
-        if downloaded_any {
-            self.evict_if_needed(&exempt_keys)?;
+        if blobs.downloaded_any {
+            self.evict_if_needed(&blobs.blob_keys)?;
         }
 
         Ok(LoadedFontBatch::new(
@@ -161,8 +165,8 @@ impl GoogleFontsClient {
             } else {
                 plan.loaded_variants
             },
-            font_data.len(),
-            font_data,
+            blobs.font_data.len(),
+            blobs.font_data,
         ))
     }
 
@@ -175,28 +179,9 @@ impl GoogleFontsClient {
         let probe_url = format!(
             "{}?family={}:wght@400&display=swap",
             self.config.css2_base_url.trim_end_matches('/'),
-            family
+            urlencoding::encode(family)
         );
         match self.get_bytes_with_retry_async(&probe_url).await {
-            Ok(bytes) => {
-                let css = String::from_utf8_lossy(&bytes);
-                Ok(css.contains("@font-face"))
-            }
-            Err(GoogleFontsError::HttpStatus { status: 400, .. }) => Ok(false),
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Check whether a font exists on Google Fonts without downloading blobs (blocking).
-    ///
-    /// `family` should be the display name (e.g., "Kalam", not "kalam").
-    pub fn is_known_font_blocking(&self, family: &str) -> Result<bool, GoogleFontsError> {
-        let probe_url = format!(
-            "{}?family={}:wght@400&display=swap",
-            self.config.css2_base_url.trim_end_matches('/'),
-            family
-        );
-        match self.get_bytes_with_retry_blocking(&probe_url) {
             Ok(bytes) => {
                 let css = String::from_utf8_lossy(&bytes);
                 Ok(css.contains("@font-face"))
@@ -253,7 +238,10 @@ impl GoogleFontsClient {
     }
 
     /// Download or retrieve from cache all resolved TTF files in parallel (async).
-    async fn ensure_blobs_async(&self, files: &[ResolvedTtfFile]) -> EnsureBlobsResult {
+    async fn ensure_blobs_async(
+        &self,
+        files: &[ResolvedTtfFile],
+    ) -> Result<EnsureBlobsResult, GoogleFontsError> {
         let limit = self.config.max_parallel_downloads.max(1);
 
         let results = stream::iter(files.iter().cloned().enumerate().map(
@@ -274,16 +262,20 @@ impl GoogleFontsClient {
         result_vec.sort_by_key(|(idx, _, _, _)| *idx);
 
         let mut font_data = Vec::with_capacity(files.len());
-        let mut exempt_keys = HashSet::new();
+        let mut blob_keys = HashSet::new();
         let mut downloaded_any = false;
 
         for (_, bytes, key, was_downloaded) in result_vec {
             font_data.push(Arc::new(bytes));
-            exempt_keys.insert(key);
+            blob_keys.insert(key);
             downloaded_any |= was_downloaded;
         }
 
-        Ok((font_data, exempt_keys, downloaded_any))
+        Ok(EnsureBlobsResult {
+            font_data,
+            blob_keys,
+            downloaded_any,
+        })
     }
 
     /// Return a single blob from cache or download it, using a gate for dedup (async).
@@ -323,9 +315,16 @@ impl GoogleFontsClient {
     }
 
     /// Download or retrieve from cache all resolved TTF files in parallel (blocking).
-    fn ensure_blobs_blocking(&self, files: &[ResolvedTtfFile]) -> EnsureBlobsResult {
+    fn ensure_blobs_blocking(
+        &self,
+        files: &[ResolvedTtfFile],
+    ) -> Result<EnsureBlobsResult, GoogleFontsError> {
         if files.is_empty() {
-            return Ok((Vec::new(), HashSet::new(), false));
+            return Ok(EnsureBlobsResult {
+                font_data: Vec::new(),
+                blob_keys: HashSet::new(),
+                downloaded_any: false,
+            });
         }
 
         let workers = self.config.max_parallel_downloads.max(1).min(files.len());
@@ -344,24 +343,32 @@ impl GoogleFontsClient {
                 })
                 .collect::<Vec<_>>()
                 .into_iter()
-                .map(|h| h.join().expect("thread panicked"))
-                .collect()
-        });
+                .map(|h| {
+                    h.join().map_err(|_| {
+                        GoogleFontsError::Internal("Font download thread panicked".to_string())
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })?;
 
         let mut font_data = Vec::with_capacity(files.len());
-        let mut exempt_keys = HashSet::new();
+        let mut blob_keys = HashSet::new();
         let mut downloaded_any = false;
 
         for chunk in thread_results {
             for result in chunk {
                 let (bytes, key, was_downloaded) = result?;
                 font_data.push(Arc::new(bytes));
-                exempt_keys.insert(key);
+                blob_keys.insert(key);
                 downloaded_any |= was_downloaded;
             }
         }
 
-        Ok((font_data, exempt_keys, downloaded_any))
+        Ok(EnsureBlobsResult {
+            font_data,
+            blob_keys,
+            downloaded_any,
+        })
     }
 
     /// Return a single blob from cache or download it, using a gate for dedup (blocking).

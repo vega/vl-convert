@@ -2247,6 +2247,10 @@ vegaLiteToCanvas_{ver_name:?}(
 
     async fn handle_command(&mut self, cmd: VlConvertCommand) {
         // Apply a google fonts overlay, execute `$work`, then clear the overlay.
+        // Note: a true RAII drop guard is not possible here because `$work` is an
+        // async expression that mutably borrows `$self`, which would conflict with
+        // a guard also holding `&mut $self`. Cleanup is guaranteed on all non-panic
+        // paths since `$work` returns a Result that is bound before `clear` runs.
         macro_rules! with_font_overlay {
             ($self:expr, $batches:expr, $work:expr) => {{
                 if !$batches.is_empty() {
@@ -3056,13 +3060,7 @@ impl VlConverter {
             Some(variants) => {
                 let mut pairs: Vec<(u16, &'static str)> = variants
                     .iter()
-                    .map(|variant| {
-                        let style = match variant.style {
-                            vl_convert_google_fonts::FontStyle::Normal => "normal",
-                            vl_convert_google_fonts::FontStyle::Italic => "italic",
-                        };
-                        (variant.weight, style)
-                    })
+                    .map(|variant| (variant.weight, variant.style.as_str()))
                     .collect();
                 pairs.sort_unstable();
                 for (idx, (weight, style)) in pairs.iter().enumerate() {

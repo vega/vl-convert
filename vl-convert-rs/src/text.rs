@@ -305,7 +305,7 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
 
 fn collect_custom_fonts_from_batch(batch: &LoadedFontBatch) -> Vec<CustomFont> {
     batch
-        .font_data()
+        .font_data
         .iter()
         .map(|data| CustomFont {
             data: Arc::clone(data),

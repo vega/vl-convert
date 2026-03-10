@@ -39,7 +39,6 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
-    /// Returns the blob subdirectory, or `None` if caching is disabled.
     pub fn blob_dir(&self) -> Option<PathBuf> {
         self.cache_dir.as_ref().map(|d| d.join("blobs"))
     }
