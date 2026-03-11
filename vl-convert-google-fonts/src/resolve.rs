@@ -3,16 +3,17 @@ use crate::types::{FontStyle, ResolvedFont, VariantRequest};
 use std::collections::HashSet;
 use urlencoding::encode;
 
-/// A single TTF file to download, with its URL.
+/// A single TTF file to download, with its URL and variant metadata.
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedTtfFile {
     pub url: String,
+    pub weight: u16,
+    pub style: FontStyle,
 }
 
 /// The result of resolving a CSS2 response into downloadable TTF files.
 #[derive(Debug, Clone)]
 pub(crate) struct ResolvedDownloadPlan {
-    pub loaded_variants: Vec<VariantRequest>,
     pub files: Vec<ResolvedTtfFile>,
 }
 
@@ -69,7 +70,11 @@ pub(crate) fn build_css2_url_all_variants(base_url: &str, family: &str) -> Strin
 ///
 /// Extracts `font-weight`, `font-style`, and `src: url(...)` from `@font-face` blocks.
 /// Skips variable font blocks (weight ranges like `100 900`).
-/// Deduplicates by (weight, style) since TTF URLs repeat across unicode-range blocks.
+///
+/// Deduplicates by (weight, style): when the request uses a non-browser User-Agent
+/// (ours is `vl-convert`), the CSS2 API returns complete TTF files instead of
+/// WOFF2 subsets. Each unicode-range block in the response points to the same
+/// TTF URL, so we only need one download per (weight, style).
 pub(crate) fn parse_css2_response(css: &str) -> Result<Vec<ResolvedFont>, GoogleFontsError> {
     let mut resolved = Vec::new();
     let mut seen: HashSet<(u16, FontStyle)> = HashSet::new();
@@ -208,7 +213,6 @@ pub(crate) fn resolve_from_css2(
             let deduped = dedupe_variants(requested);
             let mut unavailable = Vec::new();
             let mut files = Vec::new();
-            let mut loaded_variants = Vec::new();
 
             for req in &deduped {
                 let found = resolved
@@ -219,8 +223,9 @@ pub(crate) fn resolve_from_css2(
                     Some(font) => {
                         files.push(ResolvedTtfFile {
                             url: font.url.clone(),
+                            weight: req.weight,
+                            style: req.style,
                         });
-                        loaded_variants.push(req.clone());
                     }
                     None => {
                         unavailable.push(req.clone());
@@ -235,29 +240,20 @@ pub(crate) fn resolve_from_css2(
                 });
             }
 
-            Ok(ResolvedDownloadPlan {
-                loaded_variants,
-                files,
-            })
+            Ok(ResolvedDownloadPlan { files })
         }
         None => {
             // Load all available variants
             let files: Vec<ResolvedTtfFile> = resolved
                 .iter()
-                .map(|r| ResolvedTtfFile { url: r.url.clone() })
-                .collect();
-            let loaded_variants: Vec<VariantRequest> = resolved
-                .iter()
-                .map(|r| VariantRequest {
+                .map(|r| ResolvedTtfFile {
+                    url: r.url.clone(),
                     weight: r.weight,
                     style: r.style,
                 })
                 .collect();
 
-            Ok(ResolvedDownloadPlan {
-                loaded_variants,
-                files,
-            })
+            Ok(ResolvedDownloadPlan { files })
         }
     }
 }
@@ -459,14 +455,12 @@ mod tests {
             },
         ];
         let plan = resolve_from_css2("roboto", SAMPLE_CSS, Some(&requested)).unwrap();
-        assert_eq!(plan.loaded_variants.len(), 2);
         assert_eq!(plan.files.len(), 2);
     }
 
     #[test]
     fn test_resolve_from_css2_all_variants() {
         let plan = resolve_from_css2("roboto", SAMPLE_CSS, None).unwrap();
-        assert_eq!(plan.loaded_variants.len(), 3);
         assert_eq!(plan.files.len(), 3);
     }
 }

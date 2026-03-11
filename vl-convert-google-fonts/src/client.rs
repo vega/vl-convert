@@ -2,8 +2,7 @@ use crate::cache;
 use crate::config::ClientConfig;
 use crate::error::GoogleFontsError;
 use crate::resolve::{
-    build_css2_url, build_css2_url_all_variants, dedupe_variants, resolve_from_css2,
-    ResolvedTtfFile,
+    build_css2_url, build_css2_url_all_variants, resolve_from_css2, ResolvedTtfFile,
 };
 use crate::types::{family_to_id, LoadedFontBatch, VariantRequest};
 use backon::{BlockingRetryable, ExponentialBuilder, Retryable};
@@ -129,13 +128,18 @@ impl GoogleFontsClient {
             self.evict_if_needed(&blobs.blob_keys)?;
         }
 
+        let loaded_variants = plan
+            .files
+            .iter()
+            .map(|f| VariantRequest {
+                weight: f.weight,
+                style: f.style,
+            })
+            .collect();
+
         Ok(LoadedFontBatch::new(
             font_id,
-            if let Some(v) = variants {
-                dedupe_variants(v)
-            } else {
-                plan.loaded_variants
-            },
+            loaded_variants,
             blobs.font_data.len(),
             blobs.font_data,
         ))
@@ -172,13 +176,18 @@ impl GoogleFontsClient {
             self.evict_if_needed(&blobs.blob_keys)?;
         }
 
+        let loaded_variants = plan
+            .files
+            .iter()
+            .map(|f| VariantRequest {
+                weight: f.weight,
+                style: f.style,
+            })
+            .collect();
+
         Ok(LoadedFontBatch::new(
             font_id,
-            if let Some(v) = variants {
-                dedupe_variants(v)
-            } else {
-                plan.loaded_variants
-            },
+            loaded_variants,
             blobs.font_data.len(),
             blobs.font_data,
         ))
