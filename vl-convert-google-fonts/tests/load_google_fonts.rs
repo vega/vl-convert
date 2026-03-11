@@ -612,7 +612,7 @@ fn test_eviction_keeps_current_font() {
 
     let temp = tempfile::tempdir().unwrap();
     let cache_dir = temp.path();
-    let blob_dir = cache_dir.join("blobs");
+    let blob_dir = cache_dir.join("fonts");
     let max_cache = REGULAR_TTF.len() as u64 + 16;
     let client = make_client(cache_dir, server.base_url(), 8, max_cache);
 
@@ -664,7 +664,7 @@ fn test_corrupt_blob_fallbacks_to_network() {
 
     let _ = client.load_blocking("Roboto", Some(&requested)).unwrap();
 
-    let blob_dir = temp.path().join("blobs");
+    let blob_dir = temp.path().join("fonts");
     let mut blobs: Vec<_> = std::fs::read_dir(&blob_dir)
         .unwrap()
         .flatten()

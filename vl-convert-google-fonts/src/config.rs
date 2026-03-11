@@ -40,7 +40,7 @@ pub struct ClientConfig {
 
 impl ClientConfig {
     pub fn blob_dir(&self) -> Option<PathBuf> {
-        self.cache_dir.as_ref().map(|d| d.join("blobs"))
+        self.cache_dir.as_ref().map(|d| d.join("fonts"))
     }
 }
 

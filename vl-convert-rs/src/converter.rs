@@ -2247,10 +2247,6 @@ vegaLiteToCanvas_{ver_name:?}(
 
     async fn handle_command(&mut self, cmd: VlConvertCommand) {
         // Apply a google fonts overlay, execute `$work`, then clear the overlay.
-        // Note: a true RAII drop guard is not possible here because `$work` is an
-        // async expression that mutably borrows `$self`, which would conflict with
-        // a guard also holding `&mut $self`. Cleanup is guaranteed on all non-panic
-        // paths since `$work` returns a Result that is bound before `clear` runs.
         macro_rules! with_font_overlay {
             ($self:expr, $batches:expr, $work:expr) => {{
                 if !$batches.is_empty() {
