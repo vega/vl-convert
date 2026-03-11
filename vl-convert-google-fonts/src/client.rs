@@ -195,15 +195,12 @@ impl GoogleFontsClient {
 
     /// Check whether a font exists on Google Fonts without downloading blobs (async).
     ///
-    /// Probes the CSS2 API with a single weight to check for `@font-face` presence.
-    /// `family` should be the display name (e.g., "Kalam", not "kalam") since the
-    /// CSS2 API is case-sensitive for font family names.
+    /// Probes the CSS2 API with the full variant matrix (all weights and italic
+    /// combinations) so that fonts available only at non-400 weights (e.g. Buda
+    /// at 300) are still detected.  `family` should be the display name
+    /// (e.g., "Kalam", not "kalam") since the CSS2 API is case-sensitive.
     pub async fn is_known_font(&self, family: &str) -> Result<bool, GoogleFontsError> {
-        let probe_url = format!(
-            "{}?family={}:wght@400&display=swap",
-            self.config.css2_base_url.trim_end_matches('/'),
-            urlencoding::encode(family)
-        );
+        let probe_url = build_css2_url_all_variants(&self.config.css2_base_url, family);
         match self.get_bytes_with_retry_async(&probe_url).await {
             Ok(bytes) => {
                 let css = String::from_utf8_lossy(&bytes);
@@ -317,6 +314,7 @@ impl GoogleFontsClient {
         // re-download anyway), so skip it and download directly.
         if blob_dir.is_none() {
             let bytes = self.get_bytes_with_retry_async(&file.url).await?;
+            Self::validate_font_bytes(&file.url, &bytes)?;
             return Ok((bytes, key, true));
         }
 
@@ -332,6 +330,7 @@ impl GoogleFontsClient {
         }
 
         let bytes = self.get_bytes_with_retry_async(&file.url).await?;
+        Self::validate_font_bytes(&file.url, &bytes)?;
         Self::cache_blob(&file.url, &blob_dir, &bytes)?;
         Ok((bytes, key, true))
     }
@@ -409,6 +408,7 @@ impl GoogleFontsClient {
         // re-download anyway), so skip it and download directly.
         if blob_dir.is_none() {
             let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
+            Self::validate_font_bytes(&file.url, &bytes)?;
             return Ok((bytes, key, true));
         }
 
@@ -432,6 +432,7 @@ impl GoogleFontsClient {
         }
 
         let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
+        Self::validate_font_bytes(&file.url, &bytes)?;
         Self::cache_blob(&file.url, &blob_dir, &bytes)?;
         Ok((bytes, key, true))
     }
@@ -466,6 +467,41 @@ impl GoogleFontsClient {
             if Arc::ptr_eq(entry.get(), gate) && gate.active_users.load(Ordering::Acquire) == 0 {
                 entry.remove();
             }
+        }
+    }
+
+    /// Validate that font bytes begin with a recognized TTF or OTF magic number.
+    ///
+    /// Returns `Ok(())` for valid headers, or `UnexpectedFontFormat` with the
+    /// detected format name (e.g. "WOFF2", "WOFF", or a hex dump of the first 4 bytes).
+    fn validate_font_bytes(url: &str, bytes: &[u8]) -> Result<(), GoogleFontsError> {
+        if bytes.len() < 4 {
+            return Err(GoogleFontsError::UnexpectedFontFormat {
+                url: url.to_string(),
+                detected: format!("too small ({} bytes)", bytes.len()),
+            });
+        }
+        let magic = &bytes[..4];
+        match magic {
+            // TrueType: 00 01 00 00
+            [0x00, 0x01, 0x00, 0x00] => Ok(()),
+            // OpenType (CFF): "OTTO"
+            b"OTTO" => Ok(()),
+            // TrueType Collection: "ttcf"
+            b"ttcf" => Ok(()),
+            // Known non-TTF/OTF formats for clear error messages
+            b"wOF2" => Err(GoogleFontsError::UnexpectedFontFormat {
+                url: url.to_string(),
+                detected: "WOFF2".to_string(),
+            }),
+            b"wOFF" => Err(GoogleFontsError::UnexpectedFontFormat {
+                url: url.to_string(),
+                detected: "WOFF".to_string(),
+            }),
+            _ => Err(GoogleFontsError::UnexpectedFontFormat {
+                url: url.to_string(),
+                detected: format!("unknown (magic: {:02x} {:02x} {:02x} {:02x})", magic[0], magic[1], magic[2], magic[3]),
+            }),
         }
     }
 
@@ -686,5 +722,58 @@ mod tests {
 
         client.release_download_gate(key, &replacement);
         assert!(!client.download_gates.contains_key(key));
+    }
+
+    #[test]
+    fn test_validate_font_bytes_ttf() {
+        // TTF magic: 00 01 00 00
+        let ttf = vec![0x00, 0x01, 0x00, 0x00, 0xFF, 0xFF];
+        assert!(GoogleFontsClient::validate_font_bytes("http://example.com/font.ttf", &ttf).is_ok());
+    }
+
+    #[test]
+    fn test_validate_font_bytes_otf() {
+        // OTF magic: "OTTO"
+        let otf = b"OTTO\xFF\xFF".to_vec();
+        assert!(GoogleFontsClient::validate_font_bytes("http://example.com/font.otf", &otf).is_ok());
+    }
+
+    #[test]
+    fn test_validate_font_bytes_ttc() {
+        // TTC magic: "ttcf"
+        let ttc = b"ttcf\xFF\xFF".to_vec();
+        assert!(GoogleFontsClient::validate_font_bytes("http://example.com/font.ttc", &ttc).is_ok());
+    }
+
+    #[test]
+    fn test_validate_font_bytes_woff2() {
+        let woff2 = b"wOF2\xFF\xFF".to_vec();
+        let err = GoogleFontsClient::validate_font_bytes("http://example.com/font.woff2", &woff2)
+            .unwrap_err();
+        assert!(err.to_string().contains("WOFF2"));
+    }
+
+    #[test]
+    fn test_validate_font_bytes_woff() {
+        let woff = b"wOFF\xFF\xFF".to_vec();
+        let err =
+            GoogleFontsClient::validate_font_bytes("http://example.com/font.woff", &woff).unwrap_err();
+        assert!(err.to_string().contains("WOFF"));
+    }
+
+    #[test]
+    fn test_validate_font_bytes_too_small() {
+        let tiny = vec![0x00, 0x01];
+        let err =
+            GoogleFontsClient::validate_font_bytes("http://example.com/font.ttf", &tiny).unwrap_err();
+        assert!(err.to_string().contains("too small"));
+    }
+
+    #[test]
+    fn test_validate_font_bytes_unknown() {
+        let garbage = vec![0xDE, 0xAD, 0xBE, 0xEF];
+        let err = GoogleFontsClient::validate_font_bytes("http://example.com/font.bin", &garbage)
+            .unwrap_err();
+        assert!(err.to_string().contains("unknown"));
     }
 }
