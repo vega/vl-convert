@@ -276,7 +276,7 @@ fn make_client(
 ) -> GoogleFontsClient {
     let config = ClientConfig {
         cache_dir: Some(cache_root.to_path_buf()),
-        css2_base_url: format!("{}/css2", base_url),
+        google_fonts_css2_url: format!("{}/css2", base_url),
         max_parallel_downloads,
         max_blob_cache_bytes,
         ..ClientConfig::default()
@@ -287,7 +287,7 @@ fn make_client(
 fn make_cacheless_client(base_url: &str) -> GoogleFontsClient {
     let config = ClientConfig {
         cache_dir: None,
-        css2_base_url: format!("{}/css2", base_url),
+        google_fonts_css2_url: format!("{}/css2", base_url),
         ..ClientConfig::default()
     };
     GoogleFontsClient::new(config).unwrap()
@@ -612,7 +612,7 @@ fn test_eviction_keeps_current_font() {
 
     let temp = tempfile::tempdir().unwrap();
     let cache_dir = temp.path();
-    let blob_dir = cache_dir.join("fonts");
+    let fonts_dir = cache_dir.join("fonts");
     let max_cache = REGULAR_TTF.len() as u64 + 16;
     let client = make_client(cache_dir, server.base_url(), 8, max_cache);
 
@@ -636,7 +636,7 @@ fn test_eviction_keeps_current_font() {
     assert_eq!(server.hit_count("/s/roboto/v30/r400.ttf"), roboto_hits + 1);
 
     // At least one blob should exist for the currently-loaded font.
-    let blob_count = std::fs::read_dir(&blob_dir)
+    let blob_count = std::fs::read_dir(&fonts_dir)
         .unwrap()
         .flatten()
         .filter(|entry| {
@@ -664,8 +664,8 @@ fn test_corrupt_blob_fallbacks_to_network() {
 
     let _ = client.load_blocking("Roboto", Some(&requested)).unwrap();
 
-    let blob_dir = temp.path().join("fonts");
-    let mut blobs: Vec<_> = std::fs::read_dir(&blob_dir)
+    let fonts_dir = temp.path().join("fonts");
+    let mut blobs: Vec<_> = std::fs::read_dir(&fonts_dir)
         .unwrap()
         .flatten()
         .map(|entry| entry.path())

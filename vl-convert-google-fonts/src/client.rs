@@ -107,8 +107,8 @@ impl GoogleFontsClient {
 
         // Build the CSS2 URL
         let css_url = match variants {
-            Some(requested) => build_css2_url(&self.config.css2_base_url, family, requested),
-            None => build_css2_url_all_variants(&self.config.css2_base_url, family),
+            Some(requested) => build_css2_url(&self.config.google_fonts_css2_url, family, requested),
+            None => build_css2_url_all_variants(&self.config.google_fonts_css2_url, family),
         };
 
         // Fetch CSS2 response (always re-fetch, no caching)
@@ -155,8 +155,8 @@ impl GoogleFontsClient {
 
         // Build the CSS2 URL
         let css_url = match variants {
-            Some(requested) => build_css2_url(&self.config.css2_base_url, family, requested),
-            None => build_css2_url_all_variants(&self.config.css2_base_url, family),
+            Some(requested) => build_css2_url(&self.config.google_fonts_css2_url, family, requested),
+            None => build_css2_url_all_variants(&self.config.google_fonts_css2_url, family),
         };
 
         // Fetch CSS2 response (always re-fetch, no caching)
@@ -200,7 +200,7 @@ impl GoogleFontsClient {
     /// at 300) are still detected.  `family` should be the display name
     /// (e.g., "Kalam", not "kalam") since the CSS2 API is case-sensitive.
     pub async fn is_known_font(&self, family: &str) -> Result<bool, GoogleFontsError> {
-        let probe_url = build_css2_url_all_variants(&self.config.css2_base_url, family);
+        let probe_url = build_css2_url_all_variants(&self.config.google_fonts_css2_url, family);
         match self.get_bytes_with_retry_async(&probe_url).await {
             Ok(bytes) => {
                 let css = String::from_utf8_lossy(&bytes);
@@ -229,9 +229,9 @@ impl GoogleFontsClient {
     /// Try to read a blob from the cache, touching its mtime on hit.
     fn try_read_cached_blob(
         url: &str,
-        blob_dir: &Option<std::path::PathBuf>,
+        fonts_dir: &Option<std::path::PathBuf>,
     ) -> Result<Option<Vec<u8>>, GoogleFontsError> {
-        if let Some(ref dir) = blob_dir {
+        if let Some(ref dir) = fonts_dir {
             if let Some(bytes) = cache::read_blob(url, dir)? {
                 let _ = cache::touch_blob(url, dir);
                 return Ok(Some(bytes));
@@ -243,10 +243,10 @@ impl GoogleFontsClient {
     /// Write a downloaded blob to the cache if a cache directory is configured.
     fn cache_blob(
         url: &str,
-        blob_dir: &Option<std::path::PathBuf>,
+        fonts_dir: &Option<std::path::PathBuf>,
         bytes: &[u8],
     ) -> Result<(), GoogleFontsError> {
-        if let Some(ref dir) = blob_dir {
+        if let Some(ref dir) = fonts_dir {
             cache::write_blob_if_absent(url, dir, bytes)?;
         }
         Ok(())
@@ -304,15 +304,15 @@ impl GoogleFontsClient {
         file: &ResolvedTtfFile,
     ) -> Result<(Vec<u8>, String, bool), GoogleFontsError> {
         let key = cache::blob_key(&file.url);
-        let blob_dir = self.config.blob_dir();
+        let fonts_dir = self.config.fonts_dir();
 
-        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &fonts_dir)? {
             return Ok((bytes, key, false));
         }
 
         // Without a cache dir, the gate can't deduplicate (waiters would just
         // re-download anyway), so skip it and download directly.
-        if blob_dir.is_none() {
+        if fonts_dir.is_none() {
             let bytes = self.get_bytes_with_retry_async(&file.url).await?;
             Self::validate_font_bytes(&file.url, &bytes)?;
             return Ok((bytes, key, true));
@@ -325,13 +325,13 @@ impl GoogleFontsClient {
         };
         let _lock = gate_guard.gate.mutex.lock().await;
 
-        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &fonts_dir)? {
             return Ok((bytes, key, false));
         }
 
         let bytes = self.get_bytes_with_retry_async(&file.url).await?;
         Self::validate_font_bytes(&file.url, &bytes)?;
-        Self::cache_blob(&file.url, &blob_dir, &bytes)?;
+        Self::cache_blob(&file.url, &fonts_dir, &bytes)?;
         Ok((bytes, key, true))
     }
 
@@ -398,15 +398,15 @@ impl GoogleFontsClient {
         file: &ResolvedTtfFile,
     ) -> Result<(Vec<u8>, String, bool), GoogleFontsError> {
         let key = cache::blob_key(&file.url);
-        let blob_dir = self.config.blob_dir();
+        let fonts_dir = self.config.fonts_dir();
 
-        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &fonts_dir)? {
             return Ok((bytes, key, false));
         }
 
         // Without a cache dir, the gate can't deduplicate (waiters would just
         // re-download anyway), so skip it and download directly.
-        if blob_dir.is_none() {
+        if fonts_dir.is_none() {
             let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
             Self::validate_font_bytes(&file.url, &bytes)?;
             return Ok((bytes, key, true));
@@ -427,13 +427,13 @@ impl GoogleFontsClient {
         );
         let _lock = gate_guard.gate.mutex.blocking_lock();
 
-        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &blob_dir)? {
+        if let Some(bytes) = Self::try_read_cached_blob(&file.url, &fonts_dir)? {
             return Ok((bytes, key, false));
         }
 
         let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
         Self::validate_font_bytes(&file.url, &bytes)?;
-        Self::cache_blob(&file.url, &blob_dir, &bytes)?;
+        Self::cache_blob(&file.url, &fonts_dir, &bytes)?;
         Ok((bytes, key, true))
     }
 
@@ -571,7 +571,7 @@ impl GoogleFontsClient {
 
     /// Run LRU eviction on the blob cache if it exceeds the configured limit.
     fn evict_if_needed(&self, exempt_keys: &HashSet<String>) -> Result<(), GoogleFontsError> {
-        let Some(blob_dir) = self.config.blob_dir() else {
+        let Some(fonts_dir) = self.config.fonts_dir() else {
             return Ok(());
         };
         let max_bytes = self.max_blob_cache_bytes();
@@ -579,12 +579,12 @@ impl GoogleFontsClient {
             return Ok(());
         }
 
-        let size = cache::calculate_blob_cache_size_bytes(&blob_dir)?;
+        let size = cache::calculate_blob_cache_size_bytes(&fonts_dir)?;
         if size <= max_bytes {
             return Ok(());
         }
 
-        cache::evict_blob_lru_until_size(&blob_dir, max_bytes, exempt_keys)
+        cache::evict_blob_lru_until_size(&fonts_dir, max_bytes, exempt_keys)
     }
 
     /// Lazily initialize and clone the blocking HTTP client.
@@ -645,7 +645,7 @@ mod tests {
     fn make_test_client(temp_root: &std::path::Path) -> GoogleFontsClient {
         let config = ClientConfig {
             cache_dir: Some(temp_root.to_path_buf()),
-            css2_base_url: "http://127.0.0.1:1/css2".to_string(),
+            google_fonts_css2_url: "http://127.0.0.1:1/css2".to_string(),
             ..ClientConfig::default()
         };
         GoogleFontsClient::new(config).unwrap()

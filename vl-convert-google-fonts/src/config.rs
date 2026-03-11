@@ -35,11 +35,11 @@ pub struct ClientConfig {
     /// HTTP `User-Agent` header value.
     pub user_agent: String,
     /// Base URL for the Google Fonts CSS2 API.
-    pub css2_base_url: String,
+    pub google_fonts_css2_url: String,
 }
 
 impl ClientConfig {
-    pub fn blob_dir(&self) -> Option<PathBuf> {
+    pub fn fonts_dir(&self) -> Option<PathBuf> {
         self.cache_dir.as_ref().map(|d| d.join("fonts"))
     }
 }
@@ -67,7 +67,7 @@ impl Default for ClientConfig {
             request_timeout_secs: DEFAULT_TIMEOUT_SECS,
             max_retries: DEFAULT_MAX_RETRIES,
             user_agent: "vl-convert".to_string(),
-            css2_base_url: std::env::var(ENV_GOOGLE_FONTS_CSS2_URL)
+            google_fonts_css2_url: std::env::var(ENV_GOOGLE_FONTS_CSS2_URL)
                 .unwrap_or_else(|_| "https://fonts.googleapis.com/css2".to_string()),
         }
     }
