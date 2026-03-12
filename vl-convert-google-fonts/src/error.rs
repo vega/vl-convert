@@ -29,9 +29,7 @@ pub enum GoogleFontsError {
     #[error("Cache directory must be an absolute path, got: {0:?}")]
     RelativeCacheDir(std::path::PathBuf),
 
-    #[error(
-        "Unexpected font format from Google Fonts (expected TTF/OTF, got {detected}): {url}"
-    )]
+    #[error("Unexpected font format from Google Fonts (expected TTF/OTF, got {detected}): {url}")]
     UnexpectedFontFormat { url: String, detected: String },
 
     #[error("Internal error: {0}")]

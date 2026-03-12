@@ -111,14 +111,14 @@ impl GoogleFontsClient {
         let plan = resolve_from_css2(&font_id, &css, variants)?;
 
         match self.ensure_fonts_async(&plan.files).await {
-            Ok(fonts) => self.finish_load( &font_id, &plan, fonts),
+            Ok(fonts) => self.finish_load(&font_id, &plan, fonts),
             Err(e) if from_cache && e.is_retryable() => {
                 // Stale CSS may contain dead URLs — invalidate and retry
                 self.invalidate_css_cache(&font_id);
                 let (css, _) = self.fetch_css_async(&font_id, family).await?;
                 let plan = resolve_from_css2(&font_id, &css, variants)?;
                 let fonts = self.ensure_fonts_async(&plan.files).await?;
-                self.finish_load( &font_id, &plan, fonts)
+                self.finish_load(&font_id, &plan, fonts)
             }
             Err(e) => Err(e),
         }
@@ -135,13 +135,13 @@ impl GoogleFontsClient {
         let plan = resolve_from_css2(&font_id, &css, variants)?;
 
         match self.ensure_fonts_blocking(&plan.files) {
-            Ok(fonts) => self.finish_load( &font_id, &plan, fonts),
+            Ok(fonts) => self.finish_load(&font_id, &plan, fonts),
             Err(e) if from_cache && e.is_retryable() => {
                 self.invalidate_css_cache(&font_id);
                 let (css, _) = self.fetch_css_blocking(&font_id, family)?;
                 let plan = resolve_from_css2(&font_id, &css, variants)?;
                 let fonts = self.ensure_fonts_blocking(&plan.files)?;
-                self.finish_load( &font_id, &plan, fonts)
+                self.finish_load(&font_id, &plan, fonts)
             }
             Err(e) => Err(e),
         }
@@ -248,8 +248,7 @@ impl GoogleFontsClient {
         family: &str,
         font_id: &str,
     ) -> Result<String, GoogleFontsError> {
-        let css_url =
-            build_css2_url_all_variants(&self.config.google_fonts_css2_url, family);
+        let css_url = build_css2_url_all_variants(&self.config.google_fonts_css2_url, family);
         let css_bytes = self.get_bytes_with_retry_async(&css_url).await?;
         let css = String::from_utf8(css_bytes)
             .map_err(|_| GoogleFontsError::Internal("CSS2 response was not valid UTF-8".into()))?;
@@ -264,8 +263,7 @@ impl GoogleFontsClient {
         family: &str,
         font_id: &str,
     ) -> Result<String, GoogleFontsError> {
-        let css_url =
-            build_css2_url_all_variants(&self.config.google_fonts_css2_url, family);
+        let css_url = build_css2_url_all_variants(&self.config.google_fonts_css2_url, family);
         let css_bytes = self.get_bytes_with_retry_blocking(&css_url)?;
         let css = String::from_utf8(css_bytes)
             .map_err(|_| GoogleFontsError::Internal("CSS2 response was not valid UTF-8".into()))?;
@@ -564,7 +562,10 @@ impl GoogleFontsClient {
             }),
             _ => Err(GoogleFontsError::UnexpectedFontFormat {
                 url: url.to_string(),
-                detected: format!("unknown (magic: {:02x} {:02x} {:02x} {:02x})", magic[0], magic[1], magic[2], magic[3]),
+                detected: format!(
+                    "unknown (magic: {:02x} {:02x} {:02x} {:02x})",
+                    magic[0], magic[1], magic[2], magic[3]
+                ),
             }),
         }
     }
@@ -792,21 +793,27 @@ mod tests {
     fn test_validate_font_bytes_ttf() {
         // TTF magic: 00 01 00 00
         let ttf = vec![0x00, 0x01, 0x00, 0x00, 0xFF, 0xFF];
-        assert!(GoogleFontsClient::validate_font_bytes("http://example.com/font.ttf", &ttf).is_ok());
+        assert!(
+            GoogleFontsClient::validate_font_bytes("http://example.com/font.ttf", &ttf).is_ok()
+        );
     }
 
     #[test]
     fn test_validate_font_bytes_otf() {
         // OTF magic: "OTTO"
         let otf = b"OTTO\xFF\xFF".to_vec();
-        assert!(GoogleFontsClient::validate_font_bytes("http://example.com/font.otf", &otf).is_ok());
+        assert!(
+            GoogleFontsClient::validate_font_bytes("http://example.com/font.otf", &otf).is_ok()
+        );
     }
 
     #[test]
     fn test_validate_font_bytes_ttc() {
         // TTC magic: "ttcf"
         let ttc = b"ttcf\xFF\xFF".to_vec();
-        assert!(GoogleFontsClient::validate_font_bytes("http://example.com/font.ttc", &ttc).is_ok());
+        assert!(
+            GoogleFontsClient::validate_font_bytes("http://example.com/font.ttc", &ttc).is_ok()
+        );
     }
 
     #[test]
@@ -820,16 +827,16 @@ mod tests {
     #[test]
     fn test_validate_font_bytes_woff() {
         let woff = b"wOFF\xFF\xFF".to_vec();
-        let err =
-            GoogleFontsClient::validate_font_bytes("http://example.com/font.woff", &woff).unwrap_err();
+        let err = GoogleFontsClient::validate_font_bytes("http://example.com/font.woff", &woff)
+            .unwrap_err();
         assert!(err.to_string().contains("WOFF"));
     }
 
     #[test]
     fn test_validate_font_bytes_too_small() {
         let tiny = vec![0x00, 0x01];
-        let err =
-            GoogleFontsClient::validate_font_bytes("http://example.com/font.ttf", &tiny).unwrap_err();
+        let err = GoogleFontsClient::validate_font_bytes("http://example.com/font.ttf", &tiny)
+            .unwrap_err();
         assert!(err.to_string().contains("too small"));
     }
 
