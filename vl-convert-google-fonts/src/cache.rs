@@ -234,7 +234,7 @@ pub(crate) fn evict_font_lru_until_size(
                 continue;
             }
 
-            // Tolerate ENOENT from concurrent deletion.
+            // Tolerate ENOENT in case the file was deleted outside of vl-convert.
             if std::fs::remove_file(&path).is_ok() || !path.exists() {
                 total_size = total_size.saturating_sub(size);
             }
