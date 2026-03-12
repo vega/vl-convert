@@ -293,10 +293,7 @@ pub(crate) fn invalidate_css(font_id: &str, css_dir: &Path) {
 }
 
 pub(crate) fn atomic_write_bytes(dst: &Path, bytes: &[u8]) -> Result<(), GoogleFontsError> {
-    let parent = dst.parent().ok_or_else(|| {
-        GoogleFontsError::Internal(format!("No parent directory for {}", dst.display()))
-    })?;
-
+    let parent = dst.parent().unwrap_or(dst);
     std::fs::create_dir_all(parent)?;
 
     let file_name = dst.file_name().and_then(|n| n.to_str()).unwrap_or("file");

@@ -93,8 +93,11 @@ impl GoogleFontsClient {
     }
 
     /// Update the maximum font cache size (in bytes) at runtime.
-    pub fn set_max_font_cache_bytes(&self, bytes: u64) {
+    ///
+    /// Immediately evicts cached fonts if the new limit is exceeded.
+    pub fn set_max_font_cache_bytes(&self, bytes: u64) -> Result<(), GoogleFontsError> {
         self.max_font_cache_bytes.store(bytes, Ordering::Relaxed);
+        self.evict_if_needed(&HashSet::new())
     }
 
     /// Load a font family from Google Fonts (async).

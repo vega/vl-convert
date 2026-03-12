@@ -195,7 +195,10 @@ fn parse_config_overrides(
     Ok(overrides)
 }
 
-fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterConfigOverrides) {
+fn apply_config_overrides(
+    config: &mut VlConverterConfig,
+    overrides: ConverterConfigOverrides,
+) -> Result<(), vl_convert_rs::anyhow::Error> {
     if let Some(num_workers) = overrides.num_workers {
         config.num_workers = num_workers;
     }
@@ -210,7 +213,7 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     }
     if let Some(mb) = overrides.google_fonts_cache_size_mb {
         let bytes = mb.saturating_mul(1024 * 1024);
-        configure_font_cache_rs(Some(bytes));
+        configure_font_cache_rs(Some(bytes))?;
     }
     if let Some(auto_google_fonts) = overrides.auto_google_fonts {
         config.auto_google_fonts = auto_google_fonts;
@@ -218,6 +221,7 @@ fn apply_config_overrides(config: &mut VlConverterConfig, overrides: ConverterCo
     if let Some(missing_fonts) = overrides.missing_fonts {
         config.missing_fonts = missing_fonts;
     }
+    Ok(())
 }
 
 fn configure_converter_with_config_overrides(
@@ -228,7 +232,7 @@ fn configure_converter_with_config_overrides(
     })?;
 
     let mut config = guard.config();
-    apply_config_overrides(&mut config, overrides);
+    apply_config_overrides(&mut config, overrides)?;
     let converter = VlConverterRs::with_config(config)?;
     *guard = Arc::new(converter);
     Ok(())

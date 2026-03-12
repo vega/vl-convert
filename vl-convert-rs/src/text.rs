@@ -356,9 +356,11 @@ pub fn register_google_fonts_font_blocking(
 
 /// Configure the max on-disk Google Fonts cache size in bytes.
 ///
-/// `None` keeps the existing configured value.
-pub fn configure_font_cache(max_cache_bytes: Option<u64>) {
+/// `None` keeps the existing configured value. Immediately evicts cached
+/// fonts if the new limit is exceeded.
+pub fn configure_font_cache(max_cache_bytes: Option<u64>) -> Result<(), anyhow::Error> {
     if let Some(bytes) = max_cache_bytes {
-        GOOGLE_FONTS_CLIENT.set_max_font_cache_bytes(bytes);
+        GOOGLE_FONTS_CLIENT.set_max_font_cache_bytes(bytes)?;
     }
+    Ok(())
 }
