@@ -8,7 +8,7 @@ members = [
     "vl-convert-vendor",
     "vl-convert-canvas2d",
     "vl-convert-canvas2d-deno",
-    "vl-convert-fontsource",
+    "vl-convert-google-fonts",
 ]
 
 [profile.release]
@@ -70,5 +70,6 @@ tiny-skia = "0.11.4"
 tinyvec = "1"
 tokio = { version = "1.36", features = ["macros", "rt-multi-thread"] }
 ttf-parser = "0.25.1"
+urlencoding = "2"
 usvg = "0.45.1"
 zip-extract = "0.4.0"

@@ -9640,6 +9640,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "urlencoding"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
+
+[[package]]
 name = "urlpattern"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9828,7 +9834,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vl-convert-fontsource"
+name = "vl-convert-google-fonts"
 version = "2.0.0-rc1"
 dependencies = [
  "backon",
@@ -9840,11 +9846,11 @@ dependencies = [
  "futures-util",
  "reqwest",
  "serde",
- "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tinyvec",
  "tokio",
+ "urlencoding",
 ]
 
 [[package]]
@@ -9904,7 +9910,7 @@ dependencies = [
  "usvg",
  "vl-convert-canvas2d",
  "vl-convert-canvas2d-deno",
- "vl-convert-fontsource",
+ "vl-convert-google-fonts",
 ]
 
 [[package]]

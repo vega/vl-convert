@@ -255,20 +255,20 @@ def test_png(name, scale, as_dict):
     check_png(png, expected_png, name=f"png_vegalite_{name}")
 
 
-def test_png_fontsource():
-    vlc.register_fontsource_font("Bangers")
-    vlc.register_fontsource_font("Lugrasimo")
+def test_png_google_fonts():
+    vlc.register_google_fonts_font("Bangers")
+    vlc.register_google_fonts_font("Lugrasimo")
 
     vl_version = "v5_8"
-    vl_spec = load_vl_spec("fontsource_fonts")
-    expected_png = load_expected_png("fontsource_fonts", vl_version)
+    vl_spec = load_vl_spec("google_fonts")
+    expected_png = load_expected_png("google_fonts", vl_version)
 
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     png = vlc.vega_to_png(vg_spec, scale=2)
-    check_png(png, expected_png, name="png_vega_fontsource_fonts")
+    check_png(png, expected_png, name="png_vega_google_fonts")
 
     png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version, scale=2)
-    check_png(png, expected_png, name="png_vegalite_fontsource_fonts")
+    check_png(png, expected_png, name="png_vegalite_google_fonts")
 
 
 @pytest.mark.parametrize(

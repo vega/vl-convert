@@ -7,7 +7,7 @@ use usvg::roxmltree;
 pub struct FontForHtml {
     /// The font family name (e.g., "Roboto", "Playfair Display").
     pub family: String,
-    /// The Fontsource font ID (e.g., "roboto", "playfair-display").
+    /// The Google Fonts font ID (e.g., "roboto", "playfair-display").
     pub font_id: String,
     /// Whether this is a Google font ("google") or other ("other").
     pub font_type: String,
@@ -423,9 +423,9 @@ pub enum FirstFontStatus {
     Generic,
     /// First entry is already registered in fontdb.
     Available { name: String },
-    /// First entry is downloadable from Fontsource.
+    /// First entry is downloadable from Google Fonts.
     NeedsDownload { name: String },
-    /// First entry is not on the system and not on Fontsource.
+    /// First entry is not on the system and not on Google Fonts.
     Unavailable { name: String },
 }
 

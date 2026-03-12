@@ -797,32 +797,32 @@ mod test_png_no_theme {
 }
 
 #[rustfmt::skip]
-mod test_png_fontsource {
+mod test_png_google_fonts {
     use crate::*;
     use futures::executor::block_on;
     use std::sync::Once;
     use vl_convert_rs::converter::VlOpts;
-    use vl_convert_rs::register_fontsource_font_blocking;
+    use vl_convert_rs::register_google_fonts_font_blocking;
     use vl_convert_rs::VlConverter;
 
-    static INIT_FONTSOURCE: Once = Once::new();
+    static INIT_GOOGLE_FONTS: Once = Once::new();
 
-    fn initialize_fontsource() {
+    fn initialize_google_fonts() {
         initialize();
-        INIT_FONTSOURCE.call_once(|| {
-            register_fontsource_font_blocking("Bangers", None)
+        INIT_GOOGLE_FONTS.call_once(|| {
+            register_google_fonts_font_blocking("Bangers", None)
                 .expect("Failed to register Bangers");
-            register_fontsource_font_blocking("Lugrasimo", None)
+            register_google_fonts_font_blocking("Lugrasimo", None)
                 .expect("Failed to register Lugrasimo");
         });
     }
 
     #[test]
     fn test() {
-        initialize_fontsource();
+        initialize_google_fonts();
 
         let vl_version = VlVersion::v5_8;
-        let vl_spec = load_vl_spec("fontsource_fonts");
+        let vl_spec = load_vl_spec("google_fonts");
         let converter = VlConverter::new();
 
         let vg_spec = block_on(
@@ -830,12 +830,12 @@ mod test_png_fontsource {
         ).unwrap();
 
         let png_data = block_on(converter.vega_to_png(vg_spec, Default::default(), Some(2.0), None)).unwrap();
-        check_png("fontsource_fonts", vl_version, None, png_data.as_slice());
+        check_png("google_fonts", vl_version, None, png_data.as_slice());
 
         let png_data = block_on(
             converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(2.0), None)
         ).unwrap();
-        check_png("fontsource_fonts", vl_version, None, png_data.as_slice());
+        check_png("google_fonts", vl_version, None, png_data.as_slice());
     }
 
     #[test]
@@ -883,7 +883,7 @@ mod test_png_theme_config {
                     allowed_base_urls: None,
                     format_locale: None,
                     time_format_locale: None,
-                    fontsource_fonts: None,
+                    google_fonts: None,
                 },
                 Some(scale),
                 None
@@ -910,7 +910,7 @@ mod test_png_theme_config {
                     allowed_base_urls: None,
                     format_locale: None,
                     time_format_locale: None,
-                    fontsource_fonts: None,
+                    google_fonts: None,
                 },
                 Some(scale),
                 None
@@ -1080,20 +1080,9 @@ mod test_vega_label_transform {
     fn test_marker() {} // Help IDE detect test module
 }
 
-#[tokio::test]
-async fn test_svg_to_png_auto_fontsource() {
-    initialize();
-
-    let name = "svg_auto_fontsource";
-
-    // SVG that references a distinctive Fontsource-available font (Kalam)
-    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="250" height="60">
-  <rect width="250" height="60" fill="#f0f0f0"/>
-  <text x="10" y="40" font-family="Kalam" font-size="28" fill="#333">Hello Kalam</text>
-</svg>"##;
-
+async fn check_svg_to_png_baseline(name: &str, svg: &str) {
     let converter = VlConverter::with_config(vl_convert_rs::converter::VlConverterConfig {
-        auto_fontsource: true,
+        auto_google_fonts: true,
         ..Default::default()
     })
     .unwrap();
@@ -1127,4 +1116,24 @@ async fn test_svg_to_png_auto_fontsource() {
             "Baseline image does not exist for {name}.png. Failed image written to {failed_path:?}"
         );
     }
+}
+
+#[tokio::test]
+async fn test_svg_to_png_auto_google_fonts_kalam() {
+    initialize();
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="250" height="60">
+  <rect width="250" height="60" fill="#f0f0f0"/>
+  <text x="10" y="40" font-family="Kalam" font-size="28" fill="#333">Hello Kalam</text>
+</svg>"##;
+    check_svg_to_png_baseline("svg_auto_google_fonts", svg).await;
+}
+
+#[tokio::test]
+async fn test_svg_to_png_auto_google_fonts_pacifico() {
+    initialize();
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="300" height="60">
+  <rect width="300" height="60" fill="#f0f0f0"/>
+  <text x="10" y="42" font-family="Pacifico" font-size="30" fill="#333">Hello Pacifico</text>
+</svg>"##;
+    check_svg_to_png_baseline("svg_auto_google_fonts_pacifico", svg).await;
 }
