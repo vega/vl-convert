@@ -38,9 +38,14 @@ Commands:
   help       Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help information
-  -V, --version  Print version information
+      --google-font <FONT_FAMILY>  Register a font from Google Fonts for this conversion (repeatable)
+      --auto-google-fonts          Automatically download missing fonts from Google Fonts
+      --missing-fonts <POLICY>     Missing-font behavior: fallback, warn, or error [default: fallback]
+  -h, --help                       Print help information
+  -V, --version                    Print version information
 ```
+
+The `--google-font`, `--auto-google-fonts`, and `--missing-fonts` flags are global and can be used with any subcommand.
 
 Various conversion formats are handled by the subcommands listed above. Documentation for each subcommands is displayed using the `--help` flag.
 
@@ -503,6 +508,23 @@ $ vl-convert cat-theme dark
   }
 }
 ```
+
+## Google Fonts
+`vl-convert` can download and register fonts from [Google Fonts](https://fonts.google.com/) for use in chart rendering.
+
+### Explicit registration
+Use `--google-font` to download a specific font family (may be repeated):
+```plain
+$ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --google-font "Roboto" --google-font "Playfair Display"
+```
+
+### Automatic detection
+Use `--auto-google-fonts` to have missing fonts detected from the chart specification and downloaded automatically:
+```plain
+$ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --auto-google-fonts
+```
+
+Downloaded fonts are cached on disk at `~/.cache/vl-convert/google-fonts/` (or the platform-appropriate cache directory).
 
 ## User-level config file
 If a file exists at `~/.config/vl-convert/config.json`, `vl-convert` will use this path as the default value of the `--config` flag across all subcommands.

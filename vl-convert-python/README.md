@@ -107,6 +107,43 @@ vlc.warm_up_workers()  # optional: pre-initialize workers before first conversio
 
 This setting applies to subsequent conversions and enables parallel work across Python threads.
 
+## Google Fonts
+Charts that reference [Google Fonts](https://fonts.google.com/) can download and register them automatically. There are two approaches:
+
+### Explicit Registration
+Use `register_google_fonts_font` to download specific font families before conversion:
+
+```python
+import vl_convert as vlc
+
+# Download all variants of Roboto
+vlc.register_google_fonts_font("Roboto")
+
+# Download specific weight/style variants
+vlc.register_google_fonts_font("Playfair Display", variants=[(400, "normal"), (700, "italic")])
+
+svg_str = vlc.vegalite_to_svg(vl_spec=vl_spec)
+```
+
+### Automatic Detection
+Enable `auto_google_fonts` to have vl-convert scan the chart specification for font references and download matching Google Fonts automatically:
+
+```python
+import vl_convert as vlc
+
+vlc.configure(auto_google_fonts=True)
+
+# Fonts referenced in the spec are downloaded automatically
+svg_str = vlc.vegalite_to_svg(vl_spec=vl_spec)
+```
+
+### Cache Configuration
+Downloaded fonts are cached on disk (default `~/.cache/vl-convert/google-fonts/`). You can limit the cache size:
+
+```python
+vlc.configure(google_fonts_cache_size_mb=500)
+```
+
 ## Asyncio API
 An async API with matching function names is available under `vl_convert.asyncio`.
 
