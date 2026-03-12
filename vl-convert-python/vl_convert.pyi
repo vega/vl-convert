@@ -277,8 +277,7 @@ def register_google_fonts_font(
     """
     Download, cache, and register a font by family name from Google Fonts.
 
-    Downloads font files from the Google Fonts catalog (which includes
-    Google Fonts and other open-source fonts) and registers them for
+    Downloads font files from Google Fonts and registers them for
     use in subsequent conversions.
 
     Parameters

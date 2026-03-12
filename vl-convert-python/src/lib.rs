@@ -1323,8 +1323,7 @@ fn parse_variant_args(
     }
 }
 
-/// Downloads font files from Google Fonts (which includes
-/// Google Fonts and other open-source fonts) and registers them for
+/// Downloads font files from Google Fonts and registers them for
 /// use in subsequent conversions.
 #[pyfunction]
 #[pyo3(signature = (font_family, variants=None))]
