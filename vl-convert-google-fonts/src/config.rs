@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-const DEFAULT_MAX_BLOB_CACHE_BYTES: u64 = 512 * 1024 * 1024;
+const DEFAULT_MAX_FONT_CACHE_BYTES: u64 = 512 * 1024 * 1024;
 const DEFAULT_MAX_PARALLEL_DOWNLOADS: usize = 8;
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 const DEFAULT_MAX_RETRIES: usize = 3;
@@ -19,13 +19,13 @@ const ENV_GOOGLE_FONTS_CSS2_URL: &str = "VL_CONVERT_GOOGLE_FONTS_CSS2_URL";
 /// Runtime configuration for [`GoogleFontsClient`](crate::GoogleFontsClient).
 ///
 /// When `cache_dir` is `None`, the client operates without persistent caching:
-/// fonts are always fetched from the network and blobs are never written to disk.
+/// fonts are always fetched from the network and never written to disk.
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     /// Absolute path to the cache root. `None` disables persistent caching.
     pub cache_dir: Option<PathBuf>,
-    /// Maximum size of the on-disk blob cache in bytes. `0` disables eviction.
-    pub max_blob_cache_bytes: u64,
+    /// Maximum size of the on-disk font cache in bytes. `0` disables eviction.
+    pub max_font_cache_bytes: u64,
     /// Maximum number of concurrent font file downloads.
     pub max_parallel_downloads: usize,
     /// Per-request HTTP timeout in seconds.
@@ -41,6 +41,10 @@ pub struct ClientConfig {
 impl ClientConfig {
     pub fn fonts_dir(&self) -> Option<PathBuf> {
         self.cache_dir.as_ref().map(|d| d.join("fonts"))
+    }
+
+    pub fn css_dir(&self) -> Option<PathBuf> {
+        self.cache_dir.as_ref().map(|d| d.join("css"))
     }
 }
 
@@ -62,7 +66,7 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             cache_dir: google_fonts_cache_dir(),
-            max_blob_cache_bytes: DEFAULT_MAX_BLOB_CACHE_BYTES,
+            max_font_cache_bytes: DEFAULT_MAX_FONT_CACHE_BYTES,
             max_parallel_downloads: DEFAULT_MAX_PARALLEL_DOWNLOADS,
             request_timeout_secs: DEFAULT_TIMEOUT_SECS,
             max_retries: DEFAULT_MAX_RETRIES,

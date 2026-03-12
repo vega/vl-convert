@@ -272,13 +272,13 @@ fn make_client(
     cache_root: &Path,
     base_url: &str,
     max_parallel_downloads: usize,
-    max_blob_cache_bytes: u64,
+    max_font_cache_bytes: u64,
 ) -> GoogleFontsClient {
     let config = ClientConfig {
         cache_dir: Some(cache_root.to_path_buf()),
         google_fonts_css2_url: format!("{}/css2", base_url),
         max_parallel_downloads,
-        max_blob_cache_bytes,
+        max_font_cache_bytes,
         ..ClientConfig::default()
     };
     GoogleFontsClient::new(config).unwrap()
@@ -462,16 +462,16 @@ fn test_cache_hit_avoids_ttf_refetch() {
 
     let _second = client.load_blocking("Roboto", Some(&requested)).unwrap();
 
-    // TTF blobs should be served from cache, not re-downloaded
+    // TTF files should be served from cache, not re-downloaded
     assert_eq!(
         server.hit_count("/s/roboto/v30/regular.ttf"),
         regular_hits,
-        "TTF blob should not be re-fetched from cache"
+        "TTF file should not be re-fetched from cache"
     );
 }
 
 #[test]
-fn test_css2_always_refetched() {
+fn test_css2_cached_across_loads() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
@@ -480,11 +480,12 @@ fn test_css2_always_refetched() {
     let first_css2_hits = server.css2_hit_count("Roboto");
     assert_eq!(first_css2_hits, 1);
 
+    // Second load should use cached CSS — no additional network request
     let _second = client.load_blocking("Roboto", None).unwrap();
     let second_css2_hits = server.css2_hit_count("Roboto");
     assert_eq!(
-        second_css2_hits, 2,
-        "CSS2 should be re-fetched on every load (no CSS caching)"
+        second_css2_hits, 1,
+        "CSS2 should be served from cache on second load"
     );
 }
 
@@ -627,7 +628,7 @@ fn test_eviction_keeps_current_font() {
     assert_eq!(roboto_hits, 1);
     assert_eq!(lato_hits, 1);
 
-    // Current font blobs should be exempt from eviction.
+    // Current font files should be exempt from eviction.
     let _ = client.load_blocking("Lato", None).unwrap();
     assert_eq!(server.hit_count("/s/lato/v30/l400.ttf"), lato_hits);
 
@@ -635,8 +636,8 @@ fn test_eviction_keeps_current_font() {
     let _ = client.load_blocking("Roboto", None).unwrap();
     assert_eq!(server.hit_count("/s/roboto/v30/r400.ttf"), roboto_hits + 1);
 
-    // At least one blob should exist for the currently-loaded font.
-    let blob_count = std::fs::read_dir(&fonts_dir)
+    // At least one font file should exist for the currently-loaded font.
+    let font_count = std::fs::read_dir(&fonts_dir)
         .unwrap()
         .flatten()
         .filter(|entry| {
@@ -648,11 +649,11 @@ fn test_eviction_keeps_current_font() {
                 .unwrap_or(false)
         })
         .count();
-    assert!(blob_count >= 1);
+    assert!(font_count >= 1);
 }
 
 #[test]
-fn test_corrupt_blob_fallbacks_to_network() {
+fn test_corrupt_font_fallbacks_to_network() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
@@ -665,7 +666,7 @@ fn test_corrupt_blob_fallbacks_to_network() {
     let _ = client.load_blocking("Roboto", Some(&requested)).unwrap();
 
     let fonts_dir = temp.path().join("fonts");
-    let mut blobs: Vec<_> = std::fs::read_dir(&fonts_dir)
+    let mut fonts: Vec<_> = std::fs::read_dir(&fonts_dir)
         .unwrap()
         .flatten()
         .map(|entry| entry.path())
@@ -676,10 +677,10 @@ fn test_corrupt_blob_fallbacks_to_network() {
                 .unwrap_or(false)
         })
         .collect();
-    blobs.sort();
-    assert!(!blobs.is_empty());
+    fonts.sort();
+    assert!(!fonts.is_empty());
 
-    let corrupt_path = blobs[0].clone();
+    let corrupt_path = fonts[0].clone();
     std::fs::remove_file(&corrupt_path).unwrap();
     // Replace with a directory to make read fail
     std::fs::create_dir_all(&corrupt_path).unwrap();
@@ -707,7 +708,7 @@ fn test_no_cache_dir_always_downloads() {
 
     let regular_hits = server.hit_count("/s/roboto/v30/regular.ttf");
 
-    // Without a cache dir, every load re-downloads blobs.
+    // Without a cache dir, every load re-downloads font files.
     let second = client.load_blocking("Roboto", Some(&requested)).unwrap();
     assert_eq!(second.ttf_file_count, 1);
     assert_eq!(

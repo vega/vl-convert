@@ -359,6 +359,6 @@ pub fn register_google_fonts_font_blocking(
 /// `None` keeps the existing configured value.
 pub fn configure_font_cache(max_cache_bytes: Option<u64>) {
     if let Some(bytes) = max_cache_bytes {
-        GOOGLE_FONTS_CLIENT.set_max_blob_cache_bytes(bytes);
+        GOOGLE_FONTS_CLIENT.set_max_font_cache_bytes(bytes);
     }
 }

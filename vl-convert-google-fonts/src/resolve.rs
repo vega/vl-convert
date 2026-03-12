@@ -17,36 +17,6 @@ pub(crate) struct ResolvedDownloadPlan {
     pub files: Vec<ResolvedTtfFile>,
 }
 
-/// Build a CSS2 API URL for specific variants.
-///
-/// Format: `{base_url}?family={family}:ital,wght@{tuples}&display=swap`
-/// Tuples sorted: ital ascending, then wght ascending.
-pub(crate) fn build_css2_url(base_url: &str, family: &str, variants: &[VariantRequest]) -> String {
-    let mut tuples: Vec<(u8, u16)> = variants
-        .iter()
-        .map(|v| {
-            let ital = match v.style {
-                FontStyle::Normal => 0u8,
-                FontStyle::Italic => 1u8,
-            };
-            (ital, v.weight)
-        })
-        .collect();
-
-    // Deduplicate and sort
-    tuples.sort();
-    tuples.dedup();
-
-    let tuple_str: Vec<String> = tuples.iter().map(|(i, w)| format!("{i},{w}")).collect();
-
-    format!(
-        "{}?family={}:ital,wght@{}&display=swap",
-        base_url.trim_end_matches('/'),
-        encode(family),
-        tuple_str.join(";")
-    )
-}
-
 /// Build a CSS2 API URL requesting all standard weights (100-900) × both styles.
 ///
 /// The CSS2 API silently omits unavailable variants, so we parse what comes back.
@@ -362,29 +332,6 @@ mod tests {
     }
 
     #[test]
-    fn test_build_css2_url() {
-        let variants = vec![
-            VariantRequest {
-                weight: 400,
-                style: FontStyle::Normal,
-            },
-            VariantRequest {
-                weight: 700,
-                style: FontStyle::Normal,
-            },
-            VariantRequest {
-                weight: 400,
-                style: FontStyle::Italic,
-            },
-        ];
-        let url = build_css2_url("https://fonts.googleapis.com/css2", "Roboto", &variants);
-        assert_eq!(
-            url,
-            "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400&display=swap"
-        );
-    }
-
-    #[test]
     fn test_build_css2_url_all_variants() {
         let url = build_css2_url_all_variants("https://fonts.googleapis.com/css2", "Roboto");
         assert!(url.contains("0,100;"));
@@ -407,20 +354,6 @@ mod tests {
         assert_eq!(fonts.len(), 1);
         assert_eq!(fonts[0].weight, 400);
         assert!(fonts[0].url.contains("abc.ttf"));
-    }
-
-    #[test]
-    fn test_build_css2_url_encodes_family_name() {
-        let variants = vec![VariantRequest {
-            weight: 400,
-            style: FontStyle::Normal,
-        }];
-        let url = build_css2_url(
-            "https://fonts.googleapis.com/css2",
-            "Source Sans Pro",
-            &variants,
-        );
-        assert!(url.contains("family=Source%20Sans%20Pro:"));
     }
 
     #[test]

@@ -4,14 +4,14 @@ use fs4::fs_std::FileExt;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-/// Human-readable blob key derived from a gstatic URL.
+/// Human-readable font key derived from a gstatic URL.
 ///
 /// Given `https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf`,
 /// returns `roboto--KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf`.
 ///
 /// Flat key format (no path separators) ensures compatibility with
 /// non-recursive eviction/size walkers.
-pub(crate) fn blob_key(url: &str) -> String {
+pub(crate) fn font_key(url: &str) -> String {
     // Try to extract from gstatic URL pattern: /s/{font-name}/{version}/{hash}.ttf
     if let Some(idx) = url.find("/s/") {
         let after_s = &url[idx + 3..];
@@ -29,18 +29,18 @@ pub(crate) fn blob_key(url: &str) -> String {
         .replace('/', "--")
 }
 
-/// Join `blob_key(url)` onto `blob_cache_dir`, then verify the resolved path
+/// Join `font_key(url)` onto `font_cache_dir`, then verify the resolved path
 /// is still inside the cache directory. Returns an error on path traversal.
-fn blob_path(url: &str, blob_cache_dir: &Path) -> Result<PathBuf, GoogleFontsError> {
-    let key = blob_key(url);
-    let joined = blob_cache_dir.join(&key);
+fn font_path(url: &str, font_cache_dir: &Path) -> Result<PathBuf, GoogleFontsError> {
+    let key = font_key(url);
+    let joined = font_cache_dir.join(&key);
     // Normalize away any `.` / `..` components without requiring the path to
     // exist on disk (unlike `canonicalize`).
     let resolved = normalize_path(&joined);
-    let cache_dir_resolved = normalize_path(blob_cache_dir);
+    let cache_dir_resolved = normalize_path(font_cache_dir);
     if !resolved.starts_with(&cache_dir_resolved) {
         return Err(GoogleFontsError::Internal(format!(
-            "Blob key {key:?} escapes cache directory"
+            "Font key {key:?} escapes cache directory"
         )));
     }
     Ok(resolved)
@@ -63,11 +63,11 @@ fn normalize_path(path: &Path) -> PathBuf {
     out
 }
 
-pub(crate) fn read_blob(
+pub(crate) fn read_font(
     url: &str,
-    blob_cache_dir: &Path,
+    font_cache_dir: &Path,
 ) -> Result<Option<Vec<u8>>, GoogleFontsError> {
-    let path = blob_path(url, blob_cache_dir)?;
+    let path = font_path(url, font_cache_dir)?;
 
     // Reject symlinks and other non-regular entries without following them.
     match std::fs::symlink_metadata(&path) {
@@ -107,12 +107,12 @@ fn has_ttf_magic_bytes(bytes: &[u8]) -> bool {
             || bytes[..4] == *b"ttcf") // TrueType Collection
 }
 
-pub(crate) fn write_blob_if_absent(
+pub(crate) fn write_font_if_absent(
     url: &str,
-    blob_cache_dir: &Path,
+    font_cache_dir: &Path,
     bytes: &[u8],
 ) -> Result<(), GoogleFontsError> {
-    let path = blob_path(url, blob_cache_dir)?;
+    let path = font_path(url, font_cache_dir)?;
     if let Ok(meta) = std::fs::symlink_metadata(&path) {
         if meta.is_file() {
             // Already present as a regular file — nothing to do.
@@ -124,8 +124,8 @@ pub(crate) fn write_blob_if_absent(
     atomic_write_bytes(&path, bytes)
 }
 
-pub(crate) fn touch_blob(url: &str, blob_cache_dir: &Path) -> Result<(), GoogleFontsError> {
-    let path = blob_path(url, blob_cache_dir)?;
+pub(crate) fn touch_font(url: &str, font_cache_dir: &Path) -> Result<(), GoogleFontsError> {
+    let path = font_path(url, font_cache_dir)?;
 
     // Only touch regular files; skip symlinks and other non-file entries.
     match std::fs::symlink_metadata(&path) {
@@ -140,7 +140,7 @@ pub(crate) fn touch_blob(url: &str, blob_cache_dir: &Path) -> Result<(), GoogleF
     }
 }
 
-fn is_blob_file(path: &Path) -> bool {
+fn is_font_file(path: &Path) -> bool {
     // Use symlink_metadata so symlinks are not followed.
     std::fs::symlink_metadata(path)
         .map(|m| m.is_file())
@@ -152,22 +152,22 @@ fn is_blob_file(path: &Path) -> bool {
             .unwrap_or(false)
 }
 
-pub(crate) fn calculate_blob_cache_size_bytes(
-    blob_cache_dir: &Path,
+pub(crate) fn calculate_font_cache_size_bytes(
+    font_cache_dir: &Path,
 ) -> Result<u64, GoogleFontsError> {
-    if !blob_cache_dir.exists() {
+    if !font_cache_dir.exists() {
         return Ok(0);
     }
 
     let mut total = 0u64;
-    for entry in std::fs::read_dir(blob_cache_dir)? {
+    for entry in std::fs::read_dir(font_cache_dir)? {
         let entry = match entry {
             Ok(e) => e,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(e) => return Err(e.into()),
         };
         let path = entry.path();
-        if is_blob_file(&path) {
+        if is_font_file(&path) {
             let meta = match entry.metadata() {
                 Ok(m) => m,
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
@@ -180,26 +180,26 @@ pub(crate) fn calculate_blob_cache_size_bytes(
     Ok(total)
 }
 
-pub(crate) fn evict_blob_lru_until_size(
-    blob_cache_dir: &Path,
+pub(crate) fn evict_font_lru_until_size(
+    font_cache_dir: &Path,
     target_bytes: u64,
     exempt_keys: &HashSet<String>,
 ) -> Result<(), GoogleFontsError> {
-    with_exclusive_cache_lock(blob_cache_dir, || {
+    with_exclusive_cache_lock(font_cache_dir, || {
         let mut entries: Vec<(String, PathBuf, u64, std::time::SystemTime)> = Vec::new();
         let mut total_size = 0u64;
 
-        if !blob_cache_dir.exists() {
+        if !font_cache_dir.exists() {
             return Ok(());
         }
 
-        for entry in std::fs::read_dir(blob_cache_dir)? {
+        for entry in std::fs::read_dir(font_cache_dir)? {
             let entry = match entry {
                 Ok(e) => e,
                 Err(_) => continue,
             };
             let path = entry.path();
-            if !is_blob_file(&path) {
+            if !is_font_file(&path) {
                 continue;
             }
 
@@ -242,6 +242,54 @@ pub(crate) fn evict_blob_lru_until_size(
 
         Ok(())
     })
+}
+
+/// Read a cached CSS2 response for a font, returning `None` on miss.
+pub(crate) fn read_css(font_id: &str, css_dir: &Path) -> Result<Option<String>, GoogleFontsError> {
+    let path = css_dir.join(format!("{font_id}.css"));
+
+    // Reject symlinks and non-regular files without following them.
+    match std::fs::symlink_metadata(&path) {
+        Ok(meta) if !meta.is_file() => {
+            remove_path_if_present(&path);
+            return Ok(None);
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => {
+            remove_path_if_present(&path);
+            return Ok(None);
+        }
+        Ok(_) => {}
+    }
+
+    match std::fs::read_to_string(&path) {
+        Ok(s) if s.contains("@font-face") => Ok(Some(s)),
+        Ok(_) => {
+            remove_path_if_present(&path);
+            Ok(None)
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Write a CSS2 response to the cache (no-op if already present).
+pub(crate) fn write_css_if_absent(
+    font_id: &str,
+    css_dir: &Path,
+    css: &str,
+) -> Result<(), GoogleFontsError> {
+    let path = css_dir.join(format!("{font_id}.css"));
+    if path.exists() {
+        return Ok(());
+    }
+    atomic_write_bytes(&path, css.as_bytes())
+}
+
+/// Remove a cached CSS2 response so the next fetch re-downloads from the network.
+pub(crate) fn invalidate_css(font_id: &str, css_dir: &Path) {
+    let path = css_dir.join(format!("{font_id}.css"));
+    remove_path_if_present(&path);
 }
 
 pub(crate) fn atomic_write_bytes(dst: &Path, bytes: &[u8]) -> Result<(), GoogleFontsError> {
@@ -339,35 +387,35 @@ mod tests {
     }
 
     #[test]
-    fn test_blob_key_gstatic_url() {
-        let key = blob_key("https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf");
+    fn test_font_key_gstatic_url() {
+        let key = font_key("https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf");
         assert_eq!(key, "roboto--KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf");
     }
 
     #[test]
-    fn test_blob_key_deterministic() {
+    fn test_font_key_deterministic() {
         let url = "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf";
-        assert_eq!(blob_key(url), blob_key(url));
+        assert_eq!(font_key(url), font_key(url));
     }
 
     #[test]
-    fn test_blob_key_flat_no_path_separators() {
-        let key = blob_key("https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf");
+    fn test_font_key_flat_no_path_separators() {
+        let key = font_key("https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf");
         assert!(!key.contains('/'));
         assert!(!key.contains('\\'));
     }
 
     #[test]
-    fn test_blob_key_fallback_for_non_gstatic_url() {
-        let key = blob_key("https://example.com/fonts/test.ttf");
+    fn test_font_key_fallback_for_non_gstatic_url() {
+        let key = font_key("https://example.com/fonts/test.ttf");
         assert!(!key.contains('/'));
         assert!(key.contains("example.com"));
     }
 
     #[test]
-    fn test_blob_path_rejects_traversal() {
+    fn test_font_path_rejects_traversal() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = blob_path(
+        let result = font_path(
             "https://fonts.gstatic.com/s/roboto/v30/../../../../etc/passwd",
             tmp.path(),
         );
@@ -377,9 +425,9 @@ mod tests {
     }
 
     #[test]
-    fn test_blob_path_accepts_normal_url() {
+    fn test_font_path_accepts_normal_url() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = blob_path(
+        let result = font_path(
             "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1MmgVxFIzIFKw.ttf",
             tmp.path(),
         );
@@ -395,72 +443,72 @@ mod tests {
     }
 
     #[test]
-    fn test_read_write_blob_roundtrip() {
+    fn test_read_write_font_roundtrip() {
         let tmp = tempfile::tempdir().unwrap();
         let url = "https://fonts.gstatic.com/s/testfont/v1/abc123.ttf";
         let data = fake_ttf(b"font data");
 
-        assert!(read_blob(url, tmp.path()).unwrap().is_none());
+        assert!(read_font(url, tmp.path()).unwrap().is_none());
 
-        write_blob_if_absent(url, tmp.path(), &data).unwrap();
+        write_font_if_absent(url, tmp.path(), &data).unwrap();
 
-        let read_back = read_blob(url, tmp.path()).unwrap().unwrap();
+        let read_back = read_font(url, tmp.path()).unwrap().unwrap();
         assert_eq!(read_back, data);
     }
 
     #[test]
-    fn test_write_blob_no_overwrite() {
+    fn test_write_font_no_overwrite() {
         let tmp = tempfile::tempdir().unwrap();
         let url = "https://fonts.gstatic.com/s/testfont/v1/abc123.ttf";
         let first = fake_ttf(b"first");
         let second = fake_ttf(b"second");
 
-        write_blob_if_absent(url, tmp.path(), &first).unwrap();
-        write_blob_if_absent(url, tmp.path(), &second).unwrap();
+        write_font_if_absent(url, tmp.path(), &first).unwrap();
+        write_font_if_absent(url, tmp.path(), &second).unwrap();
 
-        let read_back = read_blob(url, tmp.path()).unwrap().unwrap();
+        let read_back = read_font(url, tmp.path()).unwrap().unwrap();
         assert_eq!(read_back, first);
     }
 
     #[test]
-    fn test_read_blob_bad_magic_bytes_treated_as_miss_and_cleaned() {
+    fn test_read_font_bad_magic_bytes_treated_as_miss_and_cleaned() {
         let tmp = tempfile::tempdir().unwrap();
         let url = "https://fonts.gstatic.com/s/testfont/v1/abc123.ttf";
-        let path = tmp.path().join(blob_key(url));
+        let path = tmp.path().join(font_key(url));
 
         std::fs::write(&path, b"not a font file").unwrap();
-        assert!(read_blob(url, tmp.path()).unwrap().is_none());
+        assert!(read_font(url, tmp.path()).unwrap().is_none());
         assert!(!path.exists());
     }
 
     #[test]
-    fn test_read_blob_corrupt_directory_treated_as_miss_and_cleaned() {
+    fn test_read_font_corrupt_directory_treated_as_miss_and_cleaned() {
         let tmp = tempfile::tempdir().unwrap();
         let url = "https://fonts.gstatic.com/s/testfont/v1/abc123.ttf";
-        let path = tmp.path().join(blob_key(url));
+        let path = tmp.path().join(font_key(url));
 
         std::fs::create_dir_all(&path).unwrap();
-        assert!(read_blob(url, tmp.path()).unwrap().is_none());
+        assert!(read_font(url, tmp.path()).unwrap().is_none());
         assert!(!path.exists());
     }
 
     #[cfg(unix)]
     #[test]
-    fn test_read_blob_symlink_treated_as_miss_and_cleaned() {
+    fn test_read_font_symlink_treated_as_miss_and_cleaned() {
         let tmp = tempfile::tempdir().unwrap();
         let url = "https://fonts.gstatic.com/s/testfont/v1/abc123.ttf";
-        let blob = tmp.path().join(blob_key(url));
+        let font = tmp.path().join(font_key(url));
 
-        // Create a symlink where the blob should be.
+        // Create a symlink where the font file should be.
         let target = tmp.path().join("target.ttf");
         std::fs::write(&target, fake_ttf(b"payload")).unwrap();
-        std::os::unix::fs::symlink(&target, &blob).unwrap();
-        assert!(blob.exists()); // follows symlink
+        std::os::unix::fs::symlink(&target, &font).unwrap();
+        assert!(font.exists()); // follows symlink
 
-        // read_blob must reject the symlink and remove it.
-        let result = read_blob(url, tmp.path()).unwrap();
+        // read_font must reject the symlink and remove it.
+        let result = read_font(url, tmp.path()).unwrap();
         assert!(result.is_none());
-        assert!(!blob.symlink_metadata().is_ok()); // symlink removed
+        assert!(!font.symlink_metadata().is_ok()); // symlink removed
         assert!(target.exists()); // target untouched
     }
 
