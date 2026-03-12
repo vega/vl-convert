@@ -4,7 +4,10 @@ version = "2.0.0-rc1"
 edition = "2021"
 description = "Google Fonts downloading and caching"
 license = "BSD-3-Clause"
+readme = "README.md"
+homepage = "https://github.com/vega/vl-convert"
 repository = "https://github.com/vega/vl-convert"
+keywords = ["Fonts", "Google-Fonts"]
 
 [features]
 fontdb = ["dep:fontdb", "dep:tinyvec"]
