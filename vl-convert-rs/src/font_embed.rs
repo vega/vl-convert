@@ -91,6 +91,50 @@ pub fn variants_by_family(
 }
 
 // ---------------------------------------------------------------------------
+// Font-face CSS indexing
+// ---------------------------------------------------------------------------
+
+/// Parse `@font-face` CSS blocks (produced by [`generate_font_face_css`]) into
+/// a `(family, weight, style) → CSS block` index.
+///
+/// This relies on the known format produced by [`format_font_face_block`]:
+/// ```css
+/// @font-face {
+///   font-family: "Roboto";
+///   font-weight: 400;
+///   font-style: normal;
+///   src: url(...) format("woff2");
+/// }
+/// ```
+pub fn index_font_face_blocks(css_blocks: &[String]) -> HashMap<(String, String, String), String> {
+    let mut index = HashMap::new();
+    for block in css_blocks {
+        let family = extract_css_value(block, "font-family:");
+        let weight = extract_css_value(block, "font-weight:");
+        let style = extract_css_value(block, "font-style:");
+        if let (Some(family), Some(weight), Some(style)) = (family, weight, style) {
+            index.insert((family, weight, style), block.clone());
+        }
+    }
+    index
+}
+
+/// Extract a CSS property value from a `@font-face` block.
+/// Handles both quoted (`"Roboto"`) and unquoted (`400`) values.
+fn extract_css_value(block: &str, property: &str) -> Option<String> {
+    let start = block.find(property)? + property.len();
+    let rest = &block[start..];
+    let end = rest.find(';')?;
+    let value = rest[..end].trim();
+    // Strip surrounding quotes if present
+    let value = value
+        .strip_prefix('"')
+        .and_then(|v| v.strip_suffix('"'))
+        .unwrap_or(value);
+    Some(value.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Font subsetting + CSS generation
 // ---------------------------------------------------------------------------
 

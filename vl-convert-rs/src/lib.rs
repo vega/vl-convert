@@ -16,8 +16,9 @@ extern crate lazy_static;
 // extern crate deno_core makes it available at crate root for op2 and extension! macros
 extern crate deno_core;
 
-pub use converter::{FontFormat, GoogleFontRequest, VlConverter};
+pub use converter::{GoogleFontRequest, VlConverter};
 pub use deno_core::anyhow;
+pub use extract::{FontInfo, FontVariant};
 pub use module_loader::import_map::VlVersion;
 pub use serde_json;
 pub use text::{

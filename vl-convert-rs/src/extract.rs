@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use usvg::roxmltree;
@@ -12,6 +13,16 @@ pub enum FontSource {
     },
     /// Font is already available in fontdb (system font, --font-dir, vendored).
     Local,
+}
+
+impl FontSource {
+    /// Return a short label for serialization: "google" or "local".
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FontSource::GoogleFonts { .. } => "google",
+            FontSource::Local => "local",
+        }
+    }
 }
 
 /// Metadata for a font that should be embedded or linked in HTML output.
@@ -29,6 +40,39 @@ pub struct FontKey {
     pub family: String,
     pub weight: String,
     pub style: String,
+}
+
+// ---------------------------------------------------------------------------
+// Structured font info for the public API
+// ---------------------------------------------------------------------------
+
+/// A weight/style variant of a font, with optional embedded @font-face CSS.
+#[derive(Debug, Clone, Serialize)]
+pub struct FontVariant {
+    /// CSS font-weight (e.g. "400", "700").
+    pub weight: String,
+    /// CSS font-style ("normal" or "italic").
+    pub style: String,
+    /// `@font-face` CSS block with embedded base64 WOFF2 data, or `None` if
+    /// font-face generation was not requested or subsetting failed.
+    pub font_face: Option<String>,
+}
+
+/// Structured font metadata returned by `vega_fonts` / `vegalite_fonts`.
+#[derive(Debug, Clone, Serialize)]
+pub struct FontInfo {
+    /// Font family name (e.g. "Roboto").
+    pub name: String,
+    /// Where the font originates: "google" or "local".
+    pub source: String,
+    /// Weight/style variants used by the chart.
+    pub variants: Vec<FontVariant>,
+    /// Google Fonts CSS2 API stylesheet URL, or `None` for local fonts.
+    pub url: Option<String>,
+    /// HTML `<link rel="stylesheet">` tag, or `None` for local fonts.
+    pub link_tag: Option<String>,
+    /// CSS `@import url(...)` rule, or `None` for local fonts.
+    pub import_rule: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

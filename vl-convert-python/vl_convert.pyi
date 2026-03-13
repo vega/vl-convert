@@ -124,12 +124,22 @@ if TYPE_CHECKING:
         "vox",
     ]
     Renderer: TypeAlias = Literal["canvas", "hybrid", "svg"]
-    FontFormat: TypeAlias = Literal[
-        "name", "url", "link_tag", "import_rule", "font_face"
-    ]
     FormatLocale: TypeAlias = FormatLocaleName | dict[str, Any]
     TimeFormatLocale: TypeAlias = TimeFormatLocaleName | dict[str, Any]
     VlSpec: TypeAlias = str | dict[str, Any]
+
+    class FontVariant(TypedDict):
+        weight: str
+        style: str
+        font_face: str | None
+
+    class FontInfo(TypedDict):
+        name: str
+        source: str
+        variants: list[FontVariant]
+        url: str | None
+        link_tag: str | None
+        import_rule: str | None
 
     class ConverterConfig(TypedDict):
         num_workers: int
@@ -624,23 +634,20 @@ def vega_to_url(vg_spec: VlSpec, fullscreen: bool | None = None) -> str:
 
 def vegalite_fonts(
     vl_spec: VlSpec,
-    format: FontFormat = "name",
     vl_version: str | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     auto_google_fonts: bool | None = None,
     html_embed_local_fonts: bool | None = None,
-) -> list[str]:
+    include_font_face: bool = False,
+) -> list[FontInfo]:
     """
-    Return font information for a rendered Vega-Lite spec.
+    Return structured font metadata for a rendered Vega-Lite spec.
 
     Parameters
     ----------
     vl_spec
         Vega-Lite JSON specification string or dict
-    format
-        Output format. One of 'name', 'url', 'link_tag',
-        'import_rule', or 'font_face' (default 'name')
     vl_version
         Vega-Lite library version string (e.g. 'v5.15')
         (default to latest)
@@ -654,39 +661,42 @@ def vegalite_fonts(
     html_embed_local_fonts
         Override local font embedding
         (default: use converter config)
+    include_font_face
+        Whether to run the font subsetting pipeline and populate
+        the ``font_face`` field on each variant (default False)
 
     Returns
     -------
-    Font information in the requested format.
+    Structured font metadata for each font used by the chart.
     """
     ...
 
 def vega_fonts(
     vg_spec: VlSpec,
-    format: FontFormat = "name",
     auto_google_fonts: bool | None = None,
     html_embed_local_fonts: bool | None = None,
-) -> list[str]:
+    include_font_face: bool = False,
+) -> list[FontInfo]:
     """
-    Return font information for a rendered Vega spec.
+    Return structured font metadata for a rendered Vega spec.
 
     Parameters
     ----------
     vg_spec
         Vega JSON specification string or dict
-    format
-        Output format. One of 'name', 'url', 'link_tag',
-        'import_rule', or 'font_face' (default 'name')
     auto_google_fonts
         Override auto-download from Google Fonts
         (default: use converter config)
     html_embed_local_fonts
         Override local font embedding
         (default: use converter config)
+    include_font_face
+        Whether to run the font subsetting pipeline and populate
+        the ``font_face`` field on each variant (default False)
 
     Returns
     -------
-    Font information in the requested format.
+    Structured font metadata for each font used by the chart.
     """
     ...
 
@@ -1164,22 +1174,22 @@ if TYPE_CHECKING:
         async def vegalite_fonts(
             self,
             vl_spec: VlSpec,
-            format: FontFormat = "name",
             vl_version: str | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             auto_google_fonts: bool | None = None,
             html_embed_local_fonts: bool | None = None,
-        ) -> list[str]:
+            include_font_face: bool = False,
+        ) -> list[FontInfo]:
             """Async version of ``vegalite_fonts``. See sync function for full documentation."""
             ...
         async def vega_fonts(
             self,
             vg_spec: VlSpec,
-            format: FontFormat = "name",
             auto_google_fonts: bool | None = None,
             html_embed_local_fonts: bool | None = None,
-        ) -> list[str]:
+            include_font_face: bool = False,
+        ) -> list[FontInfo]:
             """Async version of ``vega_fonts``. See sync function for full documentation."""
             ...
         async def vegalite_to_html(
