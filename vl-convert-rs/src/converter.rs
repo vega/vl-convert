@@ -18,7 +18,7 @@ use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
 use deno_runtime::FeatureChecker;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -37,19 +37,24 @@ use png::{PixelDimensions, Unit};
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-use crate::html::get_vega_or_vegalite_script;
+use crate::html::{font_cdn_url, font_import_rule, font_link_tag, get_vega_or_vegalite_script};
 use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::extract::{extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus};
+use crate::extract::{
+    extract_fonts_from_vega, extract_text_by_font, is_available, resolve_first_fonts,
+    FirstFontStatus, FontForHtml, FontKey, FontSource,
+};
+use crate::font_embed::{generate_font_face_css, variants_by_family};
 use crate::text::{
     build_usvg_options_with_fontdb, get_font_baseline_snapshot, FONT_CONFIG_VERSION,
     GOOGLE_FONTS_CLIENT, USVG_OPTIONS,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use vl_convert_google_fonts::{
-    family_to_id, GoogleFontsDatabaseExt, LoadedFontBatch, RegisteredFontBatch, VariantRequest,
+    family_to_id, FontStyle, GoogleFontsDatabaseExt, LoadedFontBatch, RegisteredFontBatch,
+    VariantRequest,
 };
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
@@ -468,6 +473,37 @@ pub enum MissingFontsPolicy {
     Error,
 }
 
+/// Output format for font information returned by `vega_fonts` / `vegalite_fonts`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FontFormat {
+    /// Just the font family name (e.g. "Roboto")
+    Name,
+    /// CDN stylesheet URL
+    Url,
+    /// HTML `<link rel="stylesheet">` tag
+    LinkTag,
+    /// CSS `@import url(...)` rule
+    ImportRule,
+    /// CSS `@font-face` block with embedded base64 WOFF2 data
+    FontFace,
+}
+
+impl std::str::FromStr for FontFormat {
+    type Err = AnyError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "name" => Ok(FontFormat::Name),
+            "url" => Ok(FontFormat::Url),
+            "link_tag" => Ok(FontFormat::LinkTag),
+            "import_rule" => Ok(FontFormat::ImportRule),
+            "font_face" => Ok(FontFormat::FontFace),
+            _ => Err(anyhow!(
+                "Invalid font format: '{s}'. Expected one of: name, url, link_tag, import_rule, font_face"
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlConverterConfig {
     pub num_workers: usize,
@@ -481,6 +517,11 @@ pub struct VlConverterConfig {
     pub auto_google_fonts: bool,
     /// How to handle missing first-choice fonts: silently fallback, warn, or error.
     pub missing_fonts: MissingFontsPolicy,
+    /// Whether to embed locally-available fonts (system, --font-dir, vendored)
+    /// as @font-face CSS in HTML output.
+    ///
+    /// Exposed as `html_embed_local_fonts` in Python and `--embed-local-fonts` in CLI.
+    pub html_embed_local_fonts: bool,
 }
 
 impl Default for VlConverterConfig {
@@ -492,6 +533,7 @@ impl Default for VlConverterConfig {
             allowed_base_urls: None,
             auto_google_fonts: false,
             missing_fonts: MissingFontsPolicy::Fallback,
+            html_embed_local_fonts: false,
         }
     }
 }
@@ -1296,6 +1338,74 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
     return scenegraphPromise
 }
 
+function vegaToTextByFont(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, errors) {
+    if (formatLocale != null) {
+        vega.formatLocale(formatLocale);
+    }
+    if (timeFormatLocale != null) {
+        vega.timeFormatLocale(timeFormatLocale);
+    }
+    let view = vegaToView(vgSpec, allowedBaseUrls, errors);
+    return view.runAsync().then(() => {
+        try {
+            view.signal("geo_interval_init_tick", {});
+        } catch (e) {}
+    }).then(() => {
+        return view.runAsync().then(() => {
+            if (errors != null && errors.length > 0) {
+                throw new Error(`${errors}`);
+            }
+            const map = {};
+            function normalizeWeight(w) {
+                if (w == null || w === 'normal') return '400';
+                if (w === 'bold') return '700';
+                if (w === 'bolder' || w === 'lighter') return '400';
+                const n = Number(w);
+                return (Number.isFinite(n) && n > 0) ? String(n) : '400';
+            }
+            function normalizeStyle(s) {
+                if (s == null || s === '') return 'normal';
+                const lower = String(s).trim().toLowerCase();
+                if (lower === 'oblique') return 'italic';
+                return (lower === 'italic') ? 'italic' : 'normal';
+            }
+            function walk(mark) {
+                if (!mark || !mark.marktype) return;
+                if (mark.marktype === 'text' && mark.items) {
+                    for (const item of mark.items) {
+                        const text = item.text;
+                        if (text == null || text === '') continue;
+                        const str = String(text);
+                        const font = (item.font || 'sans-serif').trim();
+                        const weight = normalizeWeight(item.fontWeight);
+                        const style = normalizeStyle(item.fontStyle);
+                        const key = font + '|' + weight + '|' + style;
+                        if (!map[key]) map[key] = new Set();
+                        for (const ch of str) map[key].add(ch);
+                    }
+                }
+                if (mark.marktype === 'group' && mark.items) {
+                    for (const groupItem of mark.items) {
+                        if (groupItem.items) {
+                            for (const childMark of groupItem.items) walk(childMark);
+                        }
+                    }
+                }
+            }
+            walk(view.scenegraph().root);
+            const result = [];
+            for (const [key, chars] of Object.entries(map)) {
+                const [font, weight, style] = key.split('|');
+                result.push({ font, weight, style, chars: [...chars].sort().join('') });
+            }
+            return JSON.stringify(result);
+        }).finally(() => {
+            view.finalize();
+            vega.resetDefaultLocale();
+        });
+    });
+}
+
 function vegaToViewCanvas(vgSpec, allowedBaseUrls, errors) {
     // Use the same view setup as vegaToView, since toCanvas() creates its own renderer
     return vegaToView(vgSpec, allowedBaseUrls, errors);
@@ -1932,6 +2042,67 @@ vegaToScenegraph(
         Ok(value)
     }
 
+    /// Render a Vega spec and extract text content grouped by (font, weight, style).
+    /// Returns a JSON string: `[{font, weight, style, chars}, ...]`
+    pub async fn vega_to_text_by_font(
+        &mut self,
+        vg_spec: impl Into<ValueOrString>,
+        vg_opts: VgOpts,
+    ) -> Result<String, AnyError> {
+        self.init_vega().await?;
+        let vg_spec = vg_spec.into();
+        let allowed_base_urls =
+            serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
+        let format_locale = match vg_opts.format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+        let time_format_locale = match vg_opts.time_format_locale {
+            None => serde_json::Value::Null,
+            Some(fl) => fl.as_object()?,
+        };
+
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec)?;
+        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
+        let time_format_locale_arg =
+            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+
+        let code = format!(
+            r#"
+var errors = [];
+vegaToTextByFont(
+    JSON.parse(op_get_json_arg({arg_id})),
+    {allowed_base_urls},
+    JSON.parse(op_get_json_arg({format_locale_id})),
+    JSON.parse(op_get_json_arg({time_format_locale_id})),
+    errors,
+).then((result) => {{
+    textByFontResult = result;
+}})
+"#,
+            arg_id = spec_arg.id(),
+            format_locale_id = format_locale_arg.id(),
+            time_format_locale_id = time_format_locale_arg.id(),
+        );
+        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await?;
+
+        let access_errors = self
+            .execute_script_to_string(
+                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
+            )
+            .await?;
+        if !access_errors.is_empty() {
+            bail!("{access_errors}");
+        }
+
+        let value = self.execute_script_to_string("textByFontResult").await?;
+        Ok(value)
+    }
+
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
         let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';"
             .to_string();
@@ -2510,6 +2681,14 @@ vegaLiteToCanvas_{ver_name:?}(
                 let bundle = crate::html::bundle_vega_snippet(&snippet, vl_version).await;
                 responder.send(bundle).ok();
             }
+            VlConvertCommand::VgToTextByFont {
+                vg_spec,
+                vg_opts,
+                responder,
+            } => {
+                let result = self.vega_to_text_by_font(vg_spec, vg_opts).await;
+                responder.send(result).ok();
+            }
         }
     }
 }
@@ -2641,6 +2820,11 @@ pub enum VlConvertCommand {
         vl_version: VlVersion,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
+    VgToTextByFont {
+        vg_spec: ValueOrString,
+        vg_opts: VgOpts,
+        responder: oneshot::Sender<Result<String, AnyError>>,
+    },
 }
 
 impl VlConvertCommand {
@@ -2707,6 +2891,9 @@ impl VlConvertCommand {
             Self::BundleVegaSnippet { responder, .. } => {
                 responder.send(Err(err)).ok();
             }
+            Self::VgToTextByFont { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
         }
     }
 }
@@ -2756,11 +2943,17 @@ impl VlConvertCommand {
 /// Classify a set of font-family CSS strings and return Google Fonts download
 /// requests for any that need downloading.
 ///
+/// When `prefer_cdn` is true (HTML path), Google-catalog fonts are requested
+/// even if locally available, so the render uses the same face the output
+/// will reference. When false (SVG/PNG/PDF path), only fonts not already
+/// in fontdb are requested.
+///
 /// Shared logic used by both Vega spec preprocessing and SVG font preprocessing.
 async fn classify_and_request_fonts(
     font_strings: HashSet<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    prefer_cdn: bool,
 ) -> Result<Vec<GoogleFontRequest>, AnyError> {
     if font_strings.is_empty() {
         return Ok(Vec::new());
@@ -2777,17 +2970,17 @@ async fn classify_and_request_fonts(
 
     let font_string_vec: Vec<String> = font_strings.into_iter().collect();
 
-    let mut downloadable_set: HashSet<String> = HashSet::new();
+    let mut google_fonts_set: HashSet<String> = HashSet::new();
     if auto_google_fonts {
         // Check which first-fonts are known to Google Fonts (only those not already available)
         let mut api_errors: Vec<(String, String)> = Vec::new();
         for font_string in &font_string_vec {
             let entries = crate::extract::parse_css_font_family(font_string);
             if let Some(crate::extract::FontFamilyEntry::Named(ref name)) = entries.first() {
-                if !is_available(name, &available) && family_to_id(name).is_some() {
+                if (prefer_cdn || !is_available(name, &available)) && family_to_id(name).is_some() {
                     match GOOGLE_FONTS_CLIENT.is_known_font(name).await {
                         Ok(true) => {
-                            downloadable_set.insert(name.clone());
+                            google_fonts_set.insert(name.clone());
                         }
                         Ok(false) => {}
                         Err(e) => {
@@ -2822,7 +3015,7 @@ async fn classify_and_request_fonts(
 
     // Classify each font string by its first entry
     let statuses = resolve_first_fonts(&font_string_vec, &available, |family| {
-        auto_google_fonts && downloadable_set.contains(family)
+        auto_google_fonts && google_fonts_set.contains(family)
     });
 
     // Collect unavailable fonts — report before any downloads
@@ -2906,7 +3099,164 @@ async fn preprocess_fonts(
     }
 
     let font_strings = extract_fonts_from_vega(vega_spec);
-    classify_and_request_fonts(font_strings, auto_google_fonts, missing_fonts).await
+    classify_and_request_fonts(font_strings, auto_google_fonts, missing_fonts, false).await
+}
+
+/// Classify font families extracted from the scenegraph into Google Fonts
+/// or Local sources.
+///
+/// `explicit_google_families` are families provided by per-call
+/// `GoogleFontRequest` entries — they are classified as Google immediately
+/// without catalog probing and are excluded from missing-font reporting.
+///
+/// Fonts that exist in the Google Fonts catalog are sourced from Google for
+/// portability (CDN links work on any machine). Remaining fonts are classified
+/// as Local when `html_embed_local_fonts` is true and the font is available
+/// in fontdb.
+async fn classify_scenegraph_fonts(
+    families: &BTreeSet<String>,
+    auto_google_fonts: bool,
+    html_embed_local_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
+    explicit_google_families: &HashSet<String>,
+) -> Result<Vec<FontForHtml>, AnyError> {
+    if families.is_empty()
+        || (!auto_google_fonts
+            && !html_embed_local_fonts
+            && missing_fonts == MissingFontsPolicy::Fallback
+            && explicit_google_families.is_empty())
+    {
+        return Ok(Vec::new());
+    }
+
+    let available: HashSet<String> = USVG_OPTIONS
+        .lock()
+        .map_err(|e| anyhow!("font_preprocessing: failed to lock USVG_OPTIONS: {e}"))?
+        .fontdb
+        .faces()
+        .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
+        .collect();
+
+    let mut google_fonts_set: HashSet<String> = HashSet::new();
+    if auto_google_fonts {
+        let mut api_errors: Vec<(String, String)> = Vec::new();
+        for family in families {
+            // Skip catalog probe for explicitly-requested families
+            if explicit_google_families.contains(family) {
+                continue;
+            }
+            match GOOGLE_FONTS_CLIENT.is_known_font(family).await {
+                Ok(true) => {
+                    google_fonts_set.insert(family.clone());
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    api_errors.push((family.clone(), e.to_string()));
+                }
+            }
+        }
+
+        if !api_errors.is_empty() {
+            if missing_fonts == MissingFontsPolicy::Error {
+                let details: Vec<String> = api_errors
+                    .iter()
+                    .map(|(name, err)| format!("'{name}': {err}"))
+                    .collect();
+                return Err(anyhow!(
+                    "auto_google_fonts: could not reach the Google Fonts API to check \
+                     the following fonts: {}",
+                    details.join(", ")
+                ));
+            } else if missing_fonts == MissingFontsPolicy::Warn {
+                for (name, err) in &api_errors {
+                    log::warn!(
+                        "auto_google_fonts: could not reach Google Fonts API for '{name}': {err}"
+                    );
+                }
+            }
+        }
+    }
+
+    let mut html_fonts: Vec<FontForHtml> = Vec::new();
+    let mut unavailable: Vec<String> = Vec::new();
+    for family in families {
+        // Explicit per-call requests win immediately
+        if explicit_google_families.contains(family) {
+            if let Some(font_id) = family_to_id(family) {
+                html_fonts.push(FontForHtml {
+                    family: family.clone(),
+                    source: FontSource::GoogleFonts { font_id },
+                });
+            }
+            continue;
+        }
+        if auto_google_fonts && google_fonts_set.contains(family) {
+            if let Some(font_id) = family_to_id(family) {
+                html_fonts.push(FontForHtml {
+                    family: family.clone(),
+                    source: FontSource::GoogleFonts { font_id },
+                });
+                continue;
+            }
+        }
+        if available.contains(family) {
+            if html_embed_local_fonts {
+                html_fonts.push(FontForHtml {
+                    family: family.clone(),
+                    source: FontSource::Local,
+                });
+            }
+            // Font is locally available — not missing even if not embedded
+        } else {
+            unavailable.push(family.clone());
+        }
+    }
+
+    // Report fonts that are neither in Google Fonts nor locally available.
+    // This covers runtime-resolved families (signal/field-driven) that static
+    // spec extraction cannot see.
+    if !unavailable.is_empty() {
+        let details: Vec<String> = unavailable.iter().map(|n| format!("'{n}'")).collect();
+        if missing_fonts == MissingFontsPolicy::Error {
+            if auto_google_fonts {
+                return Err(anyhow!(
+                    "auto_google_fonts: the following fonts are not available on the system \
+                     and not found in the Google Fonts catalog: {}",
+                    details.join(", ")
+                ));
+            } else {
+                return Err(anyhow!(
+                    "missing_fonts=error: the following fonts are not available on the system: {}. \
+                     Install them with register_google_fonts_font() or enable auto_google_fonts.",
+                    details.join(", ")
+                ));
+            }
+        }
+        if missing_fonts == MissingFontsPolicy::Warn {
+            for name in &unavailable {
+                if auto_google_fonts {
+                    log::warn!(
+                        "auto_google_fonts: font '{name}' is not available on the system \
+                         and not found in the Google Fonts catalog, skipping"
+                    );
+                } else {
+                    log::warn!("missing_fonts=warn: font '{name}' is not available on the system");
+                }
+            }
+        }
+    }
+
+    Ok(html_fonts)
+}
+
+/// Result of analyzing a rendered Vega scenegraph for font embedding.
+struct HtmlFontAnalysis {
+    /// Classified font metadata (Google or Local).
+    html_fonts: Vec<FontForHtml>,
+    /// Characters used per (family, weight, style) — for subsetting.
+    chars_by_key: HashMap<FontKey, BTreeSet<char>>,
+    /// (weight, style) variants per family — for CDN URLs.
+    family_variants: HashMap<String, BTreeSet<(String, String)>>,
 }
 
 struct VlConverterInner {
@@ -3182,6 +3532,7 @@ impl VlConverter {
             font_strings,
             self.inner.config.auto_google_fonts,
             self.inner.config.missing_fonts,
+            false,
         )
         .await?;
 
@@ -3822,6 +4173,7 @@ impl VlConverter {
         code: &str,
         vl_version: VlVersion,
         bundle: bool,
+        font_head_html: &str,
     ) -> Result<String, AnyError> {
         let script_tags = if bundle {
             format!(
@@ -3857,7 +4209,7 @@ impl VlConverter {
     </style>
     <meta charset="UTF-8">
     <title>Chart</title>
-{script_tags}
+{font_head_html}{script_tags}
   </head>
   <body>
     <div id="vega-chart"></div>
@@ -3870,6 +4222,374 @@ impl VlConverter {
         ))
     }
 
+    pub async fn vega_to_text_by_font(
+        &self,
+        vg_spec: impl Into<ValueOrString>,
+        mut vg_opts: VgOpts,
+    ) -> Result<String, AnyError> {
+        vg_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let vg_spec = vg_spec.into();
+        self.request(
+            move |responder| VlConvertCommand::VgToTextByFont {
+                vg_spec,
+                vg_opts,
+                responder,
+            },
+            "Vega to text-by-font extraction",
+        )
+        .await
+    }
+
+    /// Render a Vega scenegraph for HTML font analysis.
+    ///
+    /// Unlike the public `vega_to_scenegraph`, this uses the caller-supplied
+    /// `auto_google_fonts` flag (not the converter config) to decide whether
+    /// to auto-detect Google Fonts from the spec. This ensures the render
+    /// and the later classification agree on the effective policy.
+    async fn render_scenegraph_for_html(
+        &self,
+        vega_spec: serde_json::Value,
+        mut vg_opts: VgOpts,
+        auto_google_fonts: bool,
+    ) -> Result<serde_json::Value, AnyError> {
+        vg_opts.allowed_base_urls =
+            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
+        let missing = self.inner.config.missing_fonts;
+
+        // Preprocess fonts using the per-call auto_google_fonts flag with
+        // prefer_cdn=true: HTML output references Google CDN fonts, so the
+        // render should use the Google face even when a local copy exists.
+        if auto_google_fonts || missing != MissingFontsPolicy::Fallback {
+            let font_strings = extract_fonts_from_vega(&vega_spec);
+            let auto_requests =
+                classify_and_request_fonts(font_strings, auto_google_fonts, missing, true).await?;
+            if !auto_requests.is_empty() {
+                vg_opts
+                    .google_fonts
+                    .get_or_insert_with(Vec::new)
+                    .extend(auto_requests);
+            }
+        }
+
+        let vg_spec: ValueOrString = vega_spec.into();
+        let google_font_batches = self
+            .resolve_google_fonts(vg_opts.google_fonts.take())
+            .await?;
+        self.request(
+            move |responder| VlConvertCommand::VgToSg {
+                vg_spec,
+                vg_opts,
+                google_font_batches,
+                responder,
+            },
+            "Vega to Scenegraph (HTML analysis)",
+        )
+        .await
+    }
+
+    /// Render the Vega scenegraph, walk it in Rust to extract text-by-font
+    /// data, classify fonts as Google or Local, and merge any explicit
+    /// per-request Google Font overrides.
+    ///
+    /// This is the single point of truth for font analysis — called once per
+    /// HTML generation or `vega_fonts` / `vegalite_fonts` invocation.
+    async fn analyze_html_fonts(
+        &self,
+        vega_spec: serde_json::Value,
+        vg_opts: VgOpts,
+        auto_google_fonts: bool,
+        html_embed_local_fonts: bool,
+    ) -> Result<HtmlFontAnalysis, AnyError> {
+        let missing = self.inner.config.missing_fonts;
+
+        // Clone explicit google_fonts for later merging — the originals
+        // stay in vg_opts so the render loads them into fontdb for
+        // accurate text measurement.
+        let explicit_requests = vg_opts.google_fonts.clone();
+
+        // Render scenegraph using the per-call auto_google_fonts flag.
+        let sg = self
+            .render_scenegraph_for_html(vega_spec, vg_opts, auto_google_fonts)
+            .await?;
+        let sg_root = sg.get("scenegraph").unwrap_or(&sg);
+
+        // Walk scenegraph in Rust — no separate JS call needed.
+        let chars_by_key = extract_text_by_font(sg_root);
+
+        // Collect unique family names from the scenegraph
+        let families: BTreeSet<String> = chars_by_key.keys().map(|k| k.family.clone()).collect();
+
+        // Build explicit Google families set from per-call requests so
+        // classify_scenegraph_fonts treats them as Google immediately.
+        let explicit_google_families: HashSet<String> = explicit_requests
+            .as_ref()
+            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
+            .unwrap_or_default();
+
+        // Classify families as Google Fonts or Local
+        let mut html_fonts = classify_scenegraph_fonts(
+            &families,
+            auto_google_fonts,
+            html_embed_local_fonts,
+            missing,
+            &explicit_google_families,
+        )
+        .await?;
+
+        let mut family_variants = variants_by_family(&chars_by_key);
+
+        // Add explicit families not found in the scenegraph, and propagate
+        // explicit variant requests into family_variants.
+        if let Some(ref requests) = explicit_requests {
+            let known: HashSet<String> = html_fonts.iter().map(|f| f.family.clone()).collect();
+            for req in requests {
+                if !known.contains(&req.family) {
+                    if let Some(font_id) = family_to_id(&req.family) {
+                        html_fonts.push(FontForHtml {
+                            family: req.family.clone(),
+                            source: FontSource::GoogleFonts { font_id },
+                        });
+                    }
+                }
+                if let Some(ref variants) = req.variants {
+                    let entry = family_variants.entry(req.family.clone()).or_default();
+                    for v in variants {
+                        entry.insert((v.weight.to_string(), v.style.as_str().to_string()));
+                    }
+                }
+            }
+        }
+
+        Ok(HtmlFontAnalysis {
+            html_fonts,
+            chars_by_key,
+            family_variants,
+        })
+    }
+
+    /// Return font information for a Vega spec in the requested format.
+    ///
+    /// Renders the scenegraph once to discover the exact fonts, weights, and
+    /// characters used. The `auto_google_fonts` and `html_embed_local_fonts`
+    /// parameters control which fonts are included.
+    pub async fn vega_fonts(
+        &self,
+        vg_spec: impl Into<ValueOrString>,
+        vg_opts: VgOpts,
+        format: FontFormat,
+        auto_google_fonts: bool,
+        html_embed_local_fonts: bool,
+    ) -> Result<Vec<String>, AnyError> {
+        let vg_spec = vg_spec.into();
+        let spec_value: serde_json::Value = match &vg_spec {
+            ValueOrString::JsonString(s) => serde_json::from_str(s)?,
+            ValueOrString::Value(v) => v.clone(),
+        };
+
+        let analysis = self
+            .analyze_html_fonts(
+                spec_value,
+                vg_opts,
+                auto_google_fonts,
+                html_embed_local_fonts,
+            )
+            .await?;
+
+        self.format_font_analysis(analysis, format).await
+    }
+
+    /// Produce output strings from a completed font analysis.
+    async fn format_font_analysis(
+        &self,
+        analysis: HtmlFontAnalysis,
+        format: FontFormat,
+    ) -> Result<Vec<String>, AnyError> {
+        let HtmlFontAnalysis {
+            html_fonts,
+            chars_by_key,
+            family_variants,
+        } = analysis;
+
+        match format {
+            FontFormat::Name => Ok(html_fonts.iter().map(|f| f.family.clone()).collect()),
+            FontFormat::Url | FontFormat::LinkTag | FontFormat::ImportRule => {
+                let results: Vec<String> = html_fonts
+                    .iter()
+                    .filter_map(|f| {
+                        let variants = family_variants.get(&f.family);
+                        match format {
+                            FontFormat::Url => font_cdn_url(f, variants),
+                            FontFormat::LinkTag => font_link_tag(f, variants),
+                            FontFormat::ImportRule => font_import_rule(f, variants),
+                            _ => unreachable!(),
+                        }
+                    })
+                    .collect();
+                Ok(results)
+            }
+            FontFormat::FontFace => {
+                if html_fonts.is_empty() {
+                    return Ok(Vec::new());
+                }
+
+                // Build Google Font requests with specific variants from the
+                // scenegraph — only download what the chart actually uses.
+                let google_font_requests: Vec<GoogleFontRequest> = html_fonts
+                    .iter()
+                    .filter_map(|f| match &f.source {
+                        FontSource::GoogleFonts { .. } => {
+                            let variants = family_variants.get(&f.family).map(|vs| {
+                                vs.iter()
+                                    .map(|(w, s)| VariantRequest {
+                                        weight: w.parse().unwrap_or(400),
+                                        style: s.parse().unwrap_or(FontStyle::Normal),
+                                    })
+                                    .collect::<Vec<_>>()
+                            });
+                            Some(GoogleFontRequest {
+                                family: f.family.clone(),
+                                variants,
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                let batches = if google_font_requests.is_empty() {
+                    Vec::new()
+                } else {
+                    self.resolve_google_fonts(Some(google_font_requests))
+                        .await?
+                };
+
+                let missing = self.inner.config.missing_fonts;
+                let fontdb = USVG_OPTIONS
+                    .lock()
+                    .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
+                    .fontdb
+                    .clone();
+                Ok(generate_font_face_css(
+                    &chars_by_key,
+                    &html_fonts,
+                    &missing,
+                    &fontdb,
+                    &batches,
+                )?)
+            }
+        }
+    }
+
+    /// Return font information for a Vega-Lite spec in the requested format.
+    ///
+    /// Compiles the spec to Vega first, then delegates to [`vega_fonts`].
+    pub async fn vegalite_fonts(
+        &self,
+        vl_spec: impl Into<ValueOrString>,
+        vl_opts: VlOpts,
+        format: FontFormat,
+        auto_google_fonts: bool,
+        html_embed_local_fonts: bool,
+    ) -> Result<Vec<String>, AnyError> {
+        let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?;
+        let vg_opts = VgOpts {
+            allowed_base_urls: vl_opts.allowed_base_urls,
+            format_locale: vl_opts.format_locale,
+            time_format_locale: vl_opts.time_format_locale,
+            google_fonts: vl_opts.google_fonts,
+        };
+        self.vega_fonts(
+            vega_spec,
+            vg_opts,
+            format,
+            auto_google_fonts,
+            html_embed_local_fonts,
+        )
+        .await
+    }
+
+    /// Build font `<link>` and/or `<style>` tags for HTML `<head>` injection.
+    ///
+    /// Renders the scenegraph once and uses the result for all font formats.
+    async fn build_font_head_html(
+        &self,
+        vega_spec: serde_json::Value,
+        vg_opts: VgOpts,
+        bundle: bool,
+        auto_install: bool,
+        embed_local: bool,
+    ) -> Result<String, AnyError> {
+        let analysis = self
+            .analyze_html_fonts(vega_spec, vg_opts, auto_install, embed_local)
+            .await?;
+
+        if bundle {
+            // Bundle mode: embed all fonts as @font-face CSS
+            let blocks = self
+                .format_font_analysis(analysis, FontFormat::FontFace)
+                .await?;
+            if blocks.is_empty() {
+                Ok(String::new())
+            } else {
+                let css = blocks.join("\n");
+                Ok(format!("    <style>\n{css}\n    </style>\n"))
+            }
+        } else {
+            let mut parts = Vec::new();
+
+            // CDN mode: emit <link> tags for Google Fonts
+            for font in &analysis.html_fonts {
+                if let Some(tag) = font_link_tag(font, analysis.family_variants.get(&font.family)) {
+                    parts.push(format!("    {tag}\n"));
+                }
+            }
+
+            // Embed local-only fonts as @font-face CSS
+            if embed_local {
+                let google_families: HashSet<&str> = analysis
+                    .html_fonts
+                    .iter()
+                    .filter(|f| matches!(&f.source, FontSource::GoogleFonts { .. }))
+                    .map(|f| f.family.as_str())
+                    .collect();
+
+                // Filter chars_by_key to only local font families
+                let local_chars: HashMap<FontKey, BTreeSet<char>> = analysis
+                    .chars_by_key
+                    .into_iter()
+                    .filter(|(key, _)| !google_families.contains(key.family.as_str()))
+                    .collect();
+
+                if !local_chars.is_empty() {
+                    let local_fonts: Vec<FontForHtml> = analysis
+                        .html_fonts
+                        .iter()
+                        .filter(|f| matches!(&f.source, FontSource::Local))
+                        .cloned()
+                        .collect();
+                    let missing = self.inner.config.missing_fonts;
+                    let fontdb = USVG_OPTIONS
+                        .lock()
+                        .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
+                        .fontdb
+                        .clone();
+                    let blocks = generate_font_face_css(
+                        &local_chars,
+                        &local_fonts,
+                        &missing,
+                        &fontdb,
+                        &[], // no Google batches for local fonts
+                    )?;
+                    if !blocks.is_empty() {
+                        let css = blocks.join("\n");
+                        parts.push(format!("    <style>\n{css}\n    </style>\n"));
+                    }
+                }
+            }
+
+            Ok(parts.join(""))
+        }
+    }
+
     pub async fn vegalite_to_html(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -3878,8 +4598,33 @@ impl VlConverter {
         renderer: Renderer,
     ) -> Result<String, AnyError> {
         let vl_version = vl_opts.vl_version;
+        let vl_spec = vl_spec.into();
+
+        let auto_install = self.inner.config.auto_google_fonts;
+        let embed_local = self.inner.config.html_embed_local_fonts;
+
+        let font_head_html = if auto_install
+            || embed_local
+            || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
+        {
+            let vega_spec = self
+                .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
+                .await?;
+            let vg_opts = VgOpts {
+                allowed_base_urls: vl_opts.allowed_base_urls.clone(),
+                format_locale: vl_opts.format_locale.clone(),
+                time_format_locale: vl_opts.time_format_locale.clone(),
+                google_fonts: vl_opts.google_fonts.clone(),
+            };
+            self.build_font_head_html(vega_spec, vg_opts, bundle, auto_install, embed_local)
+                .await?
+        } else {
+            String::new()
+        };
+
         let code = get_vega_or_vegalite_script(vl_spec, vl_opts.to_embed_opts(renderer)?)?;
-        self.build_html(&code, vl_version, bundle).await
+        self.build_html(&code, vl_version, bundle, &font_head_html)
+            .await
     }
 
     pub async fn vega_to_html(
@@ -3889,8 +4634,34 @@ impl VlConverter {
         bundle: bool,
         renderer: Renderer,
     ) -> Result<String, AnyError> {
+        let vg_spec = vg_spec.into();
+
+        let auto_install = self.inner.config.auto_google_fonts;
+        let embed_local = self.inner.config.html_embed_local_fonts;
+
+        let font_head_html = if auto_install
+            || embed_local
+            || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
+        {
+            let spec_value: serde_json::Value = match &vg_spec {
+                ValueOrString::JsonString(s) => serde_json::from_str(s)?,
+                ValueOrString::Value(v) => v.clone(),
+            };
+            self.build_font_head_html(
+                spec_value,
+                vg_opts.clone(),
+                bundle,
+                auto_install,
+                embed_local,
+            )
+            .await?
+        } else {
+            String::new()
+        };
+
         let code = get_vega_or_vegalite_script(vg_spec, vg_opts.to_embed_opts(renderer)?)?;
-        self.build_html(&code, Default::default(), bundle).await
+        self.build_html(&code, Default::default(), bundle, &font_head_html)
+            .await
     }
 
     pub async fn get_local_tz(&self) -> Result<Option<String>, AnyError> {
@@ -4167,6 +4938,25 @@ mod tests {
     }
 
     fn assert_send_future<F: Future + Send>(_: F) {}
+
+    #[test]
+    fn test_font_format_from_str() {
+        assert_eq!("name".parse::<FontFormat>().unwrap(), FontFormat::Name);
+        assert_eq!("url".parse::<FontFormat>().unwrap(), FontFormat::Url);
+        assert_eq!(
+            "link_tag".parse::<FontFormat>().unwrap(),
+            FontFormat::LinkTag
+        );
+        assert_eq!(
+            "import_rule".parse::<FontFormat>().unwrap(),
+            FontFormat::ImportRule
+        );
+        assert_eq!(
+            "font_face".parse::<FontFormat>().unwrap(),
+            FontFormat::FontFace
+        );
+        assert!("invalid".parse::<FontFormat>().is_err());
+    }
 
     #[derive(Clone)]
     struct TestHttpResponse {
