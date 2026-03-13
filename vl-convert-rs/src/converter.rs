@@ -48,8 +48,8 @@ use crate::extract::{
 };
 use crate::font_embed::{generate_font_face_css, index_font_face_blocks, variants_by_family};
 use crate::text::{
-    build_usvg_options_with_fontdb, get_font_baseline_snapshot, FONT_CONFIG_VERSION,
-    GOOGLE_FONTS_CLIENT, USVG_OPTIONS,
+    build_usvg_options_with_fontdb, get_font_baseline_snapshot, registered_google_families,
+    FONT_CONFIG_VERSION, GOOGLE_FONTS_CLIENT, USVG_OPTIONS,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use vl_convert_google_fonts::{
@@ -3089,11 +3089,14 @@ async fn classify_scenegraph_fonts(
     missing_fonts: MissingFontsPolicy,
     explicit_google_families: &HashSet<String>,
 ) -> Result<Vec<FontForHtml>, AnyError> {
+    let pre_registered = registered_google_families()?;
+
     if families.is_empty()
         || (!auto_google_fonts
             && !html_embed_local_fonts
             && missing_fonts == MissingFontsPolicy::Fallback
-            && explicit_google_families.is_empty())
+            && explicit_google_families.is_empty()
+            && pre_registered.is_empty())
     {
         return Ok(Vec::new());
     }
@@ -3160,6 +3163,16 @@ async fn classify_scenegraph_fonts(
             continue;
         }
         if auto_google_fonts && google_fonts_set.contains(family) {
+            if let Some(font_id) = family_to_id(family) {
+                html_fonts.push(FontForHtml {
+                    family: family.clone(),
+                    source: FontSource::GoogleFonts { font_id },
+                });
+                continue;
+            }
+        }
+        // Fonts previously registered via register_google_fonts_font()
+        if pre_registered.contains(family) {
             if let Some(font_id) = family_to_id(family) {
                 html_fonts.push(FontForHtml {
                     family: family.clone(),
