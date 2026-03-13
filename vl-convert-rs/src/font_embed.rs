@@ -17,10 +17,6 @@ fn format_font_face_block(family: &str, weight: &str, style: &str, woff2_b64: &s
     )
 }
 
-// ---------------------------------------------------------------------------
-// Types for JS → Rust text extraction results
-// ---------------------------------------------------------------------------
-
 /// A single entry from the JS `vegaToTextByFont()` function.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TextByFontEntry {
@@ -33,10 +29,6 @@ pub struct TextByFontEntry {
     /// Unique characters used at this font/weight/style
     pub chars: String,
 }
-
-// ---------------------------------------------------------------------------
-// Aggregation: group characters by (first_named_family, weight, style)
-// ---------------------------------------------------------------------------
 
 /// Aggregate structured JS entries by (first_named_family, weight, style).
 ///
@@ -78,10 +70,6 @@ pub fn aggregate_chars_by_font_key(
     result
 }
 
-// ---------------------------------------------------------------------------
-// Variant extraction
-// ---------------------------------------------------------------------------
-
 /// Compute the set of (weight, style) variants used per font family.
 ///
 /// Used to build accurate Google Fonts CSS2 API URLs that request only the
@@ -98,10 +86,6 @@ pub fn variants_by_family(
     }
     result
 }
-
-// ---------------------------------------------------------------------------
-// Font-face CSS indexing
-// ---------------------------------------------------------------------------
 
 /// Parse `@font-face` CSS blocks (produced by [`generate_font_face_css`]) into
 /// a `(family, weight, style) → CSS block` index.
@@ -142,10 +126,6 @@ fn extract_css_value(block: &str, property: &str) -> Option<String> {
         .unwrap_or(value);
     Some(value.to_string())
 }
-
-// ---------------------------------------------------------------------------
-// Font subsetting + CSS generation
-// ---------------------------------------------------------------------------
 
 /// Generate `@font-face` CSS blocks with subsetted WOFF2 fonts.
 ///
@@ -431,10 +411,6 @@ fn subset_and_encode_bytes(
 mod tests {
     use super::*;
 
-    // -----------------------------------------------------------------------
-    // aggregate_chars_by_font_key tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn test_aggregate_named_font() {
         let entries = vec![TextByFontEntry {
@@ -520,10 +496,6 @@ mod tests {
         assert!(result.is_empty());
     }
 
-    // -----------------------------------------------------------------------
-    // subset_and_encode_bytes tests
-    // -----------------------------------------------------------------------
-
     #[test]
     fn test_subset_and_encode_bytes_invalid_data() {
         let bad_data = b"not a font";
@@ -554,10 +526,6 @@ mod tests {
             Err(e) => panic!("subset_and_encode_bytes failed: {e}"),
         }
     }
-
-    // -----------------------------------------------------------------------
-    // generate_local_font_css tests
-    // -----------------------------------------------------------------------
 
     fn make_fontdb_with_liberation_sans() -> fontdb::Database {
         let mut db = fontdb::Database::new();

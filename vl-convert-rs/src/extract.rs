@@ -42,10 +42,6 @@ pub struct FontKey {
     pub style: String,
 }
 
-// ---------------------------------------------------------------------------
-// Structured font info for the public API
-// ---------------------------------------------------------------------------
-
 /// A weight/style variant of a font, with optional embedded @font-face CSS.
 #[derive(Debug, Clone, Serialize)]
 pub struct FontVariant {
@@ -74,10 +70,6 @@ pub struct FontInfo {
     /// CSS `@import url(...)` rule, or `None` for local fonts.
     pub import_rule: Option<String>,
 }
-
-// ---------------------------------------------------------------------------
-// Scenegraph text extraction
-// ---------------------------------------------------------------------------
 
 /// Walk a rendered Vega scenegraph and extract unique characters per
 /// (font-family, weight, style).
