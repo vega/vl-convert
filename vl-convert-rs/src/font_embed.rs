@@ -66,6 +66,15 @@ pub fn aggregate_chars_by_font_key(
             }
         }
     }
+
+    // Always include digits 0-9 in every font variant so that pan/zoom
+    // interactions can render axis labels that weren't in the initial view.
+    for chars in result.values_mut() {
+        for d in '0'..='9' {
+            chars.insert(d);
+        }
+    }
+
     result
 }
 
@@ -441,7 +450,7 @@ mod tests {
             weight: "400".to_string(),
             style: "normal".to_string(),
         };
-        let chars: BTreeSet<char> = "Hello".chars().collect();
+        let chars: BTreeSet<char> = "Hello0123456789".chars().collect();
         assert_eq!(result[&key], chars);
     }
 
@@ -480,7 +489,7 @@ mod tests {
             weight: "400".to_string(),
             style: "normal".to_string(),
         };
-        let chars: BTreeSet<char> = "HeloWorld".chars().collect();
+        let chars: BTreeSet<char> = "HeloWorld0123456789".chars().collect();
         assert_eq!(result[&key], chars);
     }
 
