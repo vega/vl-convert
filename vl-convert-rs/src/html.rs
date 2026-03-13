@@ -1,9 +1,11 @@
 use crate::converter::ValueOrString;
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
+use crate::extract::{FontForHtml, FontSource};
 use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::VlVersion;
 use deno_core::error::AnyError;
+use std::collections::BTreeSet;
 use std::path::Path;
 
 pub fn get_vega_or_vegalite_script(
@@ -68,4 +70,193 @@ import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
     );
 
     bundle_script(script.to_string(), vl_version).await
+}
+
+/// Default weight/style tuples when the actual chart variants are unknown.
+const DEFAULT_VARIANT_TUPLES: &str = "0,400;0,700;1,400;1,700";
+
+/// Format (weight, style) pairs as CSS2 API `ital,wght@...` tuples.
+///
+/// Each tuple is `{ital},{weight}` where ital is 1 for italic, 0 otherwise.
+/// Falls back to a standard set (400/700 normal/italic) when no variants
+/// are provided.
+fn format_variant_tuples(variants: Option<&BTreeSet<(String, String)>>) -> String {
+    match variants {
+        Some(vs) if !vs.is_empty() => {
+            let mut parts: Vec<String> = vs
+                .iter()
+                .map(|(weight, style)| {
+                    let ital = if style == "italic" { "1" } else { "0" };
+                    format!("{ital},{weight}")
+                })
+                .collect();
+            parts.sort();
+            parts.dedup();
+            parts.join(";")
+        }
+        _ => DEFAULT_VARIANT_TUPLES.to_string(),
+    }
+}
+
+/// Return the CDN stylesheet URL for a font.
+///
+/// When `variants` is provided, the URL requests exactly those (weight, style)
+/// tuples from the Google Fonts CSS2 API. Otherwise falls back to a standard
+/// set of common weight/style tuples (400/700 normal/italic).
+///
+/// Returns `None` for local fonts.
+pub fn font_cdn_url(
+    font: &FontForHtml,
+    variants: Option<&BTreeSet<(String, String)>>,
+) -> Option<String> {
+    match &font.source {
+        FontSource::GoogleFonts { .. } => {
+            let name = font.family.replace(' ', "+");
+            let tuples = format_variant_tuples(variants);
+            Some(format!(
+                "https://fonts.googleapis.com/css2?family={name}:ital,wght@{tuples}&display=swap"
+            ))
+        }
+        FontSource::Local => None,
+    }
+}
+
+/// Return an HTML `<link rel="stylesheet">` tag for a font.
+/// Returns `None` for local fonts.
+pub fn font_link_tag(
+    font: &FontForHtml,
+    variants: Option<&BTreeSet<(String, String)>>,
+) -> Option<String> {
+    let url = font_cdn_url(font, variants)?;
+    Some(format!(r#"<link rel="stylesheet" href="{url}">"#))
+}
+
+/// Return a CSS `@import` rule for a font.
+/// Returns `None` for local fonts.
+pub fn font_import_rule(
+    font: &FontForHtml,
+    variants: Option<&BTreeSet<(String, String)>>,
+) -> Option<String> {
+    let url = font_cdn_url(font, variants)?;
+    Some(format!(r#"@import url("{url}");"#))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn google_font(family: &str) -> FontForHtml {
+        FontForHtml {
+            family: family.to_string(),
+            source: FontSource::GoogleFonts {
+                font_id: family.to_lowercase().replace(' ', "-"),
+            },
+        }
+    }
+
+    fn local_font(family: &str) -> FontForHtml {
+        FontForHtml {
+            family: family.to_string(),
+            source: FontSource::Local,
+        }
+    }
+
+    // format_variant_tuples tests
+
+    #[test]
+    fn test_format_variant_tuples_none() {
+        assert_eq!(format_variant_tuples(None), DEFAULT_VARIANT_TUPLES);
+    }
+
+    #[test]
+    fn test_format_variant_tuples_empty() {
+        let empty = BTreeSet::new();
+        assert_eq!(format_variant_tuples(Some(&empty)), DEFAULT_VARIANT_TUPLES);
+    }
+
+    #[test]
+    fn test_format_variant_tuples_single() {
+        let mut vs = BTreeSet::new();
+        vs.insert(("300".to_string(), "normal".to_string()));
+        assert_eq!(format_variant_tuples(Some(&vs)), "0,300");
+    }
+
+    #[test]
+    fn test_format_variant_tuples_mixed() {
+        let mut vs = BTreeSet::new();
+        vs.insert(("400".to_string(), "normal".to_string()));
+        vs.insert(("700".to_string(), "italic".to_string()));
+        vs.insert(("300".to_string(), "normal".to_string()));
+        let result = format_variant_tuples(Some(&vs));
+        assert_eq!(result, "0,300;0,400;1,700");
+    }
+
+    // font_cdn_url tests
+
+    #[test]
+    fn test_cdn_url_default_variants() {
+        let font = google_font("Roboto");
+        let url = font_cdn_url(&font, None).unwrap();
+        assert_eq!(
+            url,
+            "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+        );
+    }
+
+    #[test]
+    fn test_cdn_url_specific_variants() {
+        let font = google_font("Roboto");
+        let mut vs = BTreeSet::new();
+        vs.insert(("300".to_string(), "normal".to_string()));
+        vs.insert(("600".to_string(), "italic".to_string()));
+        let url = font_cdn_url(&font, Some(&vs)).unwrap();
+        assert_eq!(
+            url,
+            "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;1,600&display=swap"
+        );
+    }
+
+    #[test]
+    fn test_cdn_url_google_font_multi_word() {
+        let font = google_font("Playfair Display");
+        let url = font_cdn_url(&font, None).unwrap();
+        assert!(url.contains("family=Playfair+Display:ital,wght@"));
+    }
+
+    #[test]
+    fn test_cdn_url_local_font() {
+        assert!(font_cdn_url(&local_font("Arial"), None).is_none());
+    }
+
+    // font_link_tag tests
+
+    #[test]
+    fn test_link_tag_google_font() {
+        let font = google_font("Roboto");
+        let tag = font_link_tag(&font, None).unwrap();
+        assert_eq!(
+            tag,
+            r#"<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap">"#
+        );
+    }
+
+    #[test]
+    fn test_link_tag_local_font() {
+        assert!(font_link_tag(&local_font("Arial"), None).is_none());
+    }
+
+    // font_import_rule tests
+
+    #[test]
+    fn test_import_rule_google_font() {
+        let font = google_font("Roboto");
+        let rule = font_import_rule(&font, None).unwrap();
+        assert!(rule.starts_with("@import url(\"https://fonts.googleapis.com/css2?"));
+        assert!(rule.ends_with("\");"));
+    }
+
+    #[test]
+    fn test_import_rule_local_font() {
+        assert!(font_import_rule(&local_font("Arial"), None).is_none());
+    }
 }
