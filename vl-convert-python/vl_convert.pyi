@@ -124,6 +124,9 @@ if TYPE_CHECKING:
         "vox",
     ]
     Renderer: TypeAlias = Literal["canvas", "hybrid", "svg"]
+    FontFormat: TypeAlias = Literal[
+        "name", "url", "link_tag", "import_rule", "font_face"
+    ]
     FormatLocale: TypeAlias = FormatLocaleName | dict[str, Any]
     TimeFormatLocale: TypeAlias = TimeFormatLocaleName | dict[str, Any]
     VlSpec: TypeAlias = str | dict[str, Any]
@@ -134,6 +137,7 @@ if TYPE_CHECKING:
         filesystem_root: str | None
         allowed_base_urls: list[str] | None
         auto_google_fonts: bool
+        html_embed_local_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
         google_fonts_cache_dir: str | None
 
@@ -152,6 +156,7 @@ __all__ = [
     "svg_to_jpeg",
     "svg_to_pdf",
     "svg_to_png",
+    "vega_fonts",
     "vega_to_html",
     "vega_to_jpeg",
     "vega_to_pdf",
@@ -159,6 +164,7 @@ __all__ = [
     "vega_to_scenegraph",
     "vega_to_svg",
     "vega_to_url",
+    "vegalite_fonts",
     "vegalite_to_html",
     "vegalite_to_jpeg",
     "vegalite_to_pdf",
@@ -303,6 +309,7 @@ def configure(
     allowed_base_urls: list[str] | None = None,
     google_fonts_cache_size_mb: int | None = None,
     auto_google_fonts: bool | None = None,
+    html_embed_local_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
 ) -> None:
     """
@@ -328,6 +335,9 @@ def configure(
         Maximum font cache size in megabytes. If ``None``, keep current value.
     auto_google_fonts
         Automatically download missing fonts from Google Fonts. If ``None``, keep current value.
+    html_embed_local_fonts
+        Embed locally-available fonts as @font-face CSS in HTML output.
+        If ``None``, keep current value.
     missing_fonts
         Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
         If ``None``, keep current value.
@@ -609,6 +619,74 @@ def vega_to_url(vg_spec: VlSpec, fullscreen: bool | None = None) -> str:
     Returns
     -------
     URL string.
+    """
+    ...
+
+def vegalite_fonts(
+    vl_spec: VlSpec,
+    format: FontFormat = "name",
+    vl_version: str | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    auto_google_fonts: bool | None = None,
+    html_embed_local_fonts: bool | None = None,
+) -> list[str]:
+    """
+    Return font information for a rendered Vega-Lite spec.
+
+    Parameters
+    ----------
+    vl_spec
+        Vega-Lite JSON specification string or dict
+    format
+        Output format. One of 'name', 'url', 'link_tag',
+        'import_rule', or 'font_face' (default 'name')
+    vl_version
+        Vega-Lite library version string (e.g. 'v5.15')
+        (default to latest)
+    config
+        Chart configuration object to apply during conversion
+    theme
+        Named theme (e.g. "dark") to apply during conversion
+    auto_google_fonts
+        Override auto-download from Google Fonts
+        (default: use converter config)
+    html_embed_local_fonts
+        Override local font embedding
+        (default: use converter config)
+
+    Returns
+    -------
+    Font information in the requested format.
+    """
+    ...
+
+def vega_fonts(
+    vg_spec: VlSpec,
+    format: FontFormat = "name",
+    auto_google_fonts: bool | None = None,
+    html_embed_local_fonts: bool | None = None,
+) -> list[str]:
+    """
+    Return font information for a rendered Vega spec.
+
+    Parameters
+    ----------
+    vg_spec
+        Vega JSON specification string or dict
+    format
+        Output format. One of 'name', 'url', 'link_tag',
+        'import_rule', or 'font_face' (default 'name')
+    auto_google_fonts
+        Override auto-download from Google Fonts
+        (default: use converter config)
+    html_embed_local_fonts
+        Override local font embedding
+        (default: use converter config)
+
+    Returns
+    -------
+    Font information in the requested format.
     """
     ...
 
@@ -993,6 +1071,7 @@ if TYPE_CHECKING:
             allowed_base_urls: list[str] | None = None,
             google_fonts_cache_size_mb: int | None = None,
             auto_google_fonts: bool | None = None,
+            html_embed_local_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
@@ -1081,6 +1160,27 @@ if TYPE_CHECKING:
             self, vg_spec: VlSpec, fullscreen: bool | None = None
         ) -> str:
             """Async version of ``vega_to_url``. See sync function for full documentation."""
+            ...
+        async def vegalite_fonts(
+            self,
+            vl_spec: VlSpec,
+            format: FontFormat = "name",
+            vl_version: str | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            auto_google_fonts: bool | None = None,
+            html_embed_local_fonts: bool | None = None,
+        ) -> list[str]:
+            """Async version of ``vegalite_fonts``. See sync function for full documentation."""
+            ...
+        async def vega_fonts(
+            self,
+            vg_spec: VlSpec,
+            format: FontFormat = "name",
+            auto_google_fonts: bool | None = None,
+            html_embed_local_fonts: bool | None = None,
+        ) -> list[str]:
+            """Async version of ``vega_fonts``. See sync function for full documentation."""
             ...
         async def vegalite_to_html(
             self,
