@@ -128,6 +128,15 @@ if TYPE_CHECKING:
     TimeFormatLocale: TypeAlias = TimeFormatLocaleName | dict[str, Any]
     VlSpec: TypeAlias = str | dict[str, Any]
 
+    class GoogleFontSource(TypedDict):
+        type: Literal["google"]
+        font_id: str
+
+    class LocalFontSource(TypedDict):
+        type: Literal["local"]
+
+    FontSource: TypeAlias = GoogleFontSource | LocalFontSource
+
     class FontVariant(TypedDict):
         weight: str
         style: str
@@ -135,7 +144,7 @@ if TYPE_CHECKING:
 
     class FontInfo(TypedDict):
         name: str
-        source: str
+        source: FontSource
         variants: list[FontVariant]
         url: str | None
         link_tag: str | None

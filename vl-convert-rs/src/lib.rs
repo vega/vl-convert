@@ -18,7 +18,7 @@ extern crate deno_core;
 
 pub use converter::{GoogleFontRequest, VlConverter};
 pub use deno_core::anyhow;
-pub use extract::{FontInfo, FontVariant};
+pub use extract::{FontInfo, FontSource, FontVariant};
 pub use module_loader::import_map::VlVersion;
 pub use serde_json;
 pub use text::{

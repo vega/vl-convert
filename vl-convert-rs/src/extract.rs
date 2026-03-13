@@ -4,25 +4,19 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use usvg::roxmltree;
 
 /// Where a font's data originates.
-#[derive(Debug, Clone)]
+///
+/// Serializes as a tagged enum: `{"type": "google", "font_id": "roboto"}`
+/// or `{"type": "local"}`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum FontSource {
     /// Font was downloaded from Google Fonts.
-    GoogleFonts {
+    Google {
         /// Google Fonts font ID (e.g., "roboto", "playfair-display").
         font_id: String,
     },
     /// Font is already available in fontdb (system font, --font-dir, vendored).
     Local,
-}
-
-impl FontSource {
-    /// Return a short label for serialization: "google" or "local".
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            FontSource::GoogleFonts { .. } => "google",
-            FontSource::Local => "local",
-        }
-    }
 }
 
 /// Metadata for a font that should be embedded or linked in HTML output.
@@ -59,8 +53,8 @@ pub struct FontVariant {
 pub struct FontInfo {
     /// Font family name (e.g. "Roboto").
     pub name: String,
-    /// Where the font originates: "google" or "local".
-    pub source: String,
+    /// Where the font originates.
+    pub source: FontSource,
     /// Weight/style variants used by the chart.
     pub variants: Vec<FontVariant>,
     /// Google Fonts CSS2 API stylesheet URL, or `None` for local fonts.

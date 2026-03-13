@@ -3157,7 +3157,7 @@ async fn classify_scenegraph_fonts(
             if let Some(font_id) = family_to_id(family) {
                 html_fonts.push(FontForHtml {
                     family: family.clone(),
-                    source: FontSource::GoogleFonts { font_id },
+                    source: FontSource::Google { font_id },
                 });
             }
             continue;
@@ -3166,7 +3166,7 @@ async fn classify_scenegraph_fonts(
             if let Some(font_id) = family_to_id(family) {
                 html_fonts.push(FontForHtml {
                     family: family.clone(),
-                    source: FontSource::GoogleFonts { font_id },
+                    source: FontSource::Google { font_id },
                 });
                 continue;
             }
@@ -3176,7 +3176,7 @@ async fn classify_scenegraph_fonts(
             if let Some(font_id) = family_to_id(family) {
                 html_fonts.push(FontForHtml {
                     family: family.clone(),
-                    source: FontSource::GoogleFonts { font_id },
+                    source: FontSource::Google { font_id },
                 });
                 continue;
             }
@@ -4330,7 +4330,7 @@ impl VlConverter {
                     if let Some(font_id) = family_to_id(&req.family) {
                         html_fonts.push(FontForHtml {
                             family: req.family.clone(),
-                            source: FontSource::GoogleFonts { font_id },
+                            source: FontSource::Google { font_id },
                         });
                     }
                 }
@@ -4406,7 +4406,7 @@ impl VlConverter {
             let google_font_requests: Vec<GoogleFontRequest> = html_fonts
                 .iter()
                 .filter_map(|f| match &f.source {
-                    FontSource::GoogleFonts { .. } => {
+                    FontSource::Google { .. } => {
                         let variants = family_variants.get(&f.family).map(|vs| {
                             vs.iter()
                                 .map(|(w, s)| VariantRequest {
@@ -4478,7 +4478,7 @@ impl VlConverter {
 
                 FontInfo {
                     name: f.family.clone(),
-                    source: f.source.as_str().to_string(),
+                    source: f.source.clone(),
                     variants,
                     url,
                     link_tag,
@@ -4569,7 +4569,7 @@ impl VlConverter {
             if embed_local {
                 let local_blocks: Vec<&str> = fonts
                     .iter()
-                    .filter(|f| f.source == "local")
+                    .filter(|f| matches!(f.source, FontSource::Local))
                     .flat_map(|f| f.variants.iter())
                     .filter_map(|v| v.font_face.as_deref())
                     .collect();

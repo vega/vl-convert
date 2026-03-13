@@ -110,7 +110,7 @@ pub fn font_cdn_url(
     variants: Option<&BTreeSet<(String, String)>>,
 ) -> Option<String> {
     match &font.source {
-        FontSource::GoogleFonts { .. } => {
+        FontSource::Google { .. } => {
             let name = font.family.replace(' ', "+");
             let tuples = format_variant_tuples(variants);
             Some(format!(
@@ -148,7 +148,7 @@ mod tests {
     fn google_font(family: &str) -> FontForHtml {
         FontForHtml {
             family: family.to_string(),
-            source: FontSource::GoogleFonts {
+            source: FontSource::Google {
                 font_id: family.to_lowercase().replace(' ', "-"),
             },
         }

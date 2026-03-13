@@ -144,7 +144,7 @@ pub fn generate_font_face_css(
 
     for font_info in html_fonts {
         match &font_info.source {
-            FontSource::GoogleFonts { font_id } => {
+            FontSource::Google { font_id } => {
                 generate_google_fonts_css(
                     font_info,
                     font_id,
