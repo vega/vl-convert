@@ -4,6 +4,7 @@ pub mod converter;
 pub mod deno_emit;
 pub mod deno_stubs;
 pub mod extract;
+pub mod font_embed;
 pub mod html;
 pub mod image_loading;
 pub mod module_loader;
@@ -15,7 +16,7 @@ extern crate lazy_static;
 // extern crate deno_core makes it available at crate root for op2 and extension! macros
 extern crate deno_core;
 
-pub use converter::{GoogleFontRequest, VlConverter};
+pub use converter::{FontFormat, GoogleFontRequest, VlConverter};
 pub use deno_core::anyhow;
 pub use module_loader::import_map::VlVersion;
 pub use serde_json;
