@@ -333,8 +333,8 @@ enum Commands {
         bundle: bool,
 
         /// Embed locally-available fonts (system, --font-dir) as @font-face CSS in HTML output
-        #[arg(long)]
-        embed_local_fonts: bool,
+        #[arg(long = "html-embed-local-fonts")]
+        html_embed_local_fonts: bool,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -504,8 +504,8 @@ enum Commands {
         bundle: bool,
 
         /// Embed locally-available fonts (system, --font-dir) as @font-face CSS in HTML output
-        #[arg(long)]
-        embed_local_fonts: bool,
+        #[arg(long = "html-embed-local-fonts")]
+        html_embed_local_fonts: bool,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -795,7 +795,7 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             bundle,
-            embed_local_fonts,
+            html_embed_local_fonts,
             format_locale,
             time_format_locale,
             renderer,
@@ -812,7 +812,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
             let converter = VlConverter::with_config(VlConverterConfig {
-                html_embed_local_fonts: embed_local_fonts,
+                html_embed_local_fonts,
                 auto_google_fonts,
                 missing_fonts,
                 ..Default::default()
@@ -950,7 +950,7 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             bundle,
-            embed_local_fonts,
+            html_embed_local_fonts,
             format_locale,
             time_format_locale,
             renderer,
@@ -967,7 +967,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
             let converter = VlConverter::with_config(VlConverterConfig {
-                html_embed_local_fonts: embed_local_fonts,
+                html_embed_local_fonts,
                 auto_google_fonts,
                 missing_fonts,
                 ..Default::default()

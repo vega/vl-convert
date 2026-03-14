@@ -489,7 +489,6 @@ pub struct VlConverterConfig {
     /// Whether to embed locally-available fonts (system, --font-dir, vendored)
     /// as @font-face CSS in HTML output.
     ///
-    /// Exposed as `html_embed_local_fonts` in Python and `--embed-local-fonts` in CLI.
     pub html_embed_local_fonts: bool,
 }
 
