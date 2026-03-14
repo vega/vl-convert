@@ -4428,60 +4428,6 @@ impl VlConverter {
         embed_local: bool,
         subset_fonts: bool,
     ) -> Result<String, AnyError> {
-        // CDN-only fast path: when auto_google_fonts is off and we don't need
-        // embedded @font-face blocks, build <link> tags from static spec
-        // analysis without rendering the scenegraph in V8.
-        if !bundle && !embed_local && !auto_install {
-            let mut parts = Vec::new();
-            let mut seen_families = HashSet::new();
-
-            // Explicit Google fonts from per-call requests
-            if let Some(ref requests) = vg_opts.google_fonts {
-                for req in requests {
-                    if let Some(font_id) = family_to_id(&req.family) {
-                        seen_families.insert(req.family.clone());
-                        let font = FontForHtml {
-                            family: req.family.clone(),
-                            source: FontSource::Google { font_id },
-                        };
-                        let variants_set: Option<BTreeSet<(String, String)>> =
-                            req.variants.as_ref().map(|vs| {
-                                vs.iter()
-                                    .map(|v| (v.weight.to_string(), v.style.as_str().to_string()))
-                                    .collect()
-                            });
-                        if let Some(tag) = font_link_tag(&font, variants_set.as_ref(), None) {
-                            parts.push(format!("    {tag}\n"));
-                        }
-                    }
-                }
-            }
-
-            // Auto-detect additional Google fonts from static spec analysis
-            if auto_install {
-                let font_strings = extract_fonts_from_vega(&vega_spec);
-                let missing = self.inner.config.missing_fonts;
-                let auto_requests =
-                    classify_and_request_fonts(font_strings, true, missing, true).await?;
-                for req in &auto_requests {
-                    if !seen_families.insert(req.family.clone()) {
-                        continue;
-                    }
-                    if let Some(font_id) = family_to_id(&req.family) {
-                        let font = FontForHtml {
-                            family: req.family.clone(),
-                            source: FontSource::Google { font_id },
-                        };
-                        if let Some(tag) = font_link_tag(&font, None, None) {
-                            parts.push(format!("    {tag}\n"));
-                        }
-                    }
-                }
-            }
-
-            return Ok(parts.join(""));
-        }
-
         // Request font_face data when we'll need embedded CSS
         let include_font_face = bundle || embed_local;
         let fonts = self
@@ -4551,10 +4497,9 @@ impl VlConverter {
         let auto_install = self.inner.config.auto_google_fonts;
         let embed_local = embed_local_fonts;
 
-        let font_head_html = if auto_install
-            || embed_local
-            || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
-        {
+        let has_font_work =
+            auto_install || embed_local || vl_opts.google_fonts.is_some();
+        let font_head_html = if has_font_work {
             let vega_spec = self
                 .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
                 .await?;
@@ -4596,10 +4541,9 @@ impl VlConverter {
         let auto_install = self.inner.config.auto_google_fonts;
         let embed_local = embed_local_fonts;
 
-        let font_head_html = if auto_install
-            || embed_local
-            || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
-        {
+        let has_font_work =
+            auto_install || embed_local || vg_opts.google_fonts.is_some();
+        let font_head_html = if has_font_work {
             let spec_value: serde_json::Value = match &vg_spec {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
                 ValueOrString::Value(v) => v.clone(),
