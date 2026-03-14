@@ -82,7 +82,8 @@ fn normalize_weight(v: Option<&Value>) -> String {
         Some(Value::String(s)) => match s.as_str() {
             "normal" => "400".to_string(),
             "bold" => "700".to_string(),
-            "bolder" | "lighter" => "400".to_string(),
+            "bolder" => "700".to_string(),
+            "lighter" => "100".to_string(),
             other => other
                 .parse::<f64>()
                 .ok()
