@@ -333,8 +333,13 @@ enum Commands {
         bundle: bool,
 
         /// Embed locally-available fonts (system, --font-dir) as @font-face CSS in HTML output
-        #[arg(long = "html-embed-local-fonts")]
-        html_embed_local_fonts: bool,
+        #[arg(long = "embed-local-fonts")]
+        embed_local_fonts: bool,
+
+        /// Disable font subsetting. By default, only the characters used in the
+        /// chart are included. Use this flag if the chart dynamically loads content.
+        #[arg(long = "no-subset-fonts")]
+        no_subset_fonts: bool,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -504,8 +509,13 @@ enum Commands {
         bundle: bool,
 
         /// Embed locally-available fonts (system, --font-dir) as @font-face CSS in HTML output
-        #[arg(long = "html-embed-local-fonts")]
-        html_embed_local_fonts: bool,
+        #[arg(long = "embed-local-fonts")]
+        embed_local_fonts: bool,
+
+        /// Disable font subsetting. By default, only the characters used in the
+        /// chart are included. Use this flag if the chart dynamically loads content.
+        #[arg(long = "no-subset-fonts")]
+        no_subset_fonts: bool,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -795,7 +805,8 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             bundle,
-            html_embed_local_fonts,
+            embed_local_fonts,
+            no_subset_fonts,
             format_locale,
             time_format_locale,
             renderer,
@@ -812,7 +823,6 @@ async fn main() -> Result<(), anyhow::Error> {
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
             let converter = VlConverter::with_config(VlConverterConfig {
-                html_embed_local_fonts,
                 auto_google_fonts,
                 missing_fonts,
                 ..Default::default()
@@ -831,6 +841,8 @@ async fn main() -> Result<(), anyhow::Error> {
                         google_fonts: None,
                     },
                     bundle,
+                    embed_local_fonts,
+                    !no_subset_fonts,
                     Renderer::from_str(&renderer)?,
                 )
                 .await?;
@@ -950,7 +962,8 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             bundle,
-            html_embed_local_fonts,
+            embed_local_fonts,
+            no_subset_fonts,
             format_locale,
             time_format_locale,
             renderer,
@@ -967,7 +980,6 @@ async fn main() -> Result<(), anyhow::Error> {
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
             let converter = VlConverter::with_config(VlConverterConfig {
-                html_embed_local_fonts,
                 auto_google_fonts,
                 missing_fonts,
                 ..Default::default()
@@ -982,6 +994,8 @@ async fn main() -> Result<(), anyhow::Error> {
                         google_fonts: None,
                     },
                     bundle,
+                    embed_local_fonts,
+                    !no_subset_fonts,
                     Renderer::from_str(&renderer)?,
                 )
                 .await?;

@@ -176,6 +176,7 @@ pub fn generate_font_face_css(
     mode: &MissingFontsPolicy,
     fontdb: &fontdb::Database,
     loaded_batches: &[LoadedFontBatch],
+    subset_fonts: bool,
 ) -> Result<HashMap<FontKey, String>, anyhow::Error> {
     let mut css_blocks = HashMap::new();
 
@@ -189,6 +190,7 @@ pub fn generate_font_face_css(
                     mode,
                     loaded_batches,
                     &mut css_blocks,
+                    subset_fonts,
                 )?;
             }
             FontSource::Local => {
@@ -198,6 +200,7 @@ pub fn generate_font_face_css(
                     mode,
                     fontdb,
                     &mut css_blocks,
+                    subset_fonts,
                 )?;
             }
         }
@@ -214,6 +217,7 @@ fn generate_google_fonts_css(
     mode: &MissingFontsPolicy,
     loaded_batches: &[LoadedFontBatch],
     css_blocks: &mut HashMap<FontKey, String>,
+    subset_fonts: bool,
 ) -> Result<(), anyhow::Error> {
     // Find the matching batch for this font_id
     let batch = loaded_batches.iter().find(|b| b.font_id == font_id);
@@ -300,7 +304,12 @@ fn generate_google_fonts_css(
             }
         };
 
-        match subset_and_encode_bytes(ttf_data, chars) {
+        let encode_result = if subset_fonts {
+            subset_and_encode_bytes(ttf_data, chars)
+        } else {
+            encode_full_font_bytes(ttf_data)
+        };
+        match encode_result {
             Ok(Some(artifact)) => {
                 css_blocks.insert(
                     font_key.clone(),
@@ -318,7 +327,7 @@ fn generate_google_fonts_css(
             Err(e) => match mode {
                 MissingFontsPolicy::Error => {
                     return Err(anyhow!(
-                        "Failed to subset '{}' weight={} style={}: {}",
+                        "Failed to encode '{}' weight={} style={}: {}",
                         font_info.family,
                         font_key.weight,
                         font_key.style,
@@ -327,7 +336,7 @@ fn generate_google_fonts_css(
                 }
                 MissingFontsPolicy::Warn => {
                     log::warn!(
-                        "font_embed: failed to subset '{}': {}, skipping",
+                        "font_embed: failed to encode '{}': {}, skipping",
                         font_info.family,
                         e
                     );
@@ -347,6 +356,7 @@ fn generate_local_font_css(
     mode: &MissingFontsPolicy,
     fontdb: &fontdb::Database,
     css_blocks: &mut HashMap<FontKey, String>,
+    subset_fonts: bool,
 ) -> Result<(), anyhow::Error> {
     for (font_key, chars) in chars_by_font_key {
         if font_key.family != font_info.family || chars.is_empty() {
@@ -368,7 +378,11 @@ fn generate_local_font_css(
 
         if let Some(face_id) = fontdb.query(&query) {
             let result = fontdb.with_face_data(face_id, |data, _face_index| {
-                subset_and_encode_bytes(data, chars)
+                if subset_fonts {
+                    subset_and_encode_bytes(data, chars)
+                } else {
+                    encode_full_font_bytes(data)
+                }
             });
             match result {
                 Some(Ok(Some(artifact))) => {
@@ -421,6 +435,13 @@ fn generate_local_font_css(
 
 struct SubsetArtifact {
     woff2_b64: String,
+}
+
+/// Encode full TTF data as base64 without subsetting.
+fn encode_full_font_bytes(ttf_data: &[u8]) -> Result<Option<SubsetArtifact>, anyhow::Error> {
+    Ok(Some(SubsetArtifact {
+        woff2_b64: STANDARD.encode(ttf_data),
+    }))
 }
 
 /// Subset in-memory TTF data to the given characters and return the
@@ -525,6 +546,7 @@ mod tests {
             &MissingFontsPolicy::Fallback,
             &db,
             &mut css_blocks,
+            true,
         );
         assert!(result.is_ok());
         assert_eq!(css_blocks.len(), 1);
@@ -563,6 +585,7 @@ mod tests {
             &MissingFontsPolicy::Fallback,
             &db,
             &mut css_blocks,
+            true,
         );
         assert!(result.is_ok());
         // No CSS blocks since font-subset rejects the font
@@ -592,6 +615,7 @@ mod tests {
             &MissingFontsPolicy::Error,
             &db,
             &mut css_blocks,
+            true,
         );
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
@@ -620,6 +644,7 @@ mod tests {
             &MissingFontsPolicy::Fallback,
             &db,
             &[], // no Google batches
+            true,
         );
         assert!(result.is_ok());
         let blocks = result.unwrap();
@@ -655,6 +680,7 @@ mod tests {
             &MissingFontsPolicy::Fallback,
             &db,
             &[], // no loaded batches
+            true,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());

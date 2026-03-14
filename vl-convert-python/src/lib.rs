@@ -64,7 +64,6 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .map(|root| root.to_string_lossy().to_string()),
         "allowed_base_urls": config.allowed_base_urls,
         "auto_google_fonts": config.auto_google_fonts,
-        "html_embed_local_fonts": config.html_embed_local_fonts,
         "missing_fonts": match config.missing_fonts {
             MissingFontsPolicy::Fallback => "fallback",
             MissingFontsPolicy::Warn => "warn",
@@ -85,7 +84,6 @@ struct ConverterConfigOverrides {
     allowed_base_urls: Option<Option<Vec<String>>>,
     google_fonts_cache_size_mb: Option<u64>,
     auto_google_fonts: Option<bool>,
-    html_embed_local_fonts: Option<bool>,
     missing_fonts: Option<MissingFontsPolicy>,
 }
 
@@ -164,16 +162,6 @@ fn parse_config_overrides(
                     })?);
                 }
             }
-            "html_embed_local_fonts" => {
-                if !value.is_none() {
-                    overrides.html_embed_local_fonts =
-                        Some(value.extract::<bool>().map_err(|err| {
-                            vl_convert_rs::anyhow::anyhow!(
-                                "Invalid html_embed_local_fonts value for configure: {err}"
-                            )
-                        })?);
-                }
-            }
             "missing_fonts" => {
                 if !value.is_none() {
                     let s = value.extract::<String>().map_err(|err| {
@@ -192,6 +180,11 @@ fn parse_config_overrides(
                         }
                     });
                 }
+            }
+            "embed_local_fonts" | "html_embed_local_fonts" => {
+                return Err(vl_convert_rs::anyhow::anyhow!(
+                    "embed_local_fonts is now a per-call parameter on vegalite_to_html/vega_to_html, not a configure() option"
+                ));
             }
             // Read-only config fields returned by get_config() are
             // silently ignored so that `configure(**get_config())` works.
@@ -229,9 +222,6 @@ fn apply_config_overrides(
     }
     if let Some(auto_google_fonts) = overrides.auto_google_fonts {
         config.auto_google_fonts = auto_google_fonts;
-    }
-    if let Some(html_embed_local_fonts) = overrides.html_embed_local_fonts {
-        config.html_embed_local_fonts = html_embed_local_fonts;
     }
     if let Some(missing_fonts) = overrides.missing_fonts {
         config.missing_fonts = missing_fonts;
@@ -1025,12 +1015,14 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
 ///     string: HTML document
 #[pyfunction]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, bundle=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None)
+    signature = (vl_spec, vl_version=None, bundle=None, embed_local_fonts=None, subset_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None)
 )]
 fn vegalite_to_html(
     vl_spec: PyObject,
     vl_version: Option<&str>,
     bundle: Option<bool>,
+    embed_local_fonts: Option<bool>,
+    subset_fonts: Option<bool>,
     config: Option<PyObject>,
     theme: Option<String>,
     format_locale: Option<PyObject>,
@@ -1048,6 +1040,7 @@ fn vegalite_to_html(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let renderer = Renderer::from_str(&renderer)?;
+    let subset_fonts = subset_fonts.unwrap_or(true);
     let vl_opts = VlOpts {
         vl_version,
         config,
@@ -1061,7 +1054,7 @@ fn vegalite_to_html(
 
     run_converter_future(move |converter| async move {
         converter
-            .vegalite_to_html(vl_spec, vl_opts, bundle.unwrap_or(false), renderer)
+            .vegalite_to_html(vl_spec, vl_opts, bundle.unwrap_or(false), embed_local_fonts.unwrap_or(false), subset_fonts, renderer)
             .await
     })
     .map_err(|err| prefixed_py_error("Vega-Lite to HTML conversion failed", err))
@@ -1080,10 +1073,12 @@ fn vegalite_to_html(
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
-#[pyo3(signature = (vg_spec, bundle=None, format_locale=None, time_format_locale=None, renderer=None))]
+#[pyo3(signature = (vg_spec, bundle=None, embed_local_fonts=None, subset_fonts=None, format_locale=None, time_format_locale=None, renderer=None))]
 fn vega_to_html(
     vg_spec: PyObject,
     bundle: Option<bool>,
+    embed_local_fonts: Option<bool>,
+    subset_fonts: Option<bool>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     renderer: Option<String>,
@@ -1093,6 +1088,7 @@ fn vega_to_html(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let renderer = Renderer::from_str(&renderer)?;
+    let subset_fonts = subset_fonts.unwrap_or(true);
     let vg_opts = VgOpts {
         allowed_base_urls: None,
         format_locale,
@@ -1101,7 +1097,7 @@ fn vega_to_html(
     };
     run_converter_future(move |converter| async move {
         converter
-            .vega_to_html(vg_spec, vg_opts, bundle.unwrap_or(false), renderer)
+            .vega_to_html(vg_spec, vg_opts, bundle.unwrap_or(false), embed_local_fonts.unwrap_or(false), subset_fonts, renderer)
             .await
     })
     .map_err(|err| prefixed_py_error("Vega to HTML conversion failed", err))
@@ -1117,14 +1113,14 @@ fn vega_to_html(
 ///     theme (str): Named theme (e.g. "dark")
 ///     auto_google_fonts (bool): Override auto-download from Google Fonts
 ///         (default: use converter config)
-///     html_embed_local_fonts (bool): Override local font embedding
+///     embed_local_fonts (bool): Override local font embedding
 ///         (default: use converter config)
 ///     include_font_face (bool): Whether to run the font subsetting pipeline
 ///         and populate the font_face field on each variant (default False)
 /// Returns:
 ///     list[FontInfo]: Structured font metadata for each font used by the chart
 #[pyfunction]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, html_embed_local_fonts=None, include_font_face=false))]
+#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, embed_local_fonts=None, include_font_face=false))]
 fn vegalite_fonts(
     py: Python<'_>,
     vl_spec: PyObject,
@@ -1132,7 +1128,7 @@ fn vegalite_fonts(
     config: Option<PyObject>,
     theme: Option<String>,
     auto_google_fonts: Option<bool>,
-    html_embed_local_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
     include_font_face: bool,
 ) -> PyResult<PyObject> {
     let vl_version = if let Some(vl_version) = vl_version {
@@ -1155,9 +1151,9 @@ fn vegalite_fonts(
 
     let result = run_converter_future(move |converter| async move {
         let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-        let embed_lf = html_embed_local_fonts.unwrap_or(converter.config().html_embed_local_fonts);
+        let embed_lf = embed_local_fonts.unwrap_or(false);
         converter
-            .vegalite_fonts(vl_spec, vl_opts, auto_gf, embed_lf, include_font_face)
+            .vegalite_fonts(vl_spec, vl_opts, auto_gf, embed_lf, include_font_face, true)
             .await
     })
     .map_err(|err| prefixed_py_error("vegalite_fonts request failed", err))?;
@@ -1173,19 +1169,19 @@ fn vegalite_fonts(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     auto_google_fonts (bool): Override auto-download from Google Fonts
 ///         (default: use converter config)
-///     html_embed_local_fonts (bool): Override local font embedding
+///     embed_local_fonts (bool): Override local font embedding
 ///         (default: use converter config)
 ///     include_font_face (bool): Whether to run the font subsetting pipeline
 ///         and populate the font_face field on each variant (default False)
 /// Returns:
 ///     list[FontInfo]: Structured font metadata for each font used by the chart
 #[pyfunction]
-#[pyo3(signature = (vg_spec, auto_google_fonts=None, html_embed_local_fonts=None, include_font_face=false))]
+#[pyo3(signature = (vg_spec, auto_google_fonts=None, embed_local_fonts=None, include_font_face=false))]
 fn vega_fonts(
     py: Python<'_>,
     vg_spec: PyObject,
     auto_google_fonts: Option<bool>,
-    html_embed_local_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
     include_font_face: bool,
 ) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
@@ -1198,9 +1194,9 @@ fn vega_fonts(
 
     let result = run_converter_future(move |converter| async move {
         let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-        let embed_lf = html_embed_local_fonts.unwrap_or(converter.config().html_embed_local_fonts);
+        let embed_lf = embed_local_fonts.unwrap_or(false);
         converter
-            .vega_fonts(vg_spec, vg_opts, auto_gf, embed_lf, include_font_face)
+            .vega_fonts(vg_spec, vg_opts, auto_gf, embed_lf, include_font_face, true)
             .await
     })
     .map_err(|err| prefixed_py_error("vega_fonts request failed", err))?;
@@ -2183,13 +2179,15 @@ fn vega_to_url_asyncio<'py>(
 #[doc = async_variant_doc!("vegalite_to_html")]
 #[pyfunction(name = "vegalite_to_html")]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, bundle=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None)
+    signature = (vl_spec, vl_version=None, bundle=None, embed_local_fonts=None, subset_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None)
 )]
 fn vegalite_to_html_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
     vl_version: Option<&str>,
     bundle: Option<bool>,
+    embed_local_fonts: Option<bool>,
+    subset_fonts: Option<bool>,
     config: Option<PyObject>,
     theme: Option<String>,
     format_locale: Option<PyObject>,
@@ -2207,6 +2205,7 @@ fn vegalite_to_html_asyncio<'py>(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let renderer = Renderer::from_str(&renderer)?;
+    let subset_fonts = subset_fonts.unwrap_or(true);
     let vl_opts = VlOpts {
         vl_version,
         config,
@@ -2222,7 +2221,7 @@ fn vegalite_to_html_asyncio<'py>(
         py,
         move |converter| async move {
             converter
-                .vegalite_to_html(vl_spec, vl_opts, bundle.unwrap_or(false), renderer)
+                .vegalite_to_html(vl_spec, vl_opts, bundle.unwrap_or(false), embed_local_fonts.unwrap_or(false), subset_fonts, renderer)
                 .await
         },
         "Vega-Lite to HTML conversion failed",
@@ -2236,11 +2235,13 @@ fn vegalite_to_html_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_html")]
 #[pyfunction(name = "vega_to_html")]
-#[pyo3(signature = (vg_spec, bundle=None, format_locale=None, time_format_locale=None, renderer=None))]
+#[pyo3(signature = (vg_spec, bundle=None, embed_local_fonts=None, subset_fonts=None, format_locale=None, time_format_locale=None, renderer=None))]
 fn vega_to_html_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
     bundle: Option<bool>,
+    embed_local_fonts: Option<bool>,
+    subset_fonts: Option<bool>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     renderer: Option<String>,
@@ -2250,6 +2251,7 @@ fn vega_to_html_asyncio<'py>(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let renderer = Renderer::from_str(&renderer)?;
+    let subset_fonts = subset_fonts.unwrap_or(true);
     let vg_opts = VgOpts {
         allowed_base_urls: None,
         format_locale,
@@ -2261,7 +2263,7 @@ fn vega_to_html_asyncio<'py>(
         py,
         move |converter| async move {
             converter
-                .vega_to_html(vg_spec, vg_opts, bundle.unwrap_or(false), renderer)
+                .vega_to_html(vg_spec, vg_opts, bundle.unwrap_or(false), embed_local_fonts.unwrap_or(false), subset_fonts, renderer)
                 .await
         },
         "Vega to HTML conversion failed",
@@ -2275,7 +2277,7 @@ fn vega_to_html_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_fonts")]
 #[pyfunction(name = "vegalite_fonts")]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, html_embed_local_fonts=None, include_font_face=false))]
+#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, embed_local_fonts=None, include_font_face=false))]
 fn vegalite_fonts_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -2283,7 +2285,7 @@ fn vegalite_fonts_asyncio<'py>(
     config: Option<PyObject>,
     theme: Option<String>,
     auto_google_fonts: Option<bool>,
-    html_embed_local_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
     include_font_face: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vl_version = if let Some(vl_version) = vl_version {
@@ -2309,9 +2311,9 @@ fn vegalite_fonts_asyncio<'py>(
         move |converter| async move {
             let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
             let embed_lf =
-                html_embed_local_fonts.unwrap_or(converter.config().html_embed_local_fonts);
+                embed_local_fonts.unwrap_or(false);
             converter
-                .vegalite_fonts(vl_spec, vl_opts, auto_gf, embed_lf, include_font_face)
+                .vegalite_fonts(vl_spec, vl_opts, auto_gf, embed_lf, include_font_face, true)
                 .await
         },
         "vegalite_fonts request failed",
@@ -2325,12 +2327,12 @@ fn vegalite_fonts_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_fonts")]
 #[pyfunction(name = "vega_fonts")]
-#[pyo3(signature = (vg_spec, auto_google_fonts=None, html_embed_local_fonts=None, include_font_face=false))]
+#[pyo3(signature = (vg_spec, auto_google_fonts=None, embed_local_fonts=None, include_font_face=false))]
 fn vega_fonts_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
     auto_google_fonts: Option<bool>,
-    html_embed_local_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
     include_font_face: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
@@ -2346,9 +2348,9 @@ fn vega_fonts_asyncio<'py>(
         move |converter| async move {
             let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
             let embed_lf =
-                html_embed_local_fonts.unwrap_or(converter.config().html_embed_local_fonts);
+                embed_local_fonts.unwrap_or(false);
             converter
-                .vega_fonts(vg_spec, vg_opts, auto_gf, embed_lf, include_font_face)
+                .vega_fonts(vg_spec, vg_opts, auto_gf, embed_lf, include_font_face, true)
                 .await
         },
         "vega_fonts request failed",

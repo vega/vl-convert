@@ -486,10 +486,6 @@ pub struct VlConverterConfig {
     pub auto_google_fonts: bool,
     /// How to handle missing first-choice fonts: silently fallback, warn, or error.
     pub missing_fonts: MissingFontsPolicy,
-    /// Whether to embed locally-available fonts (system, --font-dir, vendored)
-    /// as @font-face CSS in HTML output.
-    ///
-    pub html_embed_local_fonts: bool,
 }
 
 impl Default for VlConverterConfig {
@@ -501,7 +497,6 @@ impl Default for VlConverterConfig {
             allowed_base_urls: None,
             auto_google_fonts: false,
             missing_fonts: MissingFontsPolicy::Fallback,
-            html_embed_local_fonts: false,
         }
     }
 }
@@ -2975,12 +2970,12 @@ fn google_font_for_html(family: &str) -> Option<FontForHtml> {
 ///
 /// Fonts that exist in the Google Fonts catalog are sourced from Google for
 /// portability (CDN links work on any machine). Remaining fonts are classified
-/// as Local when `html_embed_local_fonts` is true and the font is available
+/// as Local when `embed_local_fonts` is true and the font is available
 /// in fontdb.
 async fn classify_scenegraph_fonts(
     families: &BTreeSet<String>,
     auto_google_fonts: bool,
-    html_embed_local_fonts: bool,
+    embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     explicit_google_families: &HashSet<String>,
 ) -> Result<Vec<FontForHtml>, AnyError> {
@@ -2988,7 +2983,7 @@ async fn classify_scenegraph_fonts(
 
     if families.is_empty()
         || (!auto_google_fonts
-            && !html_embed_local_fonts
+            && !embed_local_fonts
             && missing_fonts == MissingFontsPolicy::Fallback
             && explicit_google_families.is_empty()
             && pre_registered.is_empty())
@@ -3030,7 +3025,7 @@ async fn classify_scenegraph_fonts(
             }
         }
         if is_available(family, &available) {
-            if html_embed_local_fonts {
+            if embed_local_fonts {
                 html_fonts.push(FontForHtml {
                     family: family.clone(),
                     source: FontSource::Local,
@@ -4125,7 +4120,7 @@ impl VlConverter {
         vega_spec: serde_json::Value,
         vg_opts: VgOpts,
         auto_google_fonts: bool,
-        html_embed_local_fonts: bool,
+        embed_local_fonts: bool,
     ) -> Result<HtmlFontAnalysis, AnyError> {
         let missing = self.inner.config.missing_fonts;
 
@@ -4172,7 +4167,7 @@ impl VlConverter {
         let mut html_fonts = classify_scenegraph_fonts(
             &families,
             auto_google_fonts,
-            html_embed_local_fonts,
+            embed_local_fonts,
             missing,
             &explicit_google_families,
         )
@@ -4212,15 +4207,16 @@ impl VlConverter {
     /// Return font information for a Vega spec in the requested format.
     ///
     /// Renders the scenegraph once to discover the exact fonts, weights, and
-    /// characters used. The `auto_google_fonts` and `html_embed_local_fonts`
+    /// characters used. The `auto_google_fonts` and `embed_local_fonts`
     /// parameters control which fonts are included.
     pub async fn vega_fonts(
         &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
         auto_google_fonts: bool,
-        html_embed_local_fonts: bool,
+        embed_local_fonts: bool,
         include_font_face: bool,
+        subset_fonts: bool,
     ) -> Result<Vec<FontInfo>, AnyError> {
         let vg_spec = vg_spec.into();
         let spec_value: serde_json::Value = match &vg_spec {
@@ -4233,21 +4229,25 @@ impl VlConverter {
                 spec_value,
                 vg_opts,
                 auto_google_fonts,
-                html_embed_local_fonts,
+                embed_local_fonts,
             )
             .await?;
 
-        self.build_font_info(analysis, include_font_face).await
+        self.build_font_info(analysis, include_font_face, subset_fonts)
+            .await
     }
 
     /// Build structured `FontInfo` from a completed font analysis.
     ///
     /// When `include_font_face` is true, runs the subsetting pipeline to
     /// populate `FontVariant::font_face` on each variant.
+    /// When `subset_fonts` is false, embedded fonts include all glyphs and
+    /// CDN URLs omit the `&text=` parameter.
     async fn build_font_info(
         &self,
         analysis: HtmlFontAnalysis,
         include_font_face: bool,
+        subset_fonts: bool,
     ) -> Result<Vec<FontInfo>, AnyError> {
         let HtmlFontAnalysis {
             html_fonts,
@@ -4294,7 +4294,7 @@ impl VlConverter {
                     .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
                     .fontdb
                     .clone();
-                generate_font_face_css(&chars_by_key, &html_fonts, &missing, &fontdb, &batches)?
+                generate_font_face_css(&chars_by_key, &html_fonts, &missing, &fontdb, &batches, subset_fonts)?
             } else {
                 HashMap::new()
             };
@@ -4334,13 +4334,15 @@ impl VlConverter {
         }
 
         // Aggregate characters per family for CDN &text= subsetting.
-        let mut family_chars: HashMap<String, BTreeSet<char>> = HashMap::new();
-        for (key, chars) in &chars_by_key {
-            family_chars
-                .entry(key.family.clone())
-                .or_default()
-                .extend(chars);
-        }
+        let family_chars: HashMap<String, BTreeSet<char>> = if subset_fonts {
+            let mut map: HashMap<String, BTreeSet<char>> = HashMap::new();
+            for (key, chars) in &chars_by_key {
+                map.entry(key.family.clone()).or_default().extend(chars);
+            }
+            map
+        } else {
+            HashMap::new()
+        };
 
         // Build FontInfo for each font family.
         let results: Vec<FontInfo> = html_fonts
@@ -4404,8 +4406,9 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
         auto_google_fonts: bool,
-        html_embed_local_fonts: bool,
+        embed_local_fonts: bool,
         include_font_face: bool,
+        subset_fonts: bool,
     ) -> Result<Vec<FontInfo>, AnyError> {
         let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?;
         let vg_opts = VgOpts {
@@ -4418,8 +4421,9 @@ impl VlConverter {
             vega_spec,
             vg_opts,
             auto_google_fonts,
-            html_embed_local_fonts,
+            embed_local_fonts,
             include_font_face,
+            subset_fonts,
         )
         .await
     }
@@ -4435,6 +4439,7 @@ impl VlConverter {
         bundle: bool,
         auto_install: bool,
         embed_local: bool,
+        subset_fonts: bool,
     ) -> Result<String, AnyError> {
         // CDN-only fast path: when auto_google_fonts is off and we don't need
         // embedded @font-face blocks, build <link> tags from static spec
@@ -4523,6 +4528,7 @@ impl VlConverter {
                 auto_install,
                 embed_local,
                 include_font_face,
+                subset_fonts,
             )
             .await?;
 
@@ -4572,13 +4578,15 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
         bundle: bool,
+        embed_local_fonts: bool,
+        subset_fonts: bool,
         renderer: Renderer,
     ) -> Result<String, AnyError> {
         let vl_version = vl_opts.vl_version;
         let vl_spec = vl_spec.into();
 
         let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = self.inner.config.html_embed_local_fonts;
+        let embed_local = embed_local_fonts;
 
         let font_head_html = if auto_install
             || embed_local
@@ -4593,8 +4601,15 @@ impl VlConverter {
                 time_format_locale: vl_opts.time_format_locale.clone(),
                 google_fonts: vl_opts.google_fonts.clone(),
             };
-            self.build_font_head_html(vega_spec, vg_opts, bundle, auto_install, embed_local)
-                .await?
+            self.build_font_head_html(
+                vega_spec,
+                vg_opts,
+                bundle,
+                auto_install,
+                embed_local,
+                subset_fonts,
+            )
+            .await?
         } else {
             String::new()
         };
@@ -4609,12 +4624,14 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
         bundle: bool,
+        embed_local_fonts: bool,
+        subset_fonts: bool,
         renderer: Renderer,
     ) -> Result<String, AnyError> {
         let vg_spec = vg_spec.into();
 
         let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = self.inner.config.html_embed_local_fonts;
+        let embed_local = embed_local_fonts;
 
         let font_head_html = if auto_install
             || embed_local
@@ -4630,6 +4647,7 @@ impl VlConverter {
                 bundle,
                 auto_install,
                 embed_local,
+                subset_fonts,
             )
             .await?
         } else {
@@ -6386,9 +6404,11 @@ try {
                 ..Default::default()
             },
             true,
+            false,
+            true,
             Renderer::Svg,
         ));
-        assert_send_future(converter.vega_to_html(vg_spec, VgOpts::default(), true, Renderer::Svg));
+        assert_send_future(converter.vega_to_html(vg_spec, VgOpts::default(), true, false, true, Renderer::Svg));
     }
 
     #[tokio::test]
