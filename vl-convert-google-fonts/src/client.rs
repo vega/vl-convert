@@ -199,6 +199,34 @@ impl GoogleFontsClient {
         }
     }
 
+    /// Resolve requested variants against what a font actually provides.
+    ///
+    /// Fetches the CSS2 response (using the cache) and applies the same
+    /// weight/style fallback logic used by [`load`]: exact match → closest
+    /// weight with matching style → closest weight any style.  Returns the
+    /// resolved `VariantRequest` list without downloading font files, making
+    /// this suitable for building CDN `<link>` URLs with correct weights.
+    pub async fn resolve_available_variants(
+        &self,
+        family: &str,
+        requested: &[VariantRequest],
+    ) -> Result<Vec<VariantRequest>, GoogleFontsError> {
+        let font_id = match family_to_id(family) {
+            Some(id) => id,
+            None => return Err(GoogleFontsError::FontNotFound(family.to_string())),
+        };
+        let (css, _from_cache) = self.fetch_css_async(&font_id, family).await?;
+        let plan = resolve_from_css2(&font_id, &css, Some(requested))?;
+        Ok(plan
+            .files
+            .into_iter()
+            .map(|f| VariantRequest {
+                weight: f.weight,
+                style: f.style,
+            })
+            .collect())
+    }
+
     /// Fetch the all-variants CSS2 response for a font, using the cache when available.
     /// Returns `(css, from_cache)`.
     async fn fetch_css_async(

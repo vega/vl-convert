@@ -26,9 +26,11 @@ pub fn get_vega_or_vegalite_script(
 {{
     const spec = {spec_json};
     {opts}
-    const loads = [];
-    for (const face of document.fonts) loads.push(face.load());
-    Promise.all(loads).then(() => vegaEmbed('#{chart_id}', spec, opts).catch(console.error));
+    window.addEventListener('load', () => {{
+        const loads = [];
+        for (const face of document.fonts) loads.push(face.load());
+        Promise.all(loads).then(() => vegaEmbed('#{chart_id}', spec, opts).catch(console.error));
+    }});
 }}
 "##,
     );
@@ -74,51 +76,73 @@ import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
     bundle_script(script.to_string(), vl_version).await
 }
 
-/// Default Google Fonts CSS2 `ital,wght` range used when we don't know the
-/// exact variants up front. Requests normal and italic across 100..900;
-/// Google Fonts will omit unsupported styles for a given family.
-const DEFAULT_VARIANT_TUPLES: &str = "0,100..900;1,100..900";
+/// All standard CSS font weights, enumerated for the Google Fonts CSS2 API.
+/// Using enumerated values instead of ranges (100..900) because ranges require
+/// the font to be a variable font, which single-weight fonts like Lugrasimo
+/// are not. Google returns only the weights a font actually supports.
+const ALL_WEIGHTS: &str = "100;200;300;400;500;600;700;800;900";
 
-/// Format (weight, style) pairs as CSS2 API `ital,wght@...` tuples.
+/// Format (weight, style) pairs as CSS2 API axis tuples.
 ///
-/// Each tuple is `{ital},{weight}` where ital is 1 for italic, 0 otherwise.
-/// Falls back to the full 100..900 range when no variants are provided.
-fn format_variant_tuples(variants: Option<&BTreeSet<(String, String)>>) -> String {
+/// When specific variants are provided, requests `ital,wght@{ital},{weight}`
+/// tuples. Otherwise requests all weights via `wght@100;200;...;900`.
+/// The fallback omits the ital axis to avoid errors on fonts without italic.
+fn format_css2_axis(variants: Option<&BTreeSet<(String, String)>>) -> String {
     match variants {
         Some(vs) if !vs.is_empty() => {
-            let mut parts: Vec<String> = vs
-                .iter()
-                .map(|(weight, style)| {
-                    let ital = if style == "italic" { "1" } else { "0" };
-                    format!("{ital},{weight}")
-                })
-                .collect();
-            parts.sort();
-            parts.dedup();
-            parts.join(";")
+            let has_italic = vs.iter().any(|(_, s)| s == "italic");
+            if has_italic {
+                let mut parts: Vec<String> = vs
+                    .iter()
+                    .map(|(weight, style)| {
+                        let ital = if style == "italic" { "1" } else { "0" };
+                        format!("{ital},{weight}")
+                    })
+                    .collect();
+                parts.sort();
+                parts.dedup();
+                format!("ital,wght@{}", parts.join(";"))
+            } else {
+                let mut weights: Vec<String> = vs.iter().map(|(w, _)| w.clone()).collect();
+                weights.sort();
+                weights.dedup();
+                format!("wght@{}", weights.join(";"))
+            }
         }
-        _ => DEFAULT_VARIANT_TUPLES.to_string(),
+        _ => format!("wght@{ALL_WEIGHTS}"),
     }
 }
 
 /// Return the CDN stylesheet URL for a font.
 ///
 /// When `variants` is provided, the URL requests exactly those (weight, style)
-/// tuples from the Google Fonts CSS2 API. Otherwise falls back to the full
-/// 100..900 range for both normal and italic.
+/// tuples from the Google Fonts CSS2 API. Otherwise requests all standard
+/// weights (Google returns only what the font supports).
+///
+/// When `text` is provided, appends `&text=` so Google returns only the
+/// glyphs needed for the chart — significantly smaller than full unicode-range
+/// responses.
 ///
 /// Returns `None` for local fonts.
 pub fn font_cdn_url(
     font: &FontForHtml,
     variants: Option<&BTreeSet<(String, String)>>,
+    text: Option<&str>,
 ) -> Option<String> {
     match &font.source {
         FontSource::Google { .. } => {
             let name = font.family.replace(' ', "+");
-            let tuples = format_variant_tuples(variants);
-            Some(format!(
-                "https://fonts.googleapis.com/css2?family={name}:ital,wght@{tuples}&display=swap"
-            ))
+            let axis = format_css2_axis(variants);
+            let mut url = format!(
+                "https://fonts.googleapis.com/css2?family={name}:{axis}&display=swap"
+            );
+            if let Some(t) = text {
+                if !t.is_empty() {
+                    url.push_str("&text=");
+                    url.push_str(&urlencoding::encode(t));
+                }
+            }
+            Some(url)
         }
         FontSource::Local => None,
     }
@@ -129,8 +153,9 @@ pub fn font_cdn_url(
 pub fn font_link_tag(
     font: &FontForHtml,
     variants: Option<&BTreeSet<(String, String)>>,
+    text: Option<&str>,
 ) -> Option<String> {
-    let url = font_cdn_url(font, variants)?;
+    let url = font_cdn_url(font, variants, text)?;
     Some(format!(r#"<link rel="stylesheet" href="{url}">"#))
 }
 
@@ -139,8 +164,9 @@ pub fn font_link_tag(
 pub fn font_import_rule(
     font: &FontForHtml,
     variants: Option<&BTreeSet<(String, String)>>,
+    text: Option<&str>,
 ) -> Option<String> {
-    let url = font_cdn_url(font, variants)?;
+    let url = font_cdn_url(font, variants, text)?;
     Some(format!(r#"@import url("{url}");"#))
 }
 
@@ -164,28 +190,27 @@ mod tests {
         }
     }
 
-    // format_variant_tuples tests
+    // format_css2_axis tests
 
     #[test]
-    fn test_format_variant_tuples_none() {
-        assert_eq!(format_variant_tuples(None), DEFAULT_VARIANT_TUPLES);
+    fn test_format_css2_axis_none() {
+        assert_eq!(format_css2_axis(None), format!("wght@{ALL_WEIGHTS}"));
     }
 
     #[test]
-    fn test_format_variant_tuples_single() {
+    fn test_format_css2_axis_normal_only() {
         let mut vs = BTreeSet::new();
         vs.insert(("300".to_string(), "normal".to_string()));
-        assert_eq!(format_variant_tuples(Some(&vs)), "0,300");
+        assert_eq!(format_css2_axis(Some(&vs)), "wght@300");
     }
 
     #[test]
-    fn test_format_variant_tuples_mixed() {
+    fn test_format_css2_axis_mixed() {
         let mut vs = BTreeSet::new();
         vs.insert(("400".to_string(), "normal".to_string()));
         vs.insert(("700".to_string(), "italic".to_string()));
         vs.insert(("300".to_string(), "normal".to_string()));
-        let result = format_variant_tuples(Some(&vs));
-        assert_eq!(result, "0,300;0,400;1,700");
+        assert_eq!(format_css2_axis(Some(&vs)), "ital,wght@0,300;0,400;1,700");
     }
 
     // font_cdn_url tests
@@ -193,10 +218,12 @@ mod tests {
     #[test]
     fn test_cdn_url_default_variants() {
         let font = google_font("Roboto");
-        let url = font_cdn_url(&font, None).unwrap();
+        let url = font_cdn_url(&font, None, None).unwrap();
         assert_eq!(
             url,
-            "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap"
+            format!(
+                "https://fonts.googleapis.com/css2?family=Roboto:wght@{ALL_WEIGHTS}&display=swap"
+            )
         );
     }
 
@@ -206,7 +233,7 @@ mod tests {
         let mut vs = BTreeSet::new();
         vs.insert(("300".to_string(), "normal".to_string()));
         vs.insert(("600".to_string(), "italic".to_string()));
-        let url = font_cdn_url(&font, Some(&vs)).unwrap();
+        let url = font_cdn_url(&font, Some(&vs), None).unwrap();
         assert_eq!(
             url,
             "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;1,600&display=swap"
@@ -214,14 +241,21 @@ mod tests {
     }
 
     #[test]
+    fn test_cdn_url_with_text_subset() {
+        let font = google_font("Roboto");
+        let url = font_cdn_url(&font, None, Some("Hello World")).unwrap();
+        assert!(url.ends_with("&text=Hello%20World"));
+    }
+
+    #[test]
     fn test_cdn_url_google_font_multi_word() {
         let font = google_font("Playfair Display");
-        let url = font_cdn_url(&font, None).unwrap();
-        assert!(url.contains("family=Playfair+Display:ital,wght@"));
+        let url = font_cdn_url(&font, None, None).unwrap();
+        assert!(url.contains("family=Playfair+Display:wght@"));
     }
 
     #[test]
     fn test_cdn_url_local_font() {
-        assert!(font_cdn_url(&local_font("Arial"), None).is_none());
+        assert!(font_cdn_url(&local_font("Arial"), None, None).is_none());
     }
 }

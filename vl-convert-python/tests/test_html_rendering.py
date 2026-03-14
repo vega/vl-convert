@@ -8,9 +8,7 @@ threshold to tolerate font rendering differences.
 """
 
 import io
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -28,6 +26,7 @@ root_dir = tests_dir.parent.parent
 specs_dir = root_dir / "vl-convert-rs" / "tests" / "vl-specs"
 fonts_dir = root_dir / "vl-convert-rs" / "tests" / "fonts"
 baselines_dir = tests_dir / "html-baselines"
+html_dir = tests_dir / "html-baselines" / "html"
 failures_dir = tests_dir / "html-failures"
 
 
@@ -73,33 +72,30 @@ def compare_screenshot(actual_bytes: bytes, baseline_name: str, update: bool) ->
         )
 
 
-def render_html(page, html: str, *, block_network: bool = False) -> bytes:
+def render_html(
+    page, html: str, baseline_name: str, *, block_network: bool = False
+) -> bytes:
     if block_network:
         page.route("http://**/*", lambda route: route.abort())
         page.route("https://**/*", lambda route: route.abort())
 
-    with tempfile.NamedTemporaryFile(
-        suffix=".html", delete=False, mode="w"
-    ) as f:
-        f.write(html)
-        tmp_path = f.name
+    # Save HTML for manual inspection
+    html_dir.mkdir(parents=True, exist_ok=True)
+    html_path = html_dir / baseline_name.replace(".png", ".html")
+    html_path.write_text(html)
 
-    try:
-        page.goto(f"file://{tmp_path}", wait_until="networkidle")
-        page.wait_for_function(
-            """() => {
-                const svg = document.querySelector('svg');
-                const canvas = document.querySelector('canvas');
-                return (svg && svg.querySelectorAll('path, rect, circle, line, text').length > 0)
-                    || (canvas && canvas.width > 0);
-            }""",
-            timeout=15000,
-        )
-        # Screenshot just the chart container, not the full page
-        chart = page.locator("#vega-chart")
-        return chart.screenshot()
-    finally:
-        os.unlink(tmp_path)
+    page.goto(f"file://{html_path}", wait_until="networkidle")
+    page.wait_for_function(
+        """() => {
+            const svg = document.querySelector('svg');
+            const canvas = document.querySelector('canvas');
+            return (svg && svg.querySelectorAll('path, rect, circle, line, text').length > 0)
+                || (canvas && canvas.width > 0);
+        }""",
+        timeout=15000,
+    )
+    chart = page.locator("#vega-chart")
+    return chart.screenshot()
 
 
 @pytest.fixture(scope="module")
@@ -122,50 +118,49 @@ def page(browser):
 
 def test_circle_binned_bundle(page, update_baselines):
     html = vlc.vegalite_to_html(load_spec_inline("circle_binned"), bundle=True)
-    screenshot = render_html(page, html, block_network=True)
+    screenshot = render_html(page, html, "circle_binned_bundle.png", block_network=True)
     compare_screenshot(screenshot, "circle_binned_bundle.png", update_baselines)
 
 
 def test_circle_binned_cdn(page, update_baselines):
     html = vlc.vegalite_to_html(load_spec("circle_binned"), bundle=False)
-    screenshot = render_html(page, html, block_network=False)
+    screenshot = render_html(page, html, "circle_binned_cdn.png")
     compare_screenshot(screenshot, "circle_binned_cdn.png", update_baselines)
 
 
 def test_stacked_bar_bundle(page, update_baselines):
     html = vlc.vegalite_to_html(load_spec_inline("stacked_bar_h"), bundle=True)
-    screenshot = render_html(page, html, block_network=True)
+    screenshot = render_html(page, html, "stacked_bar_bundle.png", block_network=True)
     compare_screenshot(screenshot, "stacked_bar_bundle.png", update_baselines)
 
 
 # --- Google Fonts tests ---
-
-
-def test_google_fonts_bundle(page, update_baselines):
-    vlc.register_google_fonts_font("Bangers")
-    vlc.register_google_fonts_font("Lugrasimo")
-    vlc.configure(auto_google_fonts=True)
-    html = vlc.vegalite_to_html(load_spec_inline("google_fonts"), bundle=True)
-    screenshot = render_html(page, html, block_network=True)
-    compare_screenshot(screenshot, "google_fonts_bundle.png", update_baselines)
+# CDN test must run before bundle test: the bundle path downloads fonts
+# into fontdb, which causes the CDN fast path to classify them as local
+# and skip <link> tags on subsequent calls.
 
 
 def test_google_fonts_cdn(page, update_baselines):
-    vlc.register_google_fonts_font("Bangers")
-    vlc.register_google_fonts_font("Lugrasimo")
     vlc.configure(auto_google_fonts=True)
     html = vlc.vegalite_to_html(load_spec_inline("google_fonts"), bundle=False)
-    screenshot = render_html(page, html, block_network=False)
+    screenshot = render_html(page, html, "google_fonts_cdn.png")
     compare_screenshot(screenshot, "google_fonts_cdn.png", update_baselines)
+
+
+def test_google_fonts_bundle(page, update_baselines):
+    vlc.configure(auto_google_fonts=True)
+    html = vlc.vegalite_to_html(load_spec_inline("google_fonts"), bundle=True)
+    screenshot = render_html(page, html, "google_fonts_bundle.png", block_network=True)
+    compare_screenshot(screenshot, "google_fonts_bundle.png", update_baselines)
 
 
 # --- Distinctive font + local font tests ---
 
 
 def test_pacifico_bundle(page, update_baselines):
-    vlc.register_google_fonts_font("Pacifico")
+    vlc.configure(auto_google_fonts=True)
     html = vlc.vegalite_to_html(load_spec("pacifico_title"), bundle=True)
-    screenshot = render_html(page, html, block_network=True)
+    screenshot = render_html(page, html, "pacifico_bundle.png", block_network=True)
     compare_screenshot(screenshot, "pacifico_bundle.png", update_baselines)
 
 
@@ -173,5 +168,5 @@ def test_local_font_bundle(page, update_baselines):
     vlc.register_font_directory(str(fonts_dir / "Caveat" / "static"))
     vlc.configure(html_embed_local_fonts=True, auto_google_fonts=False)
     html = vlc.vegalite_to_html(load_spec("local_font"), bundle=True)
-    screenshot = render_html(page, html, block_network=True)
+    screenshot = render_html(page, html, "local_font_bundle.png", block_network=True)
     compare_screenshot(screenshot, "local_font_bundle.png", update_baselines)

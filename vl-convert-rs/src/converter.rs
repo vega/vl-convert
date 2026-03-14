@@ -4299,14 +4299,64 @@ impl VlConverter {
                 HashMap::new()
             };
 
+        // Resolve scenegraph variants to actual available weights for CDN URLs.
+        // The scenegraph may request e.g. weight 700 for a single-weight font
+        // like Bangers (400 only). We query the CSS2 API (cached) to find the
+        // closest available weight, so CDN URLs use valid weights.
+        let mut cdn_variants: HashMap<String, BTreeSet<(String, String)>> = HashMap::new();
+        for f in &html_fonts {
+            if let FontSource::Google { .. } = &f.source {
+                if let Some(vs) = family_variants.get(&f.family) {
+                    let requested: Vec<VariantRequest> = vs
+                        .iter()
+                        .map(|(w, s)| VariantRequest {
+                            weight: w.parse().unwrap_or(400),
+                            style: s.parse().unwrap_or(FontStyle::Normal),
+                        })
+                        .collect();
+                    match GOOGLE_FONTS_CLIENT
+                        .resolve_available_variants(&f.family, &requested)
+                        .await
+                    {
+                        Ok(resolved) => {
+                            let set: BTreeSet<(String, String)> = resolved
+                                .into_iter()
+                                .map(|v| (v.weight.to_string(), v.style.as_str().to_string()))
+                                .collect();
+                            cdn_variants.insert(f.family.clone(), set);
+                        }
+                        Err(_) => {
+                            // Fall back to requesting all weights if resolution fails
+                        }
+                    }
+                }
+            }
+        }
+
+        // Aggregate characters per family for CDN &text= subsetting.
+        let mut family_chars: HashMap<String, BTreeSet<char>> = HashMap::new();
+        for (key, chars) in &chars_by_key {
+            family_chars
+                .entry(key.family.clone())
+                .or_default()
+                .extend(chars);
+        }
+
         // Build FontInfo for each font family.
         let results: Vec<FontInfo> = html_fonts
             .iter()
             .map(|f| {
+                // Use resolved CDN variants when available, otherwise request
+                // all standard weights (Google returns only what exists).
+                let cdn_set = cdn_variants.get(&f.family);
+                let text: Option<String> = family_chars.get(&f.family).map(|chars| {
+                    chars.iter().collect()
+                });
+                let text_ref = text.as_deref();
+                let url = font_cdn_url(f, cdn_set, text_ref);
+                let link_tag = font_link_tag(f, cdn_set, text_ref);
+                let import_rule = font_import_rule(f, cdn_set, text_ref);
                 let variants_set = family_variants.get(&f.family);
-                let url = font_cdn_url(f, variants_set);
-                let link_tag = font_link_tag(f, variants_set);
-                let import_rule = font_import_rule(f, variants_set);
 
                 let variants: Vec<FontVariant> = variants_set
                     .map(|vs| {
@@ -4386,10 +4436,10 @@ impl VlConverter {
         auto_install: bool,
         embed_local: bool,
     ) -> Result<String, AnyError> {
-        // CDN-only fast path: when we don't need embedded @font-face blocks,
-        // build <link> tags from static spec analysis without rendering the
-        // scenegraph in V8.
-        if !bundle && !embed_local {
+        // CDN-only fast path: when auto_google_fonts is off and we don't need
+        // embedded @font-face blocks, build <link> tags from static spec
+        // analysis without rendering the scenegraph in V8.
+        if !bundle && !embed_local && !auto_install {
             let mut parts = Vec::new();
             let mut seen_families = HashSet::new();
 
@@ -4408,7 +4458,7 @@ impl VlConverter {
                                     .map(|v| (v.weight.to_string(), v.style.as_str().to_string()))
                                     .collect()
                             });
-                        if let Some(tag) = font_link_tag(&font, variants_set.as_ref()) {
+                        if let Some(tag) = font_link_tag(&font, variants_set.as_ref(), None) {
                             parts.push(format!("    {tag}\n"));
                         }
                     }
@@ -4430,7 +4480,7 @@ impl VlConverter {
                             family: req.family.clone(),
                             source: FontSource::Google { font_id },
                         };
-                        if let Some(tag) = font_link_tag(&font, None) {
+                        if let Some(tag) = font_link_tag(&font, None, None) {
                             parts.push(format!("    {tag}\n"));
                         }
                     }
@@ -4451,7 +4501,7 @@ impl VlConverter {
                                         family: name.clone(),
                                         source: FontSource::Google { font_id },
                                     };
-                                    if let Some(tag) = font_link_tag(&font, None) {
+                                    if let Some(tag) = font_link_tag(&font, None, None) {
                                         parts.push(format!("    {tag}\n"));
                                     }
                                 }

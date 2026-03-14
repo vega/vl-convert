@@ -49,6 +49,7 @@ rmp-serde = "1.3.0"
 base64 = "0.22.1"
 escape8259 = "0.5.3"
 font-subset = { version = "0.1", features = ["woff2"] }
+urlencoding = "2"
 
 [dev-dependencies]
 rstest = { workspace = true }
