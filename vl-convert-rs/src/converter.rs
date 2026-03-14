@@ -2782,59 +2782,16 @@ async fn classify_and_request_fonts(
         return Ok(Vec::new());
     }
 
-    // Get currently available font families from fontdb
-    let available: HashSet<String> = USVG_OPTIONS
-        .lock()
-        .map_err(|e| anyhow!("font_preprocessing: failed to lock USVG_OPTIONS: {e}"))?
-        .fontdb
-        .faces()
-        .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
-        .collect();
+    let available = available_font_families()?;
 
     let font_string_vec: Vec<String> = font_strings.into_iter().collect();
 
-    let mut google_fonts_set: HashSet<String> = HashSet::new();
-    if auto_google_fonts {
-        // Check which first-fonts are known to Google Fonts (only those not already available)
-        let mut api_errors: Vec<(String, String)> = Vec::new();
-        for font_string in &font_string_vec {
-            let entries = crate::extract::parse_css_font_family(font_string);
-            if let Some(crate::extract::FontFamilyEntry::Named(ref name)) = entries.first() {
-                if (prefer_cdn || !is_available(name, &available)) && family_to_id(name).is_some() {
-                    match GOOGLE_FONTS_CLIENT.is_known_font(name).await {
-                        Ok(true) => {
-                            google_fonts_set.insert(name.clone());
-                        }
-                        Ok(false) => {}
-                        Err(e) => {
-                            api_errors.push((name.clone(), e.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Report API errors (network issues) distinctly from "not in catalog"
-        if !api_errors.is_empty() {
-            if missing_fonts == MissingFontsPolicy::Error {
-                let details: Vec<String> = api_errors
-                    .iter()
-                    .map(|(name, err)| format!("'{name}': {err}"))
-                    .collect();
-                return Err(anyhow!(
-                    "auto_google_fonts: could not reach the Google Fonts API to check \
-                     the following fonts: {}",
-                    details.join(", ")
-                ));
-            } else if missing_fonts == MissingFontsPolicy::Warn {
-                for (name, err) in &api_errors {
-                    log::warn!(
-                        "auto_google_fonts: could not reach Google Fonts API for '{name}': {err}"
-                    );
-                }
-            }
-        }
-    }
+    let google_fonts_set: HashSet<String> = if auto_google_fonts {
+        let candidates = auto_google_probe_candidates(&font_string_vec, &available, prefer_cdn);
+        google_font_catalog_matches(candidates.iter(), missing_fonts).await?
+    } else {
+        HashSet::new()
+    };
 
     // Classify each font string by its first entry
     let statuses = resolve_first_fonts(&font_string_vec, &available, |family| {
@@ -2842,53 +2799,32 @@ async fn classify_and_request_fonts(
     });
 
     // Collect unavailable fonts — report before any downloads
-    let unavailable: Vec<(&str, &str)> = statuses
+    let unavailable: Vec<(String, String)> = statuses
         .iter()
         .filter_map(|(css_string, status)| match status {
-            FirstFontStatus::Unavailable { name } => Some((name.as_str(), css_string.as_str())),
+            FirstFontStatus::Unavailable { name } => Some((
+                name.clone(),
+                if name == css_string {
+                    format!("'{name}'")
+                } else {
+                    format!("'{name}' (from \"{css_string}\")")
+                },
+            )),
             _ => None,
         })
         .collect();
 
-    if !unavailable.is_empty() {
-        let details: Vec<String> = unavailable
-            .iter()
-            .map(|(name, css)| {
-                if *name == *css {
-                    format!("'{name}'")
-                } else {
-                    format!("'{name}' (from \"{css}\")")
-                }
-            })
-            .collect();
-        if missing_fonts == MissingFontsPolicy::Error {
-            if auto_google_fonts {
-                return Err(anyhow!(
-                    "auto_google_fonts: the following fonts are not available on the system \
-                     and not found in the Google Fonts catalog: {}",
-                    details.join(", ")
-                ));
-            } else {
-                return Err(anyhow!(
-                    "missing_fonts=error: the following fonts are not available on the system: {}. \
-                     Install them with register_google_fonts_font() or enable auto_google_fonts.",
-                    details.join(", ")
-                ));
-            }
-        }
-        if missing_fonts == MissingFontsPolicy::Warn {
-            for (name, _css) in &unavailable {
-                if auto_google_fonts {
-                    log::warn!(
-                        "auto_google_fonts: font '{name}' is not available on the system \
-                         and not found in the Google Fonts catalog, skipping"
-                    );
-                } else {
-                    log::warn!("missing_fonts=warn: font '{name}' is not available on the system");
-                }
-            }
-        }
-    }
+    let unavailable_names: Vec<String> = unavailable.iter().map(|(name, _)| name.clone()).collect();
+    let unavailable_details: Vec<String> = unavailable
+        .iter()
+        .map(|(_, detail)| detail.clone())
+        .collect();
+    report_unavailable_fonts(
+        &unavailable_names,
+        &unavailable_details,
+        auto_google_fonts,
+        missing_fonts,
+    )?;
 
     if !auto_google_fonts {
         return Ok(Vec::new());
@@ -2925,6 +2861,155 @@ async fn preprocess_fonts(
     classify_and_request_fonts(font_strings, auto_google_fonts, missing_fonts, false).await
 }
 
+fn available_font_families() -> Result<HashSet<String>, AnyError> {
+    Ok(USVG_OPTIONS
+        .lock()
+        .map_err(|e| anyhow!("font_preprocessing: failed to lock USVG_OPTIONS: {e}"))?
+        .fontdb
+        .faces()
+        .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
+        .collect())
+}
+
+fn auto_google_probe_candidates(
+    font_strings: &[String],
+    available: &HashSet<String>,
+    prefer_cdn: bool,
+) -> BTreeSet<String> {
+    font_strings
+        .iter()
+        .filter_map(|font_string| {
+            let entries = crate::extract::parse_css_font_family(font_string);
+            match entries.first() {
+                Some(crate::extract::FontFamilyEntry::Named(name))
+                    if (prefer_cdn || !is_available(name, available))
+                        && family_to_id(name).is_some() =>
+                {
+                    Some(name.clone())
+                }
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+fn scenegraph_google_probe_candidates(
+    families: &BTreeSet<String>,
+    explicit_google_families: &HashSet<String>,
+    pre_registered: &HashSet<String>,
+) -> BTreeSet<String> {
+    families
+        .iter()
+        .filter(|family| {
+            !explicit_google_families.contains(*family) && !pre_registered.contains(*family)
+        })
+        .cloned()
+        .collect()
+}
+
+async fn google_font_catalog_matches<'a>(
+    families: impl IntoIterator<Item = &'a String>,
+    missing_fonts: MissingFontsPolicy,
+) -> Result<HashSet<String>, AnyError> {
+    let mut google_fonts_set: HashSet<String> = HashSet::new();
+    let mut api_errors: Vec<(String, String)> = Vec::new();
+
+    for family in families {
+        match GOOGLE_FONTS_CLIENT.is_known_font(family).await {
+            Ok(true) => {
+                google_fonts_set.insert(family.clone());
+            }
+            Ok(false) => {}
+            Err(e) => {
+                api_errors.push((family.clone(), e.to_string()));
+            }
+        }
+    }
+
+    report_google_catalog_errors(&api_errors, missing_fonts)?;
+    Ok(google_fonts_set)
+}
+
+fn report_google_catalog_errors(
+    api_errors: &[(String, String)],
+    missing_fonts: MissingFontsPolicy,
+) -> Result<(), AnyError> {
+    if api_errors.is_empty() {
+        return Ok(());
+    }
+
+    if missing_fonts == MissingFontsPolicy::Error {
+        let details: Vec<String> = api_errors
+            .iter()
+            .map(|(name, err)| format!("'{name}': {err}"))
+            .collect();
+        return Err(anyhow!(
+            "auto_google_fonts: could not reach the Google Fonts API to check \
+             the following fonts: {}",
+            details.join(", ")
+        ));
+    }
+
+    if missing_fonts == MissingFontsPolicy::Warn {
+        for (name, err) in api_errors {
+            log::warn!("auto_google_fonts: could not reach Google Fonts API for '{name}': {err}");
+        }
+    }
+
+    Ok(())
+}
+
+fn report_unavailable_fonts(
+    unavailable_names: &[String],
+    unavailable_details: &[String],
+    auto_google_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
+) -> Result<(), AnyError> {
+    if unavailable_names.is_empty() {
+        return Ok(());
+    }
+
+    if missing_fonts == MissingFontsPolicy::Error {
+        if auto_google_fonts {
+            return Err(anyhow!(
+                "auto_google_fonts: the following fonts are not available on the system \
+                 and not found in the Google Fonts catalog: {}",
+                unavailable_details.join(", ")
+            ));
+        } else {
+            return Err(anyhow!(
+                "missing_fonts=error: the following fonts are not available on the system: {}. \
+                 Install them with register_google_fonts_font() or enable auto_google_fonts.",
+                unavailable_details.join(", ")
+            ));
+        }
+    }
+
+    if missing_fonts == MissingFontsPolicy::Warn {
+        for name in unavailable_names {
+            if auto_google_fonts {
+                log::warn!(
+                    "auto_google_fonts: font '{name}' is not available on the system \
+                     and not found in the Google Fonts catalog, skipping"
+                );
+            } else {
+                log::warn!("missing_fonts=warn: font '{name}' is not available on the system");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn google_font_for_html(family: &str) -> Option<FontForHtml> {
+    Some(FontForHtml {
+        family: family.to_string(),
+        source: FontSource::Google {
+            font_id: family_to_id(family)?,
+        },
+    })
+}
+
 /// Classify font families extracted from the scenegraph into Google Fonts
 /// or Local sources.
 ///
@@ -2955,87 +3040,40 @@ async fn classify_scenegraph_fonts(
         return Ok(Vec::new());
     }
 
-    let available: HashSet<String> = USVG_OPTIONS
-        .lock()
-        .map_err(|e| anyhow!("font_preprocessing: failed to lock USVG_OPTIONS: {e}"))?
-        .fontdb
-        .faces()
-        .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
-        .collect();
+    let available = available_font_families()?;
 
-    let mut google_fonts_set: HashSet<String> = HashSet::new();
-    if auto_google_fonts {
-        let mut api_errors: Vec<(String, String)> = Vec::new();
-        for family in families {
-            // Skip catalog probe for explicitly-requested families
-            if explicit_google_families.contains(family) {
-                continue;
-            }
-            match GOOGLE_FONTS_CLIENT.is_known_font(family).await {
-                Ok(true) => {
-                    google_fonts_set.insert(family.clone());
-                }
-                Ok(false) => {}
-                Err(e) => {
-                    api_errors.push((family.clone(), e.to_string()));
-                }
-            }
-        }
-
-        if !api_errors.is_empty() {
-            if missing_fonts == MissingFontsPolicy::Error {
-                let details: Vec<String> = api_errors
-                    .iter()
-                    .map(|(name, err)| format!("'{name}': {err}"))
-                    .collect();
-                return Err(anyhow!(
-                    "auto_google_fonts: could not reach the Google Fonts API to check \
-                     the following fonts: {}",
-                    details.join(", ")
-                ));
-            } else if missing_fonts == MissingFontsPolicy::Warn {
-                for (name, err) in &api_errors {
-                    log::warn!(
-                        "auto_google_fonts: could not reach Google Fonts API for '{name}': {err}"
-                    );
-                }
-            }
-        }
-    }
+    let google_fonts_set: HashSet<String> = if auto_google_fonts {
+        let candidates =
+            scenegraph_google_probe_candidates(families, explicit_google_families, &pre_registered);
+        google_font_catalog_matches(candidates.iter(), missing_fonts).await?
+    } else {
+        HashSet::new()
+    };
 
     let mut html_fonts: Vec<FontForHtml> = Vec::new();
     let mut unavailable: Vec<String> = Vec::new();
     for family in families {
         // Explicit per-call requests win immediately
         if explicit_google_families.contains(family) {
-            if let Some(font_id) = family_to_id(family) {
-                html_fonts.push(FontForHtml {
-                    family: family.clone(),
-                    source: FontSource::Google { font_id },
-                });
+            if let Some(font) = google_font_for_html(family) {
+                html_fonts.push(font);
             }
             continue;
         }
         if auto_google_fonts && google_fonts_set.contains(family) {
-            if let Some(font_id) = family_to_id(family) {
-                html_fonts.push(FontForHtml {
-                    family: family.clone(),
-                    source: FontSource::Google { font_id },
-                });
+            if let Some(font) = google_font_for_html(family) {
+                html_fonts.push(font);
                 continue;
             }
         }
         // Fonts previously registered via register_google_fonts_font()
         if pre_registered.contains(family) {
-            if let Some(font_id) = family_to_id(family) {
-                html_fonts.push(FontForHtml {
-                    family: family.clone(),
-                    source: FontSource::Google { font_id },
-                });
+            if let Some(font) = google_font_for_html(family) {
+                html_fonts.push(font);
                 continue;
             }
         }
-        if available.contains(family) {
+        if is_available(family, &available) {
             if html_embed_local_fonts {
                 html_fonts.push(FontForHtml {
                     family: family.clone(),
@@ -3051,36 +3089,13 @@ async fn classify_scenegraph_fonts(
     // Report fonts that are neither in Google Fonts nor locally available.
     // This covers runtime-resolved families (signal/field-driven) that static
     // spec extraction cannot see.
-    if !unavailable.is_empty() {
-        let details: Vec<String> = unavailable.iter().map(|n| format!("'{n}'")).collect();
-        if missing_fonts == MissingFontsPolicy::Error {
-            if auto_google_fonts {
-                return Err(anyhow!(
-                    "auto_google_fonts: the following fonts are not available on the system \
-                     and not found in the Google Fonts catalog: {}",
-                    details.join(", ")
-                ));
-            } else {
-                return Err(anyhow!(
-                    "missing_fonts=error: the following fonts are not available on the system: {}. \
-                     Install them with register_google_fonts_font() or enable auto_google_fonts.",
-                    details.join(", ")
-                ));
-            }
-        }
-        if missing_fonts == MissingFontsPolicy::Warn {
-            for name in &unavailable {
-                if auto_google_fonts {
-                    log::warn!(
-                        "auto_google_fonts: font '{name}' is not available on the system \
-                         and not found in the Google Fonts catalog, skipping"
-                    );
-                } else {
-                    log::warn!("missing_fonts=warn: font '{name}' is not available on the system");
-                }
-            }
-        }
-    }
+    let unavailable_details: Vec<String> = unavailable.iter().map(|n| format!("'{n}'")).collect();
+    report_unavailable_fonts(
+        &unavailable,
+        &unavailable_details,
+        auto_google_fonts,
+        missing_fonts,
+    )?;
 
     Ok(html_fonts)
 }
@@ -6697,5 +6712,56 @@ try {
         )
         .await
         .unwrap();
+    }
+
+    #[test]
+    fn test_scenegraph_google_probe_candidates_skip_explicit_and_preregistered() {
+        let families = BTreeSet::from([
+            "Alpha".to_string(),
+            "Bravo".to_string(),
+            "Charlie".to_string(),
+        ]);
+        let explicit = HashSet::from(["Bravo".to_string()]);
+        let pre_registered = HashSet::from(["Charlie".to_string()]);
+
+        let candidates = scenegraph_google_probe_candidates(&families, &explicit, &pre_registered);
+
+        assert_eq!(candidates, BTreeSet::from(["Alpha".to_string()]));
+    }
+
+    #[tokio::test]
+    async fn test_classify_scenegraph_fonts_uses_case_insensitive_local_match() {
+        let available = available_font_families().unwrap();
+        let family = available
+            .iter()
+            .find(|name| name.chars().any(|c| c.is_ascii_alphabetic()))
+            .cloned()
+            .expect("expected at least one alphabetic font family in fontdb");
+        let alt_family = if family.to_ascii_uppercase() != family {
+            family.to_ascii_uppercase()
+        } else {
+            family.to_ascii_lowercase()
+        };
+
+        assert_ne!(
+            family, alt_family,
+            "test requires a case-changed family name"
+        );
+        assert!(is_available(&alt_family, &available));
+
+        let families = BTreeSet::from([alt_family.clone()]);
+        let result = classify_scenegraph_fonts(
+            &families,
+            false,
+            true,
+            MissingFontsPolicy::Fallback,
+            &HashSet::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].family, alt_family);
+        assert!(matches!(result[0].source, FontSource::Local));
     }
 }
