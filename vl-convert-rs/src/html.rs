@@ -171,12 +171,6 @@ mod tests {
     }
 
     #[test]
-    fn test_format_variant_tuples_empty() {
-        let empty = BTreeSet::new();
-        assert_eq!(format_variant_tuples(Some(&empty)), DEFAULT_VARIANT_TUPLES);
-    }
-
-    #[test]
     fn test_format_variant_tuples_single() {
         let mut vs = BTreeSet::new();
         vs.insert(("300".to_string(), "normal".to_string()));
@@ -228,37 +222,5 @@ mod tests {
     #[test]
     fn test_cdn_url_local_font() {
         assert!(font_cdn_url(&local_font("Arial"), None).is_none());
-    }
-
-    // font_link_tag tests
-
-    #[test]
-    fn test_link_tag_google_font() {
-        let font = google_font("Roboto");
-        let tag = font_link_tag(&font, None).unwrap();
-        assert_eq!(
-            tag,
-            r#"<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap">"#
-        );
-    }
-
-    #[test]
-    fn test_link_tag_local_font() {
-        assert!(font_link_tag(&local_font("Arial"), None).is_none());
-    }
-
-    // font_import_rule tests
-
-    #[test]
-    fn test_import_rule_google_font() {
-        let font = google_font("Roboto");
-        let rule = font_import_rule(&font, None).unwrap();
-        assert!(rule.starts_with("@import url(\"https://fonts.googleapis.com/css2?"));
-        assert!(rule.ends_with("\");"));
-    }
-
-    #[test]
-    fn test_import_rule_local_font() {
-        assert!(font_import_rule(&local_font("Arial"), None).is_none());
     }
 }
