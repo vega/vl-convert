@@ -4530,6 +4530,38 @@ impl VlConverter {
         auto_install: bool,
         embed_local: bool,
     ) -> Result<String, AnyError> {
+        // CDN fast path: when we only need <link> tags for explicitly provided
+        // Google Fonts, skip scenegraph rendering and V8 entirely.
+        if !bundle && !embed_local && !auto_install {
+            if let Some(ref requests) = vg_opts.google_fonts {
+                if !requests.is_empty() {
+                    let mut parts = Vec::new();
+                    for req in requests {
+                        if let Some(font_id) = family_to_id(&req.family) {
+                            let font = FontForHtml {
+                                family: req.family.clone(),
+                                source: FontSource::Google { font_id },
+                            };
+                            let variants_set: Option<BTreeSet<(String, String)>> =
+                                req.variants.as_ref().map(|vs| {
+                                    vs.iter()
+                                        .map(|v| {
+                                            (v.weight.to_string(), v.style.as_str().to_string())
+                                        })
+                                        .collect()
+                                });
+                            if let Some(tag) =
+                                font_link_tag(&font, variants_set.as_ref())
+                            {
+                                parts.push(format!("    {tag}\n"));
+                            }
+                        }
+                    }
+                    return Ok(parts.join(""));
+                }
+            }
+        }
+
         // Request font_face data when we'll need embedded CSS
         let include_font_face = bundle || embed_local;
         let fonts = self
