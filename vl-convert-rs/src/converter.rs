@@ -4530,36 +4530,82 @@ impl VlConverter {
         auto_install: bool,
         embed_local: bool,
     ) -> Result<String, AnyError> {
-        // CDN fast path: when we only need <link> tags for explicitly provided
-        // Google Fonts, skip scenegraph rendering and V8 entirely.
-        if !bundle && !embed_local && !auto_install {
+        // CDN-only fast path: when we don't need embedded @font-face blocks,
+        // build <link> tags from static spec analysis without rendering the
+        // scenegraph in V8.
+        if !bundle && !embed_local {
+            let mut parts = Vec::new();
+            let mut seen_families = HashSet::new();
+
+            // Explicit Google fonts from per-call requests
             if let Some(ref requests) = vg_opts.google_fonts {
-                if !requests.is_empty() {
-                    let mut parts = Vec::new();
-                    for req in requests {
-                        if let Some(font_id) = family_to_id(&req.family) {
-                            let font = FontForHtml {
-                                family: req.family.clone(),
-                                source: FontSource::Google { font_id },
-                            };
-                            let variants_set: Option<BTreeSet<(String, String)>> =
-                                req.variants.as_ref().map(|vs| {
-                                    vs.iter()
-                                        .map(|v| {
-                                            (v.weight.to_string(), v.style.as_str().to_string())
-                                        })
-                                        .collect()
-                                });
-                            if let Some(tag) =
-                                font_link_tag(&font, variants_set.as_ref())
-                            {
-                                parts.push(format!("    {tag}\n"));
+                for req in requests {
+                    if let Some(font_id) = family_to_id(&req.family) {
+                        seen_families.insert(req.family.clone());
+                        let font = FontForHtml {
+                            family: req.family.clone(),
+                            source: FontSource::Google { font_id },
+                        };
+                        let variants_set: Option<BTreeSet<(String, String)>> =
+                            req.variants.as_ref().map(|vs| {
+                                vs.iter()
+                                    .map(|v| (v.weight.to_string(), v.style.as_str().to_string()))
+                                    .collect()
+                            });
+                        if let Some(tag) = font_link_tag(&font, variants_set.as_ref()) {
+                            parts.push(format!("    {tag}\n"));
+                        }
+                    }
+                }
+            }
+
+            // Auto-detect additional Google fonts from static spec analysis
+            if auto_install {
+                let font_strings = extract_fonts_from_vega(&vega_spec);
+                let missing = self.inner.config.missing_fonts;
+                let auto_requests =
+                    classify_and_request_fonts(font_strings, true, missing, true).await?;
+                for req in &auto_requests {
+                    if !seen_families.insert(req.family.clone()) {
+                        continue;
+                    }
+                    if let Some(font_id) = family_to_id(&req.family) {
+                        let font = FontForHtml {
+                            family: req.family.clone(),
+                            source: FontSource::Google { font_id },
+                        };
+                        if let Some(tag) = font_link_tag(&font, None) {
+                            parts.push(format!("    {tag}\n"));
+                        }
+                    }
+                }
+            } else {
+                // Check pre-registered Google fonts that appear in the spec
+                let pre_registered = registered_google_families()?;
+                if !pre_registered.is_empty() {
+                    let font_strings = extract_fonts_from_vega(&vega_spec);
+                    for font_string in &font_strings {
+                        let entries = crate::extract::parse_css_font_family(font_string);
+                        if let Some(crate::extract::FontFamilyEntry::Named(ref name)) =
+                            entries.first()
+                        {
+                            if pre_registered.contains(name) && seen_families.insert(name.clone()) {
+                                if let Some(font_id) = family_to_id(name) {
+                                    let font = FontForHtml {
+                                        family: name.clone(),
+                                        source: FontSource::Google { font_id },
+                                    };
+                                    if let Some(tag) = font_link_tag(&font, None) {
+                                        parts.push(format!("    {tag}\n"));
+                                    }
+                                }
                             }
                         }
                     }
-                    return Ok(parts.join(""));
                 }
             }
+
+            return Ok(parts.join(""));
         }
 
         // Request font_face data when we'll need embedded CSS

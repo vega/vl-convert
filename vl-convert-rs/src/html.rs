@@ -72,8 +72,10 @@ import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
     bundle_script(script.to_string(), vl_version).await
 }
 
-/// Default weight/style tuples when the actual chart variants are unknown.
-const DEFAULT_VARIANT_TUPLES: &str = "0,400;0,700;1,400;1,700";
+/// Default CSS2 API axis range requesting all available weights for both
+/// normal and italic.  Browsers only download the variants actually used
+/// by the page, so requesting the full range has no bandwidth cost.
+const DEFAULT_VARIANT_TUPLES: &str = "0,100..900;1,100..900";
 
 /// Format (weight, style) pairs as CSS2 API `ital,wght@...` tuples.
 ///
@@ -199,7 +201,7 @@ mod tests {
         let url = font_cdn_url(&font, None).unwrap();
         assert_eq!(
             url,
-            "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+            "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap"
         );
     }
 
@@ -236,7 +238,7 @@ mod tests {
         let tag = font_link_tag(&font, None).unwrap();
         assert_eq!(
             tag,
-            r#"<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap">"#
+            r#"<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap">"#
         );
     }
 
