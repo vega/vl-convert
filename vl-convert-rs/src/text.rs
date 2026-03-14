@@ -1,7 +1,6 @@
 use crate::anyhow;
 use crate::anyhow::anyhow;
 use crate::image_loading::custom_string_resolver;
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -48,7 +47,6 @@ lazy_static! {
     );
     pub static ref USVG_OPTIONS: Mutex<usvg::Options<'static>> = Mutex::new(init_usvg_options());
     pub static ref GOOGLE_FONTS_CLIENT: GoogleFontsClient = GoogleFontsClient::default();
-    static ref REGISTERED_GOOGLE_FAMILIES: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
 }
 
 const LIBERATION_SANS_REGULAR: &[u8] =
@@ -335,11 +333,6 @@ pub async fn register_google_fonts_font(
         font_config.custom_fonts.extend(loaded_custom_fonts);
     }
 
-    REGISTERED_GOOGLE_FAMILIES
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire registered google families lock: {err}"))?
-        .insert(family.to_string());
-
     refresh_font_baseline_after_config_update()
 }
 
@@ -358,21 +351,7 @@ pub fn register_google_fonts_font_blocking(
         font_config.custom_fonts.extend(loaded_custom_fonts);
     }
 
-    REGISTERED_GOOGLE_FAMILIES
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire registered google families lock: {err}"))?
-        .insert(family.to_string());
-
     refresh_font_baseline_after_config_update()
-}
-
-/// Returns the set of font families that were registered via
-/// [`register_google_fonts_font`] or its blocking variant.
-pub fn registered_google_families() -> Result<HashSet<String>, anyhow::Error> {
-    Ok(REGISTERED_GOOGLE_FAMILIES
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire registered google families lock: {err}"))?
-        .clone())
 }
 
 /// Configure the max on-disk Google Fonts cache size in bytes.

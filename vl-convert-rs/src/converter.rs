@@ -48,7 +48,7 @@ use crate::extract::{
 };
 use crate::font_embed::{generate_font_face_css, inject_locale_chars, variants_by_family};
 use crate::text::{
-    build_usvg_options_with_fontdb, get_font_baseline_snapshot, registered_google_families,
+    build_usvg_options_with_fontdb, get_font_baseline_snapshot,
     FONT_CONFIG_VERSION, GOOGLE_FONTS_CLIENT, USVG_OPTIONS,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -2847,13 +2847,10 @@ fn auto_google_probe_candidates(
 fn scenegraph_google_probe_candidates(
     families: &BTreeSet<String>,
     explicit_google_families: &HashSet<String>,
-    pre_registered: &HashSet<String>,
 ) -> BTreeSet<String> {
     families
         .iter()
-        .filter(|family| {
-            !explicit_google_families.contains(*family) && !pre_registered.contains(*family)
-        })
+        .filter(|family| !explicit_google_families.contains(*family))
         .cloned()
         .collect()
 }
@@ -2979,14 +2976,11 @@ async fn classify_scenegraph_fonts(
     missing_fonts: MissingFontsPolicy,
     explicit_google_families: &HashSet<String>,
 ) -> Result<Vec<FontForHtml>, AnyError> {
-    let pre_registered = registered_google_families()?;
-
     if families.is_empty()
         || (!auto_google_fonts
             && !embed_local_fonts
             && missing_fonts == MissingFontsPolicy::Fallback
-            && explicit_google_families.is_empty()
-            && pre_registered.is_empty())
+            && explicit_google_families.is_empty())
     {
         return Ok(Vec::new());
     }
@@ -2995,7 +2989,7 @@ async fn classify_scenegraph_fonts(
 
     let google_fonts_set: HashSet<String> = if auto_google_fonts {
         let candidates =
-            scenegraph_google_probe_candidates(families, explicit_google_families, &pre_registered);
+            scenegraph_google_probe_candidates(families, explicit_google_families);
         google_font_catalog_matches(candidates.iter(), missing_fonts).await?
     } else {
         HashSet::new()
@@ -3012,13 +3006,6 @@ async fn classify_scenegraph_fonts(
             continue;
         }
         if auto_google_fonts && google_fonts_set.contains(family) {
-            if let Some(font) = google_font_for_html(family) {
-                html_fonts.push(font);
-                continue;
-            }
-        }
-        // Fonts previously registered via register_google_fonts_font()
-        if pre_registered.contains(family) {
             if let Some(font) = google_font_for_html(family) {
                 html_fonts.push(font);
                 continue;
@@ -4487,30 +4474,6 @@ impl VlConverter {
                         };
                         if let Some(tag) = font_link_tag(&font, None, None) {
                             parts.push(format!("    {tag}\n"));
-                        }
-                    }
-                }
-            } else {
-                // Check pre-registered Google fonts that appear in the spec
-                let pre_registered = registered_google_families()?;
-                if !pre_registered.is_empty() {
-                    let font_strings = extract_fonts_from_vega(&vega_spec);
-                    for font_string in &font_strings {
-                        let entries = crate::extract::parse_css_font_family(font_string);
-                        if let Some(crate::extract::FontFamilyEntry::Named(ref name)) =
-                            entries.first()
-                        {
-                            if pre_registered.contains(name) && seen_families.insert(name.clone()) {
-                                if let Some(font_id) = family_to_id(name) {
-                                    let font = FontForHtml {
-                                        family: name.clone(),
-                                        source: FontSource::Google { font_id },
-                                    };
-                                    if let Some(tag) = font_link_tag(&font, None, None) {
-                                        parts.push(format!("    {tag}\n"));
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -6779,18 +6742,20 @@ try {
     }
 
     #[test]
-    fn test_scenegraph_google_probe_candidates_skip_explicit_and_preregistered() {
+    fn test_scenegraph_google_probe_candidates_skip_explicit() {
         let families = BTreeSet::from([
             "Alpha".to_string(),
             "Bravo".to_string(),
             "Charlie".to_string(),
         ]);
         let explicit = HashSet::from(["Bravo".to_string()]);
-        let pre_registered = HashSet::from(["Charlie".to_string()]);
 
-        let candidates = scenegraph_google_probe_candidates(&families, &explicit, &pre_registered);
+        let candidates = scenegraph_google_probe_candidates(&families, &explicit);
 
-        assert_eq!(candidates, BTreeSet::from(["Alpha".to_string()]));
+        assert_eq!(
+            candidates,
+            BTreeSet::from(["Alpha".to_string(), "Charlie".to_string()])
+        );
     }
 
     #[tokio::test]
