@@ -142,6 +142,8 @@ def test_stacked_bar_bundle(page, update_baselines):
 
 
 def test_google_fonts_bundle(page, update_baselines):
+    vlc.register_google_fonts_font("Bangers")
+    vlc.register_google_fonts_font("Lugrasimo")
     vlc.configure(auto_google_fonts=True)
     html = vlc.vegalite_to_html(load_spec_inline("google_fonts"), bundle=True)
     screenshot = render_html(page, html, block_network=True)
@@ -149,6 +151,8 @@ def test_google_fonts_bundle(page, update_baselines):
 
 
 def test_google_fonts_cdn(page, update_baselines):
+    vlc.register_google_fonts_font("Bangers")
+    vlc.register_google_fonts_font("Lugrasimo")
     vlc.configure(auto_google_fonts=True)
     html = vlc.vegalite_to_html(load_spec_inline("google_fonts"), bundle=False)
     screenshot = render_html(page, html, block_network=False)
@@ -159,7 +163,7 @@ def test_google_fonts_cdn(page, update_baselines):
 
 
 def test_pacifico_bundle(page, update_baselines):
-    vlc.configure(auto_google_fonts=True)
+    vlc.register_google_fonts_font("Pacifico")
     html = vlc.vegalite_to_html(load_spec("pacifico_title"), bundle=True)
     screenshot = render_html(page, html, block_network=True)
     compare_screenshot(screenshot, "pacifico_bundle.png", update_baselines)

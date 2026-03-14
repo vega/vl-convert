@@ -14,6 +14,6 @@
   },
   "title": "Pacifico Font Test",
   "config": {
-    "title": {"font": "Pacifico", "fontSize": 24}
+    "title": {"font": "Pacifico", "fontSize": 24, "fontWeight": 400}
   }
 }
