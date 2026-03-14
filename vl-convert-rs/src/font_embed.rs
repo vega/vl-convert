@@ -147,8 +147,9 @@ pub fn inject_locale_chars(
 
 /// Compute the set of (weight, style) variants used per font family.
 ///
-/// Used to build accurate Google Fonts CSS2 API URLs that request only the
-/// weight/style tuples the chart actually renders.
+/// Used by `vega_fonts`/`vegalite_fonts` to populate `FontInfo.variants` and
+/// build CSS2 API URLs with the specific tuples the chart renders. (The HTML
+/// CDN fast path bypasses this and requests the full weight range instead.)
 pub fn variants_by_family(
     chars_by_key: &HashMap<FontKey, BTreeSet<char>>,
 ) -> HashMap<String, BTreeSet<(String, String)>> {
@@ -225,11 +226,14 @@ fn generate_google_fonts_css(
                     font_id
                 ));
             }
-            _ => {
+            MissingFontsPolicy::Warn => {
                 log::warn!(
                     "font_embed: no loaded data for '{}', skipping",
                     font_info.family
                 );
+                return Ok(());
+            }
+            MissingFontsPolicy::Fallback => {
                 return Ok(());
             }
         }
@@ -280,13 +284,16 @@ fn generate_google_fonts_css(
                             font_key.style
                         ));
                     }
-                    _ => {
+                    MissingFontsPolicy::Warn => {
                         log::warn!(
                             "font_embed: no data for {} weight={} style={}, skipping",
                             font_key.family,
                             font_key.weight,
                             font_key.style
                         );
+                        continue;
+                    }
+                    MissingFontsPolicy::Fallback => {
                         continue;
                     }
                 },
@@ -318,13 +325,14 @@ fn generate_google_fonts_css(
                         e
                     ));
                 }
-                _ => {
+                MissingFontsPolicy::Warn => {
                     log::warn!(
                         "font_embed: failed to subset '{}': {}, skipping",
                         font_info.family,
                         e
                     );
                 }
+                MissingFontsPolicy::Fallback => {}
             },
         }
     }
@@ -390,13 +398,15 @@ fn generate_local_font_css(
                     }
                 }
                 None => {
-                    log::warn!(
-                        "font_embed: fontdb could not provide face data for '{}'",
-                        font_info.family
-                    );
+                    if matches!(mode, MissingFontsPolicy::Warn) {
+                        log::warn!(
+                            "font_embed: fontdb could not provide face data for '{}'",
+                            font_info.family
+                        );
+                    }
                 }
             }
-        } else {
+        } else if matches!(mode, MissingFontsPolicy::Warn) {
             log::warn!(
                 "font_embed: no fontdb match for '{}' weight={} style={}",
                 font_info.family,
