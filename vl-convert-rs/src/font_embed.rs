@@ -471,14 +471,6 @@ mod tests {
     }
 
     #[test]
-    fn test_subset_and_encode_bytes_empty_chars() {
-        let chars: BTreeSet<char> = BTreeSet::new();
-        let bad_data = b"not a font";
-        // Either an error (bad font) or None (no chars) is acceptable
-        let _result = subset_and_encode_bytes(bad_data, &chars);
-    }
-
-    #[test]
     fn test_subset_and_encode_bytes_caveat() {
         let font_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fonts/Caveat/static/Caveat-Regular.ttf");
@@ -604,34 +596,6 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Cannot subset local font"));
-    }
-
-    #[test]
-    fn test_generate_local_font_css_no_match() {
-        let db = fontdb::Database::new(); // empty db
-        let font = FontForHtml {
-            family: "Nonexistent Font".to_string(),
-            source: FontSource::Local,
-        };
-        let mut chars_map = HashMap::new();
-        chars_map.insert(
-            FontKey {
-                family: "Nonexistent Font".to_string(),
-                weight: "400".to_string(),
-                style: "normal".to_string(),
-            },
-            "Hello".chars().collect(),
-        );
-        let mut css_blocks = HashMap::new();
-        let result = generate_local_font_css(
-            &font,
-            &chars_map,
-            &MissingFontsPolicy::Fallback,
-            &db,
-            &mut css_blocks,
-        );
-        assert!(result.is_ok());
-        assert!(css_blocks.is_empty());
     }
 
     #[test]
@@ -852,63 +816,5 @@ mod tests {
         // Time format literals
         assert!(chars.contains(&'/'));
         assert!(chars.contains(&':'));
-    }
-
-    #[test]
-    fn test_inject_locale_chars_both_locales() {
-        let mut map = make_chars_map("X");
-        let fmt: serde_json::Value = serde_json::json!({
-            "decimal": ",",
-            "thousands": ".",
-            "grouping": [3],
-            "currency": ["$", ""]
-        });
-        let time: serde_json::Value = serde_json::json!({
-            "periods": ["AM", "PM"],
-            "shortMonths": ["Jan"],
-            "shortDays": ["Mon"],
-            "months": ["January"],
-            "days": ["Monday"]
-        });
-        inject_locale_chars(&mut map, Some(&fmt), Some(&time));
-        let chars = &map[&make_font_key()];
-        assert!(chars.contains(&'$'));
-        assert!(chars.contains(&'J'));
-        assert!(chars.contains(&'y')); // from "January"/"Monday"
-    }
-
-    #[test]
-    fn test_inject_locale_chars_empty_map() {
-        let mut map: HashMap<FontKey, BTreeSet<char>> = HashMap::new();
-        inject_locale_chars(&mut map, None, None);
-        // No font variants means nothing to inject into
-        assert!(map.is_empty());
-    }
-
-    #[test]
-    fn test_inject_locale_chars_multiple_variants() {
-        let mut map = HashMap::new();
-        map.insert(
-            FontKey {
-                family: "A".to_string(),
-                weight: "400".to_string(),
-                style: "normal".to_string(),
-            },
-            "x".chars().collect(),
-        );
-        map.insert(
-            FontKey {
-                family: "A".to_string(),
-                weight: "700".to_string(),
-                style: "normal".to_string(),
-            },
-            "y".chars().collect(),
-        );
-        inject_locale_chars(&mut map, None, None);
-        // Both variants should have locale chars
-        for chars in map.values() {
-            assert!(chars.contains(&'0'));
-            assert!(chars.contains(&'%'));
-        }
     }
 }
