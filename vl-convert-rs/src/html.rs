@@ -26,11 +26,9 @@ pub fn get_vega_or_vegalite_script(
 {{
     const spec = {spec_json};
     {opts}
-    window.addEventListener('load', () => {{
-        const loads = [];
-        for (const face of document.fonts) loads.push(face.load());
-        Promise.all(loads).then(() => vegaEmbed('#{chart_id}', spec, opts).catch(console.error));
-    }});
+    Promise.all([...document.fonts].map(f => f.load()))
+        .then(() => vegaEmbed('#{chart_id}', spec, opts))
+        .catch(console.error);
 }}
 "##,
     );
