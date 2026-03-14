@@ -59,15 +59,140 @@ pub fn aggregate_chars_by_font_key(
         }
     }
 
-    // Always include digits 0-9 in every font variant so that pan/zoom
-    // interactions can render axis labels that weren't in the initial view.
-    for chars in result.values_mut() {
-        for d in '0'..='9' {
-            chars.insert(d);
+    // Inject default formatting characters (digits, separators, etc.) so that
+    // pan/zoom interactions can render axis labels that weren't in the initial view.
+    inject_locale_chars(&mut result, None, None);
+
+    result
+}
+
+/// Extract all characters from a JSON string or array-of-strings field.
+fn extract_chars_from_value(value: &serde_json::Value, chars: &mut BTreeSet<char>) {
+    match value {
+        serde_json::Value::String(s) => {
+            for ch in s.chars() {
+                chars.insert(ch);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                if let serde_json::Value::String(s) = item {
+                    for ch in s.chars() {
+                        chars.insert(ch);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Inject locale-aware characters into every font variant so that pan/zoom
+/// interactions can render axis labels that weren't in the initial view.
+///
+/// Resolves the format and time-format locales to concrete JSON objects,
+/// defaulting to en-US when not provided. Extracts all characters that D3's
+/// formatters might produce: digits (or locale `numerals`), decimal/thousands
+/// separators, currency symbols, minus/percent signs, month/day names, etc.
+///
+/// A small set of characters not covered by any locale (scientific notation
+/// `e`/`E`, sign `+`, padding space, `NaN`) is always included.
+pub fn inject_locale_chars(
+    chars_by_key: &mut HashMap<FontKey, BTreeSet<char>>,
+    format_locale: Option<&serde_json::Value>,
+    time_format_locale: Option<&serde_json::Value>,
+) {
+    use crate::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
+
+    // Resolve to concrete locale JSON, defaulting to en-US.
+    let default_fmt: serde_json::Value;
+    let fmt_locale = match format_locale {
+        Some(v) => v,
+        None => {
+            default_fmt = FORMATE_LOCALE_MAP
+                .get("en-US")
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+            &default_fmt
+        }
+    };
+    let default_time: serde_json::Value;
+    let time_locale = match time_format_locale {
+        Some(v) => v,
+        None => {
+            default_time = TIME_FORMATE_LOCALE_MAP
+                .get("en-US")
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+            &default_time
+        }
+    };
+
+    let mut locale_chars: BTreeSet<char> = BTreeSet::new();
+
+    // Characters not covered by any locale but used by D3 formatting:
+    // scientific notation and sign padding.
+    for ch in ['+', ' ', 'e', 'E'] {
+        locale_chars.insert(ch);
+    }
+
+    // Format locale: digits, numerals, separators, currency, signs.
+    // Always include ASCII 0-9 because d3-time-format uses them regardless
+    // of formatLocale.numerals. Additionally include locale numerals when
+    // present (they replace ASCII digits in d3-format number output).
+    for d in '0'..='9' {
+        locale_chars.insert(d);
+    }
+    if let Some(numerals) = fmt_locale.get("numerals") {
+        extract_chars_from_value(numerals, &mut locale_chars);
+    }
+    for field in ["decimal", "thousands", "currency"] {
+        if let Some(val) = fmt_locale.get(field) {
+            extract_chars_from_value(val, &mut locale_chars);
+        }
+    }
+    // D3 defaults for optional format locale fields
+    if let Some(val) = fmt_locale.get("minus") {
+        extract_chars_from_value(val, &mut locale_chars);
+    } else {
+        locale_chars.insert('\u{2212}');
+        locale_chars.insert('-');
+    }
+    if let Some(val) = fmt_locale.get("percent") {
+        extract_chars_from_value(val, &mut locale_chars);
+    } else {
+        locale_chars.insert('%');
+    }
+    if let Some(val) = fmt_locale.get("nan") {
+        extract_chars_from_value(val, &mut locale_chars);
+    } else {
+        for ch in "NaN".chars() {
+            locale_chars.insert(ch);
         }
     }
 
-    result
+    // Time format locale: format template literals (dateTime/date/time contain
+    // punctuation like "/" and ":" that appear in rendered labels) plus
+    // period/month/day name strings.
+    for field in [
+        "dateTime",
+        "date",
+        "time",
+        "periods",
+        "shortMonths",
+        "shortDays",
+        "months",
+        "days",
+    ] {
+        if let Some(val) = time_locale.get(field) {
+            extract_chars_from_value(val, &mut locale_chars);
+        }
+    }
+
+    // Inject into every font variant
+    for chars in chars_by_key.values_mut() {
+        chars.extend(&locale_chars);
+    }
 }
 
 /// Compute the set of (weight, style) variants used per font family.
@@ -87,47 +212,8 @@ pub fn variants_by_family(
     result
 }
 
-/// Parse `@font-face` CSS blocks (produced by [`generate_font_face_css`]) into
-/// a `(family, weight, style) → CSS block` index.
-///
-/// This relies on the known format produced by [`format_font_face_block`]:
-/// ```css
-/// @font-face {
-///   font-family: "Roboto";
-///   font-weight: 400;
-///   font-style: normal;
-///   src: url(...) format("woff2");
-/// }
-/// ```
-pub fn index_font_face_blocks(css_blocks: &[String]) -> HashMap<(String, String, String), String> {
-    let mut index = HashMap::new();
-    for block in css_blocks {
-        let family = extract_css_value(block, "font-family:");
-        let weight = extract_css_value(block, "font-weight:");
-        let style = extract_css_value(block, "font-style:");
-        if let (Some(family), Some(weight), Some(style)) = (family, weight, style) {
-            index.insert((family, weight, style), block.clone());
-        }
-    }
-    index
-}
-
-/// Extract a CSS property value from a `@font-face` block.
-/// Handles both quoted (`"Roboto"`) and unquoted (`400`) values.
-fn extract_css_value(block: &str, property: &str) -> Option<String> {
-    let start = block.find(property)? + property.len();
-    let rest = &block[start..];
-    let end = rest.find(';')?;
-    let value = rest[..end].trim();
-    // Strip surrounding quotes if present
-    let value = value
-        .strip_prefix('"')
-        .and_then(|v| v.strip_suffix('"'))
-        .unwrap_or(value);
-    Some(value.to_string())
-}
-
-/// Generate `@font-face` CSS blocks with subsetted WOFF2 fonts.
+/// Generate `@font-face` CSS blocks with subsetted WOFF2 fonts, indexed by
+/// `(family, weight, style)`.
 ///
 /// For each (family, weight, style) in `chars_by_font_key` that matches a
 /// font in `html_fonts`, locates the font data (from Google Fonts loaded
@@ -139,8 +225,8 @@ pub fn generate_font_face_css(
     mode: &MissingFontsPolicy,
     fontdb: &fontdb::Database,
     loaded_batches: &[LoadedFontBatch],
-) -> Result<Vec<String>, anyhow::Error> {
-    let mut css_blocks = Vec::new();
+) -> Result<HashMap<FontKey, String>, anyhow::Error> {
+    let mut css_blocks = HashMap::new();
 
     for font_info in html_fonts {
         match &font_info.source {
@@ -176,7 +262,7 @@ fn generate_google_fonts_css(
     chars_by_font_key: &HashMap<FontKey, BTreeSet<char>>,
     mode: &MissingFontsPolicy,
     loaded_batches: &[LoadedFontBatch],
-    css_blocks: &mut Vec<String>,
+    css_blocks: &mut HashMap<FontKey, String>,
 ) -> Result<(), anyhow::Error> {
     // Find the matching batch for this font_id
     let batch = loaded_batches.iter().find(|b| b.font_id == font_id);
@@ -259,12 +345,15 @@ fn generate_google_fonts_css(
 
         match subset_and_encode_bytes(ttf_data, chars) {
             Ok(Some(artifact)) => {
-                css_blocks.push(format_font_face_block(
-                    &font_info.family,
-                    &font_key.weight,
-                    &font_key.style,
-                    &artifact.woff2_b64,
-                ));
+                css_blocks.insert(
+                    font_key.clone(),
+                    format_font_face_block(
+                        &font_info.family,
+                        &font_key.weight,
+                        &font_key.style,
+                        &artifact.woff2_b64,
+                    ),
+                );
             }
             Ok(None) => {
                 // Font didn't cover any of the requested characters
@@ -299,7 +388,7 @@ fn generate_local_font_css(
     chars_by_font_key: &HashMap<FontKey, BTreeSet<char>>,
     mode: &MissingFontsPolicy,
     fontdb: &fontdb::Database,
-    css_blocks: &mut Vec<String>,
+    css_blocks: &mut HashMap<FontKey, String>,
 ) -> Result<(), anyhow::Error> {
     for (font_key, chars) in chars_by_font_key {
         if font_key.family != font_info.family || chars.is_empty() {
@@ -325,12 +414,15 @@ fn generate_local_font_css(
             });
             match result {
                 Some(Ok(Some(artifact))) => {
-                    css_blocks.push(format_font_face_block(
-                        &font_info.family,
-                        &font_key.weight,
-                        &font_key.style,
-                        &artifact.woff2_b64,
-                    ));
+                    css_blocks.insert(
+                        font_key.clone(),
+                        format_font_face_block(
+                            &font_info.family,
+                            &font_key.weight,
+                            &font_key.style,
+                            &artifact.woff2_b64,
+                        ),
+                    );
                 }
                 Some(Ok(None)) => {
                     // Font didn't cover any of the requested characters
@@ -426,8 +518,14 @@ mod tests {
             weight: "400".to_string(),
             style: "normal".to_string(),
         };
-        let chars: BTreeSet<char> = "Hello0123456789".chars().collect();
-        assert_eq!(result[&key], chars);
+        // Should include "Hello" + D3 default formatting chars
+        assert!(result[&key].contains(&'H'));
+        assert!(result[&key].contains(&'0'));
+        assert!(result[&key].contains(&'9'));
+        assert!(result[&key].contains(&'.'));
+        assert!(result[&key].contains(&','));
+        assert!(result[&key].contains(&'%'));
+        assert!(result[&key].contains(&'\u{2212}')); // minus sign
     }
 
     #[test]
@@ -465,8 +563,10 @@ mod tests {
             weight: "400".to_string(),
             style: "normal".to_string(),
         };
-        let chars: BTreeSet<char> = "HeloWorld0123456789".chars().collect();
-        assert_eq!(result[&key], chars);
+        // Should include "HeloWorld" + D3 default formatting chars
+        for ch in "HeloWorld0123456789".chars() {
+            assert!(result[&key].contains(&ch), "missing char: {ch}");
+        }
     }
 
     #[test]
@@ -559,7 +659,7 @@ mod tests {
             },
             "Hello".chars().collect(),
         );
-        let mut css_blocks = Vec::new();
+        let mut css_blocks = HashMap::new();
         let result = generate_local_font_css(
             &font,
             &chars_map,
@@ -569,7 +669,12 @@ mod tests {
         );
         assert!(result.is_ok());
         assert_eq!(css_blocks.len(), 1);
-        let block = &css_blocks[0];
+        let key = FontKey {
+            family: "Caveat".to_string(),
+            weight: "400".to_string(),
+            style: "normal".to_string(),
+        };
+        let block = &css_blocks[&key];
         assert!(block.contains("font-family: \"Caveat\""));
         assert!(block.contains("font-weight: 400"));
         assert!(block.contains("font-style: normal"));
@@ -592,7 +697,7 @@ mod tests {
             },
             "Hello".chars().collect(),
         );
-        let mut css_blocks = Vec::new();
+        let mut css_blocks = HashMap::new();
         let result = generate_local_font_css(
             &font,
             &chars_map,
@@ -621,7 +726,7 @@ mod tests {
             },
             "Hello".chars().collect(),
         );
-        let mut css_blocks = Vec::new();
+        let mut css_blocks = HashMap::new();
         let result = generate_local_font_css(
             &font,
             &chars_map,
@@ -650,7 +755,7 @@ mod tests {
             },
             "Hello".chars().collect(),
         );
-        let mut css_blocks = Vec::new();
+        let mut css_blocks = HashMap::new();
         let result = generate_local_font_css(
             &font,
             &chars_map,
@@ -688,8 +793,13 @@ mod tests {
         assert!(result.is_ok());
         let blocks = result.unwrap();
         assert_eq!(blocks.len(), 1);
-        assert!(blocks[0].contains("font-family: \"Caveat\""));
-        assert!(blocks[0].contains("data:font/woff2;base64,"));
+        let key = FontKey {
+            family: "Caveat".to_string(),
+            weight: "400".to_string(),
+            style: "normal".to_string(),
+        };
+        assert!(blocks[&key].contains("font-family: \"Caveat\""));
+        assert!(blocks[&key].contains("data:font/woff2;base64,"));
     }
 
     #[test]
@@ -717,5 +827,221 @@ mod tests {
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
+    }
+
+    fn make_font_key() -> FontKey {
+        FontKey {
+            family: "TestFont".to_string(),
+            weight: "400".to_string(),
+            style: "normal".to_string(),
+        }
+    }
+
+    fn make_chars_map(text: &str) -> HashMap<FontKey, BTreeSet<char>> {
+        let mut map = HashMap::new();
+        map.insert(make_font_key(), text.chars().collect());
+        map
+    }
+
+    #[test]
+    fn test_inject_locale_chars_defaults_only() {
+        let mut map = make_chars_map("Hello");
+        inject_locale_chars(&mut map, None, None);
+        let chars = &map[&make_font_key()];
+        // Original chars preserved
+        assert!(chars.contains(&'H'));
+        assert!(chars.contains(&'o'));
+        // Digits
+        for d in '0'..='9' {
+            assert!(chars.contains(&d), "missing digit: {d}");
+        }
+        // Separators and formatting
+        assert!(chars.contains(&'.'));
+        assert!(chars.contains(&','));
+        assert!(chars.contains(&'-'));
+        assert!(chars.contains(&'+'));
+        assert!(chars.contains(&'%'));
+        assert!(chars.contains(&' '));
+        assert!(chars.contains(&'e'));
+        assert!(chars.contains(&'E'));
+        assert!(chars.contains(&'\u{2212}')); // minus sign
+                                              // NaN
+        assert!(chars.contains(&'N'));
+        assert!(chars.contains(&'a'));
+    }
+
+    #[test]
+    fn test_inject_locale_chars_arabic_format() {
+        let mut map = make_chars_map("X");
+        let locale: serde_json::Value = serde_json::json!({
+            "decimal": "\u{066b}",
+            "thousands": "\u{066c}",
+            "grouping": [3],
+            "currency": ["", ""],
+            "numerals": ["\u{0660}", "\u{0661}", "\u{0662}", "\u{0663}", "\u{0664}",
+                         "\u{0665}", "\u{0666}", "\u{0667}", "\u{0668}", "\u{0669}"]
+        });
+        inject_locale_chars(&mut map, Some(&locale), None);
+        let chars = &map[&make_font_key()];
+        // Arabic-Indic decimal and thousands separators
+        assert!(chars.contains(&'\u{066b}'));
+        assert!(chars.contains(&'\u{066c}'));
+        // Arabic-Indic numerals
+        assert!(chars.contains(&'\u{0660}'));
+        assert!(chars.contains(&'\u{0669}'));
+        // ASCII digits still included (needed for d3-time-format)
+        assert!(chars.contains(&'0'));
+    }
+
+    #[test]
+    fn test_inject_locale_chars_european_format() {
+        let mut map = make_chars_map("X");
+        let locale: serde_json::Value = serde_json::json!({
+            "decimal": ",",
+            "thousands": ".",
+            "grouping": [3],
+            "currency": ["", "\u{00a0}€"]
+        });
+        inject_locale_chars(&mut map, Some(&locale), None);
+        let chars = &map[&make_font_key()];
+        // Euro sign and non-breaking space from currency suffix
+        assert!(chars.contains(&'€'));
+        assert!(chars.contains(&'\u{00a0}'));
+    }
+
+    #[test]
+    fn test_inject_locale_chars_french_percent() {
+        let mut map = make_chars_map("X");
+        let locale: serde_json::Value = serde_json::json!({
+            "decimal": ",",
+            "thousands": "\u{00a0}",
+            "grouping": [3],
+            "currency": ["", "\u{00a0}€"],
+            "percent": "\u{202f}%"
+        });
+        inject_locale_chars(&mut map, Some(&locale), None);
+        let chars = &map[&make_font_key()];
+        // Narrow no-break space from percent field
+        assert!(chars.contains(&'\u{202f}'));
+    }
+
+    #[test]
+    fn test_inject_locale_chars_time_format() {
+        let mut map = make_chars_map("X");
+        let locale: serde_json::Value = serde_json::json!({
+            "dateTime": "%A, der %e. %B %Y, %X",
+            "date": "%d.%m.%Y",
+            "time": "%H:%M:%S",
+            "periods": ["AM", "PM"],
+            "days": ["Sonntag", "Montag"],
+            "shortDays": ["So", "Mo"],
+            "months": ["März"],
+            "shortMonths": ["Mrz"]
+        });
+        inject_locale_chars(&mut map, None, Some(&locale));
+        let chars = &map[&make_font_key()];
+        // German month with umlaut
+        assert!(chars.contains(&'ä'));
+        // Day/month name chars
+        assert!(chars.contains(&'S'));
+        assert!(chars.contains(&'o'));
+        // AM/PM
+        assert!(chars.contains(&'A'));
+        assert!(chars.contains(&'M'));
+        assert!(chars.contains(&'P'));
+        // Literals from date/time format strings
+        assert!(chars.contains(&':')); // from time: "%H:%M:%S"
+    }
+
+    #[test]
+    fn test_inject_locale_chars_arabic_numerals_with_time() {
+        let mut map = make_chars_map("X");
+        let fmt: serde_json::Value = serde_json::json!({
+            "decimal": "\u{066b}",
+            "thousands": "\u{066c}",
+            "grouping": [3],
+            "currency": ["", ""],
+            "numerals": ["\u{0660}", "\u{0661}", "\u{0662}", "\u{0663}", "\u{0664}",
+                         "\u{0665}", "\u{0666}", "\u{0667}", "\u{0668}", "\u{0669}"]
+        });
+        let time: serde_json::Value = serde_json::json!({
+            "dateTime": "%x, %X",
+            "date": "%-m/%-d/%Y",
+            "time": "%-I:%M:%S %p",
+            "periods": ["AM", "PM"],
+            "shortMonths": ["Jan"],
+            "shortDays": ["Sun"],
+            "months": ["January"],
+            "days": ["Sunday"]
+        });
+        inject_locale_chars(&mut map, Some(&fmt), Some(&time));
+        let chars = &map[&make_font_key()];
+        // Arabic-Indic numerals for number formatting
+        assert!(chars.contains(&'\u{0660}'));
+        assert!(chars.contains(&'\u{0669}'));
+        // ASCII digits still needed for d3-time-format (%d, %H, %M, %S)
+        assert!(chars.contains(&'0'));
+        assert!(chars.contains(&'9'));
+        // Time format literals
+        assert!(chars.contains(&'/'));
+        assert!(chars.contains(&':'));
+    }
+
+    #[test]
+    fn test_inject_locale_chars_both_locales() {
+        let mut map = make_chars_map("X");
+        let fmt: serde_json::Value = serde_json::json!({
+            "decimal": ",",
+            "thousands": ".",
+            "grouping": [3],
+            "currency": ["$", ""]
+        });
+        let time: serde_json::Value = serde_json::json!({
+            "periods": ["AM", "PM"],
+            "shortMonths": ["Jan"],
+            "shortDays": ["Mon"],
+            "months": ["January"],
+            "days": ["Monday"]
+        });
+        inject_locale_chars(&mut map, Some(&fmt), Some(&time));
+        let chars = &map[&make_font_key()];
+        assert!(chars.contains(&'$'));
+        assert!(chars.contains(&'J'));
+        assert!(chars.contains(&'y')); // from "January"/"Monday"
+    }
+
+    #[test]
+    fn test_inject_locale_chars_empty_map() {
+        let mut map: HashMap<FontKey, BTreeSet<char>> = HashMap::new();
+        inject_locale_chars(&mut map, None, None);
+        // No font variants means nothing to inject into
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn test_inject_locale_chars_multiple_variants() {
+        let mut map = HashMap::new();
+        map.insert(
+            FontKey {
+                family: "A".to_string(),
+                weight: "400".to_string(),
+                style: "normal".to_string(),
+            },
+            "x".chars().collect(),
+        );
+        map.insert(
+            FontKey {
+                family: "A".to_string(),
+                weight: "700".to_string(),
+                style: "normal".to_string(),
+            },
+            "y".chars().collect(),
+        );
+        inject_locale_chars(&mut map, None, None);
+        // Both variants should have locale chars
+        for chars in map.values() {
+            assert!(chars.contains(&'0'));
+            assert!(chars.contains(&'%'));
+        }
     }
 }

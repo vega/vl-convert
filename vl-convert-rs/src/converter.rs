@@ -46,7 +46,7 @@ use crate::extract::{
     extract_fonts_from_vega, extract_text_by_font, is_available, resolve_first_fonts,
     FirstFontStatus, FontForHtml, FontInfo, FontKey, FontSource, FontVariant,
 };
-use crate::font_embed::{generate_font_face_css, index_font_face_blocks, variants_by_family};
+use crate::font_embed::{generate_font_face_css, inject_locale_chars, variants_by_family};
 use crate::text::{
     build_usvg_options_with_fontdb, get_font_baseline_snapshot, registered_google_families,
     FONT_CONFIG_VERSION, GOOGLE_FONTS_CLIENT, USVG_OPTIONS,
@@ -4285,10 +4285,16 @@ impl VlConverter {
     ) -> Result<HtmlFontAnalysis, AnyError> {
         let missing = self.inner.config.missing_fonts;
 
-        // Clone explicit google_fonts for later merging — the originals
-        // stay in vg_opts so the render loads them into fontdb for
-        // accurate text measurement.
+        // Clone fields we need after vg_opts is consumed by render.
         let explicit_requests = vg_opts.google_fonts.clone();
+        let format_locale_value = vg_opts
+            .format_locale
+            .as_ref()
+            .and_then(|l| l.as_object().ok());
+        let time_format_locale_value = vg_opts
+            .time_format_locale
+            .as_ref()
+            .and_then(|l| l.as_object().ok());
 
         // Render scenegraph using the per-call auto_google_fonts flag.
         let sg = self
@@ -4297,7 +4303,16 @@ impl VlConverter {
         let sg_root = sg.get("scenegraph").unwrap_or(&sg);
 
         // Walk scenegraph in Rust — no separate JS call needed.
-        let chars_by_key = extract_text_by_font(sg_root);
+        let mut chars_by_key = extract_text_by_font(sg_root);
+
+        // Inject locale-aware characters so that pan/zoom interactions can
+        // render axis labels with locale-specific formatting (e.g. non-ASCII
+        // decimal separators, currency symbols, month/day names).
+        inject_locale_chars(
+            &mut chars_by_key,
+            format_locale_value.as_ref(),
+            time_format_locale_value.as_ref(),
+        );
 
         // Collect unique family names from the scenegraph
         let families: BTreeSet<String> = chars_by_key.keys().map(|k| k.family.clone()).collect();
@@ -4398,53 +4413,47 @@ impl VlConverter {
 
         // If font_face is requested, run the subsetting pipeline to get
         // per-variant CSS blocks indexed by (family, weight, style).
-        let font_face_index: HashMap<(String, String, String), String> = if include_font_face
-            && !html_fonts.is_empty()
-        {
-            // Build Google Font requests with specific variants from the
-            // scenegraph — only download what the chart actually uses.
-            let google_font_requests: Vec<GoogleFontRequest> = html_fonts
-                .iter()
-                .filter_map(|f| match &f.source {
-                    FontSource::Google { .. } => {
-                        let variants = family_variants.get(&f.family).map(|vs| {
-                            vs.iter()
-                                .map(|(w, s)| VariantRequest {
-                                    weight: w.parse().unwrap_or(400),
-                                    style: s.parse().unwrap_or(FontStyle::Normal),
-                                })
-                                .collect::<Vec<_>>()
-                        });
-                        Some(GoogleFontRequest {
-                            family: f.family.clone(),
-                            variants,
-                        })
-                    }
-                    _ => None,
-                })
-                .collect();
-            let batches = if google_font_requests.is_empty() {
-                Vec::new()
+        let font_face_index: HashMap<FontKey, String> =
+            if include_font_face && !html_fonts.is_empty() {
+                // Build Google Font requests with specific variants from the
+                // scenegraph — only download what the chart actually uses.
+                let google_font_requests: Vec<GoogleFontRequest> = html_fonts
+                    .iter()
+                    .filter_map(|f| match &f.source {
+                        FontSource::Google { .. } => {
+                            let variants = family_variants.get(&f.family).map(|vs| {
+                                vs.iter()
+                                    .map(|(w, s)| VariantRequest {
+                                        weight: w.parse().unwrap_or(400),
+                                        style: s.parse().unwrap_or(FontStyle::Normal),
+                                    })
+                                    .collect::<Vec<_>>()
+                            });
+                            Some(GoogleFontRequest {
+                                family: f.family.clone(),
+                                variants,
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                let batches = if google_font_requests.is_empty() {
+                    Vec::new()
+                } else {
+                    self.resolve_google_fonts(Some(google_font_requests))
+                        .await?
+                };
+
+                let missing = self.inner.config.missing_fonts;
+                let fontdb = USVG_OPTIONS
+                    .lock()
+                    .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
+                    .fontdb
+                    .clone();
+                generate_font_face_css(&chars_by_key, &html_fonts, &missing, &fontdb, &batches)?
             } else {
-                self.resolve_google_fonts(Some(google_font_requests))
-                    .await?
+                HashMap::new()
             };
-
-            let missing = self.inner.config.missing_fonts;
-            let fontdb = USVG_OPTIONS
-                .lock()
-                .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
-                .fontdb
-                .clone();
-            let css_blocks =
-                generate_font_face_css(&chars_by_key, &html_fonts, &missing, &fontdb, &batches)?;
-
-            // Index the flat CSS blocks by (family, weight, style) so we can
-            // attach them to the correct FontVariant below.
-            index_font_face_blocks(&css_blocks)
-        } else {
-            HashMap::new()
-        };
 
         // Build FontInfo for each font family.
         let results: Vec<FontInfo> = html_fonts
@@ -4460,9 +4469,12 @@ impl VlConverter {
                         vs.iter()
                             .map(|(w, s)| {
                                 let font_face = if include_font_face {
-                                    font_face_index
-                                        .get(&(f.family.clone(), w.clone(), s.clone()))
-                                        .cloned()
+                                    let key = FontKey {
+                                        family: f.family.clone(),
+                                        weight: w.clone(),
+                                        style: s.clone(),
+                                    };
+                                    font_face_index.get(&key).cloned()
                                 } else {
                                     None
                                 };
