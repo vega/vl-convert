@@ -1307,74 +1307,6 @@ function vegaToScenegraph(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocal
     return scenegraphPromise
 }
 
-function vegaToTextByFont(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, errors) {
-    if (formatLocale != null) {
-        vega.formatLocale(formatLocale);
-    }
-    if (timeFormatLocale != null) {
-        vega.timeFormatLocale(timeFormatLocale);
-    }
-    let view = vegaToView(vgSpec, allowedBaseUrls, errors);
-    return view.runAsync().then(() => {
-        try {
-            view.signal("geo_interval_init_tick", {});
-        } catch (e) {}
-    }).then(() => {
-        return view.runAsync().then(() => {
-            if (errors != null && errors.length > 0) {
-                throw new Error(`${errors}`);
-            }
-            const map = {};
-            function normalizeWeight(w) {
-                if (w == null || w === 'normal') return '400';
-                if (w === 'bold') return '700';
-                if (w === 'bolder' || w === 'lighter') return '400';
-                const n = Number(w);
-                return (Number.isFinite(n) && n > 0) ? String(n) : '400';
-            }
-            function normalizeStyle(s) {
-                if (s == null || s === '') return 'normal';
-                const lower = String(s).trim().toLowerCase();
-                if (lower === 'oblique') return 'italic';
-                return (lower === 'italic') ? 'italic' : 'normal';
-            }
-            function walk(mark) {
-                if (!mark || !mark.marktype) return;
-                if (mark.marktype === 'text' && mark.items) {
-                    for (const item of mark.items) {
-                        const text = item.text;
-                        if (text == null || text === '') continue;
-                        const str = String(text);
-                        const font = (item.font || 'sans-serif').trim();
-                        const weight = normalizeWeight(item.fontWeight);
-                        const style = normalizeStyle(item.fontStyle);
-                        const key = font + '|' + weight + '|' + style;
-                        if (!map[key]) map[key] = new Set();
-                        for (const ch of str) map[key].add(ch);
-                    }
-                }
-                if (mark.marktype === 'group' && mark.items) {
-                    for (const groupItem of mark.items) {
-                        if (groupItem.items) {
-                            for (const childMark of groupItem.items) walk(childMark);
-                        }
-                    }
-                }
-            }
-            walk(view.scenegraph().root);
-            const result = [];
-            for (const [key, chars] of Object.entries(map)) {
-                const [font, weight, style] = key.split('|');
-                result.push({ font, weight, style, chars: [...chars].sort().join('') });
-            }
-            return JSON.stringify(result);
-        }).finally(() => {
-            view.finalize();
-            vega.resetDefaultLocale();
-        });
-    });
-}
-
 function vegaToViewCanvas(vgSpec, allowedBaseUrls, errors) {
     // Use the same view setup as vegaToView, since toCanvas() creates its own renderer
     return vegaToView(vgSpec, allowedBaseUrls, errors);
@@ -2011,67 +1943,6 @@ vegaToScenegraph(
         Ok(value)
     }
 
-    /// Render a Vega spec and extract text content grouped by (font, weight, style).
-    /// Returns a JSON string: `[{font, weight, style, chars}, ...]`
-    pub async fn vega_to_text_by_font(
-        &mut self,
-        vg_spec: impl Into<ValueOrString>,
-        vg_opts: VgOpts,
-    ) -> Result<String, AnyError> {
-        self.init_vega().await?;
-        let vg_spec = vg_spec.into();
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
-        let format_locale = match vg_opts.format_locale {
-            None => serde_json::Value::Null,
-            Some(fl) => fl.as_object()?,
-        };
-        let time_format_locale = match vg_opts.time_format_locale {
-            None => serde_json::Value::Null,
-            Some(fl) => fl.as_object()?,
-        };
-
-        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec)?;
-        let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
-        let time_format_locale_arg =
-            JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
-
-        let code = format!(
-            r#"
-var errors = [];
-vegaToTextByFont(
-    JSON.parse(op_get_json_arg({arg_id})),
-    {allowed_base_urls},
-    JSON.parse(op_get_json_arg({format_locale_id})),
-    JSON.parse(op_get_json_arg({time_format_locale_id})),
-    errors,
-).then((result) => {{
-    textByFontResult = result;
-}})
-"#,
-            arg_id = spec_arg.id(),
-            format_locale_id = format_locale_arg.id(),
-            time_format_locale_id = time_format_locale_arg.id(),
-        );
-        self.worker.js_runtime.execute_script("ext:<anon>", code)?;
-        self.worker
-            .js_runtime
-            .run_event_loop(Default::default())
-            .await?;
-
-        let access_errors = self
-            .execute_script_to_string(
-                "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
-            )
-            .await?;
-        if !access_errors.is_empty() {
-            bail!("{access_errors}");
-        }
-
-        let value = self.execute_script_to_string("textByFontResult").await?;
-        Ok(value)
-    }
-
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
         let code = "var localTz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'undefined';"
             .to_string();
@@ -2650,14 +2521,6 @@ vegaLiteToCanvas_{ver_name:?}(
                 let bundle = crate::html::bundle_vega_snippet(&snippet, vl_version).await;
                 responder.send(bundle).ok();
             }
-            VlConvertCommand::VgToTextByFont {
-                vg_spec,
-                vg_opts,
-                responder,
-            } => {
-                let result = self.vega_to_text_by_font(vg_spec, vg_opts).await;
-                responder.send(result).ok();
-            }
         }
     }
 }
@@ -2789,11 +2652,6 @@ pub enum VlConvertCommand {
         vl_version: VlVersion,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
-    VgToTextByFont {
-        vg_spec: ValueOrString,
-        vg_opts: VgOpts,
-        responder: oneshot::Sender<Result<String, AnyError>>,
-    },
 }
 
 impl VlConvertCommand {
@@ -2858,9 +2716,6 @@ impl VlConvertCommand {
                 responder.send(Err(err)).ok();
             }
             Self::BundleVegaSnippet { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VgToTextByFont { responder, .. } => {
                 responder.send(Err(err)).ok();
             }
         }
@@ -4202,25 +4057,6 @@ impl VlConverter {
 </html>
         "#
         ))
-    }
-
-    pub async fn vega_to_text_by_font(
-        &self,
-        vg_spec: impl Into<ValueOrString>,
-        mut vg_opts: VgOpts,
-    ) -> Result<String, AnyError> {
-        vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
-        let vg_spec = vg_spec.into();
-        self.request(
-            move |responder| VlConvertCommand::VgToTextByFont {
-                vg_spec,
-                vg_opts,
-                responder,
-            },
-            "Vega to text-by-font extraction",
-        )
-        .await
     }
 
     /// Render a Vega scenegraph for HTML font analysis.

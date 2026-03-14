@@ -1,12 +1,11 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use deno_core::anyhow::{self, anyhow};
 use font_subset::FontReader;
-use serde::Deserialize;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::converter::MissingFontsPolicy;
-use crate::extract::{parse_css_font_family, FontFamilyEntry, FontForHtml, FontKey, FontSource};
+use crate::extract::{FontForHtml, FontKey, FontSource};
 use vl_convert_google_fonts::LoadedFontBatch;
 
 /// Format a single `@font-face` CSS block from a WOFF2-encoded artifact.
@@ -15,55 +14,6 @@ fn format_font_face_block(family: &str, weight: &str, style: &str, woff2_b64: &s
         "@font-face {{\n  font-family: \"{}\";\n  font-weight: {};\n  font-style: {};\n  src: url(data:font/woff2;base64,{}) format(\"woff2\");\n}}",
         family, weight, style, woff2_b64
     )
-}
-
-/// A single entry from the JS `vegaToTextByFont()` function.
-#[derive(Debug, Clone, Deserialize)]
-pub struct TextByFontEntry {
-    /// CSS font-family string (e.g. "Roboto, sans-serif")
-    pub font: String,
-    /// Normalized weight (e.g. "400", "700")
-    pub weight: String,
-    /// Normalized style ("normal" or "italic")
-    pub style: String,
-    /// Unique characters used at this font/weight/style
-    pub chars: String,
-}
-
-/// Aggregate structured JS entries by (first_named_family, weight, style).
-///
-/// Only includes entries where the FIRST font in the family list is a Named
-/// font. If the first font is a generic family (sans-serif, etc.) or the
-/// list is empty, the entry is skipped.
-pub fn aggregate_chars_by_font_key(
-    entries: &[TextByFontEntry],
-) -> HashMap<FontKey, BTreeSet<char>> {
-    let mut result: HashMap<FontKey, BTreeSet<char>> = HashMap::new();
-    for entry in entries {
-        let families = parse_css_font_family(&entry.font);
-        match families.first() {
-            Some(FontFamilyEntry::Named(name)) => {
-                let font_key = FontKey {
-                    family: name.clone(),
-                    weight: entry.weight.clone(),
-                    style: entry.style.clone(),
-                };
-                let chars = result.entry(font_key).or_default();
-                for ch in entry.chars.chars() {
-                    chars.insert(ch);
-                }
-            }
-            _ => {
-                // First font is generic or list is empty — skip
-            }
-        }
-    }
-
-    // Inject default formatting characters (digits, separators, etc.) so that
-    // pan/zoom interactions can render axis labels that weren't in the initial view.
-    inject_locale_chars(&mut result, None, None);
-
-    result
 }
 
 /// Extract all characters from a JSON string or array-of-strings field.
@@ -502,99 +452,6 @@ fn subset_and_encode_bytes(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_aggregate_named_font() {
-        let entries = vec![TextByFontEntry {
-            font: "Roboto, sans-serif".to_string(),
-            weight: "400".to_string(),
-            style: "normal".to_string(),
-            chars: "Hello".to_string(),
-        }];
-        let result = aggregate_chars_by_font_key(&entries);
-        assert_eq!(result.len(), 1);
-        let key = FontKey {
-            family: "Roboto".to_string(),
-            weight: "400".to_string(),
-            style: "normal".to_string(),
-        };
-        // Should include "Hello" + D3 default formatting chars
-        assert!(result[&key].contains(&'H'));
-        assert!(result[&key].contains(&'0'));
-        assert!(result[&key].contains(&'9'));
-        assert!(result[&key].contains(&'.'));
-        assert!(result[&key].contains(&','));
-        assert!(result[&key].contains(&'%'));
-        assert!(result[&key].contains(&'\u{2212}')); // minus sign
-    }
-
-    #[test]
-    fn test_aggregate_generic_first_font_skipped() {
-        let entries = vec![TextByFontEntry {
-            font: "sans-serif".to_string(),
-            weight: "400".to_string(),
-            style: "normal".to_string(),
-            chars: "Hello".to_string(),
-        }];
-        let result = aggregate_chars_by_font_key(&entries);
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn test_aggregate_merges_same_key() {
-        let entries = vec![
-            TextByFontEntry {
-                font: "Roboto".to_string(),
-                weight: "400".to_string(),
-                style: "normal".to_string(),
-                chars: "Helo".to_string(),
-            },
-            TextByFontEntry {
-                font: "Roboto, sans-serif".to_string(),
-                weight: "400".to_string(),
-                style: "normal".to_string(),
-                chars: "World".to_string(),
-            },
-        ];
-        let result = aggregate_chars_by_font_key(&entries);
-        assert_eq!(result.len(), 1);
-        let key = FontKey {
-            family: "Roboto".to_string(),
-            weight: "400".to_string(),
-            style: "normal".to_string(),
-        };
-        // Should include "HeloWorld" + D3 default formatting chars
-        for ch in "HeloWorld0123456789".chars() {
-            assert!(result[&key].contains(&ch), "missing char: {ch}");
-        }
-    }
-
-    #[test]
-    fn test_aggregate_different_weights_separate() {
-        let entries = vec![
-            TextByFontEntry {
-                font: "Roboto".to_string(),
-                weight: "400".to_string(),
-                style: "normal".to_string(),
-                chars: "abc".to_string(),
-            },
-            TextByFontEntry {
-                font: "Roboto".to_string(),
-                weight: "700".to_string(),
-                style: "normal".to_string(),
-                chars: "xyz".to_string(),
-            },
-        ];
-        let result = aggregate_chars_by_font_key(&entries);
-        assert_eq!(result.len(), 2);
-    }
-
-    #[test]
-    fn test_aggregate_empty_entries() {
-        let entries: Vec<TextByFontEntry> = vec![];
-        let result = aggregate_chars_by_font_key(&entries);
-        assert!(result.is_empty());
-    }
 
     #[test]
     fn test_subset_and_encode_bytes_invalid_data() {
