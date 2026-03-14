@@ -2721,57 +2721,13 @@ impl VlConvertCommand {
     }
 }
 
-/// Struct for performing Vega-Lite to Vega conversions using the Deno v8 Runtime
-///
-/// # Examples
-///
-/// ```
-/// use vl_convert_rs::{VlConverter, VlVersion};
-/// let converter = VlConverter::new();
-///
-/// let vl_spec: serde_json::Value = serde_json::from_str(r#"
-/// {
-///   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-///   "data": {"url": "data/movies.json"},
-///   "mark": "circle",
-///   "encoding": {
-///     "x": {
-///       "bin": {"maxbins": 10},
-///       "field": "IMDB Rating"
-///     },
-///     "y": {
-///       "bin": {"maxbins": 10},
-///       "field": "Rotten Tomatoes Rating"
-///     },
-///     "size": {"aggregate": "count"}
-///   }
-/// }   "#).unwrap();
-///
-///     let vega_spec = futures::executor::block_on(
-///         converter.vegalite_to_vega(vl_spec, Default::default())
-///     ).expect(
-///         "Failed to perform Vega-Lite to Vega conversion"
-///     );
-///
-///     println!("{}", vega_spec)
-/// ```
-/// Validate font availability and optionally identify missing fonts to download
-/// from Google Fonts.
-///
-/// Extracts font-family strings from the compiled Vega spec and classifies the
-/// **first** non-generic font in each string (the rest of the CSS fallback
-/// chain is ignored). Returns font requests for downloadable fonts so the
-/// caller can add them to `VgOpts.google_fonts` for per-request overlay.
-/// Missing fonts are warned about or treated as errors depending on settings.
-/// Classify a set of font-family CSS strings and return Google Fonts download
-/// requests for any that need downloading.
+/// Classify a set of CSS `font-family` strings and return Google Fonts download
+/// requests for any first-choice families that should be overlaid for a render.
 ///
 /// When `prefer_cdn` is true (HTML path), Google-catalog fonts are requested
-/// even if locally available, so the render uses the same face the output
-/// will reference. When false (SVG/PNG/PDF path), only fonts not already
-/// in fontdb are requested.
-///
-/// Shared logic used by both Vega spec preprocessing and SVG font preprocessing.
+/// even if locally available so the render uses the same face the HTML output
+/// will reference. When false (SVG/PNG/PDF path), only fonts not already in
+/// `fontdb` are requested.
 async fn classify_and_request_fonts(
     font_strings: HashSet<String>,
     auto_google_fonts: bool,
@@ -3116,6 +3072,44 @@ struct VlConverterInner {
     config: Arc<VlConverterConfig>,
 }
 
+/// Struct for performing Vega-Lite to Vega conversions using the Deno v8 runtime.
+///
+/// # Examples
+///
+/// ```
+/// use vl_convert_rs::{VlConverter, VlOpts, VlVersion};
+/// let converter = VlConverter::new();
+///
+/// let vl_spec: serde_json::Value = serde_json::from_str(r#"
+/// {
+///   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+///   "data": {"url": "data/movies.json"},
+///   "mark": "circle",
+///   "encoding": {
+///     "x": {
+///       "bin": {"maxbins": 10},
+///       "field": "IMDB Rating"
+///     },
+///     "y": {
+///       "bin": {"maxbins": 10},
+///       "field": "Rotten Tomatoes Rating"
+///     },
+///     "size": {"aggregate": "count"}
+///   }
+/// }"#).unwrap();
+///
+/// let vega_spec = futures::executor::block_on(
+///     converter.vegalite_to_vega(
+///         vl_spec,
+///         VlOpts {
+///             vl_version: VlVersion::default(),
+///             ..Default::default()
+///         }
+///     )
+/// ).expect("Failed to perform Vega-Lite to Vega conversion");
+///
+/// println!("{}", vega_spec);
+/// ```
 #[derive(Clone)]
 pub struct VlConverter {
     inner: Arc<VlConverterInner>,
