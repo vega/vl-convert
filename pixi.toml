@@ -16,6 +16,10 @@ test-py = { cmd = ["pytest", "vl-convert-python/tests"]}
 test-cli = "cargo test -p vl-convert"
 test-rs = "cargo test -p vl-convert-rs -- --test-threads=1"
 
+test-html = { cmd = ["pytest", "vl-convert-python/tests/test_html_rendering.py", "-v"] }
+test-html-update = { cmd = ["pytest", "vl-convert-python/tests/test_html_rendering.py", "-v", "--update-baselines"] }
+install-browsers = "playwright install chromium"
+
 fmt-py = "ruff format vl-convert-python"
 build-node-canvas = { cmd = "cd vl-convert-canvas2d/tests/node_baseline && PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig npm install" }
 fmt-py-check = "ruff format vl-convert-python --check"
@@ -40,6 +44,7 @@ cp thirdparty_*.* vl-convert/
 
 [pypi-dependencies]
 pypdfium2 = ">=4.30.0, <5"
+playwright = ">=1.40"
 
 # Development Dependencies
 [dependencies]
