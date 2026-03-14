@@ -72,16 +72,15 @@ import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
     bundle_script(script.to_string(), vl_version).await
 }
 
-/// Default CSS2 API axis range requesting all available weights for both
-/// normal and italic.  Browsers only download the variants actually used
-/// by the page, so requesting the full range has no bandwidth cost.
+/// Default Google Fonts CSS2 `ital,wght` range used when we don't know the
+/// exact variants up front. Requests normal and italic across 100..900;
+/// Google Fonts will omit unsupported styles for a given family.
 const DEFAULT_VARIANT_TUPLES: &str = "0,100..900;1,100..900";
 
 /// Format (weight, style) pairs as CSS2 API `ital,wght@...` tuples.
 ///
 /// Each tuple is `{ital},{weight}` where ital is 1 for italic, 0 otherwise.
-/// Falls back to a standard set (400/700 normal/italic) when no variants
-/// are provided.
+/// Falls back to the full 100..900 range when no variants are provided.
 fn format_variant_tuples(variants: Option<&BTreeSet<(String, String)>>) -> String {
     match variants {
         Some(vs) if !vs.is_empty() => {
@@ -103,8 +102,8 @@ fn format_variant_tuples(variants: Option<&BTreeSet<(String, String)>>) -> Strin
 /// Return the CDN stylesheet URL for a font.
 ///
 /// When `variants` is provided, the URL requests exactly those (weight, style)
-/// tuples from the Google Fonts CSS2 API. Otherwise falls back to a standard
-/// set of common weight/style tuples (400/700 normal/italic).
+/// tuples from the Google Fonts CSS2 API. Otherwise falls back to the full
+/// 100..900 range for both normal and italic.
 ///
 /// Returns `None` for local fonts.
 pub fn font_cdn_url(
