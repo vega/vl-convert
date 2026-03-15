@@ -3140,7 +3140,9 @@ pub(crate) struct VlConverterInner {
 /// # Examples
 ///
 /// ```
-/// use vl_convert_rs::{VlConverter, VlOpts, VlVersion};
+/// use vl_convert_rs::VlConverter;
+/// use vl_convert_rs::converter::VlOpts;
+/// use vl_convert_rs::module_loader::import_map::VlVersion;
 /// let converter = VlConverter::new();
 ///
 /// let vl_spec: serde_json::Value = serde_json::from_str(r#"
