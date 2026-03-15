@@ -8,8 +8,8 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use vl_convert_rs::converter::{
-    vega_to_url, vegalite_to_url, FormatLocale, MissingFontsPolicy, Renderer, TimeFormatLocale,
-    VgOpts, VlConverter, VlConverterConfig, VlOpts,
+    vega_to_url, vegalite_to_url, FormatLocale, GoogleFontRequest, MissingFontsPolicy, Renderer,
+    TimeFormatLocale, VgOpts, VlConverter, VlConverterConfig, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
@@ -880,7 +880,7 @@ async fn main() -> Result<(), anyhow::Error> {
             renderer,
         } => {
             register_google_fonts(&google_font_families).await?;
-            // Initialize converter
+            let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vl_str = read_input_string(input.as_deref())?;
             let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
             let config = read_config_json(config)?;
@@ -906,7 +906,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         allowed_base_urls: None,
                         format_locale,
                         time_format_locale,
-                        google_fonts: None,
+                        google_fonts,
                     },
                     bundle,
                     embed_local_fonts,
@@ -928,6 +928,7 @@ async fn main() -> Result<(), anyhow::Error> {
             pretty,
         } => {
             register_google_fonts(&google_font_families).await?;
+            let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vl_str = read_input_string(input.as_deref())?;
             let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
             let config = read_config_json(config)?;
@@ -949,7 +950,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         allowed_base_urls: None,
                         format_locale: None,
                         time_format_locale: None,
-                        google_fonts: None,
+                        google_fonts,
                     },
                     auto_google_fonts,
                     embed_local_fonts,
@@ -1085,7 +1086,7 @@ async fn main() -> Result<(), anyhow::Error> {
             renderer,
         } => {
             register_google_fonts(&google_font_families).await?;
-            // Initialize converter
+            let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
 
@@ -1107,7 +1108,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         allowed_base_urls: None,
                         format_locale,
                         time_format_locale,
-                        google_fonts: None,
+                        google_fonts,
                     },
                     bundle,
                     embed_local_fonts,
@@ -1126,6 +1127,7 @@ async fn main() -> Result<(), anyhow::Error> {
             pretty,
         } => {
             register_google_fonts(&google_font_families).await?;
+            let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
 
@@ -1137,7 +1139,10 @@ async fn main() -> Result<(), anyhow::Error> {
             let fonts = converter
                 .vega_fonts(
                     vg_spec,
-                    VgOpts::default(),
+                    VgOpts {
+                        google_fonts,
+                        ..Default::default()
+                    },
                     auto_google_fonts,
                     embed_local_fonts,
                     include_font_face,
@@ -1258,12 +1263,28 @@ fn parse_google_font_arg(s: &str) -> Result<(String, Option<Vec<VariantRequest>>
     }
 }
 
+/// Parse all `--google-font` args and register fonts into fontdb for rendering.
 async fn register_google_fonts(fonts: &[String]) -> Result<(), anyhow::Error> {
     for spec in fonts {
         let (family, variants) = parse_google_font_arg(spec)?;
         register_google_fonts_font(&family, variants.as_deref()).await?;
     }
     Ok(())
+}
+
+/// Parse `--google-font` args into `GoogleFontRequest`s for per-call opts.
+fn parse_google_font_requests(
+    fonts: &[String],
+) -> Result<Option<Vec<GoogleFontRequest>>, anyhow::Error> {
+    if fonts.is_empty() {
+        return Ok(None);
+    }
+    let mut requests = Vec::new();
+    for spec in fonts {
+        let (family, variants) = parse_google_font_arg(spec)?;
+        requests.push(GoogleFontRequest { family, variants });
+    }
+    Ok(Some(requests))
 }
 
 fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
