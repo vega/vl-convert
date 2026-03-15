@@ -289,26 +289,6 @@ jobs:
         run: |
           cargo test -p vl-convert -- --test-threads=1
 
-      # HTML visual regression tests with Playwright
-      - name: Setup Pixi
-        uses: prefix-dev/setup-pixi@v0.9.4
-        with:
-          pixi-version: v0.47.0
-          cache: true
-
-      - name: Install Playwright browsers
-        run: pixi run install-browsers
-
-      - name: Run HTML browser tests
-        run: pixi run test-html
-
-      - name: Upload HTML test failures
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: html-test-failures
-          path: vl-convert-python/tests/html-failures/
-          if-no-files-found: ignore
 
       - name: Upload test failures
         uses: actions/upload-artifact@v7
@@ -421,6 +401,26 @@ jobs:
           source .venv/bin/activate
           cd vl-convert-python
           pytest
+
+      # HTML visual regression tests with Playwright
+      - name: Install Playwright and browsers
+        run: |
+          source .venv/bin/activate
+          pip install playwright numpy pillow scikit-image
+          playwright install chromium
+
+      - name: Run HTML browser tests
+        run: |
+          source .venv/bin/activate
+          pytest vl-convert-python/tests/test_html_rendering.py -v
+
+      - name: Upload HTML test failures
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: html-test-failures
+          path: vl-convert-python/tests/html-failures/
+          if-no-files-found: ignore
 
   vl-convert-python-tests:
     runs-on: ${{ matrix.options[0] }}
