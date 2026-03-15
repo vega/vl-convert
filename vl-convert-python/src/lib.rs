@@ -181,11 +181,6 @@ fn parse_config_overrides(
                     });
                 }
             }
-            "embed_local_fonts" | "html_embed_local_fonts" => {
-                return Err(vl_convert_rs::anyhow::anyhow!(
-                    "embed_local_fonts is now a per-call parameter on vegalite_to_html/vega_to_html, not a configure() option"
-                ));
-            }
             // Read-only config fields returned by get_config() are
             // silently ignored so that `configure(**get_config())` works.
             "google_fonts_cache_dir" => {}
