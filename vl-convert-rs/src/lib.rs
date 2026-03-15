@@ -21,9 +21,7 @@ pub use deno_core::anyhow;
 pub use extract::{FontInfo, FontSource, FontVariant};
 pub use module_loader::import_map::VlVersion;
 pub use serde_json;
-pub use text::{
-    configure_font_cache, register_google_fonts_font, register_google_fonts_font_blocking,
-};
+pub use text::configure_font_cache;
 pub use vl_convert_google_fonts::{google_fonts_cache_dir, FontStyle, VariantRequest};
 
 /// V8 snapshot containing the pre-compiled deno_runtime extensions plus our

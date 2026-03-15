@@ -306,7 +306,7 @@ def configure(
     google_fonts_cache_size_mb: int | None = None,
     auto_google_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
-    google_fonts: list[GoogleFontSpec] | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -424,7 +424,7 @@ def vega_to_html(
     bundle: bool | None = None,
     embed_local_fonts: bool | None = None,
     subset_fonts: bool | None = None,
-    google_fonts: list[GoogleFontSpec] | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     renderer: Renderer | None = None,
@@ -636,7 +636,7 @@ def vegalite_fonts(
     embed_local_fonts: bool | None = None,
     include_font_face: bool = False,
     subset_fonts: bool | None = None,
-    google_fonts: list[GoogleFontSpec] | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
 ) -> list[FontInfo]:
     """
     Return structured font metadata for a rendered Vega-Lite spec.
@@ -678,7 +678,7 @@ def vega_fonts(
     embed_local_fonts: bool | None = None,
     include_font_face: bool = False,
     subset_fonts: bool | None = None,
-    google_fonts: list[GoogleFontSpec] | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
 ) -> list[FontInfo]:
     """
     Return structured font metadata for a rendered Vega spec.
@@ -713,7 +713,7 @@ def vegalite_to_html(
     bundle: bool | None = None,
     embed_local_fonts: bool | None = None,
     subset_fonts: bool | None = None,
-    google_fonts: list[GoogleFontSpec] | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     format_locale: FormatLocale | None = None,
@@ -1090,7 +1090,7 @@ if TYPE_CHECKING:
             google_fonts_cache_size_mb: int | None = None,
             auto_google_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
-            google_fonts: list[GoogleFontSpec] | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...
@@ -1119,7 +1119,7 @@ if TYPE_CHECKING:
             bundle: bool | None = None,
             embed_local_fonts: bool | None = None,
             subset_fonts: bool | None = None,
-            google_fonts: list[GoogleFontSpec] | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             renderer: Renderer | None = None,
@@ -1192,7 +1192,7 @@ if TYPE_CHECKING:
             embed_local_fonts: bool | None = None,
             include_font_face: bool = False,
             subset_fonts: bool | None = None,
-            google_fonts: list[GoogleFontSpec] | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vegalite_fonts``. See sync function for full documentation."""
             ...
@@ -1203,7 +1203,7 @@ if TYPE_CHECKING:
             embed_local_fonts: bool | None = None,
             include_font_face: bool = False,
             subset_fonts: bool | None = None,
-            google_fonts: list[GoogleFontSpec] | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vega_fonts``. See sync function for full documentation."""
             ...
@@ -1214,7 +1214,7 @@ if TYPE_CHECKING:
             bundle: bool | None = None,
             embed_local_fonts: bool | None = None,
             subset_fonts: bool | None = None,
-            google_fonts: list[GoogleFontSpec] | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             format_locale: FormatLocale | None = None,

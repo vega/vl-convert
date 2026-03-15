@@ -314,46 +314,6 @@ fn collect_custom_fonts_from_batch(batch: &LoadedFontBatch) -> Vec<CustomFont> {
         .collect()
 }
 
-/// Download and install a font by family name from Google Fonts.
-///
-/// Google Fonts TTF files are loaded into `fontdb` as in-memory binary sources.
-/// The same bytes are also appended to `FONT_CONFIG.custom_fonts` so worker
-/// font refreshes keep the newly-installed fonts.
-pub async fn register_google_fonts_font(
-    family: &str,
-    variants: Option<&[VariantRequest]>,
-) -> Result<(), anyhow::Error> {
-    let batch = GOOGLE_FONTS_CLIENT.load(family, variants).await?;
-    let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
-
-    {
-        let mut font_config = FONT_CONFIG
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
-        font_config.custom_fonts.extend(loaded_custom_fonts);
-    }
-
-    refresh_font_baseline_after_config_update()
-}
-
-/// Blocking variant of [`register_google_fonts_font`].
-pub fn register_google_fonts_font_blocking(
-    family: &str,
-    variants: Option<&[VariantRequest]>,
-) -> Result<(), anyhow::Error> {
-    let batch = GOOGLE_FONTS_CLIENT.load_blocking(family, variants)?;
-    let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
-
-    {
-        let mut font_config = FONT_CONFIG
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
-        font_config.custom_fonts.extend(loaded_custom_fonts);
-    }
-
-    refresh_font_baseline_after_config_update()
-}
-
 /// Configure the max on-disk Google Fonts cache size in bytes.
 ///
 /// `None` keeps the existing configured value. Immediately evicts cached

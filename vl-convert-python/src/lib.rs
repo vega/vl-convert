@@ -1521,6 +1521,12 @@ fn parse_variant_args(
 ///
 /// Accepts `list[dict]` where each dict has `"family"` (str, required) and
 /// optionally `"variants"` (list of `(weight, style)` tuples).
+/// Parse a `google_fonts` argument into `Vec<GoogleFontRequest>`.
+///
+/// Each entry can be:
+/// - A `str` — interpreted as a font family name (all variants)
+/// - A `dict` with `"family"` (str, required) and optionally `"variants"`
+///   (list of `(weight, style)` tuples)
 fn parse_google_fonts_arg(
     fonts: Option<Vec<PyObject>>,
 ) -> PyResult<Option<Vec<GoogleFontRequest>>> {
@@ -1533,19 +1539,30 @@ fn parse_google_fonts_arg(
     Python::with_gil(|py| {
         let mut requests = Vec::with_capacity(fonts.len());
         for obj in &fonts {
-            let dict = obj.downcast_bound::<PyDict>(py).map_err(|_| {
-                PyValueError::new_err("Each google_fonts entry must be a dict with 'family' key")
-            })?;
-            let family: String = dict
-                .get_item("family")?
-                .ok_or_else(|| PyValueError::new_err("google_fonts entry missing 'family' key"))?
-                .extract()?;
-            let variants: Option<Vec<(u16, String)>> = dict
-                .get_item("variants")?
-                .map(|v| v.extract())
-                .transpose()?;
-            let variants = parse_variant_args(variants)?;
-            requests.push(GoogleFontRequest { family, variants });
+            let bound = obj.bind(py);
+            if let Ok(family) = bound.extract::<String>() {
+                requests.push(GoogleFontRequest {
+                    family,
+                    variants: None,
+                });
+            } else if let Ok(dict) = bound.downcast::<PyDict>() {
+                let family: String = dict
+                    .get_item("family")?
+                    .ok_or_else(|| {
+                        PyValueError::new_err("google_fonts dict entry missing 'family' key")
+                    })?
+                    .extract()?;
+                let variants: Option<Vec<(u16, String)>> = dict
+                    .get_item("variants")?
+                    .map(|v| v.extract())
+                    .transpose()?;
+                let variants = parse_variant_args(variants)?;
+                requests.push(GoogleFontRequest { family, variants });
+            } else {
+                return Err(PyValueError::new_err(
+                    "Each google_fonts entry must be a str or dict with 'family' key",
+                ));
+            }
         }
         Ok(Some(requests))
     })

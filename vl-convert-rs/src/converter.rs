@@ -483,6 +483,10 @@ pub struct VlConverterConfig {
     pub auto_google_fonts: bool,
     /// How to handle missing first-choice fonts: silently fallback, warn, or error.
     pub missing_fonts: MissingFontsPolicy,
+    /// Google Fonts to register for all conversions. Each request specifies a
+    /// family and optionally specific variants. Fonts are downloaded and
+    /// registered per-request via the overlay mechanism.
+    pub google_fonts: Option<Vec<GoogleFontRequest>>,
 }
 
 impl Default for VlConverterConfig {
@@ -494,6 +498,7 @@ impl Default for VlConverterConfig {
             allowed_base_urls: None,
             auto_google_fonts: false,
             missing_fonts: MissingFontsPolicy::Fallback,
+            google_fonts: None,
         }
     }
 }
@@ -2938,7 +2943,7 @@ fn report_unavailable_fonts(
         } else {
             return Err(anyhow!(
                 "missing_fonts=error: the following fonts are not available on the system: {}. \
-                 Install them with register_google_fonts_font() or enable auto_google_fonts.",
+                 Add them to google_fonts config or enable auto_google_fonts.",
                 unavailable_details.join(", ")
             ));
         }
@@ -3263,9 +3268,17 @@ impl VlConverter {
         &self,
         request_fonts: Option<Vec<GoogleFontRequest>>,
     ) -> Result<Vec<LoadedFontBatch>, AnyError> {
-        let Some(request_fonts) = request_fonts else {
-            return Ok(Vec::new());
+        // Merge per-call requests with configured google_fonts
+        let merged = match (self.inner.config.google_fonts.clone(), request_fonts) {
+            (None, None) => return Ok(Vec::new()),
+            (Some(c), None) => c,
+            (None, Some(r)) => r,
+            (Some(mut c), Some(r)) => {
+                c.extend(r);
+                c
+            }
         };
+        let request_fonts = merged;
         if request_fonts.is_empty() {
             return Ok(Vec::new());
         }
