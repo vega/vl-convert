@@ -354,6 +354,45 @@ enum Commands {
         renderer: Option<String>,
     },
 
+    /// Return font metadata for a rendered Vega-Lite specification
+    Vl2fonts {
+        /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
+        #[arg(short, long)]
+        input: Option<String>,
+
+        /// Path to output JSON file. Writes to stdout if omitted or set to "-"
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
+        vl_version: String,
+
+        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        #[arg(long)]
+        theme: Option<String>,
+
+        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        #[arg(short, long)]
+        config: Option<String>,
+
+        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS
+        #[arg(long = "embed-local-fonts")]
+        embed_local_fonts: bool,
+
+        /// Include @font-face CSS blocks in the output
+        #[arg(long = "include-font-face")]
+        include_font_face: bool,
+
+        /// Disable font subsetting (include full fonts)
+        #[arg(long = "no-subset-fonts")]
+        no_subset_fonts: bool,
+
+        /// Pretty-print JSON output
+        #[arg(short, long)]
+        pretty: bool,
+    },
+
     /// Convert a Vega specification to an SVG image
     Vg2svg {
         /// Path to input Vega file. Reads from stdin if omitted or set to "-"
@@ -528,6 +567,33 @@ enum Commands {
         /// Vega renderer. One of 'svg' (default), 'canvas', or 'hybrid'
         #[arg(long)]
         renderer: Option<String>,
+    },
+
+    /// Return font metadata for a rendered Vega specification
+    Vg2fonts {
+        /// Path to input Vega file. Reads from stdin if omitted or set to "-"
+        #[arg(short, long)]
+        input: Option<String>,
+
+        /// Path to output JSON file. Writes to stdout if omitted or set to "-"
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS
+        #[arg(long = "embed-local-fonts")]
+        embed_local_fonts: bool,
+
+        /// Include @font-face CSS blocks in the output
+        #[arg(long = "include-font-face")]
+        include_font_face: bool,
+
+        /// Disable font subsetting (include full fonts)
+        #[arg(long = "no-subset-fonts")]
+        no_subset_fonts: bool,
+
+        /// Pretty-print JSON output
+        #[arg(short, long)]
+        pretty: bool,
     },
 
     /// Convert an SVG image to a PNG image
@@ -848,6 +914,54 @@ async fn main() -> Result<(), anyhow::Error> {
                 .await?;
             write_output_string(output.as_deref(), &html)?;
         }
+        Vl2fonts {
+            input,
+            output,
+            vl_version,
+            theme,
+            config,
+            embed_local_fonts,
+            include_font_face,
+            no_subset_fonts,
+            pretty,
+        } => {
+            register_google_fonts(&google_font_families).await?;
+            let vl_str = read_input_string(input.as_deref())?;
+            let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
+            let config = read_config_json(config)?;
+            let vl_version = parse_vl_version(&vl_version)?;
+
+            let converter = VlConverter::with_config(VlConverterConfig {
+                auto_google_fonts,
+                missing_fonts,
+                ..Default::default()
+            })?;
+            let fonts = converter
+                .vegalite_fonts(
+                    vl_spec,
+                    VlOpts {
+                        config,
+                        theme,
+                        vl_version,
+                        show_warnings: false,
+                        allowed_base_urls: None,
+                        format_locale: None,
+                        time_format_locale: None,
+                        google_fonts: None,
+                    },
+                    auto_google_fonts,
+                    embed_local_fonts,
+                    include_font_face,
+                    !no_subset_fonts,
+                )
+                .await?;
+            let json = if pretty {
+                serde_json::to_string_pretty(&fonts)?
+            } else {
+                serde_json::to_string(&fonts)?
+            };
+            write_output_string(output.as_deref(), &json)?;
+        }
         Vg2svg {
             input,
             output,
@@ -1000,6 +1114,40 @@ async fn main() -> Result<(), anyhow::Error> {
                 )
                 .await?;
             write_output_string(output.as_deref(), &html)?;
+        }
+        Vg2fonts {
+            input,
+            output,
+            embed_local_fonts,
+            include_font_face,
+            no_subset_fonts,
+            pretty,
+        } => {
+            register_google_fonts(&google_font_families).await?;
+            let vg_str = read_input_string(input.as_deref())?;
+            let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
+
+            let converter = VlConverter::with_config(VlConverterConfig {
+                auto_google_fonts,
+                missing_fonts,
+                ..Default::default()
+            })?;
+            let fonts = converter
+                .vega_fonts(
+                    vg_spec,
+                    VgOpts::default(),
+                    auto_google_fonts,
+                    embed_local_fonts,
+                    include_font_face,
+                    !no_subset_fonts,
+                )
+                .await?;
+            let json = if pretty {
+                serde_json::to_string_pretty(&fonts)?
+            } else {
+                serde_json::to_string(&fonts)?
+            };
+            write_output_string(output.as_deref(), &json)?;
         }
         Svg2png {
             input,

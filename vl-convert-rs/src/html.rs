@@ -1,7 +1,6 @@
 use crate::converter::{
     classify_and_request_fonts, classify_scenegraph_fonts, GoogleFontRequest, HtmlFontAnalysis,
-    MissingFontsPolicy, Renderer, ValueOrString, VgOpts, VlConvertCommand, VlConverter,
-    VlConverterConfig, VlOpts,
+    MissingFontsPolicy, Renderer, ValueOrString, VgOpts, VlConvertCommand, VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{

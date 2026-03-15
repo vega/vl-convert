@@ -37,24 +37,21 @@ use png::{PixelDimensions, Unit};
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-use crate::html::{font_cdn_url, font_import_rule, font_link_tag, get_vega_or_vegalite_script};
 use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
 use crate::extract::{
-    extract_fonts_from_vega, extract_text_by_font, is_available, resolve_first_fonts,
-    FirstFontStatus, FontForHtml, FontInfo, FontKey, FontSource, FontVariant,
+    extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus, FontForHtml,
+    FontKey, FontSource,
 };
-use crate::font_embed::{generate_font_face_css, inject_locale_chars, variants_by_family};
 use crate::text::{
     build_usvg_options_with_fontdb, get_font_baseline_snapshot, FONT_CONFIG_VERSION,
     GOOGLE_FONTS_CLIENT, USVG_OPTIONS,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use vl_convert_google_fonts::{
-    family_to_id, FontStyle, GoogleFontsDatabaseExt, LoadedFontBatch, RegisteredFontBatch,
-    VariantRequest,
+    family_to_id, GoogleFontsDatabaseExt, LoadedFontBatch, RegisteredFontBatch, VariantRequest,
 };
 
 // Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
