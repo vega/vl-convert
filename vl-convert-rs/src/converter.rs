@@ -4313,8 +4313,11 @@ impl VlConverter {
                                 .collect();
                             cdn_variants.insert(f.family.clone(), set);
                         }
-                        Err(_) => {
-                            // Fall back to requesting all weights if resolution fails
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to resolve variants for '{}': {e}, skipping CDN URL",
+                                f.family
+                            );
                         }
                     }
                 }
@@ -4336,16 +4339,22 @@ impl VlConverter {
         let results: Vec<FontInfo> = html_fonts
             .iter()
             .map(|f| {
-                // Use resolved CDN variants when available, otherwise request
-                // all standard weights (Google returns only what exists).
-                let cdn_set = cdn_variants.get(&f.family);
                 let text: Option<String> = family_chars
                     .get(&f.family)
                     .map(|chars| chars.iter().collect());
                 let text_ref = text.as_deref();
-                let url = font_cdn_url(f, cdn_set, text_ref);
-                let link_tag = font_link_tag(f, cdn_set, text_ref);
-                let import_rule = font_import_rule(f, cdn_set, text_ref);
+
+                // CDN URLs require resolved variants; skip if resolution failed.
+                let (url, link_tag, import_rule) =
+                    if let Some(cdn_set) = cdn_variants.get(&f.family) {
+                        (
+                            font_cdn_url(f, cdn_set, text_ref),
+                            font_link_tag(f, cdn_set, text_ref),
+                            font_import_rule(f, cdn_set, text_ref),
+                        )
+                    } else {
+                        (None, None, None)
+                    };
                 let variants_set = family_variants.get(&f.family);
 
                 let variants: Vec<FontVariant> = variants_set
