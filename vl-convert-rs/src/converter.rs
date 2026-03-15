@@ -18,7 +18,7 @@ use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
 use deno_runtime::FeatureChecker;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -2273,7 +2273,7 @@ vegaLiteToCanvas_{ver_name:?}(
             return Ok(Vec::new());
         }
 
-        let mut unique: HashMap<String, GoogleFontRequest> = HashMap::new();
+        let mut unique: BTreeMap<String, GoogleFontRequest> = BTreeMap::new();
         for request in merged {
             let key = google_font_request_key(&request);
             unique.entry(key).or_insert(request);
