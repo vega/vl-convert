@@ -256,8 +256,7 @@ def test_png(name, scale, as_dict):
 
 
 def test_png_google_fonts():
-    vlc.register_google_fonts_font("Bangers")
-    vlc.register_google_fonts_font("Lugrasimo")
+    vlc.configure(google_fonts=[{"family": "Bangers"}, {"family": "Lugrasimo"}])
 
     vl_version = "v5_8"
     vl_spec = load_vl_spec("google_fonts")
