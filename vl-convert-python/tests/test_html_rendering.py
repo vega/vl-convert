@@ -104,7 +104,10 @@ def render_html(
 @pytest.fixture(scope="module")
 def browser():
     with sync_playwright() as p:
-        b = p.chromium.launch()
+        try:
+            b = p.chromium.launch()
+        except Exception as e:
+            pytest.skip(f"Playwright browser not available: {e}")
         yield b
         b.close()
 
