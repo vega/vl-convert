@@ -193,8 +193,7 @@ pub(crate) fn resolve_from_css2(
                 .collect();
 
             for req in &deduped {
-                let found =
-                    find_closest_variant(req, &available).map(|idx| &resolved[idx]);
+                let found = find_closest_variant(req, &available).map(|idx| &resolved[idx]);
 
                 if let Some(font) = found {
                     // Deduplicate by URL: multiple requested weights may

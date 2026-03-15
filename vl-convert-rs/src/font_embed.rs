@@ -263,33 +263,32 @@ fn generate_google_fonts_css(
             weight: font_key.weight.parse().unwrap_or(400),
             style: font_key.style.parse().unwrap_or(FontStyle::Normal),
         };
-        let ttf_data =
-            if let Some(idx) = find_closest_variant(&requested, &available_variants) {
-                font_data_list[idx]
-            } else {
-                match mode {
-                    MissingFontsPolicy::Error => {
-                        return Err(anyhow!(
-                            "No font data for {} weight={} style={}",
-                            font_key.family,
-                            font_key.weight,
-                            font_key.style
-                        ));
-                    }
-                    MissingFontsPolicy::Warn => {
-                        log::warn!(
-                            "font_embed: no data for {} weight={} style={}, skipping",
-                            font_key.family,
-                            font_key.weight,
-                            font_key.style
-                        );
-                        continue;
-                    }
-                    MissingFontsPolicy::Fallback => {
-                        continue;
-                    }
+        let ttf_data = if let Some(idx) = find_closest_variant(&requested, &available_variants) {
+            font_data_list[idx]
+        } else {
+            match mode {
+                MissingFontsPolicy::Error => {
+                    return Err(anyhow!(
+                        "No font data for {} weight={} style={}",
+                        font_key.family,
+                        font_key.weight,
+                        font_key.style
+                    ));
                 }
-            };
+                MissingFontsPolicy::Warn => {
+                    log::warn!(
+                        "font_embed: no data for {} weight={} style={}, skipping",
+                        font_key.family,
+                        font_key.weight,
+                        font_key.style
+                    );
+                    continue;
+                }
+                MissingFontsPolicy::Fallback => {
+                    continue;
+                }
+            }
+        };
 
         let encode_result = if subset_fonts {
             subset_and_encode_bytes(ttf_data, chars)
