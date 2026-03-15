@@ -290,6 +290,12 @@ jobs:
           cargo test -p vl-convert -- --test-threads=1
 
       # HTML visual regression tests with Playwright
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.9.4
+        with:
+          pixi-version: v0.47.0
+          cache: true
+
       - name: Install Playwright browsers
         run: pixi run install-browsers
 
