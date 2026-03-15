@@ -1,5 +1,5 @@
 use crate::error::GoogleFontsError;
-use crate::types::{FontStyle, ResolvedFont, VariantRequest};
+use crate::types::{find_closest_variant, FontStyle, ResolvedFont, VariantRequest};
 use std::collections::HashSet;
 use urlencoding::encode;
 
@@ -184,25 +184,17 @@ pub(crate) fn resolve_from_css2(
             let mut files = Vec::new();
             let mut seen_urls = HashSet::new();
 
+            let available: Vec<VariantRequest> = resolved
+                .iter()
+                .map(|r| VariantRequest {
+                    weight: r.weight,
+                    style: r.style,
+                })
+                .collect();
+
             for req in &deduped {
-                // Exact match, then closest weight with matching style,
-                // then closest weight any style. Single-weight fonts like
-                // Bangers (400 only) need this when the scenegraph requests
-                // bold (700) for titles.
-                let found = resolved
-                    .iter()
-                    .find(|r| r.weight == req.weight && r.style == req.style)
-                    .or_else(|| {
-                        resolved
-                            .iter()
-                            .filter(|r| r.style == req.style)
-                            .min_by_key(|r| (r.weight as i32 - req.weight as i32).abs())
-                    })
-                    .or_else(|| {
-                        resolved
-                            .iter()
-                            .min_by_key(|r| (r.weight as i32 - req.weight as i32).abs())
-                    });
+                let found =
+                    find_closest_variant(req, &available).map(|idx| &resolved[idx]);
 
                 if let Some(font) = found {
                     // Deduplicate by URL: multiple requested weights may

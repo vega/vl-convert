@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::converter::MissingFontsPolicy;
 use crate::extract::{FontForHtml, FontKey, FontSource};
-use vl_convert_google_fonts::LoadedFontBatch;
+use vl_convert_google_fonts::{find_closest_variant, FontStyle, LoadedFontBatch, VariantRequest};
 
 /// Format a single `@font-face` CSS block from a WOFF2-encoded artifact.
 fn format_font_face_block(family: &str, weight: &str, style: &str, woff2_b64: &str) -> String {
@@ -243,15 +243,14 @@ fn generate_google_fonts_css(
         }
     };
 
-    // Build index of font data by (weight, style) from the loaded variants
-    let variant_index: HashMap<(String, String), &Arc<Vec<u8>>> = batch
+    // Index font data by position, with available variants for fallback lookup
+    let font_data_list: Vec<&Arc<Vec<u8>>> = batch.font_data.iter().collect();
+    let available_variants: Vec<VariantRequest> = batch
         .loaded_variants
         .iter()
-        .zip(batch.font_data.iter())
-        .map(|(variant, data)| {
-            let weight = variant.weight.to_string();
-            let style = variant.style.as_str().to_string();
-            ((weight, style), data)
+        .map(|v| VariantRequest {
+            weight: v.weight,
+            style: v.style,
         })
         .collect();
 
@@ -260,26 +259,15 @@ fn generate_google_fonts_css(
             continue;
         }
 
-        let ws_key = (font_key.weight.clone(), font_key.style.clone());
-        let ttf_data = if let Some(data) = variant_index.get(&ws_key) {
-            data
-        } else {
-            // Exact variant not available — fall back to the closest weight
-            // with matching style, or any available variant as last resort.
-            // This handles fonts like Bangers that only have a single weight.
-            let target_weight: i32 = font_key.weight.parse().unwrap_or(400);
-            let fallback = variant_index
-                .iter()
-                .filter(|((_, s), _)| *s == font_key.style)
-                .min_by_key(|((w, _), _)| (w.parse::<i32>().unwrap_or(400) - target_weight).abs())
-                .or_else(|| {
-                    variant_index.iter().min_by_key(|((w, _), _)| {
-                        (w.parse::<i32>().unwrap_or(400) - target_weight).abs()
-                    })
-                });
-            match fallback {
-                Some((_, data)) => data,
-                None => match mode {
+        let requested = VariantRequest {
+            weight: font_key.weight.parse().unwrap_or(400),
+            style: font_key.style.parse().unwrap_or(FontStyle::Normal),
+        };
+        let ttf_data =
+            if let Some(idx) = find_closest_variant(&requested, &available_variants) {
+                font_data_list[idx]
+            } else {
+                match mode {
                     MissingFontsPolicy::Error => {
                         return Err(anyhow!(
                             "No font data for {} weight={} style={}",
@@ -300,9 +288,8 @@ fn generate_google_fonts_css(
                     MissingFontsPolicy::Fallback => {
                         continue;
                     }
-                },
-            }
-        };
+                }
+            };
 
         let encode_result = if subset_fonts {
             subset_and_encode_bytes(ttf_data, chars)
