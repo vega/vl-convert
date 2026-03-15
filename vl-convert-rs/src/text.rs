@@ -303,7 +303,6 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
     refresh_font_baseline_after_config_update()
 }
 
-
 /// Configure the max on-disk Google Fonts cache size in bytes.
 ///
 /// `None` keeps the existing configured value. Immediately evicts cached
