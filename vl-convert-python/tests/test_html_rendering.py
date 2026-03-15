@@ -63,17 +63,34 @@ def compare_screenshot(actual_bytes: bytes, baseline_name: str, update: bool) ->
     actual = np.array(Image.open(io.BytesIO(actual_bytes)).convert("RGB"))
     expected = np.array(Image.open(baseline_path).convert("RGB"))
 
+    # Pad smaller image with white to match dimensions if within 5px
+    # (cross-platform font rendering can shift layout by a few pixels)
     if actual.shape != expected.shape:
-        failures_dir.mkdir(exist_ok=True)
-        (failures_dir / baseline_name).write_bytes(actual_bytes)
-        (failures_dir / f"expected_{baseline_name}").write_bytes(
-            baseline_path.read_bytes()
-        )
-        pytest.fail(
-            f"Dimension mismatch for {baseline_name}: "
-            f"actual {actual.shape} != expected {expected.shape}. "
-            f"Regenerate baselines on this platform."
-        )
+        h_diff = abs(actual.shape[0] - expected.shape[0])
+        w_diff = abs(actual.shape[1] - expected.shape[1])
+        if h_diff <= 5 and w_diff <= 5:
+            h = max(actual.shape[0], expected.shape[0])
+            w = max(actual.shape[1], expected.shape[1])
+            for arr_name in ("actual", "expected"):
+                arr = actual if arr_name == "actual" else expected
+                if arr.shape[0] < h or arr.shape[1] < w:
+                    padded = np.full((h, w, 3), 255, dtype=np.uint8)
+                    padded[: arr.shape[0], : arr.shape[1]] = arr
+                    if arr_name == "actual":
+                        actual = padded
+                    else:
+                        expected = padded
+        else:
+            failures_dir.mkdir(exist_ok=True)
+            (failures_dir / baseline_name).write_bytes(actual_bytes)
+            (failures_dir / f"expected_{baseline_name}").write_bytes(
+                baseline_path.read_bytes()
+            )
+            pytest.fail(
+                f"Dimension mismatch for {baseline_name}: "
+                f"actual {actual.shape} != expected {expected.shape} "
+                f"(exceeds 5px tolerance)."
+            )
 
     similarity = ssim(expected, actual, channel_axis=2)
     if similarity < SSIM_THRESHOLD:
