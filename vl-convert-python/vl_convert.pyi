@@ -649,6 +649,7 @@ def vegalite_fonts(
     auto_google_fonts: bool | None = None,
     embed_local_fonts: bool | None = None,
     include_font_face: bool = False,
+    subset_fonts: bool | None = None,
 ) -> list[FontInfo]:
     """
     Return structured font metadata for a rendered Vega-Lite spec.
@@ -673,6 +674,10 @@ def vegalite_fonts(
     include_font_face
         Whether to run the font subsetting pipeline and populate
         the ``font_face`` field on each variant (default False)
+    subset_fonts
+        If True (default), subset fonts to only the characters used.
+        If False, include full fonts. Only relevant when
+        ``include_font_face=True``.
 
     Returns
     -------
@@ -685,6 +690,7 @@ def vega_fonts(
     auto_google_fonts: bool | None = None,
     embed_local_fonts: bool | None = None,
     include_font_face: bool = False,
+    subset_fonts: bool | None = None,
 ) -> list[FontInfo]:
     """
     Return structured font metadata for a rendered Vega spec.
@@ -702,6 +708,10 @@ def vega_fonts(
     include_font_face
         Whether to run the font subsetting pipeline and populate
         the ``font_face`` field on each variant (default False)
+    subset_fonts
+        If True (default), subset fonts to only the characters used.
+        If False, include full fonts. Only relevant when
+        ``include_font_face=True``.
 
     Returns
     -------
@@ -1195,6 +1205,7 @@ if TYPE_CHECKING:
             auto_google_fonts: bool | None = None,
             embed_local_fonts: bool | None = None,
             include_font_face: bool = False,
+            subset_fonts: bool | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vegalite_fonts``. See sync function for full documentation."""
             ...
@@ -1204,6 +1215,7 @@ if TYPE_CHECKING:
             auto_google_fonts: bool | None = None,
             embed_local_fonts: bool | None = None,
             include_font_face: bool = False,
+            subset_fonts: bool | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vega_fonts``. See sync function for full documentation."""
             ...
