@@ -10,7 +10,7 @@ use usvg::{
     ImageHrefResolver,
 };
 use vl_convert_canvas2d::font_config::{CustomFont, FontConfig, ResolvedFontConfig};
-use vl_convert_google_fonts::{GoogleFontsClient, LoadedFontBatch, VariantRequest};
+use vl_convert_google_fonts::GoogleFontsClient;
 
 /// Monotonically increasing version counter for font configuration changes.
 /// Incremented each time font configuration is modified.
@@ -303,16 +303,6 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
     refresh_font_baseline_after_config_update()
 }
 
-fn collect_custom_fonts_from_batch(batch: &LoadedFontBatch) -> Vec<CustomFont> {
-    batch
-        .font_data
-        .iter()
-        .map(|data| CustomFont {
-            data: Arc::clone(data),
-            family_name: None,
-        })
-        .collect()
-}
 
 /// Configure the max on-disk Google Fonts cache size in bytes.
 ///
