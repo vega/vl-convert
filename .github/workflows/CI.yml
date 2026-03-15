@@ -409,6 +409,11 @@ jobs:
           pip install playwright numpy pillow scikit-image
           playwright install chromium
 
+      - name: Generate HTML test baselines
+        run: |
+          source .venv/bin/activate
+          pytest vl-convert-python/tests/test_html_rendering.py -v --update-baselines
+
       - name: Run HTML browser tests
         run: |
           source .venv/bin/activate

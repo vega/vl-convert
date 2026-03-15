@@ -63,6 +63,15 @@ def compare_screenshot(actual_bytes: bytes, baseline_name: str, update: bool) ->
     actual = np.array(Image.open(io.BytesIO(actual_bytes)).convert("RGB"))
     expected = np.array(Image.open(baseline_path).convert("RGB"))
 
+    if actual.shape != expected.shape:
+        failures_dir.mkdir(exist_ok=True)
+        (failures_dir / baseline_name).write_bytes(actual_bytes)
+        pytest.fail(
+            f"Dimension mismatch for {baseline_name}: "
+            f"actual {actual.shape} != expected {expected.shape}. "
+            f"Regenerate baselines on this platform."
+        )
+
     similarity = ssim(expected, actual, channel_axis=2)
     if similarity < SSIM_THRESHOLD:
         failures_dir.mkdir(exist_ok=True)
