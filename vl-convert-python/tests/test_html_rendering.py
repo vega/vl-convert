@@ -66,6 +66,9 @@ def compare_screenshot(actual_bytes: bytes, baseline_name: str, update: bool) ->
     if actual.shape != expected.shape:
         failures_dir.mkdir(exist_ok=True)
         (failures_dir / baseline_name).write_bytes(actual_bytes)
+        (failures_dir / f"expected_{baseline_name}").write_bytes(
+            baseline_path.read_bytes()
+        )
         pytest.fail(
             f"Dimension mismatch for {baseline_name}: "
             f"actual {actual.shape} != expected {expected.shape}. "
