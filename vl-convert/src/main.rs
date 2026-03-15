@@ -13,6 +13,7 @@ use vl_convert_rs::converter::{
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
+use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::{anyhow, anyhow::bail, register_google_fonts_font};
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default)]
@@ -52,8 +53,9 @@ struct Cli {
     #[arg(long, global = true)]
     filesystem_root: Option<String>,
 
-    /// Register a font by family name from Google Fonts for this conversion.
-    /// May be specified multiple times. All variants are downloaded.
+    /// Register a font from Google Fonts. Use "Family" for all variants,
+    /// or "Family:400,700italic" for specific weight/style combinations.
+    /// May be specified multiple times.
     #[arg(long = "google-font", global = true)]
     google_font: Vec<String>,
 
@@ -1224,9 +1226,42 @@ fn register_font_dir(dir: Option<String>) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+/// Parse a `--google-font` value like `"Roboto"` or `"Roboto:400,700italic"`
+/// into a family name and optional variant list.
+fn parse_google_font_arg(s: &str) -> Result<(String, Option<Vec<VariantRequest>>), anyhow::Error> {
+    let Some((family, variants_str)) = s.split_once(':') else {
+        return Ok((s.to_string(), None));
+    };
+    let mut variants = Vec::new();
+    for token in variants_str.split(',') {
+        let token = token.trim();
+        if token.is_empty() {
+            continue;
+        }
+        let (weight_str, style) = if let Some(w) = token.strip_suffix("italic") {
+            (w, FontStyle::Italic)
+        } else {
+            (token, FontStyle::Normal)
+        };
+        let weight: u16 = weight_str.parse().map_err(|_| {
+            anyhow::anyhow!(
+                "Invalid font variant '{token}' in --google-font '{s}'. \
+                 Expected format: 400, 700italic, etc."
+            )
+        })?;
+        variants.push(VariantRequest { weight, style });
+    }
+    if variants.is_empty() {
+        Ok((family.to_string(), None))
+    } else {
+        Ok((family.to_string(), Some(variants)))
+    }
+}
+
 async fn register_google_fonts(fonts: &[String]) -> Result<(), anyhow::Error> {
-    for family in fonts {
-        register_google_fonts_font(family, None).await?;
+    for spec in fonts {
+        let (family, variants) = parse_google_font_arg(spec)?;
+        register_google_fonts_font(&family, variants.as_deref()).await?;
     }
     Ok(())
 }
