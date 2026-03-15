@@ -637,6 +637,8 @@ def vegalite_fonts(
     include_font_face: bool = False,
     subset_fonts: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> list[FontInfo]:
     """
     Return structured font metadata for a rendered Vega-Lite spec.
@@ -679,6 +681,8 @@ def vega_fonts(
     include_font_face: bool = False,
     subset_fonts: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
 ) -> list[FontInfo]:
     """
     Return structured font metadata for a rendered Vega spec.
@@ -1193,6 +1197,8 @@ if TYPE_CHECKING:
             include_font_face: bool = False,
             subset_fonts: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vegalite_fonts``. See sync function for full documentation."""
             ...
@@ -1204,6 +1210,8 @@ if TYPE_CHECKING:
             include_font_face: bool = False,
             subset_fonts: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vega_fonts``. See sync function for full documentation."""
             ...

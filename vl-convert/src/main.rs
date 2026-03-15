@@ -390,6 +390,14 @@ enum Commands {
         #[arg(long = "no-subset-fonts")]
         no_subset_fonts: bool,
 
+        /// d3-format locale name or file with .json extension
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale name or file with .json extension
+        #[arg(long)]
+        time_format_locale: Option<String>,
+
         /// Pretty-print JSON output
         #[arg(short, long)]
         pretty: bool,
@@ -592,6 +600,14 @@ enum Commands {
         /// Disable font subsetting (include full fonts)
         #[arg(long = "no-subset-fonts")]
         no_subset_fonts: bool,
+
+        /// d3-format locale name or file with .json extension
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale name or file with .json extension
+        #[arg(long)]
+        time_format_locale: Option<String>,
 
         /// Pretty-print JSON output
         #[arg(short, long)]
@@ -926,6 +942,8 @@ async fn main() -> Result<(), anyhow::Error> {
             embed_local_fonts,
             include_font_face,
             no_subset_fonts,
+            format_locale,
+            time_format_locale,
             pretty,
         } => {
             let google_fonts = parse_google_font_requests(&google_font_families)?;
@@ -933,6 +951,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
             let config = read_config_json(config)?;
             let vl_version = parse_vl_version(&vl_version)?;
+            let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+            let time_format_locale =
+                parse_time_format_locale_option(time_format_locale.as_deref())?;
 
             let converter = VlConverter::with_config(VlConverterConfig {
                 auto_google_fonts,
@@ -949,8 +970,8 @@ async fn main() -> Result<(), anyhow::Error> {
                         vl_version,
                         show_warnings: false,
                         allowed_base_urls: None,
-                        format_locale: None,
-                        time_format_locale: None,
+                        format_locale,
+                        time_format_locale,
                         google_fonts,
                     },
                     auto_google_fonts,
@@ -1125,11 +1146,16 @@ async fn main() -> Result<(), anyhow::Error> {
             embed_local_fonts,
             include_font_face,
             no_subset_fonts,
+            format_locale,
+            time_format_locale,
             pretty,
         } => {
             let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
+            let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+            let time_format_locale =
+                parse_time_format_locale_option(time_format_locale.as_deref())?;
 
             let converter = VlConverter::with_config(VlConverterConfig {
                 auto_google_fonts,
@@ -1142,6 +1168,8 @@ async fn main() -> Result<(), anyhow::Error> {
                     vg_spec,
                     VgOpts {
                         google_fonts,
+                        format_locale,
+                        time_format_locale,
                         ..Default::default()
                     },
                     auto_google_fonts,
