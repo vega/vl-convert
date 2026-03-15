@@ -2812,6 +2812,7 @@ async fn preprocess_fonts(
     classify_and_request_fonts(font_strings, auto_google_fonts, missing_fonts, false).await
 }
 
+/// Return all font family names currently available in fontdb.
 fn available_font_families() -> Result<HashSet<String>, AnyError> {
     Ok(USVG_OPTIONS
         .lock()
@@ -2822,6 +2823,10 @@ fn available_font_families() -> Result<HashSet<String>, AnyError> {
         .collect())
 }
 
+/// Collect font family names that should be probed against the Google Fonts
+/// catalog. Used by the SVG/PNG preprocessing path. Parses CSS font-family
+/// strings and keeps families that have a valid Google Fonts ID and are either
+/// not locally available or `prefer_cdn` is set.
 fn auto_google_probe_candidates(
     font_strings: &[String],
     available: &HashSet<String>,
@@ -2844,6 +2849,9 @@ fn auto_google_probe_candidates(
         .collect()
 }
 
+/// Collect font family names from the rendered scenegraph that should be
+/// probed against Google Fonts. Excludes families already identified as
+/// explicit per-call Google Font requests.
 fn scenegraph_google_probe_candidates(
     families: &BTreeSet<String>,
     explicit_google_families: &HashSet<String>,
@@ -2855,6 +2863,9 @@ fn scenegraph_google_probe_candidates(
         .collect()
 }
 
+/// Probe the Google Fonts API for each family and return the set that
+/// exists in the catalog. API errors are collected and reported according
+/// to `missing_fonts` policy.
 async fn google_font_catalog_matches<'a>(
     families: impl IntoIterator<Item = &'a String>,
     missing_fonts: MissingFontsPolicy,
@@ -2878,6 +2889,7 @@ async fn google_font_catalog_matches<'a>(
     Ok(google_fonts_set)
 }
 
+/// Report Google Fonts API errors according to `missing_fonts` policy.
 fn report_google_catalog_errors(
     api_errors: &[(String, String)],
     missing_fonts: MissingFontsPolicy,
@@ -2907,6 +2919,8 @@ fn report_google_catalog_errors(
     Ok(())
 }
 
+/// Report fonts that are neither in Google Fonts nor locally available,
+/// according to `missing_fonts` policy: ignore, warn, or error.
 fn report_unavailable_fonts(
     unavailable_names: &[String],
     unavailable_details: &[String],
@@ -2949,6 +2963,8 @@ fn report_unavailable_fonts(
     Ok(())
 }
 
+/// Create a `FontForHtml` with `FontSource::Google` for a family name,
+/// or `None` if the name doesn't map to a valid Google Fonts ID.
 fn google_font_for_html(family: &str) -> Option<FontForHtml> {
     Some(FontForHtml {
         family: family.to_string(),
