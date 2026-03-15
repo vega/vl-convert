@@ -2252,16 +2252,65 @@ vegaLiteToCanvas_{ver_name:?}(
         self.svg_to_pdf_with_worker_options(&svg, &policy)
     }
 
+    /// Resolve Google Fonts requests on the worker thread using the async API.
+    ///
+    /// Merges per-request fonts with `config.google_fonts`, deduplicates, and
+    /// downloads each unique font via `GOOGLE_FONTS_CLIENT.load()`.
+    async fn resolve_google_fonts(
+        &self,
+        request_fonts: Option<Vec<GoogleFontRequest>>,
+    ) -> Result<Vec<LoadedFontBatch>, AnyError> {
+        let merged = match (self.config.google_fonts.clone(), request_fonts) {
+            (None, None) => return Ok(Vec::new()),
+            (Some(c), None) => c,
+            (None, Some(r)) => r,
+            (Some(mut c), Some(r)) => {
+                c.extend(r);
+                c
+            }
+        };
+        if merged.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut unique: HashMap<String, GoogleFontRequest> = HashMap::new();
+        for request in merged {
+            let key = google_font_request_key(&request);
+            unique.entry(key).or_insert(request);
+        }
+
+        let mut batches = Vec::new();
+        for request in unique.into_values() {
+            let batch = GOOGLE_FONTS_CLIENT
+                .load(&request.family, request.variants.as_deref())
+                .await
+                .map_err(|err| {
+                    anyhow!(
+                        "Failed to load request font '{}' from Google Fonts: {err}",
+                        request.family
+                    )
+                })?;
+            batches.push(batch);
+        }
+        Ok(batches)
+    }
+
     async fn handle_command(&mut self, cmd: VlConvertCommand) {
-        // Apply a google fonts overlay, execute `$work`, then clear the overlay.
+        // Resolve google fonts on the worker thread, apply as overlay,
+        // execute `$work`, then clear the overlay.
         macro_rules! with_font_overlay {
-            ($self:expr, $batches:expr, $work:expr) => {{
-                if !$batches.is_empty() {
-                    $self.apply_google_fonts_overlay($batches);
+            ($self:expr, $google_fonts:expr, $work:expr) => {{
+                match $self.resolve_google_fonts($google_fonts).await {
+                    Err(e) => Err(e),
+                    Ok(batches) => {
+                        if !batches.is_empty() {
+                            $self.apply_google_fonts_overlay(batches);
+                        }
+                        let result = $work;
+                        $self.clear_google_fonts_overlay();
+                        result
+                    }
                 }
-                let result = $work;
-                $self.clear_google_fonts_overlay();
-                result
             }};
         }
 
@@ -2276,93 +2325,83 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VgToSvg {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 responder,
             } => {
-                let result = with_font_overlay!(
-                    self,
-                    google_font_batches,
-                    self.vega_to_svg(vg_spec, vg_opts).await
-                );
+                let gf = vg_opts.google_fonts.take();
+                let result = with_font_overlay!(self, gf, self.vega_to_svg(vg_spec, vg_opts).await);
                 responder.send(result).ok();
             }
             VlConvertCommand::VgToSg {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 responder,
             } => {
-                let result = with_font_overlay!(
-                    self,
-                    google_font_batches,
-                    self.vega_to_scenegraph(vg_spec, vg_opts).await
-                );
+                let gf = vg_opts.google_fonts.take();
+                let result =
+                    with_font_overlay!(self, gf, self.vega_to_scenegraph(vg_spec, vg_opts).await);
                 responder.send(result).ok();
             }
             VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 responder,
             } => {
+                let gf = vg_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
                 );
                 responder.send(result).ok();
             }
             VlConvertCommand::VlToSvg {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 responder,
             } => {
-                let result = with_font_overlay!(
-                    self,
-                    google_font_batches,
-                    self.vegalite_to_svg(vl_spec, vl_opts).await
-                );
+                let gf = vl_opts.google_fonts.take();
+                let result =
+                    with_font_overlay!(self, gf, self.vegalite_to_svg(vl_spec, vl_opts).await);
                 responder.send(result).ok();
             }
             VlConvertCommand::VlToSg {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vegalite_to_scenegraph(vl_spec, vl_opts).await
                 );
                 responder.send(result).ok();
             }
             VlConvertCommand::VlToSgMsgpack {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await
                 );
                 responder.send(result).ok();
             }
             VlConvertCommand::VgToPng {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 scale,
                 ppi,
                 responder,
             } => {
+                let gf = vg_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     match vg_spec.to_value() {
                         Ok(v) => self.vega_to_png(&v, vg_opts, scale, ppi).await,
                         Err(e) => Err(e),
@@ -2372,16 +2411,16 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VgToJpeg {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 scale,
                 quality,
                 image_policy,
                 responder,
             } => {
+                let gf = vg_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                         .await
                 );
@@ -2389,29 +2428,29 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VgToPdf {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 image_policy,
                 responder,
             } => {
+                let gf = vg_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vega_to_pdf(vg_spec, vg_opts, image_policy).await
                 );
                 responder.send(result).ok();
             }
             VlConvertCommand::VlToPng {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 scale,
                 ppi,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     match vl_spec.to_value() {
                         Ok(v) => self.vegalite_to_png(&v, vl_opts, scale, ppi).await,
                         Err(e) => Err(e),
@@ -2421,16 +2460,16 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VlToJpeg {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 scale,
                 quality,
                 image_policy,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
                         .await
                 );
@@ -2438,14 +2477,14 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VlToPdf {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 image_policy,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
                 );
                 responder.send(result).ok();
@@ -2455,12 +2494,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 scale,
                 ppi,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    google_fonts,
                     self.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
                 );
                 responder.send(result).ok();
@@ -2470,12 +2509,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 scale,
                 quality,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    google_fonts,
                     self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
                 );
                 responder.send(result).ok();
@@ -2483,14 +2522,21 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::SvgToPdf {
                 svg,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    google_fonts,
                     self.svg_to_pdf_with_worker_options(&svg, &image_policy)
                 );
+                responder.send(result).ok();
+            }
+            VlConvertCommand::ResolveGoogleFonts {
+                google_fonts,
+                responder,
+            } => {
+                let result = self.resolve_google_fonts(Some(google_fonts)).await;
                 responder.send(result).ok();
             }
             VlConvertCommand::GetLocalTz { responder } => {
@@ -2521,6 +2567,29 @@ vegaLiteToCanvas_{ver_name:?}(
     }
 }
 
+/// Deduplication key for a Google Font request.
+fn google_font_request_key(request: &GoogleFontRequest) -> String {
+    let mut key = request.family.trim().to_lowercase();
+    key.push('|');
+    match &request.variants {
+        None => key.push_str("all"),
+        Some(variants) => {
+            let mut pairs: Vec<(u16, &'static str)> = variants
+                .iter()
+                .map(|variant| (variant.weight, variant.style.as_str()))
+                .collect();
+            pairs.sort_unstable();
+            for (idx, (weight, style)) in pairs.iter().enumerate() {
+                if idx > 0 {
+                    key.push(',');
+                }
+                key.push_str(&format!("{weight}:{style}"));
+            }
+        }
+    }
+    key
+}
+
 pub enum VlConvertCommand {
     VlToVg {
         vl_spec: ValueOrString,
@@ -2530,37 +2599,31 @@ pub enum VlConvertCommand {
     VgToSvg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VgToSg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToSgMsgpack {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSvg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VlToSg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToPng {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         ppi: f32,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
@@ -2568,7 +2631,6 @@ pub enum VlConvertCommand {
     VgToJpeg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         quality: Option<u8>,
         image_policy: ImageAccessPolicy,
@@ -2577,14 +2639,12 @@ pub enum VlConvertCommand {
     VgToPdf {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         image_policy: ImageAccessPolicy,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToPng {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         ppi: f32,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
@@ -2592,7 +2652,6 @@ pub enum VlConvertCommand {
     VlToJpeg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         quality: Option<u8>,
         image_policy: ImageAccessPolicy,
@@ -2601,14 +2660,12 @@ pub enum VlConvertCommand {
     VlToPdf {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         image_policy: ImageAccessPolicy,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSgMsgpack {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     SvgToPng {
@@ -2616,7 +2673,7 @@ pub enum VlConvertCommand {
         scale: f32,
         ppi: Option<f32>,
         image_policy: ImageAccessPolicy,
-        google_font_batches: Vec<LoadedFontBatch>,
+        google_fonts: Option<Vec<GoogleFontRequest>>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     SvgToJpeg {
@@ -2624,14 +2681,18 @@ pub enum VlConvertCommand {
         scale: f32,
         quality: Option<u8>,
         image_policy: ImageAccessPolicy,
-        google_font_batches: Vec<LoadedFontBatch>,
+        google_fonts: Option<Vec<GoogleFontRequest>>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     SvgToPdf {
         svg: String,
         image_policy: ImageAccessPolicy,
-        google_font_batches: Vec<LoadedFontBatch>,
+        google_fonts: Option<Vec<GoogleFontRequest>>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    ResolveGoogleFonts {
+        google_fonts: Vec<GoogleFontRequest>,
+        responder: oneshot::Sender<Result<Vec<LoadedFontBatch>, AnyError>>,
     },
     GetLocalTz {
         responder: oneshot::Sender<Result<Option<String>, AnyError>>,
@@ -2703,6 +2764,9 @@ impl VlConvertCommand {
                 responder.send(Err(err)).ok();
             }
             Self::SvgToPdf { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
+            Self::ResolveGoogleFonts { responder, .. } => {
                 responder.send(Err(err)).ok();
             }
             Self::GetThemes { responder } => {
@@ -3242,68 +3306,6 @@ impl VlConverter {
         }
     }
 
-    fn request_font_key(request: &GoogleFontRequest) -> String {
-        let mut key = request.family.trim().to_lowercase();
-        key.push('|');
-        match &request.variants {
-            None => key.push_str("all"),
-            Some(variants) => {
-                let mut pairs: Vec<(u16, &'static str)> = variants
-                    .iter()
-                    .map(|variant| (variant.weight, variant.style.as_str()))
-                    .collect();
-                pairs.sort_unstable();
-                for (idx, (weight, style)) in pairs.iter().enumerate() {
-                    if idx > 0 {
-                        key.push(',');
-                    }
-                    key.push_str(&format!("{weight}:{style}"));
-                }
-            }
-        }
-        key
-    }
-
-    pub(crate) async fn resolve_google_fonts(
-        &self,
-        request_fonts: Option<Vec<GoogleFontRequest>>,
-    ) -> Result<Vec<LoadedFontBatch>, AnyError> {
-        // Merge per-call requests with configured google_fonts
-        let merged = match (self.inner.config.google_fonts.clone(), request_fonts) {
-            (None, None) => return Ok(Vec::new()),
-            (Some(c), None) => c,
-            (None, Some(r)) => r,
-            (Some(mut c), Some(r)) => {
-                c.extend(r);
-                c
-            }
-        };
-        let request_fonts = merged;
-        if request_fonts.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mut unique: HashMap<String, GoogleFontRequest> = HashMap::new();
-        for request in request_fonts {
-            let key = Self::request_font_key(&request);
-            unique.entry(key).or_insert(request);
-        }
-
-        let mut batches = Vec::new();
-        for request in unique.into_values() {
-            let batch = GOOGLE_FONTS_CLIENT
-                .load_blocking(&request.family, request.variants.as_deref())
-                .map_err(|err| {
-                    anyhow!(
-                        "Failed to load request font '{}' from Google Fonts: {err}",
-                        request.family
-                    )
-                })?;
-            batches.push(batch);
-        }
-        Ok(batches)
-    }
-
     fn should_preprocess_fonts(&self) -> bool {
         self.inner.config.auto_google_fonts
             || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
@@ -3373,9 +3375,13 @@ impl VlConverter {
 
     /// If font preprocessing is enabled, extract fonts from the SVG and resolve
     /// them via Google Fonts. Returns loaded font batches ready for overlay.
-    async fn preprocess_svg_fonts(&self, svg: &str) -> Result<Vec<LoadedFontBatch>, AnyError> {
+    /// Extract font requests from an SVG for worker-side resolution.
+    async fn preprocess_svg_font_requests(
+        &self,
+        svg: &str,
+    ) -> Result<Option<Vec<GoogleFontRequest>>, AnyError> {
         if !self.should_preprocess_fonts() {
-            return Ok(Vec::new());
+            return Ok(None);
         }
 
         let font_strings = crate::extract::extract_fonts_from_svg(svg);
@@ -3387,12 +3393,11 @@ impl VlConverter {
         )
         .await?;
 
-        self.resolve_google_fonts(if auto_requests.is_empty() {
-            None
+        if auto_requests.is_empty() {
+            Ok(None)
         } else {
-            Some(auto_requests)
-        })
-        .await
+            Ok(Some(auto_requests))
+        }
     }
 
     pub async fn vegalite_to_vega(
@@ -3427,14 +3432,10 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         self.request(
             move |responder| VlConvertCommand::VgToSvg {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 responder,
             },
             "Vega to SVG conversion",
@@ -3457,14 +3458,10 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         self.request(
             move |responder| VlConvertCommand::VgToSg {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 responder,
             },
             "Vega to Scenegraph conversion",
@@ -3487,14 +3484,10 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         self.request(
             move |responder| VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 responder,
             },
             "Vega to Scenegraph conversion",
@@ -3511,33 +3504,25 @@ impl VlConverter {
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToSvg {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega to SVG conversion",
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToSvg {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega-Lite to SVG conversion",
@@ -3555,33 +3540,25 @@ impl VlConverter {
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToSg {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega to Scenegraph conversion",
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToSg {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega-Lite to Scenegraph conversion",
@@ -3599,33 +3576,25 @@ impl VlConverter {
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToSgMsgpack {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega to Scenegraph conversion",
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToSgMsgpack {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega-Lite to Scenegraph conversion",
@@ -3651,9 +3620,6 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
@@ -3662,7 +3628,6 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToPng {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 scale: effective_scale,
                 ppi,
                 responder,
@@ -3686,19 +3651,15 @@ impl VlConverter {
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToPng {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     scale: effective_scale,
                     ppi,
                     responder,
@@ -3707,14 +3668,10 @@ impl VlConverter {
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToPng {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     scale: effective_scale,
                     ppi,
                     responder,
@@ -3743,9 +3700,6 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vg_opts.allowed_base_urls = effective_allowed_base_urls;
@@ -3753,7 +3707,6 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToJpeg {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 scale,
                 quality,
                 image_policy,
@@ -3779,19 +3732,15 @@ impl VlConverter {
         vl_opts.allowed_base_urls = effective_allowed_base_urls;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToJpeg {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     scale,
                     quality,
                     image_policy,
@@ -3801,14 +3750,10 @@ impl VlConverter {
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToJpeg {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     scale,
                     quality,
                     image_policy,
@@ -3835,9 +3780,6 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vg_opts.allowed_base_urls = effective_allowed_base_urls;
@@ -3845,7 +3787,6 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToPdf {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 image_policy,
                 responder,
             },
@@ -3866,19 +3807,15 @@ impl VlConverter {
         vl_opts.allowed_base_urls = effective_allowed_base_urls;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToPdf {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     image_policy,
                     responder,
                 },
@@ -3886,14 +3823,10 @@ impl VlConverter {
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToPdf {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     image_policy,
                     responder,
                 },
@@ -3910,7 +3843,7 @@ impl VlConverter {
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
-        let google_font_batches = self.preprocess_svg_fonts(svg).await?;
+        let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
         self.request(
             move |responder| VlConvertCommand::SvgToPng {
@@ -3918,7 +3851,7 @@ impl VlConverter {
                 scale,
                 ppi,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             },
             "SVG to PNG conversion",
@@ -3933,7 +3866,7 @@ impl VlConverter {
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
-        let google_font_batches = self.preprocess_svg_fonts(svg).await?;
+        let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
         self.request(
             move |responder| VlConvertCommand::SvgToJpeg {
@@ -3941,7 +3874,7 @@ impl VlConverter {
                 scale,
                 quality,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             },
             "SVG to JPEG conversion",
@@ -3951,13 +3884,13 @@ impl VlConverter {
 
     pub async fn svg_to_pdf(&self, svg: &str) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
-        let google_font_batches = self.preprocess_svg_fonts(svg).await?;
+        let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
         self.request(
             move |responder| VlConvertCommand::SvgToPdf {
                 svg,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             },
             "SVG to PDF conversion",

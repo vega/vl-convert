@@ -255,15 +255,11 @@ impl VlConverter {
         }
 
         let vg_spec: ValueOrString = vega_spec.into();
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         let msgpack_bytes: Vec<u8> = self
             .request(
                 move |responder| VlConvertCommand::VgToSgMsgpack {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega to Scenegraph msgpack (HTML analysis)",
@@ -427,8 +423,14 @@ impl VlConverter {
                 let batches = if google_font_requests.is_empty() {
                     Vec::new()
                 } else {
-                    self.resolve_google_fonts(Some(google_font_requests))
-                        .await?
+                    self.request(
+                        move |responder| VlConvertCommand::ResolveGoogleFonts {
+                            google_fonts: google_font_requests,
+                            responder,
+                        },
+                        "Resolve Google Fonts for font-face CSS",
+                    )
+                    .await?
                 };
 
                 let missing = self.inner.config.missing_fonts;
