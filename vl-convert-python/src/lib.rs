@@ -1054,7 +1054,14 @@ fn vegalite_to_html(
 
     run_converter_future(move |converter| async move {
         converter
-            .vegalite_to_html(vl_spec, vl_opts, bundle.unwrap_or(false), embed_local_fonts.unwrap_or(false), subset_fonts, renderer)
+            .vegalite_to_html(
+                vl_spec,
+                vl_opts,
+                bundle.unwrap_or(false),
+                embed_local_fonts.unwrap_or(false),
+                subset_fonts,
+                renderer,
+            )
             .await
     })
     .map_err(|err| prefixed_py_error("Vega-Lite to HTML conversion failed", err))
@@ -1097,7 +1104,14 @@ fn vega_to_html(
     };
     run_converter_future(move |converter| async move {
         converter
-            .vega_to_html(vg_spec, vg_opts, bundle.unwrap_or(false), embed_local_fonts.unwrap_or(false), subset_fonts, renderer)
+            .vega_to_html(
+                vg_spec,
+                vg_opts,
+                bundle.unwrap_or(false),
+                embed_local_fonts.unwrap_or(false),
+                subset_fonts,
+                renderer,
+            )
             .await
     })
     .map_err(|err| prefixed_py_error("Vega to HTML conversion failed", err))
@@ -2221,7 +2235,14 @@ fn vegalite_to_html_asyncio<'py>(
         py,
         move |converter| async move {
             converter
-                .vegalite_to_html(vl_spec, vl_opts, bundle.unwrap_or(false), embed_local_fonts.unwrap_or(false), subset_fonts, renderer)
+                .vegalite_to_html(
+                    vl_spec,
+                    vl_opts,
+                    bundle.unwrap_or(false),
+                    embed_local_fonts.unwrap_or(false),
+                    subset_fonts,
+                    renderer,
+                )
                 .await
         },
         "Vega-Lite to HTML conversion failed",
@@ -2263,7 +2284,14 @@ fn vega_to_html_asyncio<'py>(
         py,
         move |converter| async move {
             converter
-                .vega_to_html(vg_spec, vg_opts, bundle.unwrap_or(false), embed_local_fonts.unwrap_or(false), subset_fonts, renderer)
+                .vega_to_html(
+                    vg_spec,
+                    vg_opts,
+                    bundle.unwrap_or(false),
+                    embed_local_fonts.unwrap_or(false),
+                    subset_fonts,
+                    renderer,
+                )
                 .await
         },
         "Vega to HTML conversion failed",
@@ -2310,8 +2338,7 @@ fn vegalite_fonts_asyncio<'py>(
         py,
         move |converter| async move {
             let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-            let embed_lf =
-                embed_local_fonts.unwrap_or(false);
+            let embed_lf = embed_local_fonts.unwrap_or(false);
             converter
                 .vegalite_fonts(vl_spec, vl_opts, auto_gf, embed_lf, include_font_face, true)
                 .await
@@ -2347,8 +2374,7 @@ fn vega_fonts_asyncio<'py>(
         py,
         move |converter| async move {
             let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-            let embed_lf =
-                embed_local_fonts.unwrap_or(false);
+            let embed_lf = embed_local_fonts.unwrap_or(false);
             converter
                 .vega_fonts(vg_spec, vg_opts, auto_gf, embed_lf, include_font_face, true)
                 .await

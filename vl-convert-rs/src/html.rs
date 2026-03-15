@@ -131,9 +131,8 @@ pub fn font_cdn_url(
         FontSource::Google { .. } => {
             let name = font.family.replace(' ', "+");
             let axis = format_css2_axis(variants);
-            let mut url = format!(
-                "https://fonts.googleapis.com/css2?family={name}:{axis}&display=swap"
-            );
+            let mut url =
+                format!("https://fonts.googleapis.com/css2?family={name}:{axis}&display=swap");
             if let Some(t) = text {
                 if !t.is_empty() {
                     url.push_str("&text=");

@@ -48,8 +48,8 @@ use crate::extract::{
 };
 use crate::font_embed::{generate_font_face_css, inject_locale_chars, variants_by_family};
 use crate::text::{
-    build_usvg_options_with_fontdb, get_font_baseline_snapshot,
-    FONT_CONFIG_VERSION, GOOGLE_FONTS_CLIENT, USVG_OPTIONS,
+    build_usvg_options_with_fontdb, get_font_baseline_snapshot, FONT_CONFIG_VERSION,
+    GOOGLE_FONTS_CLIENT, USVG_OPTIONS,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 use vl_convert_google_fonts::{
@@ -2988,8 +2988,7 @@ async fn classify_scenegraph_fonts(
     let available = available_font_families()?;
 
     let google_fonts_set: HashSet<String> = if auto_google_fonts {
-        let candidates =
-            scenegraph_google_probe_candidates(families, explicit_google_families);
+        let candidates = scenegraph_google_probe_candidates(families, explicit_google_families);
         google_font_catalog_matches(candidates.iter(), missing_fonts).await?
     } else {
         HashSet::new()
@@ -4212,12 +4211,7 @@ impl VlConverter {
         };
 
         let analysis = self
-            .analyze_html_fonts(
-                spec_value,
-                vg_opts,
-                auto_google_fonts,
-                embed_local_fonts,
-            )
+            .analyze_html_fonts(spec_value, vg_opts, auto_google_fonts, embed_local_fonts)
             .await?;
 
         self.build_font_info(analysis, include_font_face, subset_fonts)
@@ -4281,7 +4275,14 @@ impl VlConverter {
                     .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
                     .fontdb
                     .clone();
-                generate_font_face_css(&chars_by_key, &html_fonts, &missing, &fontdb, &batches, subset_fonts)?
+                generate_font_face_css(
+                    &chars_by_key,
+                    &html_fonts,
+                    &missing,
+                    &fontdb,
+                    &batches,
+                    subset_fonts,
+                )?
             } else {
                 HashMap::new()
             };
@@ -4338,9 +4339,9 @@ impl VlConverter {
                 // Use resolved CDN variants when available, otherwise request
                 // all standard weights (Google returns only what exists).
                 let cdn_set = cdn_variants.get(&f.family);
-                let text: Option<String> = family_chars.get(&f.family).map(|chars| {
-                    chars.iter().collect()
-                });
+                let text: Option<String> = family_chars
+                    .get(&f.family)
+                    .map(|chars| chars.iter().collect());
                 let text_ref = text.as_deref();
                 let url = font_cdn_url(f, cdn_set, text_ref);
                 let link_tag = font_link_tag(f, cdn_set, text_ref);
@@ -4497,8 +4498,7 @@ impl VlConverter {
         let auto_install = self.inner.config.auto_google_fonts;
         let embed_local = embed_local_fonts;
 
-        let has_font_work =
-            auto_install || embed_local || vl_opts.google_fonts.is_some();
+        let has_font_work = auto_install || embed_local || vl_opts.google_fonts.is_some();
         let font_head_html = if has_font_work {
             let vega_spec = self
                 .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
@@ -4541,8 +4541,7 @@ impl VlConverter {
         let auto_install = self.inner.config.auto_google_fonts;
         let embed_local = embed_local_fonts;
 
-        let has_font_work =
-            auto_install || embed_local || vg_opts.google_fonts.is_some();
+        let has_font_work = auto_install || embed_local || vg_opts.google_fonts.is_some();
         let font_head_html = if has_font_work {
             let spec_value: serde_json::Value = match &vg_spec {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
@@ -6315,7 +6314,14 @@ try {
             true,
             Renderer::Svg,
         ));
-        assert_send_future(converter.vega_to_html(vg_spec, VgOpts::default(), true, false, true, Renderer::Svg));
+        assert_send_future(converter.vega_to_html(
+            vg_spec,
+            VgOpts::default(),
+            true,
+            false,
+            true,
+            Renderer::Svg,
+        ));
     }
 
     #[tokio::test]
