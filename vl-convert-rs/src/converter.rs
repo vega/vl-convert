@@ -4064,12 +4064,15 @@ impl VlConverter {
         ))
     }
 
-    /// Render a Vega scenegraph for HTML font analysis.
+    /// Render a Vega scenegraph for HTML font analysis via msgpack.
     ///
     /// Unlike the public `vega_to_scenegraph`, this uses the caller-supplied
     /// `auto_google_fonts` flag (not the converter config) to decide whether
     /// to auto-detect Google Fonts from the spec. This ensures the render
     /// and the later classification agree on the effective policy.
+    ///
+    /// Returns msgpack bytes that are deserialized to `serde_json::Value` by
+    /// the caller, avoiding the overhead of JSON string serialization in V8.
     async fn render_scenegraph_for_html(
         &self,
         vega_spec: serde_json::Value,
@@ -4099,16 +4102,19 @@ impl VlConverter {
         let google_font_batches = self
             .resolve_google_fonts(vg_opts.google_fonts.take())
             .await?;
-        self.request(
-            move |responder| VlConvertCommand::VgToSg {
-                vg_spec,
-                vg_opts,
-                google_font_batches,
-                responder,
-            },
-            "Vega to Scenegraph (HTML analysis)",
-        )
-        .await
+        let msgpack_bytes: Vec<u8> = self
+            .request(
+                move |responder| VlConvertCommand::VgToSgMsgpack {
+                    vg_spec,
+                    vg_opts,
+                    google_font_batches,
+                    responder,
+                },
+                "Vega to Scenegraph msgpack (HTML analysis)",
+            )
+            .await?;
+        let sg: serde_json::Value = rmp_serde::from_slice(&msgpack_bytes)?;
+        Ok(sg)
     }
 
     /// Render the Vega scenegraph, walk it in Rust to extract text-by-font
