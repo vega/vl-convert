@@ -12,6 +12,9 @@ import sys
 from pathlib import Path
 
 import pytest
+
+pytest.importorskip("playwright")
+
 import numpy as np
 from PIL import Image
 from playwright.sync_api import sync_playwright
