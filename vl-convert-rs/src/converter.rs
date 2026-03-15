@@ -3292,8 +3292,7 @@ impl VlConverter {
         let mut batches = Vec::new();
         for request in unique.into_values() {
             let batch = GOOGLE_FONTS_CLIENT
-                .load(&request.family, request.variants.as_deref())
-                .await
+                .load_blocking(&request.family, request.variants.as_deref())
                 .map_err(|err| {
                     anyhow!(
                         "Failed to load request font '{}' from Google Fonts: {err}",
