@@ -89,6 +89,8 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
         },
         "google_fonts_cache_dir": vl_convert_rs::google_fonts_cache_dir()
             .map(|p| p.to_string_lossy().into_owned()),
+        "max_worker_heap_size": config.max_worker_heap_size,
+        "gc_after_conversion": config.gc_after_conversion,
     })
 }
 
@@ -105,6 +107,8 @@ struct ConverterConfigOverrides {
     missing_fonts: Option<MissingFontsPolicy>,
     // None => no change, Some(None) => clear, Some(Some(fonts)) => set
     google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
+    max_worker_heap_size: Option<usize>,
+    gc_after_conversion: Option<bool>,
 }
 
 fn parse_config_overrides(
@@ -218,6 +222,26 @@ fn parse_config_overrides(
                     overrides.google_fonts = Some(parsed);
                 }
             }
+            "max_worker_heap_size" => {
+                if !value.is_none() {
+                    overrides.max_worker_heap_size =
+                        Some(value.extract::<usize>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid max_worker_heap_size value for configure: {err}"
+                            )
+                        })?);
+                }
+            }
+            "gc_after_conversion" => {
+                if !value.is_none() {
+                    overrides.gc_after_conversion =
+                        Some(value.extract::<bool>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid gc_after_conversion value for configure: {err}"
+                            )
+                        })?);
+                }
+            }
             // Read-only config fields returned by get_config() are
             // silently ignored so that `configure(**get_config())` works.
             "google_fonts_cache_dir" => {}
@@ -263,6 +287,12 @@ fn apply_config_overrides(
             .write()
             .map_err(|e| vl_convert_rs::anyhow::anyhow!("Failed to write google_fonts: {e}"))?;
         *guard = google_fonts;
+    }
+    if let Some(max_worker_heap_size) = overrides.max_worker_heap_size {
+        config.max_worker_heap_size = max_worker_heap_size;
+    }
+    if let Some(gc_after_conversion) = overrides.gc_after_conversion {
+        config.gc_after_conversion = gc_after_conversion;
     }
     Ok(())
 }
@@ -1623,6 +1653,34 @@ fn get_local_tz() -> PyResult<Option<String>> {
         .map_err(|err| prefixed_py_error("get_local_tz request failed", err))
 }
 
+/// Get V8 heap statistics for each worker in the converter pool.
+///
+/// Returns:
+///     list[dict]: List of dicts with keys ``worker_index``, ``used_heap_size``,
+///         ``total_heap_size``, ``heap_size_limit``, and ``external_memory``
+///         (all sizes in bytes).
+#[pyfunction]
+#[pyo3(signature = ())]
+fn get_worker_memory_statistics() -> PyResult<PyObject> {
+    let stats =
+        run_converter_future(|converter| async move { converter.get_memory_statistics().await })
+            .map_err(|err| prefixed_py_error("get_worker_memory_statistics request failed", err))?;
+
+    Python::with_gil(|py| {
+        let list = pyo3::types::PyList::empty(py);
+        for s in &stats {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item("worker_index", s.worker_index)?;
+            dict.set_item("used_heap_size", s.used_heap_size)?;
+            dict.set_item("total_heap_size", s.total_heap_size)?;
+            dict.set_item("heap_size_limit", s.heap_size_limit)?;
+            dict.set_item("external_memory", s.external_memory)?;
+            list.append(dict)?;
+        }
+        Ok(list.into())
+    })
+}
+
 /// Get the config dict for each built-in theme
 ///
 /// Returns:
@@ -2671,6 +2729,30 @@ fn get_local_tz_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     )
 }
 
+#[doc = async_variant_doc!("get_worker_memory_statistics")]
+#[pyfunction(name = "get_worker_memory_statistics")]
+#[pyo3(signature = ())]
+fn get_worker_memory_statistics_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    run_converter_future_async(
+        py,
+        |converter| async move { converter.get_memory_statistics().await },
+        "get_worker_memory_statistics request failed",
+        |py, stats| {
+            let list = pyo3::types::PyList::empty(py);
+            for s in &stats {
+                let dict = pyo3::types::PyDict::new(py);
+                dict.set_item("worker_index", s.worker_index)?;
+                dict.set_item("used_heap_size", s.used_heap_size)?;
+                dict.set_item("total_heap_size", s.total_heap_size)?;
+                dict.set_item("heap_size_limit", s.heap_size_limit)?;
+                dict.set_item("external_memory", s.external_memory)?;
+                list.append(dict)?;
+            }
+            Ok(list.into())
+        },
+    )
+}
+
 #[doc = async_variant_doc!("get_themes")]
 #[pyfunction(name = "get_themes")]
 #[pyo3(signature = ())]
@@ -2859,6 +2941,10 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(
+        get_worker_memory_statistics_asyncio,
+        &asyncio
+    )?)?;
     asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_themes_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_format_locale_asyncio, &asyncio)?)?;
@@ -2904,6 +2990,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(configure, m)?)?;
     m.add_function(wrap_pyfunction!(get_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
+    m.add_function(wrap_pyfunction!(get_worker_memory_statistics, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
     m.add_function(wrap_pyfunction!(get_format_locale, m)?)?;

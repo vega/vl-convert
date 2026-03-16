@@ -162,6 +162,8 @@ if TYPE_CHECKING:
         auto_google_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
         google_fonts_cache_dir: str | None
+        max_worker_heap_size: int
+        gc_after_conversion: bool
 
 __all__ = [
     "asyncio",
@@ -174,6 +176,7 @@ __all__ = [
     "javascript_bundle",
     "register_font_directory",
     "warm_up_workers",
+    "get_worker_memory_statistics",
     "svg_to_jpeg",
     "svg_to_pdf",
     "svg_to_png",
@@ -307,6 +310,8 @@ def configure(
     auto_google_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
+    max_worker_heap_size: int | None = None,
+    gc_after_conversion: bool | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -340,6 +345,12 @@ def configure(
         (list of ``(weight, style)`` tuples). Fonts are downloaded and
         registered on each conversion call. ``None`` keeps current value.
         Pass ``[]`` to clear.
+    max_worker_heap_size
+        Maximum V8 heap size per worker in megabytes. Default is 1024 (1 GB).
+        Set to 0 for no limit. If ``None``, keep current value.
+    gc_after_conversion
+        Whether to run V8 garbage collection after each conversion to release
+        memory back to the OS. Default is False. If ``None``, keep current value.
     """
     ...
 
@@ -359,6 +370,26 @@ def warm_up_workers() -> None:
 
     This can be used to avoid first-conversion startup latency by pre-initializing
     worker runtimes before submitting conversion requests.
+    """
+    ...
+
+class WorkerMemoryStatistics(TypedDict):
+    worker_index: int
+    used_heap_size: int
+    total_heap_size: int
+    heap_size_limit: int
+    external_memory: int
+
+def get_worker_memory_statistics() -> list[WorkerMemoryStatistics]:
+    """
+    Get V8 heap statistics for each worker in the converter pool.
+
+    Returns
+    -------
+    list[WorkerMemoryStatistics]
+        List of dicts with ``worker_index``, ``used_heap_size``,
+        ``total_heap_size``, ``heap_size_limit``, and ``external_memory``
+        (all sizes in bytes).
     """
     ...
 
@@ -1095,6 +1126,8 @@ if TYPE_CHECKING:
             auto_google_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
+            max_worker_heap_size: int | None = None,
+            gc_after_conversion: bool | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...
@@ -1103,6 +1136,9 @@ if TYPE_CHECKING:
             ...
         async def warm_up_workers(self) -> None:
             """Async version of ``warm_up_workers``. See sync function for full documentation."""
+            ...
+        async def get_worker_memory_statistics(self) -> list[WorkerMemoryStatistics]:
+            """Async version of ``get_worker_memory_statistics``. See sync function for full documentation."""
             ...
         async def svg_to_jpeg(
             self, svg: str, scale: float | None = None, quality: int | None = None

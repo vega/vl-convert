@@ -1129,3 +1129,176 @@ async fn test_svg_to_png_auto_google_fonts_pacifico() {
 </svg>"##;
     check_svg_to_png_baseline("svg_auto_google_fonts_pacifico", svg).await;
 }
+
+mod test_heap_limit {
+    use vl_convert_rs::converter::{VgOpts, VlConverterConfig};
+    use vl_convert_rs::VlConverter;
+
+    /// Verify that exceeding the V8 heap limit returns a specific error
+    /// rather than aborting the process. Uses a small heap (256 MB) and
+    /// a Vega spec that allocates a large array in JS. Also exercises
+    /// `get_memory_statistics` before and after the OOM.
+    #[tokio::test]
+    async fn test_heap_limit_exceeded_returns_error() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            max_worker_heap_size: 256,
+            ..Default::default()
+        })
+        .expect("Failed to create converter with small heap");
+
+        // Warm up the worker so the pool is spawned
+        converter.warm_up().expect("warm_up should succeed");
+
+        // Check heap stats before OOM
+        let stats_before = converter
+            .get_memory_statistics()
+            .await
+            .expect("get_memory_statistics should succeed before OOM");
+        assert_eq!(stats_before.len(), 1, "should have 1 worker");
+        eprintln!(
+            "Before OOM: worker={} used={}B total={}B limit={}B external={}B",
+            stats_before[0].worker_index,
+            stats_before[0].used_heap_size,
+            stats_before[0].total_heap_size,
+            stats_before[0].heap_size_limit,
+            stats_before[0].external_memory,
+        );
+
+        // A Vega spec whose data pipeline generates enough rows to exceed
+        // the 256 MB heap limit.
+        let spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "data": [
+                {
+                    "name": "big",
+                    "transform": [
+                        { "type": "sequence", "start": 0, "stop": 50000000, "as": "x" }
+                    ]
+                }
+            ],
+            "marks": []
+        });
+
+        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+
+        let err = result.expect_err("Expected heap limit error, got Ok");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("V8 heap limit exceeded"),
+            "Error should mention heap limit, got: {msg}"
+        );
+
+        // Check heap stats after OOM — worker should still be responsive
+        let stats_after = converter
+            .get_memory_statistics()
+            .await
+            .expect("get_memory_statistics should succeed after OOM");
+        assert_eq!(stats_after.len(), 1, "should still have 1 worker");
+        eprintln!(
+            "After OOM:  worker={} used={}B total={}B limit={}B external={}B",
+            stats_after[0].worker_index,
+            stats_after[0].used_heap_size,
+            stats_after[0].total_heap_size,
+            stats_after[0].heap_size_limit,
+            stats_after[0].external_memory,
+        );
+    }
+
+    /// Verify that the worker recovers after a heap-limit error and can
+    /// process a subsequent normal conversion.
+    #[tokio::test]
+    async fn test_worker_recovers_after_heap_limit() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            max_worker_heap_size: 256,
+            ..Default::default()
+        })
+        .expect("Failed to create converter with small heap");
+
+        // First: trigger heap limit
+        let big_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "data": [
+                {
+                    "name": "big",
+                    "transform": [
+                        { "type": "sequence", "start": 0, "stop": 50000000, "as": "x" }
+                    ]
+                }
+            ],
+            "marks": []
+        });
+
+        let result = converter.vega_to_svg(big_spec, VgOpts::default()).await;
+        assert!(result.is_err(), "First conversion should fail");
+
+        // Second: a trivial spec should succeed, proving the worker recovered.
+        let small_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "marks": []
+        });
+
+        let result = converter.vega_to_svg(small_spec, VgOpts::default()).await;
+        assert!(
+            result.is_ok(),
+            "Second conversion should succeed after recovery, got: {:?}",
+            result.err()
+        );
+    }
+
+    /// Verify that the heap limit is properly restored after recovery so
+    /// the callback fires again on a second OOM.
+    #[tokio::test]
+    async fn test_heap_limit_restored_after_recovery() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            max_worker_heap_size: 256,
+            ..Default::default()
+        })
+        .expect("Failed to create converter with small heap");
+
+        let big_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "data": [{
+                "name": "big",
+                "transform": [
+                    { "type": "sequence", "start": 0, "stop": 50000000, "as": "x" }
+                ]
+            }],
+            "marks": []
+        });
+
+        // First OOM
+        let result = converter
+            .vega_to_svg(big_spec.clone(), VgOpts::default())
+            .await;
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("V8 heap limit exceeded"), "First OOM: {msg}");
+
+        // Recovery
+        let small_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "marks": []
+        });
+        assert!(converter
+            .vega_to_svg(small_spec, VgOpts::default())
+            .await
+            .is_ok());
+
+        // Second OOM — proves the limit was restored, not stuck at 2×
+        let result = converter.vega_to_svg(big_spec, VgOpts::default()).await;
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("V8 heap limit exceeded"),
+            "Second OOM should also be caught: {msg}"
+        );
+    }
+}
