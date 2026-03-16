@@ -1137,7 +1137,7 @@ mod test_heap_limit {
     /// Verify that exceeding the V8 heap limit returns a specific error
     /// rather than aborting the process. Uses a small heap (256 MB) and
     /// a Vega spec that allocates a large array in JS. Also exercises
-    /// `get_memory_statistics` before and after the OOM.
+    /// `get_worker_memory_statistics` before and after the OOM.
     #[tokio::test]
     async fn test_heap_limit_exceeded_returns_error() {
         let converter = VlConverter::with_config(VlConverterConfig {
@@ -1148,9 +1148,9 @@ mod test_heap_limit {
 
         // Check heap stats before OOM (also verifies pool auto-spawn)
         let stats_before = converter
-            .get_memory_statistics()
+            .get_worker_memory_statistics()
             .await
-            .expect("get_memory_statistics should succeed before OOM");
+            .expect("get_worker_memory_statistics should succeed before OOM");
         assert_eq!(stats_before.len(), 1, "should have 1 worker");
         eprintln!(
             "Before OOM: worker={} used={}B total={}B limit={}B external={}B",
@@ -1189,9 +1189,9 @@ mod test_heap_limit {
 
         // Check heap stats after OOM — worker should still be responsive
         let stats_after = converter
-            .get_memory_statistics()
+            .get_worker_memory_statistics()
             .await
-            .expect("get_memory_statistics should succeed after OOM");
+            .expect("get_worker_memory_statistics should succeed after OOM");
         assert_eq!(stats_after.len(), 1, "should still have 1 worker");
         eprintln!(
             "After OOM:  worker={} used={}B total={}B limit={}B external={}B",

@@ -1663,8 +1663,10 @@ fn get_local_tz() -> PyResult<Option<String>> {
 #[pyo3(signature = ())]
 fn get_worker_memory_statistics() -> PyResult<PyObject> {
     let stats =
-        run_converter_future(|converter| async move { converter.get_memory_statistics().await })
-            .map_err(|err| prefixed_py_error("get_worker_memory_statistics request failed", err))?;
+        run_converter_future(
+            |converter| async move { converter.get_worker_memory_statistics().await },
+        )
+        .map_err(|err| prefixed_py_error("get_worker_memory_statistics request failed", err))?;
 
     Python::with_gil(|py| {
         let list = pyo3::types::PyList::empty(py);
@@ -2735,7 +2737,7 @@ fn get_local_tz_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
 fn get_worker_memory_statistics_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     run_converter_future_async(
         py,
-        |converter| async move { converter.get_memory_statistics().await },
+        |converter| async move { converter.get_worker_memory_statistics().await },
         "get_worker_memory_statistics request failed",
         |py, stats| {
             let list = pyo3::types::PyList::empty(py);

@@ -4184,7 +4184,9 @@ impl VlConverter {
     ///
     /// Spawns the worker pool if it hasn't been created yet, so callers
     /// always get stats for all configured workers.
-    pub async fn get_memory_statistics(&self) -> Result<Vec<WorkerMemoryStatistics>, AnyError> {
+    pub async fn get_worker_memory_statistics(
+        &self,
+    ) -> Result<Vec<WorkerMemoryStatistics>, AnyError> {
         // Ensure the pool is spawned (same as warm_up).
         self.get_or_spawn_sender()?;
 
