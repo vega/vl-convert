@@ -1332,7 +1332,9 @@ mod test_heap_limit {
             max_worker_heap_size_mb: 32,
             ..Default::default()
         });
-        let err = result.err().expect("max_worker_heap_size_mb=32 should be rejected");
+        let err = result
+            .err()
+            .expect("max_worker_heap_size_mb=32 should be rejected");
         let msg = err.to_string();
         assert!(
             msg.contains("minimum supported value"),
