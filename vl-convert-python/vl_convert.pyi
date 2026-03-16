@@ -162,7 +162,7 @@ if TYPE_CHECKING:
         auto_google_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
         google_fonts_cache_dir: str | None
-        max_worker_heap_size: int
+        max_worker_heap_size_mb: int
         gc_after_conversion: bool
 
 __all__ = [
@@ -310,7 +310,7 @@ def configure(
     auto_google_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
-    max_worker_heap_size: int | None = None,
+    max_worker_heap_size_mb: int | None = None,
     gc_after_conversion: bool | None = None,
 ) -> None:
     """
@@ -345,7 +345,7 @@ def configure(
         (list of ``(weight, style)`` tuples). Fonts are downloaded and
         registered on each conversion call. ``None`` keeps current value.
         Pass ``[]`` to clear.
-    max_worker_heap_size
+    max_worker_heap_size_mb
         Maximum V8 heap size per worker in megabytes. Default is 1024 (1 GB).
         Set to 0 for no limit. If ``None``, keep current value.
     gc_after_conversion
@@ -1126,7 +1126,7 @@ if TYPE_CHECKING:
             auto_google_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
-            max_worker_heap_size: int | None = None,
+            max_worker_heap_size_mb: int | None = None,
             gc_after_conversion: bool | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""

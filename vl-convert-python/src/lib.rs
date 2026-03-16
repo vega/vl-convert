@@ -89,7 +89,7 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
         },
         "google_fonts_cache_dir": vl_convert_rs::google_fonts_cache_dir()
             .map(|p| p.to_string_lossy().into_owned()),
-        "max_worker_heap_size": config.max_worker_heap_size,
+        "max_worker_heap_size_mb": config.max_worker_heap_size_mb,
         "gc_after_conversion": config.gc_after_conversion,
     })
 }
@@ -107,7 +107,7 @@ struct ConverterConfigOverrides {
     missing_fonts: Option<MissingFontsPolicy>,
     // None => no change, Some(None) => clear, Some(Some(fonts)) => set
     google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
-    max_worker_heap_size: Option<usize>,
+    max_worker_heap_size_mb: Option<usize>,
     gc_after_conversion: Option<bool>,
 }
 
@@ -222,12 +222,12 @@ fn parse_config_overrides(
                     overrides.google_fonts = Some(parsed);
                 }
             }
-            "max_worker_heap_size" => {
+            "max_worker_heap_size_mb" => {
                 if !value.is_none() {
-                    overrides.max_worker_heap_size =
+                    overrides.max_worker_heap_size_mb =
                         Some(value.extract::<usize>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
-                                "Invalid max_worker_heap_size value for configure: {err}"
+                                "Invalid max_worker_heap_size_mb value for configure: {err}"
                             )
                         })?);
                 }
@@ -288,8 +288,8 @@ fn apply_config_overrides(
             .map_err(|e| vl_convert_rs::anyhow::anyhow!("Failed to write google_fonts: {e}"))?;
         *guard = google_fonts;
     }
-    if let Some(max_worker_heap_size) = overrides.max_worker_heap_size {
-        config.max_worker_heap_size = max_worker_heap_size;
+    if let Some(max_worker_heap_size_mb) = overrides.max_worker_heap_size_mb {
+        config.max_worker_heap_size_mb = max_worker_heap_size_mb;
     }
     if let Some(gc_after_conversion) = overrides.gc_after_conversion {
         config.gc_after_conversion = gc_after_conversion;

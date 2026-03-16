@@ -181,7 +181,7 @@ fn worker_queue_capacity(num_workers: usize) -> usize {
     num_workers.saturating_mul(32).max(32)
 }
 
-/// Minimum `max_worker_heap_size` in MB. The V8 snapshot is ~10 MB and
+/// Minimum `max_worker_heap_size_mb` in MB. The V8 snapshot is ~10 MB and
 /// deserialization needs significant headroom. Values below this cause
 /// V8 to abort during isolate creation.
 const MIN_WORKER_HEAP_SIZE_MB: usize = 64;
@@ -341,11 +341,13 @@ fn normalize_converter_config(
         config.filesystem_root = Some(canonical_root);
     }
 
-    if config.max_worker_heap_size > 0 && config.max_worker_heap_size < MIN_WORKER_HEAP_SIZE_MB {
+    if config.max_worker_heap_size_mb > 0
+        && config.max_worker_heap_size_mb < MIN_WORKER_HEAP_SIZE_MB
+    {
         bail!(
-            "max_worker_heap_size is {} MB, which is too small for V8 to initialize. \
+            "max_worker_heap_size_mb is {} MB, which is too small for V8 to initialize. \
              The minimum supported value is {} MB, or use 0 for no limit.",
-            config.max_worker_heap_size,
+            config.max_worker_heap_size_mb,
             MIN_WORKER_HEAP_SIZE_MB,
         );
     }
@@ -522,7 +524,7 @@ pub struct VlConverterConfig {
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
     /// Maximum V8 heap size in megabytes per worker. Defaults to 1024 (1 GB).
     /// Set to 0 for no limit (V8 default behavior).
-    pub max_worker_heap_size: usize,
+    pub max_worker_heap_size_mb: usize,
     /// Whether to run V8 garbage collection after each conversion to release
     /// memory back to the OS. Defaults to false. Enabling this reduces peak
     /// memory between conversions at the cost of slower throughput.
@@ -539,7 +541,7 @@ impl Default for VlConverterConfig {
             auto_google_fonts: false,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: None,
-            max_worker_heap_size: 1024,
+            max_worker_heap_size_mb: 1024,
             gc_after_conversion: false,
         }
     }
@@ -926,16 +928,23 @@ unsafe extern "C" fn near_heap_limit_callback(
     current_heap_limit: usize,
     _initial_heap_limit: usize,
 ) -> usize {
+    // SAFETY: `data` is a leaked `Box<HeapLimitCallbackData>` created during
+    // worker init. It lives for the isolate's lifetime (bounded: one per worker).
     let cb_data = unsafe { &*(data as *const HeapLimitCallbackData) };
-    cb_data
+
+    // If the flag was already set (repeated callback invocation during the
+    // same OOM episode), return the limit unchanged — do not keep doubling.
+    if cb_data
         .heap_limit_hit
-        .store(true, std::sync::atomic::Ordering::Release);
+        .swap(true, std::sync::atomic::Ordering::AcqRel)
+    {
+        return current_heap_limit;
+    }
+
     cb_data.handle.terminate_execution();
-    // Double the limit temporarily so V8 can process the termination
-    // rather than going directly to FatalProcessOutOfMemory. The callback
-    // is only invoked once (V8 removes it after the first call), so the
-    // effective cap is 2× the configured limit.
-    current_heap_limit * 2
+    // Grant temporary headroom so V8 can process the termination signal
+    // rather than going directly to FatalProcessOutOfMemory.
+    current_heap_limit.saturating_mul(2)
 }
 
 /// Struct that interacts directly with the Deno JavaScript runtime. Not Sendable
@@ -948,7 +957,7 @@ struct InnerVlConverter {
     usvg_options: usvg::Options<'static>,
     config: Arc<VlConverterConfig>,
     /// Pointer to the heap-limit callback data (leaked Box). `None` when
-    /// `max_worker_heap_size` is 0 (no limit).
+    /// `max_worker_heap_size_mb` is 0 (no limit).
     heap_limit_data: Option<*const HeapLimitCallbackData>,
 }
 
@@ -956,6 +965,8 @@ impl InnerVlConverter {
     /// Returns `true` if the near-heap-limit callback has fired.
     fn heap_limit_was_hit(&self) -> bool {
         if let Some(ptr) = self.heap_limit_data {
+            // SAFETY: ptr is a leaked Box<HeapLimitCallbackData> created via
+            // Box::into_raw during worker init. It lives for the isolate's lifetime.
             let data = unsafe { &*ptr };
             data.heap_limit_hit
                 .load(std::sync::atomic::Ordering::Acquire)
@@ -970,6 +981,8 @@ impl InnerVlConverter {
     /// `cancel_terminate_execution()`.
     fn restore_heap_limit_if_needed(&mut self) {
         if let Some(ptr) = self.heap_limit_data {
+            // SAFETY: ptr is a leaked Box<HeapLimitCallbackData> created via
+            // Box::into_raw during worker init. It lives for the isolate's lifetime.
             let data = unsafe { &*ptr };
             if !data
                 .heap_limit_hit
@@ -979,7 +992,10 @@ impl InnerVlConverter {
                 return;
             }
 
-            let max_bytes = self.config.max_worker_heap_size.saturating_mul(1024 * 1024);
+            let max_bytes = self
+                .config
+                .max_worker_heap_size_mb
+                .saturating_mul(1024 * 1024);
             let isolate = self.worker.js_runtime.v8_isolate();
 
             // Remove the (already consumed) callback and restore the
@@ -994,28 +1010,32 @@ impl InnerVlConverter {
         }
     }
 
-    /// If the result is an error and the V8 heap limit was hit, replace
-    /// the error with a descriptive heap-limit-exceeded message including
-    /// current memory statistics. Otherwise return the result unchanged.
-    /// Does not reset the flag — that is done by
-    /// [`restore_heap_limit_if_needed`] in the worker loop.
-    fn check_heap_limit<T>(&mut self, result: Result<T, AnyError>) -> Result<T, AnyError> {
-        match result {
-            Err(_) if self.heap_limit_was_hit() => {
+    /// Send a command result through the responder, replacing the error with
+    /// a heap-limit-exceeded message if the near-heap-limit callback fired.
+    /// All command handlers should use this instead of calling
+    /// `responder.send()` directly.
+    fn send_result<T>(
+        &mut self,
+        responder: oneshot::Sender<Result<T, AnyError>>,
+        result: Result<T, AnyError>,
+    ) {
+        let result = match result {
+            Err(original) if self.heap_limit_was_hit() => {
                 let stats = self.worker.js_runtime.v8_isolate().get_heap_statistics();
                 let used_mb = stats.used_heap_size() as f64 / (1024.0 * 1024.0);
                 let total_mb = stats.total_heap_size() as f64 / (1024.0 * 1024.0);
                 let external_mb = stats.external_memory() as f64 / (1024.0 * 1024.0);
-                Err(anyhow!(
+                Err(original.context(format!(
                     "V8 heap limit exceeded (configured: {} MB). \
                      Worker memory: {used_mb:.1} MB used, {total_mb:.1} MB total, \
                      {external_mb:.1} MB external. \
-                     Increase max_worker_heap_size or set to 0 for no limit.",
-                    self.config.max_worker_heap_size,
-                ))
+                     Increase max_worker_heap_size_mb or set to 0 for no limit.",
+                    self.config.max_worker_heap_size_mb,
+                )))
             }
             other => other,
-        }
+        };
+        responder.send(result).ok();
     }
 
     fn publish_worker_font_state_to_opstate(&mut self) {
@@ -1654,8 +1674,8 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         // Configure WorkerOptions with our custom extensions and V8 snapshot.
         // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
         // This is required for container compatibility (manylinux, slim images).
-        let create_params = if config.max_worker_heap_size > 0 {
-            let max_bytes = config.max_worker_heap_size.saturating_mul(1024 * 1024);
+        let create_params = if config.max_worker_heap_size_mb > 0 {
+            let max_bytes = config.max_worker_heap_size_mb.saturating_mul(1024 * 1024);
             Some(v8::CreateParams::default().heap_limits(0, max_bytes))
         } else {
             None
@@ -1678,7 +1698,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
 
         // Register a near-heap-limit callback so V8 terminates JS execution
         // instead of calling FatalProcessOutOfMemory() (which aborts the process).
-        let heap_limit_data = if config.max_worker_heap_size > 0 {
+        let heap_limit_data = if config.max_worker_heap_size_mb > 0 {
             let isolate = worker.js_runtime.v8_isolate();
             let cb_data = Box::new(HeapLimitCallbackData {
                 handle: isolate.thread_safe_handle(),
@@ -2504,7 +2524,7 @@ vegaLiteToCanvas_{ver_name:?}(
                 responder,
             } => {
                 let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts).await;
-                responder.send(self.check_heap_limit(vega_spec)).ok();
+                self.send_result(responder, vega_spec);
             }
             VlConvertCommand::VgToSvg {
                 vg_spec,
@@ -2513,7 +2533,7 @@ vegaLiteToCanvas_{ver_name:?}(
             } => {
                 let gf = vg_opts.google_fonts.take();
                 let result = with_font_overlay!(self, gf, self.vega_to_svg(vg_spec, vg_opts).await);
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VgToSg {
                 vg_spec,
@@ -2523,7 +2543,7 @@ vegaLiteToCanvas_{ver_name:?}(
                 let gf = vg_opts.google_fonts.take();
                 let result =
                     with_font_overlay!(self, gf, self.vega_to_scenegraph(vg_spec, vg_opts).await);
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
@@ -2536,7 +2556,7 @@ vegaLiteToCanvas_{ver_name:?}(
                     gf,
                     self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VlToSvg {
                 vl_spec,
@@ -2546,7 +2566,7 @@ vegaLiteToCanvas_{ver_name:?}(
                 let gf = vl_opts.google_fonts.take();
                 let result =
                     with_font_overlay!(self, gf, self.vegalite_to_svg(vl_spec, vl_opts).await);
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VlToSg {
                 vl_spec,
@@ -2559,7 +2579,7 @@ vegaLiteToCanvas_{ver_name:?}(
                     gf,
                     self.vegalite_to_scenegraph(vl_spec, vl_opts).await
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VlToSgMsgpack {
                 vl_spec,
@@ -2572,7 +2592,7 @@ vegaLiteToCanvas_{ver_name:?}(
                     gf,
                     self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VgToPng {
                 vg_spec,
@@ -2590,7 +2610,7 @@ vegaLiteToCanvas_{ver_name:?}(
                         Err(e) => Err(e),
                     }
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VgToJpeg {
                 vg_spec,
@@ -2607,7 +2627,7 @@ vegaLiteToCanvas_{ver_name:?}(
                     self.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                         .await
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VgToPdf {
                 vg_spec,
@@ -2621,7 +2641,7 @@ vegaLiteToCanvas_{ver_name:?}(
                     gf,
                     self.vega_to_pdf(vg_spec, vg_opts, image_policy).await
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VlToPng {
                 vl_spec,
@@ -2639,7 +2659,7 @@ vegaLiteToCanvas_{ver_name:?}(
                         Err(e) => Err(e),
                     }
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VlToJpeg {
                 vl_spec,
@@ -2656,7 +2676,7 @@ vegaLiteToCanvas_{ver_name:?}(
                     self.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
                         .await
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::VlToPdf {
                 vl_spec,
@@ -2670,7 +2690,7 @@ vegaLiteToCanvas_{ver_name:?}(
                     gf,
                     self.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::SvgToPng {
                 svg,
@@ -2685,7 +2705,7 @@ vegaLiteToCanvas_{ver_name:?}(
                     google_fonts,
                     self.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::SvgToJpeg {
                 svg,
@@ -2700,7 +2720,7 @@ vegaLiteToCanvas_{ver_name:?}(
                     google_fonts,
                     self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::SvgToPdf {
                 svg,
@@ -2713,22 +2733,22 @@ vegaLiteToCanvas_{ver_name:?}(
                     google_fonts,
                     self.svg_to_pdf_with_worker_options(&svg, &image_policy)
                 );
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::ResolveGoogleFonts {
                 google_fonts,
                 responder,
             } => {
                 let result = self.resolve_google_fonts(Some(google_fonts)).await;
-                responder.send(self.check_heap_limit(result)).ok();
+                self.send_result(responder, result);
             }
             VlConvertCommand::GetLocalTz { responder } => {
                 let local_tz = self.get_local_tz().await;
-                responder.send(self.check_heap_limit(local_tz)).ok();
+                self.send_result(responder, local_tz);
             }
             VlConvertCommand::GetThemes { responder } => {
                 let themes = self.get_themes().await;
-                responder.send(self.check_heap_limit(themes)).ok();
+                self.send_result(responder, themes);
             }
             VlConvertCommand::ComputeVegaembedBundle {
                 vl_version,
@@ -2736,7 +2756,7 @@ vegaLiteToCanvas_{ver_name:?}(
             } => {
                 let bundle =
                     crate::html::bundle_vega_snippet(VEGAEMBED_GLOBAL_SNIPPET, vl_version).await;
-                responder.send(self.check_heap_limit(bundle)).ok();
+                self.send_result(responder, bundle);
             }
             VlConvertCommand::BundleVegaSnippet {
                 snippet,
@@ -2744,7 +2764,7 @@ vegaLiteToCanvas_{ver_name:?}(
                 responder,
             } => {
                 let bundle = crate::html::bundle_vega_snippet(&snippet, vl_version).await;
-                responder.send(self.check_heap_limit(bundle)).ok();
+                self.send_result(responder, bundle);
             }
             VlConvertCommand::GetMemoryStatistics {
                 worker_index,

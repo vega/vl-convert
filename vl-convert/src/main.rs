@@ -69,7 +69,7 @@ struct Cli {
 
     /// Maximum V8 heap size per worker in megabytes [default: 1024, 0 = no limit]
     #[arg(long, global = true, default_value_t = 1024)]
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
 
     /// Run V8 garbage collection after each conversion to release memory
     #[arg(long, global = true)]
@@ -715,7 +715,7 @@ async fn main() -> Result<(), anyhow::Error> {
         google_font: google_font_families,
         auto_google_fonts,
         missing_fonts: missing_fonts_arg,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
         command,
     } = Cli::parse();
@@ -748,7 +748,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )
             .await?
@@ -781,7 +781,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )
             .await?
@@ -818,7 +818,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )
             .await?
@@ -855,7 +855,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )
             .await?
@@ -888,7 +888,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )
             .await?
@@ -1027,7 +1027,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )
             .await?
@@ -1056,7 +1056,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )
             .await?
@@ -1085,7 +1085,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )
             .await?
@@ -1110,7 +1110,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )
             .await?
@@ -1230,7 +1230,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )?;
             let png_data = converter.svg_to_png(&svg, scale, Some(ppi)).await?;
@@ -1253,7 +1253,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )?;
             let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality)).await?;
@@ -1274,7 +1274,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 config_google_fonts.clone(),
-                max_worker_heap_size,
+                max_worker_heap_size_mb,
                 gc_after_conversion,
             )?;
             let pdf_data = converter.svg_to_pdf(&svg).await?;
@@ -1353,7 +1353,7 @@ fn build_converter(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<VlConverter, anyhow::Error> {
     let config = VlConverterConfig {
@@ -1363,7 +1363,7 @@ fn build_converter(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
         ..Default::default()
     };
@@ -1659,7 +1659,7 @@ async fn vl_2_vg(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -1682,7 +1682,7 @@ async fn vl_2_vg(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
     )?;
 
@@ -1737,7 +1737,7 @@ async fn vg_2_svg(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<(), anyhow::Error> {
     // Read input file
@@ -1757,7 +1757,7 @@ async fn vg_2_svg(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
     )?;
 
@@ -1800,7 +1800,7 @@ async fn vg_2_png(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<(), anyhow::Error> {
     // Read input file
@@ -1820,7 +1820,7 @@ async fn vg_2_png(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
     )?;
 
@@ -1865,7 +1865,7 @@ async fn vg_2_jpeg(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<(), anyhow::Error> {
     // Read input file
@@ -1885,7 +1885,7 @@ async fn vg_2_jpeg(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
     )?;
 
@@ -1927,7 +1927,7 @@ async fn vg_2_pdf(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<(), anyhow::Error> {
     // Read input file
@@ -1947,7 +1947,7 @@ async fn vg_2_pdf(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
     )?;
 
@@ -1992,7 +1992,7 @@ async fn vl_2_svg(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -2018,7 +2018,7 @@ async fn vl_2_svg(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
     )?;
 
@@ -2069,7 +2069,7 @@ async fn vl_2_png(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -2095,7 +2095,7 @@ async fn vl_2_png(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
     )?;
 
@@ -2148,7 +2148,7 @@ async fn vl_2_jpeg(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -2174,7 +2174,7 @@ async fn vl_2_jpeg(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
     )?;
 
@@ -2225,7 +2225,7 @@ async fn vl_2_pdf(
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size: usize,
+    max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
 ) -> Result<(), anyhow::Error> {
     // Parse version
@@ -2251,7 +2251,7 @@ async fn vl_2_pdf(
         auto_google_fonts,
         missing_fonts,
         google_fonts,
-        max_worker_heap_size,
+        max_worker_heap_size_mb,
         gc_after_conversion,
     )?;
 

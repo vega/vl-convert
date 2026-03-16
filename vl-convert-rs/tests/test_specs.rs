@@ -1141,7 +1141,7 @@ mod test_heap_limit {
     #[tokio::test]
     async fn test_heap_limit_exceeded_returns_error() {
         let converter = VlConverter::with_config(VlConverterConfig {
-            max_worker_heap_size: 256,
+            max_worker_heap_size_mb: 256,
             ..Default::default()
         })
         .expect("Failed to create converter with small heap");
@@ -1208,7 +1208,7 @@ mod test_heap_limit {
     #[tokio::test]
     async fn test_worker_recovers_after_heap_limit() {
         let converter = VlConverter::with_config(VlConverterConfig {
-            max_worker_heap_size: 256,
+            max_worker_heap_size_mb: 256,
             ..Default::default()
         })
         .expect("Failed to create converter with small heap");
@@ -1253,7 +1253,7 @@ mod test_heap_limit {
     #[tokio::test]
     async fn test_heap_limit_restored_after_recovery() {
         let converter = VlConverter::with_config(VlConverterConfig {
-            max_worker_heap_size: 256,
+            max_worker_heap_size_mb: 256,
             ..Default::default()
         })
         .expect("Failed to create converter with small heap");
@@ -1296,6 +1296,71 @@ mod test_heap_limit {
         assert!(
             msg.contains("V8 heap limit exceeded"),
             "Second OOM should also be caught: {msg}"
+        );
+    }
+
+    /// Verify that max_worker_heap_size_mb=0 (no limit) works: no callback
+    /// is registered and a normal conversion succeeds.
+    #[tokio::test]
+    async fn test_no_heap_limit() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            max_worker_heap_size_mb: 0,
+            ..Default::default()
+        })
+        .expect("max_worker_heap_size_mb=0 should be valid");
+
+        let spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "marks": []
+        });
+
+        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+        assert!(
+            result.is_ok(),
+            "Conversion with no heap limit should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    /// Verify that max_worker_heap_size_mb below the minimum is rejected
+    /// at config time, not deferred to first use.
+    #[test]
+    fn test_min_heap_size_validation() {
+        let result = VlConverter::with_config(VlConverterConfig {
+            max_worker_heap_size_mb: 32,
+            ..Default::default()
+        });
+        let err = result.err().expect("max_worker_heap_size_mb=32 should be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("minimum supported value"),
+            "Should mention minimum, got: {msg}"
+        );
+    }
+
+    /// Smoke test that gc_after_conversion=true doesn't crash.
+    #[tokio::test]
+    async fn test_gc_after_conversion() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            gc_after_conversion: true,
+            ..Default::default()
+        })
+        .expect("gc_after_conversion config should be valid");
+
+        let spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "marks": []
+        });
+
+        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+        assert!(
+            result.is_ok(),
+            "Conversion with gc_after_conversion should succeed: {:?}",
+            result.err()
         );
     }
 }
