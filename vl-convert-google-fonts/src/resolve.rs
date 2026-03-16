@@ -1,5 +1,5 @@
 use crate::error::GoogleFontsError;
-use crate::types::{FontStyle, ResolvedFont, VariantRequest};
+use crate::types::{find_closest_variant, FontStyle, ResolvedFont, VariantRequest};
 use std::collections::HashSet;
 use urlencoding::encode;
 
@@ -181,33 +181,35 @@ pub(crate) fn resolve_from_css2(
     match variants {
         Some(requested) => {
             let deduped = dedupe_variants(requested);
-            let mut unavailable = Vec::new();
             let mut files = Vec::new();
+            let mut seen_urls = HashSet::new();
+
+            let available: Vec<VariantRequest> = resolved
+                .iter()
+                .map(|r| VariantRequest {
+                    weight: r.weight,
+                    style: r.style,
+                })
+                .collect();
 
             for req in &deduped {
-                let found = resolved
-                    .iter()
-                    .find(|r| r.weight == req.weight && r.style == req.style);
+                let found = find_closest_variant(req, &available).map(|idx| &resolved[idx]);
 
-                match found {
-                    Some(font) => {
+                if let Some(font) = found {
+                    // Deduplicate by URL: multiple requested weights may
+                    // resolve to the same font file for single-weight fonts.
+                    if seen_urls.insert(font.url.clone()) {
                         files.push(ResolvedTtfFile {
                             url: font.url.clone(),
-                            weight: req.weight,
-                            style: req.style,
+                            weight: font.weight,
+                            style: font.style,
                         });
-                    }
-                    None => {
-                        unavailable.push(req.clone());
                     }
                 }
             }
 
-            if !unavailable.is_empty() {
-                return Err(GoogleFontsError::VariantsNotAvailable {
-                    font_id: font_id.to_string(),
-                    unavailable,
-                });
+            if files.is_empty() {
+                return Err(GoogleFontsError::FontNotFound(font_id.to_string()));
             }
 
             Ok(ResolvedDownloadPlan { files })
@@ -363,16 +365,44 @@ mod tests {
     }
 
     #[test]
-    fn test_resolve_from_css2_variants_not_available() {
+    fn test_resolve_from_css2_variant_weight_fallback() {
+        // Request weight 900 italic — Roboto only has 400 italic, should fall back
         let requested = vec![VariantRequest {
             weight: 900,
             style: FontStyle::Italic,
         }];
-        let result = resolve_from_css2("roboto", SAMPLE_CSS, Some(&requested));
-        assert!(matches!(
-            result,
-            Err(GoogleFontsError::VariantsNotAvailable { .. })
-        ));
+        let plan = resolve_from_css2("roboto", SAMPLE_CSS, Some(&requested)).unwrap();
+        assert_eq!(plan.files.len(), 1);
+        // Gets the 400 italic file (closest weight with matching style)
+        assert!(plan.files[0].url.contains("KFOkCnqEu92Fr1Mu51xIIzI.ttf"));
+    }
+
+    #[test]
+    fn test_resolve_from_css2_single_weight_font_fallback() {
+        // Simulate a single-weight font (like Bangers: 400 normal only)
+        let single_weight_css = r#"
+@font-face {
+  font-family: 'Bangers';
+  font-style: normal;
+  font-weight: 400;
+  src: url(https://fonts.gstatic.com/s/bangers/v24/FeVQS0BTqb0h60ACL5la.ttf) format('truetype');
+}
+"#;
+        // Request bold (700) — should fall back to 400
+        let requested = vec![
+            VariantRequest {
+                weight: 400,
+                style: FontStyle::Normal,
+            },
+            VariantRequest {
+                weight: 700,
+                style: FontStyle::Normal,
+            },
+        ];
+        let plan = resolve_from_css2("bangers", single_weight_css, Some(&requested)).unwrap();
+        // Both requests resolve to the same URL, deduplicated to 1 file
+        assert_eq!(plan.files.len(), 1);
+        assert!(plan.files[0].url.contains("bangers"));
     }
 
     #[test]

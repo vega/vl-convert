@@ -289,54 +289,6 @@ jobs:
         run: |
           cargo test -p vl-convert -- --test-threads=1
 
-      # HTML bundle validation with Chrome headless
-      # Use debug build (already built by tests) to avoid disk space issues
-      - name: Generate HTML files (bundled and unbundled)
-        run: |
-          mkdir -p html-validation
-          # Generate bundled HTML
-          ./target/debug/vl-convert vl2html \
-            -i vl-convert-rs/tests/vl-specs/circle_binned.vl.json \
-            -o html-validation/circle_binned_bundled.html \
-            --bundle
-          ./target/debug/vl-convert vl2html \
-            -i vl-convert-rs/tests/vl-specs/stacked_bar_h.vl.json \
-            -o html-validation/stacked_bar_bundled.html \
-            --bundle
-          # Generate unbundled HTML (uses CDN)
-          ./target/debug/vl-convert vl2html \
-            -i vl-convert-rs/tests/vl-specs/circle_binned.vl.json \
-            -o html-validation/circle_binned_cdn.html
-          echo "Generated HTML files:"
-          ls -la html-validation/
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-
-      - name: Install Puppeteer
-        run: npm install puppeteer-core
-
-      - name: Validate bundled HTML files with Chrome headless
-        run: |
-          mkdir -p html-validation/screenshots
-          export CHROME_PATH=$(which google-chrome-stable || which chromium-browser || which chromium)
-          # Validate bundled HTML files (these should work offline)
-          node scripts/validate-html.mjs \
-            html-validation/circle_binned_bundled.html \
-            html-validation/screenshots/circle_binned_bundled.png
-          node scripts/validate-html.mjs \
-            html-validation/stacked_bar_bundled.html \
-            html-validation/screenshots/stacked_bar_bundled.png
-          echo "All bundled HTML files validated successfully"
-
-      - name: Upload HTML validation screenshots
-        uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: html-validation-screenshots
-          path: html-validation/
 
       - name: Upload test failures
         uses: actions/upload-artifact@v7
@@ -449,6 +401,26 @@ jobs:
           source .venv/bin/activate
           cd vl-convert-python
           pytest
+
+      # HTML visual regression tests with Playwright
+      - name: Install Playwright and browsers
+        run: |
+          source .venv/bin/activate
+          pip install playwright numpy pillow scikit-image
+          playwright install chromium
+
+      - name: Run HTML browser tests
+        run: |
+          source .venv/bin/activate
+          pytest vl-convert-python/tests/test_html_rendering.py -v
+
+      - name: Upload HTML test failures
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: html-test-failures
+          path: vl-convert-python/tests/html-failures/
+          if-no-files-found: ignore
 
   vl-convert-python-tests:
     runs-on: ${{ matrix.options[0] }}

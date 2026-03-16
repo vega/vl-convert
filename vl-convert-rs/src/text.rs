@@ -10,7 +10,7 @@ use usvg::{
     ImageHrefResolver,
 };
 use vl_convert_canvas2d::font_config::{CustomFont, FontConfig, ResolvedFontConfig};
-use vl_convert_google_fonts::{GoogleFontsClient, LoadedFontBatch, VariantRequest};
+use vl_convert_google_fonts::GoogleFontsClient;
 
 /// Monotonically increasing version counter for font configuration changes.
 /// Incremented each time font configuration is modified.
@@ -298,57 +298,6 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
             .lock()
             .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
         font_config.font_dirs.push(PathBuf::from(dir));
-    }
-
-    refresh_font_baseline_after_config_update()
-}
-
-fn collect_custom_fonts_from_batch(batch: &LoadedFontBatch) -> Vec<CustomFont> {
-    batch
-        .font_data
-        .iter()
-        .map(|data| CustomFont {
-            data: Arc::clone(data),
-            family_name: None,
-        })
-        .collect()
-}
-
-/// Download and install a font by family name from Google Fonts.
-///
-/// Google Fonts TTF files are loaded into `fontdb` as in-memory binary sources.
-/// The same bytes are also appended to `FONT_CONFIG.custom_fonts` so worker
-/// font refreshes keep the newly-installed fonts.
-pub async fn register_google_fonts_font(
-    family: &str,
-    variants: Option<&[VariantRequest]>,
-) -> Result<(), anyhow::Error> {
-    let batch = GOOGLE_FONTS_CLIENT.load(family, variants).await?;
-    let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
-
-    {
-        let mut font_config = FONT_CONFIG
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
-        font_config.custom_fonts.extend(loaded_custom_fonts);
-    }
-
-    refresh_font_baseline_after_config_update()
-}
-
-/// Blocking variant of [`register_google_fonts_font`].
-pub fn register_google_fonts_font_blocking(
-    family: &str,
-    variants: Option<&[VariantRequest]>,
-) -> Result<(), anyhow::Error> {
-    let batch = GOOGLE_FONTS_CLIENT.load_blocking(family, variants)?;
-    let loaded_custom_fonts = collect_custom_fonts_from_batch(&batch);
-
-    {
-        let mut font_config = FONT_CONFIG
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
-        font_config.custom_fonts.extend(loaded_custom_fonts);
     }
 
     refresh_font_baseline_after_config_update()

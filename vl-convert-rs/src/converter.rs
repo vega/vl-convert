@@ -18,7 +18,7 @@ use deno_runtime::worker::{MainWorker, WorkerOptions, WorkerServiceOptions};
 use deno_runtime::FeatureChecker;
 use std::cell::RefCell;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -37,12 +37,14 @@ use png::{PixelDimensions, Unit};
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-use crate::html::get_vega_or_vegalite_script;
 use image::codecs::jpeg::JpegEncoder;
 use image::ImageReader;
 use resvg::render;
 
-use crate::extract::{extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus};
+use crate::extract::{
+    extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus, FontForHtml,
+    FontKey, FontSource,
+};
 use crate::text::{
     build_usvg_options_with_fontdb, get_font_baseline_snapshot, FONT_CONFIG_VERSION,
     GOOGLE_FONTS_CLIENT, USVG_OPTIONS,
@@ -481,6 +483,10 @@ pub struct VlConverterConfig {
     pub auto_google_fonts: bool,
     /// How to handle missing first-choice fonts: silently fallback, warn, or error.
     pub missing_fonts: MissingFontsPolicy,
+    /// Google Fonts to register for all conversions. Each request specifies a
+    /// family and optionally specific variants. Fonts are downloaded and
+    /// registered per-request via the overlay mechanism.
+    pub google_fonts: Option<Vec<GoogleFontRequest>>,
 }
 
 impl Default for VlConverterConfig {
@@ -492,6 +498,7 @@ impl Default for VlConverterConfig {
             allowed_base_urls: None,
             auto_google_fonts: false,
             missing_fonts: MissingFontsPolicy::Fallback,
+            google_fonts: None,
         }
     }
 }
@@ -2245,16 +2252,65 @@ vegaLiteToCanvas_{ver_name:?}(
         self.svg_to_pdf_with_worker_options(&svg, &policy)
     }
 
+    /// Resolve Google Fonts requests on the worker thread using the async API.
+    ///
+    /// Merges per-request fonts with `config.google_fonts`, deduplicates, and
+    /// downloads each unique font via `GOOGLE_FONTS_CLIENT.load()`.
+    async fn resolve_google_fonts(
+        &self,
+        request_fonts: Option<Vec<GoogleFontRequest>>,
+    ) -> Result<Vec<LoadedFontBatch>, AnyError> {
+        let merged = match (self.config.google_fonts.clone(), request_fonts) {
+            (None, None) => return Ok(Vec::new()),
+            (Some(c), None) => c,
+            (None, Some(r)) => r,
+            (Some(mut c), Some(r)) => {
+                c.extend(r);
+                c
+            }
+        };
+        if merged.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut unique: BTreeMap<String, GoogleFontRequest> = BTreeMap::new();
+        for request in merged {
+            let key = google_font_request_key(&request);
+            unique.entry(key).or_insert(request);
+        }
+
+        let mut batches = Vec::new();
+        for request in unique.into_values() {
+            let batch = GOOGLE_FONTS_CLIENT
+                .load(&request.family, request.variants.as_deref())
+                .await
+                .map_err(|err| {
+                    anyhow!(
+                        "Failed to load request font '{}' from Google Fonts: {err}",
+                        request.family
+                    )
+                })?;
+            batches.push(batch);
+        }
+        Ok(batches)
+    }
+
     async fn handle_command(&mut self, cmd: VlConvertCommand) {
-        // Apply a google fonts overlay, execute `$work`, then clear the overlay.
+        // Resolve google fonts on the worker thread, apply as overlay,
+        // execute `$work`, then clear the overlay.
         macro_rules! with_font_overlay {
-            ($self:expr, $batches:expr, $work:expr) => {{
-                if !$batches.is_empty() {
-                    $self.apply_google_fonts_overlay($batches);
+            ($self:expr, $google_fonts:expr, $work:expr) => {{
+                match $self.resolve_google_fonts($google_fonts).await {
+                    Err(e) => Err(e),
+                    Ok(batches) => {
+                        if !batches.is_empty() {
+                            $self.apply_google_fonts_overlay(batches);
+                        }
+                        let result = $work;
+                        $self.clear_google_fonts_overlay();
+                        result
+                    }
                 }
-                let result = $work;
-                $self.clear_google_fonts_overlay();
-                result
             }};
         }
 
@@ -2269,93 +2325,83 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VgToSvg {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 responder,
             } => {
-                let result = with_font_overlay!(
-                    self,
-                    google_font_batches,
-                    self.vega_to_svg(vg_spec, vg_opts).await
-                );
+                let gf = vg_opts.google_fonts.take();
+                let result = with_font_overlay!(self, gf, self.vega_to_svg(vg_spec, vg_opts).await);
                 responder.send(result).ok();
             }
             VlConvertCommand::VgToSg {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 responder,
             } => {
-                let result = with_font_overlay!(
-                    self,
-                    google_font_batches,
-                    self.vega_to_scenegraph(vg_spec, vg_opts).await
-                );
+                let gf = vg_opts.google_fonts.take();
+                let result =
+                    with_font_overlay!(self, gf, self.vega_to_scenegraph(vg_spec, vg_opts).await);
                 responder.send(result).ok();
             }
             VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 responder,
             } => {
+                let gf = vg_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
                 );
                 responder.send(result).ok();
             }
             VlConvertCommand::VlToSvg {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 responder,
             } => {
-                let result = with_font_overlay!(
-                    self,
-                    google_font_batches,
-                    self.vegalite_to_svg(vl_spec, vl_opts).await
-                );
+                let gf = vl_opts.google_fonts.take();
+                let result =
+                    with_font_overlay!(self, gf, self.vegalite_to_svg(vl_spec, vl_opts).await);
                 responder.send(result).ok();
             }
             VlConvertCommand::VlToSg {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vegalite_to_scenegraph(vl_spec, vl_opts).await
                 );
                 responder.send(result).ok();
             }
             VlConvertCommand::VlToSgMsgpack {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await
                 );
                 responder.send(result).ok();
             }
             VlConvertCommand::VgToPng {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 scale,
                 ppi,
                 responder,
             } => {
+                let gf = vg_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     match vg_spec.to_value() {
                         Ok(v) => self.vega_to_png(&v, vg_opts, scale, ppi).await,
                         Err(e) => Err(e),
@@ -2365,16 +2411,16 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VgToJpeg {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 scale,
                 quality,
                 image_policy,
                 responder,
             } => {
+                let gf = vg_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                         .await
                 );
@@ -2382,29 +2428,29 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VgToPdf {
                 vg_spec,
-                vg_opts,
-                google_font_batches,
+                mut vg_opts,
                 image_policy,
                 responder,
             } => {
+                let gf = vg_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vega_to_pdf(vg_spec, vg_opts, image_policy).await
                 );
                 responder.send(result).ok();
             }
             VlConvertCommand::VlToPng {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 scale,
                 ppi,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     match vl_spec.to_value() {
                         Ok(v) => self.vegalite_to_png(&v, vl_opts, scale, ppi).await,
                         Err(e) => Err(e),
@@ -2414,16 +2460,16 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VlToJpeg {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 scale,
                 quality,
                 image_policy,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
                         .await
                 );
@@ -2431,14 +2477,14 @@ vegaLiteToCanvas_{ver_name:?}(
             }
             VlConvertCommand::VlToPdf {
                 vl_spec,
-                vl_opts,
-                google_font_batches,
+                mut vl_opts,
                 image_policy,
                 responder,
             } => {
+                let gf = vl_opts.google_fonts.take();
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    gf,
                     self.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
                 );
                 responder.send(result).ok();
@@ -2448,12 +2494,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 scale,
                 ppi,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    google_fonts,
                     self.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
                 );
                 responder.send(result).ok();
@@ -2463,12 +2509,12 @@ vegaLiteToCanvas_{ver_name:?}(
                 scale,
                 quality,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    google_fonts,
                     self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
                 );
                 responder.send(result).ok();
@@ -2476,14 +2522,21 @@ vegaLiteToCanvas_{ver_name:?}(
             VlConvertCommand::SvgToPdf {
                 svg,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             } => {
                 let result = with_font_overlay!(
                     self,
-                    google_font_batches,
+                    google_fonts,
                     self.svg_to_pdf_with_worker_options(&svg, &image_policy)
                 );
+                responder.send(result).ok();
+            }
+            VlConvertCommand::ResolveGoogleFonts {
+                google_fonts,
+                responder,
+            } => {
+                let result = self.resolve_google_fonts(Some(google_fonts)).await;
                 responder.send(result).ok();
             }
             VlConvertCommand::GetLocalTz { responder } => {
@@ -2514,6 +2567,29 @@ vegaLiteToCanvas_{ver_name:?}(
     }
 }
 
+/// Deduplication key for a Google Font request.
+fn google_font_request_key(request: &GoogleFontRequest) -> String {
+    let mut key = request.family.trim().to_lowercase();
+    key.push('|');
+    match &request.variants {
+        None => key.push_str("all"),
+        Some(variants) => {
+            let mut pairs: Vec<(u16, &'static str)> = variants
+                .iter()
+                .map(|variant| (variant.weight, variant.style.as_str()))
+                .collect();
+            pairs.sort_unstable();
+            for (idx, (weight, style)) in pairs.iter().enumerate() {
+                if idx > 0 {
+                    key.push(',');
+                }
+                key.push_str(&format!("{weight}:{style}"));
+            }
+        }
+    }
+    key
+}
+
 pub enum VlConvertCommand {
     VlToVg {
         vl_spec: ValueOrString,
@@ -2523,37 +2599,31 @@ pub enum VlConvertCommand {
     VgToSvg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VgToSg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToSgMsgpack {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSvg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
     VlToSg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
     },
     VgToPng {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         ppi: f32,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
@@ -2561,7 +2631,6 @@ pub enum VlConvertCommand {
     VgToJpeg {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         quality: Option<u8>,
         image_policy: ImageAccessPolicy,
@@ -2570,14 +2639,12 @@ pub enum VlConvertCommand {
     VgToPdf {
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         image_policy: ImageAccessPolicy,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToPng {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         ppi: f32,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
@@ -2585,7 +2652,6 @@ pub enum VlConvertCommand {
     VlToJpeg {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         scale: f32,
         quality: Option<u8>,
         image_policy: ImageAccessPolicy,
@@ -2594,14 +2660,12 @@ pub enum VlConvertCommand {
     VlToPdf {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         image_policy: ImageAccessPolicy,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     VlToSgMsgpack {
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
-        google_font_batches: Vec<LoadedFontBatch>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     SvgToPng {
@@ -2609,7 +2673,7 @@ pub enum VlConvertCommand {
         scale: f32,
         ppi: Option<f32>,
         image_policy: ImageAccessPolicy,
-        google_font_batches: Vec<LoadedFontBatch>,
+        google_fonts: Option<Vec<GoogleFontRequest>>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     SvgToJpeg {
@@ -2617,14 +2681,18 @@ pub enum VlConvertCommand {
         scale: f32,
         quality: Option<u8>,
         image_policy: ImageAccessPolicy,
-        google_font_batches: Vec<LoadedFontBatch>,
+        google_fonts: Option<Vec<GoogleFontRequest>>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
     },
     SvgToPdf {
         svg: String,
         image_policy: ImageAccessPolicy,
-        google_font_batches: Vec<LoadedFontBatch>,
+        google_fonts: Option<Vec<GoogleFontRequest>>,
         responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
+    },
+    ResolveGoogleFonts {
+        google_fonts: Vec<GoogleFontRequest>,
+        responder: oneshot::Sender<Result<Vec<LoadedFontBatch>, AnyError>>,
     },
     GetLocalTz {
         responder: oneshot::Sender<Result<Option<String>, AnyError>>,
@@ -2698,6 +2766,9 @@ impl VlConvertCommand {
             Self::SvgToPdf { responder, .. } => {
                 responder.send(Err(err)).ok();
             }
+            Self::ResolveGoogleFonts { responder, .. } => {
+                responder.send(Err(err)).ok();
+            }
             Self::GetThemes { responder } => {
                 responder.send(Err(err)).ok();
             }
@@ -2711,168 +2782,66 @@ impl VlConvertCommand {
     }
 }
 
-/// Struct for performing Vega-Lite to Vega conversions using the Deno v8 Runtime
+/// Classify a set of CSS `font-family` strings and return Google Fonts download
+/// requests for any first-choice families that should be overlaid for a render.
 ///
-/// # Examples
-///
-/// ```
-/// use vl_convert_rs::{VlConverter, VlVersion};
-/// let converter = VlConverter::new();
-///
-/// let vl_spec: serde_json::Value = serde_json::from_str(r#"
-/// {
-///   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-///   "data": {"url": "data/movies.json"},
-///   "mark": "circle",
-///   "encoding": {
-///     "x": {
-///       "bin": {"maxbins": 10},
-///       "field": "IMDB Rating"
-///     },
-///     "y": {
-///       "bin": {"maxbins": 10},
-///       "field": "Rotten Tomatoes Rating"
-///     },
-///     "size": {"aggregate": "count"}
-///   }
-/// }   "#).unwrap();
-///
-///     let vega_spec = futures::executor::block_on(
-///         converter.vegalite_to_vega(vl_spec, Default::default())
-///     ).expect(
-///         "Failed to perform Vega-Lite to Vega conversion"
-///     );
-///
-///     println!("{}", vega_spec)
-/// ```
-/// Validate font availability and optionally identify missing fonts to download
-/// from Google Fonts.
-///
-/// Extracts font-family strings from the compiled Vega spec and classifies the
-/// **first** non-generic font in each string (the rest of the CSS fallback
-/// chain is ignored). Returns font requests for downloadable fonts so the
-/// caller can add them to `VgOpts.google_fonts` for per-request overlay.
-/// Missing fonts are warned about or treated as errors depending on settings.
-/// Classify a set of font-family CSS strings and return Google Fonts download
-/// requests for any that need downloading.
-///
-/// Shared logic used by both Vega spec preprocessing and SVG font preprocessing.
-async fn classify_and_request_fonts(
+/// When `prefer_cdn` is true (HTML path), Google-catalog fonts are requested
+/// even if locally available so the render uses the same face the HTML output
+/// will reference. When false (SVG/PNG/PDF path), only fonts not already in
+/// `fontdb` are requested.
+pub(crate) async fn classify_and_request_fonts(
     font_strings: HashSet<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    prefer_cdn: bool,
 ) -> Result<Vec<GoogleFontRequest>, AnyError> {
     if font_strings.is_empty() {
         return Ok(Vec::new());
     }
 
-    // Get currently available font families from fontdb
-    let available: HashSet<String> = USVG_OPTIONS
-        .lock()
-        .map_err(|e| anyhow!("font_preprocessing: failed to lock USVG_OPTIONS: {e}"))?
-        .fontdb
-        .faces()
-        .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
-        .collect();
+    let available = available_font_families()?;
 
     let font_string_vec: Vec<String> = font_strings.into_iter().collect();
 
-    let mut downloadable_set: HashSet<String> = HashSet::new();
-    if auto_google_fonts {
-        // Check which first-fonts are known to Google Fonts (only those not already available)
-        let mut api_errors: Vec<(String, String)> = Vec::new();
-        for font_string in &font_string_vec {
-            let entries = crate::extract::parse_css_font_family(font_string);
-            if let Some(crate::extract::FontFamilyEntry::Named(ref name)) = entries.first() {
-                if !is_available(name, &available) && family_to_id(name).is_some() {
-                    match GOOGLE_FONTS_CLIENT.is_known_font(name).await {
-                        Ok(true) => {
-                            downloadable_set.insert(name.clone());
-                        }
-                        Ok(false) => {}
-                        Err(e) => {
-                            api_errors.push((name.clone(), e.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Report API errors (network issues) distinctly from "not in catalog"
-        if !api_errors.is_empty() {
-            if missing_fonts == MissingFontsPolicy::Error {
-                let details: Vec<String> = api_errors
-                    .iter()
-                    .map(|(name, err)| format!("'{name}': {err}"))
-                    .collect();
-                return Err(anyhow!(
-                    "auto_google_fonts: could not reach the Google Fonts API to check \
-                     the following fonts: {}",
-                    details.join(", ")
-                ));
-            } else if missing_fonts == MissingFontsPolicy::Warn {
-                for (name, err) in &api_errors {
-                    log::warn!(
-                        "auto_google_fonts: could not reach Google Fonts API for '{name}': {err}"
-                    );
-                }
-            }
-        }
-    }
+    let google_fonts_set: HashSet<String> = if auto_google_fonts {
+        let candidates = auto_google_probe_candidates(&font_string_vec, &available, prefer_cdn);
+        google_font_catalog_matches(candidates.iter(), missing_fonts).await?
+    } else {
+        HashSet::new()
+    };
 
     // Classify each font string by its first entry
     let statuses = resolve_first_fonts(&font_string_vec, &available, |family| {
-        auto_google_fonts && downloadable_set.contains(family)
+        auto_google_fonts && google_fonts_set.contains(family)
     });
 
     // Collect unavailable fonts — report before any downloads
-    let unavailable: Vec<(&str, &str)> = statuses
+    let unavailable: Vec<(String, String)> = statuses
         .iter()
         .filter_map(|(css_string, status)| match status {
-            FirstFontStatus::Unavailable { name } => Some((name.as_str(), css_string.as_str())),
+            FirstFontStatus::Unavailable { name } => Some((
+                name.clone(),
+                if name == css_string {
+                    format!("'{name}'")
+                } else {
+                    format!("'{name}' (from \"{css_string}\")")
+                },
+            )),
             _ => None,
         })
         .collect();
 
-    if !unavailable.is_empty() {
-        let details: Vec<String> = unavailable
-            .iter()
-            .map(|(name, css)| {
-                if *name == *css {
-                    format!("'{name}'")
-                } else {
-                    format!("'{name}' (from \"{css}\")")
-                }
-            })
-            .collect();
-        if missing_fonts == MissingFontsPolicy::Error {
-            if auto_google_fonts {
-                return Err(anyhow!(
-                    "auto_google_fonts: the following fonts are not available on the system \
-                     and not found in the Google Fonts catalog: {}",
-                    details.join(", ")
-                ));
-            } else {
-                return Err(anyhow!(
-                    "missing_fonts=error: the following fonts are not available on the system: {}. \
-                     Install them with register_google_fonts_font() or enable auto_google_fonts.",
-                    details.join(", ")
-                ));
-            }
-        }
-        if missing_fonts == MissingFontsPolicy::Warn {
-            for (name, _css) in &unavailable {
-                if auto_google_fonts {
-                    log::warn!(
-                        "auto_google_fonts: font '{name}' is not available on the system \
-                         and not found in the Google Fonts catalog, skipping"
-                    );
-                } else {
-                    log::warn!("missing_fonts=warn: font '{name}' is not available on the system");
-                }
-            }
-        }
-    }
+    let unavailable_names: Vec<String> = unavailable.iter().map(|(name, _)| name.clone()).collect();
+    let unavailable_details: Vec<String> = unavailable
+        .iter()
+        .map(|(_, detail)| detail.clone())
+        .collect();
+    report_unavailable_fonts(
+        &unavailable_names,
+        &unavailable_details,
+        auto_google_fonts,
+        missing_fonts,
+    )?;
 
     if !auto_google_fonts {
         return Ok(Vec::new());
@@ -2906,18 +2875,307 @@ async fn preprocess_fonts(
     }
 
     let font_strings = extract_fonts_from_vega(vega_spec);
-    classify_and_request_fonts(font_strings, auto_google_fonts, missing_fonts).await
+    classify_and_request_fonts(font_strings, auto_google_fonts, missing_fonts, false).await
 }
 
-struct VlConverterInner {
+/// Return all font family names currently available in fontdb.
+fn available_font_families() -> Result<HashSet<String>, AnyError> {
+    Ok(USVG_OPTIONS
+        .lock()
+        .map_err(|e| anyhow!("font_preprocessing: failed to lock USVG_OPTIONS: {e}"))?
+        .fontdb
+        .faces()
+        .flat_map(|face| face.families.iter().map(|(name, _)| name.clone()))
+        .collect())
+}
+
+/// Collect font family names that should be probed against the Google Fonts
+/// catalog. Used by the SVG/PNG preprocessing path. Parses CSS font-family
+/// strings and keeps families that have a valid Google Fonts ID and are either
+/// not locally available or `prefer_cdn` is set.
+fn auto_google_probe_candidates(
+    font_strings: &[String],
+    available: &HashSet<String>,
+    prefer_cdn: bool,
+) -> BTreeSet<String> {
+    font_strings
+        .iter()
+        .filter_map(|font_string| {
+            let entries = crate::extract::parse_css_font_family(font_string);
+            match entries.first() {
+                Some(crate::extract::FontFamilyEntry::Named(name))
+                    if (prefer_cdn || !is_available(name, available))
+                        && family_to_id(name).is_some() =>
+                {
+                    Some(name.clone())
+                }
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// Collect font family names from the rendered scenegraph that should be
+/// probed against Google Fonts. Excludes families already identified as
+/// explicit per-call Google Font requests.
+fn scenegraph_google_probe_candidates(
+    families: &BTreeSet<String>,
+    explicit_google_families: &HashSet<String>,
+) -> BTreeSet<String> {
+    families
+        .iter()
+        .filter(|family| !explicit_google_families.contains(*family))
+        .cloned()
+        .collect()
+}
+
+/// Probe the Google Fonts API for each family and return the set that
+/// exists in the catalog. API errors are collected and reported according
+/// to `missing_fonts` policy.
+async fn google_font_catalog_matches<'a>(
+    families: impl IntoIterator<Item = &'a String>,
+    missing_fonts: MissingFontsPolicy,
+) -> Result<HashSet<String>, AnyError> {
+    let mut google_fonts_set: HashSet<String> = HashSet::new();
+    let mut api_errors: Vec<(String, String)> = Vec::new();
+
+    for family in families {
+        match GOOGLE_FONTS_CLIENT.is_known_font(family).await {
+            Ok(true) => {
+                google_fonts_set.insert(family.clone());
+            }
+            Ok(false) => {}
+            Err(e) => {
+                api_errors.push((family.clone(), e.to_string()));
+            }
+        }
+    }
+
+    report_google_catalog_errors(&api_errors, missing_fonts)?;
+    Ok(google_fonts_set)
+}
+
+/// Report Google Fonts API errors according to `missing_fonts` policy.
+fn report_google_catalog_errors(
+    api_errors: &[(String, String)],
+    missing_fonts: MissingFontsPolicy,
+) -> Result<(), AnyError> {
+    if api_errors.is_empty() {
+        return Ok(());
+    }
+
+    if missing_fonts == MissingFontsPolicy::Error {
+        let details: Vec<String> = api_errors
+            .iter()
+            .map(|(name, err)| format!("'{name}': {err}"))
+            .collect();
+        return Err(anyhow!(
+            "auto_google_fonts: could not reach the Google Fonts API to check \
+             the following fonts: {}",
+            details.join(", ")
+        ));
+    }
+
+    if missing_fonts == MissingFontsPolicy::Warn {
+        for (name, err) in api_errors {
+            log::warn!("auto_google_fonts: could not reach Google Fonts API for '{name}': {err}");
+        }
+    }
+
+    Ok(())
+}
+
+/// Report fonts that are neither in Google Fonts nor locally available,
+/// according to `missing_fonts` policy: ignore, warn, or error.
+fn report_unavailable_fonts(
+    unavailable_names: &[String],
+    unavailable_details: &[String],
+    auto_google_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
+) -> Result<(), AnyError> {
+    if unavailable_names.is_empty() {
+        return Ok(());
+    }
+
+    if missing_fonts == MissingFontsPolicy::Error {
+        if auto_google_fonts {
+            return Err(anyhow!(
+                "auto_google_fonts: the following fonts are not available on the system \
+                 and not found in the Google Fonts catalog: {}",
+                unavailable_details.join(", ")
+            ));
+        } else {
+            return Err(anyhow!(
+                "missing_fonts=error: the following fonts are not available on the system: {}. \
+                 Add them to google_fonts config or enable auto_google_fonts.",
+                unavailable_details.join(", ")
+            ));
+        }
+    }
+
+    if missing_fonts == MissingFontsPolicy::Warn {
+        for name in unavailable_names {
+            if auto_google_fonts {
+                log::warn!(
+                    "auto_google_fonts: font '{name}' is not available on the system \
+                     and not found in the Google Fonts catalog, skipping"
+                );
+            } else {
+                log::warn!("missing_fonts=warn: font '{name}' is not available on the system");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Create a `FontForHtml` with `FontSource::Google` for a family name,
+/// or `None` if the name doesn't map to a valid Google Fonts ID.
+fn google_font_for_html(family: &str) -> Option<FontForHtml> {
+    Some(FontForHtml {
+        family: family.to_string(),
+        source: FontSource::Google {
+            font_id: family_to_id(family)?,
+        },
+    })
+}
+
+/// Classify font families extracted from the scenegraph into Google Fonts
+/// or Local sources.
+///
+/// `explicit_google_families` are families provided by per-call
+/// `GoogleFontRequest` entries — they are classified as Google immediately
+/// without catalog probing and are excluded from missing-font reporting.
+///
+/// Fonts that exist in the Google Fonts catalog are sourced from Google for
+/// portability (CDN links work on any machine). Remaining fonts are classified
+/// as Local when `embed_local_fonts` is true and the font is available
+/// in fontdb.
+pub(crate) async fn classify_scenegraph_fonts(
+    families: &BTreeSet<String>,
+    auto_google_fonts: bool,
+    embed_local_fonts: bool,
+    missing_fonts: MissingFontsPolicy,
+    explicit_google_families: &HashSet<String>,
+) -> Result<Vec<FontForHtml>, AnyError> {
+    if families.is_empty()
+        || (!auto_google_fonts
+            && !embed_local_fonts
+            && missing_fonts == MissingFontsPolicy::Fallback
+            && explicit_google_families.is_empty())
+    {
+        return Ok(Vec::new());
+    }
+
+    let available = available_font_families()?;
+
+    let google_fonts_set: HashSet<String> = if auto_google_fonts {
+        let candidates = scenegraph_google_probe_candidates(families, explicit_google_families);
+        google_font_catalog_matches(candidates.iter(), missing_fonts).await?
+    } else {
+        HashSet::new()
+    };
+
+    let mut html_fonts: Vec<FontForHtml> = Vec::new();
+    let mut unavailable: Vec<String> = Vec::new();
+    for family in families {
+        // Explicit per-call requests win immediately
+        if explicit_google_families.contains(family) {
+            if let Some(font) = google_font_for_html(family) {
+                html_fonts.push(font);
+            }
+            continue;
+        }
+        if auto_google_fonts && google_fonts_set.contains(family) {
+            if let Some(font) = google_font_for_html(family) {
+                html_fonts.push(font);
+                continue;
+            }
+        }
+        if is_available(family, &available) {
+            if embed_local_fonts {
+                html_fonts.push(FontForHtml {
+                    family: family.clone(),
+                    source: FontSource::Local,
+                });
+            }
+            // Font is locally available — not missing even if not embedded
+        } else {
+            unavailable.push(family.clone());
+        }
+    }
+
+    // Report fonts that are neither in Google Fonts nor locally available.
+    // This covers runtime-resolved families (signal/field-driven) that static
+    // spec extraction cannot see.
+    let unavailable_details: Vec<String> = unavailable.iter().map(|n| format!("'{n}'")).collect();
+    report_unavailable_fonts(
+        &unavailable,
+        &unavailable_details,
+        auto_google_fonts,
+        missing_fonts,
+    )?;
+
+    Ok(html_fonts)
+}
+
+/// Result of analyzing a rendered Vega scenegraph for font embedding.
+pub(crate) struct HtmlFontAnalysis {
+    /// Classified font metadata (Google or Local).
+    pub(crate) html_fonts: Vec<FontForHtml>,
+    /// Characters used per (family, weight, style) — for subsetting.
+    pub(crate) chars_by_key: HashMap<FontKey, BTreeSet<char>>,
+    /// (weight, style) variants per family — for CDN URLs.
+    pub(crate) family_variants: HashMap<String, BTreeSet<(String, String)>>,
+}
+
+pub(crate) struct VlConverterInner {
     vegaembed_bundles: Mutex<HashMap<VlVersion, String>>,
     pool: Mutex<Option<WorkerPool>>,
-    config: Arc<VlConverterConfig>,
+    pub(crate) config: Arc<VlConverterConfig>,
 }
 
+/// Struct for performing Vega-Lite to Vega conversions using the Deno v8 runtime.
+///
+/// # Examples
+///
+/// ```
+/// use vl_convert_rs::{VlConverter, VlOpts, VlVersion};
+/// let converter = VlConverter::new();
+///
+/// let vl_spec: serde_json::Value = serde_json::from_str(r#"
+/// {
+///   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+///   "data": {"url": "data/movies.json"},
+///   "mark": "circle",
+///   "encoding": {
+///     "x": {
+///       "bin": {"maxbins": 10},
+///       "field": "IMDB Rating"
+///     },
+///     "y": {
+///       "bin": {"maxbins": 10},
+///       "field": "Rotten Tomatoes Rating"
+///     },
+///     "size": {"aggregate": "count"}
+///   }
+/// }"#).unwrap();
+///
+/// let vega_spec = futures::executor::block_on(
+///     converter.vegalite_to_vega(
+///         vl_spec,
+///         VlOpts {
+///             vl_version: VlVersion::default(),
+///             ..Default::default()
+///         }
+///     )
+/// ).expect("Failed to perform Vega-Lite to Vega conversion");
+///
+/// println!("{}", vega_spec);
+/// ```
 #[derive(Clone)]
 pub struct VlConverter {
-    inner: Arc<VlConverterInner>,
+    pub(crate) inner: Arc<VlConverterInner>,
 }
 
 impl VlConverter {
@@ -2949,7 +3207,7 @@ impl VlConverter {
         (*self.inner.config).clone()
     }
 
-    fn effective_allowed_base_urls(
+    pub(crate) fn effective_allowed_base_urls(
         &self,
         requested_allowed_base_urls: Option<Vec<String>>,
     ) -> Result<Option<Vec<String>>, AnyError> {
@@ -3034,7 +3292,7 @@ impl VlConverter {
         }
     }
 
-    async fn request<R>(
+    pub(crate) async fn request<R>(
         &self,
         make_cmd: impl FnOnce(oneshot::Sender<Result<R, AnyError>>) -> VlConvertCommand,
         request_name: &str,
@@ -3046,61 +3304,6 @@ impl VlConverter {
             Ok(result) => result,
             Err(err) => bail!("Failed to retrieve {request_name} result: {err}"),
         }
-    }
-
-    fn request_font_key(request: &GoogleFontRequest) -> String {
-        let mut key = request.family.trim().to_lowercase();
-        key.push('|');
-        match &request.variants {
-            None => key.push_str("all"),
-            Some(variants) => {
-                let mut pairs: Vec<(u16, &'static str)> = variants
-                    .iter()
-                    .map(|variant| (variant.weight, variant.style.as_str()))
-                    .collect();
-                pairs.sort_unstable();
-                for (idx, (weight, style)) in pairs.iter().enumerate() {
-                    if idx > 0 {
-                        key.push(',');
-                    }
-                    key.push_str(&format!("{weight}:{style}"));
-                }
-            }
-        }
-        key
-    }
-
-    async fn resolve_google_fonts(
-        &self,
-        request_fonts: Option<Vec<GoogleFontRequest>>,
-    ) -> Result<Vec<LoadedFontBatch>, AnyError> {
-        let Some(request_fonts) = request_fonts else {
-            return Ok(Vec::new());
-        };
-        if request_fonts.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mut unique: HashMap<String, GoogleFontRequest> = HashMap::new();
-        for request in request_fonts {
-            let key = Self::request_font_key(&request);
-            unique.entry(key).or_insert(request);
-        }
-
-        let mut batches = Vec::new();
-        for request in unique.into_values() {
-            let batch = GOOGLE_FONTS_CLIENT
-                .load(&request.family, request.variants.as_deref())
-                .await
-                .map_err(|err| {
-                    anyhow!(
-                        "Failed to load request font '{}' from Google Fonts: {err}",
-                        request.family
-                    )
-                })?;
-            batches.push(batch);
-        }
-        Ok(batches)
     }
 
     fn should_preprocess_fonts(&self) -> bool {
@@ -3172,9 +3375,13 @@ impl VlConverter {
 
     /// If font preprocessing is enabled, extract fonts from the SVG and resolve
     /// them via Google Fonts. Returns loaded font batches ready for overlay.
-    async fn preprocess_svg_fonts(&self, svg: &str) -> Result<Vec<LoadedFontBatch>, AnyError> {
+    /// Extract font requests from an SVG for worker-side resolution.
+    async fn preprocess_svg_font_requests(
+        &self,
+        svg: &str,
+    ) -> Result<Option<Vec<GoogleFontRequest>>, AnyError> {
         if !self.should_preprocess_fonts() {
-            return Ok(Vec::new());
+            return Ok(None);
         }
 
         let font_strings = crate::extract::extract_fonts_from_svg(svg);
@@ -3182,15 +3389,15 @@ impl VlConverter {
             font_strings,
             self.inner.config.auto_google_fonts,
             self.inner.config.missing_fonts,
+            false,
         )
         .await?;
 
-        self.resolve_google_fonts(if auto_requests.is_empty() {
-            None
+        if auto_requests.is_empty() {
+            Ok(None)
         } else {
-            Some(auto_requests)
-        })
-        .await
+            Ok(Some(auto_requests))
+        }
     }
 
     pub async fn vegalite_to_vega(
@@ -3225,14 +3432,10 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         self.request(
             move |responder| VlConvertCommand::VgToSvg {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 responder,
             },
             "Vega to SVG conversion",
@@ -3255,14 +3458,10 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         self.request(
             move |responder| VlConvertCommand::VgToSg {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 responder,
             },
             "Vega to Scenegraph conversion",
@@ -3285,14 +3484,10 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         self.request(
             move |responder| VlConvertCommand::VgToSgMsgpack {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 responder,
             },
             "Vega to Scenegraph conversion",
@@ -3309,33 +3504,25 @@ impl VlConverter {
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToSvg {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega to SVG conversion",
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToSvg {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega-Lite to SVG conversion",
@@ -3353,33 +3540,25 @@ impl VlConverter {
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToSg {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega to Scenegraph conversion",
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToSg {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega-Lite to Scenegraph conversion",
@@ -3397,33 +3576,25 @@ impl VlConverter {
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToSgMsgpack {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega to Scenegraph conversion",
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToSgMsgpack {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     responder,
                 },
                 "Vega-Lite to Scenegraph conversion",
@@ -3449,9 +3620,6 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
@@ -3460,7 +3628,6 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToPng {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 scale: effective_scale,
                 ppi,
                 responder,
@@ -3484,19 +3651,15 @@ impl VlConverter {
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToPng {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     scale: effective_scale,
                     ppi,
                     responder,
@@ -3505,14 +3668,10 @@ impl VlConverter {
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToPng {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     scale: effective_scale,
                     ppi,
                     responder,
@@ -3541,9 +3700,6 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vg_opts.allowed_base_urls = effective_allowed_base_urls;
@@ -3551,7 +3707,6 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToJpeg {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 scale,
                 quality,
                 image_policy,
@@ -3577,19 +3732,15 @@ impl VlConverter {
         vl_opts.allowed_base_urls = effective_allowed_base_urls;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToJpeg {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     scale,
                     quality,
                     image_policy,
@@ -3599,14 +3750,10 @@ impl VlConverter {
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToJpeg {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     scale,
                     quality,
                     image_policy,
@@ -3633,9 +3780,6 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let google_font_batches = self
-            .resolve_google_fonts(vg_opts.google_fonts.take())
-            .await?;
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vg_opts.allowed_base_urls = effective_allowed_base_urls;
@@ -3643,7 +3787,6 @@ impl VlConverter {
             move |responder| VlConvertCommand::VgToPdf {
                 vg_spec,
                 vg_opts,
-                google_font_batches,
                 image_policy,
                 responder,
             },
@@ -3664,19 +3807,15 @@ impl VlConverter {
         vl_opts.allowed_base_urls = effective_allowed_base_urls;
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
-            let google_font_batches = self
-                .resolve_google_fonts(vg_opts.google_fonts.take())
-                .await?;
             let vg_spec: ValueOrString = vega_spec.into();
             self.request(
                 move |responder| VlConvertCommand::VgToPdf {
                     vg_spec,
                     vg_opts,
-                    google_font_batches,
                     image_policy,
                     responder,
                 },
@@ -3684,14 +3823,10 @@ impl VlConverter {
             )
             .await
         } else {
-            let google_font_batches = self
-                .resolve_google_fonts(vl_opts.google_fonts.take())
-                .await?;
             self.request(
                 move |responder| VlConvertCommand::VlToPdf {
                     vl_spec,
                     vl_opts,
-                    google_font_batches,
                     image_policy,
                     responder,
                 },
@@ -3708,7 +3843,7 @@ impl VlConverter {
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
-        let google_font_batches = self.preprocess_svg_fonts(svg).await?;
+        let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
         self.request(
             move |responder| VlConvertCommand::SvgToPng {
@@ -3716,7 +3851,7 @@ impl VlConverter {
                 scale,
                 ppi,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             },
             "SVG to PNG conversion",
@@ -3731,7 +3866,7 @@ impl VlConverter {
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
-        let google_font_batches = self.preprocess_svg_fonts(svg).await?;
+        let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
         self.request(
             move |responder| VlConvertCommand::SvgToJpeg {
@@ -3739,7 +3874,7 @@ impl VlConverter {
                 scale,
                 quality,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             },
             "SVG to JPEG conversion",
@@ -3749,13 +3884,13 @@ impl VlConverter {
 
     pub async fn svg_to_pdf(&self, svg: &str) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
-        let google_font_batches = self.preprocess_svg_fonts(svg).await?;
+        let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
         self.request(
             move |responder| VlConvertCommand::SvgToPdf {
                 svg,
                 image_policy,
-                google_font_batches,
+                google_fonts,
                 responder,
             },
             "SVG to PDF conversion",
@@ -3815,82 +3950,6 @@ impl VlConverter {
             "JavaScript bundle generation",
         )
         .await
-    }
-
-    async fn build_html(
-        &self,
-        code: &str,
-        vl_version: VlVersion,
-        bundle: bool,
-    ) -> Result<String, AnyError> {
-        let script_tags = if bundle {
-            format!(
-                r#"
-    <script type="text/javascript">{}</script>
-            "#,
-                self.get_vegaembed_bundle(vl_version).await?
-            )
-        } else {
-            format!(
-                r#"
-    <script src="https://cdn.jsdelivr.net/npm/vega@6"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vega-lite@{vl_ver}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
-            "#,
-                vl_ver = vl_version.to_semver()
-            )
-        };
-
-        Ok(format!(
-            r#"<!DOCTYPE html>
-<html>
-  <head>
-    <style>
-        vega-chart.vega-embed {{
-          width: 100%;
-          display: flex;
-        }}
-        vega-chart.vega-embed details,
-        vega-chart.vega-embed details summary {{
-          position: relative;
-        }}
-    </style>
-    <meta charset="UTF-8">
-    <title>Chart</title>
-{script_tags}
-  </head>
-  <body>
-    <div id="vega-chart"></div>
-    <script type="text/javascript">
-{code}
-    </script>
-  </body>
-</html>
-        "#
-        ))
-    }
-
-    pub async fn vegalite_to_html(
-        &self,
-        vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
-        bundle: bool,
-        renderer: Renderer,
-    ) -> Result<String, AnyError> {
-        let vl_version = vl_opts.vl_version;
-        let code = get_vega_or_vegalite_script(vl_spec, vl_opts.to_embed_opts(renderer)?)?;
-        self.build_html(&code, vl_version, bundle).await
-    }
-
-    pub async fn vega_to_html(
-        &self,
-        vg_spec: impl Into<ValueOrString>,
-        vg_opts: VgOpts,
-        bundle: bool,
-        renderer: Renderer,
-    ) -> Result<String, AnyError> {
-        let code = get_vega_or_vegalite_script(vg_spec, vg_opts.to_embed_opts(renderer)?)?;
-        self.build_html(&code, Default::default(), bundle).await
     }
 
     pub async fn get_local_tz(&self) -> Result<Option<String>, AnyError> {
@@ -5264,6 +5323,10 @@ try {
     }
 
     #[tokio::test]
+    #[cfg_attr(
+        target_os = "windows",
+        ignore = "flaky on Windows: redirect test server timing"
+    )]
     async fn test_vega_loader_denies_redirect_when_allowlist_configured() {
         let disallowed_server =
             TestHttpServer::new(vec![("/data.csv", TestHttpResponse::ok_text("a,b\n1,2\n"))]);
@@ -5638,9 +5701,18 @@ try {
                 ..Default::default()
             },
             true,
+            false,
+            true,
             Renderer::Svg,
         ));
-        assert_send_future(converter.vega_to_html(vg_spec, VgOpts::default(), true, Renderer::Svg));
+        assert_send_future(converter.vega_to_html(
+            vg_spec,
+            VgOpts::default(),
+            true,
+            false,
+            true,
+            Renderer::Svg,
+        ));
     }
 
     #[tokio::test]
@@ -6008,5 +6080,58 @@ try {
         )
         .await
         .unwrap();
+    }
+
+    #[test]
+    fn test_scenegraph_google_probe_candidates_skip_explicit() {
+        let families = BTreeSet::from([
+            "Alpha".to_string(),
+            "Bravo".to_string(),
+            "Charlie".to_string(),
+        ]);
+        let explicit = HashSet::from(["Bravo".to_string()]);
+
+        let candidates = scenegraph_google_probe_candidates(&families, &explicit);
+
+        assert_eq!(
+            candidates,
+            BTreeSet::from(["Alpha".to_string(), "Charlie".to_string()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_classify_scenegraph_fonts_uses_case_insensitive_local_match() {
+        let available = available_font_families().unwrap();
+        let family = available
+            .iter()
+            .find(|name| name.chars().any(|c| c.is_ascii_alphabetic()))
+            .cloned()
+            .expect("expected at least one alphabetic font family in fontdb");
+        let alt_family = if family.to_ascii_uppercase() != family {
+            family.to_ascii_uppercase()
+        } else {
+            family.to_ascii_lowercase()
+        };
+
+        assert_ne!(
+            family, alt_family,
+            "test requires a case-changed family name"
+        );
+        assert!(is_available(&alt_family, &available));
+
+        let families = BTreeSet::from([alt_family.clone()]);
+        let result = classify_scenegraph_fonts(
+            &families,
+            false,
+            true,
+            MissingFontsPolicy::Fallback,
+            &HashSet::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].family, alt_family);
+        assert!(matches!(result[0].source, FontSource::Local));
     }
 }

@@ -128,6 +128,32 @@ if TYPE_CHECKING:
     TimeFormatLocale: TypeAlias = TimeFormatLocaleName | dict[str, Any]
     VlSpec: TypeAlias = str | dict[str, Any]
 
+    class GoogleFontSource(TypedDict):
+        type: Literal["google"]
+        font_id: str
+
+    class LocalFontSource(TypedDict):
+        type: Literal["local"]
+
+    FontSource: TypeAlias = GoogleFontSource | LocalFontSource
+
+    class GoogleFontSpec(TypedDict, total=False):
+        family: str  # required
+        variants: list[tuple[int, str]]  # optional: [(400, "normal"), (700, "italic")]
+
+    class FontVariant(TypedDict):
+        weight: str
+        style: str
+        font_face: str | None
+
+    class FontInfo(TypedDict):
+        name: str
+        source: FontSource
+        variants: list[FontVariant]
+        url: str | None
+        link_tag: str | None
+        import_rule: str | None
+
     class ConverterConfig(TypedDict):
         num_workers: int
         allow_http_access: bool
@@ -147,11 +173,11 @@ __all__ = [
     "get_time_format_locale",
     "javascript_bundle",
     "register_font_directory",
-    "register_google_fonts_font",
     "warm_up_workers",
     "svg_to_jpeg",
     "svg_to_pdf",
     "svg_to_png",
+    "vega_fonts",
     "vega_to_html",
     "vega_to_jpeg",
     "vega_to_pdf",
@@ -159,6 +185,7 @@ __all__ = [
     "vega_to_scenegraph",
     "vega_to_svg",
     "vega_to_url",
+    "vegalite_fonts",
     "vegalite_to_html",
     "vegalite_to_jpeg",
     "vegalite_to_pdf",
@@ -271,31 +298,6 @@ def register_font_directory(font_dir: str) -> None:
     """
     ...
 
-def register_google_fonts_font(
-    font_family: str, variants: list[tuple[int, str]] | None = None
-) -> None:
-    """
-    Download, cache, and register a font by family name from Google Fonts.
-
-    Downloads font files from Google Fonts and registers them for
-    use in subsequent conversions.
-
-    Parameters
-    ----------
-    font_family
-        Font family name (e.g. "Roboto", "Playfair Display")
-    variants
-        Optional list of (weight, style) tuples to download.
-        Style must be "normal" or "italic".
-        If None, downloads all available variants.
-        Example: [(400, "normal"), (700, "normal"), (400, "italic"), (700, "italic")]
-
-    Returns
-    -------
-    None
-    """
-    ...
-
 def configure(
     num_workers: int | None = None,
     allow_http_access: bool | None = None,
@@ -304,6 +306,7 @@ def configure(
     google_fonts_cache_size_mb: int | None = None,
     auto_google_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -331,6 +334,12 @@ def configure(
     missing_fonts
         Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
         If ``None``, keep current value.
+    google_fonts
+        Google Fonts to register for all subsequent conversions. Each entry
+        is a dict with ``"family"`` (required) and optionally ``"variants"``
+        (list of ``(weight, style)`` tuples). Fonts are downloaded and
+        registered on each conversion call. ``None`` keeps current value.
+        Pass ``[]`` to clear.
     """
     ...
 
@@ -413,6 +422,9 @@ def svg_to_png(svg: str, scale: float | None = None, ppi: float | None = None) -
 def vega_to_html(
     vg_spec: VlSpec,
     bundle: bool | None = None,
+    embed_local_fonts: bool | None = None,
+    subset_fonts: bool | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     renderer: Renderer | None = None,
@@ -427,6 +439,9 @@ def vega_to_html(
     bundle
         If True, bundle all dependencies in HTML file.
         If False (default), HTML file will load dependencies from only CDN
+    subset_fonts
+        If True (default), subset fonts to only the characters used in the
+        chart. Set to False if the chart dynamically loads content.
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -612,10 +627,97 @@ def vega_to_url(vg_spec: VlSpec, fullscreen: bool | None = None) -> str:
     """
     ...
 
+def vegalite_fonts(
+    vl_spec: VlSpec,
+    vl_version: str | None = None,
+    config: dict[str, Any] | None = None,
+    theme: VegaThemes | None = None,
+    auto_google_fonts: bool | None = None,
+    embed_local_fonts: bool | None = None,
+    include_font_face: bool = False,
+    subset_fonts: bool | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
+) -> list[FontInfo]:
+    """
+    Return structured font metadata for a rendered Vega-Lite spec.
+
+    Parameters
+    ----------
+    vl_spec
+        Vega-Lite JSON specification string or dict
+    vl_version
+        Vega-Lite library version string (e.g. 'v5.15')
+        (default to latest)
+    config
+        Chart configuration object to apply during conversion
+    theme
+        Named theme (e.g. "dark") to apply during conversion
+    auto_google_fonts
+        Override auto-download from Google Fonts
+        (default: use converter config)
+    embed_local_fonts
+        Override local font embedding
+        (default: use converter config)
+    include_font_face
+        Whether to run the font subsetting pipeline and populate
+        the ``font_face`` field on each variant (default False)
+    subset_fonts
+        If True (default), subset fonts to only the characters used.
+        If False, include full fonts. Only relevant when
+        ``include_font_face=True``.
+
+    Returns
+    -------
+    Structured font metadata for each font used by the chart.
+    """
+    ...
+
+def vega_fonts(
+    vg_spec: VlSpec,
+    auto_google_fonts: bool | None = None,
+    embed_local_fonts: bool | None = None,
+    include_font_face: bool = False,
+    subset_fonts: bool | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    format_locale: FormatLocale | None = None,
+    time_format_locale: TimeFormatLocale | None = None,
+) -> list[FontInfo]:
+    """
+    Return structured font metadata for a rendered Vega spec.
+
+    Parameters
+    ----------
+    vg_spec
+        Vega JSON specification string or dict
+    auto_google_fonts
+        Override auto-download from Google Fonts
+        (default: use converter config)
+    embed_local_fonts
+        Override local font embedding
+        (default: use converter config)
+    include_font_face
+        Whether to run the font subsetting pipeline and populate
+        the ``font_face`` field on each variant (default False)
+    subset_fonts
+        If True (default), subset fonts to only the characters used.
+        If False, include full fonts. Only relevant when
+        ``include_font_face=True``.
+
+    Returns
+    -------
+    Structured font metadata for each font used by the chart.
+    """
+    ...
+
 def vegalite_to_html(
     vl_spec: VlSpec,
     vl_version: str | None = None,
     bundle: bool | None = None,
+    embed_local_fonts: bool | None = None,
+    subset_fonts: bool | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     format_locale: FormatLocale | None = None,
@@ -635,6 +737,9 @@ def vegalite_to_html(
     bundle
         If True, bundle all dependencies in HTML file
         If False (default), HTML file will load dependencies from only CDN
+    subset_fonts
+        If True (default), subset fonts to only the characters used in the
+        chart. Set to False if the chart dynamically loads content.
     config
         Chart configuration object to apply during conversion
     theme
@@ -980,11 +1085,6 @@ if TYPE_CHECKING:
         async def register_font_directory(self, font_dir: str) -> None:
             """Async version of ``register_font_directory``. See sync function for full documentation."""
             ...
-        async def register_google_fonts_font(
-            self, font_family: str, variants: list[tuple[int, str]] | None = None
-        ) -> None:
-            """Async version of ``register_google_fonts_font``. See sync function for full documentation."""
-            ...
         async def configure(
             self,
             num_workers: int | None = None,
@@ -994,6 +1094,7 @@ if TYPE_CHECKING:
             google_fonts_cache_size_mb: int | None = None,
             auto_google_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...
@@ -1020,6 +1121,9 @@ if TYPE_CHECKING:
             self,
             vg_spec: VlSpec,
             bundle: bool | None = None,
+            embed_local_fonts: bool | None = None,
+            subset_fonts: bool | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             renderer: Renderer | None = None,
@@ -1082,11 +1186,43 @@ if TYPE_CHECKING:
         ) -> str:
             """Async version of ``vega_to_url``. See sync function for full documentation."""
             ...
+        async def vegalite_fonts(
+            self,
+            vl_spec: VlSpec,
+            vl_version: str | None = None,
+            config: dict[str, Any] | None = None,
+            theme: VegaThemes | None = None,
+            auto_google_fonts: bool | None = None,
+            embed_local_fonts: bool | None = None,
+            include_font_face: bool = False,
+            subset_fonts: bool | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> list[FontInfo]:
+            """Async version of ``vegalite_fonts``. See sync function for full documentation."""
+            ...
+        async def vega_fonts(
+            self,
+            vg_spec: VlSpec,
+            auto_google_fonts: bool | None = None,
+            embed_local_fonts: bool | None = None,
+            include_font_face: bool = False,
+            subset_fonts: bool | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            format_locale: FormatLocale | None = None,
+            time_format_locale: TimeFormatLocale | None = None,
+        ) -> list[FontInfo]:
+            """Async version of ``vega_fonts``. See sync function for full documentation."""
+            ...
         async def vegalite_to_html(
             self,
             vl_spec: VlSpec,
             vl_version: str | None = None,
             bundle: bool | None = None,
+            embed_local_fonts: bool | None = None,
+            subset_fonts: bool | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             format_locale: FormatLocale | None = None,

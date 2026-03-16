@@ -14,4 +14,4 @@ mod fontdb_ext;
 #[cfg(feature = "fontdb")]
 pub use fontdb_ext::{GoogleFontsDatabaseExt, RegisteredFontBatch};
 
-pub use types::{family_to_id, FontStyle, LoadedFontBatch, VariantRequest};
+pub use types::{family_to_id, find_closest_variant, FontStyle, LoadedFontBatch, VariantRequest};

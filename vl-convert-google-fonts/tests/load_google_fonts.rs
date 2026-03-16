@@ -311,21 +311,23 @@ fn test_empty_variants_returns_error_blocking() {
 }
 
 #[test]
-fn test_variants_not_available_error_blocking() {
+fn test_variant_weight_fallback_blocking() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
+    // Request weight 900 italic — Roboto only has 400 italic, should fall back
     let requested = [VariantRequest {
         weight: 900,
         style: FontStyle::Italic,
     }];
 
-    let err = client
-        .load_blocking("Roboto", Some(&requested))
-        .unwrap_err();
+    let batch = client.load_blocking("Roboto", Some(&requested)).unwrap();
 
-    assert!(matches!(err, GoogleFontsError::VariantsNotAvailable { .. }));
+    // Falls back to 400 italic (closest weight with matching style)
+    assert_eq!(batch.loaded_variants.len(), 1);
+    assert_eq!(batch.loaded_variants[0].weight, 400);
+    assert_eq!(batch.loaded_variants[0].style, FontStyle::Italic);
 }
 
 #[test]
