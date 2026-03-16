@@ -1329,16 +1329,16 @@ mod test_heap_limit {
     #[test]
     fn test_min_heap_size_validation() {
         let result = VlConverter::with_config(VlConverterConfig {
-            max_worker_heap_size_mb: 32,
+            max_worker_heap_size_mb: 1,
             ..Default::default()
         });
         let err = result
             .err()
-            .expect("max_worker_heap_size_mb=32 should be rejected");
+            .expect("max_worker_heap_size_mb=1 should be rejected");
         let msg = err.to_string();
         assert!(
-            msg.contains("minimum supported value"),
-            "Should mention minimum, got: {msg}"
+            msg.contains("too small for V8 to initialize"),
+            "Should mention V8 initialization, got: {msg}"
         );
     }
 

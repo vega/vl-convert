@@ -181,9 +181,8 @@ fn worker_queue_capacity(num_workers: usize) -> usize {
     num_workers.saturating_mul(32).max(32)
 }
 
-/// Minimum `max_worker_heap_size_mb` in MB. The V8 snapshot is ~10 MB and
-/// deserialization needs significant headroom. Values below this cause
-/// V8 to abort during isolate creation.
+/// Minimum `max_worker_heap_size_mb` in MB. Values below this cause V8 to
+/// abort during isolate creation (unrecoverable).
 const MIN_WORKER_HEAP_SIZE_MB: usize = 64;
 
 fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyError> {
@@ -345,8 +344,8 @@ fn normalize_converter_config(
         && config.max_worker_heap_size_mb < MIN_WORKER_HEAP_SIZE_MB
     {
         bail!(
-            "max_worker_heap_size_mb is {} MB, which is too small for V8 to initialize. \
-             The minimum supported value is {} MB, or use 0 for no limit.",
+            "max_worker_heap_size_mb is {} MB, which is too small for V8 to \
+             initialize. Set to {} or higher, or use 0 for no limit.",
             config.max_worker_heap_size_mb,
             MIN_WORKER_HEAP_SIZE_MB,
         );
@@ -522,8 +521,8 @@ pub struct VlConverterConfig {
     /// family and optionally specific variants. Fonts are downloaded and
     /// registered per-request via the overlay mechanism.
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
-    /// Maximum V8 heap size in megabytes per worker. Defaults to 1024 (1 GB).
-    /// Set to 0 for no limit (V8 default behavior).
+    /// Maximum V8 heap size in megabytes per worker. Defaults to 0 (no limit).
+    /// Set to a positive value to cap V8 heap usage per worker.
     pub max_worker_heap_size_mb: usize,
     /// Whether to run V8 garbage collection after each conversion to release
     /// memory back to the OS. Defaults to false. Enabling this reduces peak
@@ -541,7 +540,7 @@ impl Default for VlConverterConfig {
             auto_google_fonts: false,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: None,
-            max_worker_heap_size_mb: 1024,
+            max_worker_heap_size_mb: 0,
             gc_after_conversion: false,
         }
     }
@@ -1001,6 +1000,10 @@ impl InnerVlConverter {
             // Remove the (already consumed) callback and restore the
             // original heap limit.
             isolate.remove_near_heap_limit_callback(near_heap_limit_callback, max_bytes);
+
+            // GC to free garbage from the failed conversion before
+            // re-registering the callback at the original limit.
+            isolate.low_memory_notification();
 
             // Re-register so the next OOM is caught too.
             isolate.add_near_heap_limit_callback(

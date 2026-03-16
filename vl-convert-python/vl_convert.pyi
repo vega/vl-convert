@@ -346,8 +346,8 @@ def configure(
         registered on each conversion call. ``None`` keeps current value.
         Pass ``[]`` to clear.
     max_worker_heap_size_mb
-        Maximum V8 heap size per worker in megabytes. Default is 1024 (1 GB).
-        Set to 0 for no limit. If ``None``, keep current value.
+        Maximum V8 heap size per worker in megabytes. Default is 0 (no limit).
+        If ``None``, keep current value.
     gc_after_conversion
         Whether to run V8 garbage collection after each conversion to release
         memory back to the OS. Default is False. If ``None``, keep current value.

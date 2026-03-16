@@ -67,8 +67,8 @@ struct Cli {
     #[arg(long, global = true, value_enum, default_value_t = MissingFontsArg::Fallback)]
     missing_fonts: MissingFontsArg,
 
-    /// Maximum V8 heap size per worker in megabytes [default: 1024, 0 = no limit]
-    #[arg(long, global = true, default_value_t = 1024)]
+    /// Maximum V8 heap size per worker in megabytes [default: 0 = no limit]
+    #[arg(long, global = true, default_value_t = 0)]
     max_worker_heap_size_mb: usize,
 
     /// Run V8 garbage collection after each conversion to release memory
