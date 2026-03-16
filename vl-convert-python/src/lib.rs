@@ -1653,7 +1653,7 @@ fn get_local_tz() -> PyResult<Option<String>> {
         .map_err(|err| prefixed_py_error("get_local_tz request failed", err))
 }
 
-/// Get V8 heap statistics for each worker in the converter pool.
+/// Get V8 memory usage for each worker in the converter pool.
 ///
 /// Returns:
 ///     list[dict]: List of dicts with keys ``worker_index``, ``used_heap_size``,
@@ -1661,12 +1661,10 @@ fn get_local_tz() -> PyResult<Option<String>> {
 ///         (all sizes in bytes).
 #[pyfunction]
 #[pyo3(signature = ())]
-fn get_worker_memory_statistics() -> PyResult<PyObject> {
+fn get_worker_memory_usage() -> PyResult<PyObject> {
     let stats =
-        run_converter_future(
-            |converter| async move { converter.get_worker_memory_statistics().await },
-        )
-        .map_err(|err| prefixed_py_error("get_worker_memory_statistics request failed", err))?;
+        run_converter_future(|converter| async move { converter.get_worker_memory_usage().await })
+            .map_err(|err| prefixed_py_error("get_worker_memory_usage request failed", err))?;
 
     Python::with_gil(|py| {
         let list = pyo3::types::PyList::empty(py);
@@ -2731,14 +2729,14 @@ fn get_local_tz_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     )
 }
 
-#[doc = async_variant_doc!("get_worker_memory_statistics")]
-#[pyfunction(name = "get_worker_memory_statistics")]
+#[doc = async_variant_doc!("get_worker_memory_usage")]
+#[pyfunction(name = "get_worker_memory_usage")]
 #[pyo3(signature = ())]
-fn get_worker_memory_statistics_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+fn get_worker_memory_usage_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     run_converter_future_async(
         py,
-        |converter| async move { converter.get_worker_memory_statistics().await },
-        "get_worker_memory_statistics request failed",
+        |converter| async move { converter.get_worker_memory_usage().await },
+        "get_worker_memory_usage request failed",
         |py, stats| {
             let list = pyo3::types::PyList::empty(py);
             for s in &stats {
@@ -2943,10 +2941,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(
-        get_worker_memory_statistics_asyncio,
-        &asyncio
-    )?)?;
+    asyncio.add_function(wrap_pyfunction!(get_worker_memory_usage_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_themes_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_format_locale_asyncio, &asyncio)?)?;
@@ -2992,7 +2987,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(configure, m)?)?;
     m.add_function(wrap_pyfunction!(get_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
-    m.add_function(wrap_pyfunction!(get_worker_memory_statistics, m)?)?;
+    m.add_function(wrap_pyfunction!(get_worker_memory_usage, m)?)?;
     m.add_function(wrap_pyfunction!(get_local_tz, m)?)?;
     m.add_function(wrap_pyfunction!(get_themes, m)?)?;
     m.add_function(wrap_pyfunction!(get_format_locale, m)?)?;

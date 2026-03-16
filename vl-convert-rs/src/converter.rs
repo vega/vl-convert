@@ -546,9 +546,9 @@ impl Default for VlConverterConfig {
     }
 }
 
-/// V8 heap statistics for a single worker.
+/// V8 memory usage for a single worker.
 #[derive(Debug, Clone)]
-pub struct WorkerMemoryStatistics {
+pub struct WorkerMemoryUsage {
     /// Index of the worker in the pool (0-based).
     pub worker_index: usize,
     /// Bytes of heap currently in use by V8.
@@ -2769,13 +2769,13 @@ vegaLiteToCanvas_{ver_name:?}(
                 let bundle = crate::html::bundle_vega_snippet(&snippet, vl_version).await;
                 self.send_result(responder, bundle);
             }
-            VlConvertCommand::GetMemoryStatistics {
+            VlConvertCommand::GetMemoryUsage {
                 worker_index,
                 responder,
             } => {
                 let stats = self.worker.js_runtime.v8_isolate().get_heap_statistics();
                 responder
-                    .send(WorkerMemoryStatistics {
+                    .send(WorkerMemoryUsage {
                         worker_index,
                         used_heap_size: stats.used_heap_size(),
                         total_heap_size: stats.total_heap_size(),
@@ -2930,9 +2930,9 @@ pub enum VlConvertCommand {
         vl_version: VlVersion,
         responder: oneshot::Sender<Result<String, AnyError>>,
     },
-    GetMemoryStatistics {
+    GetMemoryUsage {
         worker_index: usize,
-        responder: oneshot::Sender<WorkerMemoryStatistics>,
+        responder: oneshot::Sender<WorkerMemoryUsage>,
     },
 }
 
@@ -3003,7 +3003,7 @@ impl VlConvertCommand {
             Self::BundleVegaSnippet { responder, .. } => {
                 responder.send(Err(err)).ok();
             }
-            Self::GetMemoryStatistics { .. } => {
+            Self::GetMemoryUsage { .. } => {
                 // Responder doesn't carry a Result — just drop it.
             }
         }
@@ -4180,13 +4180,11 @@ impl VlConverter {
         .await
     }
 
-    /// Return V8 memory statistics for every worker in the pool.
+    /// Return V8 memory usage for every worker in the pool.
     ///
     /// Spawns the worker pool if it hasn't been created yet, so callers
     /// always get stats for all configured workers.
-    pub async fn get_worker_memory_statistics(
-        &self,
-    ) -> Result<Vec<WorkerMemoryStatistics>, AnyError> {
+    pub async fn get_worker_memory_usage(&self) -> Result<Vec<WorkerMemoryUsage>, AnyError> {
         // Ensure the pool is spawned (same as warm_up).
         self.get_or_spawn_sender()?;
 
@@ -4220,7 +4218,7 @@ impl VlConverter {
             let (resp_tx, resp_rx) = oneshot::channel();
             let ticket = OutstandingTicket::new(outstanding);
             let cmd = QueuedCommand::new(
-                VlConvertCommand::GetMemoryStatistics {
+                VlConvertCommand::GetMemoryUsage {
                     worker_index: idx,
                     responder: resp_tx,
                 },
@@ -4229,7 +4227,7 @@ impl VlConverter {
             sender
                 .send(cmd)
                 .await
-                .map_err(|e| anyhow!("Failed to send GetMemoryStatistics to worker {idx}: {e}"))?;
+                .map_err(|e| anyhow!("Failed to send GetMemoryUsage to worker {idx}: {e}"))?;
             receivers.push(resp_rx);
         }
 
@@ -4237,7 +4235,7 @@ impl VlConverter {
         for rx in receivers {
             match rx.await {
                 Ok(stats) => results.push(stats),
-                Err(e) => return Err(anyhow!("Failed to receive memory statistics: {e}")),
+                Err(e) => return Err(anyhow!("Failed to receive memory usage: {e}")),
             }
         }
         Ok(results)

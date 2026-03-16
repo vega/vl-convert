@@ -1148,9 +1148,9 @@ mod test_heap_limit {
 
         // Check heap stats before OOM (also verifies pool auto-spawn)
         let stats_before = converter
-            .get_worker_memory_statistics()
+            .get_worker_memory_usage()
             .await
-            .expect("get_worker_memory_statistics should succeed before OOM");
+            .expect("get_worker_memory_usage should succeed before OOM");
         assert_eq!(stats_before.len(), 1, "should have 1 worker");
 
         // Trigger OOM with a spec that exceeds the 256 MB heap limit
@@ -1177,9 +1177,9 @@ mod test_heap_limit {
 
         // Worker should still be responsive after OOM
         let stats_after = converter
-            .get_worker_memory_statistics()
+            .get_worker_memory_usage()
             .await
-            .expect("get_worker_memory_statistics should succeed after OOM");
+            .expect("get_worker_memory_usage should succeed after OOM");
         assert_eq!(stats_after.len(), 1, "should still have 1 worker");
 
         // A normal conversion should succeed, proving recovery

@@ -176,7 +176,7 @@ __all__ = [
     "javascript_bundle",
     "register_font_directory",
     "warm_up_workers",
-    "get_worker_memory_statistics",
+    "get_worker_memory_usage",
     "svg_to_jpeg",
     "svg_to_pdf",
     "svg_to_png",
@@ -373,20 +373,20 @@ def warm_up_workers() -> None:
     """
     ...
 
-class WorkerMemoryStatistics(TypedDict):
+class WorkerMemoryUsage(TypedDict):
     worker_index: int
     used_heap_size: int
     total_heap_size: int
     heap_size_limit: int
     external_memory: int
 
-def get_worker_memory_statistics() -> list[WorkerMemoryStatistics]:
+def get_worker_memory_usage() -> list[WorkerMemoryUsage]:
     """
-    Get V8 heap statistics for each worker in the converter pool.
+    Get V8 memory usage for each worker in the converter pool.
 
     Returns
     -------
-    list[WorkerMemoryStatistics]
+    list[WorkerMemoryUsage]
         List of dicts with ``worker_index``, ``used_heap_size``,
         ``total_heap_size``, ``heap_size_limit``, and ``external_memory``
         (all sizes in bytes).
@@ -1137,8 +1137,8 @@ if TYPE_CHECKING:
         async def warm_up_workers(self) -> None:
             """Async version of ``warm_up_workers``. See sync function for full documentation."""
             ...
-        async def get_worker_memory_statistics(self) -> list[WorkerMemoryStatistics]:
-            """Async version of ``get_worker_memory_statistics``. See sync function for full documentation."""
+        async def get_worker_memory_usage(self) -> list[WorkerMemoryUsage]:
+            """Async version of ``get_worker_memory_usage``. See sync function for full documentation."""
             ...
         async def svg_to_jpeg(
             self, svg: str, scale: float | None = None, quality: int | None = None
