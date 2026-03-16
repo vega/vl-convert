@@ -191,14 +191,6 @@ fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyEr
     if num_workers < 1 {
         bail!("num_workers must be >= 1");
     }
-    if config.max_worker_heap_size > 0 && config.max_worker_heap_size < MIN_WORKER_HEAP_SIZE_MB {
-        bail!(
-            "V8 heap limit exceeded ({} MB). Increase max_worker_heap_size \
-             or set to 0 for no limit. The minimum recommended value is {} MB.",
-            config.max_worker_heap_size,
-            MIN_WORKER_HEAP_SIZE_MB,
-        );
-    }
     ensure_v8_platform_initialized();
     let initial_font_baseline = get_font_baseline_snapshot()?;
 
@@ -347,6 +339,15 @@ fn normalize_converter_config(
             );
         }
         config.filesystem_root = Some(canonical_root);
+    }
+
+    if config.max_worker_heap_size > 0 && config.max_worker_heap_size < MIN_WORKER_HEAP_SIZE_MB {
+        bail!(
+            "max_worker_heap_size is {} MB, which is too small for V8 to initialize. \
+             The minimum supported value is {} MB, or use 0 for no limit.",
+            config.max_worker_heap_size,
+            MIN_WORKER_HEAP_SIZE_MB,
+        );
     }
 
     Ok(config)
@@ -4156,49 +4157,62 @@ impl VlConverter {
         .await
     }
 
-    /// Return V8 heap statistics for every worker in the pool.
+    /// Return V8 memory statistics for every worker in the pool.
+    ///
+    /// Spawns the worker pool if it hasn't been created yet, so callers
+    /// always get stats for all configured workers.
     pub async fn get_memory_statistics(&self) -> Result<Vec<WorkerMemoryStatistics>, AnyError> {
-        // Collect oneshot receivers while holding the pool lock, then drop
-        // the lock before awaiting so we don't hold it across .await.
-        let receivers = {
+        // Ensure the pool is spawned (same as warm_up).
+        self.get_or_spawn_sender()?;
+
+        // Collect senders and outstanding counters while holding the lock,
+        // then drop the lock before awaiting sends.
+        let worker_senders: Vec<(
+            usize,
+            tokio::sync::mpsc::Sender<QueuedCommand>,
+            Arc<AtomicUsize>,
+        )> = {
             let guard = self
                 .inner
                 .pool
                 .lock()
                 .map_err(|e| anyhow!("Failed to lock worker pool: {e}"))?;
 
-            let pool = match guard.as_ref() {
-                Some(pool) => pool,
-                None => return Ok(Vec::new()),
-            };
+            let pool = guard
+                .as_ref()
+                .ok_or_else(|| anyhow!("Worker pool not available"))?;
 
-            let mut receivers = Vec::with_capacity(pool.senders.len());
-            for (idx, sender) in pool.senders.iter().enumerate() {
-                if sender.is_closed() {
-                    continue;
-                }
-                let (resp_tx, resp_rx) = oneshot::channel();
-                let ticket = OutstandingTicket::new(pool.outstanding[idx].clone());
-                let cmd = QueuedCommand::new(
-                    VlConvertCommand::GetMemoryStatistics {
-                        worker_index: idx,
-                        responder: resp_tx,
-                    },
-                    ticket,
-                );
-                sender.try_send(cmd).map_err(|e| {
-                    anyhow!("Failed to send GetMemoryStatistics to worker {idx}: {e}")
-                })?;
-                receivers.push(resp_rx);
-            }
-            receivers
+            pool.senders
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| !s.is_closed())
+                .map(|(idx, s)| (idx, s.clone(), pool.outstanding[idx].clone()))
+                .collect()
         };
+
+        let mut receivers = Vec::with_capacity(worker_senders.len());
+        for (idx, sender, outstanding) in worker_senders {
+            let (resp_tx, resp_rx) = oneshot::channel();
+            let ticket = OutstandingTicket::new(outstanding);
+            let cmd = QueuedCommand::new(
+                VlConvertCommand::GetMemoryStatistics {
+                    worker_index: idx,
+                    responder: resp_tx,
+                },
+                ticket,
+            );
+            sender
+                .send(cmd)
+                .await
+                .map_err(|e| anyhow!("Failed to send GetMemoryStatistics to worker {idx}: {e}"))?;
+            receivers.push(resp_rx);
+        }
 
         let mut results = Vec::with_capacity(receivers.len());
         for rx in receivers {
             match rx.await {
                 Ok(stats) => results.push(stats),
-                Err(e) => return Err(anyhow!("Failed to receive heap statistics: {e}")),
+                Err(e) => return Err(anyhow!("Failed to receive memory statistics: {e}")),
             }
         }
         Ok(results)

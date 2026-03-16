@@ -1146,10 +1146,7 @@ mod test_heap_limit {
         })
         .expect("Failed to create converter with small heap");
 
-        // Warm up the worker so the pool is spawned
-        converter.warm_up().expect("warm_up should succeed");
-
-        // Check heap stats before OOM
+        // Check heap stats before OOM (also verifies pool auto-spawn)
         let stats_before = converter
             .get_memory_statistics()
             .await
