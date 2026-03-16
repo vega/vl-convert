@@ -7,13 +7,14 @@ use itertools::Itertools;
 use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
-    vega_to_url, vegalite_to_url, FormatLocale, MissingFontsPolicy, Renderer, TimeFormatLocale,
-    VgOpts, VlConverter, VlConverterConfig, VlOpts,
+    vega_to_url, vegalite_to_url, FormatLocale, GoogleFontRequest, MissingFontsPolicy, Renderer,
+    TimeFormatLocale, VgOpts, VlConverter, VlConverterConfig, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
-use vl_convert_rs::{anyhow, anyhow::bail, register_google_fonts_font};
+use vl_convert_rs::{anyhow, anyhow::bail};
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default)]
 enum MissingFontsArg {
@@ -52,8 +53,9 @@ struct Cli {
     #[arg(long, global = true)]
     filesystem_root: Option<String>,
 
-    /// Register a font by family name from Google Fonts for this conversion.
-    /// May be specified multiple times. All variants are downloaded.
+    /// Register a font from Google Fonts. Use "Family" for all variants,
+    /// or "Family:400,700italic" for specific weight/style combinations.
+    /// May be specified multiple times.
     #[arg(long = "google-font", global = true)]
     google_font: Vec<String>,
 
@@ -332,6 +334,15 @@ enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
+        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS in HTML output
+        #[arg(long = "embed-local-fonts")]
+        embed_local_fonts: bool,
+
+        /// Disable font subsetting. By default, only the characters used in the
+        /// chart are included. Use this flag if the chart dynamically loads content.
+        #[arg(long = "no-subset-fonts")]
+        no_subset_fonts: bool,
+
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -343,6 +354,53 @@ enum Commands {
         /// Vega renderer. One of 'svg' (default), 'canvas', or 'hybrid'
         #[arg(long)]
         renderer: Option<String>,
+    },
+
+    /// Return font metadata for a rendered Vega-Lite specification
+    Vl2fonts {
+        /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
+        #[arg(short, long)]
+        input: Option<String>,
+
+        /// Path to output JSON file. Writes to stdout if omitted or set to "-"
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
+        vl_version: String,
+
+        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        #[arg(long)]
+        theme: Option<String>,
+
+        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        #[arg(short, long)]
+        config: Option<String>,
+
+        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS
+        #[arg(long = "embed-local-fonts")]
+        embed_local_fonts: bool,
+
+        /// Include @font-face CSS blocks in the output
+        #[arg(long = "include-font-face")]
+        include_font_face: bool,
+
+        /// Disable font subsetting (include full fonts)
+        #[arg(long = "no-subset-fonts")]
+        no_subset_fonts: bool,
+
+        /// d3-format locale name or file with .json extension
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale name or file with .json extension
+        #[arg(long)]
+        time_format_locale: Option<String>,
+
+        /// Pretty-print JSON output
+        #[arg(short, long)]
+        pretty: bool,
     },
 
     /// Convert a Vega specification to an SVG image
@@ -499,6 +557,15 @@ enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
+        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS in HTML output
+        #[arg(long = "embed-local-fonts")]
+        embed_local_fonts: bool,
+
+        /// Disable font subsetting. By default, only the characters used in the
+        /// chart are included. Use this flag if the chart dynamically loads content.
+        #[arg(long = "no-subset-fonts")]
+        no_subset_fonts: bool,
+
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -510,6 +577,41 @@ enum Commands {
         /// Vega renderer. One of 'svg' (default), 'canvas', or 'hybrid'
         #[arg(long)]
         renderer: Option<String>,
+    },
+
+    /// Return font metadata for a rendered Vega specification
+    Vg2fonts {
+        /// Path to input Vega file. Reads from stdin if omitted or set to "-"
+        #[arg(short, long)]
+        input: Option<String>,
+
+        /// Path to output JSON file. Writes to stdout if omitted or set to "-"
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS
+        #[arg(long = "embed-local-fonts")]
+        embed_local_fonts: bool,
+
+        /// Include @font-face CSS blocks in the output
+        #[arg(long = "include-font-face")]
+        include_font_face: bool,
+
+        /// Disable font subsetting (include full fonts)
+        #[arg(long = "no-subset-fonts")]
+        no_subset_fonts: bool,
+
+        /// d3-format locale name or file with .json extension
+        #[arg(long)]
+        format_locale: Option<String>,
+
+        /// d3-time-format locale name or file with .json extension
+        #[arg(long)]
+        time_format_locale: Option<String>,
+
+        /// Pretty-print JSON output
+        #[arg(short, long)]
+        pretty: bool,
     },
 
     /// Convert an SVG image to a PNG image
@@ -611,6 +713,7 @@ async fn main() -> Result<(), anyhow::Error> {
         allow_http_access = false;
     }
     let missing_fonts = missing_fonts_arg.to_policy();
+    let config_google_fonts = parse_google_font_requests(&google_font_families)?;
     use crate::Commands::*;
     match command {
         Vl2vg {
@@ -622,7 +725,6 @@ async fn main() -> Result<(), anyhow::Error> {
             pretty,
             show_warnings,
         } => {
-            register_google_fonts(&google_font_families).await?;
             vl_2_vg(
                 input_vegalite_file.as_deref(),
                 output_vega_file.as_deref(),
@@ -635,6 +737,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )
             .await?
         }
@@ -651,7 +754,6 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             vl_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -666,6 +768,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )
             .await?
         }
@@ -684,7 +787,6 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             vl_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -701,6 +803,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )
             .await?
         }
@@ -719,7 +822,6 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             vl_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -736,6 +838,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )
             .await?
         }
@@ -752,7 +855,6 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             vl_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -767,6 +869,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )
             .await?
         }
@@ -787,12 +890,13 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             bundle,
+            embed_local_fonts,
+            no_subset_fonts,
             format_locale,
             time_format_locale,
             renderer,
         } => {
-            register_google_fonts(&google_font_families).await?;
-            // Initialize converter
+            let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vl_str = read_input_string(input.as_deref())?;
             let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
             let config = read_config_json(config)?;
@@ -802,7 +906,12 @@ async fn main() -> Result<(), anyhow::Error> {
                 parse_time_format_locale_option(time_format_locale.as_deref())?;
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
-            let converter = VlConverter::new();
+            let converter = VlConverter::with_config(VlConverterConfig {
+                auto_google_fonts,
+                missing_fonts,
+                google_fonts: config_google_fonts.clone(),
+                ..Default::default()
+            })?;
             let html = converter
                 .vegalite_to_html(
                     vl_spec,
@@ -814,13 +923,69 @@ async fn main() -> Result<(), anyhow::Error> {
                         allowed_base_urls: None,
                         format_locale,
                         time_format_locale,
-                        google_fonts: None,
+                        google_fonts,
                     },
                     bundle,
+                    embed_local_fonts,
+                    !no_subset_fonts,
                     Renderer::from_str(&renderer)?,
                 )
                 .await?;
             write_output_string(output.as_deref(), &html)?;
+        }
+        Vl2fonts {
+            input,
+            output,
+            vl_version,
+            theme,
+            config,
+            embed_local_fonts,
+            include_font_face,
+            no_subset_fonts,
+            format_locale,
+            time_format_locale,
+            pretty,
+        } => {
+            let google_fonts = parse_google_font_requests(&google_font_families)?;
+            let vl_str = read_input_string(input.as_deref())?;
+            let vl_spec: serde_json::Value = serde_json::from_str(&vl_str)?;
+            let config = read_config_json(config)?;
+            let vl_version = parse_vl_version(&vl_version)?;
+            let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+            let time_format_locale =
+                parse_time_format_locale_option(time_format_locale.as_deref())?;
+
+            let converter = VlConverter::with_config(VlConverterConfig {
+                auto_google_fonts,
+                missing_fonts,
+                google_fonts: config_google_fonts.clone(),
+                ..Default::default()
+            })?;
+            let fonts = converter
+                .vegalite_fonts(
+                    vl_spec,
+                    VlOpts {
+                        config,
+                        theme,
+                        vl_version,
+                        show_warnings: false,
+                        allowed_base_urls: None,
+                        format_locale,
+                        time_format_locale,
+                        google_fonts,
+                    },
+                    auto_google_fonts,
+                    embed_local_fonts,
+                    include_font_face,
+                    !no_subset_fonts,
+                )
+                .await?;
+            let json = if pretty {
+                serde_json::to_string_pretty(&fonts)?
+            } else {
+                serde_json::to_string(&fonts)?
+            };
+            write_output_string(output.as_deref(), &json)?;
         }
         Vg2svg {
             input,
@@ -831,7 +996,6 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             vg_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -842,6 +1006,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )
             .await?
         }
@@ -856,7 +1021,6 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             vg_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -869,6 +1033,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )
             .await?
         }
@@ -883,7 +1048,6 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             vg_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -896,6 +1060,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )
             .await?
         }
@@ -908,7 +1073,6 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             vg_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -919,6 +1083,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 filesystem_root.clone(),
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )
             .await?
         }
@@ -936,12 +1101,13 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             bundle,
+            embed_local_fonts,
+            no_subset_fonts,
             format_locale,
             time_format_locale,
             renderer,
         } => {
-            register_google_fonts(&google_font_families).await?;
-            // Initialize converter
+            let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
 
@@ -951,7 +1117,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
-            let converter = VlConverter::new();
+            let converter = VlConverter::with_config(VlConverterConfig {
+                auto_google_fonts,
+                missing_fonts,
+                google_fonts: config_google_fonts.clone(),
+                ..Default::default()
+            })?;
             let html = converter
                 .vega_to_html(
                     vg_spec,
@@ -959,13 +1130,60 @@ async fn main() -> Result<(), anyhow::Error> {
                         allowed_base_urls: None,
                         format_locale,
                         time_format_locale,
-                        google_fonts: None,
+                        google_fonts,
                     },
                     bundle,
+                    embed_local_fonts,
+                    !no_subset_fonts,
                     Renderer::from_str(&renderer)?,
                 )
                 .await?;
             write_output_string(output.as_deref(), &html)?;
+        }
+        Vg2fonts {
+            input,
+            output,
+            embed_local_fonts,
+            include_font_face,
+            no_subset_fonts,
+            format_locale,
+            time_format_locale,
+            pretty,
+        } => {
+            let google_fonts = parse_google_font_requests(&google_font_families)?;
+            let vg_str = read_input_string(input.as_deref())?;
+            let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
+            let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+            let time_format_locale =
+                parse_time_format_locale_option(time_format_locale.as_deref())?;
+
+            let converter = VlConverter::with_config(VlConverterConfig {
+                auto_google_fonts,
+                missing_fonts,
+                google_fonts: config_google_fonts.clone(),
+                ..Default::default()
+            })?;
+            let fonts = converter
+                .vega_fonts(
+                    vg_spec,
+                    VgOpts {
+                        google_fonts,
+                        format_locale,
+                        time_format_locale,
+                        ..Default::default()
+                    },
+                    auto_google_fonts,
+                    embed_local_fonts,
+                    include_font_face,
+                    !no_subset_fonts,
+                )
+                .await?;
+            let json = if pretty {
+                serde_json::to_string_pretty(&fonts)?
+            } else {
+                serde_json::to_string(&fonts)?
+            };
+            write_output_string(output.as_deref(), &json)?;
         }
         Svg2png {
             input,
@@ -976,7 +1194,6 @@ async fn main() -> Result<(), anyhow::Error> {
             allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             let svg = read_input_string(input.as_deref())?;
             let converter = build_converter(
                 allow_http_access,
@@ -984,6 +1201,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )?;
             let png_data = converter.svg_to_png(&svg, scale, Some(ppi)).await?;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
@@ -997,7 +1215,6 @@ async fn main() -> Result<(), anyhow::Error> {
             allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             let svg = read_input_string(input.as_deref())?;
             let converter = build_converter(
                 allow_http_access,
@@ -1005,6 +1222,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )?;
             let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality)).await?;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
@@ -1016,7 +1234,6 @@ async fn main() -> Result<(), anyhow::Error> {
             allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
-            register_google_fonts(&google_font_families).await?;
             let svg = read_input_string(input.as_deref())?;
             let converter = build_converter(
                 allow_http_access,
@@ -1024,6 +1241,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 allowed_base_url,
                 auto_google_fonts,
                 missing_fonts,
+                config_google_fonts.clone(),
             )?;
             let pdf_data = converter.svg_to_pdf(&svg).await?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
@@ -1042,11 +1260,51 @@ fn register_font_dir(dir: Option<String>) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn register_google_fonts(fonts: &[String]) -> Result<(), anyhow::Error> {
-    for family in fonts {
-        register_google_fonts_font(family, None).await?;
+/// Parse a `--google-font` value like `"Roboto"` or `"Roboto:400,700italic"`
+/// into a family name and optional variant list.
+fn parse_google_font_arg(s: &str) -> Result<(String, Option<Vec<VariantRequest>>), anyhow::Error> {
+    let Some((family, variants_str)) = s.split_once(':') else {
+        return Ok((s.to_string(), None));
+    };
+    let mut variants = Vec::new();
+    for token in variants_str.split(',') {
+        let token = token.trim();
+        if token.is_empty() {
+            continue;
+        }
+        let (weight_str, style) = if let Some(w) = token.strip_suffix("italic") {
+            (w, FontStyle::Italic)
+        } else {
+            (token, FontStyle::Normal)
+        };
+        let weight: u16 = weight_str.parse().map_err(|_| {
+            anyhow::anyhow!(
+                "Invalid font variant '{token}' in --google-font '{s}'. \
+                 Expected format: 400, 700italic, etc."
+            )
+        })?;
+        variants.push(VariantRequest { weight, style });
     }
-    Ok(())
+    if variants.is_empty() {
+        Ok((family.to_string(), None))
+    } else {
+        Ok((family.to_string(), Some(variants)))
+    }
+}
+
+/// Parse `--google-font` args into `GoogleFontRequest`s for per-call opts.
+fn parse_google_font_requests(
+    fonts: &[String],
+) -> Result<Option<Vec<GoogleFontRequest>>, anyhow::Error> {
+    if fonts.is_empty() {
+        return Ok(None);
+    }
+    let mut requests = Vec::new();
+    for spec in fonts {
+        let (family, variants) = parse_google_font_arg(spec)?;
+        requests.push(GoogleFontRequest { family, variants });
+    }
+    Ok(Some(requests))
 }
 
 fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
@@ -1060,6 +1318,7 @@ fn build_converter(
     allowed_base_urls: Option<Vec<String>>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<VlConverter, anyhow::Error> {
     let config = VlConverterConfig {
         allow_http_access,
@@ -1067,6 +1326,7 @@ fn build_converter(
         allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
         ..Default::default()
     };
 
@@ -1360,6 +1620,7 @@ async fn vl_2_vg(
     filesystem_root: Option<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1380,6 +1641,7 @@ async fn vl_2_vg(
         None,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
     )?;
 
     // Perform conversion
@@ -1432,6 +1694,7 @@ async fn vg_2_svg(
     filesystem_root: Option<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1449,6 +1712,7 @@ async fn vg_2_svg(
         None,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
     )?;
 
     // Perform conversion
@@ -1489,6 +1753,7 @@ async fn vg_2_png(
     filesystem_root: Option<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1506,6 +1771,7 @@ async fn vg_2_png(
         None,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
     )?;
 
     // Perform conversion
@@ -1548,6 +1814,7 @@ async fn vg_2_jpeg(
     filesystem_root: Option<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1565,6 +1832,7 @@ async fn vg_2_jpeg(
         None,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
     )?;
 
     // Perform conversion
@@ -1604,6 +1872,7 @@ async fn vg_2_pdf(
     filesystem_root: Option<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1621,6 +1890,7 @@ async fn vg_2_pdf(
         None,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
     )?;
 
     // Perform conversion
@@ -1663,6 +1933,7 @@ async fn vl_2_svg(
     filesystem_root: Option<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1686,6 +1957,7 @@ async fn vl_2_svg(
         None,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
     )?;
 
     // Perform conversion
@@ -1734,6 +2006,7 @@ async fn vl_2_png(
     filesystem_root: Option<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1757,6 +2030,7 @@ async fn vl_2_png(
         None,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
     )?;
 
     // Perform conversion
@@ -1807,6 +2081,7 @@ async fn vl_2_jpeg(
     filesystem_root: Option<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1830,6 +2105,7 @@ async fn vl_2_jpeg(
         None,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
     )?;
 
     // Perform conversion
@@ -1878,6 +2154,7 @@ async fn vl_2_pdf(
     filesystem_root: Option<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
+    google_fonts: Option<Vec<GoogleFontRequest>>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1901,6 +2178,7 @@ async fn vl_2_pdf(
         None,
         auto_google_fonts,
         missing_fonts,
+        google_fonts,
     )?;
 
     // Perform conversion

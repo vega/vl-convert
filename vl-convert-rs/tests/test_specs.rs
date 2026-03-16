@@ -499,7 +499,7 @@ mod test_vegalite_to_html_no_bundle {
         let converter = VlConverter::new();
 
         let html_result = block_on(
-            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, false, Renderer::Canvas)
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, false, false, true, Renderer::Canvas)
         ).unwrap();
 
         // Check for expected patterns
@@ -547,7 +547,7 @@ mod test_vegalite_to_html_bundle {
         let converter = VlConverter::new();
 
         let html_result = block_on(
-            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, true, Renderer::Svg)
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, true, false, true, Renderer::Svg)
         ).unwrap();
 
         // Check for expected patterns
@@ -800,30 +800,22 @@ mod test_png_no_theme {
 mod test_png_google_fonts {
     use crate::*;
     use futures::executor::block_on;
-    use std::sync::Once;
-    use vl_convert_rs::converter::VlOpts;
-    use vl_convert_rs::register_google_fonts_font_blocking;
+    use vl_convert_rs::converter::{GoogleFontRequest, VlConverterConfig, VlOpts};
     use vl_convert_rs::VlConverter;
-
-    static INIT_GOOGLE_FONTS: Once = Once::new();
-
-    fn initialize_google_fonts() {
-        initialize();
-        INIT_GOOGLE_FONTS.call_once(|| {
-            register_google_fonts_font_blocking("Bangers", None)
-                .expect("Failed to register Bangers");
-            register_google_fonts_font_blocking("Lugrasimo", None)
-                .expect("Failed to register Lugrasimo");
-        });
-    }
 
     #[test]
     fn test() {
-        initialize_google_fonts();
+        initialize();
 
         let vl_version = VlVersion::v5_8;
         let vl_spec = load_vl_spec("google_fonts");
-        let converter = VlConverter::new();
+        let converter = VlConverter::with_config(VlConverterConfig {
+            google_fonts: Some(vec![
+                GoogleFontRequest { family: "Bangers".to_string(), variants: None },
+                GoogleFontRequest { family: "Lugrasimo".to_string(), variants: None },
+            ]),
+            ..Default::default()
+        }).unwrap();
 
         let vg_spec = block_on(
             converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})

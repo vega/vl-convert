@@ -1,0 +1,19 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "data": {
+    "values": [
+      {"category": "A", "value": 28},
+      {"category": "B", "value": 55},
+      {"category": "C", "value": 43}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "category"},
+    "y": {"field": "value", "type": "quantitative"}
+  },
+  "title": "Pacifico Font Test",
+  "config": {
+    "title": {"font": "Pacifico", "fontSize": 24, "fontWeight": 400}
+  }
+}

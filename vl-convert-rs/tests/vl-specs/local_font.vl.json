@@ -1,0 +1,20 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "data": {
+    "values": [
+      {"category": "A", "value": 28},
+      {"category": "B", "value": 55},
+      {"category": "C", "value": 43}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "category"},
+    "y": {"field": "value", "type": "quantitative"}
+  },
+  "title": "Local Font Test",
+  "config": {
+    "title": {"font": "Caveat", "fontSize": 24},
+    "axis": {"labelFont": "Caveat", "titleFont": "Caveat"}
+  }
+}

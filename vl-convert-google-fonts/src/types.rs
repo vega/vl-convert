@@ -44,6 +44,39 @@ impl fmt::Display for VariantRequest {
     }
 }
 
+/// Find the closest available variant to a requested (weight, style).
+///
+/// Tries: exact match → closest weight with matching style → closest weight
+/// any style. Returns the index into `available`, or `None` if `available`
+/// is empty.
+pub fn find_closest_variant(
+    requested: &VariantRequest,
+    available: &[VariantRequest],
+) -> Option<usize> {
+    // Exact match
+    if let Some(i) = available
+        .iter()
+        .position(|v| v.weight == requested.weight && v.style == requested.style)
+    {
+        return Some(i);
+    }
+    // Closest weight with matching style
+    let same_style = available
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| v.style == requested.style)
+        .min_by_key(|(_, v)| (v.weight as i32 - requested.weight as i32).abs());
+    if let Some((i, _)) = same_style {
+        return Some(i);
+    }
+    // Closest weight any style
+    available
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, v)| (v.weight as i32 - requested.weight as i32).abs())
+        .map(|(i, _)| i)
+}
+
 /// Convert a font family name to a normalized font ID.
 ///
 /// Lowercases and replaces spaces with hyphens. The result must match
