@@ -1135,11 +1135,11 @@ mod test_heap_limit {
     use vl_convert_rs::VlConverter;
 
     /// Verify that exceeding the V8 heap limit returns a specific error
-    /// rather than aborting the process. Uses a small heap (256 MB) and
-    /// a Vega spec that allocates a large array in JS. Also exercises
-    /// `get_worker_memory_statistics` before and after the OOM.
+    /// rather than aborting the process, that the worker recovers and can
+    /// process a subsequent conversion, and that memory stats are available
+    /// before and after the OOM.
     #[tokio::test]
-    async fn test_heap_limit_exceeded_returns_error() {
+    async fn test_heap_limit_exceeded_and_recovery() {
         let converter = VlConverter::with_config(VlConverterConfig {
             max_worker_heap_size_mb: 256,
             ..Default::default()
@@ -1152,34 +1152,22 @@ mod test_heap_limit {
             .await
             .expect("get_worker_memory_statistics should succeed before OOM");
         assert_eq!(stats_before.len(), 1, "should have 1 worker");
-        eprintln!(
-            "Before OOM: worker={} used={}B total={}B limit={}B external={}B",
-            stats_before[0].worker_index,
-            stats_before[0].used_heap_size,
-            stats_before[0].total_heap_size,
-            stats_before[0].heap_size_limit,
-            stats_before[0].external_memory,
-        );
 
-        // A Vega spec whose data pipeline generates enough rows to exceed
-        // the 256 MB heap limit.
-        let spec = serde_json::json!({
+        // Trigger OOM with a spec that exceeds the 256 MB heap limit
+        let big_spec = serde_json::json!({
             "$schema": "https://vega.github.io/schema/vega/v5.json",
             "width": 10,
             "height": 10,
-            "data": [
-                {
-                    "name": "big",
-                    "transform": [
-                        { "type": "sequence", "start": 0, "stop": 50000000, "as": "x" }
-                    ]
-                }
-            ],
+            "data": [{
+                "name": "big",
+                "transform": [
+                    { "type": "sequence", "start": 0, "stop": 50000000, "as": "x" }
+                ]
+            }],
             "marks": []
         });
 
-        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
-
+        let result = converter.vega_to_svg(big_spec, VgOpts::default()).await;
         let err = result.expect_err("Expected heap limit error, got Ok");
         let msg = err.to_string();
         assert!(
@@ -1187,63 +1175,24 @@ mod test_heap_limit {
             "Error should mention heap limit, got: {msg}"
         );
 
-        // Check heap stats after OOM — worker should still be responsive
+        // Worker should still be responsive after OOM
         let stats_after = converter
             .get_worker_memory_statistics()
             .await
             .expect("get_worker_memory_statistics should succeed after OOM");
         assert_eq!(stats_after.len(), 1, "should still have 1 worker");
-        eprintln!(
-            "After OOM:  worker={} used={}B total={}B limit={}B external={}B",
-            stats_after[0].worker_index,
-            stats_after[0].used_heap_size,
-            stats_after[0].total_heap_size,
-            stats_after[0].heap_size_limit,
-            stats_after[0].external_memory,
-        );
-    }
 
-    /// Verify that the worker recovers after a heap-limit error and can
-    /// process a subsequent normal conversion.
-    #[tokio::test]
-    async fn test_worker_recovers_after_heap_limit() {
-        let converter = VlConverter::with_config(VlConverterConfig {
-            max_worker_heap_size_mb: 256,
-            ..Default::default()
-        })
-        .expect("Failed to create converter with small heap");
-
-        // First: trigger heap limit
-        let big_spec = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega/v5.json",
-            "width": 10,
-            "height": 10,
-            "data": [
-                {
-                    "name": "big",
-                    "transform": [
-                        { "type": "sequence", "start": 0, "stop": 50000000, "as": "x" }
-                    ]
-                }
-            ],
-            "marks": []
-        });
-
-        let result = converter.vega_to_svg(big_spec, VgOpts::default()).await;
-        assert!(result.is_err(), "First conversion should fail");
-
-        // Second: a trivial spec should succeed, proving the worker recovered.
+        // A normal conversion should succeed, proving recovery
         let small_spec = serde_json::json!({
             "$schema": "https://vega.github.io/schema/vega/v5.json",
             "width": 10,
             "height": 10,
             "marks": []
         });
-
         let result = converter.vega_to_svg(small_spec, VgOpts::default()).await;
         assert!(
             result.is_ok(),
-            "Second conversion should succeed after recovery, got: {:?}",
+            "Conversion should succeed after recovery, got: {:?}",
             result.err()
         );
     }
