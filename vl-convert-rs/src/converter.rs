@@ -5323,7 +5323,10 @@ try {
     }
 
     #[tokio::test]
-    #[cfg_attr(target_os = "windows", ignore = "flaky on Windows: redirect test server timing")]
+    #[cfg_attr(
+        target_os = "windows",
+        ignore = "flaky on Windows: redirect test server timing"
+    )]
     async fn test_vega_loader_denies_redirect_when_allowlist_configured() {
         let disallowed_server =
             TestHttpServer::new(vec![("/data.csv", TestHttpResponse::ok_text("a,b\n1,2\n"))]);
