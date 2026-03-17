@@ -60,7 +60,7 @@ async fn test_plugin_registers_expression_function() {
     })
     .unwrap();
 
-    let spec = vega_spec_with_expression("double(5)");
+    let spec = vega_spec_with_expression("double(7)");
     let svg = converter
         .vega_to_svg(spec, VgOpts::default())
         .await
@@ -68,8 +68,8 @@ async fn test_plugin_registers_expression_function() {
 
     assert!(svg.contains("<svg"), "output should be valid SVG");
     assert!(
-        svg.contains("10"),
-        "SVG should contain the result of double(5) = 10"
+        svg.contains("14"),
+        "SVG should contain the result of double(7) = 14"
     );
 }
 
@@ -174,15 +174,15 @@ async fn test_plugin_poison_behavior() {
         "first error should be plugin loading failure, got: {msg1}"
     );
 
-    // Second attempt should return the poison error, not retry
+    // Second attempt should return the poison error (short-circuit, no retry)
     let err2 = converter
         .vega_to_svg(spec, VgOpts::default())
         .await
         .unwrap_err();
     let msg2 = err2.to_string();
     assert!(
-        msg2.contains("poisoned") || msg2.contains("Failed to load Vega plugin"),
-        "second error should be poison or plugin failure, got: {msg2}"
+        msg2.contains("poisoned"),
+        "second error should be the poison sentinel, got: {msg2}"
     );
 }
 

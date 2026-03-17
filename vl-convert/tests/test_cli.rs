@@ -1404,11 +1404,11 @@ mod test_stdin_stdout {
         );
         let svg = String::from_utf8(output.stdout)?;
         assert!(svg.contains("<svg"), "output should be valid SVG");
-        // The plugin registered 'clischeme'; if vegaEmbed rendered the chart,
-        // the SVG should contain fill colors from that scheme.
+        // The plugin registered 'clischeme' with ['red', 'green', 'blue'].
+        // Vega renders fill="red" for the first bar.
         assert!(
-            svg.contains("red") || svg.contains("fill"),
-            "SVG should contain fill attributes from the plugin-registered scheme"
+            svg.contains(r#"fill="red""#),
+            "SVG should contain fill=\"red\" from the plugin-registered scheme"
         );
         Ok(())
     }

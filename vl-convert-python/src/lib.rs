@@ -260,12 +260,16 @@ fn parse_config_overrides(
                 }
             }
             "allowed_plugin_import_domains" => {
-                overrides.allowed_plugin_import_domains =
-                    Some(value.extract::<Vec<String>>().map_err(|err| {
-                        vl_convert_rs::anyhow::anyhow!(
-                            "Invalid allowed_plugin_import_domains value for configure: {err}"
-                        )
-                    })?);
+                if value.is_none() {
+                    overrides.allowed_plugin_import_domains = Some(vec![]);
+                } else {
+                    overrides.allowed_plugin_import_domains =
+                        Some(value.extract::<Vec<String>>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid allowed_plugin_import_domains value for configure: {err}"
+                            )
+                        })?);
+                }
             }
             // Read-only config fields returned by get_config() are
             // silently ignored so that `configure(**get_config())` works.

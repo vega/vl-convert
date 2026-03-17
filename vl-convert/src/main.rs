@@ -964,7 +964,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 google_fonts: config_google_fonts.clone(),
                 vega_plugins: vega_plugins.clone(),
                 allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
-                resolved_plugins: None,
                 ..Default::default()
             })?;
             let html = converter
@@ -1016,7 +1015,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 google_fonts: config_google_fonts.clone(),
                 vega_plugins: vega_plugins.clone(),
                 allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
-                resolved_plugins: None,
                 ..Default::default()
             })?;
             let fonts = converter
@@ -1197,7 +1195,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 google_fonts: config_google_fonts.clone(),
                 vega_plugins: vega_plugins.clone(),
                 allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
-                resolved_plugins: None,
                 ..Default::default()
             })?;
             let html = converter
@@ -1240,7 +1237,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 google_fonts: config_google_fonts.clone(),
                 vega_plugins: vega_plugins.clone(),
                 allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
-                resolved_plugins: None,
                 ..Default::default()
             })?;
             let fonts = converter
@@ -1435,7 +1431,6 @@ fn build_converter(
         gc_after_conversion,
         vega_plugins,
         allowed_plugin_import_domains,
-        resolved_plugins: None,
         ..Default::default()
     };
 

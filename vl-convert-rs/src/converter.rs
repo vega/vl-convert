@@ -258,44 +258,45 @@ async fn bundle_source_plugin(
 }
 
 /// Resolve and bundle all plugins. Runs async on a dedicated thread.
+/// Returns the resolved plugins (or None if no plugins configured).
 async fn resolve_and_bundle_plugins(
-    mut config: VlConverterConfig,
-) -> Result<VlConverterConfig, AnyError> {
-    if let Some(ref plugins) = config.vega_plugins {
-        let mut resolved = Vec::new();
-        for (i, entry) in plugins.iter().enumerate() {
-            let is_url = entry.starts_with("http://") || entry.starts_with("https://");
+    config: &VlConverterConfig,
+) -> Result<Option<Vec<ResolvedPlugin>>, AnyError> {
+    let Some(ref plugins) = config.vega_plugins else {
+        return Ok(None);
+    };
+    let mut resolved = Vec::new();
+    for (i, entry) in plugins.iter().enumerate() {
+        let is_url = entry.starts_with("http://") || entry.starts_with("https://");
 
-            if is_url {
-                // URL plugin: always bundle. The bundler fetches the entry and
-                // all sub-imports (including relative imports) via HTTP.
-                // No separate fetch_plugin_url() call needed.
-                let bundled = bundle_url_plugin(entry, &config.allowed_plugin_import_domains)
-                    .await
-                    .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
-                resolved.push(ResolvedPlugin {
-                    original_url: Some(entry.clone()),
-                    bundled_source: bundled,
-                });
-            } else {
-                // File/inline plugin: bundle only if it has HTTP imports
-                let bundled = bundle_source_plugin(entry, &config.allowed_plugin_import_domains)
-                    .await
-                    .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
-                resolved.push(ResolvedPlugin {
-                    original_url: None,
-                    bundled_source: bundled,
-                });
-            }
+        if is_url {
+            // URL plugin: always bundle. The bundler fetches the entry and
+            // all sub-imports (including relative imports) via HTTP.
+            // No separate fetch_plugin_url() call needed.
+            let bundled = bundle_url_plugin(entry, &config.allowed_plugin_import_domains)
+                .await
+                .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
+            resolved.push(ResolvedPlugin {
+                original_url: Some(entry.clone()),
+                bundled_source: bundled,
+            });
+        } else {
+            // File/inline plugin: bundle only if it has HTTP imports
+            let bundled = bundle_source_plugin(entry, &config.allowed_plugin_import_domains)
+                .await
+                .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
+            resolved.push(ResolvedPlugin {
+                original_url: None,
+                bundled_source: bundled,
+            });
         }
-        config.resolved_plugins = Some(resolved);
     }
-    Ok(config)
+    Ok(Some(resolved))
 }
 
 fn spawn_worker_pool(
     config: Arc<VlConverterConfig>,
-) -> Result<(WorkerPool, Option<Vec<ResolvedPlugin>>), AnyError> {
+) -> Result<(WorkerPool, Arc<ConverterContext>), AnyError> {
     let num_workers = config.num_workers;
     if num_workers < 1 {
         bail!("num_workers must be >= 1");
@@ -305,21 +306,25 @@ fn spawn_worker_pool(
     // Resolve plugins before spawning workers (needs async for HTTP + deno_emit).
     // Runs on a dedicated thread with its own tokio runtime to avoid
     // "nested runtime" panics when called from Python's async path.
-    let config = if config.vega_plugins.is_some() {
-        let config_for_resolve = (*config).clone();
-        let resolved = std::thread::spawn(move || {
+    let resolved_plugins = if config.vega_plugins.is_some() {
+        let config_ref = config.clone();
+        std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .map_err(|e| anyhow!("Failed to build plugin resolver runtime: {e}"))?;
-            rt.block_on(resolve_and_bundle_plugins(config_for_resolve))
+            rt.block_on(resolve_and_bundle_plugins(&config_ref))
         })
         .join()
-        .map_err(|_| anyhow!("Plugin resolver thread panicked"))??;
-        Arc::new(resolved)
+        .map_err(|_| anyhow!("Plugin resolver thread panicked"))??
     } else {
-        config
+        None
     };
+
+    let ctx = Arc::new(ConverterContext {
+        config: (*config).clone(),
+        resolved_plugins: resolved_plugins.clone(),
+    });
 
     let initial_font_baseline = get_font_baseline_snapshot()?;
 
@@ -333,7 +338,7 @@ fn spawn_worker_pool(
         let (tx, mut rx) = tokio::sync::mpsc::channel::<QueuedCommand>(per_worker_queue_capacity);
         senders.push(tx);
         let (startup_tx, startup_rx) = std::sync::mpsc::channel::<Result<(), String>>();
-        let worker_config = config.clone();
+        let worker_ctx = ctx.clone();
         let worker_font_baseline = initial_font_baseline.clone();
         let handle = thread::spawn(move || {
             let runtime = match tokio::runtime::Builder::new_current_thread()
@@ -349,7 +354,7 @@ fn spawn_worker_pool(
             let local = tokio::task::LocalSet::new();
             local.block_on(&runtime, async move {
                 let mut inner =
-                    match InnerVlConverter::try_new(worker_config, worker_font_baseline).await {
+                    match InnerVlConverter::try_new(worker_ctx, worker_font_baseline).await {
                         Ok(inner) => {
                             let _ = startup_tx.send(Ok(()));
                             inner
@@ -381,7 +386,7 @@ fn spawn_worker_pool(
                         .cancel_terminate_execution();
                     inner.restore_heap_limit_if_needed();
 
-                    if inner.config.gc_after_conversion {
+                    if inner.ctx.config.gc_after_conversion {
                         inner
                             .worker
                             .js_runtime
@@ -416,7 +421,6 @@ fn spawn_worker_pool(
     }
 
     let num = senders.len();
-    let resolved_plugins = config.resolved_plugins.clone();
     Ok((
         WorkerPool {
             senders,
@@ -424,7 +428,7 @@ fn spawn_worker_pool(
             dispatch_cursor: AtomicUsize::new(0),
             _handles: handles,
         },
-        resolved_plugins,
+        ctx,
     ))
 }
 
@@ -502,8 +506,14 @@ fn normalize_converter_config(
                 // Leave the URL string in place — fetched at startup in spawn_worker_pool()
             } else {
                 let path = Path::new(entry.as_str());
-                if (entry.ends_with(".js") || entry.ends_with(".mjs")) && path.is_file() {
+                if entry.ends_with(".js") || entry.ends_with(".mjs") {
                     // File plugin — read source, replace entry
+                    if !path.is_file() {
+                        bail!(
+                            "Vega plugin {i} path '{}' does not exist or is not a file",
+                            path.display()
+                        );
+                    }
                     *entry = std::fs::read_to_string(path).map_err(|e| {
                         anyhow!("Failed to read Vega plugin {i} at {}: {e}", path.display())
                     })?;
@@ -728,10 +738,15 @@ pub struct VlConverterConfig {
     /// Domains from URL plugins are auto-added during normalization.
     /// Independent of `allow_http_access` (which controls data-fetching in specs).
     pub allowed_plugin_import_domains: Vec<String>,
+}
+
+/// Shared runtime context passed to all workers. Wraps the user config
+/// plus derived state computed at startup (resolved plugins).
+#[derive(Debug, Clone)]
+pub(crate) struct ConverterContext {
+    pub config: VlConverterConfig,
     /// Resolved plugins after fetching URLs and bundling HTTP imports.
-    /// Populated by the plugin resolver in `spawn_worker_pool()` before
-    /// workers start. None if `vega_plugins` is None.
-    /// Internal-only: excluded from get_config() / converter_config_json().
+    /// None if `vega_plugins` is None.
     pub resolved_plugins: Option<Vec<ResolvedPlugin>>,
 }
 
@@ -749,7 +764,6 @@ impl Default for VlConverterConfig {
             gc_after_conversion: false,
             vega_plugins: None,
             allowed_plugin_import_domains: Vec::new(),
-            resolved_plugins: None,
         }
     }
 }
@@ -1162,7 +1176,7 @@ struct InnerVlConverter {
     vega_initialized: bool,
     font_state: WorkerFontState,
     usvg_options: usvg::Options<'static>,
-    config: Arc<VlConverterConfig>,
+    ctx: Arc<ConverterContext>,
     /// Pointer to the heap-limit callback data (leaked Box). `None` when
     /// `max_worker_heap_size_mb` is 0 (no limit).
     heap_limit_data: Option<*const HeapLimitCallbackData>,
@@ -1203,6 +1217,7 @@ impl InnerVlConverter {
             }
 
             let max_bytes = self
+                .ctx
                 .config
                 .max_worker_heap_size_mb
                 .saturating_mul(1024 * 1024);
@@ -1244,7 +1259,7 @@ impl InnerVlConverter {
                      Worker memory: {used_mb:.1} MB used, {total_mb:.1} MB total, \
                      {external_mb:.1} MB external. \
                      Increase max_worker_heap_size_mb or set to 0 for no limit.",
-                    self.config.max_worker_heap_size_mb,
+                    self.ctx.config.max_worker_heap_size_mb,
                 )))
             }
             other => other,
@@ -1384,7 +1399,7 @@ class WarningCollector {
 
             // Create and initialize svg function string
             let filesystem_base_url = serde_json::to_string(&filesystem_root_file_url(
-                self.config.filesystem_root.as_deref(),
+                self.ctx.config.filesystem_root.as_deref(),
             )?)?;
             let mut function_str = r#"
 const DEFAULT_HTTP_BASE_URL = 'https://vega.github.io/vega-datasets/';
@@ -1744,7 +1759,7 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
             .to_string();
             function_str = function_str.replace(
                 "__ALLOW_HTTP_ACCESS__",
-                if self.config.allow_http_access {
+                if self.ctx.config.allow_http_access {
                     "true"
                 } else {
                     "false"
@@ -1765,7 +1780,7 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
                 .await?;
 
             // Load user plugins after Vega is fully initialized
-            if let Some(ref plugins) = self.config.resolved_plugins {
+            if let Some(ref plugins) = self.ctx.resolved_plugins {
                 for (i, plugin) in plugins.iter().enumerate() {
                     // Step 1: Load the plugin as an ES side module
                     let specifier =
@@ -1788,7 +1803,12 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
                     self.worker
                         .js_runtime
                         .run_event_loop(Default::default())
-                        .await?;
+                        .await
+                        .map_err(|e| {
+                            let msg = format!("Vega plugin {i} event loop error: {e}");
+                            self.plugin_init_error = Some(msg.clone());
+                            anyhow!(msg)
+                        })?;
                     receiver.await.map_err(|e| {
                         let msg = format!("Vega plugin {i} evaluation failed: {e}");
                         self.plugin_init_error = Some(msg.clone());
@@ -1927,7 +1947,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
     }
 
     pub async fn try_new(
-        config: Arc<VlConverterConfig>,
+        ctx: Arc<ConverterContext>,
         initial_font_baseline: crate::text::FontBaselineSnapshot,
     ) -> Result<Self, AnyError> {
         // MainWorker's deno_tls extension panics without a global crypto provider
@@ -1943,7 +1963,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         // Create permission descriptor parser using RealSys
         let descriptor_parser = Arc::new(RuntimePermissionDescriptorParser::new(VlConvertNodeSys));
 
-        let permissions = build_permissions(&config)?;
+        let permissions = build_permissions(&ctx.config)?;
 
         // Configure WorkerServiceOptions with stub types for npm resolution (not used by vl-convert)
         let services = WorkerServiceOptions::<
@@ -1971,8 +1991,11 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
         // Configure WorkerOptions with our custom extensions and V8 snapshot.
         // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
         // This is required for container compatibility (manylinux, slim images).
-        let create_params = if config.max_worker_heap_size_mb > 0 {
-            let max_bytes = config.max_worker_heap_size_mb.saturating_mul(1024 * 1024);
+        let create_params = if ctx.config.max_worker_heap_size_mb > 0 {
+            let max_bytes = ctx
+                .config
+                .max_worker_heap_size_mb
+                .saturating_mul(1024 * 1024);
             Some(v8::CreateParams::default().heap_limits(0, max_bytes))
         } else {
             None
@@ -1995,7 +2018,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
 
         // Register a near-heap-limit callback so V8 terminates JS execution
         // instead of calling FatalProcessOutOfMemory() (which aborts the process).
-        let heap_limit_data = if config.max_worker_heap_size_mb > 0 {
+        let heap_limit_data = if ctx.config.max_worker_heap_size_mb > 0 {
             let isolate = worker.js_runtime.v8_isolate();
             let cb_data = Box::new(HeapLimitCallbackData {
                 handle: isolate.thread_safe_handle(),
@@ -2037,7 +2060,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
             vega_initialized: false,
             usvg_options: build_usvg_options_with_fontdb(font_state.db.clone()),
             font_state,
-            config,
+            ctx,
             heap_limit_data,
             plugin_init_error: None,
         };
@@ -2761,7 +2784,7 @@ vegaLiteToCanvas_{ver_name:?}(
         &self,
         request_fonts: Option<Vec<GoogleFontRequest>>,
     ) -> Result<Vec<LoadedFontBatch>, AnyError> {
-        let merged = match (self.config.google_fonts.clone(), request_fonts) {
+        let merged = match (self.ctx.config.google_fonts.clone(), request_fonts) {
             (None, None) => return Ok(Vec::new()),
             (Some(c), None) => c,
             (None, Some(r)) => r,
@@ -3790,9 +3813,9 @@ impl VlConverter {
             *guard = None;
         }
 
-        let (pool, resolved_plugins) = spawn_worker_pool(self.inner.config.clone())?;
+        let (pool, ctx) = spawn_worker_pool(self.inner.config.clone())?;
         // Store resolved plugins so HTML export can access them
-        if let Some(plugins) = resolved_plugins {
+        if let Some(plugins) = ctx.resolved_plugins.clone() {
             *self.inner.resolved_plugins.lock().unwrap() = Some(plugins);
         }
         let sender = pool
@@ -5077,7 +5100,10 @@ mod tests {
     #[tokio::test]
     async fn test_execute_script_to_bytes_typed_array() {
         let mut ctx = InnerVlConverter::try_new(
-            std::sync::Arc::new(VlConverterConfig::default()),
+            std::sync::Arc::new(ConverterContext {
+                config: VlConverterConfig::default(),
+                resolved_plugins: None,
+            }),
             get_font_baseline_snapshot().unwrap(),
         )
         .await
@@ -5092,7 +5118,10 @@ mod tests {
     #[tokio::test]
     async fn test_canvas_png_and_image_data_are_typed_arrays() {
         let mut ctx = InnerVlConverter::try_new(
-            std::sync::Arc::new(VlConverterConfig::default()),
+            std::sync::Arc::new(ConverterContext {
+                config: VlConverterConfig::default(),
+                resolved_plugins: None,
+            }),
             get_font_baseline_snapshot().unwrap(),
         )
         .await
@@ -5143,7 +5172,10 @@ var __imageDataChecks = [
     #[tokio::test]
     async fn test_image_decode_and_load_events() {
         let mut ctx = InnerVlConverter::try_new(
-            std::sync::Arc::new(VlConverterConfig::default()),
+            std::sync::Arc::new(ConverterContext {
+                config: VlConverterConfig::default(),
+                resolved_plugins: None,
+            }),
             get_font_baseline_snapshot().unwrap(),
         )
         .await
@@ -5195,7 +5227,10 @@ var __imageDecodeLoadResult = null;
     #[tokio::test]
     async fn test_image_decode_rejects_and_error_events_fire() {
         let mut ctx = InnerVlConverter::try_new(
-            std::sync::Arc::new(VlConverterConfig::default()),
+            std::sync::Arc::new(ConverterContext {
+                config: VlConverterConfig::default(),
+                resolved_plugins: None,
+            }),
             get_font_baseline_snapshot().unwrap(),
         )
         .await
@@ -5277,7 +5312,10 @@ var __imageDecodeErrorResult = null;
     #[tokio::test]
     async fn test_image_decode_ignores_stale_src_results() {
         let mut ctx = InnerVlConverter::try_new(
-            std::sync::Arc::new(VlConverterConfig::default()),
+            std::sync::Arc::new(ConverterContext {
+                config: VlConverterConfig::default(),
+                resolved_plugins: None,
+            }),
             get_font_baseline_snapshot().unwrap(),
         )
         .await
@@ -5374,7 +5412,10 @@ var __imageRaceResult = null;
     #[tokio::test]
     async fn test_polyfill_unsupported_methods_throw() {
         let mut ctx = InnerVlConverter::try_new(
-            std::sync::Arc::new(VlConverterConfig::default()),
+            std::sync::Arc::new(ConverterContext {
+                config: VlConverterConfig::default(),
+                resolved_plugins: None,
+            }),
             get_font_baseline_snapshot().unwrap(),
         )
         .await

@@ -278,21 +278,25 @@ _EXPR_SPEC = """{
 def test_plugin_custom_scheme_bundle(page, update_baselines):
     """Plugin registers a named color scheme; bundle=True embeds all JS."""
     vlc.configure(vega_plugins=[_SCHEME_PLUGIN])
-    html = vlc.vega_to_html(_SCHEME_SPEC, bundle=True)
-    screenshot = render_html(
-        page, html, "plugin_custom_scheme_bundle.png", block_network=True
-    )
-    compare_screenshot(screenshot, "plugin_custom_scheme_bundle.png", update_baselines)
-    vlc.configure(vega_plugins=None)
+    try:
+        html = vlc.vega_to_html(_SCHEME_SPEC, bundle=True)
+        screenshot = render_html(
+            page, html, "plugin_custom_scheme_bundle.png", block_network=True
+        )
+        compare_screenshot(screenshot, "plugin_custom_scheme_bundle.png", update_baselines)
+    finally:
+        vlc.configure(vega_plugins=None)
 
 
 def test_plugin_custom_scheme_cdn(page, update_baselines):
     """Plugin registers a named color scheme; bundle=False loads Vega from CDN."""
     vlc.configure(vega_plugins=[_SCHEME_PLUGIN])
-    html = vlc.vega_to_html(_SCHEME_SPEC, bundle=False)
-    screenshot = render_html(page, html, "plugin_custom_scheme_cdn.png")
-    compare_screenshot(screenshot, "plugin_custom_scheme_cdn.png", update_baselines)
-    vlc.configure(vega_plugins=None)
+    try:
+        html = vlc.vega_to_html(_SCHEME_SPEC, bundle=False)
+        screenshot = render_html(page, html, "plugin_custom_scheme_cdn.png")
+        compare_screenshot(screenshot, "plugin_custom_scheme_cdn.png", update_baselines)
+    finally:
+        vlc.configure(vega_plugins=None)
 
 
 def test_plugin_http_import_bundle(page, update_baselines):
@@ -305,14 +309,16 @@ def test_plugin_http_import_bundle(page, update_baselines):
         vega_plugins=[_HTTP_IMPORT_PLUGIN],
         allowed_plugin_import_domains=["esm.sh"],
     )
-    html = vlc.vega_to_html(_EXPR_SPEC, bundle=True)
-    screenshot = render_html(
-        page, html, "plugin_http_import_bundle.png", block_network=True
-    )
-    compare_screenshot(
-        screenshot, "plugin_http_import_bundle.png", update_baselines
-    )
-    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+    try:
+        html = vlc.vega_to_html(_EXPR_SPEC, bundle=True)
+        screenshot = render_html(
+            page, html, "plugin_http_import_bundle.png", block_network=True
+        )
+        compare_screenshot(
+            screenshot, "plugin_http_import_bundle.png", update_baselines
+        )
+    finally:
+        vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
 
 
 def test_plugin_http_import_cdn(page, update_baselines):
@@ -324,10 +330,12 @@ def test_plugin_http_import_cdn(page, update_baselines):
         vega_plugins=[_HTTP_IMPORT_PLUGIN],
         allowed_plugin_import_domains=["esm.sh"],
     )
-    html = vlc.vega_to_html(_EXPR_SPEC, bundle=False)
-    screenshot = render_html(page, html, "plugin_http_import_cdn.png")
-    compare_screenshot(screenshot, "plugin_http_import_cdn.png", update_baselines)
-    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+    try:
+        html = vlc.vega_to_html(_EXPR_SPEC, bundle=False)
+        screenshot = render_html(page, html, "plugin_http_import_cdn.png")
+        compare_screenshot(screenshot, "plugin_http_import_cdn.png", update_baselines)
+    finally:
+        vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
 
 
 # ---------------------------------------------------------------------------
@@ -377,11 +385,8 @@ def plugin_server():
     - /plugin_with_dep.js — imports ./dep.js (tests relative-import resolution)
     - /plugin_redirect.js — 301 redirect to /plugin.js (tests redirect handling)
     """
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        port = s.getsockname()[1]
-
-    serve_dir = Path(tempfile.mkdtemp())
+    tmp = tempfile.TemporaryDirectory()
+    serve_dir = Path(tmp.name)
     (serve_dir / "plugin.js").write_text(_URL_PLUGIN_SOURCE)
     (serve_dir / "dep.js").write_text(_DEP_SOURCE)
     (serve_dir / "plugin_with_dep.js").write_text(_PLUGIN_WITH_DEP_SOURCE)
@@ -401,13 +406,18 @@ def plugin_server():
         def log_message(self, *args):
             pass  # suppress noisy output
 
-    server = socketserver.TCPServer(("localhost", port), _Handler)
+    # Bind directly to port 0 to avoid race between finding a free port and
+    # binding to it (TCPServer picks the port atomically).
+    server = socketserver.TCPServer(("localhost", 0), _Handler)
+    port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
     yield {"port": port, "serve_dir": serve_dir}
 
     server.shutdown()
+    thread.join()
+    tmp.cleanup()
 
 
 def test_plugin_url_entry_bundle(page, plugin_server, update_baselines):
@@ -423,12 +433,14 @@ def test_plugin_url_entry_bundle(page, plugin_server, update_baselines):
         vega_plugins=[plugin_url],
         allowed_plugin_import_domains=["localhost"],
     )
-    html = vlc.vega_to_html(_URL_SCHEME_SPEC, bundle=True)
-    screenshot = render_html(
-        page, html, "plugin_url_entry_bundle.png", block_network=True
-    )
-    compare_screenshot(screenshot, "plugin_url_entry_bundle.png", update_baselines)
-    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+    try:
+        html = vlc.vega_to_html(_URL_SCHEME_SPEC, bundle=True)
+        screenshot = render_html(
+            page, html, "plugin_url_entry_bundle.png", block_network=True
+        )
+        compare_screenshot(screenshot, "plugin_url_entry_bundle.png", update_baselines)
+    finally:
+        vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
 
 
 def test_plugin_url_entry_cdn(page, plugin_server, update_baselines):
@@ -446,8 +458,10 @@ def test_plugin_url_entry_cdn(page, plugin_server, update_baselines):
         vega_plugins=[plugin_url],
         allowed_plugin_import_domains=["localhost"],
     )
-    html = vlc.vega_to_html(_URL_SCHEME_SPEC, bundle=False)
-    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+    try:
+        html = vlc.vega_to_html(_URL_SCHEME_SPEC, bundle=False)
+    finally:
+        vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
 
     # Persist HTML for manual inspection
     html_dir.mkdir(parents=True, exist_ok=True)
@@ -480,14 +494,16 @@ def test_plugin_url_relative_imports_bundle(page, plugin_server, update_baseline
         vega_plugins=[plugin_url],
         allowed_plugin_import_domains=["localhost"],
     )
-    html = vlc.vega_to_html(_REL_SCHEME_SPEC, bundle=True)
-    screenshot = render_html(
-        page, html, "plugin_url_relative_imports_bundle.png", block_network=True
-    )
-    compare_screenshot(
-        screenshot, "plugin_url_relative_imports_bundle.png", update_baselines
-    )
-    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+    try:
+        html = vlc.vega_to_html(_REL_SCHEME_SPEC, bundle=True)
+        screenshot = render_html(
+            page, html, "plugin_url_relative_imports_bundle.png", block_network=True
+        )
+        compare_screenshot(
+            screenshot, "plugin_url_relative_imports_bundle.png", update_baselines
+        )
+    finally:
+        vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
 
 
 def test_plugin_url_redirect_bundle(page, plugin_server, update_baselines):
@@ -504,11 +520,13 @@ def test_plugin_url_redirect_bundle(page, plugin_server, update_baselines):
         vega_plugins=[plugin_url],
         allowed_plugin_import_domains=["localhost"],
     )
-    html = vlc.vega_to_html(_URL_SCHEME_SPEC, bundle=True)
-    screenshot = render_html(
-        page, html, "plugin_url_redirect_bundle.png", block_network=True
-    )
-    compare_screenshot(
-        screenshot, "plugin_url_redirect_bundle.png", update_baselines
-    )
-    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+    try:
+        html = vlc.vega_to_html(_URL_SCHEME_SPEC, bundle=True)
+        screenshot = render_html(
+            page, html, "plugin_url_redirect_bundle.png", block_network=True
+        )
+        compare_screenshot(
+            screenshot, "plugin_url_redirect_bundle.png", update_baselines
+        )
+    finally:
+        vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])

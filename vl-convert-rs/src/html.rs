@@ -24,15 +24,20 @@ use vl_convert_google_fonts::{family_to_id, FontStyle, VariantRequest};
 /// Handles backslashes, backticks, `${` interpolation sequences, and
 /// `</script>` sequences that would prematurely close the HTML script element.
 fn escape_for_template_literal(s: &str) -> String {
+    use std::sync::OnceLock;
+    static SCRIPT_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = SCRIPT_RE.get_or_init(|| {
+        regex::RegexBuilder::new(r"</script")
+            .case_insensitive(true)
+            .build()
+            .unwrap()
+    });
+
     let s = s
         .replace('\\', "\\\\")
         .replace('`', "\\`")
         .replace("${", "\\${");
     // HTML safety: prevent </script> from terminating the script element
-    let re = regex::RegexBuilder::new(r"</script")
-        .case_insensitive(true)
-        .build()
-        .unwrap();
     re.replace_all(&s, "<\\/script").into_owned()
 }
 
@@ -104,6 +109,7 @@ pub fn get_vega_or_vegalite_script(
 {plugin_imports}
         const spec = {spec_json};
         {opts}
+        await Promise.all([...document.fonts].map(f => f.load()));
         await vegaEmbed('#{chart_id}', spec, opts);
     }} catch(e) {{
         console.error(e);
