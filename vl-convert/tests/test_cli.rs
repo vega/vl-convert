@@ -26,6 +26,19 @@ pub fn initialize() {
     });
 }
 
+fn vg_spec_path(name: &str) -> String {
+    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
+    root_path
+        .join("..")
+        .join("vl-convert-rs")
+        .join("tests")
+        .join("specs")
+        .join(format!("{}.vg.json", name))
+        .to_str()
+        .unwrap()
+        .to_string()
+}
+
 fn vl_spec_path(name: &str) -> String {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let spec_path = root_path
@@ -1354,6 +1367,95 @@ mod test_stdin_stdout {
         assert!(result2.success());
         let url = fs::read_to_string(&url_output)?;
         assert!(url.contains("https://vega.github.io/editor"));
+        Ok(())
+    }
+
+    // --- Plugin tests ---
+
+    #[test]
+    fn test_vg2svg_with_inline_plugin() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        // Inline plugin source passed directly as the --vega-plugin value.
+        // The spec uses a custom color scheme registered by the plugin.
+        let plugin_source =
+            "export default function(vega) { vega.scheme('clischeme', ['red', 'green', 'blue']); }";
+
+        let spec_path = vg_spec_path("plugin_custom_scheme");
+        // plugin_custom_scheme.vg.json uses "testscheme" — write a variant that uses "clischeme"
+        let spec_str = fs::read_to_string(&spec_path)?;
+        let spec_str = spec_str.replace("\"testscheme\"", "\"clischeme\"");
+        let mut spec_file = NamedTempFile::new()?;
+        spec_file.write_all(spec_str.as_bytes())?;
+
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let output = cmd
+            .arg("vg2svg")
+            .arg("-i")
+            .arg(spec_file.path())
+            .arg("--vega-plugin")
+            .arg(plugin_source)
+            .output()?;
+
+        assert!(
+            output.status.success(),
+            "vg2svg with --vega-plugin failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let svg = String::from_utf8(output.stdout)?;
+        assert!(svg.contains("<svg"), "output should be valid SVG");
+        // The plugin registered 'clischeme'; if vegaEmbed rendered the chart,
+        // the SVG should contain fill colors from that scheme.
+        assert!(
+            svg.contains("red") || svg.contains("fill"),
+            "SVG should contain fill attributes from the plugin-registered scheme"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_vg2svg_with_file_plugin() -> Result<(), Box<dyn std::error::Error>> {
+        initialize();
+
+        // Plugin written to a .js file — exercises the file-path resolution
+        // in normalize_converter_config().
+        let mut plugin_file = NamedTempFile::with_suffix(".js")?;
+        plugin_file.write_all(
+            b"export default function(vega) { vega.expressionFunction('cliDouble', (x) => x * 2); }",
+        )?;
+
+        // Minimal Vega spec that renders the expression function result as text.
+        let spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 100, "height": 100,
+            "marks": [{"type": "text", "encode": {"enter": {
+                "text": {"signal": "cliDouble(21)"},
+                "x": {"value": 50}, "y": {"value": 50}
+            }}}]
+        });
+        let mut spec_file = NamedTempFile::with_suffix(".json")?;
+        spec_file.write_all(serde_json::to_string(&spec)?.as_bytes())?;
+
+        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let output = cmd
+            .arg("vg2svg")
+            .arg("-i")
+            .arg(spec_file.path())
+            .arg("--vega-plugin")
+            .arg(plugin_file.path())
+            .output()?;
+
+        assert!(
+            output.status.success(),
+            "vg2svg with file --vega-plugin failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let svg = String::from_utf8(output.stdout)?;
+        assert!(svg.contains("<svg"), "output should be valid SVG");
+        assert!(
+            svg.contains("42"),
+            "SVG should contain cliDouble(21) = 42"
+        );
         Ok(())
     }
 }

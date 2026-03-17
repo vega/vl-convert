@@ -232,6 +232,39 @@ async fn test_plugin_html_export_contains_module_script() {
     );
 }
 
+// --- File-path plugin tests ---
+
+#[tokio::test]
+async fn test_file_path_plugin() {
+    // Write a plugin to a temp file and pass its path as the plugin entry.
+    // Exercises the normalize_converter_config() file-reading path.
+    let dir = tempfile::tempdir().unwrap();
+    let plugin_path = dir.path().join("my_plugin.js");
+    std::fs::write(
+        &plugin_path,
+        "export default function(vega) { vega.expressionFunction('fromFile', (x) => x + 100); }",
+    )
+    .unwrap();
+
+    let converter = VlConverter::with_config(VlConverterConfig {
+        vega_plugins: Some(vec![plugin_path.to_str().unwrap().to_string()]),
+        ..Default::default()
+    })
+    .unwrap();
+
+    let spec = vega_spec_with_expression("fromFile(7)");
+    let svg = converter
+        .vega_to_svg(spec, VgOpts::default())
+        .await
+        .unwrap();
+
+    assert!(
+        svg.contains("107"),
+        "SVG should contain fromFile(7) = 107, got: {}",
+        &svg[..svg.len().min(400)]
+    );
+}
+
 // --- Network-dependent tests ---
 //
 // These tests require internet access (esm.sh). They run in CI.
