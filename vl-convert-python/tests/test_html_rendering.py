@@ -219,7 +219,7 @@ def test_local_font_bundle(page, update_baselines):
 # Inline ESM that registers a custom color scheme.
 _SCHEME_PLUGIN = (
     "export default function(vega) {"
-    " vega.scheme('testscheme', ['#e41a1c', '#377eb8', '#4daf4a']); "
+    " vega.scheme('testscheme', ['red', 'green', 'blue']); "
     "}"
 )
 
@@ -338,7 +338,7 @@ def test_plugin_http_import_cdn(page, update_baselines):
 # rendered chart visually confirms the URL entry was fetched and executed.
 _URL_PLUGIN_SOURCE = (
     "export default function(vega) {"
-    " vega.scheme('urlscheme', ['#9467bd', '#8c564b', '#e377c2']); "
+    " vega.scheme('urlscheme', ['purple', 'orange', 'cyan']); "
     "}"
 )
 
@@ -348,7 +348,7 @@ _URL_SCHEME_SPEC = _SCHEME_SPEC.replace('"testscheme"', '"urlscheme"')
 # Two-file plugin: dep.js exports colors, plugin_with_dep.js imports them via
 # a relative path. Tests that deno_emit resolves relative imports against the
 # entry URL rather than a synthetic local path.
-_DEP_SOURCE = "export const relSchemeColors = ['#1b9e77', '#d95f02', '#7570b3'];"
+_DEP_SOURCE = "export const relSchemeColors = ['gold', 'teal', 'coral'];"
 _PLUGIN_WITH_DEP_SOURCE = """\
 import { relSchemeColors } from './dep.js';
 export default function(vega) {
