@@ -7,8 +7,13 @@ Baselines are generated on Linux. Non-Linux platforms use a looser SSIM
 threshold to tolerate font rendering differences.
 """
 
+import http.server
 import io
+import socket
+import socketserver
 import sys
+import tempfile
+import threading
 from pathlib import Path
 
 import pytest
@@ -323,3 +328,108 @@ def test_plugin_http_import_cdn(page, update_baselines):
     screenshot = render_html(page, html, "plugin_http_import_cdn.png")
     compare_screenshot(screenshot, "plugin_http_import_cdn.png", update_baselines)
     vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+
+
+# ---------------------------------------------------------------------------
+# URL-entry plugin tests (local HTTP server)
+# ---------------------------------------------------------------------------
+
+# Plugin served from localhost — registers a distinct color scheme so the
+# rendered chart visually confirms the URL entry was fetched and executed.
+_URL_PLUGIN_SOURCE = (
+    "export default function(vega) {"
+    " vega.scheme('urlscheme', ['#9467bd', '#8c564b', '#e377c2']); "
+    "}"
+)
+
+# Same bar chart spec as _SCHEME_SPEC but using 'urlscheme'.
+_URL_SCHEME_SPEC = _SCHEME_SPEC.replace('"testscheme"', '"urlscheme"')
+
+_CHART_READY_JS = """() => {
+    const svg = document.querySelector('svg');
+    const canvas = document.querySelector('canvas');
+    return (svg && svg.querySelectorAll('path, rect, circle, line, text').length > 0)
+        || (canvas && canvas.width > 0);
+}"""
+
+
+@pytest.fixture(scope="module")
+def plugin_server():
+    """Serve a plugin JS file from a free localhost port for URL-plugin tests."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        port = s.getsockname()[1]
+
+    serve_dir = Path(tempfile.mkdtemp())
+    (serve_dir / "plugin.js").write_text(_URL_PLUGIN_SOURCE)
+
+    class _Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=str(serve_dir), **kwargs)
+
+        def log_message(self, *args):
+            pass  # suppress noisy output
+
+    server = socketserver.TCPServer(("localhost", port), _Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    yield {"port": port, "serve_dir": serve_dir}
+
+    server.shutdown()
+
+
+def test_plugin_url_entry_bundle(page, plugin_server, update_baselines):
+    """URL-entry plugin: fetched and bundled at configure() time.
+
+    bundle=True inlines the pre-bundled plugin source as a blob URL, so the
+    page renders correctly even with network fully blocked.
+    """
+    port = plugin_server["port"]
+    plugin_url = f"http://localhost:{port}/plugin.js"
+
+    vlc.configure(
+        vega_plugins=[plugin_url],
+        allowed_plugin_import_domains=["localhost"],
+    )
+    html = vlc.vega_to_html(_URL_SCHEME_SPEC, bundle=True)
+    screenshot = render_html(
+        page, html, "plugin_url_entry_bundle.png", block_network=True
+    )
+    compare_screenshot(screenshot, "plugin_url_entry_bundle.png", update_baselines)
+    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+
+
+def test_plugin_url_entry_cdn(page, plugin_server, update_baselines):
+    """URL-entry plugin with bundle=False: browser fetches plugin via import().
+
+    The HTML is served from the same localhost origin as the plugin so that
+    import('http://localhost:PORT/plugin.js') is a same-origin request and
+    Chromium does not block it.
+    """
+    port = plugin_server["port"]
+    serve_dir = plugin_server["serve_dir"]
+    plugin_url = f"http://localhost:{port}/plugin.js"
+
+    vlc.configure(
+        vega_plugins=[plugin_url],
+        allowed_plugin_import_domains=["localhost"],
+    )
+    html = vlc.vega_to_html(_URL_SCHEME_SPEC, bundle=False)
+    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+
+    # Persist HTML for manual inspection
+    html_dir.mkdir(parents=True, exist_ok=True)
+    (html_dir / "plugin_url_entry_cdn.html").write_text(html)
+
+    # Write HTML into the server directory so the page and plugin share origin
+    (serve_dir / "plugin_url_entry_cdn.html").write_text(html)
+
+    page.goto(
+        f"http://localhost:{port}/plugin_url_entry_cdn.html",
+        wait_until="networkidle",
+    )
+    page.wait_for_function(_CHART_READY_JS, timeout=15000)
+    screenshot = page.locator("#vega-chart").screenshot()
+
+    compare_screenshot(screenshot, "plugin_url_entry_cdn.png", update_baselines)
