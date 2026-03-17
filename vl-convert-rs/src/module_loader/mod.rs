@@ -204,7 +204,10 @@ impl Loader for PluginBundleLoader {
             return Box::pin(async move {
                 Ok(Some(LoadResponse::Module {
                     specifier,
-                    maybe_headers: None,
+                    maybe_headers: Some(std::collections::HashMap::from([(
+                        "content-type".to_string(),
+                        "application/javascript".to_string(),
+                    )])),
                     content,
                     mtime: None,
                 }))
@@ -257,13 +260,11 @@ impl Loader for PluginBundleLoader {
                             })?;
                         let target_domain = target_url.host_str().unwrap_or("");
                         if !domain_matches_patterns(target_domain, &allowed) {
-                            return Err(LoadError::Other(Arc::new(JsErrorBox::generic(
-                                format!(
-                                    "HTTP import redirect blocked: {url} redirected to \
+                            return Err(LoadError::Other(Arc::new(JsErrorBox::generic(format!(
+                                "HTTP import redirect blocked: {url} redirected to \
                                      domain '{target_domain}' which is not in \
                                      allowed_plugin_import_domains"
-                                ),
-                            ))));
+                            )))));
                         }
                         // Return redirect for deno_graph to follow
                         return Ok(Some(LoadResponse::Redirect {
@@ -282,6 +283,16 @@ impl Loader for PluginBundleLoader {
                     )))));
                 }
 
+                // Forward the response content-type so deno_graph can identify
+                // the media type (JavaScript, TypeScript, etc.). Fall back to
+                // application/javascript if no header is present.
+                let content_type = resp
+                    .headers()
+                    .get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("application/javascript")
+                    .to_string();
+
                 let code = resp.bytes().await.map_err(|e| {
                     LoadError::Other(Arc::new(JsErrorBox::generic(format!(
                         "Failed to read module {url}: {e}"
@@ -291,7 +302,10 @@ impl Loader for PluginBundleLoader {
 
                 Ok(Some(LoadResponse::Module {
                     specifier,
-                    maybe_headers: None,
+                    maybe_headers: Some(std::collections::HashMap::from([(
+                        "content-type".to_string(),
+                        content_type,
+                    )])),
                     content,
                     mtime: None,
                 }))

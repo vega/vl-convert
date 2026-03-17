@@ -95,10 +95,15 @@ pub fn get_vega_or_vegalite_script(
             URL.revokeObjectURL(url);
             return mod;
         }}
+        // Wait for all synchronous scripts (e.g. bundled Vega in <head>) to
+        // finish executing before reading window.vega. An `await import()`
+        // above yields back to the event loop, which can run before a large
+        // classic <script> in <head> completes. A setTimeout(0) macrotask
+        // schedules after all pending synchronous script execution.
+        await new Promise(r => setTimeout(r, 0));
 {plugin_imports}
         const spec = {spec_json};
         {opts}
-        await Promise.all([...document.fonts].map(f => f.load()));
         await vegaEmbed('#{chart_id}', spec, opts);
     }} catch(e) {{
         console.error(e);
@@ -149,8 +154,8 @@ pub async fn bundle_vega_snippet(snippet: &str, vl_version: VlVersion) -> Result
     let script = format!(
         r#"
 import vegaEmbed from "{JSDELIVR_URL}{VEGA_EMBED_PATH}.js"
-import vega from "{JSDELIVR_URL}{VEGA_PATH}.js"
-import vegaLite from "{JSDELIVR_URL}{VEGA_LITE_PATH}.js"
+import * as vega from "{JSDELIVR_URL}{VEGA_PATH}.js"
+import * as vegaLite from "{JSDELIVR_URL}{VEGA_LITE_PATH}.js"
 import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
 {snippet}
 "#,
@@ -730,6 +735,18 @@ impl VlConverter {
         }
     }
 
+    /// Convert a Vega-Lite spec to a self-contained HTML page.
+    ///
+    /// # `bundle` flag
+    ///
+    /// Controls how **Vega/vega-embed** are delivered:
+    /// - `true` — all Vega JS is inlined in a `<script>` tag; the page works offline.
+    /// - `false` — Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
+    ///
+    /// **Plugins are always bundled** (HTTP imports inlined via deno_emit) regardless
+    /// of this flag, with one exception: URL-backed plugins (e.g. `https://esm.sh/…`)
+    /// are fetched live from their original URL when `bundle=false`, so the browser
+    /// benefits from CDN caching. With `bundle=true` their source is inlined too.
     pub async fn vegalite_to_html(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -773,12 +790,7 @@ impl VlConverter {
         if self.inner.config.vega_plugins.is_some() {
             self.warm_up()?;
         }
-        let resolved_plugins_owned = self
-            .inner
-            .resolved_plugins
-            .lock()
-            .unwrap()
-            .clone();
+        let resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();
         let resolved_plugins = resolved_plugins_owned.as_deref();
         let has_plugins = resolved_plugins.map_or(false, |p| !p.is_empty());
         let code = get_vega_or_vegalite_script(
@@ -791,6 +803,18 @@ impl VlConverter {
             .await
     }
 
+    /// Convert a Vega spec to a self-contained HTML page.
+    ///
+    /// # `bundle` flag
+    ///
+    /// Controls how **Vega/vega-embed** are delivered:
+    /// - `true` — all Vega JS is inlined in a `<script>` tag; the page works offline.
+    /// - `false` — Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
+    ///
+    /// **Plugins are always bundled** (HTTP imports inlined via deno_emit) regardless
+    /// of this flag, with one exception: URL-backed plugins (e.g. `https://esm.sh/…`)
+    /// are fetched live from their original URL when `bundle=false`, so the browser
+    /// benefits from CDN caching. With `bundle=true` their source is inlined too.
     pub async fn vega_to_html(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -828,12 +852,7 @@ impl VlConverter {
         if self.inner.config.vega_plugins.is_some() {
             self.warm_up()?;
         }
-        let resolved_plugins_owned = self
-            .inner
-            .resolved_plugins
-            .lock()
-            .unwrap()
-            .clone();
+        let resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();
         let resolved_plugins = resolved_plugins_owned.as_deref();
         let has_plugins = resolved_plugins.map_or(false, |p| !p.is_empty());
         let code = get_vega_or_vegalite_script(

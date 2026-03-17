@@ -188,10 +188,7 @@ const MIN_WORKER_HEAP_SIZE_MB: usize = 64;
 /// Bundle a URL plugin by using the URL as the deno_emit entry specifier.
 /// The PluginBundleLoader fetches the entry and all sub-imports (including
 /// relative imports like `./dep.js`) via HTTP. Always bundles — no heuristic.
-async fn bundle_url_plugin(
-    url: &str,
-    allowed_domains: &[String],
-) -> Result<String, AnyError> {
+async fn bundle_url_plugin(url: &str, allowed_domains: &[String]) -> Result<String, AnyError> {
     use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
     use crate::module_loader::PluginBundleLoader;
 
@@ -273,20 +270,18 @@ async fn resolve_and_bundle_plugins(
                 // URL plugin: always bundle. The bundler fetches the entry and
                 // all sub-imports (including relative imports) via HTTP.
                 // No separate fetch_plugin_url() call needed.
-                let bundled =
-                    bundle_url_plugin(entry, &config.allowed_plugin_import_domains)
-                        .await
-                        .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
+                let bundled = bundle_url_plugin(entry, &config.allowed_plugin_import_domains)
+                    .await
+                    .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
                 resolved.push(ResolvedPlugin {
                     original_url: Some(entry.clone()),
                     bundled_source: bundled,
                 });
             } else {
                 // File/inline plugin: bundle only if it has HTTP imports
-                let bundled =
-                    bundle_source_plugin(entry, &config.allowed_plugin_import_domains)
-                        .await
-                        .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
+                let bundled = bundle_source_plugin(entry, &config.allowed_plugin_import_domains)
+                    .await
+                    .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
                 resolved.push(ResolvedPlugin {
                     original_url: None,
                     bundled_source: bundled,
@@ -6733,205 +6728,59 @@ try {
         assert!(matches!(result[0].source, FontSource::Local));
     }
 
-    // ---- Vega Plugin ESM integration tests ----
+    // --- domain_matches_patterns unit tests ---
 
-    /// Helper: minimal Vega spec that renders a text mark using an expression function.
-    fn vega_spec_with_expression(expr: &str) -> serde_json::Value {
-        json!({
-            "$schema": "https://vega.github.io/schema/vega/v5.json",
-            "width": 100,
-            "height": 100,
-            "marks": [{
-                "type": "text",
-                "encode": {
-                    "enter": {
-                        "text": {"signal": expr},
-                        "x": {"value": 50},
-                        "y": {"value": 50}
-                    }
-                }
-            }]
-        })
+    #[test]
+    fn test_domain_matches_exact() {
+        let patterns = vec!["esm.sh".to_string()];
+        assert!(domain_matches_patterns("esm.sh", &patterns));
+        assert!(!domain_matches_patterns("cdn.esm.sh", &patterns));
+        assert!(!domain_matches_patterns("esm.sh.evil.com", &patterns));
     }
 
-    #[tokio::test]
-    async fn test_plugin_registers_expression_function() {
-        let plugin_source =
-            "export default function(vega) { vega.expressionFunction('double', (x) => x * 2); }";
-        let converter = VlConverter::with_config(VlConverterConfig {
-            vega_plugins: Some(vec![plugin_source.to_string()]),
-            ..Default::default()
-        })
-        .unwrap();
-
-        let spec = vega_spec_with_expression("double(5)");
-        let svg = converter
-            .vega_to_svg(spec, VgOpts::default())
-            .await
-            .unwrap();
-
-        assert!(svg.contains("<svg"), "output should be valid SVG");
-        assert!(
-            svg.contains("10"),
-            "SVG should contain the result of double(5) = 10"
-        );
+    #[test]
+    fn test_domain_matches_wildcard_subdomain() {
+        let patterns = vec!["*.jsdelivr.net".to_string()];
+        assert!(domain_matches_patterns("cdn.jsdelivr.net", &patterns));
+        assert!(domain_matches_patterns("foo.bar.jsdelivr.net", &patterns));
+        // The bare domain itself should match (*.x matches x)
+        assert!(domain_matches_patterns("jsdelivr.net", &patterns));
+        // Must not match a suffix attack
+        assert!(!domain_matches_patterns("jsdelivr.net.evil.com", &patterns));
+        assert!(!domain_matches_patterns("notjsdelivr.net", &patterns));
     }
 
-    #[tokio::test]
-    async fn test_multiple_plugins_register_different_functions() {
-        let plugin_a =
-            "export default function(vega) { vega.expressionFunction('triple', (x) => x * 3); }";
-        let plugin_b =
-            "export default function(vega) { vega.expressionFunction('addTen', (x) => x + 10); }";
-        let converter = VlConverter::with_config(VlConverterConfig {
-            vega_plugins: Some(vec![plugin_a.to_string(), plugin_b.to_string()]),
-            ..Default::default()
-        })
-        .unwrap();
-
-        // Test triple(4) = 12
-        let spec_triple = vega_spec_with_expression("triple(4)");
-        let svg_triple = converter
-            .vega_to_svg(spec_triple, VgOpts::default())
-            .await
-            .unwrap();
-        assert!(
-            svg_triple.contains("12"),
-            "SVG should contain the result of triple(4) = 12"
-        );
-
-        // Test addTen(7) = 17
-        let spec_add = vega_spec_with_expression("addTen(7)");
-        let svg_add = converter
-            .vega_to_svg(spec_add, VgOpts::default())
-            .await
-            .unwrap();
-        assert!(
-            svg_add.contains("17"),
-            "SVG should contain the result of addTen(7) = 17"
-        );
+    #[test]
+    fn test_domain_matches_star_all() {
+        let patterns = vec!["*".to_string()];
+        assert!(domain_matches_patterns("esm.sh", &patterns));
+        assert!(domain_matches_patterns("anything.example.com", &patterns));
+        assert!(domain_matches_patterns("", &patterns));
     }
 
-    #[tokio::test]
-    async fn test_plugin_with_syntax_error() {
-        let bad_plugin = "export default function(vega) { vega.expressionFunction('bad', (x) =>; }";
-        let converter = VlConverter::with_config(VlConverterConfig {
-            vega_plugins: Some(vec![bad_plugin.to_string()]),
-            ..Default::default()
-        })
-        .unwrap();
-
-        let spec = vega_spec_with_expression("1 + 1");
-        let err = converter
-            .vega_to_svg(spec, VgOpts::default())
-            .await
-            .unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("Failed to load Vega plugin"),
-            "error should mention plugin loading failure, got: {msg}"
-        );
+    #[test]
+    fn test_domain_no_match_empty_list() {
+        let patterns: Vec<String> = vec![];
+        assert!(!domain_matches_patterns("esm.sh", &patterns));
     }
 
-    #[tokio::test]
-    async fn test_plugin_without_default_export() {
-        let no_default_plugin = "export const x = 1;";
-        let converter = VlConverter::with_config(VlConverterConfig {
-            vega_plugins: Some(vec![no_default_plugin.to_string()]),
-            ..Default::default()
-        })
-        .unwrap();
-
-        let spec = vega_spec_with_expression("1 + 1");
-        let err = converter
-            .vega_to_svg(spec, VgOpts::default())
-            .await
-            .unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("does not export a default function"),
-            "error should mention missing default export, got: {msg}"
-        );
+    #[test]
+    fn test_domain_no_match_wrong_domain() {
+        let patterns = vec!["esm.sh".to_string(), "*.jsdelivr.net".to_string()];
+        assert!(!domain_matches_patterns("evil.com", &patterns));
+        assert!(!domain_matches_patterns("esm.sh.evil.com", &patterns));
     }
 
-    #[tokio::test]
-    async fn test_plugin_poison_behavior() {
-        let good_plugin =
-            "export default function(vega) { vega.expressionFunction('ok', () => 42); }";
-        let bad_plugin = "export default function(vega) { vega.expressionFunction('bad', (x) =>; }";
-
-        let converter = VlConverter::with_config(VlConverterConfig {
-            vega_plugins: Some(vec![good_plugin.to_string(), bad_plugin.to_string()]),
-            ..Default::default()
-        })
-        .unwrap();
-
-        let spec = vega_spec_with_expression("1 + 1");
-
-        // First attempt should fail due to the bad plugin
-        let err1 = converter
-            .vega_to_svg(spec.clone(), VgOpts::default())
-            .await
-            .unwrap_err();
-        let msg1 = err1.to_string();
-        assert!(
-            msg1.contains("Failed to load Vega plugin"),
-            "first error should be plugin loading failure, got: {msg1}"
-        );
-
-        // Second attempt should return the poison error, not retry
-        let err2 = converter
-            .vega_to_svg(spec, VgOpts::default())
-            .await
-            .unwrap_err();
-        let msg2 = err2.to_string();
-        assert!(
-            msg2.contains("poisoned") || msg2.contains("Failed to load Vega plugin"),
-            "second error should be poison or plugin failure, got: {msg2}"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_plugin_html_export_contains_module_script() {
-        let plugin_source =
-            "export default function(vega) { vega.expressionFunction('myFn', (x) => x); }";
-
-        let converter = VlConverter::with_config(VlConverterConfig {
-            vega_plugins: Some(vec![plugin_source.to_string()]),
-            ..Default::default()
-        })
-        .unwrap();
-
-        let spec = json!({
-            "$schema": "https://vega.github.io/schema/vega/v5.json",
-            "width": 100,
-            "height": 100,
-            "marks": [{
-                "type": "rect",
-                "encode": {
-                    "enter": {
-                        "x": {"value": 0},
-                        "y": {"value": 0},
-                        "width": {"value": 50},
-                        "height": {"value": 50},
-                        "fill": {"value": "steelblue"}
-                    }
-                }
-            }]
-        });
-
-        let html = converter
-            .vega_to_html(spec, VgOpts::default(), true, false, true, Renderer::Svg)
-            .await
-            .unwrap();
-
-        assert!(
-            html.contains(r#"type="module""#),
-            "HTML should use <script type=\"module\"> when plugins are present"
-        );
-        assert!(
-            html.contains("__vlcLoadPlugin"),
-            "HTML should contain the __vlcLoadPlugin helper for inline plugin loading"
-        );
+    #[test]
+    fn test_domain_multiple_patterns() {
+        let patterns = vec![
+            "esm.sh".to_string(),
+            "*.jsdelivr.net".to_string(),
+            "unpkg.com".to_string(),
+        ];
+        assert!(domain_matches_patterns("esm.sh", &patterns));
+        assert!(domain_matches_patterns("cdn.jsdelivr.net", &patterns));
+        assert!(domain_matches_patterns("unpkg.com", &patterns));
+        assert!(!domain_matches_patterns("evil.com", &patterns));
     }
 }

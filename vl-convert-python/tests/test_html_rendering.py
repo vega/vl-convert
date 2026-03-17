@@ -205,3 +205,121 @@ def test_local_font_bundle(page, update_baselines):
     html = vlc.vegalite_to_html(load_spec("local_font"), bundle=True, embed_local_fonts=True)
     screenshot = render_html(page, html, "local_font_bundle.png", block_network=True)
     compare_screenshot(screenshot, "local_font_bundle.png", update_baselines)
+
+
+# ---------------------------------------------------------------------------
+# Plugin tests
+# ---------------------------------------------------------------------------
+
+# Inline ESM that registers a custom color scheme.
+_SCHEME_PLUGIN = (
+    "export default function(vega) {"
+    " vega.scheme('testscheme', ['#e41a1c', '#377eb8', '#4daf4a']); "
+    "}"
+)
+
+# Inline ESM that registers an expression function using a bundled HTTP import.
+# The import from esm.sh is resolved at configure() time via deno_emit.
+_HTTP_IMPORT_PLUGIN = """\
+import { scaleLinear } from 'https://esm.sh/d3-scale@4';
+
+export default function(vega) {
+    const s = scaleLinear().domain([0, 10]).range([0, 200]);
+    vega.expressionFunction('d3scaled', (x) => s(x));
+}
+"""
+
+# Self-contained bar chart that uses the 'testscheme' color scheme.
+_SCHEME_SPEC = """{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "width": 200, "height": 150, "padding": 5,
+  "data": [{"name": "t", "values": [
+    {"c": "A", "v": 28}, {"c": "B", "v": 55}, {"c": "C", "v": 43}
+  ]}],
+  "scales": [
+    {"name": "x", "type": "band", "domain": {"data": "t", "field": "c"},
+     "range": "width", "padding": 0.1},
+    {"name": "y", "type": "linear", "domain": {"data": "t", "field": "v"},
+     "range": "height", "nice": true},
+    {"name": "color", "type": "ordinal", "domain": {"data": "t", "field": "c"},
+     "range": {"scheme": "testscheme"}}
+  ],
+  "marks": [{"type": "rect", "from": {"data": "t"}, "encode": {"enter": {
+    "x": {"scale": "x", "field": "c"}, "width": {"scale": "x", "band": 1},
+    "y": {"scale": "y", "field": "v"}, "y2": {"scale": "y", "value": 0},
+    "fill": {"scale": "color", "field": "c"}
+  }}}]
+}"""
+
+# Chart that renders two text marks using d3scaled() from the HTTP-import plugin.
+_EXPR_SPEC = """{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "width": 200, "height": 100, "padding": 5,
+  "marks": [
+    {"type": "text", "encode": {"enter": {
+      "text": {"signal": "'d3scaled(2) = ' + d3scaled(2)"},
+      "x": {"value": 10}, "y": {"value": 40},
+      "fontSize": {"value": 16}, "fill": {"value": "#333"}
+    }}},
+    {"type": "text", "encode": {"enter": {
+      "text": {"signal": "'d3scaled(8) = ' + d3scaled(8)"},
+      "x": {"value": 10}, "y": {"value": 70},
+      "fontSize": {"value": 16}, "fill": {"value": "#333"}
+    }}}
+  ]
+}"""
+
+
+def test_plugin_custom_scheme_bundle(page, update_baselines):
+    """Plugin registers a named color scheme; bundle=True embeds all JS."""
+    vlc.configure(vega_plugins=[_SCHEME_PLUGIN])
+    html = vlc.vega_to_html(_SCHEME_SPEC, bundle=True)
+    screenshot = render_html(
+        page, html, "plugin_custom_scheme_bundle.png", block_network=True
+    )
+    compare_screenshot(screenshot, "plugin_custom_scheme_bundle.png", update_baselines)
+    vlc.configure(vega_plugins=None)
+
+
+def test_plugin_custom_scheme_cdn(page, update_baselines):
+    """Plugin registers a named color scheme; bundle=False loads Vega from CDN."""
+    vlc.configure(vega_plugins=[_SCHEME_PLUGIN])
+    html = vlc.vega_to_html(_SCHEME_SPEC, bundle=False)
+    screenshot = render_html(page, html, "plugin_custom_scheme_cdn.png")
+    compare_screenshot(screenshot, "plugin_custom_scheme_cdn.png", update_baselines)
+    vlc.configure(vega_plugins=None)
+
+
+def test_plugin_http_import_bundle(page, update_baselines):
+    """Plugin with HTTP import (esm.sh); bundled at configure() time via deno_emit.
+
+    bundle=True: the fully-inlined plugin blob is embedded, so the chart
+    renders correctly even with network blocked.
+    """
+    vlc.configure(
+        vega_plugins=[_HTTP_IMPORT_PLUGIN],
+        allowed_plugin_import_domains=["esm.sh"],
+    )
+    html = vlc.vega_to_html(_EXPR_SPEC, bundle=True)
+    screenshot = render_html(
+        page, html, "plugin_http_import_bundle.png", block_network=True
+    )
+    compare_screenshot(
+        screenshot, "plugin_http_import_bundle.png", update_baselines
+    )
+    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+
+
+def test_plugin_http_import_cdn(page, update_baselines):
+    """Plugin with HTTP import (esm.sh); bundle=False — Vega from CDN, plugin
+    source inlined as blob URL (CDN fetch happens at configure() time, so
+    the rendered HTML is self-contained w.r.t. the plugin).
+    """
+    vlc.configure(
+        vega_plugins=[_HTTP_IMPORT_PLUGIN],
+        allowed_plugin_import_domains=["esm.sh"],
+    )
+    html = vlc.vega_to_html(_EXPR_SPEC, bundle=False)
+    screenshot = render_html(page, html, "plugin_http_import_cdn.png")
+    compare_screenshot(screenshot, "plugin_http_import_cdn.png", update_baselines)
+    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
