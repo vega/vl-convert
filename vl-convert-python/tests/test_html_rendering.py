@@ -345,6 +345,20 @@ _URL_PLUGIN_SOURCE = (
 # Same bar chart spec as _SCHEME_SPEC but using 'urlscheme'.
 _URL_SCHEME_SPEC = _SCHEME_SPEC.replace('"testscheme"', '"urlscheme"')
 
+# Two-file plugin: dep.js exports colors, plugin_with_dep.js imports them via
+# a relative path. Tests that deno_emit resolves relative imports against the
+# entry URL rather than a synthetic local path.
+_DEP_SOURCE = "export const relSchemeColors = ['#1b9e77', '#d95f02', '#7570b3'];"
+_PLUGIN_WITH_DEP_SOURCE = """\
+import { relSchemeColors } from './dep.js';
+export default function(vega) {
+    vega.scheme('relscheme', relSchemeColors);
+}
+"""
+
+# Same spec as _URL_SCHEME_SPEC but using 'relscheme'.
+_REL_SCHEME_SPEC = _SCHEME_SPEC.replace('"testscheme"', '"relscheme"')
+
 _CHART_READY_JS = """() => {
     const svg = document.querySelector('svg');
     const canvas = document.querySelector('canvas');
@@ -355,17 +369,34 @@ _CHART_READY_JS = """() => {
 
 @pytest.fixture(scope="module")
 def plugin_server():
-    """Serve a plugin JS file from a free localhost port for URL-plugin tests."""
+    """Local HTTP server for URL-plugin tests.
+
+    Serves:
+    - /plugin.js          — single-file scheme plugin (urlscheme)
+    - /dep.js             — ES module exporting color array
+    - /plugin_with_dep.js — imports ./dep.js (tests relative-import resolution)
+    - /plugin_redirect.js — 301 redirect to /plugin.js (tests redirect handling)
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("", 0))
         port = s.getsockname()[1]
 
     serve_dir = Path(tempfile.mkdtemp())
     (serve_dir / "plugin.js").write_text(_URL_PLUGIN_SOURCE)
+    (serve_dir / "dep.js").write_text(_DEP_SOURCE)
+    (serve_dir / "plugin_with_dep.js").write_text(_PLUGIN_WITH_DEP_SOURCE)
 
     class _Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(serve_dir), **kwargs)
+
+        def do_GET(self):
+            if self.path == "/plugin_redirect.js":
+                self.send_response(301)
+                self.send_header("Location", "/plugin.js")
+                self.end_headers()
+            else:
+                super().do_GET()
 
         def log_message(self, *args):
             pass  # suppress noisy output
@@ -433,3 +464,51 @@ def test_plugin_url_entry_cdn(page, plugin_server, update_baselines):
     screenshot = page.locator("#vega-chart").screenshot()
 
     compare_screenshot(screenshot, "plugin_url_entry_cdn.png", update_baselines)
+
+
+def test_plugin_url_relative_imports_bundle(page, plugin_server, update_baselines):
+    """URL-entry plugin that uses a relative import (./dep.js).
+
+    Exercises the deno_emit bundler's relative-import resolution: the entry
+    URL is passed as the bundle root so './dep.js' resolves against the same
+    localhost origin, not a synthetic local path.
+    """
+    port = plugin_server["port"]
+    plugin_url = f"http://localhost:{port}/plugin_with_dep.js"
+
+    vlc.configure(
+        vega_plugins=[plugin_url],
+        allowed_plugin_import_domains=["localhost"],
+    )
+    html = vlc.vega_to_html(_REL_SCHEME_SPEC, bundle=True)
+    screenshot = render_html(
+        page, html, "plugin_url_relative_imports_bundle.png", block_network=True
+    )
+    compare_screenshot(
+        screenshot, "plugin_url_relative_imports_bundle.png", update_baselines
+    )
+    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
+
+
+def test_plugin_url_redirect_bundle(page, plugin_server, update_baselines):
+    """URL-entry plugin behind a 301 redirect.
+
+    Exercises PluginBundleLoader's redirect handling: the entry URL returns
+    a redirect whose Location header is validated against allowed_plugin_import_domains
+    before the final plugin source is fetched and bundled.
+    """
+    port = plugin_server["port"]
+    plugin_url = f"http://localhost:{port}/plugin_redirect.js"
+
+    vlc.configure(
+        vega_plugins=[plugin_url],
+        allowed_plugin_import_domains=["localhost"],
+    )
+    html = vlc.vega_to_html(_URL_SCHEME_SPEC, bundle=True)
+    screenshot = render_html(
+        page, html, "plugin_url_redirect_bundle.png", block_network=True
+    )
+    compare_screenshot(
+        screenshot, "plugin_url_redirect_bundle.png", update_baselines
+    )
+    vlc.configure(vega_plugins=None, allowed_plugin_import_domains=[])
