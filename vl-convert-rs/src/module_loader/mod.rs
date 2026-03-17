@@ -1,5 +1,6 @@
 pub mod import_map;
 
+use crate::converter::domain_matches_patterns;
 use crate::deno_emit::{LoadFuture, LoadOptions, Loader};
 use crate::module_loader::import_map::{
     build_format_locale_map, build_import_map, build_time_format_locale_map, JSDELIVR_URL,
@@ -12,7 +13,7 @@ use deno_core::{
     ModuleSource, ModuleSourceCode, ModuleSpecifier, ModuleType, ResolutionKind,
 };
 use deno_error::JsErrorBox;
-use deno_graph::source::LoadResponse;
+use deno_graph::source::{LoadError, LoadResponse};
 use regex::Regex;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -177,5 +178,127 @@ impl Loader for VlConvertBundleLoader {
                 mtime: None,
             }))
         })
+    }
+}
+
+/// Loader for bundling plugin ESM modules with HTTP import support.
+/// Used at startup (spawn_worker_pool) to bundle plugin dependencies,
+/// not at V8 runtime.
+pub struct PluginBundleLoader {
+    /// The plugin entry module source code.
+    pub entry_source: String,
+    /// The entry specifier string (used to match the entry module request).
+    /// For URL plugins this is the original URL; for inline/file plugins
+    /// this is the synthetic vl-plugin-entry.js path.
+    pub entry_specifier: String,
+    /// Domain allowlist for HTTP fetches.
+    pub allowed_domains: Vec<String>,
+}
+
+impl Loader for PluginBundleLoader {
+    fn load(&self, module_specifier: &ModuleSpecifier, _options: LoadOptions) -> LoadFuture {
+        // Serve the entry module source directly
+        if module_specifier.to_string() == self.entry_specifier {
+            let content: Arc<[u8]> = self.entry_source.as_bytes().into();
+            let specifier = module_specifier.clone();
+            return Box::pin(async move {
+                Ok(Some(LoadResponse::Module {
+                    specifier,
+                    maybe_headers: None,
+                    content,
+                    mtime: None,
+                }))
+            });
+        }
+
+        // Handle HTTP/HTTPS imports
+        if module_specifier.scheme() == "https" || module_specifier.scheme() == "http" {
+            let domain = module_specifier.host_str().unwrap_or("").to_string();
+            let allowed = self.allowed_domains.clone();
+            let url = module_specifier.to_string();
+            let specifier = module_specifier.clone();
+
+            if !domain_matches_patterns(&domain, &allowed) {
+                return Box::pin(async move {
+                    Err(LoadError::Other(Arc::new(JsErrorBox::generic(format!(
+                        "HTTP import blocked: domain '{domain}' not in \
+                         allowed_plugin_import_domains. URL: {url}"
+                    )))))
+                });
+            }
+
+            return Box::pin(async move {
+                let client = reqwest::Client::builder()
+                    .redirect(reqwest::redirect::Policy::none())
+                    .build()
+                    .map_err(|e| {
+                        LoadError::Other(Arc::new(JsErrorBox::generic(format!(
+                            "HTTP client error: {e}"
+                        ))))
+                    })?;
+                let resp = client.get(&url).send().await.map_err(|e| {
+                    LoadError::Other(Arc::new(JsErrorBox::generic(format!(
+                        "Failed to fetch module {url}: {e}"
+                    ))))
+                })?;
+
+                // Handle redirects: resolve Location (absolute or relative),
+                // check target domain against allowlist
+                if resp.status().is_redirection() {
+                    if let Some(location) = resp.headers().get("location") {
+                        let target = location.to_str().unwrap_or("");
+                        // Try absolute URL first, fall back to resolving against request URL
+                        let target_url = Url::parse(target)
+                            .or_else(|_| specifier.join(target))
+                            .map_err(|e| {
+                                LoadError::Other(Arc::new(JsErrorBox::generic(format!(
+                                    "Invalid redirect URL '{target}' from {url}: {e}"
+                                ))))
+                            })?;
+                        let target_domain = target_url.host_str().unwrap_or("");
+                        if !domain_matches_patterns(target_domain, &allowed) {
+                            return Err(LoadError::Other(Arc::new(JsErrorBox::generic(
+                                format!(
+                                    "HTTP import redirect blocked: {url} redirected to \
+                                     domain '{target_domain}' which is not in \
+                                     allowed_plugin_import_domains"
+                                ),
+                            ))));
+                        }
+                        // Return redirect for deno_graph to follow
+                        return Ok(Some(LoadResponse::Redirect {
+                            specifier: target_url,
+                        }));
+                    }
+                    return Err(LoadError::Other(Arc::new(JsErrorBox::generic(format!(
+                        "HTTP import redirect with no valid location: {url}"
+                    )))));
+                }
+
+                if !resp.status().is_success() {
+                    return Err(LoadError::Other(Arc::new(JsErrorBox::generic(format!(
+                        "HTTP {} fetching module {url}",
+                        resp.status()
+                    )))));
+                }
+
+                let code = resp.bytes().await.map_err(|e| {
+                    LoadError::Other(Arc::new(JsErrorBox::generic(format!(
+                        "Failed to read module {url}: {e}"
+                    ))))
+                })?;
+                let content: Arc<[u8]> = code.to_vec().into_boxed_slice().into();
+
+                Ok(Some(LoadResponse::Module {
+                    specifier,
+                    maybe_headers: None,
+                    content,
+                    mtime: None,
+                }))
+            });
+        }
+
+        // Unknown scheme — return None
+        Box::pin(async move { Ok(None) })
     }
 }

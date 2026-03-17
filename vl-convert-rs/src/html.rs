@@ -1,6 +1,7 @@
 use crate::converter::{
     classify_and_request_fonts, classify_scenegraph_fonts, GoogleFontRequest, HtmlFontAnalysis,
-    MissingFontsPolicy, Renderer, ValueOrString, VgOpts, VlConvertCommand, VlConverter, VlOpts,
+    MissingFontsPolicy, Renderer, ResolvedPlugin, ValueOrString, VgOpts, VlConvertCommand,
+    VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{
@@ -18,9 +19,57 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use vl_convert_google_fonts::{family_to_id, FontStyle, VariantRequest};
 
+/// Escape a string for safe embedding inside a JavaScript template literal.
+///
+/// Handles backslashes, backticks, `${` interpolation sequences, and
+/// `</script>` sequences that would prematurely close the HTML script element.
+fn escape_for_template_literal(s: &str) -> String {
+    let s = s
+        .replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace("${", "\\${");
+    // HTML safety: prevent </script> from terminating the script element
+    let re = regex::RegexBuilder::new(r"</script")
+        .case_insensitive(true)
+        .build()
+        .unwrap();
+    re.replace_all(&s, "<\\/script").into_owned()
+}
+
+/// Generate JavaScript lines that import and execute resolved plugins.
+///
+/// - `bundle=true` or file/inline plugins: embed source via blob URL using `__vlcLoadPlugin()`
+/// - `bundle=false` + URL plugin: use `import('{original_url}')` directly
+fn generate_plugin_imports(plugins: &[ResolvedPlugin], bundle: bool) -> String {
+    plugins
+        .iter()
+        .enumerate()
+        .map(|(i, plugin)| {
+            if !bundle && plugin.original_url.is_some() {
+                // bundle=false + URL plugin: import directly from CDN
+                // (browser fetches natively, handles caching)
+                let url = plugin.original_url.as_ref().unwrap();
+                format!(
+                    "        const __vlcPlugin{i} = await import('{url}');\n        __vlcPlugin{i}.default(window.vega);"
+                )
+            } else {
+                // bundle=true (all plugins), or bundle=false + file/inline plugin:
+                // embed bundled source via blob URL
+                let escaped = escape_for_template_literal(&plugin.bundled_source);
+                format!(
+                    "        const __vlcPlugin{i} = await __vlcLoadPlugin(`{escaped}`);\n        __vlcPlugin{i}.default(window.vega);"
+                )
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub fn get_vega_or_vegalite_script(
     spec: impl Into<ValueOrString>,
     opts: serde_json::Value,
+    resolved_plugins: Option<&[ResolvedPlugin]>,
+    bundle: bool,
 ) -> Result<String, AnyError> {
     let chart_id = "vega-chart";
     let spec_json = match spec.into() {
@@ -31,8 +80,34 @@ pub fn get_vega_or_vegalite_script(
     // Setup embed opts
     let opts = format!("const opts = {}", serde_json::to_string(&opts)?);
 
-    let index_js = format!(
-        r##"
+    let has_plugins = resolved_plugins.map_or(false, |p| !p.is_empty());
+
+    let index_js = if has_plugins {
+        let plugins = resolved_plugins.unwrap();
+        let plugin_imports = generate_plugin_imports(plugins, bundle);
+        format!(
+            r##"
+    try {{
+        async function __vlcLoadPlugin(src) {{
+            const blob = new Blob([src], {{type: 'text/javascript'}});
+            const url = URL.createObjectURL(blob);
+            const mod = await import(url);
+            URL.revokeObjectURL(url);
+            return mod;
+        }}
+{plugin_imports}
+        const spec = {spec_json};
+        {opts}
+        await Promise.all([...document.fonts].map(f => f.load()));
+        await vegaEmbed('#{chart_id}', spec, opts);
+    }} catch(e) {{
+        console.error(e);
+    }}
+"##,
+        )
+    } else {
+        format!(
+            r##"
 {{
     const spec = {spec_json};
     {opts}
@@ -41,7 +116,8 @@ pub fn get_vega_or_vegalite_script(
         .catch(console.error);
 }}
 "##,
-    );
+        )
+    };
     Ok(index_js)
 }
 
@@ -175,6 +251,7 @@ impl VlConverter {
         vl_version: VlVersion,
         bundle: bool,
         font_head_html: &str,
+        has_plugins: bool,
     ) -> Result<String, AnyError> {
         let script_tags = if bundle {
             format!(
@@ -192,6 +269,14 @@ impl VlConverter {
             "#,
                 vl_ver = vl_version.to_semver()
             )
+        };
+
+        // Use module script when plugins are present (required for dynamic import());
+        // otherwise keep the classic script for backward compatibility.
+        let script_type = if has_plugins {
+            "module"
+        } else {
+            "text/javascript"
         };
 
         Ok(format!(
@@ -214,7 +299,7 @@ impl VlConverter {
   </head>
   <body>
     <div id="vega-chart"></div>
-    <script type="text/javascript">
+    <script type="{script_type}">
 {code}
     </script>
   </body>
@@ -684,8 +769,25 @@ impl VlConverter {
             String::new()
         };
 
-        let code = get_vega_or_vegalite_script(vl_spec, vl_opts.to_embed_opts(renderer)?)?;
-        self.build_html(&code, vl_version, bundle, &font_head_html)
+        // Ensure plugins are resolved (triggers pool spawn if not yet started)
+        if self.inner.config.vega_plugins.is_some() {
+            self.warm_up()?;
+        }
+        let resolved_plugins_owned = self
+            .inner
+            .resolved_plugins
+            .lock()
+            .unwrap()
+            .clone();
+        let resolved_plugins = resolved_plugins_owned.as_deref();
+        let has_plugins = resolved_plugins.map_or(false, |p| !p.is_empty());
+        let code = get_vega_or_vegalite_script(
+            vl_spec,
+            vl_opts.to_embed_opts(renderer)?,
+            resolved_plugins,
+            bundle,
+        )?;
+        self.build_html(&code, vl_version, bundle, &font_head_html, has_plugins)
             .await
     }
 
@@ -722,9 +824,32 @@ impl VlConverter {
             String::new()
         };
 
-        let code = get_vega_or_vegalite_script(vg_spec, vg_opts.to_embed_opts(renderer)?)?;
-        self.build_html(&code, Default::default(), bundle, &font_head_html)
-            .await
+        // Ensure plugins are resolved (triggers pool spawn if not yet started)
+        if self.inner.config.vega_plugins.is_some() {
+            self.warm_up()?;
+        }
+        let resolved_plugins_owned = self
+            .inner
+            .resolved_plugins
+            .lock()
+            .unwrap()
+            .clone();
+        let resolved_plugins = resolved_plugins_owned.as_deref();
+        let has_plugins = resolved_plugins.map_or(false, |p| !p.is_empty());
+        let code = get_vega_or_vegalite_script(
+            vg_spec,
+            vg_opts.to_embed_opts(renderer)?,
+            resolved_plugins,
+            bundle,
+        )?;
+        self.build_html(
+            &code,
+            Default::default(),
+            bundle,
+            &font_head_html,
+            has_plugins,
+        )
+        .await
     }
 }
 

@@ -164,6 +164,8 @@ if TYPE_CHECKING:
         google_fonts_cache_dir: str | None
         max_worker_heap_size_mb: int
         gc_after_conversion: bool
+        vega_plugins: list[str] | None
+        allowed_plugin_import_domains: list[str]
 
 __all__ = [
     "asyncio",
@@ -312,6 +314,8 @@ def configure(
     google_fonts: list[str | GoogleFontSpec] | None = None,
     max_worker_heap_size_mb: int | None = None,
     gc_after_conversion: bool | None = None,
+    vega_plugins: list[str] | None = None,
+    allowed_plugin_import_domains: list[str] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -351,6 +355,17 @@ def configure(
     gc_after_conversion
         Whether to run V8 garbage collection after each conversion to release
         memory back to the OS. Default is False. If ``None``, keep current value.
+    vega_plugins
+        List of Vega plugins to load. Each entry is a file path (``.js``/``.mjs``),
+        URL (``https://...``), or inline ESM string. Plugins must be single-entry
+        ESM modules with a default export function accepting a ``vega`` object.
+        Multi-file plugins should be pre-bundled with esbuild or Rollup.
+        URL plugins auto-allow their domain for imports. ``None`` keeps current value.
+    allowed_plugin_import_domains
+        List of domain patterns allowed for ESM imports inside plugins.
+        Empty list (default) disables all ESM HTTP imports.
+        Use ``["*"]`` to allow any domain, or specific patterns like
+        ``["esm.sh", "*.jsdelivr.net"]``. If ``None``, keep current value.
     """
     ...
 
@@ -1128,6 +1143,8 @@ if TYPE_CHECKING:
             google_fonts: list[str | GoogleFontSpec] | None = None,
             max_worker_heap_size_mb: int | None = None,
             gc_after_conversion: bool | None = None,
+            vega_plugins: list[str] | None = None,
+            allowed_plugin_import_domains: list[str] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...

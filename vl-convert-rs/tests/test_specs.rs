@@ -1315,3 +1315,35 @@ mod test_heap_limit {
         );
     }
 }
+
+mod test_plugin_custom_scheme_png {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::converter::{VgOpts, VlConverterConfig};
+    use vl_convert_rs::VlConverter;
+
+    #[test]
+    fn test() {
+        initialize();
+
+        let plugin_source =
+            "export default function(vega) { vega.scheme('testscheme', ['#ff0000', '#00ff00', '#0000ff']); }";
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            vega_plugins: Some(vec![plugin_source.to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let vg_spec = load_vg_spec("plugin_custom_scheme");
+        let png_data = block_on(converter.vega_to_png(
+            vg_spec,
+            VgOpts::default(),
+            Some(2.0),
+            None,
+        ))
+        .unwrap();
+
+        check_vg_png("plugin_custom_scheme", png_data.as_slice());
+    }
+}

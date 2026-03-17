@@ -91,6 +91,8 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
             .map(|p| p.to_string_lossy().into_owned()),
         "max_worker_heap_size_mb": config.max_worker_heap_size_mb,
         "gc_after_conversion": config.gc_after_conversion,
+        "vega_plugins": config.vega_plugins,
+        "allowed_plugin_import_domains": config.allowed_plugin_import_domains,
     })
 }
 
@@ -109,6 +111,9 @@ struct ConverterConfigOverrides {
     google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
     max_worker_heap_size_mb: Option<usize>,
     gc_after_conversion: Option<bool>,
+    // None => no change, Some(None) => clear, Some(Some(plugins)) => set
+    vega_plugins: Option<Option<Vec<String>>>,
+    allowed_plugin_import_domains: Option<Vec<String>>,
 }
 
 fn parse_config_overrides(
@@ -242,6 +247,26 @@ fn parse_config_overrides(
                         })?);
                 }
             }
+            "vega_plugins" => {
+                if value.is_none() {
+                    overrides.vega_plugins = Some(None);
+                } else {
+                    let raw: Vec<String> = value.extract().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid vega_plugins value for configure: {err}"
+                        )
+                    })?;
+                    overrides.vega_plugins = Some(Some(raw));
+                }
+            }
+            "allowed_plugin_import_domains" => {
+                overrides.allowed_plugin_import_domains =
+                    Some(value.extract::<Vec<String>>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid allowed_plugin_import_domains value for configure: {err}"
+                        )
+                    })?);
+            }
             // Read-only config fields returned by get_config() are
             // silently ignored so that `configure(**get_config())` works.
             "google_fonts_cache_dir" => {}
@@ -293,6 +318,12 @@ fn apply_config_overrides(
     }
     if let Some(gc_after_conversion) = overrides.gc_after_conversion {
         config.gc_after_conversion = gc_after_conversion;
+    }
+    if let Some(vega_plugins) = overrides.vega_plugins {
+        config.vega_plugins = vega_plugins;
+    }
+    if let Some(allowed_plugin_import_domains) = overrides.allowed_plugin_import_domains {
+        config.allowed_plugin_import_domains = allowed_plugin_import_domains;
     }
     Ok(())
 }

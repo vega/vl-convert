@@ -185,12 +185,147 @@ fn worker_queue_capacity(num_workers: usize) -> usize {
 /// abort during isolate creation (unrecoverable).
 const MIN_WORKER_HEAP_SIZE_MB: usize = 64;
 
-fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyError> {
+/// Bundle a URL plugin by using the URL as the deno_emit entry specifier.
+/// The PluginBundleLoader fetches the entry and all sub-imports (including
+/// relative imports like `./dep.js`) via HTTP. Always bundles — no heuristic.
+async fn bundle_url_plugin(
+    url: &str,
+    allowed_domains: &[String],
+) -> Result<String, AnyError> {
+    use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
+    use crate::module_loader::PluginBundleLoader;
+
+    let entry = deno_core::url::Url::parse(url)?;
+    let mut loader = PluginBundleLoader {
+        // Not used for URL entries — the loader fetches via HTTP
+        entry_source: String::new(),
+        entry_specifier: String::new(),
+        allowed_domains: allowed_domains.to_vec(),
+    };
+    let bundled = bundle(
+        entry,
+        &mut loader,
+        BundleOptions {
+            bundle_type: BundleType::Module,
+            transpile_options: Default::default(),
+            emit_options: EmitOptions {
+                source_map: SourceMapOption::None,
+                ..Default::default()
+            },
+            emit_ignore_directives: false,
+            minify: false,
+        },
+    )
+    .await?;
+    Ok(bundled.code)
+}
+
+/// Bundle a file/inline plugin's HTTP imports into a self-contained ESM string.
+/// Returns the source unchanged if no HTTP imports are detected.
+async fn bundle_source_plugin(
+    source: &str,
+    allowed_domains: &[String],
+) -> Result<String, AnyError> {
+    // Quick check: skip bundling if no HTTP imports
+    if !source.contains("https://") && !source.contains("http://") {
+        return Ok(source.to_string());
+    }
+
+    use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
+    use crate::module_loader::PluginBundleLoader;
+
+    let entry =
+        deno_core::resolve_path("vl-plugin-entry.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
+    let entry_str = entry.to_string();
+    let mut loader = PluginBundleLoader {
+        entry_source: source.to_string(),
+        entry_specifier: entry_str,
+        allowed_domains: allowed_domains.to_vec(),
+    };
+    let bundled = bundle(
+        entry,
+        &mut loader,
+        BundleOptions {
+            bundle_type: BundleType::Module,
+            transpile_options: Default::default(),
+            emit_options: EmitOptions {
+                source_map: SourceMapOption::None,
+                ..Default::default()
+            },
+            emit_ignore_directives: false,
+            minify: false,
+        },
+    )
+    .await?;
+    Ok(bundled.code)
+}
+
+/// Resolve and bundle all plugins. Runs async on a dedicated thread.
+async fn resolve_and_bundle_plugins(
+    mut config: VlConverterConfig,
+) -> Result<VlConverterConfig, AnyError> {
+    if let Some(ref plugins) = config.vega_plugins {
+        let mut resolved = Vec::new();
+        for (i, entry) in plugins.iter().enumerate() {
+            let is_url = entry.starts_with("http://") || entry.starts_with("https://");
+
+            if is_url {
+                // URL plugin: always bundle. The bundler fetches the entry and
+                // all sub-imports (including relative imports) via HTTP.
+                // No separate fetch_plugin_url() call needed.
+                let bundled =
+                    bundle_url_plugin(entry, &config.allowed_plugin_import_domains)
+                        .await
+                        .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
+                resolved.push(ResolvedPlugin {
+                    original_url: Some(entry.clone()),
+                    bundled_source: bundled,
+                });
+            } else {
+                // File/inline plugin: bundle only if it has HTTP imports
+                let bundled =
+                    bundle_source_plugin(entry, &config.allowed_plugin_import_domains)
+                        .await
+                        .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
+                resolved.push(ResolvedPlugin {
+                    original_url: None,
+                    bundled_source: bundled,
+                });
+            }
+        }
+        config.resolved_plugins = Some(resolved);
+    }
+    Ok(config)
+}
+
+fn spawn_worker_pool(
+    config: Arc<VlConverterConfig>,
+) -> Result<(WorkerPool, Option<Vec<ResolvedPlugin>>), AnyError> {
     let num_workers = config.num_workers;
     if num_workers < 1 {
         bail!("num_workers must be >= 1");
     }
     ensure_v8_platform_initialized();
+
+    // Resolve plugins before spawning workers (needs async for HTTP + deno_emit).
+    // Runs on a dedicated thread with its own tokio runtime to avoid
+    // "nested runtime" panics when called from Python's async path.
+    let config = if config.vega_plugins.is_some() {
+        let config_for_resolve = (*config).clone();
+        let resolved = std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| anyhow!("Failed to build plugin resolver runtime: {e}"))?;
+            rt.block_on(resolve_and_bundle_plugins(config_for_resolve))
+        })
+        .join()
+        .map_err(|_| anyhow!("Plugin resolver thread panicked"))??;
+        Arc::new(resolved)
+    } else {
+        config
+    };
+
     let initial_font_baseline = get_font_baseline_snapshot()?;
 
     let total_queue_capacity = worker_queue_capacity(num_workers);
@@ -286,12 +421,16 @@ fn spawn_worker_pool(config: Arc<VlConverterConfig>) -> Result<WorkerPool, AnyEr
     }
 
     let num = senders.len();
-    Ok(WorkerPool {
-        senders,
-        outstanding: (0..num).map(|_| Arc::new(AtomicUsize::new(0))).collect(),
-        dispatch_cursor: AtomicUsize::new(0),
-        _handles: handles,
-    })
+    let resolved_plugins = config.resolved_plugins.clone();
+    Ok((
+        WorkerPool {
+            senders,
+            outstanding: (0..num).map(|_| Arc::new(AtomicUsize::new(0))).collect(),
+            dispatch_cursor: AtomicUsize::new(0),
+            _handles: handles,
+        },
+        resolved_plugins,
+    ))
 }
 
 /// Canonicalize a path, stripping the Windows extended-length prefix (`\\?\`)
@@ -351,7 +490,49 @@ fn normalize_converter_config(
         );
     }
 
+    // Classify and resolve vega plugins (sync: file reads and URL validation only)
+    if let Some(ref mut plugins) = config.vega_plugins {
+        for (i, entry) in plugins.iter_mut().enumerate() {
+            if entry.starts_with("http://") || entry.starts_with("https://") {
+                // URL plugin — validate URL, auto-allow the domain
+                let url = Url::parse(entry)
+                    .map_err(|e| anyhow!("Invalid Vega plugin {i} URL: {entry}: {e}"))?;
+                if let Some(domain) = url.host_str() {
+                    if !domain_matches_patterns(domain, &config.allowed_plugin_import_domains) {
+                        config
+                            .allowed_plugin_import_domains
+                            .push(domain.to_string());
+                    }
+                }
+                // Leave the URL string in place — fetched at startup in spawn_worker_pool()
+            } else {
+                let path = Path::new(entry.as_str());
+                if (entry.ends_with(".js") || entry.ends_with(".mjs")) && path.is_file() {
+                    // File plugin — read source, replace entry
+                    *entry = std::fs::read_to_string(path).map_err(|e| {
+                        anyhow!("Failed to read Vega plugin {i} at {}: {e}", path.display())
+                    })?;
+                }
+                // else: inline ESM — leave as-is
+            }
+        }
+    }
+
     Ok(config)
+}
+
+/// Check if a domain matches any pattern in the allowlist.
+/// Patterns: `"esm.sh"` = exact, `"*.jsdelivr.net"` = subdomain wildcard, `"*"` = any.
+pub fn domain_matches_patterns(domain: &str, patterns: &[String]) -> bool {
+    patterns.iter().any(|pattern| {
+        if pattern == "*" {
+            true
+        } else if let Some(suffix) = pattern.strip_prefix("*.") {
+            domain == suffix || domain.ends_with(&format!(".{suffix}"))
+        } else {
+            domain == pattern
+        }
+    })
 }
 
 fn normalize_allowed_base_urls(
@@ -504,6 +685,17 @@ pub enum MissingFontsPolicy {
     Error,
 }
 
+/// A plugin after resolution: URL fetched, HTTP imports bundled.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedPlugin {
+    /// Original URL if this was a URL plugin (used for bundle=false HTML export).
+    /// None for file-backed or inline plugins.
+    pub original_url: Option<String>,
+    /// Fully resolved, self-contained ESM source (HTTP imports inlined).
+    /// This is what init_vega() loads into V8 and what bundle=true HTML embeds.
+    pub bundled_source: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VlConverterConfig {
     pub num_workers: usize,
@@ -528,6 +720,24 @@ pub struct VlConverterConfig {
     /// memory back to the OS. Defaults to false. Enabling this reduces peak
     /// memory between conversions at the cost of slower throughput.
     pub gc_after_conversion: bool,
+    /// User-provided Vega plugin ESM modules. Each string is either:
+    /// - An HTTP/HTTPS URL (fetched and bundled at startup)
+    /// - A file path ending in `.js` or `.mjs` (read at config normalization)
+    /// - Raw ESM source code (used directly)
+    ///
+    /// Plugins must be single-entry ESM modules with a default export function
+    /// that accepts a vega object.
+    pub vega_plugins: Option<Vec<String>>,
+    /// Domain allowlist for HTTP/HTTPS imports inside plugins.
+    /// Empty = disabled, `["*"]` = any domain, `["esm.sh"]` = specific domains.
+    /// Domains from URL plugins are auto-added during normalization.
+    /// Independent of `allow_http_access` (which controls data-fetching in specs).
+    pub allowed_plugin_import_domains: Vec<String>,
+    /// Resolved plugins after fetching URLs and bundling HTTP imports.
+    /// Populated by the plugin resolver in `spawn_worker_pool()` before
+    /// workers start. None if `vega_plugins` is None.
+    /// Internal-only: excluded from get_config() / converter_config_json().
+    pub resolved_plugins: Option<Vec<ResolvedPlugin>>,
 }
 
 impl Default for VlConverterConfig {
@@ -542,6 +752,9 @@ impl Default for VlConverterConfig {
             google_fonts: None,
             max_worker_heap_size_mb: 0,
             gc_after_conversion: false,
+            vega_plugins: None,
+            allowed_plugin_import_domains: Vec::new(),
+            resolved_plugins: None,
         }
     }
 }
@@ -958,6 +1171,9 @@ struct InnerVlConverter {
     /// Pointer to the heap-limit callback data (leaked Box). `None` when
     /// `max_worker_heap_size_mb` is 0 (no limit).
     heap_limit_data: Option<*const HeapLimitCallbackData>,
+    /// Set when a plugin fails during init_vega(). All subsequent commands
+    /// return this error immediately — no retry on the tainted isolate.
+    plugin_init_error: Option<String>,
 }
 
 impl InnerVlConverter {
@@ -1097,6 +1313,11 @@ impl InnerVlConverter {
     }
 
     async fn init_vega(&mut self) -> Result<(), AnyError> {
+        // Check for poison from a previous plugin failure
+        if let Some(ref err) = self.plugin_init_error {
+            bail!("Worker poisoned by plugin failure: {err}. Reconfigure to reset.");
+        }
+
         if !self.vega_initialized {
             // ops are now exposed on globalThis by the extension ESM bootstrap
             let import_code = format!(
@@ -1548,6 +1769,84 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
                 .run_event_loop(Default::default())
                 .await?;
 
+            // Load user plugins after Vega is fully initialized
+            if let Some(ref plugins) = self.config.resolved_plugins {
+                for (i, plugin) in plugins.iter().enumerate() {
+                    // Step 1: Load the plugin as an ES side module
+                    let specifier =
+                        deno_core::ModuleSpecifier::parse(&format!("vl-plugin:vega-plugin-{i}"))
+                            .expect("valid plugin specifier");
+
+                    let module_id = self
+                        .worker
+                        .js_runtime
+                        .load_side_es_module_from_code(&specifier, plugin.bundled_source.clone())
+                        .await
+                        .map_err(|e| {
+                            let msg = format!("Failed to load Vega plugin {i}: {e}");
+                            self.plugin_init_error = Some(msg.clone());
+                            anyhow!(msg)
+                        })?;
+
+                    // Step 2: Evaluate the module (runs top-level code, resolves TLA)
+                    let receiver = self.worker.js_runtime.mod_evaluate(module_id);
+                    self.worker
+                        .js_runtime
+                        .run_event_loop(Default::default())
+                        .await?;
+                    receiver.await.map_err(|e| {
+                        let msg = format!("Vega plugin {i} evaluation failed: {e}");
+                        self.plugin_init_error = Some(msg.clone());
+                        anyhow!(msg)
+                    })?;
+
+                    // Step 3: Get the module namespace and set it as a temporary global
+                    let namespace = self
+                        .worker
+                        .js_runtime
+                        .get_module_namespace(module_id)
+                        .map_err(|e| {
+                            let msg = format!("Failed to get Vega plugin {i} namespace: {e}");
+                            self.plugin_init_error = Some(msg.clone());
+                            anyhow!(msg)
+                        })?;
+                    {
+                        deno_core::scope!(scope, self.worker.js_runtime);
+                        let global = scope.get_current_context().global(scope);
+                        let key = v8::String::new(scope, "__vlcPluginNs").unwrap();
+                        let ns_local = v8::Local::new(scope, &namespace);
+                        global.set(scope, key.into(), ns_local.into());
+                    }
+
+                    // Step 4: Call the default export with the vega object, then clean up
+                    let call_code = format!(
+                        "if (typeof __vlcPluginNs.default === 'function') {{
+                            __vlcPluginNs.default(vega);
+                        }} else {{
+                            throw new Error('Vega plugin {i} does not export a default function');
+                        }}
+                        delete globalThis.__vlcPluginNs;"
+                    );
+                    self.worker
+                        .js_runtime
+                        .execute_script("ext:<anon>", call_code)
+                        .map_err(|e| {
+                            let msg = format!("Vega plugin {i} default export call failed: {e}");
+                            self.plugin_init_error = Some(msg.clone());
+                            anyhow!(msg)
+                        })?;
+                    self.worker
+                        .js_runtime
+                        .run_event_loop(Default::default())
+                        .await
+                        .map_err(|e| {
+                            let msg = format!("Vega plugin {i} post-call error: {e}");
+                            self.plugin_init_error = Some(msg.clone());
+                            anyhow!(msg)
+                        })?;
+                }
+            }
+
             self.vega_initialized = true;
         }
 
@@ -1745,6 +2044,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, allowedBas
             font_state,
             config,
             heap_limit_data,
+            plugin_init_error: None,
         };
 
         Ok(this)
@@ -3361,6 +3661,10 @@ pub(crate) struct VlConverterInner {
     vegaembed_bundles: Mutex<HashMap<VlVersion, String>>,
     pool: Mutex<Option<WorkerPool>>,
     pub(crate) config: Arc<VlConverterConfig>,
+    /// Resolved plugins populated when the worker pool is first spawned.
+    /// Separate from config because spawn_worker_pool() creates a new Arc
+    /// but VlConverterInner.config is set at with_config() time.
+    pub(crate) resolved_plugins: Mutex<Option<Vec<ResolvedPlugin>>>,
 }
 
 /// Struct for performing Vega-Lite to Vega conversions using the Deno v8 runtime.
@@ -3427,6 +3731,7 @@ impl VlConverter {
                 vegaembed_bundles: Default::default(),
                 pool: Default::default(),
                 config,
+                resolved_plugins: Mutex::new(None),
             }),
         })
     }
@@ -3490,7 +3795,11 @@ impl VlConverter {
             *guard = None;
         }
 
-        let pool = spawn_worker_pool(self.inner.config.clone())?;
+        let (pool, resolved_plugins) = spawn_worker_pool(self.inner.config.clone())?;
+        // Store resolved plugins so HTML export can access them
+        if let Some(plugins) = resolved_plugins {
+            *self.inner.resolved_plugins.lock().unwrap() = Some(plugins);
+        }
         let sender = pool
             .next_sender()
             .ok_or_else(|| anyhow!("Worker pool has no senders"))?;
@@ -6422,5 +6731,207 @@ try {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].family, alt_family);
         assert!(matches!(result[0].source, FontSource::Local));
+    }
+
+    // ---- Vega Plugin ESM integration tests ----
+
+    /// Helper: minimal Vega spec that renders a text mark using an expression function.
+    fn vega_spec_with_expression(expr: &str) -> serde_json::Value {
+        json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 100,
+            "height": 100,
+            "marks": [{
+                "type": "text",
+                "encode": {
+                    "enter": {
+                        "text": {"signal": expr},
+                        "x": {"value": 50},
+                        "y": {"value": 50}
+                    }
+                }
+            }]
+        })
+    }
+
+    #[tokio::test]
+    async fn test_plugin_registers_expression_function() {
+        let plugin_source =
+            "export default function(vega) { vega.expressionFunction('double', (x) => x * 2); }";
+        let converter = VlConverter::with_config(VlConverterConfig {
+            vega_plugins: Some(vec![plugin_source.to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let spec = vega_spec_with_expression("double(5)");
+        let svg = converter
+            .vega_to_svg(spec, VgOpts::default())
+            .await
+            .unwrap();
+
+        assert!(svg.contains("<svg"), "output should be valid SVG");
+        assert!(
+            svg.contains("10"),
+            "SVG should contain the result of double(5) = 10"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_multiple_plugins_register_different_functions() {
+        let plugin_a =
+            "export default function(vega) { vega.expressionFunction('triple', (x) => x * 3); }";
+        let plugin_b =
+            "export default function(vega) { vega.expressionFunction('addTen', (x) => x + 10); }";
+        let converter = VlConverter::with_config(VlConverterConfig {
+            vega_plugins: Some(vec![plugin_a.to_string(), plugin_b.to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        // Test triple(4) = 12
+        let spec_triple = vega_spec_with_expression("triple(4)");
+        let svg_triple = converter
+            .vega_to_svg(spec_triple, VgOpts::default())
+            .await
+            .unwrap();
+        assert!(
+            svg_triple.contains("12"),
+            "SVG should contain the result of triple(4) = 12"
+        );
+
+        // Test addTen(7) = 17
+        let spec_add = vega_spec_with_expression("addTen(7)");
+        let svg_add = converter
+            .vega_to_svg(spec_add, VgOpts::default())
+            .await
+            .unwrap();
+        assert!(
+            svg_add.contains("17"),
+            "SVG should contain the result of addTen(7) = 17"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plugin_with_syntax_error() {
+        let bad_plugin = "export default function(vega) { vega.expressionFunction('bad', (x) =>; }";
+        let converter = VlConverter::with_config(VlConverterConfig {
+            vega_plugins: Some(vec![bad_plugin.to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let spec = vega_spec_with_expression("1 + 1");
+        let err = converter
+            .vega_to_svg(spec, VgOpts::default())
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Failed to load Vega plugin"),
+            "error should mention plugin loading failure, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plugin_without_default_export() {
+        let no_default_plugin = "export const x = 1;";
+        let converter = VlConverter::with_config(VlConverterConfig {
+            vega_plugins: Some(vec![no_default_plugin.to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let spec = vega_spec_with_expression("1 + 1");
+        let err = converter
+            .vega_to_svg(spec, VgOpts::default())
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("does not export a default function"),
+            "error should mention missing default export, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plugin_poison_behavior() {
+        let good_plugin =
+            "export default function(vega) { vega.expressionFunction('ok', () => 42); }";
+        let bad_plugin = "export default function(vega) { vega.expressionFunction('bad', (x) =>; }";
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            vega_plugins: Some(vec![good_plugin.to_string(), bad_plugin.to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let spec = vega_spec_with_expression("1 + 1");
+
+        // First attempt should fail due to the bad plugin
+        let err1 = converter
+            .vega_to_svg(spec.clone(), VgOpts::default())
+            .await
+            .unwrap_err();
+        let msg1 = err1.to_string();
+        assert!(
+            msg1.contains("Failed to load Vega plugin"),
+            "first error should be plugin loading failure, got: {msg1}"
+        );
+
+        // Second attempt should return the poison error, not retry
+        let err2 = converter
+            .vega_to_svg(spec, VgOpts::default())
+            .await
+            .unwrap_err();
+        let msg2 = err2.to_string();
+        assert!(
+            msg2.contains("poisoned") || msg2.contains("Failed to load Vega plugin"),
+            "second error should be poison or plugin failure, got: {msg2}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_plugin_html_export_contains_module_script() {
+        let plugin_source =
+            "export default function(vega) { vega.expressionFunction('myFn', (x) => x); }";
+
+        let converter = VlConverter::with_config(VlConverterConfig {
+            vega_plugins: Some(vec![plugin_source.to_string()]),
+            ..Default::default()
+        })
+        .unwrap();
+
+        let spec = json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 100,
+            "height": 100,
+            "marks": [{
+                "type": "rect",
+                "encode": {
+                    "enter": {
+                        "x": {"value": 0},
+                        "y": {"value": 0},
+                        "width": {"value": 50},
+                        "height": {"value": 50},
+                        "fill": {"value": "steelblue"}
+                    }
+                }
+            }]
+        });
+
+        let html = converter
+            .vega_to_html(spec, VgOpts::default(), true, false, true, Renderer::Svg)
+            .await
+            .unwrap();
+
+        assert!(
+            html.contains(r#"type="module""#),
+            "HTML should use <script type=\"module\"> when plugins are present"
+        );
+        assert!(
+            html.contains("__vlcLoadPlugin"),
+            "HTML should contain the __vlcLoadPlugin helper for inline plugin loading"
+        );
     }
 }

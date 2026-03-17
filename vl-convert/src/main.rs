@@ -75,6 +75,20 @@ struct Cli {
     #[arg(long, global = true)]
     gc_after_conversion: bool,
 
+    /// Vega plugin: file path (.js/.mjs), URL (https://...), or inline ESM string.
+    /// The plugin must be a single ESM module that exports a default function
+    /// accepting a vega object. Multi-file plugins should be pre-bundled
+    /// with esbuild or Rollup. URL plugins auto-allow their domain for imports.
+    /// May be specified multiple times; plugins execute in order.
+    #[arg(long = "vega-plugin", global = true)]
+    vega_plugin: Vec<String>,
+
+    /// Domains allowed for HTTP imports in plugins, comma-separated.
+    /// Examples: '*' (any), 'esm.sh', '*.jsdelivr.net'.
+    /// May be specified multiple times. Omit to disable HTTP imports.
+    #[arg(long = "allowed-plugin-import-domains", global = true)]
+    allowed_plugin_import_domains: Vec<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -717,6 +731,8 @@ async fn main() -> Result<(), anyhow::Error> {
         missing_fonts: missing_fonts_arg,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugin,
+        allowed_plugin_import_domains,
         command,
     } = Cli::parse();
     if no_http_access {
@@ -724,6 +740,12 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     let missing_fonts = missing_fonts_arg.to_policy();
     let config_google_fonts = parse_google_font_requests(&google_font_families)?;
+    let vega_plugins = if vega_plugin.is_empty() {
+        None
+    } else {
+        Some(vega_plugin)
+    };
+    let allowed_plugin_import_domains = flatten_plugin_domains(&allowed_plugin_import_domains);
     use crate::Commands::*;
     match command {
         Vl2vg {
@@ -750,6 +772,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )
             .await?
         }
@@ -783,6 +807,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )
             .await?
         }
@@ -820,6 +846,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )
             .await?
         }
@@ -857,6 +885,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )
             .await?
         }
@@ -890,6 +920,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )
             .await?
         }
@@ -930,6 +962,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 google_fonts: config_google_fonts.clone(),
+                vega_plugins: vega_plugins.clone(),
+                allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
+                resolved_plugins: None,
                 ..Default::default()
             })?;
             let html = converter
@@ -979,6 +1014,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 google_fonts: config_google_fonts.clone(),
+                vega_plugins: vega_plugins.clone(),
+                allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
+                resolved_plugins: None,
                 ..Default::default()
             })?;
             let fonts = converter
@@ -1029,6 +1067,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )
             .await?
         }
@@ -1058,6 +1098,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )
             .await?
         }
@@ -1087,6 +1129,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )
             .await?
         }
@@ -1112,6 +1156,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )
             .await?
         }
@@ -1149,6 +1195,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 google_fonts: config_google_fonts.clone(),
+                vega_plugins: vega_plugins.clone(),
+                allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
+                resolved_plugins: None,
                 ..Default::default()
             })?;
             let html = converter
@@ -1189,6 +1238,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 auto_google_fonts,
                 missing_fonts,
                 google_fonts: config_google_fonts.clone(),
+                vega_plugins: vega_plugins.clone(),
+                allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
+                resolved_plugins: None,
                 ..Default::default()
             })?;
             let fonts = converter
@@ -1232,6 +1284,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )?;
             let png_data = converter.svg_to_png(&svg, scale, Some(ppi)).await?;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
@@ -1255,6 +1309,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )?;
             let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality)).await?;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
@@ -1276,6 +1332,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 config_google_fonts.clone(),
                 max_worker_heap_size_mb,
                 gc_after_conversion,
+                vega_plugins.clone(),
+                allowed_plugin_import_domains.clone(),
             )?;
             let pdf_data = converter.svg_to_pdf(&svg).await?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
@@ -1341,6 +1399,14 @@ fn parse_google_font_requests(
     Ok(Some(requests))
 }
 
+fn flatten_plugin_domains(raw: &[String]) -> Vec<String> {
+    raw.iter()
+        .flat_map(|s| s.split(','))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
     VlVersion::from_str(vl_version)
         .map_err(|_| anyhow::anyhow!("Invalid or unsupported Vega-Lite version: {vl_version}"))
@@ -1355,6 +1421,8 @@ fn build_converter(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<VlConverter, anyhow::Error> {
     let config = VlConverterConfig {
         allow_http_access,
@@ -1365,6 +1433,9 @@ fn build_converter(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
+        resolved_plugins: None,
         ..Default::default()
     };
 
@@ -1661,6 +1732,8 @@ async fn vl_2_vg(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1684,6 +1757,8 @@ async fn vl_2_vg(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -1739,6 +1814,8 @@ async fn vg_2_svg(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1759,6 +1836,8 @@ async fn vg_2_svg(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -1802,6 +1881,8 @@ async fn vg_2_png(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1822,6 +1903,8 @@ async fn vg_2_png(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -1867,6 +1950,8 @@ async fn vg_2_jpeg(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1887,6 +1972,8 @@ async fn vg_2_jpeg(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -1929,6 +2016,8 @@ async fn vg_2_pdf(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1949,6 +2038,8 @@ async fn vg_2_pdf(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -1994,6 +2085,8 @@ async fn vl_2_svg(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -2020,6 +2113,8 @@ async fn vl_2_svg(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -2071,6 +2166,8 @@ async fn vl_2_png(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -2097,6 +2194,8 @@ async fn vl_2_png(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -2150,6 +2249,8 @@ async fn vl_2_jpeg(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -2176,6 +2277,8 @@ async fn vl_2_jpeg(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -2227,6 +2330,8 @@ async fn vl_2_pdf(
     google_fonts: Option<Vec<GoogleFontRequest>>,
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
+    vega_plugins: Option<Vec<String>>,
+    allowed_plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -2253,6 +2358,8 @@ async fn vl_2_pdf(
         google_fonts,
         max_worker_heap_size_mb,
         gc_after_conversion,
+        vega_plugins,
+        allowed_plugin_import_domains,
     )?;
 
     // Perform conversion
