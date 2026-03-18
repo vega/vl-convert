@@ -806,9 +806,11 @@ pub struct GoogleFontRequest {
 pub struct VgOpts {
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
-    /// Per-request overlay plugin (pre-bundled ESM string, no HTTP imports).
+    /// Per-request overlay plugin: an inline ESM string or HTTP/HTTPS URL.
     /// Requires `allow_per_request_plugins: true` on the converter config.
     /// Runs on an ephemeral V8 isolate for true isolation (50–100ms overhead).
+    /// File paths are not supported (path traversal risk from untrusted input).
+    /// HTTP imports within the source are gated by `per_request_plugin_import_domains`.
     pub vega_plugin: Option<String>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
 }
@@ -916,9 +918,11 @@ pub struct VlOpts {
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
-    /// Per-request overlay plugin (pre-bundled ESM string, no HTTP imports).
+    /// Per-request overlay plugin: an inline ESM string or HTTP/HTTPS URL.
     /// Requires `allow_per_request_plugins: true` on the converter config.
     /// Runs on an ephemeral V8 isolate for true isolation (50–100ms overhead).
+    /// File paths are not supported (path traversal risk from untrusted input).
+    /// HTTP imports within the source are gated by `per_request_plugin_import_domains`.
     pub vega_plugin: Option<String>,
 }
 
@@ -3928,13 +3932,28 @@ impl VlConverter {
                 .map_err(|e| anyhow!("Failed to build ephemeral worker runtime: {e}"))?;
             let local = tokio::task::LocalSet::new();
             local.block_on(&rt, async move {
-                // Bundle per-request plugin if it has HTTP imports
-                let bundled_source = bundle_source_plugin(
-                    &plugin_source,
-                    &ctx.config.per_request_plugin_import_domains,
-                )
-                .await
-                .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?;
+                // Resolve the per-request plugin source:
+                // - URL entry (https://...): fetch and bundle via PluginBundleLoader
+                // - Inline ESM: bundle if it has HTTP imports, pass through otherwise
+                // File paths are NOT supported for per-request plugins (path
+                // traversal risk from untrusted input).
+                let is_url =
+                    plugin_source.starts_with("http://") || plugin_source.starts_with("https://");
+                let bundled_source = if is_url {
+                    bundle_url_plugin(
+                        &plugin_source,
+                        &ctx.config.per_request_plugin_import_domains,
+                    )
+                    .await
+                    .map_err(|e| anyhow!("Per-request plugin fetch/bundle failed: {e}"))?
+                } else {
+                    bundle_source_plugin(
+                        &plugin_source,
+                        &ctx.config.per_request_plugin_import_domains,
+                    )
+                    .await
+                    .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?
+                };
 
                 let mut inner = InnerVlConverter::try_new(ctx, font_baseline).await?;
                 inner.init_vega().await?;
