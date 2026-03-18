@@ -273,7 +273,7 @@ async fn resolve_and_bundle_plugins(
             // URL plugin: always bundle. The bundler fetches the entry and
             // all sub-imports (including relative imports) via HTTP.
             // No separate fetch_plugin_url() call needed.
-            let bundled = bundle_url_plugin(entry, &config.allowed_plugin_import_domains)
+            let bundled = bundle_url_plugin(entry, &config.plugin_import_domains)
                 .await
                 .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
             resolved.push(ResolvedPlugin {
@@ -282,7 +282,7 @@ async fn resolve_and_bundle_plugins(
             });
         } else {
             // File/inline plugin: bundle only if it has HTTP imports
-            let bundled = bundle_source_plugin(entry, &config.allowed_plugin_import_domains)
+            let bundled = bundle_source_plugin(entry, &config.plugin_import_domains)
                 .await
                 .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
             resolved.push(ResolvedPlugin {
@@ -497,10 +497,8 @@ fn normalize_converter_config(
                 let url = Url::parse(entry)
                     .map_err(|e| anyhow!("Invalid Vega plugin {i} URL: {entry}: {e}"))?;
                 if let Some(domain) = url.host_str() {
-                    if !domain_matches_patterns(domain, &config.allowed_plugin_import_domains) {
-                        config
-                            .allowed_plugin_import_domains
-                            .push(domain.to_string());
+                    if !domain_matches_patterns(domain, &config.plugin_import_domains) {
+                        config.plugin_import_domains.push(domain.to_string());
                     }
                 }
                 // Leave the URL string in place — fetched at startup in spawn_worker_pool()
@@ -737,7 +735,7 @@ pub struct VlConverterConfig {
     /// Empty = disabled, `["*"]` = any domain, `["esm.sh"]` = specific domains.
     /// Domains from URL plugins are auto-added during normalization.
     /// Independent of `allow_http_access` (which controls data-fetching in specs).
-    pub allowed_plugin_import_domains: Vec<String>,
+    pub plugin_import_domains: Vec<String>,
     /// Whether to allow per-request plugins via `VgOpts`/`VlOpts`.
     /// Defaults to false. When enabled, requests can include a `vega_plugin`
     /// field with a pre-bundled ESM string that runs on an ephemeral worker
@@ -748,10 +746,10 @@ pub struct VlConverterConfig {
     /// all conversions — those have no per-request overhead.
     pub allow_per_request_plugins: bool,
     /// Domain allowlist for HTTP imports inside per-request plugins.
-    /// Separate from `allowed_plugin_import_domains` (which controls config-level
+    /// Separate from `plugin_import_domains` (which controls config-level
     /// plugins). Defaults to empty (no HTTP imports allowed in per-request plugins).
     /// Set to `["esm.sh"]` to allow specific CDNs, or `["*"]` for any domain.
-    pub per_request_import_domains: Vec<String>,
+    pub per_request_plugin_import_domains: Vec<String>,
 }
 
 /// Shared runtime context passed to all workers. Wraps the user config
@@ -777,9 +775,9 @@ impl Default for VlConverterConfig {
             max_worker_heap_size_mb: 0,
             gc_after_conversion: false,
             vega_plugins: None,
-            allowed_plugin_import_domains: Vec::new(),
+            plugin_import_domains: Vec::new(),
             allow_per_request_plugins: false,
-            per_request_import_domains: Vec::new(),
+            per_request_plugin_import_domains: Vec::new(),
         }
     }
 }
@@ -3949,10 +3947,12 @@ impl VlConverter {
             let local = tokio::task::LocalSet::new();
             local.block_on(&rt, async move {
                 // Bundle per-request plugin if it has HTTP imports
-                let bundled_source =
-                    bundle_source_plugin(&plugin_source, &ctx.config.per_request_import_domains)
-                        .await
-                        .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?;
+                let bundled_source = bundle_source_plugin(
+                    &plugin_source,
+                    &ctx.config.per_request_plugin_import_domains,
+                )
+                .await
+                .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?;
 
                 let mut inner = InnerVlConverter::try_new(ctx, font_baseline).await?;
                 inner.init_vega().await?;

@@ -284,7 +284,7 @@ export default function(vega) {
 "#;
     let converter = VlConverter::with_config(VlConverterConfig {
         vega_plugins: Some(vec![plugin_source.to_string()]),
-        allowed_plugin_import_domains: vec!["esm.sh".to_string()],
+        plugin_import_domains: vec!["esm.sh".to_string()],
         ..Default::default()
     })
     .unwrap();
@@ -317,7 +317,7 @@ export default function(vega) {
 "#;
     let converter = VlConverter::with_config(VlConverterConfig {
         vega_plugins: Some(vec![plugin_source.to_string()]),
-        allowed_plugin_import_domains: vec!["esm.sh".to_string()],
+        plugin_import_domains: vec!["esm.sh".to_string()],
         ..Default::default()
     })
     .unwrap();

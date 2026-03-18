@@ -225,7 +225,7 @@ impl Loader for PluginBundleLoader {
                 return Box::pin(async move {
                     Err(LoadError::Other(Arc::new(JsErrorBox::generic(format!(
                         "HTTP import blocked: domain '{domain}' not in \
-                         allowed_plugin_import_domains. URL: {url}"
+                         plugin_import_domains. URL: {url}"
                     )))))
                 });
             }
@@ -263,7 +263,7 @@ impl Loader for PluginBundleLoader {
                             return Err(LoadError::Other(Arc::new(JsErrorBox::generic(format!(
                                 "HTTP import redirect blocked: {url} redirected to \
                                      domain '{target_domain}' which is not in \
-                                     allowed_plugin_import_domains"
+                                     plugin_import_domains"
                             )))));
                         }
                         // Return redirect for deno_graph to follow

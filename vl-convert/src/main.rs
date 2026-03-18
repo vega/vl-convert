@@ -86,8 +86,8 @@ struct Cli {
     /// Domains allowed for HTTP imports in plugins, comma-separated.
     /// Examples: '*' (any), 'esm.sh', '*.jsdelivr.net'.
     /// May be specified multiple times. Omit to disable HTTP imports.
-    #[arg(long = "allowed-plugin-import-domains", global = true)]
-    allowed_plugin_import_domains: Vec<String>,
+    #[arg(long = "plugin-import-domains", global = true)]
+    plugin_import_domains: Vec<String>,
 
     #[command(subcommand)]
     command: Commands,
@@ -732,7 +732,7 @@ async fn main() -> Result<(), anyhow::Error> {
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugin,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
         command,
     } = Cli::parse();
     if no_http_access {
@@ -745,7 +745,7 @@ async fn main() -> Result<(), anyhow::Error> {
     } else {
         Some(vega_plugin)
     };
-    let allowed_plugin_import_domains = flatten_plugin_domains(&allowed_plugin_import_domains);
+    let plugin_import_domains = flatten_plugin_domains(&plugin_import_domains);
     use crate::Commands::*;
     match command {
         Vl2vg {
@@ -773,7 +773,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )
             .await?
         }
@@ -808,7 +808,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )
             .await?
         }
@@ -847,7 +847,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )
             .await?
         }
@@ -886,7 +886,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )
             .await?
         }
@@ -921,7 +921,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )
             .await?
         }
@@ -963,7 +963,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 missing_fonts,
                 google_fonts: config_google_fonts.clone(),
                 vega_plugins: vega_plugins.clone(),
-                allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
+                plugin_import_domains: plugin_import_domains.clone(),
                 ..Default::default()
             })?;
             let html = converter
@@ -1015,7 +1015,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 missing_fonts,
                 google_fonts: config_google_fonts.clone(),
                 vega_plugins: vega_plugins.clone(),
-                allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
+                plugin_import_domains: plugin_import_domains.clone(),
                 ..Default::default()
             })?;
             let fonts = converter
@@ -1068,7 +1068,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )
             .await?
         }
@@ -1099,7 +1099,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )
             .await?
         }
@@ -1130,7 +1130,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )
             .await?
         }
@@ -1157,7 +1157,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )
             .await?
         }
@@ -1196,7 +1196,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 missing_fonts,
                 google_fonts: config_google_fonts.clone(),
                 vega_plugins: vega_plugins.clone(),
-                allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
+                plugin_import_domains: plugin_import_domains.clone(),
                 ..Default::default()
             })?;
             let html = converter
@@ -1239,7 +1239,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 missing_fonts,
                 google_fonts: config_google_fonts.clone(),
                 vega_plugins: vega_plugins.clone(),
-                allowed_plugin_import_domains: allowed_plugin_import_domains.clone(),
+                plugin_import_domains: plugin_import_domains.clone(),
                 ..Default::default()
             })?;
             let fonts = converter
@@ -1284,7 +1284,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )?;
             let png_data = converter.svg_to_png(&svg, scale, Some(ppi)).await?;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
@@ -1309,7 +1309,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )?;
             let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality)).await?;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
@@ -1332,7 +1332,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 max_worker_heap_size_mb,
                 gc_after_conversion,
                 vega_plugins.clone(),
-                allowed_plugin_import_domains.clone(),
+                plugin_import_domains.clone(),
             )?;
             let pdf_data = converter.svg_to_pdf(&svg).await?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
@@ -1421,7 +1421,7 @@ fn build_converter(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<VlConverter, anyhow::Error> {
     let config = VlConverterConfig {
         allow_http_access,
@@ -1433,7 +1433,7 @@ fn build_converter(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
         ..Default::default()
     };
 
@@ -1731,7 +1731,7 @@ async fn vl_2_vg(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -1756,7 +1756,7 @@ async fn vl_2_vg(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -1814,7 +1814,7 @@ async fn vg_2_svg(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1836,7 +1836,7 @@ async fn vg_2_svg(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -1882,7 +1882,7 @@ async fn vg_2_png(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1904,7 +1904,7 @@ async fn vg_2_png(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -1952,7 +1952,7 @@ async fn vg_2_jpeg(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -1974,7 +1974,7 @@ async fn vg_2_jpeg(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -2019,7 +2019,7 @@ async fn vg_2_pdf(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Read input file
     let vega_str = read_input_string(input)?;
@@ -2041,7 +2041,7 @@ async fn vg_2_pdf(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -2089,7 +2089,7 @@ async fn vl_2_svg(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -2117,7 +2117,7 @@ async fn vl_2_svg(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -2171,7 +2171,7 @@ async fn vl_2_png(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -2199,7 +2199,7 @@ async fn vl_2_png(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -2255,7 +2255,7 @@ async fn vl_2_jpeg(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -2283,7 +2283,7 @@ async fn vl_2_jpeg(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
     )?;
 
     // Perform conversion
@@ -2337,7 +2337,7 @@ async fn vl_2_pdf(
     max_worker_heap_size_mb: usize,
     gc_after_conversion: bool,
     vega_plugins: Option<Vec<String>>,
-    allowed_plugin_import_domains: Vec<String>,
+    plugin_import_domains: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     // Parse version
     let vl_version = parse_vl_version(vl_version)?;
@@ -2365,7 +2365,7 @@ async fn vl_2_pdf(
         max_worker_heap_size_mb,
         gc_after_conversion,
         vega_plugins,
-        allowed_plugin_import_domains,
+        plugin_import_domains,
     )?;
 
     // Perform conversion

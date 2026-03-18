@@ -92,7 +92,7 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
         "max_worker_heap_size_mb": config.max_worker_heap_size_mb,
         "gc_after_conversion": config.gc_after_conversion,
         "vega_plugins": config.vega_plugins,
-        "allowed_plugin_import_domains": config.allowed_plugin_import_domains,
+        "plugin_import_domains": config.plugin_import_domains,
     })
 }
 
@@ -113,9 +113,9 @@ struct ConverterConfigOverrides {
     gc_after_conversion: Option<bool>,
     // None => no change, Some(None) => clear, Some(Some(plugins)) => set
     vega_plugins: Option<Option<Vec<String>>>,
-    allowed_plugin_import_domains: Option<Vec<String>>,
+    plugin_import_domains: Option<Vec<String>>,
     allow_per_request_plugins: Option<bool>,
-    per_request_import_domains: Option<Vec<String>>,
+    per_request_plugin_import_domains: Option<Vec<String>>,
 }
 
 fn parse_config_overrides(
@@ -261,14 +261,14 @@ fn parse_config_overrides(
                     overrides.vega_plugins = Some(Some(raw));
                 }
             }
-            "allowed_plugin_import_domains" => {
+            "plugin_import_domains" => {
                 if value.is_none() {
-                    overrides.allowed_plugin_import_domains = Some(vec![]);
+                    overrides.plugin_import_domains = Some(vec![]);
                 } else {
-                    overrides.allowed_plugin_import_domains =
+                    overrides.plugin_import_domains =
                         Some(value.extract::<Vec<String>>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
-                                "Invalid allowed_plugin_import_domains value for configure: {err}"
+                                "Invalid plugin_import_domains value for configure: {err}"
                             )
                         })?);
                 }
@@ -283,14 +283,14 @@ fn parse_config_overrides(
                         })?);
                 }
             }
-            "per_request_import_domains" => {
+            "per_request_plugin_import_domains" => {
                 if value.is_none() {
-                    overrides.per_request_import_domains = Some(vec![]);
+                    overrides.per_request_plugin_import_domains = Some(vec![]);
                 } else {
-                    overrides.per_request_import_domains =
+                    overrides.per_request_plugin_import_domains =
                         Some(value.extract::<Vec<String>>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
-                                "Invalid per_request_import_domains value for configure: {err}"
+                                "Invalid per_request_plugin_import_domains value for configure: {err}"
                             )
                         })?);
                 }
@@ -350,14 +350,14 @@ fn apply_config_overrides(
     if let Some(vega_plugins) = overrides.vega_plugins {
         config.vega_plugins = vega_plugins;
     }
-    if let Some(allowed_plugin_import_domains) = overrides.allowed_plugin_import_domains {
-        config.allowed_plugin_import_domains = allowed_plugin_import_domains;
+    if let Some(plugin_import_domains) = overrides.plugin_import_domains {
+        config.plugin_import_domains = plugin_import_domains;
     }
     if let Some(allow_per_request_plugins) = overrides.allow_per_request_plugins {
         config.allow_per_request_plugins = allow_per_request_plugins;
     }
-    if let Some(per_request_import_domains) = overrides.per_request_import_domains {
-        config.per_request_import_domains = per_request_import_domains;
+    if let Some(per_request_plugin_import_domains) = overrides.per_request_plugin_import_domains {
+        config.per_request_plugin_import_domains = per_request_plugin_import_domains;
     }
     Ok(())
 }
