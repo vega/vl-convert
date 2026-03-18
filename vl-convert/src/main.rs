@@ -974,7 +974,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         theme,
                         vl_version,
                         show_warnings: false,
-                        allowed_base_urls: None,
+
                         format_locale,
                         time_format_locale,
                         google_fonts,
@@ -1026,7 +1026,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         theme,
                         vl_version,
                         show_warnings: false,
-                        allowed_base_urls: None,
+
                         format_locale,
                         time_format_locale,
                         google_fonts,
@@ -1203,7 +1203,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 .vega_to_html(
                     vg_spec,
                     VgOpts {
-                        allowed_base_urls: None,
                         format_locale,
                         time_format_locale,
                         google_fonts,
@@ -1768,7 +1767,6 @@ async fn vl_2_vg(
                 theme,
                 config,
                 show_warnings,
-                allowed_base_urls: None,
                 format_locale: None,
                 time_format_locale: None,
                 google_fonts: None,
@@ -1829,7 +1827,7 @@ async fn vg_2_svg(
     let converter = build_converter(
         allow_http_access,
         filesystem_root,
-        None,
+        allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
         google_fonts,
@@ -1844,7 +1842,6 @@ async fn vg_2_svg(
         .vega_to_svg(
             vg_spec,
             VgOpts {
-                allowed_base_urls,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -1897,7 +1894,7 @@ async fn vg_2_png(
     let converter = build_converter(
         allow_http_access,
         filesystem_root,
-        None,
+        allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
         google_fonts,
@@ -1912,7 +1909,6 @@ async fn vg_2_png(
         .vega_to_png(
             vg_spec,
             VgOpts {
-                allowed_base_urls,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -1967,7 +1963,7 @@ async fn vg_2_jpeg(
     let converter = build_converter(
         allow_http_access,
         filesystem_root,
-        None,
+        allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
         google_fonts,
@@ -1982,7 +1978,6 @@ async fn vg_2_jpeg(
         .vega_to_jpeg(
             vg_spec,
             VgOpts {
-                allowed_base_urls,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -2034,7 +2029,7 @@ async fn vg_2_pdf(
     let converter = build_converter(
         allow_http_access,
         filesystem_root,
-        None,
+        allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
         google_fonts,
@@ -2049,7 +2044,6 @@ async fn vg_2_pdf(
         .vega_to_pdf(
             vg_spec,
             VgOpts {
-                allowed_base_urls,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -2110,7 +2104,7 @@ async fn vl_2_svg(
     let converter = build_converter(
         allow_http_access,
         filesystem_root,
-        None,
+        allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
         google_fonts,
@@ -2129,7 +2123,6 @@ async fn vl_2_svg(
                 config,
                 theme,
                 show_warnings,
-                allowed_base_urls,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -2192,7 +2185,7 @@ async fn vl_2_png(
     let converter = build_converter(
         allow_http_access,
         filesystem_root,
-        None,
+        allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
         google_fonts,
@@ -2211,7 +2204,6 @@ async fn vl_2_png(
                 config,
                 theme,
                 show_warnings,
-                allowed_base_urls,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -2276,7 +2268,7 @@ async fn vl_2_jpeg(
     let converter = build_converter(
         allow_http_access,
         filesystem_root,
-        None,
+        allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
         google_fonts,
@@ -2295,7 +2287,6 @@ async fn vl_2_jpeg(
                 config,
                 theme,
                 show_warnings,
-                allowed_base_urls,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -2358,7 +2349,7 @@ async fn vl_2_pdf(
     let converter = build_converter(
         allow_http_access,
         filesystem_root,
-        None,
+        allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
         google_fonts,
@@ -2377,7 +2368,6 @@ async fn vl_2_pdf(
                 config,
                 theme,
                 show_warnings,
-                allowed_base_urls,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,

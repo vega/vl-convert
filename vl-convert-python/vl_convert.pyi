@@ -334,8 +334,6 @@ def configure(
         Entries are normalized to include a trailing ``/`` and must not include userinfo,
         query, or fragment components. When provided, this list must be non-empty.
         When configured, HTTP redirects are denied instead of followed.
-        Per-call ``allowed_base_urls`` arguments on conversion functions override
-        this converter-level default when provided.
     google_fonts_cache_size_mb
         Maximum font cache size in megabytes. If ``None``, keep current value.
     auto_google_fonts
@@ -506,7 +504,6 @@ def vega_to_jpeg(
     vg_spec: VlSpec,
     scale: float | None = None,
     quality: int | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
@@ -521,9 +518,6 @@ def vega_to_jpeg(
         Image scale factor (default 1.0)
     quality
         JPEG Quality between 0 (worst) and 100 (best). Default 90
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -538,7 +532,6 @@ def vega_to_jpeg(
 def vega_to_pdf(
     vg_spec: VlSpec,
     scale: float | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
@@ -551,9 +544,6 @@ def vega_to_pdf(
         Vega JSON specification string or dict
     scale
         Image scale factor (default 1.0)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -569,7 +559,6 @@ def vega_to_png(
     vg_spec: VlSpec,
     scale: float | None = None,
     ppi: float | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
@@ -584,9 +573,6 @@ def vega_to_png(
         Image scale factor (default 1.0)
     ppi
         Pixels per inch (default 72)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -600,7 +586,6 @@ def vega_to_png(
 
 def vega_to_scenegraph(
     vg_spec: VlSpec,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     format: Literal["dict", "msgpack"] = "dict",
@@ -612,9 +597,6 @@ def vega_to_scenegraph(
     ----------
     vg_spec
         Vega JSON specification string or dict
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -631,7 +613,6 @@ def vega_to_scenegraph(
 
 def vega_to_svg(
     vg_spec: VlSpec,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
 ) -> str:
@@ -642,9 +623,6 @@ def vega_to_svg(
     ----------
     vg_spec
         Vega JSON specification string or dict
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -812,7 +790,6 @@ def vegalite_to_jpeg(
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     show_warnings: bool | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
@@ -836,9 +813,6 @@ def vegalite_to_jpeg(
         Named theme (e.g. "dark") to apply during conversion
     show_warnings
         Whether to print Vega-Lite compilation warnings (default false)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -856,7 +830,6 @@ def vegalite_to_pdf(
     scale: float | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
@@ -876,9 +849,6 @@ def vegalite_to_pdf(
         Chart configuration object to apply during conversion
     theme
         Named theme (e.g. "dark") to apply during conversion
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -898,7 +868,6 @@ def vegalite_to_png(
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     show_warnings: bool | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
 ) -> bytes:
@@ -922,9 +891,6 @@ def vegalite_to_png(
         Named theme (e.g. "dark") to apply during conversion
     show_warnings
         Whether to print Vega-Lite compilation warnings (default false)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -942,7 +908,6 @@ def vegalite_to_scenegraph(
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     show_warnings: bool | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     format: Literal["dict", "msgpack"] = "dict",
@@ -963,9 +928,6 @@ def vegalite_to_scenegraph(
         Named theme (e.g. "dark") to apply during conversion
     show_warnings
         Whether to print Vega-Lite compilation warnings (default false)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -986,7 +948,6 @@ def vegalite_to_svg(
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     show_warnings: bool | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
 ) -> str:
@@ -1006,9 +967,6 @@ def vegalite_to_svg(
         Named theme (e.g. "dark") to apply during conversion
     show_warnings
         Whether to print Vega-Lite compilation warnings (default false)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -1188,7 +1146,6 @@ if TYPE_CHECKING:
             vg_spec: VlSpec,
             scale: float | None = None,
             quality: int | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
         ) -> bytes:
@@ -1198,7 +1155,6 @@ if TYPE_CHECKING:
             self,
             vg_spec: VlSpec,
             scale: float | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
         ) -> bytes:
@@ -1209,7 +1165,6 @@ if TYPE_CHECKING:
             vg_spec: VlSpec,
             scale: float | None = None,
             ppi: float | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
         ) -> bytes:
@@ -1218,7 +1173,6 @@ if TYPE_CHECKING:
         async def vega_to_scenegraph(
             self,
             vg_spec: VlSpec,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             format: Literal["dict", "msgpack"] = "dict",
@@ -1228,7 +1182,6 @@ if TYPE_CHECKING:
         async def vega_to_svg(
             self,
             vg_spec: VlSpec,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
         ) -> str:
@@ -1293,7 +1246,6 @@ if TYPE_CHECKING:
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             show_warnings: bool | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
         ) -> bytes:
@@ -1306,7 +1258,6 @@ if TYPE_CHECKING:
             scale: float | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
         ) -> bytes:
@@ -1321,7 +1272,6 @@ if TYPE_CHECKING:
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             show_warnings: bool | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
         ) -> bytes:
@@ -1334,7 +1284,6 @@ if TYPE_CHECKING:
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             show_warnings: bool | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             format: Literal["dict", "msgpack"] = "dict",
@@ -1348,7 +1297,6 @@ if TYPE_CHECKING:
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             show_warnings: bool | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
         ) -> str:

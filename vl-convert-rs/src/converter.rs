@@ -704,8 +704,7 @@ pub struct VlConverterConfig {
     pub num_workers: usize,
     pub allow_http_access: bool,
     pub filesystem_root: Option<PathBuf>,
-    /// Converter-level default HTTP allowlist. Per-request `allowed_base_urls`
-    /// values override this default when provided. Must be non-empty when set.
+    /// HTTP allowlist for external data requests. Must be non-empty when set.
     /// When configured, HTTP redirects are denied instead of followed.
     pub allowed_base_urls: Option<Vec<String>>,
     /// Whether to auto-download missing fonts from Google Fonts.
@@ -805,7 +804,6 @@ pub struct GoogleFontRequest {
 
 #[derive(Debug, Clone, Default)]
 pub struct VgOpts {
-    pub allowed_base_urls: Option<Vec<String>>,
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
     /// Per-request overlay plugin (pre-bundled ESM string, no HTTP imports).
@@ -915,7 +913,6 @@ pub struct VlOpts {
     pub theme: Option<String>,
     pub vl_version: VlVersion,
     pub show_warnings: bool,
-    pub allowed_base_urls: Option<Vec<String>>,
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
@@ -2211,8 +2208,9 @@ compileVegaLite_{ver_name:?}(
 
         let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec.into())?;
         let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
+        let allowed_base_urls = serde_json::to_string(&serde_json::Value::from(
+            self.ctx.config.allowed_base_urls.clone(),
+        ))?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
             JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
@@ -2290,8 +2288,9 @@ vegaLiteToSvg_{ver_name:?}(
 
         let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec)?;
         let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
+        let allowed_base_urls = serde_json::to_string(&serde_json::Value::from(
+            self.ctx.config.allowed_base_urls.clone(),
+        ))?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
             JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
@@ -2366,8 +2365,9 @@ vegaLiteToScenegraph_{ver_name:?}(
         vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
         self.init_vega().await?;
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
+        let allowed_base_urls = serde_json::to_string(&serde_json::Value::from(
+            self.ctx.config.allowed_base_urls.clone(),
+        ))?;
 
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
@@ -2431,8 +2431,9 @@ vegaToSvg(
     ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
         let vg_spec = vg_spec.into();
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
+        let allowed_base_urls = serde_json::to_string(&serde_json::Value::from(
+            self.ctx.config.allowed_base_urls.clone(),
+        ))?;
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
             Some(fl) => fl.as_object()?,
@@ -2561,8 +2562,9 @@ delete themes.default
         ppi: f32,
     ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vg_opts.allowed_base_urls))?;
+        let allowed_base_urls = serde_json::to_string(&serde_json::Value::from(
+            self.ctx.config.allowed_base_urls.clone(),
+        ))?;
 
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
@@ -2653,8 +2655,9 @@ vegaToCanvas(
             Some(s) => format!("'{}'", s),
         };
 
-        let allowed_base_urls =
-            serde_json::to_string(&serde_json::Value::from(vl_opts.allowed_base_urls))?;
+        let allowed_base_urls = serde_json::to_string(&serde_json::Value::from(
+            self.ctx.config.allowed_base_urls.clone(),
+        ))?;
 
         let code = format!(
             r#"
@@ -3794,33 +3797,12 @@ impl VlConverter {
         (*self.inner.config).clone()
     }
 
-    pub(crate) fn effective_allowed_base_urls(
-        &self,
-        requested_allowed_base_urls: Option<Vec<String>>,
-    ) -> Result<Option<Vec<String>>, AnyError> {
-        let requested_allowed_base_urls = normalize_allowed_base_urls(requested_allowed_base_urls)?;
-        if requested_allowed_base_urls.is_some() && !self.inner.config.allow_http_access {
-            bail!("allowed_base_urls cannot be set when HTTP access is disabled");
-        }
-
-        // Per-request allowlists override converter-level defaults. Converter-level values
-        // are used as a fallback when requests do not provide one.
-        Ok(requested_allowed_base_urls.or_else(|| self.inner.config.allowed_base_urls.clone()))
-    }
-
-    fn image_access_policy_with_allowed_base_urls(
-        &self,
-        allowed_base_urls: Option<Vec<String>>,
-    ) -> ImageAccessPolicy {
+    fn image_access_policy(&self) -> ImageAccessPolicy {
         ImageAccessPolicy {
             allow_http_access: self.inner.config.allow_http_access,
             filesystem_root: self.inner.config.filesystem_root.clone(),
-            allowed_base_urls,
+            allowed_base_urls: self.inner.config.allowed_base_urls.clone(),
         }
-    }
-
-    fn image_access_policy(&self) -> ImageAccessPolicy {
-        self.image_access_policy_with_allowed_base_urls(self.inner.config.allowed_base_urls.clone())
     }
 
     /// Eagerly start the worker pool for this converter instance.
@@ -3990,7 +3972,6 @@ impl VlConverter {
             return Ok(None);
         }
         let mut vg_opts = VgOpts {
-            allowed_base_urls: vl_opts.allowed_base_urls.clone(),
             format_locale: vl_opts.format_locale.clone(),
             time_format_locale: vl_opts.time_format_locale.clone(),
             google_fonts: vl_opts.google_fonts.clone(),
@@ -4089,8 +4070,6 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
-        vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
 
         // Per-request plugin: route to ephemeral worker for isolation
@@ -4130,8 +4109,6 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
     ) -> Result<serde_json::Value, AnyError> {
-        vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
@@ -4156,8 +4133,6 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
-        vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
@@ -4182,8 +4157,6 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
-        vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
         // Per-request plugin: route to ephemeral worker for isolation
@@ -4223,10 +4196,8 @@ impl VlConverter {
     pub async fn vegalite_to_scenegraph(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        mut vl_opts: VlOpts,
+        vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
-        vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
         if let Some((vega_spec, vg_opts)) = self
@@ -4259,10 +4230,8 @@ impl VlConverter {
     pub async fn vegalite_to_scenegraph_msgpack(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        mut vl_opts: VlOpts,
+        vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
-        vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
         if let Some((vega_spec, vg_opts)) = self
@@ -4299,8 +4268,6 @@ impl VlConverter {
         scale: Option<f32>,
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
-        vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
@@ -4346,8 +4313,6 @@ impl VlConverter {
         scale: Option<f32>,
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
-        vl_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
@@ -4403,16 +4368,12 @@ impl VlConverter {
         scale: Option<f32>,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
-        let effective_allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
         let vg_spec = vg_spec.into();
 
         // Per-request plugin: route to ephemeral worker for isolation
         if let Some(plugin_source) = vg_opts.vega_plugin.take() {
-            let image_policy = self
-                .image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
-            vg_opts.allowed_base_urls = effective_allowed_base_urls;
+            let image_policy = self.image_access_policy();
             return self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 Box::pin(inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy))
             });
@@ -4425,9 +4386,7 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let image_policy =
-            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
-        vg_opts.allowed_base_urls = effective_allowed_base_urls;
+        let image_policy = self.image_access_policy();
         self.request(
             move |responder| VlConvertCommand::VgToJpeg {
                 vg_spec,
@@ -4449,24 +4408,18 @@ impl VlConverter {
         scale: Option<f32>,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
-        let effective_allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
         let vl_spec = vl_spec.into();
 
         // Per-request plugin: route to ephemeral worker for isolation
         if let Some(plugin_source) = vl_opts.vega_plugin.take() {
-            let image_policy = self
-                .image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
-            vl_opts.allowed_base_urls = effective_allowed_base_urls;
+            let image_policy = self.image_access_policy();
             return self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 Box::pin(inner.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy))
             });
         }
 
-        let image_policy =
-            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
-        vl_opts.allowed_base_urls = effective_allowed_base_urls;
+        let image_policy = self.image_access_policy();
 
         if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
@@ -4506,15 +4459,11 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
-        let effective_allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
 
         // Per-request plugin: route to ephemeral worker for isolation
         if let Some(plugin_source) = vg_opts.vega_plugin.take() {
-            let image_policy = self
-                .image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
-            vg_opts.allowed_base_urls = effective_allowed_base_urls;
+            let image_policy = self.image_access_policy();
             return self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 Box::pin(inner.vega_to_pdf(vg_spec, vg_opts, image_policy))
             });
@@ -4527,9 +4476,7 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let image_policy =
-            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
-        vg_opts.allowed_base_urls = effective_allowed_base_urls;
+        let image_policy = self.image_access_policy();
         self.request(
             move |responder| VlConvertCommand::VgToPdf {
                 vg_spec,
@@ -4547,23 +4494,17 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
-        let effective_allowed_base_urls =
-            self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
 
         // Per-request plugin: route to ephemeral worker for isolation
         if let Some(plugin_source) = vl_opts.vega_plugin.take() {
-            let image_policy = self
-                .image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
-            vl_opts.allowed_base_urls = effective_allowed_base_urls;
+            let image_policy = self.image_access_policy();
             return self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 Box::pin(inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy))
             });
         }
 
-        let image_policy =
-            self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
-        vl_opts.allowed_base_urls = effective_allowed_base_urls;
+        let image_policy = self.image_access_policy();
 
         if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
@@ -5950,43 +5891,6 @@ try {
             .contains("allowed_base_urls cannot be empty"));
     }
 
-    #[test]
-    fn test_effective_allowed_base_urls_override_behavior() {
-        let converter = VlConverter::with_config(VlConverterConfig {
-            allow_http_access: true,
-            allowed_base_urls: Some(vec!["https://config.example/".to_string()]),
-            ..Default::default()
-        })
-        .unwrap();
-
-        let fallback = converter
-            .effective_allowed_base_urls(None)
-            .unwrap()
-            .unwrap();
-        assert_eq!(fallback, vec!["https://config.example/".to_string()]);
-
-        let request_override = converter
-            .effective_allowed_base_urls(Some(vec!["https://request.example/".to_string()]))
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            request_override,
-            vec!["https://request.example/".to_string()]
-        );
-    }
-
-    #[test]
-    fn test_effective_allowed_base_urls_rejects_empty_override() {
-        let converter = VlConverter::new();
-        let err = converter
-            .effective_allowed_base_urls(Some(vec![]))
-            .err()
-            .unwrap();
-        assert!(err
-            .to_string()
-            .contains("allowed_base_urls cannot be empty"));
-    }
-
     #[tokio::test]
     async fn test_svg_helper_denies_subdomain_and_userinfo_url_confusion() {
         let converter = VlConverter::with_config(VlConverterConfig {
@@ -6485,7 +6389,7 @@ try {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_vegalite_to_pdf_uses_per_request_allowlist_for_svg_rasterization() {
+    async fn test_vegalite_to_pdf_config_allowlist_for_svg_rasterization() {
         let server = TestHttpServer::new(vec![(
             "/image.svg",
             TestHttpResponse::ok_svg(
@@ -6494,7 +6398,7 @@ try {
         )]);
         let converter = VlConverter::with_config(VlConverterConfig {
             allow_http_access: true,
-            allowed_base_urls: Some(vec!["https://blocked.example/".to_string()]),
+            allowed_base_urls: Some(vec![server.origin()]),
             ..Default::default()
         })
         .unwrap();
@@ -6504,7 +6408,6 @@ try {
                 vegalite_spec_with_image_url(&server.url("/image.svg")),
                 VlOpts {
                     vl_version: VlVersion::v5_16,
-                    allowed_base_urls: Some(vec![server.origin()]),
                     ..Default::default()
                 },
             )

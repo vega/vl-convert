@@ -507,7 +507,7 @@ mod test_svg {
 mod test_svg_allowed_base_url {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::{VgOpts, VlOpts};
+    use vl_convert_rs::converter::{VgOpts, VlOpts, VlConverterConfig};
     use vl_convert_rs::VlConverter;
 
     #[rstest]
@@ -519,8 +519,14 @@ mod test_svg_allowed_base_url {
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
 
-        // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        // Create converter with matching base URL on the config
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec![
+                "https://raw.githubusercontent.com/vega/vega-datasets".to_string()
+            ]),
+            ..Default::default()
+        }).unwrap();
 
         // Convert to vega first
         let vg_spec = block_on(converter.vegalite_to_vega(
@@ -533,15 +539,9 @@ mod test_svg_allowed_base_url {
         .unwrap();
 
         // Check with matching base URL
-        let allowed_base_urls = Some(vec![
-            "https://raw.githubusercontent.com/vega/vega-datasets".to_string()
-        ]);
         let svg = block_on(converter.vega_to_svg(
             vg_spec.clone(),
-            VgOpts {
-                allowed_base_urls: allowed_base_urls.clone(),
-                ..Default::default()
-            },
+            VgOpts::default(),
         ))
         .unwrap();
         check_svg(name, vl_version, None, &svg);
@@ -551,7 +551,6 @@ mod test_svg_allowed_base_url {
             vl_spec.clone(),
             VlOpts {
                 vl_version,
-                allowed_base_urls,
                 ..Default::default()
             },
         ))
@@ -559,24 +558,24 @@ mod test_svg_allowed_base_url {
         check_svg(name, vl_version, None, &svg);
 
         // Check for error with non-matching URL
-        let allowed_base_urls = Some(vec!["https://some-other-base".to_string()]);
+        let converter_blocked = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec!["https://some-other-base".to_string()]),
+            ..Default::default()
+        }).unwrap();
 
-        let Err(result) = block_on(converter.vega_to_svg(
+        let Err(result) = block_on(converter_blocked.vega_to_svg(
             vg_spec,
-            VgOpts {
-                allowed_base_urls: allowed_base_urls.clone(),
-                ..Default::default()
-            },
+            VgOpts::default(),
         )) else {
             panic!("Expected error")
         };
         assert!(result.to_string().contains("External data url not allowed"));
 
-        let Err(result) = block_on(converter.vegalite_to_svg(
+        let Err(result) = block_on(converter_blocked.vegalite_to_svg(
             vl_spec,
             VlOpts {
                 vl_version,
-                allowed_base_urls: allowed_base_urls.clone(),
                 ..Default::default()
             },
         )) else {
@@ -768,7 +767,7 @@ mod test_png_theme_config {
                     theme: Some(theme.to_string()),
                     config: Some(json!({"background": BACKGROUND_COLOR})),
                     show_warnings: false,
-                    allowed_base_urls: None,
+
                     format_locale: None,
                     time_format_locale: None,
                     google_fonts: None,
@@ -796,7 +795,7 @@ mod test_png_theme_config {
                     theme: None,
                     config: Some(json!({"background": BACKGROUND_COLOR})),
                     show_warnings: false,
-                    allowed_base_urls: None,
+
                     format_locale: None,
                     time_format_locale: None,
                     google_fonts: None,

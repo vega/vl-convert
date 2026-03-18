@@ -334,8 +334,6 @@ impl VlConverter {
         mut vg_opts: VgOpts,
         auto_google_fonts: bool,
     ) -> Result<serde_json::Value, AnyError> {
-        vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let missing = self.inner.config.missing_fonts;
 
         if auto_google_fonts || missing != MissingFontsPolicy::Fallback {
@@ -662,7 +660,6 @@ impl VlConverter {
     ) -> Result<Vec<FontInfo>, AnyError> {
         let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?;
         let vg_opts = VgOpts {
-            allowed_base_urls: vl_opts.allowed_base_urls,
             format_locale: vl_opts.format_locale,
             time_format_locale: vl_opts.time_format_locale,
             google_fonts: vl_opts.google_fonts,
@@ -775,7 +772,6 @@ impl VlConverter {
                 .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
                 .await?;
             let vg_opts = VgOpts {
-                allowed_base_urls: vl_opts.allowed_base_urls.clone(),
                 format_locale: vl_opts.format_locale.clone(),
                 time_format_locale: vl_opts.time_format_locale.clone(),
                 google_fonts: vl_opts.google_fonts.clone(),

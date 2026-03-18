@@ -483,7 +483,7 @@ fn vegalite_to_vega(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls: None,
+
         format_locale: None,
         time_format_locale: None,
         google_fonts: effective_google_fonts(None),
@@ -512,17 +512,15 @@ fn vegalite_to_vega(
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None))]
+#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None))]
 fn vega_to_svg(
     vg_spec: PyObject,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -532,7 +530,6 @@ fn vega_to_svg(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -552,18 +549,16 @@ fn vega_to_svg(
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
 /// Returns:
 ///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
-#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None))]
+#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None))]
 fn vega_to_scenegraph(
     vg_spec: PyObject,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     format: &str,
@@ -573,7 +568,6 @@ fn vega_to_scenegraph(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -619,15 +613,14 @@ fn vega_to_scenegraph(
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vegalite_to_svg(
     vl_spec: PyObject,
@@ -635,7 +628,6 @@ fn vegalite_to_svg(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -656,7 +648,6 @@ fn vegalite_to_svg(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -682,8 +673,7 @@ fn vegalite_to_svg(
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
@@ -691,7 +681,7 @@ fn vegalite_to_svg(
 ///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None)
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None)
 )]
 fn vegalite_to_scenegraph(
     vl_spec: PyObject,
@@ -699,7 +689,6 @@ fn vegalite_to_scenegraph(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     format: &str,
@@ -720,7 +709,6 @@ fn vegalite_to_scenegraph(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -764,21 +752,19 @@ fn vegalite_to_scenegraph(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
 ///     ppi (float): Pixels per inch (default 72)
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
 #[pyo3(
-    signature = (vg_spec, scale=None, ppi=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vg_spec, scale=None, ppi=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vega_to_png(
     vg_spec: PyObject,
     scale: Option<f32>,
     ppi: Option<f32>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -788,7 +774,6 @@ fn vega_to_png(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -819,15 +804,14 @@ fn vega_to_png(
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vegalite_to_png(
     vl_spec: PyObject,
@@ -837,7 +821,6 @@ fn vegalite_to_png(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -857,7 +840,6 @@ fn vegalite_to_png(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -884,21 +866,19 @@ fn vegalite_to_png(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
 ///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
 #[pyo3(
-    signature = (vg_spec, scale=None, quality=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vg_spec, scale=None, quality=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vega_to_jpeg(
     vg_spec: PyObject,
     scale: Option<f32>,
     quality: Option<u8>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -908,7 +888,6 @@ fn vega_to_jpeg(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -941,15 +920,14 @@ fn vega_to_jpeg(
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vegalite_to_jpeg(
     vl_spec: PyObject,
@@ -959,7 +937,6 @@ fn vegalite_to_jpeg(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -979,7 +956,6 @@ fn vegalite_to_jpeg(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -1010,18 +986,16 @@ fn vegalite_to_jpeg(
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PDF file bytes
 #[pyfunction]
-#[pyo3(signature = (vg_spec, scale=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None))]
+#[pyo3(signature = (vg_spec, scale=None, format_locale=None, time_format_locale=None, vega_plugin=None))]
 fn vega_to_pdf(
     vg_spec: PyObject,
     scale: Option<f32>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -1032,7 +1006,6 @@ fn vega_to_pdf(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
 
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -1060,15 +1033,14 @@ fn vega_to_pdf(
 ///     scale (float): Image scale factor (default 1.0)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///     allowed_base_urls (list of str): List of allowed base URLs for external
-///                                      data requests. Default allows any base URL
+
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     bytes: PDF image data
 #[pyfunction]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vegalite_to_pdf(
     vl_spec: PyObject,
@@ -1076,7 +1048,6 @@ fn vegalite_to_pdf(
     scale: Option<f32>,
     config: Option<PyObject>,
     theme: Option<String>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -1097,7 +1068,6 @@ fn vegalite_to_pdf(
         config,
         theme,
         show_warnings: false,
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -1204,7 +1174,7 @@ fn vegalite_to_html(
         config,
         theme,
         show_warnings: false,
-        allowed_base_urls: None,
+
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
@@ -1260,7 +1230,6 @@ fn vega_to_html(
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
-        allowed_base_urls: None,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
@@ -1329,7 +1298,7 @@ fn vegalite_fonts(
         config,
         theme,
         show_warnings: false,
-        allowed_base_urls: None,
+
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
@@ -1388,7 +1357,6 @@ fn vega_fonts(
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
-        allowed_base_urls: None,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
@@ -1948,7 +1916,7 @@ fn vegalite_to_vega_asyncio<'py>(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls: None,
+
         format_locale: None,
         time_format_locale: None,
         google_fonts: effective_google_fonts(None),
@@ -1969,11 +1937,10 @@ fn vegalite_to_vega_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_svg")]
 #[pyfunction(name = "vega_to_svg")]
-#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None))]
+#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None))]
 fn vega_to_svg_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -1982,7 +1949,6 @@ fn vega_to_svg_asyncio<'py>(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2003,11 +1969,10 @@ fn vega_to_svg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_scenegraph")]
 #[pyfunction(name = "vega_to_scenegraph")]
-#[pyo3(signature = (vg_spec, allowed_base_urls=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None))]
+#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None))]
 fn vega_to_scenegraph_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     format: &str,
@@ -2016,7 +1981,6 @@ fn vega_to_scenegraph_asyncio<'py>(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2057,7 +2021,7 @@ fn vega_to_scenegraph_asyncio<'py>(
 #[doc = async_variant_doc!("vegalite_to_svg")]
 #[pyfunction(name = "vegalite_to_svg")]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vegalite_to_svg_asyncio<'py>(
     py: Python<'py>,
@@ -2066,7 +2030,6 @@ fn vegalite_to_svg_asyncio<'py>(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -2085,7 +2048,6 @@ fn vegalite_to_svg_asyncio<'py>(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2107,7 +2069,7 @@ fn vegalite_to_svg_asyncio<'py>(
 #[doc = async_variant_doc!("vegalite_to_scenegraph")]
 #[pyfunction(name = "vegalite_to_scenegraph")]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None)
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None)
 )]
 fn vegalite_to_scenegraph_asyncio<'py>(
     py: Python<'py>,
@@ -2116,7 +2078,6 @@ fn vegalite_to_scenegraph_asyncio<'py>(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     format: &str,
@@ -2135,7 +2096,6 @@ fn vegalite_to_scenegraph_asyncio<'py>(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2178,14 +2138,13 @@ fn vegalite_to_scenegraph_asyncio<'py>(
 #[doc = async_variant_doc!("vega_to_png")]
 #[pyfunction(name = "vega_to_png")]
 #[pyo3(
-    signature = (vg_spec, scale=None, ppi=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vg_spec, scale=None, ppi=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vega_to_png_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
     scale: Option<f32>,
     ppi: Option<f32>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -2194,7 +2153,6 @@ fn vega_to_png_asyncio<'py>(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2212,7 +2170,7 @@ fn vega_to_png_asyncio<'py>(
 #[doc = async_variant_doc!("vegalite_to_png")]
 #[pyfunction(name = "vegalite_to_png")]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vegalite_to_png_asyncio<'py>(
     py: Python<'py>,
@@ -2223,7 +2181,6 @@ fn vegalite_to_png_asyncio<'py>(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -2242,7 +2199,6 @@ fn vegalite_to_png_asyncio<'py>(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2264,14 +2220,13 @@ fn vegalite_to_png_asyncio<'py>(
 #[doc = async_variant_doc!("vega_to_jpeg")]
 #[pyfunction(name = "vega_to_jpeg")]
 #[pyo3(
-    signature = (vg_spec, scale=None, quality=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vg_spec, scale=None, quality=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vega_to_jpeg_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
     scale: Option<f32>,
     quality: Option<u8>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -2280,7 +2235,6 @@ fn vega_to_jpeg_asyncio<'py>(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2302,7 +2256,7 @@ fn vega_to_jpeg_asyncio<'py>(
 #[doc = async_variant_doc!("vegalite_to_jpeg")]
 #[pyfunction(name = "vegalite_to_jpeg")]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vegalite_to_jpeg_asyncio<'py>(
     py: Python<'py>,
@@ -2313,7 +2267,6 @@ fn vegalite_to_jpeg_asyncio<'py>(
     config: Option<PyObject>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -2332,7 +2285,6 @@ fn vegalite_to_jpeg_asyncio<'py>(
         config,
         theme,
         show_warnings: show_warnings.unwrap_or(false),
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2353,12 +2305,11 @@ fn vegalite_to_jpeg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_pdf")]
 #[pyfunction(name = "vega_to_pdf")]
-#[pyo3(signature = (vg_spec, scale=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None))]
+#[pyo3(signature = (vg_spec, scale=None, format_locale=None, time_format_locale=None, vega_plugin=None))]
 fn vega_to_pdf_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
     scale: Option<f32>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -2368,7 +2319,6 @@ fn vega_to_pdf_asyncio<'py>(
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let vg_opts = VgOpts {
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2386,7 +2336,7 @@ fn vega_to_pdf_asyncio<'py>(
 #[doc = async_variant_doc!("vegalite_to_pdf")]
 #[pyfunction(name = "vegalite_to_pdf")]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, allowed_base_urls=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, format_locale=None, time_format_locale=None, vega_plugin=None)
 )]
 fn vegalite_to_pdf_asyncio<'py>(
     py: Python<'py>,
@@ -2395,7 +2345,6 @@ fn vegalite_to_pdf_asyncio<'py>(
     scale: Option<f32>,
     config: Option<PyObject>,
     theme: Option<String>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -2415,7 +2364,6 @@ fn vegalite_to_pdf_asyncio<'py>(
         config,
         theme,
         show_warnings: false,
-        allowed_base_urls,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2507,7 +2455,7 @@ fn vegalite_to_html_asyncio<'py>(
         config,
         theme,
         show_warnings: false,
-        allowed_base_urls: None,
+
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
@@ -2561,7 +2509,6 @@ fn vega_to_html_asyncio<'py>(
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
-        allowed_base_urls: None,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
@@ -2624,7 +2571,7 @@ fn vegalite_fonts_asyncio<'py>(
         config,
         theme,
         show_warnings: false,
-        allowed_base_urls: None,
+
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
@@ -2676,7 +2623,6 @@ fn vega_fonts_asyncio<'py>(
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
-        allowed_base_urls: None,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
