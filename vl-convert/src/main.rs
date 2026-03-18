@@ -978,6 +978,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         format_locale,
                         time_format_locale,
                         google_fonts,
+                        vega_plugin: None,
                     },
                     bundle,
                     embed_local_fonts,
@@ -1029,6 +1030,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         format_locale,
                         time_format_locale,
                         google_fonts,
+                        vega_plugin: None,
                     },
                     auto_google_fonts,
                     embed_local_fonts,
@@ -1205,6 +1207,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         format_locale,
                         time_format_locale,
                         google_fonts,
+                        vega_plugin: None,
                     },
                     bundle,
                     embed_local_fonts,
@@ -1769,6 +1772,7 @@ async fn vl_2_vg(
                 format_locale: None,
                 time_format_locale: None,
                 google_fonts: None,
+                vega_plugin: None,
             },
         )
         .await
@@ -1844,6 +1848,7 @@ async fn vg_2_svg(
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
+                vega_plugin: None,
             },
         )
         .await
@@ -1911,6 +1916,7 @@ async fn vg_2_png(
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
+                vega_plugin: None,
             },
             Some(scale),
             Some(ppi),
@@ -1980,6 +1986,7 @@ async fn vg_2_jpeg(
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
+                vega_plugin: None,
             },
             Some(scale),
             Some(quality),
@@ -2046,6 +2053,7 @@ async fn vg_2_pdf(
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
+                vega_plugin: None,
             },
         )
         .await
@@ -2125,6 +2133,7 @@ async fn vl_2_svg(
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
+                vega_plugin: None,
             },
         )
         .await
@@ -2206,6 +2215,7 @@ async fn vl_2_png(
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
+                vega_plugin: None,
             },
             Some(scale),
             Some(ppi),
@@ -2289,6 +2299,7 @@ async fn vl_2_jpeg(
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
+                vega_plugin: None,
             },
             Some(scale),
             Some(quality),
@@ -2370,6 +2381,7 @@ async fn vl_2_pdf(
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
+                vega_plugin: None,
             },
         )
         .await

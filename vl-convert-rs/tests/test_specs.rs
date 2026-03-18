@@ -772,6 +772,7 @@ mod test_png_theme_config {
                     format_locale: None,
                     time_format_locale: None,
                     google_fonts: None,
+                    vega_plugin: None,
                 },
                 Some(scale),
                 None
@@ -799,6 +800,7 @@ mod test_png_theme_config {
                     format_locale: None,
                     time_format_locale: None,
                     google_fonts: None,
+                    vega_plugin: None,
                 },
                 Some(scale),
                 None

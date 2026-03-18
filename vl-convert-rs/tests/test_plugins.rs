@@ -334,3 +334,183 @@ export default function(vega) {
         &svg[..svg.len().min(500)]
     );
 }
+
+// --- Per-request plugin tests ---
+
+#[tokio::test]
+async fn test_per_request_plugin_works() {
+    let plugin_source =
+        "export default function(vega) { vega.expressionFunction('perReq', (x) => x + 99); }";
+
+    let converter = VlConverter::with_config(VlConverterConfig {
+        allow_per_request_plugins: true,
+        ..Default::default()
+    })
+    .unwrap();
+
+    let spec = vega_spec_with_expression("perReq(1)");
+    let svg = converter
+        .vega_to_svg(
+            spec,
+            VgOpts {
+                vega_plugin: Some(plugin_source.to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        svg.contains("100"),
+        "SVG should contain perReq(1) = 100. Got: {}",
+        &svg[..svg.len().min(400)]
+    );
+}
+
+#[tokio::test]
+async fn test_per_request_plugin_isolation() {
+    // First request uses a per-request plugin that registers 'ephExpr'
+    let plugin_source =
+        "export default function(vega) { vega.expressionFunction('ephExpr', () => 777); }";
+
+    let converter = VlConverter::with_config(VlConverterConfig {
+        allow_per_request_plugins: true,
+        ..Default::default()
+    })
+    .unwrap();
+
+    // First conversion with plugin — should succeed
+    let spec = vega_spec_with_expression("ephExpr()");
+    let svg = converter
+        .vega_to_svg(
+            spec.clone(),
+            VgOpts {
+                vega_plugin: Some(plugin_source.to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(svg.contains("777"), "ephExpr() should produce 777");
+
+    // Second conversion WITHOUT plugin — 'ephExpr' should NOT be available
+    // (true isolation: the ephemeral worker was dropped)
+    let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+    // The conversion should either fail (unknown expression) or produce no "777"
+    match result {
+        Ok(svg) => {
+            assert!(
+                !svg.contains("777"),
+                "ephExpr should NOT be available on the main pool worker"
+            );
+        }
+        Err(_) => {
+            // Error is also acceptable — the expression function doesn't exist
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_per_request_plugin_disabled_by_default() {
+    let converter = VlConverter::with_config(VlConverterConfig::default()).unwrap();
+
+    let spec = vega_spec_with_expression("1 + 1");
+    let err = converter
+        .vega_to_svg(
+            spec,
+            VgOpts {
+                vega_plugin: Some("export default function(vega) {}".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_err();
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("allow_per_request_plugins"),
+        "Error should mention allow_per_request_plugins, got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_per_request_plugin_with_config_level_plugins() {
+    // Config-level plugin registers 'configFn', per-request registers 'reqFn'
+    let config_plugin =
+        "export default function(vega) { vega.expressionFunction('configFn', (x) => x * 3); }";
+    let request_plugin =
+        "export default function(vega) { vega.expressionFunction('reqFn', (x) => x + 50); }";
+
+    let converter = VlConverter::with_config(VlConverterConfig {
+        vega_plugins: Some(vec![config_plugin.to_string()]),
+        allow_per_request_plugins: true,
+        ..Default::default()
+    })
+    .unwrap();
+
+    // Use reqFn in the spec — both config and request plugins should be active
+    let spec = vega_spec_with_expression("reqFn(configFn(4))");
+    let svg = converter
+        .vega_to_svg(
+            spec,
+            VgOpts {
+                vega_plugin: Some(request_plugin.to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // configFn(4) = 12, reqFn(12) = 62
+    assert!(
+        svg.contains("62"),
+        "SVG should contain reqFn(configFn(4)) = 62. Got: {}",
+        &svg[..svg.len().min(400)]
+    );
+}
+
+#[tokio::test]
+async fn test_per_request_plugin_html_export() {
+    let plugin_source =
+        "export default function(vega) { vega.expressionFunction('htmlReq', (x) => x); }";
+
+    let converter = VlConverter::with_config(VlConverterConfig {
+        allow_per_request_plugins: true,
+        ..Default::default()
+    })
+    .unwrap();
+
+    let spec = json!({
+        "$schema": "https://vega.github.io/schema/vega/v5.json",
+        "width": 50, "height": 50,
+        "marks": [{"type": "rect", "encode": {"enter": {
+            "x": {"value": 0}, "y": {"value": 0},
+            "width": {"value": 10}, "height": {"value": 10},
+            "fill": {"value": "red"}
+        }}}]
+    });
+
+    let html = converter
+        .vega_to_html(
+            spec,
+            VgOpts {
+                vega_plugin: Some(plugin_source.to_string()),
+                ..Default::default()
+            },
+            true,
+            false,
+            false,
+            Renderer::Svg,
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        html.contains("htmlReq"),
+        "HTML should contain the per-request plugin source"
+    );
+    assert!(
+        html.contains(r#"type="module""#),
+        "HTML should use module script when plugins present"
+    );
+}

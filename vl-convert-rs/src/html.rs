@@ -666,6 +666,7 @@ impl VlConverter {
             format_locale: vl_opts.format_locale,
             time_format_locale: vl_opts.time_format_locale,
             google_fonts: vl_opts.google_fonts,
+            vega_plugin: None,
         };
         self.vega_fonts(
             vega_spec,
@@ -778,6 +779,7 @@ impl VlConverter {
                 format_locale: vl_opts.format_locale.clone(),
                 time_format_locale: vl_opts.time_format_locale.clone(),
                 google_fonts: vl_opts.google_fonts.clone(),
+                vega_plugin: None,
             };
             self.build_font_head_html(
                 vega_spec,
@@ -796,9 +798,26 @@ impl VlConverter {
         if self.inner.config.vega_plugins.is_some() {
             self.warm_up()?;
         }
-        let resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();
-        let resolved_plugins = resolved_plugins_owned.as_deref();
-        let has_plugins = resolved_plugins.map_or(false, |p| !p.is_empty());
+        let mut resolved_plugins_owned = self
+            .inner
+            .resolved_plugins
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_default();
+        // Append per-request plugin overlay if present
+        if let Some(ref plugin_source) = vl_opts.vega_plugin {
+            resolved_plugins_owned.push(ResolvedPlugin {
+                original_url: None,
+                bundled_source: plugin_source.clone(),
+            });
+        }
+        let resolved_plugins: Option<&[ResolvedPlugin]> = if resolved_plugins_owned.is_empty() {
+            None
+        } else {
+            Some(&resolved_plugins_owned)
+        };
+        let has_plugins = resolved_plugins.is_some();
         let code = get_vega_or_vegalite_script(
             vl_spec,
             vl_opts.to_embed_opts(renderer)?,
@@ -858,9 +877,26 @@ impl VlConverter {
         if self.inner.config.vega_plugins.is_some() {
             self.warm_up()?;
         }
-        let resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();
-        let resolved_plugins = resolved_plugins_owned.as_deref();
-        let has_plugins = resolved_plugins.map_or(false, |p| !p.is_empty());
+        let mut resolved_plugins_owned = self
+            .inner
+            .resolved_plugins
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_default();
+        // Append per-request plugin overlay if present
+        if let Some(ref plugin_source) = vg_opts.vega_plugin {
+            resolved_plugins_owned.push(ResolvedPlugin {
+                original_url: None,
+                bundled_source: plugin_source.clone(),
+            });
+        }
+        let resolved_plugins: Option<&[ResolvedPlugin]> = if resolved_plugins_owned.is_empty() {
+            None
+        } else {
+            Some(&resolved_plugins_owned)
+        };
+        let has_plugins = resolved_plugins.is_some();
         let code = get_vega_or_vegalite_script(
             vg_spec,
             vg_opts.to_embed_opts(renderer)?,

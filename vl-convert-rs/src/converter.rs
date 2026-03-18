@@ -738,6 +738,15 @@ pub struct VlConverterConfig {
     /// Domains from URL plugins are auto-added during normalization.
     /// Independent of `allow_http_access` (which controls data-fetching in specs).
     pub allowed_plugin_import_domains: Vec<String>,
+    /// Whether to allow per-request plugins via `VgOpts`/`VlOpts`.
+    /// Defaults to false. When enabled, requests can include a `vega_plugin`
+    /// field with a pre-bundled ESM string that runs on an ephemeral worker
+    /// (true isolation — no leaking to other requests).
+    ///
+    /// Each per-request conversion spawns a fresh V8 isolate, adding 50–100ms
+    /// of overhead. Use config-level `vega_plugins` for plugins that apply to
+    /// all conversions — those have no per-request overhead.
+    pub allow_per_request_plugins: bool,
 }
 
 /// Shared runtime context passed to all workers. Wraps the user config
@@ -764,6 +773,7 @@ impl Default for VlConverterConfig {
             gc_after_conversion: false,
             vega_plugins: None,
             allowed_plugin_import_domains: Vec::new(),
+            allow_per_request_plugins: false,
         }
     }
 }
@@ -794,6 +804,10 @@ pub struct VgOpts {
     pub allowed_base_urls: Option<Vec<String>>,
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
+    /// Per-request overlay plugin (pre-bundled ESM string, no HTTP imports).
+    /// Requires `allow_per_request_plugins: true` on the converter config.
+    /// Runs on an ephemeral V8 isolate for true isolation (50–100ms overhead).
+    pub vega_plugin: Option<String>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
 }
 
@@ -901,6 +915,10 @@ pub struct VlOpts {
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
+    /// Per-request overlay plugin (pre-bundled ESM string, no HTTP imports).
+    /// Requires `allow_per_request_plugins: true` on the converter config.
+    /// Runs on an ephemeral V8 isolate for true isolation (50–100ms overhead).
+    pub vega_plugin: Option<String>,
 }
 
 impl VlOpts {
@@ -1779,91 +1797,105 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
                 .run_event_loop(Default::default())
                 .await?;
 
-            // Load user plugins after Vega is fully initialized
-            if let Some(ref plugins) = self.ctx.resolved_plugins {
+            // Load user plugins after Vega is fully initialized.
+            // Clone to release the borrow on self.ctx before calling load_plugin.
+            if let Some(plugins) = self.ctx.resolved_plugins.clone() {
                 for (i, plugin) in plugins.iter().enumerate() {
-                    // Step 1: Load the plugin as an ES side module
-                    let specifier =
-                        deno_core::ModuleSpecifier::parse(&format!("vl-plugin:vega-plugin-{i}"))
-                            .expect("valid plugin specifier");
-
-                    let module_id = self
-                        .worker
-                        .js_runtime
-                        .load_side_es_module_from_code(&specifier, plugin.bundled_source.clone())
-                        .await
-                        .map_err(|e| {
-                            let msg = format!("Failed to load Vega plugin {i}: {e}");
-                            self.plugin_init_error = Some(msg.clone());
-                            anyhow!(msg)
-                        })?;
-
-                    // Step 2: Evaluate the module (runs top-level code, resolves TLA)
-                    let receiver = self.worker.js_runtime.mod_evaluate(module_id);
-                    self.worker
-                        .js_runtime
-                        .run_event_loop(Default::default())
-                        .await
-                        .map_err(|e| {
-                            let msg = format!("Vega plugin {i} event loop error: {e}");
-                            self.plugin_init_error = Some(msg.clone());
-                            anyhow!(msg)
-                        })?;
-                    receiver.await.map_err(|e| {
-                        let msg = format!("Vega plugin {i} evaluation failed: {e}");
-                        self.plugin_init_error = Some(msg.clone());
-                        anyhow!(msg)
-                    })?;
-
-                    // Step 3: Get the module namespace and set it as a temporary global
-                    let namespace = self
-                        .worker
-                        .js_runtime
-                        .get_module_namespace(module_id)
-                        .map_err(|e| {
-                            let msg = format!("Failed to get Vega plugin {i} namespace: {e}");
-                            self.plugin_init_error = Some(msg.clone());
-                            anyhow!(msg)
-                        })?;
-                    {
-                        deno_core::scope!(scope, self.worker.js_runtime);
-                        let global = scope.get_current_context().global(scope);
-                        let key = v8::String::new(scope, "__vlcPluginNs").unwrap();
-                        let ns_local = v8::Local::new(scope, &namespace);
-                        global.set(scope, key.into(), ns_local.into());
-                    }
-
-                    // Step 4: Call the default export with the vega object, then clean up
-                    let call_code = format!(
-                        "if (typeof __vlcPluginNs.default === 'function') {{
-                            __vlcPluginNs.default(vega);
-                        }} else {{
-                            throw new Error('Vega plugin {i} does not export a default function');
-                        }}
-                        delete globalThis.__vlcPluginNs;"
-                    );
-                    self.worker
-                        .js_runtime
-                        .execute_script("ext:<anon>", call_code)
-                        .map_err(|e| {
-                            let msg = format!("Vega plugin {i} default export call failed: {e}");
-                            self.plugin_init_error = Some(msg.clone());
-                            anyhow!(msg)
-                        })?;
-                    self.worker
-                        .js_runtime
-                        .run_event_loop(Default::default())
-                        .await
-                        .map_err(|e| {
-                            let msg = format!("Vega plugin {i} post-call error: {e}");
-                            self.plugin_init_error = Some(msg.clone());
-                            anyhow!(msg)
-                        })?;
+                    self.load_plugin(i, &plugin.bundled_source, true).await?;
                 }
             }
 
             self.vega_initialized = true;
         }
+
+        Ok(())
+    }
+
+    /// Load a single plugin ESM module into the V8 runtime.
+    ///
+    /// Steps: load module → evaluate → get namespace → call default(vega) → cleanup.
+    ///
+    /// If `poison_on_failure` is true, sets `plugin_init_error` on any error
+    /// (used for config-level plugins during init_vega). If false, errors are
+    /// returned without poisoning (used for per-request plugins).
+    async fn load_plugin(
+        &mut self,
+        index: usize,
+        source: &str,
+        poison_on_failure: bool,
+    ) -> Result<(), AnyError> {
+        let specifier =
+            deno_core::ModuleSpecifier::parse(&format!("vl-plugin:vega-plugin-{index}"))
+                .expect("valid plugin specifier");
+
+        let poison = |this: &mut Self, msg: String| -> AnyError {
+            if poison_on_failure {
+                this.plugin_init_error = Some(msg.clone());
+            }
+            anyhow!(msg)
+        };
+
+        // Step 1: Load the plugin as an ES side module
+        let module_id = self
+            .worker
+            .js_runtime
+            .load_side_es_module_from_code(&specifier, source.to_string())
+            .await
+            .map_err(|e| poison(self, format!("Failed to load Vega plugin {index}: {e}")))?;
+
+        // Step 2: Evaluate the module (runs top-level code, resolves TLA)
+        let receiver = self.worker.js_runtime.mod_evaluate(module_id);
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .map_err(|e| poison(self, format!("Vega plugin {index} event loop error: {e}")))?;
+        receiver
+            .await
+            .map_err(|e| poison(self, format!("Vega plugin {index} evaluation failed: {e}")))?;
+
+        // Step 3: Get the module namespace and set it as a temporary global
+        let namespace = self
+            .worker
+            .js_runtime
+            .get_module_namespace(module_id)
+            .map_err(|e| {
+                poison(
+                    self,
+                    format!("Failed to get Vega plugin {index} namespace: {e}"),
+                )
+            })?;
+        {
+            deno_core::scope!(scope, self.worker.js_runtime);
+            let global = scope.get_current_context().global(scope);
+            let key = v8::String::new(scope, "__vlcPluginNs").unwrap();
+            let ns_local = v8::Local::new(scope, &namespace);
+            global.set(scope, key.into(), ns_local.into());
+        }
+
+        // Step 4: Call the default export with the vega object, then clean up
+        let call_code = format!(
+            "if (typeof __vlcPluginNs.default === 'function') {{
+                __vlcPluginNs.default(vega);
+            }} else {{
+                throw new Error('Vega plugin {index} does not export a default function');
+            }}
+            delete globalThis.__vlcPluginNs;"
+        );
+        self.worker
+            .js_runtime
+            .execute_script("ext:<anon>", call_code)
+            .map_err(|e| {
+                poison(
+                    self,
+                    format!("Vega plugin {index} default export call failed: {e}"),
+                )
+            })?;
+        self.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .map_err(|e| poison(self, format!("Vega plugin {index} post-call error: {e}")))?;
 
         Ok(())
     }
@@ -3861,6 +3893,81 @@ impl VlConverter {
         }
     }
 
+    /// Run a conversion on an ephemeral worker with a per-request plugin.
+    ///
+    /// Spawns a fresh V8 isolate on a dedicated thread, initializes Vega +
+    /// config-level plugins, loads the per-request overlay plugin, runs the
+    /// provided conversion closure, and drops the worker. This provides true
+    /// isolation — the per-request plugin's registrations don't leak to other
+    /// requests.
+    fn run_on_ephemeral_worker<R: Send + 'static>(
+        &self,
+        plugin_source: String,
+        work: impl FnOnce(
+                &mut InnerVlConverter,
+            )
+                -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<R, AnyError>> + '_>>
+            + Send
+            + 'static,
+    ) -> Result<R, AnyError> {
+        if !self.inner.config.allow_per_request_plugins {
+            bail!(
+                "Per-request plugins are disabled. Set allow_per_request_plugins=true \
+                 in the converter config to enable."
+            );
+        }
+
+        // Reject plugins with HTTP imports (must be pre-bundled)
+        if plugin_source.contains("https://") || plugin_source.contains("http://") {
+            bail!(
+                "Per-request plugins must be pre-bundled ESM with no HTTP imports. \
+                 Use config-level vega_plugins for plugins with HTTP dependencies."
+            );
+        }
+
+        // Ensure config-level plugins are resolved (triggers pool spawn if needed)
+        if self.inner.config.vega_plugins.is_some() {
+            self.warm_up()?;
+        }
+        // Build a ConverterContext with resolved plugins from the pool
+        let resolved_plugins = self
+            .inner
+            .resolved_plugins
+            .lock()
+            .map_err(|e| anyhow!("Failed to lock resolved_plugins: {e}"))?
+            .clone();
+        let ctx = Arc::new(ConverterContext {
+            config: (*self.inner.config).clone(),
+            resolved_plugins,
+        });
+
+        let font_baseline = get_font_baseline_snapshot()?;
+
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| anyhow!("Failed to build ephemeral worker runtime: {e}"))?;
+            let local = tokio::task::LocalSet::new();
+            local.block_on(&rt, async move {
+                let mut inner = InnerVlConverter::try_new(ctx, font_baseline).await?;
+                inner.init_vega().await?;
+
+                // Load the per-request plugin (don't poison on failure —
+                // this is an ephemeral worker that will be dropped)
+                let plugin_index = inner.ctx.resolved_plugins.as_ref().map_or(0, |p| p.len());
+                inner
+                    .load_plugin(plugin_index, &plugin_source, false)
+                    .await?;
+
+                // Run the actual conversion
+                work(&mut inner).await
+            })
+        })
+        .join()
+        .map_err(|_| anyhow!("Ephemeral worker thread panicked"))?
+    }
+
     fn should_preprocess_fonts(&self) -> bool {
         self.inner.config.auto_google_fonts
             || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
@@ -3883,6 +3990,7 @@ impl VlConverter {
             format_locale: vl_opts.format_locale.clone(),
             time_format_locale: vl_opts.time_format_locale.clone(),
             google_fonts: vl_opts.google_fonts.clone(),
+            vega_plugin: vl_opts.vega_plugin.clone(),
         };
         let vega_spec = self
             .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
@@ -3980,6 +4088,21 @@ impl VlConverter {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
+
+        // Per-request plugin: route to ephemeral worker for isolation
+        if let Some(plugin_source) = vg_opts.vega_plugin.take() {
+            let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+            if !auto_requests.is_empty() {
+                vg_opts
+                    .google_fonts
+                    .get_or_insert_with(Vec::new)
+                    .extend(auto_requests);
+            }
+            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                Box::pin(inner.vega_to_svg(vg_spec, vg_opts))
+            });
+        }
+
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
             vg_opts
@@ -4058,6 +4181,13 @@ impl VlConverter {
         vl_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let vl_spec = vl_spec.into();
+
+        // Per-request plugin: route to ephemeral worker for isolation
+        if let Some(plugin_source) = vl_opts.vega_plugin.take() {
+            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                Box::pin(inner.vegalite_to_svg(vl_spec, vl_opts))
+            });
+        }
 
         if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
@@ -4168,6 +4298,22 @@ impl VlConverter {
         vg_opts.allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
+        let scale = scale.unwrap_or(1.0);
+        let ppi = ppi.unwrap_or(72.0);
+        let effective_scale = scale * ppi / 72.0;
+
+        // Per-request plugin: route to ephemeral worker for isolation
+        if let Some(plugin_source) = vg_opts.vega_plugin.take() {
+            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                Box::pin(async move {
+                    let spec_value = vg_spec.to_value()?;
+                    inner
+                        .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
+                        .await
+                })
+            });
+        }
+
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
             vg_opts
@@ -4175,9 +4321,6 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        let scale = scale.unwrap_or(1.0);
-        let ppi = ppi.unwrap_or(72.0);
-        let effective_scale = scale * ppi / 72.0;
 
         self.request(
             move |responder| VlConvertCommand::VgToPng {
@@ -4205,6 +4348,18 @@ impl VlConverter {
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
+
+        // Per-request plugin: route to ephemeral worker for isolation
+        if let Some(plugin_source) = vl_opts.vega_plugin.take() {
+            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                Box::pin(async move {
+                    let spec_value = vl_spec.to_value()?;
+                    inner
+                        .vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi)
+                        .await
+                })
+            });
+        }
 
         if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
@@ -4248,6 +4403,17 @@ impl VlConverter {
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
         let vg_spec = vg_spec.into();
+
+        // Per-request plugin: route to ephemeral worker for isolation
+        if let Some(plugin_source) = vg_opts.vega_plugin.take() {
+            let image_policy = self
+                .image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+            vg_opts.allowed_base_urls = effective_allowed_base_urls;
+            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                Box::pin(inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy))
+            });
+        }
+
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
             vg_opts
@@ -4282,10 +4448,21 @@ impl VlConverter {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
         let scale = scale.unwrap_or(1.0);
+        let vl_spec = vl_spec.into();
+
+        // Per-request plugin: route to ephemeral worker for isolation
+        if let Some(plugin_source) = vl_opts.vega_plugin.take() {
+            let image_policy = self
+                .image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+            vl_opts.allowed_base_urls = effective_allowed_base_urls;
+            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                Box::pin(inner.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy))
+            });
+        }
+
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vl_opts.allowed_base_urls = effective_allowed_base_urls;
-        let vl_spec = vl_spec.into();
 
         if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
@@ -4328,6 +4505,17 @@ impl VlConverter {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let vg_spec = vg_spec.into();
+
+        // Per-request plugin: route to ephemeral worker for isolation
+        if let Some(plugin_source) = vg_opts.vega_plugin.take() {
+            let image_policy = self
+                .image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+            vg_opts.allowed_base_urls = effective_allowed_base_urls;
+            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                Box::pin(inner.vega_to_pdf(vg_spec, vg_opts, image_policy))
+            });
+        }
+
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
             vg_opts
@@ -4357,10 +4545,21 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let effective_allowed_base_urls =
             self.effective_allowed_base_urls(vl_opts.allowed_base_urls.take())?;
+        let vl_spec = vl_spec.into();
+
+        // Per-request plugin: route to ephemeral worker for isolation
+        if let Some(plugin_source) = vl_opts.vega_plugin.take() {
+            let image_policy = self
+                .image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
+            vl_opts.allowed_base_urls = effective_allowed_base_urls;
+            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                Box::pin(inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy))
+            });
+        }
+
         let image_policy =
             self.image_access_policy_with_allowed_base_urls(effective_allowed_base_urls.clone());
         vl_opts.allowed_base_urls = effective_allowed_base_urls;
-        let vl_spec = vl_spec.into();
 
         if let Some((vega_spec, vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
