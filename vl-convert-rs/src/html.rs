@@ -50,10 +50,9 @@ fn generate_plugin_imports(plugins: &[ResolvedPlugin], bundle: bool) -> String {
         .iter()
         .enumerate()
         .map(|(i, plugin)| {
-            if !bundle && plugin.original_url.is_some() {
+            if let (false, Some(url)) = (bundle, &plugin.original_url) {
                 // bundle=false + URL plugin: import directly from CDN
                 // (browser fetches natively, handles caching)
-                let url = plugin.original_url.as_ref().unwrap();
                 format!(
                     "        const __vlcPlugin{i} = await import('{url}');\n        __vlcPlugin{i}.default(window.vega);"
                 )
@@ -85,7 +84,7 @@ pub fn get_vega_or_vegalite_script(
     // Setup embed opts
     let opts = format!("const opts = {}", serde_json::to_string(&opts)?);
 
-    let has_plugins = resolved_plugins.map_or(false, |p| !p.is_empty());
+    let has_plugins = resolved_plugins.is_some_and(|p| !p.is_empty());
 
     let index_js = if has_plugins {
         let plugins = resolved_plugins.unwrap();
