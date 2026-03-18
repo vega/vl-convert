@@ -747,6 +747,11 @@ pub struct VlConverterConfig {
     /// of overhead. Use config-level `vega_plugins` for plugins that apply to
     /// all conversions — those have no per-request overhead.
     pub allow_per_request_plugins: bool,
+    /// Domain allowlist for HTTP imports inside per-request plugins.
+    /// Separate from `allowed_plugin_import_domains` (which controls config-level
+    /// plugins). Defaults to empty (no HTTP imports allowed in per-request plugins).
+    /// Set to `["esm.sh"]` to allow specific CDNs, or `["*"]` for any domain.
+    pub per_request_import_domains: Vec<String>,
 }
 
 /// Shared runtime context passed to all workers. Wraps the user config
@@ -774,6 +779,7 @@ impl Default for VlConverterConfig {
             vega_plugins: None,
             allowed_plugin_import_domains: Vec::new(),
             allow_per_request_plugins: false,
+            per_request_import_domains: Vec::new(),
         }
     }
 }
@@ -3917,14 +3923,6 @@ impl VlConverter {
             );
         }
 
-        // Reject plugins with HTTP imports (must be pre-bundled)
-        if plugin_source.contains("https://") || plugin_source.contains("http://") {
-            bail!(
-                "Per-request plugins must be pre-bundled ESM with no HTTP imports. \
-                 Use config-level vega_plugins for plugins with HTTP dependencies."
-            );
-        }
-
         // Ensure config-level plugins are resolved (triggers pool spawn if needed)
         if self.inner.config.vega_plugins.is_some() {
             self.warm_up()?;
@@ -3950,6 +3948,12 @@ impl VlConverter {
                 .map_err(|e| anyhow!("Failed to build ephemeral worker runtime: {e}"))?;
             let local = tokio::task::LocalSet::new();
             local.block_on(&rt, async move {
+                // Bundle per-request plugin if it has HTTP imports
+                let bundled_source =
+                    bundle_source_plugin(&plugin_source, &ctx.config.per_request_import_domains)
+                        .await
+                        .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?;
+
                 let mut inner = InnerVlConverter::try_new(ctx, font_baseline).await?;
                 inner.init_vega().await?;
 
@@ -3957,7 +3961,7 @@ impl VlConverter {
                 // this is an ephemeral worker that will be dropped)
                 let plugin_index = inner.ctx.resolved_plugins.as_ref().map_or(0, |p| p.len());
                 inner
-                    .load_plugin(plugin_index, &plugin_source, false)
+                    .load_plugin(plugin_index, &bundled_source, false)
                     .await?;
 
                 // Run the actual conversion

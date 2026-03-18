@@ -115,6 +115,7 @@ struct ConverterConfigOverrides {
     vega_plugins: Option<Option<Vec<String>>>,
     allowed_plugin_import_domains: Option<Vec<String>>,
     allow_per_request_plugins: Option<bool>,
+    per_request_import_domains: Option<Vec<String>>,
 }
 
 fn parse_config_overrides(
@@ -282,6 +283,18 @@ fn parse_config_overrides(
                         })?);
                 }
             }
+            "per_request_import_domains" => {
+                if value.is_none() {
+                    overrides.per_request_import_domains = Some(vec![]);
+                } else {
+                    overrides.per_request_import_domains =
+                        Some(value.extract::<Vec<String>>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid per_request_import_domains value for configure: {err}"
+                            )
+                        })?);
+                }
+            }
             // Read-only config fields returned by get_config() are
             // silently ignored so that `configure(**get_config())` works.
             "google_fonts_cache_dir" => {}
@@ -342,6 +355,9 @@ fn apply_config_overrides(
     }
     if let Some(allow_per_request_plugins) = overrides.allow_per_request_plugins {
         config.allow_per_request_plugins = allow_per_request_plugins;
+    }
+    if let Some(per_request_import_domains) = overrides.per_request_import_domains {
+        config.per_request_import_domains = per_request_import_domains;
     }
     Ok(())
 }
