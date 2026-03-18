@@ -512,7 +512,6 @@ fn vegalite_to_vega(
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
@@ -549,7 +548,6 @@ fn vega_to_svg(
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
@@ -613,7 +611,6 @@ fn vega_to_scenegraph(
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
@@ -673,7 +670,6 @@ fn vegalite_to_svg(
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
@@ -752,7 +748,6 @@ fn vegalite_to_scenegraph(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
 ///     ppi (float): Pixels per inch (default 72)
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
@@ -804,7 +799,6 @@ fn vega_to_png(
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
@@ -866,7 +860,6 @@ fn vegalite_to_png(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
 ///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
@@ -920,7 +913,6 @@ fn vega_to_jpeg(
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
@@ -986,7 +978,6 @@ fn vegalite_to_jpeg(
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     scale (float): Image scale factor (default 1.0)
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
@@ -1033,7 +1024,6 @@ fn vega_to_pdf(
 ///     scale (float): Image scale factor (default 1.0)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
