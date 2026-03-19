@@ -185,16 +185,13 @@ fn worker_queue_capacity(num_workers: usize) -> usize {
 /// abort during isolate creation (unrecoverable).
 const MIN_WORKER_HEAP_SIZE_MB: usize = 64;
 
-/// Bundle a URL plugin by using the URL as the deno_emit entry specifier.
-/// The PluginBundleLoader fetches the entry and all sub-imports (including
-/// relative imports like `./dep.js`) via HTTP. Always bundles — no heuristic.
+/// Bundle a URL plugin using the URL as the deno_emit entry specifier.
 async fn bundle_url_plugin(url: &str, allowed_domains: &[String]) -> Result<String, AnyError> {
     use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
     use crate::module_loader::PluginBundleLoader;
 
     let entry = deno_core::url::Url::parse(url)?;
     let mut loader = PluginBundleLoader {
-        // Not used for URL entries — the loader fetches via HTTP
         entry_source: String::new(),
         entry_specifier: String::new(),
         allowed_domains: allowed_domains.to_vec(),
@@ -217,8 +214,7 @@ async fn bundle_url_plugin(url: &str, allowed_domains: &[String]) -> Result<Stri
     Ok(bundled.code)
 }
 
-/// Bundle a file/inline plugin's HTTP imports into a self-contained ESM string.
-/// Returns the source unchanged if no HTTP imports are detected.
+/// Bundle a file/inline plugin into a self-contained ESM string.
 async fn bundle_source_plugin(
     source: &str,
     allowed_domains: &[String],
@@ -276,7 +272,6 @@ async fn resolve_and_bundle_plugins(
                 bundled_source: bundled,
             });
         } else {
-            // File/inline plugin: bundle only if it has HTTP imports
             let bundled = bundle_source_plugin(entry, &config.plugin_import_domains)
                 .await
                 .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
@@ -511,7 +506,6 @@ fn normalize_converter_config(
                         anyhow!("Failed to read Vega plugin {i} at {}: {e}", path.display())
                     })?;
                 }
-                // else: inline ESM — leave as-is
             }
         }
     }
@@ -746,8 +740,7 @@ pub struct VlConverterConfig {
     pub per_request_plugin_import_domains: Vec<String>,
 }
 
-/// Shared runtime context passed to all workers. Wraps the user config
-/// plus derived state computed at startup (resolved plugins).
+/// Shared context passed to all workers.
 #[derive(Debug, Clone)]
 pub(crate) struct ConverterContext {
     pub config: VlConverterConfig,
@@ -801,11 +794,7 @@ pub struct GoogleFontRequest {
 pub struct VgOpts {
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
-    /// Per-request overlay plugin: an inline ESM string or HTTP/HTTPS URL.
-    /// Requires `allow_per_request_plugins: true` on the converter config.
-    /// Runs on an ephemeral V8 isolate for true isolation (50–100ms overhead).
-    /// File paths are not supported (path traversal risk from untrusted input).
-    /// HTTP imports within the source are gated by `per_request_plugin_import_domains`.
+    /// Per-request overlay plugin (inline ESM or URL). Requires `allow_per_request_plugins`.
     pub vega_plugin: Option<String>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
 }
@@ -913,11 +902,7 @@ pub struct VlOpts {
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
-    /// Per-request overlay plugin: an inline ESM string or HTTP/HTTPS URL.
-    /// Requires `allow_per_request_plugins: true` on the converter config.
-    /// Runs on an ephemeral V8 isolate for true isolation (50–100ms overhead).
-    /// File paths are not supported (path traversal risk from untrusted input).
-    /// HTTP imports within the source are gated by `per_request_plugin_import_domains`.
+    /// Per-request overlay plugin (inline ESM or URL). Requires `allow_per_request_plugins`.
     pub vega_plugin: Option<String>,
 }
 
@@ -1341,7 +1326,6 @@ impl InnerVlConverter {
     }
 
     async fn init_vega(&mut self) -> Result<(), AnyError> {
-        // Check for poison from a previous plugin failure
         if let Some(ref err) = self.plugin_init_error {
             bail!("Worker poisoned by plugin failure: {err}. Reconfigure to reset.");
         }
@@ -1797,7 +1781,6 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
                 .run_event_loop(Default::default())
                 .await?;
 
-            // Load user plugins after Vega is fully initialized.
             // Clone to release the borrow on self.ctx before calling load_plugin.
             if let Some(plugins) = self.ctx.resolved_plugins.clone() {
                 for (i, plugin) in plugins.iter().enumerate() {
@@ -1812,12 +1795,7 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
     }
 
     /// Load a single plugin ESM module into the V8 runtime.
-    ///
-    /// Steps: load module → evaluate → get namespace → call default(vega) → cleanup.
-    ///
-    /// If `poison_on_failure` is true, sets `plugin_init_error` on any error
-    /// (used for config-level plugins during init_vega). If false, errors are
-    /// returned without poisoning (used for per-request plugins).
+    /// If `poison_on_failure` is true, sets `plugin_init_error` on any error.
     async fn load_plugin(
         &mut self,
         index: usize,
@@ -1835,7 +1813,7 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
             anyhow!(msg)
         };
 
-        // Step 1: Load the plugin as an ES side module
+        // Load the plugin as an ES side module
         let module_id = self
             .worker
             .js_runtime
@@ -1843,7 +1821,7 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
             .await
             .map_err(|e| poison(self, format!("Failed to load Vega plugin {index}: {e}")))?;
 
-        // Step 2: Evaluate the module (runs top-level code, resolves TLA)
+        // Evaluate the module
         let receiver = self.worker.js_runtime.mod_evaluate(module_id);
         self.worker
             .js_runtime
@@ -1854,7 +1832,7 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
             .await
             .map_err(|e| poison(self, format!("Vega plugin {index} evaluation failed: {e}")))?;
 
-        // Step 3: Get the module namespace and set it as a temporary global
+        // Get the module namespace and set it as a temporary global
         let namespace = self
             .worker
             .js_runtime
@@ -1873,7 +1851,7 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
             global.set(scope, key.into(), ns_local.into());
         }
 
-        // Step 4: Call the default export with the vega object, then clean up
+        // Call the default export with the vega object
         let call_code = format!(
             "if (typeof __vlcPluginNs.default === 'function') {{
                 __vlcPluginNs.default(vega);
@@ -3831,7 +3809,6 @@ impl VlConverter {
         }
 
         let (pool, ctx) = spawn_worker_pool(self.inner.config.clone())?;
-        // Store resolved plugins so HTML export can access them
         if let Some(plugins) = ctx.resolved_plugins.clone() {
             *self.inner.resolved_plugins.lock().unwrap() = Some(plugins);
         }
@@ -3879,12 +3856,6 @@ impl VlConverter {
     }
 
     /// Run a conversion on an ephemeral worker with a per-request plugin.
-    ///
-    /// Spawns a fresh V8 isolate on a dedicated thread, initializes Vega +
-    /// config-level plugins, loads the per-request overlay plugin, runs the
-    /// provided conversion closure, and drops the worker. This provides true
-    /// isolation — the per-request plugin's registrations don't leak to other
-    /// requests.
     fn run_on_ephemeral_worker<R: Send + 'static>(
         &self,
         plugin_source: String,
@@ -3902,11 +3873,10 @@ impl VlConverter {
             );
         }
 
-        // Ensure config-level plugins are resolved (triggers pool spawn if needed)
+        // Resolve config-level plugins if needed
         if self.inner.config.vega_plugins.is_some() {
             self.warm_up()?;
         }
-        // Build a ConverterContext with resolved plugins from the pool
         let resolved_plugins = self
             .inner
             .resolved_plugins
@@ -3927,11 +3897,6 @@ impl VlConverter {
                 .map_err(|e| anyhow!("Failed to build ephemeral worker runtime: {e}"))?;
             let local = tokio::task::LocalSet::new();
             local.block_on(&rt, async move {
-                // Resolve the per-request plugin source:
-                // - URL entry (https://...): fetch and bundle via PluginBundleLoader
-                // - Inline ESM: bundle if it has HTTP imports, pass through otherwise
-                // File paths are NOT supported for per-request plugins (path
-                // traversal risk from untrusted input).
                 let is_url =
                     plugin_source.starts_with("http://") || plugin_source.starts_with("https://");
                 let bundled_source = if is_url {
