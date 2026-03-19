@@ -483,6 +483,7 @@ def vega_to_html(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     renderer: Renderer | None = None,
+    vega_plugin: str | None = None,
 ) -> str:
     """
     Convert a Vega spec to an HTML document, optionally bundling dependencies.
@@ -505,6 +506,10 @@ def vega_to_html(
         Vega renderer. One of 'svg' (default), 'canvas',
         or 'hybrid' (where text is svg and other marks are canvas)
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     HTML document.
@@ -517,6 +522,7 @@ def vega_to_jpeg(
     quality: int | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to JPEG image data.
@@ -534,6 +540,10 @@ def vega_to_jpeg(
     time_format_locale
         d3-time-format locale name or dictionary
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     JPEG image data.
@@ -545,6 +555,7 @@ def vega_to_pdf(
     scale: float | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to PDF format.
@@ -560,6 +571,10 @@ def vega_to_pdf(
     time_format_locale
         d3-time-format locale name or dictionary
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     PDF file bytes.
@@ -572,6 +587,7 @@ def vega_to_png(
     ppi: float | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to PNG image data.
@@ -589,6 +605,10 @@ def vega_to_png(
     time_format_locale
         d3-time-format locale name or dictionary
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     PNG image data.
@@ -600,6 +620,7 @@ def vega_to_scenegraph(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     format: Literal["dict", "msgpack"] = "dict",
+    vega_plugin: str | None = None,
 ) -> dict[str, Any] | bytes:
     """
     Convert a Vega spec to a Vega Scenegraph.
@@ -616,6 +637,10 @@ def vega_to_scenegraph(
         Output format: "dict" returns a Python dictionary (default),
         "msgpack" returns raw MessagePack bytes
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
@@ -626,6 +651,7 @@ def vega_to_svg(
     vg_spec: VlSpec,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> str:
     """
     Convert a Vega spec to an SVG image string.
@@ -638,6 +664,10 @@ def vega_to_svg(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
+
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
 
     Returns
     -------
@@ -758,6 +788,7 @@ def vegalite_to_html(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     renderer: Renderer | None = None,
+    vega_plugin: str | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to an HTML document, optionally bundling dependencies.
@@ -787,6 +818,10 @@ def vegalite_to_html(
         Vega renderer. One of 'svg' (default), 'canvas',
         or 'hybrid' (where text is svg and other marks are canvas)
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     HTML document.
@@ -803,6 +838,7 @@ def vegalite_to_jpeg(
     show_warnings: bool | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to JPEG image data using a particular version of the Vega-Lite JavaScript library.
@@ -829,6 +865,10 @@ def vegalite_to_jpeg(
     time_format_locale
         d3-time-format locale name or dictionary
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     JPEG image data.
@@ -843,6 +883,7 @@ def vegalite_to_pdf(
     theme: VegaThemes | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to PDF image data using a particular version of the Vega-Lite JavaScript library.
@@ -865,6 +906,10 @@ def vegalite_to_pdf(
     time_format_locale
         d3-time-format locale name or dictionary
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     PDF image data.
@@ -881,6 +926,7 @@ def vegalite_to_png(
     show_warnings: bool | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to PNG image data using a particular version of the Vega-Lite JavaScript library.
@@ -907,6 +953,10 @@ def vegalite_to_png(
     time_format_locale
         d3-time-format locale name or dictionary
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     PNG image data.
@@ -922,6 +972,7 @@ def vegalite_to_scenegraph(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     format: Literal["dict", "msgpack"] = "dict",
+    vega_plugin: str | None = None,
 ) -> dict[str, Any] | bytes:
     """
     Convert a Vega-Lite spec to a Vega Scenegraph using a particular version of the Vega-Lite JavaScript library.
@@ -947,6 +998,10 @@ def vegalite_to_scenegraph(
         Output format: "dict" returns a Python dictionary (default),
         "msgpack" returns raw MessagePack bytes
 
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
+
     Returns
     -------
     scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
@@ -961,6 +1016,7 @@ def vegalite_to_svg(
     show_warnings: bool | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to an SVG image string using a particular version of the Vega-Lite JavaScript library.
@@ -982,6 +1038,10 @@ def vegalite_to_svg(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
+
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
 
     Returns
     -------
@@ -1151,6 +1211,7 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             renderer: Renderer | None = None,
+            vega_plugin: str | None = None,
         ) -> str:
             """Async version of ``vega_to_html``. See sync function for full documentation."""
             ...
@@ -1161,6 +1222,7 @@ if TYPE_CHECKING:
             quality: int | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vega_to_jpeg``. See sync function for full documentation."""
             ...
@@ -1170,6 +1232,7 @@ if TYPE_CHECKING:
             scale: float | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vega_to_pdf``. See sync function for full documentation."""
             ...
@@ -1180,6 +1243,7 @@ if TYPE_CHECKING:
             ppi: float | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vega_to_png``. See sync function for full documentation."""
             ...
@@ -1189,6 +1253,7 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             format: Literal["dict", "msgpack"] = "dict",
+            vega_plugin: str | None = None,
         ) -> dict[str, Any] | bytes:
             """Async version of ``vega_to_scenegraph``. See sync function for full documentation."""
             ...
@@ -1197,6 +1262,7 @@ if TYPE_CHECKING:
             vg_spec: VlSpec,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> str:
             """Async version of ``vega_to_svg``. See sync function for full documentation."""
             ...
@@ -1247,6 +1313,7 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             renderer: Renderer | None = None,
+            vega_plugin: str | None = None,
         ) -> str:
             """Async version of ``vegalite_to_html``. See sync function for full documentation."""
             ...
@@ -1261,6 +1328,7 @@ if TYPE_CHECKING:
             show_warnings: bool | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vegalite_to_jpeg``. See sync function for full documentation."""
             ...
@@ -1273,6 +1341,7 @@ if TYPE_CHECKING:
             theme: VegaThemes | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vegalite_to_pdf``. See sync function for full documentation."""
             ...
@@ -1287,6 +1356,7 @@ if TYPE_CHECKING:
             show_warnings: bool | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vegalite_to_png``. See sync function for full documentation."""
             ...
@@ -1300,6 +1370,7 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             format: Literal["dict", "msgpack"] = "dict",
+            vega_plugin: str | None = None,
         ) -> dict[str, Any] | bytes:
             """Async version of ``vegalite_to_scenegraph``. See sync function for full documentation."""
             ...
@@ -1312,6 +1383,7 @@ if TYPE_CHECKING:
             show_warnings: bool | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> str:
             """Async version of ``vegalite_to_svg``. See sync function for full documentation."""
             ...
