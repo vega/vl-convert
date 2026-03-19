@@ -1,5 +1,4 @@
 #![allow(clippy::uninlined_format_args)]
-#![allow(clippy::too_many_arguments)]
 #![doc = include_str!("../README.md")]
 
 use clap::{Parser, Subcommand};
@@ -746,6 +745,27 @@ async fn main() -> Result<(), anyhow::Error> {
         Some(vega_plugin)
     };
     let plugin_import_domains = flatten_plugin_domains(&plugin_import_domains);
+
+    let base_config = VlConverterConfig {
+        num_workers: 1,
+        allow_http_access,
+        filesystem_root: filesystem_root.map(PathBuf::from),
+        allowed_base_urls: None,
+        auto_google_fonts,
+        missing_fonts,
+        google_fonts: config_google_fonts.clone(),
+        max_worker_heap_size_mb,
+        gc_after_conversion,
+        vega_plugins,
+        plugin_import_domains,
+        allow_per_request_plugins: false,
+        per_request_plugin_import_domains: Vec::new(),
+        default_theme: None,
+        default_format_locale: None,
+        default_time_format_locale: None,
+        themes: None,
+    };
+
     use crate::Commands::*;
     match command {
         Vl2vg {
@@ -765,15 +785,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 config,
                 pretty,
                 show_warnings,
-                allow_http_access,
-                filesystem_root.clone(),
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
+                base_config,
             )
             .await?
         }
@@ -790,6 +802,8 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
             vl_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -797,18 +811,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 theme,
                 config,
                 show_warnings,
-                allowed_base_url,
                 format_locale,
                 time_format_locale,
-                allow_http_access,
-                filesystem_root.clone(),
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
+                config_with_urls,
             )
             .await?
         }
@@ -827,6 +832,8 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
             vl_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -836,18 +843,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 scale,
                 ppi,
                 show_warnings,
-                allowed_base_url,
                 format_locale,
                 time_format_locale,
-                allow_http_access,
-                filesystem_root.clone(),
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
+                config_with_urls,
             )
             .await?
         }
@@ -866,6 +864,8 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
             vl_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -875,18 +875,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 scale,
                 quality,
                 show_warnings,
-                allowed_base_url,
                 format_locale,
                 time_format_locale,
-                allow_http_access,
-                filesystem_root.clone(),
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
+                config_with_urls,
             )
             .await?
         }
@@ -903,6 +894,8 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
             vl_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -910,18 +903,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 theme,
                 config,
                 show_warnings,
-                allowed_base_url,
                 format_locale,
                 time_format_locale,
-                allow_http_access,
-                filesystem_root.clone(),
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
+                config_with_urls,
             )
             .await?
         }
@@ -958,14 +942,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 parse_time_format_locale_option(time_format_locale.as_deref())?;
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
-            let converter = VlConverter::with_config(VlConverterConfig {
-                auto_google_fonts,
-                missing_fonts,
-                google_fonts: config_google_fonts.clone(),
-                vega_plugins: vega_plugins.clone(),
-                plugin_import_domains: plugin_import_domains.clone(),
-                ..Default::default()
-            })?;
+            let converter = VlConverter::with_config(base_config)?;
             let html = converter
                 .vegalite_to_html(
                     vl_spec,
@@ -1010,14 +987,8 @@ async fn main() -> Result<(), anyhow::Error> {
             let time_format_locale =
                 parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-            let converter = VlConverter::with_config(VlConverterConfig {
-                auto_google_fonts,
-                missing_fonts,
-                google_fonts: config_google_fonts.clone(),
-                vega_plugins: vega_plugins.clone(),
-                plugin_import_domains: plugin_import_domains.clone(),
-                ..Default::default()
-            })?;
+            let auto_google_fonts = base_config.auto_google_fonts;
+            let converter = VlConverter::with_config(base_config)?;
             let fonts = converter
                 .vegalite_fonts(
                     vl_spec,
@@ -1054,21 +1025,14 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
             vg_2_svg(
                 input.as_deref(),
                 output.as_deref(),
-                allowed_base_url,
                 format_locale,
                 time_format_locale,
-                allow_http_access,
-                filesystem_root.clone(),
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
+                config_with_urls,
             )
             .await?
         }
@@ -1083,23 +1047,16 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
             vg_2_png(
                 input.as_deref(),
                 output.as_deref(),
                 scale,
                 ppi,
-                allowed_base_url,
                 format_locale,
                 time_format_locale,
-                allow_http_access,
-                filesystem_root.clone(),
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
+                config_with_urls,
             )
             .await?
         }
@@ -1114,23 +1071,16 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
             vg_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
                 scale,
                 quality,
-                allowed_base_url,
                 format_locale,
                 time_format_locale,
-                allow_http_access,
-                filesystem_root.clone(),
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
+                config_with_urls,
             )
             .await?
         }
@@ -1143,21 +1093,14 @@ async fn main() -> Result<(), anyhow::Error> {
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
             vg_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
-                allowed_base_url,
                 format_locale,
                 time_format_locale,
-                allow_http_access,
-                filesystem_root.clone(),
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
+                config_with_urls,
             )
             .await?
         }
@@ -1191,14 +1134,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
-            let converter = VlConverter::with_config(VlConverterConfig {
-                auto_google_fonts,
-                missing_fonts,
-                google_fonts: config_google_fonts.clone(),
-                vega_plugins: vega_plugins.clone(),
-                plugin_import_domains: plugin_import_domains.clone(),
-                ..Default::default()
-            })?;
+            let converter = VlConverter::with_config(base_config)?;
             let html = converter
                 .vega_to_html(
                     vg_spec,
@@ -1233,14 +1169,8 @@ async fn main() -> Result<(), anyhow::Error> {
             let time_format_locale =
                 parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-            let converter = VlConverter::with_config(VlConverterConfig {
-                auto_google_fonts,
-                missing_fonts,
-                google_fonts: config_google_fonts.clone(),
-                vega_plugins: vega_plugins.clone(),
-                plugin_import_domains: plugin_import_domains.clone(),
-                ..Default::default()
-            })?;
+            let auto_google_fonts = base_config.auto_google_fonts;
+            let converter = VlConverter::with_config(base_config)?;
             let fonts = converter
                 .vega_fonts(
                     vg_spec,
@@ -1273,18 +1203,9 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
-            let converter = build_converter(
-                allow_http_access,
-                filesystem_root.clone(),
-                allowed_base_url,
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
-            )?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
+            let converter = VlConverter::with_config(config_with_urls)?;
             let png_data = converter.svg_to_png(&svg, scale, Some(ppi)).await?;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
         }
@@ -1298,18 +1219,9 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
-            let converter = build_converter(
-                allow_http_access,
-                filesystem_root.clone(),
-                allowed_base_url,
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
-            )?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
+            let converter = VlConverter::with_config(config_with_urls)?;
             let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality)).await?;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
         }
@@ -1321,18 +1233,9 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
-            let converter = build_converter(
-                allow_http_access,
-                filesystem_root.clone(),
-                allowed_base_url,
-                auto_google_fonts,
-                missing_fonts,
-                config_google_fonts.clone(),
-                max_worker_heap_size_mb,
-                gc_after_conversion,
-                vega_plugins.clone(),
-                plugin_import_domains.clone(),
-            )?;
+            let mut config_with_urls = base_config;
+            config_with_urls.allowed_base_urls = allowed_base_url;
+            let converter = VlConverter::with_config(config_with_urls)?;
             let pdf_data = converter.svg_to_pdf(&svg).await?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
         }
@@ -1408,36 +1311,6 @@ fn flatten_plugin_domains(raw: &[String]) -> Vec<String> {
 fn parse_vl_version(vl_version: &str) -> Result<VlVersion, anyhow::Error> {
     VlVersion::from_str(vl_version)
         .map_err(|_| anyhow::anyhow!("Invalid or unsupported Vega-Lite version: {vl_version}"))
-}
-
-fn build_converter(
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    allowed_base_urls: Option<Vec<String>>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
-) -> Result<VlConverter, anyhow::Error> {
-    let config = VlConverterConfig {
-        allow_http_access,
-        filesystem_root: filesystem_root.map(PathBuf::from),
-        allowed_base_urls,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-        ..Default::default()
-    };
-
-    VlConverter::with_config(config)
-        .map_err(|err| anyhow::anyhow!("Failed to configure converter: {err}"))
 }
 
 fn read_input_string(input: Option<&str>) -> Result<String, anyhow::Error> {
@@ -1722,43 +1595,15 @@ async fn vl_2_vg(
     config: Option<String>,
     pretty: bool,
     show_warnings: bool,
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
+    converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
-    // Parse version
     let vl_version = parse_vl_version(vl_version)?;
-
-    // Read input file
     let vegalite_str = read_input_string(input)?;
-
-    // Parse input as json
     let vegalite_json = parse_as_json(&vegalite_str)?;
-
-    // Load config from file
     let config = read_config_json(config)?;
 
-    // Initialize converter
-    let converter = build_converter(
-        allow_http_access,
-        filesystem_root,
-        None,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-    )?;
+    let converter = VlConverter::with_config(converter_config)?;
 
-    // Perform conversion
     let vega_json = match converter
         .vegalite_to_vega(
             vegalite_json,
@@ -1787,7 +1632,6 @@ async fn vl_2_vg(
     };
     match vega_str_res {
         Ok(vega_str) => {
-            // Write result
             write_output_string(output, &vega_str)?;
         }
         Err(err) => {
@@ -1801,43 +1645,18 @@ async fn vl_2_vg(
 async fn vg_2_svg(
     input: Option<&str>,
     output: Option<&str>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
+    converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
-    // Read input file
     let vega_str = read_input_string(input)?;
-
-    // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-    // Initialize converter
-    let converter = build_converter(
-        allow_http_access,
-        filesystem_root,
-        allowed_base_urls,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-    )?;
+    let converter = VlConverter::with_config(converter_config)?;
 
-    // Perform conversion
     let svg = match converter
         .vega_to_svg(
             vg_spec,
@@ -1856,7 +1675,6 @@ async fn vg_2_svg(
         }
     };
 
-    // Write result
     write_output_string(output, &svg)?;
 
     Ok(())
@@ -1868,43 +1686,18 @@ async fn vg_2_png(
     output: Option<&str>,
     scale: f32,
     ppi: f32,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
+    converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
-    // Read input file
     let vega_str = read_input_string(input)?;
-
-    // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-    // Initialize converter
-    let converter = build_converter(
-        allow_http_access,
-        filesystem_root,
-        allowed_base_urls,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-    )?;
+    let converter = VlConverter::with_config(converter_config)?;
 
-    // Perform conversion
     let png_data = match converter
         .vega_to_png(
             vg_spec,
@@ -1925,7 +1718,6 @@ async fn vg_2_png(
         }
     };
 
-    // Write result
     write_output_binary(output, &png_data, "PNG")?;
 
     Ok(())
@@ -1937,43 +1729,18 @@ async fn vg_2_jpeg(
     output: Option<&str>,
     scale: f32,
     quality: u8,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
+    converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
-    // Read input file
     let vega_str = read_input_string(input)?;
-
-    // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-    // Initialize converter
-    let converter = build_converter(
-        allow_http_access,
-        filesystem_root,
-        allowed_base_urls,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-    )?;
+    let converter = VlConverter::with_config(converter_config)?;
 
-    // Perform conversion
     let jpeg_data = match converter
         .vega_to_jpeg(
             vg_spec,
@@ -1994,7 +1761,6 @@ async fn vg_2_jpeg(
         }
     };
 
-    // Write result
     write_output_binary(output, &jpeg_data, "JPEG")?;
 
     Ok(())
@@ -2003,43 +1769,18 @@ async fn vg_2_jpeg(
 async fn vg_2_pdf(
     input: Option<&str>,
     output: Option<&str>,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
+    converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
-    // Read input file
     let vega_str = read_input_string(input)?;
-
-    // Parse input as json
     let vg_spec = parse_as_json(&vega_str)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-    // Initialize converter
-    let converter = build_converter(
-        allow_http_access,
-        filesystem_root,
-        allowed_base_urls,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-    )?;
+    let converter = VlConverter::with_config(converter_config)?;
 
-    // Perform conversion
     let pdf_data = match converter
         .vega_to_pdf(
             vg_spec,
@@ -2058,7 +1799,6 @@ async fn vg_2_pdf(
         }
     };
 
-    // Write result
     write_output_binary(output, &pdf_data, "PDF")?;
 
     Ok(())
@@ -2072,49 +1812,20 @@ async fn vl_2_svg(
     theme: Option<String>,
     config: Option<String>,
     show_warnings: bool,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
+    converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
-    // Parse version
     let vl_version = parse_vl_version(vl_version)?;
-
-    // Read input file
     let vegalite_str = read_input_string(input)?;
-
-    // Parse input as json
     let vl_spec = parse_as_json(&vegalite_str)?;
-
-    // Load config from file
     let config = read_config_json(config)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-    // Initialize converter
-    let converter = build_converter(
-        allow_http_access,
-        filesystem_root,
-        allowed_base_urls,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-    )?;
+    let converter = VlConverter::with_config(converter_config)?;
 
-    // Perform conversion
     let svg = match converter
         .vegalite_to_svg(
             vl_spec,
@@ -2137,7 +1848,6 @@ async fn vl_2_svg(
         }
     };
 
-    // Write result
     write_output_string(output, &svg)?;
 
     Ok(())
@@ -2153,49 +1863,20 @@ async fn vl_2_png(
     scale: f32,
     ppi: f32,
     show_warnings: bool,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
+    converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
-    // Parse version
     let vl_version = parse_vl_version(vl_version)?;
-
-    // Read input file
     let vegalite_str = read_input_string(input)?;
-
-    // Parse input as json
     let vl_spec = parse_as_json(&vegalite_str)?;
-
-    // Load config from file
     let config = read_config_json(config)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-    // Initialize converter
-    let converter = build_converter(
-        allow_http_access,
-        filesystem_root,
-        allowed_base_urls,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-    )?;
+    let converter = VlConverter::with_config(converter_config)?;
 
-    // Perform conversion
     let png_data = match converter
         .vegalite_to_png(
             vl_spec,
@@ -2220,7 +1901,6 @@ async fn vl_2_png(
         }
     };
 
-    // Write result
     write_output_binary(output, &png_data, "PNG")?;
 
     Ok(())
@@ -2236,49 +1916,20 @@ async fn vl_2_jpeg(
     scale: f32,
     quality: u8,
     show_warnings: bool,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
+    converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
-    // Parse version
     let vl_version = parse_vl_version(vl_version)?;
-
-    // Read input file
     let vegalite_str = read_input_string(input)?;
-
-    // Parse input as json
     let vl_spec = parse_as_json(&vegalite_str)?;
-
-    // Load config from file
     let config = read_config_json(config)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-    // Initialize converter
-    let converter = build_converter(
-        allow_http_access,
-        filesystem_root,
-        allowed_base_urls,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-    )?;
+    let converter = VlConverter::with_config(converter_config)?;
 
-    // Perform conversion
     let jpeg_data = match converter
         .vegalite_to_jpeg(
             vl_spec,
@@ -2303,7 +1954,6 @@ async fn vl_2_jpeg(
         }
     };
 
-    // Write result
     write_output_binary(output, &jpeg_data, "JPEG")?;
 
     Ok(())
@@ -2317,49 +1967,20 @@ async fn vl_2_pdf(
     theme: Option<String>,
     config: Option<String>,
     show_warnings: bool,
-    allowed_base_urls: Option<Vec<String>>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    allow_http_access: bool,
-    filesystem_root: Option<String>,
-    auto_google_fonts: bool,
-    missing_fonts: MissingFontsPolicy,
-    google_fonts: Option<Vec<GoogleFontRequest>>,
-    max_worker_heap_size_mb: usize,
-    gc_after_conversion: bool,
-    vega_plugins: Option<Vec<String>>,
-    plugin_import_domains: Vec<String>,
+    converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
-    // Parse version
     let vl_version = parse_vl_version(vl_version)?;
-
-    // Read input file
     let vegalite_str = read_input_string(input)?;
-
-    // Parse input as json
     let vl_spec = parse_as_json(&vegalite_str)?;
-
-    // Load config from file
     let config = read_config_json(config)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-    // Initialize converter
-    let converter = build_converter(
-        allow_http_access,
-        filesystem_root,
-        allowed_base_urls,
-        auto_google_fonts,
-        missing_fonts,
-        google_fonts,
-        max_worker_heap_size_mb,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-    )?;
+    let converter = VlConverter::with_config(converter_config)?;
 
-    // Perform conversion
     let pdf_data = match converter
         .vegalite_to_pdf(
             vl_spec,
@@ -2382,7 +2003,6 @@ async fn vl_2_pdf(
         }
     };
 
-    // Write result
     write_output_binary(output, &pdf_data, "PDF")?;
 
     Ok(())

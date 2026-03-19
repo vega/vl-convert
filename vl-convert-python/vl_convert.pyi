@@ -168,6 +168,10 @@ if TYPE_CHECKING:
         plugin_import_domains: list[str]
         allow_per_request_plugins: bool
         per_request_plugin_import_domains: list[str]
+        default_theme: str | None
+        default_format_locale: str | dict[str, Any] | None
+        default_time_format_locale: str | dict[str, Any] | None
+        themes: dict[str, dict[str, Any]] | None
 
 __all__ = [
     "asyncio",
@@ -320,6 +324,10 @@ def configure(
     plugin_import_domains: list[str] | None = None,
     allow_per_request_plugins: bool | None = None,
     per_request_plugin_import_domains: list[str] | None = None,
+    default_theme: str | None = None,
+    default_format_locale: str | dict[str, Any] | None = None,
+    default_time_format_locale: str | dict[str, Any] | None = None,
+    themes: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -375,6 +383,19 @@ def configure(
         Domain patterns allowed for HTTP imports inside per-request plugins.
         Separate from ``plugin_import_domains``. Empty list (default) disables
         HTTP imports in per-request plugins. If ``None``, keep current value.
+    default_theme
+        Default named theme (e.g. ``"dark"``) applied to all Vega-Lite conversions.
+        Per-request ``theme`` overrides this if set. ``None`` clears the default.
+    default_format_locale
+        Default d3-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
+        Per-request ``format_locale`` overrides this if set. ``None`` clears the default.
+    default_time_format_locale
+        Default d3-time-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
+        Per-request ``time_format_locale`` overrides this if set. ``None`` clears the default.
+    themes
+        Custom named themes mapping names to Vega config objects.
+        Registered alongside built-in vega-themes. Custom themes take
+        priority over built-in themes if names collide. ``None`` clears.
     """
     ...
 
@@ -1152,6 +1173,10 @@ if TYPE_CHECKING:
             plugin_import_domains: list[str] | None = None,
             allow_per_request_plugins: bool | None = None,
             per_request_plugin_import_domains: list[str] | None = None,
+            default_theme: str | None = None,
+            default_format_locale: str | None = None,
+            default_time_format_locale: str | None = None,
+            themes: dict[str, dict[str, Any]] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...

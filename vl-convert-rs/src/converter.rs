@@ -736,6 +736,18 @@ pub struct VlConverterConfig {
     /// plugins). Defaults to empty (no HTTP imports allowed in per-request plugins).
     /// Set to `["esm.sh"]` to allow specific CDNs, or `["*"]` for any domain.
     pub per_request_plugin_import_domains: Vec<String>,
+    /// Default theme applied to all Vega-Lite conversions.
+    /// Per-request `VlOpts.theme` overrides this if set.
+    pub default_theme: Option<String>,
+    /// Default d3-format locale applied to all conversions.
+    /// Per-request `format_locale` on VgOpts/VlOpts overrides this if set.
+    pub default_format_locale: Option<FormatLocale>,
+    /// Default d3-time-format locale applied to all conversions.
+    /// Per-request `time_format_locale` on VgOpts/VlOpts overrides this if set.
+    pub default_time_format_locale: Option<TimeFormatLocale>,
+    /// Custom named themes (Vega config objects) registered alongside built-in
+    /// vega-themes. Custom themes take priority if names collide.
+    pub themes: Option<HashMap<String, serde_json::Value>>,
 }
 
 /// Shared context passed to all workers.
@@ -763,6 +775,10 @@ impl Default for VlConverterConfig {
             plugin_import_domains: Vec::new(),
             allow_per_request_plugins: false,
             per_request_plugin_import_domains: Vec::new(),
+            default_theme: None,
+            default_format_locale: None,
+            default_time_format_locale: None,
+            themes: None,
         }
     }
 }
@@ -820,7 +836,7 @@ impl VgOpts {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FormatLocale {
     Name(String),
     Object(serde_json::Value),
@@ -840,7 +856,7 @@ impl FormatLocale {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TimeFormatLocale {
     Name(String),
     Object(serde_json::Value),
@@ -1812,6 +1828,16 @@ function vegaToCanvas(vgSpec, allowedBaseUrls, formatLocale, timeFormatLocale, s
                 for (i, plugin) in plugins.iter().enumerate() {
                     self.load_plugin(i, &plugin.bundled_source, true).await?;
                 }
+            }
+
+            // Register custom themes: replace the frozen vegaThemes module namespace
+            // with a mutable copy that includes the custom themes.
+            if let Some(ref themes) = self.ctx.config.themes {
+                let themes_json = serde_json::to_string(themes)?;
+                self.worker.js_runtime.execute_script(
+                    "ext:<anon>",
+                    format!("vegaThemes = Object.assign({{}}, vegaThemes, {themes_json});"),
+                )?;
             }
 
             self.vega_initialized = true;
@@ -3563,11 +3589,37 @@ impl VlConverter {
         }
     }
 
+    /// Apply config-level defaults to VlOpts where the per-request value is None.
+    pub(crate) fn apply_vl_defaults(&self, opts: &mut VlOpts) {
+        let config = &self.inner.config;
+        if opts.theme.is_none() {
+            opts.theme = config.default_theme.clone();
+        }
+        if opts.format_locale.is_none() {
+            opts.format_locale = config.default_format_locale.clone();
+        }
+        if opts.time_format_locale.is_none() {
+            opts.time_format_locale = config.default_time_format_locale.clone();
+        }
+    }
+
+    /// Apply config-level defaults to VgOpts where the per-request value is None.
+    pub(crate) fn apply_vg_defaults(&self, opts: &mut VgOpts) {
+        let config = &self.inner.config;
+        if opts.format_locale.is_none() {
+            opts.format_locale = config.default_format_locale.clone();
+        }
+        if opts.time_format_locale.is_none() {
+            opts.time_format_locale = config.default_time_format_locale.clone();
+        }
+    }
+
     pub async fn vegalite_to_vega(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
+        self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
         self.run_on_worker(move |inner| Box::pin(inner.vegalite_to_vega(vl_spec, vl_opts)))
             .await
@@ -3578,6 +3630,7 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
+        self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
@@ -3614,6 +3667,7 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
     ) -> Result<serde_json::Value, AnyError> {
+        self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
@@ -3637,6 +3691,7 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
+        self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
@@ -3664,6 +3719,7 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
+        self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
 
@@ -3715,6 +3771,7 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
+        self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
         if let Some((vega_spec, mut vg_opts)) = self
@@ -3751,6 +3808,7 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
+        self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
         if let Some((vega_spec, mut vg_opts)) = self
@@ -3793,6 +3851,7 @@ impl VlConverter {
         scale: Option<f32>,
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
+        self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
@@ -3844,6 +3903,7 @@ impl VlConverter {
         scale: Option<f32>,
         ppi: Option<f32>,
     ) -> Result<Vec<u8>, AnyError> {
+        self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
@@ -3920,6 +3980,7 @@ impl VlConverter {
         scale: Option<f32>,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
+        self.apply_vg_defaults(&mut vg_opts);
         let scale = scale.unwrap_or(1.0);
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
@@ -3972,6 +4033,7 @@ impl VlConverter {
         scale: Option<f32>,
         quality: Option<u8>,
     ) -> Result<Vec<u8>, AnyError> {
+        self.apply_vl_defaults(&mut vl_opts);
         let scale = scale.unwrap_or(1.0);
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
@@ -4049,6 +4111,7 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
+        self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
@@ -4094,6 +4157,7 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
+        self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
