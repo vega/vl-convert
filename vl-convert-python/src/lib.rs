@@ -93,6 +93,8 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
         "gc_after_conversion": config.gc_after_conversion,
         "vega_plugins": config.vega_plugins,
         "plugin_import_domains": config.plugin_import_domains,
+        "allow_per_request_plugins": config.allow_per_request_plugins,
+        "per_request_plugin_import_domains": config.per_request_plugin_import_domains,
     })
 }
 

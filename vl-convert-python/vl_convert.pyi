@@ -166,6 +166,8 @@ if TYPE_CHECKING:
         gc_after_conversion: bool
         vega_plugins: list[str] | None
         plugin_import_domains: list[str]
+        allow_per_request_plugins: bool
+        per_request_plugin_import_domains: list[str]
 
 __all__ = [
     "asyncio",
@@ -316,6 +318,8 @@ def configure(
     gc_after_conversion: bool | None = None,
     vega_plugins: list[str] | None = None,
     plugin_import_domains: list[str] | None = None,
+    allow_per_request_plugins: bool | None = None,
+    per_request_plugin_import_domains: list[str] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -360,10 +364,17 @@ def configure(
         Multi-file plugins should be pre-bundled with esbuild or Rollup.
         URL plugins auto-allow their domain for imports. ``None`` keeps current value.
     plugin_import_domains
-        List of domain patterns allowed for ESM imports inside plugins.
-        Empty list (default) disables all ESM HTTP imports.
-        Use ``["*"]`` to allow any domain, or specific patterns like
-        ``["esm.sh", "*.jsdelivr.net"]``. If ``None``, keep current value.
+        Domain patterns allowed for HTTP imports inside config-level plugins.
+        Empty list (default) disables HTTP imports.
+        Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
+        If ``None``, keep current value.
+    allow_per_request_plugins
+        Whether to accept per-request plugins via the ``vega_plugin`` parameter
+        on conversion functions. Default ``False``. If ``None``, keep current value.
+    per_request_plugin_import_domains
+        Domain patterns allowed for HTTP imports inside per-request plugins.
+        Separate from ``plugin_import_domains``. Empty list (default) disables
+        HTTP imports in per-request plugins. If ``None``, keep current value.
     """
     ...
 
@@ -1103,6 +1114,8 @@ if TYPE_CHECKING:
             gc_after_conversion: bool | None = None,
             vega_plugins: list[str] | None = None,
             plugin_import_domains: list[str] | None = None,
+            allow_per_request_plugins: bool | None = None,
+            per_request_plugin_import_domains: list[str] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...
