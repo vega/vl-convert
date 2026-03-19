@@ -223,11 +223,6 @@ async fn bundle_source_plugin(
     source: &str,
     allowed_domains: &[String],
 ) -> Result<String, AnyError> {
-    // Quick check: skip bundling if no HTTP imports
-    if !source.contains("https://") && !source.contains("http://") {
-        return Ok(source.to_string());
-    }
-
     use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
     use crate::module_loader::PluginBundleLoader;
 
