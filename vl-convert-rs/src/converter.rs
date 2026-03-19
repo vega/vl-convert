@@ -483,7 +483,7 @@ fn normalize_converter_config(
     if let Some(ref mut plugins) = config.vega_plugins {
         for (i, entry) in plugins.iter_mut().enumerate() {
             if entry.starts_with("http://") || entry.starts_with("https://") {
-                // URL plugin — validate URL, auto-allow the domain
+                // URL plugin: validate URL, auto-allow the domain
                 let url = Url::parse(entry)
                     .map_err(|e| anyhow!("Invalid Vega plugin {i} URL: {entry}: {e}"))?;
                 if let Some(domain) = url.host_str() {
@@ -491,11 +491,11 @@ fn normalize_converter_config(
                         config.plugin_import_domains.push(domain.to_string());
                     }
                 }
-                // Leave the URL string in place — fetched at startup in spawn_worker_pool()
+                // Leave the URL string in place; fetched at startup in spawn_worker_pool()
             } else {
                 let path = Path::new(entry.as_str());
                 if entry.ends_with(".js") || entry.ends_with(".mjs") {
-                    // File plugin — read source, replace entry
+                    // File plugin: read source, replace entry
                     if !path.is_file() {
                         bail!(
                             "Vega plugin {i} path '{}' does not exist or is not a file",
@@ -726,12 +726,7 @@ pub struct VlConverterConfig {
     pub plugin_import_domains: Vec<String>,
     /// Whether to allow per-request plugins via `VgOpts`/`VlOpts`.
     /// Defaults to false. When enabled, requests can include a `vega_plugin`
-    /// field with a pre-bundled ESM string that runs on an ephemeral worker
-    /// (true isolation — no leaking to other requests).
-    ///
-    /// Each per-request conversion spawns a fresh V8 isolate, adding 50–100ms
-    /// of overhead. Use config-level `vega_plugins` for plugins that apply to
-    /// all conversions — those have no per-request overhead.
+    /// field that runs on an ephemeral V8 isolate (50-100ms overhead).
     pub allow_per_request_plugins: bool,
     /// Domain allowlist for HTTP imports inside per-request plugins.
     /// Separate from `plugin_import_domains` (which controls config-level
@@ -1183,8 +1178,8 @@ struct InnerVlConverter {
     /// Pointer to the heap-limit callback data (leaked Box). `None` when
     /// `max_worker_heap_size_mb` is 0 (no limit).
     heap_limit_data: Option<*const HeapLimitCallbackData>,
-    /// Set when a plugin fails during init_vega(). All subsequent commands
-    /// return this error immediately — no retry on the tainted isolate.
+    /// Set when a plugin fails during init_vega(). Subsequent commands
+    /// return this error immediately (no retry on the tainted isolate).
     plugin_init_error: Option<String>,
 }
 
@@ -3918,8 +3913,7 @@ impl VlConverter {
                 let mut inner = InnerVlConverter::try_new(ctx, font_baseline).await?;
                 inner.init_vega().await?;
 
-                // Load the per-request plugin (don't poison on failure —
-                // this is an ephemeral worker that will be dropped)
+                // Load per-request plugin (no poison: ephemeral worker)
                 let plugin_index = inner.ctx.resolved_plugins.as_ref().map_or(0, |p| p.len());
                 inner
                     .load_plugin(plugin_index, &bundled_source, false)
