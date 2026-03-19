@@ -73,7 +73,7 @@ deno_core::extension!(
 // Scenegraph results are returned as MessagePack byte buffers via ops,
 // avoiding JSON serialization overhead for large payloads.
 struct WorkerPool {
-    senders: Vec<tokio::sync::mpsc::Sender<QueuedCommand>>,
+    senders: Vec<tokio::sync::mpsc::Sender<QueuedWork>>,
     // Per-worker count of requests that have been reserved for this worker but not yet
     // fully processed. This includes in-flight senders blocked on channel capacity and
     // commands currently queued/executing in the worker loop.
@@ -87,7 +87,7 @@ const VEGAEMBED_GLOBAL_SNIPPET: &str =
 pub const ACCESS_DENIED_MARKER: &str = "VLC_ACCESS_DENIED";
 
 impl WorkerPool {
-    fn next_sender(&self) -> Option<(tokio::sync::mpsc::Sender<QueuedCommand>, OutstandingTicket)> {
+    fn next_sender(&self) -> Option<(tokio::sync::mpsc::Sender<QueuedWork>, OutstandingTicket)> {
         if self.senders.is_empty() {
             return None;
         }
@@ -144,22 +144,26 @@ impl Drop for OutstandingTicket {
     }
 }
 
-struct QueuedCommand {
-    cmd: VlConvertCommand,
+/// A boxed closure that executes work on a worker's InnerVlConverter.
+type WorkFn = Box<
+    dyn FnOnce(
+            &mut InnerVlConverter,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + '_>>
+        + Send,
+>;
+
+struct QueuedWork {
+    work: WorkFn,
     ticket: OutstandingTicket,
 }
 
-impl QueuedCommand {
-    fn new(cmd: VlConvertCommand, ticket: OutstandingTicket) -> Self {
-        Self { cmd, ticket }
+impl QueuedWork {
+    fn new(work: WorkFn, ticket: OutstandingTicket) -> Self {
+        Self { work, ticket }
     }
 
-    fn into_command(self) -> VlConvertCommand {
-        self.cmd
-    }
-
-    fn into_parts(self) -> (VlConvertCommand, OutstandingTicket) {
-        (self.cmd, self.ticket)
+    fn into_parts(self) -> (WorkFn, OutstandingTicket) {
+        (self.work, self.ticket)
     }
 }
 
@@ -325,7 +329,7 @@ fn spawn_worker_pool(
     let mut startup_receivers = Vec::with_capacity(num_workers);
 
     for _ in 0..num_workers {
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<QueuedCommand>(per_worker_queue_capacity);
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<QueuedWork>(per_worker_queue_capacity);
         senders.push(tx);
         let (startup_tx, startup_rx) = std::sync::mpsc::channel::<Result<(), String>>();
         let worker_ctx = ctx.clone();
@@ -355,15 +359,11 @@ fn spawn_worker_pool(
                         }
                     };
 
-                while let Some(queued_cmd) = rx.recv().await {
+                while let Some(queued_work) = rx.recv().await {
                     // Keep the ticket alive for the full loop iteration so outstanding
-                    // covers refresh + command execution (drop happens at iteration end).
-                    let (cmd, _ticket) = queued_cmd.into_parts();
-                    if let Err(e) = inner.refresh_font_config_if_needed() {
-                        cmd.send_error(e);
-                        continue;
-                    }
-                    inner.handle_command(cmd).await;
+                    // covers the work execution (drop happens at iteration end).
+                    let (work, _ticket) = queued_work.into_parts();
+                    (work)(&mut inner).await;
 
                     // If V8 execution was terminated (e.g. by the near-heap-limit
                     // callback), clear the terminated state so the worker can
@@ -1167,7 +1167,7 @@ unsafe extern "C" fn near_heap_limit_callback(
 }
 
 /// Struct that interacts directly with the Deno JavaScript runtime. Not Sendable
-struct InnerVlConverter {
+pub(crate) struct InnerVlConverter {
     worker: MainWorker,
     transfer_state: WorkerTransferStateHandle,
     initialized_vl_versions: HashSet<VlVersion>,
@@ -1237,16 +1237,10 @@ impl InnerVlConverter {
         }
     }
 
-    /// Send a command result through the responder, replacing the error with
-    /// a heap-limit-exceeded message if the near-heap-limit callback fired.
-    /// All command handlers should use this instead of calling
-    /// `responder.send()` directly.
-    fn send_result<T>(
-        &mut self,
-        responder: oneshot::Sender<Result<T, AnyError>>,
-        result: Result<T, AnyError>,
-    ) {
-        let result = match result {
+    /// If the near-heap-limit callback fired, annotate the error with V8
+    /// memory stats. Otherwise return the result unchanged.
+    fn annotate_heap_limit_error<T>(&mut self, result: Result<T, AnyError>) -> Result<T, AnyError> {
+        match result {
             Err(original) if self.heap_limit_was_hit() => {
                 let stats = self.worker.js_runtime.v8_isolate().get_heap_statistics();
                 let used_mb = stats.used_heap_size() as f64 / (1024.0 * 1024.0);
@@ -1261,8 +1255,7 @@ impl InnerVlConverter {
                 )))
             }
             other => other,
-        };
-        responder.send(result).ok();
+        }
     }
 
     fn publish_worker_font_state_to_opstate(&mut self) {
@@ -1308,7 +1301,7 @@ impl InnerVlConverter {
         self.publish_worker_font_state_to_opstate();
     }
 
-    fn clear_google_fonts_overlay(&mut self) {
+    pub(crate) fn clear_google_fonts_overlay(&mut self) {
         if self.font_state.overlay_registrations.is_empty() {
             return;
         }
@@ -1319,6 +1312,42 @@ impl InnerVlConverter {
         }
         self.publish_worker_font_state_to_opstate();
     }
+
+    /// Resolve Google Fonts and apply them as an overlay on the worker's fontdb.
+    /// Returns `Ok(true)` if fonts were applied, `Ok(false)` if none were needed.
+    /// Caller must call `clear_google_fonts_overlay()` after the work is done.
+    pub(crate) async fn apply_font_overlay_if_needed(
+        &mut self,
+        google_fonts: Option<Vec<GoogleFontRequest>>,
+    ) -> Result<bool, AnyError> {
+        let batches = self.resolve_google_fonts(google_fonts).await?;
+        if !batches.is_empty() {
+            self.apply_google_fonts_overlay(batches);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+}
+
+/// Wrap a worker operation with Google Fonts overlay (resolve, apply, work, clear).
+/// Use inside `async move` blocks within closures passed to `run_on_worker` /
+/// `run_on_ephemeral_worker`. The `$inner` expression must be a reborrowed
+/// `&mut InnerVlConverter` (i.e., `let inner = &mut *inner;` before the async move block).
+///
+/// Usage: `with_font_overlay!(inner, gf_option, inner.async_method(args).await)`
+/// or:    `with_font_overlay!(inner, gf_option, inner.sync_method(args))`
+#[macro_export]
+macro_rules! with_font_overlay {
+    ($inner:expr, $google_fonts:expr, $work:expr) => {{
+        $inner.apply_font_overlay_if_needed($google_fonts).await?;
+        let result = $work;
+        $inner.clear_google_fonts_overlay();
+        result
+    }};
+}
+
+impl InnerVlConverter {
 
     async fn init_vega(&mut self) -> Result<(), AnyError> {
         if let Some(ref err) = self.plugin_init_error {
@@ -2791,7 +2820,7 @@ vegaLiteToCanvas_{ver_name:?}(
     ///
     /// Merges per-request fonts with `config.google_fonts`, deduplicates, and
     /// downloads each unique font via `GOOGLE_FONTS_CLIENT.load()`.
-    async fn resolve_google_fonts(
+    pub(crate) async fn resolve_google_fonts(
         &self,
         request_fonts: Option<Vec<GoogleFontRequest>>,
     ) -> Result<Vec<LoadedFontBatch>, AnyError> {
@@ -2830,291 +2859,6 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(batches)
     }
 
-    async fn handle_command(&mut self, cmd: VlConvertCommand) {
-        // Resolve google fonts on the worker thread, apply as overlay,
-        // execute `$work`, then clear the overlay.
-        macro_rules! with_font_overlay {
-            ($self:expr, $google_fonts:expr, $work:expr) => {{
-                match $self.resolve_google_fonts($google_fonts).await {
-                    Err(e) => Err(e),
-                    Ok(batches) => {
-                        if !batches.is_empty() {
-                            $self.apply_google_fonts_overlay(batches);
-                        }
-                        let result = $work;
-                        $self.clear_google_fonts_overlay();
-                        result
-                    }
-                }
-            }};
-        }
-
-        match cmd {
-            VlConvertCommand::VlToVg {
-                vl_spec,
-                vl_opts,
-                responder,
-            } => {
-                let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts).await;
-                self.send_result(responder, vega_spec);
-            }
-            VlConvertCommand::VgToSvg {
-                vg_spec,
-                mut vg_opts,
-                responder,
-            } => {
-                let gf = vg_opts.google_fonts.take();
-                let result = with_font_overlay!(self, gf, self.vega_to_svg(vg_spec, vg_opts).await);
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VgToSg {
-                vg_spec,
-                mut vg_opts,
-                responder,
-            } => {
-                let gf = vg_opts.google_fonts.take();
-                let result =
-                    with_font_overlay!(self, gf, self.vega_to_scenegraph(vg_spec, vg_opts).await);
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VgToSgMsgpack {
-                vg_spec,
-                mut vg_opts,
-                responder,
-            } => {
-                let gf = vg_opts.google_fonts.take();
-                let result = with_font_overlay!(
-                    self,
-                    gf,
-                    self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VlToSvg {
-                vl_spec,
-                mut vl_opts,
-                responder,
-            } => {
-                let gf = vl_opts.google_fonts.take();
-                let result =
-                    with_font_overlay!(self, gf, self.vegalite_to_svg(vl_spec, vl_opts).await);
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VlToSg {
-                vl_spec,
-                mut vl_opts,
-                responder,
-            } => {
-                let gf = vl_opts.google_fonts.take();
-                let result = with_font_overlay!(
-                    self,
-                    gf,
-                    self.vegalite_to_scenegraph(vl_spec, vl_opts).await
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VlToSgMsgpack {
-                vl_spec,
-                mut vl_opts,
-                responder,
-            } => {
-                let gf = vl_opts.google_fonts.take();
-                let result = with_font_overlay!(
-                    self,
-                    gf,
-                    self.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VgToPng {
-                vg_spec,
-                mut vg_opts,
-                scale,
-                ppi,
-                responder,
-            } => {
-                let gf = vg_opts.google_fonts.take();
-                let result = with_font_overlay!(
-                    self,
-                    gf,
-                    match vg_spec.to_value() {
-                        Ok(v) => self.vega_to_png(&v, vg_opts, scale, ppi).await,
-                        Err(e) => Err(e),
-                    }
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VgToJpeg {
-                vg_spec,
-                mut vg_opts,
-                scale,
-                quality,
-                image_policy,
-                responder,
-            } => {
-                let gf = vg_opts.google_fonts.take();
-                let result = with_font_overlay!(
-                    self,
-                    gf,
-                    self.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
-                        .await
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VgToPdf {
-                vg_spec,
-                mut vg_opts,
-                image_policy,
-                responder,
-            } => {
-                let gf = vg_opts.google_fonts.take();
-                let result = with_font_overlay!(
-                    self,
-                    gf,
-                    self.vega_to_pdf(vg_spec, vg_opts, image_policy).await
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VlToPng {
-                vl_spec,
-                mut vl_opts,
-                scale,
-                ppi,
-                responder,
-            } => {
-                let gf = vl_opts.google_fonts.take();
-                let result = with_font_overlay!(
-                    self,
-                    gf,
-                    match vl_spec.to_value() {
-                        Ok(v) => self.vegalite_to_png(&v, vl_opts, scale, ppi).await,
-                        Err(e) => Err(e),
-                    }
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VlToJpeg {
-                vl_spec,
-                mut vl_opts,
-                scale,
-                quality,
-                image_policy,
-                responder,
-            } => {
-                let gf = vl_opts.google_fonts.take();
-                let result = with_font_overlay!(
-                    self,
-                    gf,
-                    self.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
-                        .await
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::VlToPdf {
-                vl_spec,
-                mut vl_opts,
-                image_policy,
-                responder,
-            } => {
-                let gf = vl_opts.google_fonts.take();
-                let result = with_font_overlay!(
-                    self,
-                    gf,
-                    self.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::SvgToPng {
-                svg,
-                scale,
-                ppi,
-                image_policy,
-                google_fonts,
-                responder,
-            } => {
-                let result = with_font_overlay!(
-                    self,
-                    google_fonts,
-                    self.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::SvgToJpeg {
-                svg,
-                scale,
-                quality,
-                image_policy,
-                google_fonts,
-                responder,
-            } => {
-                let result = with_font_overlay!(
-                    self,
-                    google_fonts,
-                    self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::SvgToPdf {
-                svg,
-                image_policy,
-                google_fonts,
-                responder,
-            } => {
-                let result = with_font_overlay!(
-                    self,
-                    google_fonts,
-                    self.svg_to_pdf_with_worker_options(&svg, &image_policy)
-                );
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::ResolveGoogleFonts {
-                google_fonts,
-                responder,
-            } => {
-                let result = self.resolve_google_fonts(Some(google_fonts)).await;
-                self.send_result(responder, result);
-            }
-            VlConvertCommand::GetLocalTz { responder } => {
-                let local_tz = self.get_local_tz().await;
-                self.send_result(responder, local_tz);
-            }
-            VlConvertCommand::GetThemes { responder } => {
-                let themes = self.get_themes().await;
-                self.send_result(responder, themes);
-            }
-            VlConvertCommand::ComputeVegaembedBundle {
-                vl_version,
-                responder,
-            } => {
-                let bundle =
-                    crate::html::bundle_vega_snippet(VEGAEMBED_GLOBAL_SNIPPET, vl_version).await;
-                self.send_result(responder, bundle);
-            }
-            VlConvertCommand::BundleVegaSnippet {
-                snippet,
-                vl_version,
-                responder,
-            } => {
-                let bundle = crate::html::bundle_vega_snippet(&snippet, vl_version).await;
-                self.send_result(responder, bundle);
-            }
-            VlConvertCommand::GetMemoryUsage {
-                worker_index,
-                responder,
-            } => {
-                let stats = self.worker.js_runtime.v8_isolate().get_heap_statistics();
-                responder
-                    .send(WorkerMemoryUsage {
-                        worker_index,
-                        used_heap_size: stats.used_heap_size(),
-                        total_heap_size: stats.total_heap_size(),
-                        heap_size_limit: stats.heap_size_limit(),
-                        external_memory: stats.external_memory(),
-                    })
-                    .ok();
-            }
-        }
-    }
 }
 
 /// Deduplication key for a Google Font request.
@@ -3138,205 +2882,6 @@ fn google_font_request_key(request: &GoogleFontRequest) -> String {
         }
     }
     key
-}
-
-pub enum VlConvertCommand {
-    VlToVg {
-        vl_spec: ValueOrString,
-        vl_opts: VlOpts,
-        responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
-    },
-    VgToSvg {
-        vg_spec: ValueOrString,
-        vg_opts: VgOpts,
-        responder: oneshot::Sender<Result<String, AnyError>>,
-    },
-    VgToSg {
-        vg_spec: ValueOrString,
-        vg_opts: VgOpts,
-        responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
-    },
-    VgToSgMsgpack {
-        vg_spec: ValueOrString,
-        vg_opts: VgOpts,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    VlToSvg {
-        vl_spec: ValueOrString,
-        vl_opts: VlOpts,
-        responder: oneshot::Sender<Result<String, AnyError>>,
-    },
-    VlToSg {
-        vl_spec: ValueOrString,
-        vl_opts: VlOpts,
-        responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
-    },
-    VgToPng {
-        vg_spec: ValueOrString,
-        vg_opts: VgOpts,
-        scale: f32,
-        ppi: f32,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    VgToJpeg {
-        vg_spec: ValueOrString,
-        vg_opts: VgOpts,
-        scale: f32,
-        quality: Option<u8>,
-        image_policy: ImageAccessPolicy,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    VgToPdf {
-        vg_spec: ValueOrString,
-        vg_opts: VgOpts,
-        image_policy: ImageAccessPolicy,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    VlToPng {
-        vl_spec: ValueOrString,
-        vl_opts: VlOpts,
-        scale: f32,
-        ppi: f32,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    VlToJpeg {
-        vl_spec: ValueOrString,
-        vl_opts: VlOpts,
-        scale: f32,
-        quality: Option<u8>,
-        image_policy: ImageAccessPolicy,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    VlToPdf {
-        vl_spec: ValueOrString,
-        vl_opts: VlOpts,
-        image_policy: ImageAccessPolicy,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    VlToSgMsgpack {
-        vl_spec: ValueOrString,
-        vl_opts: VlOpts,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    SvgToPng {
-        svg: String,
-        scale: f32,
-        ppi: Option<f32>,
-        image_policy: ImageAccessPolicy,
-        google_fonts: Option<Vec<GoogleFontRequest>>,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    SvgToJpeg {
-        svg: String,
-        scale: f32,
-        quality: Option<u8>,
-        image_policy: ImageAccessPolicy,
-        google_fonts: Option<Vec<GoogleFontRequest>>,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    SvgToPdf {
-        svg: String,
-        image_policy: ImageAccessPolicy,
-        google_fonts: Option<Vec<GoogleFontRequest>>,
-        responder: oneshot::Sender<Result<Vec<u8>, AnyError>>,
-    },
-    ResolveGoogleFonts {
-        google_fonts: Vec<GoogleFontRequest>,
-        responder: oneshot::Sender<Result<Vec<LoadedFontBatch>, AnyError>>,
-    },
-    GetLocalTz {
-        responder: oneshot::Sender<Result<Option<String>, AnyError>>,
-    },
-    GetThemes {
-        responder: oneshot::Sender<Result<serde_json::Value, AnyError>>,
-    },
-    ComputeVegaembedBundle {
-        vl_version: VlVersion,
-        responder: oneshot::Sender<Result<String, AnyError>>,
-    },
-    BundleVegaSnippet {
-        snippet: String,
-        vl_version: VlVersion,
-        responder: oneshot::Sender<Result<String, AnyError>>,
-    },
-    GetMemoryUsage {
-        worker_index: usize,
-        responder: oneshot::Sender<WorkerMemoryUsage>,
-    },
-}
-
-impl VlConvertCommand {
-    /// Send an error to the command's responder, consuming the command.
-    fn send_error(self, err: AnyError) {
-        match self {
-            Self::VlToVg { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VgToSvg { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VgToSg { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VgToSgMsgpack { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VlToSvg { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VlToSg { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VlToSgMsgpack { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VgToPng { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VgToJpeg { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VgToPdf { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VlToPng { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VlToJpeg { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::VlToPdf { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::GetLocalTz { responder } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::SvgToPng { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::SvgToJpeg { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::SvgToPdf { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::ResolveGoogleFonts { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::GetThemes { responder } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::ComputeVegaembedBundle { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::BundleVegaSnippet { responder, .. } => {
-                responder.send(Err(err)).ok();
-            }
-            Self::GetMemoryUsage { .. } => {
-                // Responder doesn't carry a Result — just drop it.
-            }
-        }
-    }
 }
 
 /// Classify a set of CSS `font-family` strings and return Google Fonts download
@@ -3787,7 +3332,7 @@ impl VlConverter {
 
     fn get_or_spawn_sender(
         &self,
-    ) -> Result<(tokio::sync::mpsc::Sender<QueuedCommand>, OutstandingTicket), AnyError> {
+    ) -> Result<(tokio::sync::mpsc::Sender<QueuedWork>, OutstandingTicket), AnyError> {
         let mut guard = self
             .inner
             .pool
@@ -3814,40 +3359,49 @@ impl VlConverter {
         Ok(sender)
     }
 
-    async fn send_command_with_retry(
-        &self,
-        cmd: VlConvertCommand,
-        request_name: &str,
-    ) -> Result<(), AnyError> {
+    async fn send_work_with_retry(&self, work: WorkFn) -> Result<(), AnyError> {
         let (sender, ticket) = self.get_or_spawn_sender()?;
-        let queued = QueuedCommand::new(cmd, ticket);
+        let queued = QueuedWork::new(work, ticket);
         match sender.send(queued).await {
             Ok(()) => Ok(()),
             Err(tokio::sync::mpsc::error::SendError(queued)) => {
-                let cmd = queued.into_command();
+                let (work, _old_ticket) = queued.into_parts();
                 let (sender, ticket) = self.get_or_spawn_sender()?;
                 sender
-                    .send(QueuedCommand::new(cmd, ticket))
+                    .send(QueuedWork::new(work, ticket))
                     .await
-                    .map_err(|err| {
-                        anyhow!("Failed to send {request_name} request after retry: {err}")
-                    })
+                    .map_err(|err| anyhow!("Failed to send request after retry: {err}"))
             }
         }
     }
 
-    pub(crate) async fn request<R>(
+    pub(crate) async fn run_on_worker<R: Send + 'static>(
         &self,
-        make_cmd: impl FnOnce(oneshot::Sender<Result<R, AnyError>>) -> VlConvertCommand,
-        request_name: &str,
+        work: impl FnOnce(
+                &mut InnerVlConverter,
+            )
+                -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<R, AnyError>> + '_>>
+            + Send
+            + 'static,
     ) -> Result<R, AnyError> {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<R, AnyError>>();
-        self.send_command_with_retry(make_cmd(resp_tx), request_name)
-            .await?;
-        match resp_rx.await {
-            Ok(result) => result,
-            Err(err) => bail!("Failed to retrieve {request_name} result: {err}"),
-        }
+        let boxed_work: WorkFn = Box::new(move |inner| {
+            Box::pin(async move {
+                if let Err(e) = inner.refresh_font_config_if_needed() {
+                    let _ = resp_tx.send(Err(e));
+                    return;
+                }
+                let result = work(inner).await;
+                // Decorate heap-limit errors with V8 memory stats
+                let result = inner.annotate_heap_limit_error(result);
+                let _ = resp_tx.send(result);
+            })
+        });
+
+        self.send_work_with_retry(boxed_work).await?;
+        resp_rx
+            .await
+            .map_err(|e| anyhow!("Worker dropped: {e}"))?
     }
 
     /// Run a conversion on an ephemeral worker with a per-request plugin.
@@ -4027,14 +3581,9 @@ impl VlConverter {
         vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
         let vl_spec = vl_spec.into();
-        self.request(
-            move |responder| VlConvertCommand::VlToVg {
-                vl_spec,
-                vl_opts,
-                responder,
-            },
-            "Vega-Lite to Vega conversion",
-        )
+        self.run_on_worker(move |inner| {
+            Box::pin(inner.vegalite_to_vega(vl_spec, vl_opts))
+        })
         .await
     }
 
@@ -4044,20 +3593,7 @@ impl VlConverter {
         mut vg_opts: VgOpts,
     ) -> Result<String, AnyError> {
         let vg_spec = vg_spec.into();
-
-        // Per-request plugin: route to ephemeral worker for isolation
-        if let Some(plugin_source) = vg_opts.vega_plugin.take() {
-            let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
-            if !auto_requests.is_empty() {
-                vg_opts
-                    .google_fonts
-                    .get_or_insert_with(Vec::new)
-                    .extend(auto_requests);
-            }
-            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                Box::pin(inner.vega_to_svg(vg_spec, vg_opts))
-            });
-        }
+        let plugin = vg_opts.vega_plugin.take();
 
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
@@ -4066,15 +3602,20 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        self.request(
-            move |responder| VlConvertCommand::VgToSvg {
-                vg_spec,
-                vg_opts,
-                responder,
-            },
-            "Vega to SVG conversion",
-        )
-        .await
+
+        if let Some(plugin_source) = plugin {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await) })
+            })
+        } else {
+            self.run_on_worker(move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await) })
+            }).await
+        }
     }
 
     pub async fn vega_to_scenegraph(
@@ -4090,14 +3631,11 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        self.request(
-            move |responder| VlConvertCommand::VgToSg {
-                vg_spec,
-                vg_opts,
-                responder,
-            },
-            "Vega to Scenegraph conversion",
-        )
+        self.run_on_worker(move |inner| {
+            let gf = vg_opts.google_fonts.take();
+            let inner = &mut *inner;
+            Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_scenegraph(vg_spec, vg_opts).await) })
+        })
         .await
     }
 
@@ -4114,14 +3652,13 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        self.request(
-            move |responder| VlConvertCommand::VgToSgMsgpack {
-                vg_spec,
-                vg_opts,
-                responder,
-            },
-            "Vega to Scenegraph conversion",
-        )
+        self.run_on_worker(move |inner| {
+            let gf = vg_opts.google_fonts.take();
+            let inner = &mut *inner;
+            Box::pin(async move {
+                with_font_overlay!(inner, gf, inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await)
+            })
+        })
         .await
     }
 
@@ -4131,71 +3668,69 @@ impl VlConverter {
         mut vl_opts: VlOpts,
     ) -> Result<String, AnyError> {
         let vl_spec = vl_spec.into();
+        let plugin = vl_opts.vega_plugin.take();
 
-        // Per-request plugin: route to ephemeral worker for isolation
-        if let Some(plugin_source) = vl_opts.vega_plugin.take() {
-            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                Box::pin(inner.vegalite_to_svg(vl_spec, vl_opts))
-            });
-        }
-
-        if let Some((vega_spec, vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            self.request(
-                move |responder| VlConvertCommand::VgToSvg {
-                    vg_spec,
-                    vg_opts,
-                    responder,
-                },
-                "Vega to SVG conversion",
-            )
-            .await
+            if let Some(plugin_source) = plugin {
+                self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await) })
+                })
+            } else {
+                self.run_on_worker(move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await) })
+                }).await
+            }
+        } else if let Some(plugin_source) = plugin {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move { with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await) })
+            })
         } else {
-            self.request(
-                move |responder| VlConvertCommand::VlToSvg {
-                    vl_spec,
-                    vl_opts,
-                    responder,
-                },
-                "Vega-Lite to SVG conversion",
-            )
-            .await
+            self.run_on_worker(move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move { with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await) })
+            }).await
         }
     }
 
     pub async fn vegalite_to_scenegraph(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            self.request(
-                move |responder| VlConvertCommand::VgToSg {
-                    vg_spec,
-                    vg_opts,
-                    responder,
-                },
-                "Vega to Scenegraph conversion",
-            )
+            self.run_on_worker(move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_scenegraph(vg_spec, vg_opts).await)
+                })
+            })
             .await
         } else {
-            self.request(
-                move |responder| VlConvertCommand::VlToSg {
-                    vl_spec,
-                    vl_opts,
-                    responder,
-                },
-                "Vega-Lite to Scenegraph conversion",
-            )
+            self.run_on_worker(move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vegalite_to_scenegraph(vl_spec, vl_opts).await)
+                })
+            })
             .await
         }
     }
@@ -4203,33 +3738,31 @@ impl VlConverter {
     pub async fn vegalite_to_scenegraph_msgpack(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            self.request(
-                move |responder| VlConvertCommand::VgToSgMsgpack {
-                    vg_spec,
-                    vg_opts,
-                    responder,
-                },
-                "Vega to Scenegraph conversion",
-            )
+            self.run_on_worker(move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await)
+                })
+            })
             .await
         } else {
-            self.request(
-                move |responder| VlConvertCommand::VlToSgMsgpack {
-                    vl_spec,
-                    vl_opts,
-                    responder,
-                },
-                "Vega-Lite to Scenegraph conversion",
-            )
+            self.run_on_worker(move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await)
+                })
+            })
             .await
         }
     }
@@ -4245,18 +3778,7 @@ impl VlConverter {
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
-
-        // Per-request plugin: route to ephemeral worker for isolation
-        if let Some(plugin_source) = vg_opts.vega_plugin.take() {
-            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                Box::pin(async move {
-                    let spec_value = vg_spec.to_value()?;
-                    inner
-                        .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
-                        .await
-                })
-            });
-        }
+        let plugin = vg_opts.vega_plugin.take();
 
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
@@ -4266,17 +3788,29 @@ impl VlConverter {
                 .extend(auto_requests);
         }
 
-        self.request(
-            move |responder| VlConvertCommand::VgToPng {
-                vg_spec,
-                vg_opts,
-                scale: effective_scale,
-                ppi,
-                responder,
-            },
-            "Vega to PNG conversion",
-        )
-        .await
+        if let Some(plugin_source) = plugin {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, {
+                        let spec_value = vg_spec.to_value()?;
+                        inner.vega_to_png(&spec_value, vg_opts, effective_scale, ppi).await
+                    })
+                })
+            })
+        } else {
+            self.run_on_worker(move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, {
+                        let spec_value = vg_spec.to_value()?;
+                        inner.vega_to_png(&spec_value, vg_opts, effective_scale, ppi).await
+                    })
+                })
+            }).await
+        }
     }
 
     pub async fn vegalite_to_png(
@@ -4290,47 +3824,58 @@ impl VlConverter {
         let scale = scale.unwrap_or(1.0);
         let ppi = ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
+        let plugin = vl_opts.vega_plugin.take();
 
-        // Per-request plugin: route to ephemeral worker for isolation
-        if let Some(plugin_source) = vl_opts.vega_plugin.take() {
-            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                Box::pin(async move {
-                    let spec_value = vl_spec.to_value()?;
-                    inner
-                        .vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi)
-                        .await
-                })
-            });
-        }
-
-        if let Some((vega_spec, vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            self.request(
-                move |responder| VlConvertCommand::VgToPng {
-                    vg_spec,
-                    vg_opts,
-                    scale: effective_scale,
-                    ppi,
-                    responder,
-                },
-                "Vega to PNG conversion",
-            )
-            .await
+            if let Some(plugin_source) = plugin {
+                self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move {
+                        with_font_overlay!(inner, gf, {
+                            let spec_value = vg_spec.to_value()?;
+                            inner.vega_to_png(&spec_value, vg_opts, effective_scale, ppi).await
+                        })
+                    })
+                })
+            } else {
+                self.run_on_worker(move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move {
+                        with_font_overlay!(inner, gf, {
+                            let spec_value = vg_spec.to_value()?;
+                            inner.vega_to_png(&spec_value, vg_opts, effective_scale, ppi).await
+                        })
+                    })
+                }).await
+            }
+        } else if let Some(plugin_source) = plugin {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, {
+                        let spec_value = vl_spec.to_value()?;
+                        inner.vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi).await
+                    })
+                })
+            })
         } else {
-            self.request(
-                move |responder| VlConvertCommand::VlToPng {
-                    vl_spec,
-                    vl_opts,
-                    scale: effective_scale,
-                    ppi,
-                    responder,
-                },
-                "Vega-Lite to PNG conversion",
-            )
-            .await
+            self.run_on_worker(move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, {
+                        let spec_value = vl_spec.to_value()?;
+                        inner.vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi).await
+                    })
+                })
+            }).await
         }
     }
 
@@ -4343,14 +3888,7 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let vg_spec = vg_spec.into();
-
-        // Per-request plugin: route to ephemeral worker for isolation
-        if let Some(plugin_source) = vg_opts.vega_plugin.take() {
-            let image_policy = self.image_access_policy();
-            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                Box::pin(inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy))
-            });
-        }
+        let plugin = vg_opts.vega_plugin.take();
 
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
@@ -4360,18 +3898,24 @@ impl VlConverter {
                 .extend(auto_requests);
         }
         let image_policy = self.image_access_policy();
-        self.request(
-            move |responder| VlConvertCommand::VgToJpeg {
-                vg_spec,
-                vg_opts,
-                scale,
-                quality,
-                image_policy,
-                responder,
-            },
-            "Vega to JPEG conversion",
-        )
-        .await
+
+        if let Some(plugin_source) = plugin {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy).await)
+                })
+            })
+        } else {
+            self.run_on_worker(move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy).await)
+                })
+            }).await
+        }
     }
 
     pub async fn vegalite_to_jpeg(
@@ -4383,47 +3927,47 @@ impl VlConverter {
     ) -> Result<Vec<u8>, AnyError> {
         let scale = scale.unwrap_or(1.0);
         let vl_spec = vl_spec.into();
-
-        // Per-request plugin: route to ephemeral worker for isolation
-        if let Some(plugin_source) = vl_opts.vega_plugin.take() {
-            let image_policy = self.image_access_policy();
-            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                Box::pin(inner.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy))
-            });
-        }
-
+        let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        if let Some((vega_spec, vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            self.request(
-                move |responder| VlConvertCommand::VgToJpeg {
-                    vg_spec,
-                    vg_opts,
-                    scale,
-                    quality,
-                    image_policy,
-                    responder,
-                },
-                "Vega to JPEG conversion",
-            )
-            .await
+            if let Some(plugin_source) = plugin {
+                self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move {
+                        with_font_overlay!(inner, gf, inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy).await)
+                    })
+                })
+            } else {
+                self.run_on_worker(move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move {
+                        with_font_overlay!(inner, gf, inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy).await)
+                    })
+                }).await
+            }
+        } else if let Some(plugin_source) = plugin {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy).await)
+                })
+            })
         } else {
-            self.request(
-                move |responder| VlConvertCommand::VlToJpeg {
-                    vl_spec,
-                    vl_opts,
-                    scale,
-                    quality,
-                    image_policy,
-                    responder,
-                },
-                "Vega-Lite to JPEG conversion",
-            )
-            .await
+            self.run_on_worker(move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy).await)
+                })
+            }).await
         }
     }
 
@@ -4433,14 +3977,7 @@ impl VlConverter {
         mut vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
         let vg_spec = vg_spec.into();
-
-        // Per-request plugin: route to ephemeral worker for isolation
-        if let Some(plugin_source) = vg_opts.vega_plugin.take() {
-            let image_policy = self.image_access_policy();
-            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                Box::pin(inner.vega_to_pdf(vg_spec, vg_opts, image_policy))
-            });
-        }
+        let plugin = vg_opts.vega_plugin.take();
 
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
@@ -4450,16 +3987,24 @@ impl VlConverter {
                 .extend(auto_requests);
         }
         let image_policy = self.image_access_policy();
-        self.request(
-            move |responder| VlConvertCommand::VgToPdf {
-                vg_spec,
-                vg_opts,
-                image_policy,
-                responder,
-            },
-            "Vega to PDF conversion",
-        )
-        .await
+
+        if let Some(plugin_source) = plugin {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await)
+                })
+            })
+        } else {
+            self.run_on_worker(move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await)
+                })
+            }).await
+        }
     }
 
     pub async fn vegalite_to_pdf(
@@ -4468,43 +4013,47 @@ impl VlConverter {
         mut vl_opts: VlOpts,
     ) -> Result<Vec<u8>, AnyError> {
         let vl_spec = vl_spec.into();
-
-        // Per-request plugin: route to ephemeral worker for isolation
-        if let Some(plugin_source) = vl_opts.vega_plugin.take() {
-            let image_policy = self.image_access_policy();
-            return self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                Box::pin(inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy))
-            });
-        }
-
+        let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        if let Some((vega_spec, vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            self.request(
-                move |responder| VlConvertCommand::VgToPdf {
-                    vg_spec,
-                    vg_opts,
-                    image_policy,
-                    responder,
-                },
-                "Vega to PDF conversion",
-            )
-            .await
+            if let Some(plugin_source) = plugin {
+                self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move {
+                        with_font_overlay!(inner, gf, inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await)
+                    })
+                })
+            } else {
+                self.run_on_worker(move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move {
+                        with_font_overlay!(inner, gf, inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await)
+                    })
+                }).await
+            }
+        } else if let Some(plugin_source) = plugin {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await)
+                })
+            })
         } else {
-            self.request(
-                move |responder| VlConvertCommand::VlToPdf {
-                    vl_spec,
-                    vl_opts,
-                    image_policy,
-                    responder,
-                },
-                "Vega-Lite to PDF conversion",
-            )
-            .await
+            self.run_on_worker(move |inner| {
+                let gf = vl_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await)
+                })
+            }).await
         }
     }
 
@@ -4517,17 +4066,12 @@ impl VlConverter {
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
-        self.request(
-            move |responder| VlConvertCommand::SvgToPng {
-                svg,
-                scale,
-                ppi,
-                image_policy,
-                google_fonts,
-                responder,
-            },
-            "SVG to PNG conversion",
-        )
+        self.run_on_worker(move |inner| {
+            let inner = &mut *inner;
+            Box::pin(async move {
+                with_font_overlay!(inner, google_fonts, inner.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy))
+            })
+        })
         .await
     }
 
@@ -4540,17 +4084,12 @@ impl VlConverter {
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
-        self.request(
-            move |responder| VlConvertCommand::SvgToJpeg {
-                svg,
-                scale,
-                quality,
-                image_policy,
-                google_fonts,
-                responder,
-            },
-            "SVG to JPEG conversion",
-        )
+        self.run_on_worker(move |inner| {
+            let inner = &mut *inner;
+            Box::pin(async move {
+                with_font_overlay!(inner, google_fonts, inner.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy))
+            })
+        })
         .await
     }
 
@@ -4558,15 +4097,12 @@ impl VlConverter {
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
-        self.request(
-            move |responder| VlConvertCommand::SvgToPdf {
-                svg,
-                image_policy,
-                google_fonts,
-                responder,
-            },
-            "SVG to PDF conversion",
-        )
+        self.run_on_worker(move |inner| {
+            let inner = &mut *inner;
+            Box::pin(async move {
+                with_font_overlay!(inner, google_fonts, inner.svg_to_pdf_with_worker_options(&svg, &image_policy))
+            })
+        })
         .await
     }
 
@@ -4583,13 +4119,11 @@ impl VlConverter {
         }
 
         let computed_bundle = self
-            .request(
-                move |responder| VlConvertCommand::ComputeVegaembedBundle {
-                    vl_version,
-                    responder,
-                },
-                "Vega-Embed bundle generation",
-            )
+            .run_on_worker(move |_inner: &mut InnerVlConverter| {
+                Box::pin(async move {
+                    crate::html::bundle_vega_snippet(VEGAEMBED_GLOBAL_SNIPPET, vl_version).await
+                })
+            })
             .await?;
 
         let mut guard = self
@@ -4613,14 +4147,11 @@ impl VlConverter {
         vl_version: VlVersion,
     ) -> Result<String, AnyError> {
         let snippet = snippet.into();
-        self.request(
-            move |responder| VlConvertCommand::BundleVegaSnippet {
-                snippet,
-                vl_version,
-                responder,
-            },
-            "JavaScript bundle generation",
-        )
+        self.run_on_worker(move |_inner: &mut InnerVlConverter| {
+            Box::pin(async move {
+                crate::html::bundle_vega_snippet(&snippet, vl_version).await
+            })
+        })
         .await
     }
 
@@ -4636,7 +4167,7 @@ impl VlConverter {
         // then drop the lock before awaiting sends.
         let worker_senders: Vec<(
             usize,
-            tokio::sync::mpsc::Sender<QueuedCommand>,
+            tokio::sync::mpsc::Sender<QueuedWork>,
             Arc<AtomicUsize>,
         )> = {
             let guard = self
@@ -4659,17 +4190,24 @@ impl VlConverter {
 
         let mut receivers = Vec::with_capacity(worker_senders.len());
         for (idx, sender, outstanding) in worker_senders {
-            let (resp_tx, resp_rx) = oneshot::channel();
+            let (resp_tx, resp_rx) = oneshot::channel::<WorkerMemoryUsage>();
             let ticket = OutstandingTicket::new(outstanding);
-            let cmd = QueuedCommand::new(
-                VlConvertCommand::GetMemoryUsage {
-                    worker_index: idx,
-                    responder: resp_tx,
-                },
-                ticket,
-            );
+            let work: WorkFn = Box::new(move |inner: &mut InnerVlConverter| {
+                Box::pin(async move {
+                    let stats = inner.worker.js_runtime.v8_isolate().get_heap_statistics();
+                    resp_tx
+                        .send(WorkerMemoryUsage {
+                            worker_index: idx,
+                            used_heap_size: stats.used_heap_size(),
+                            total_heap_size: stats.total_heap_size(),
+                            heap_size_limit: stats.heap_size_limit(),
+                            external_memory: stats.external_memory(),
+                        })
+                        .ok();
+                })
+            });
             sender
-                .send(cmd)
+                .send(QueuedWork::new(work, ticket))
                 .await
                 .map_err(|e| anyhow!("Failed to send GetMemoryUsage to worker {idx}: {e}"))?;
             receivers.push(resp_rx);
@@ -4686,19 +4224,13 @@ impl VlConverter {
     }
 
     pub async fn get_local_tz(&self) -> Result<Option<String>, AnyError> {
-        self.request(
-            |responder| VlConvertCommand::GetLocalTz { responder },
-            "get_local_tz",
-        )
-        .await
+        self.run_on_worker(|inner| Box::pin(inner.get_local_tz()))
+            .await
     }
 
     pub async fn get_themes(&self) -> Result<serde_json::Value, AnyError> {
-        self.request(
-            |responder| VlConvertCommand::GetThemes { responder },
-            "get_themes",
-        )
-        .await
+        self.run_on_worker(|inner| Box::pin(inner.get_themes()))
+            .await
     }
 }
 
@@ -4952,10 +4484,8 @@ mod tests {
         "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyIiBoZWlnaHQ9IjMiPjxyZWN0IHdpZHRoPSIyIiBoZWlnaHQ9IjMiIGZpbGw9InJlZCIvPjwvc3ZnPg==";
     const SVG_2X3_DATA_URL: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyIiBoZWlnaHQ9IjMiPjxyZWN0IHdpZHRoPSIyIiBoZWlnaHQ9IjMiIGZpbGw9InJlZCIvPjwvc3ZnPg==";
 
-    fn make_test_command() -> VlConvertCommand {
-        let (responder, _rx) =
-            futures::channel::oneshot::channel::<Result<Option<String>, AnyError>>();
-        VlConvertCommand::GetLocalTz { responder }
+    fn make_test_work() -> WorkFn {
+        Box::new(|_inner| Box::pin(async {}))
     }
 
     fn assert_send_future<F: Future + Send>(_: F) {}
@@ -6475,7 +6005,7 @@ try {
         let mut senders = Vec::new();
         let mut _receivers = Vec::new();
         for _ in 0..3 {
-            let (tx, rx) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+            let (tx, rx) = tokio::sync::mpsc::channel::<QueuedWork>(1);
             senders.push(tx);
             _receivers.push(rx);
         }
@@ -6517,10 +6047,10 @@ try {
 
     #[test]
     fn test_worker_pool_next_sender_skips_closed_senders() {
-        let (closed_sender, closed_receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+        let (closed_sender, closed_receiver) = tokio::sync::mpsc::channel::<QueuedWork>(1);
         drop(closed_receiver);
 
-        let (open_sender, mut open_receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+        let (open_sender, mut open_receiver) = tokio::sync::mpsc::channel::<QueuedWork>(1);
 
         let pool = WorkerPool {
             senders: vec![closed_sender, open_sender],
@@ -6536,7 +6066,7 @@ try {
                 .next_sender()
                 .expect("pool should return the open sender");
             sender
-                .try_send(QueuedCommand::new(make_test_command(), ticket))
+                .try_send(QueuedWork::new(make_test_work(), ticket))
                 .expect("dispatch should use open sender, not closed sender");
             let queued = open_receiver
                 .try_recv()
@@ -6547,7 +6077,7 @@ try {
 
     #[tokio::test]
     async fn test_worker_pool_cancellation_releases_outstanding_ticket() {
-        let (sender, mut receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+        let (sender, mut receiver) = tokio::sync::mpsc::channel::<QueuedWork>(1);
         let pool = WorkerPool {
             senders: vec![sender],
             outstanding: vec![std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0))],
@@ -6557,7 +6087,7 @@ try {
 
         let (sender, ticket) = pool.next_sender().unwrap();
         sender
-            .send(QueuedCommand::new(make_test_command(), ticket))
+            .send(QueuedWork::new(make_test_work(), ticket))
             .await
             .unwrap();
         assert_eq!(
@@ -6568,7 +6098,7 @@ try {
         let (sender, ticket) = pool.next_sender().unwrap();
         let blocked_send = tokio::spawn(async move {
             sender
-                .send(QueuedCommand::new(make_test_command(), ticket))
+                .send(QueuedWork::new(make_test_work(), ticket))
                 .await
         });
         tokio::task::yield_now().await;
@@ -6610,7 +6140,7 @@ try {
 
         let mut closed_senders = Vec::with_capacity(num_workers);
         for _ in 0..num_workers {
-            let (sender, receiver) = tokio::sync::mpsc::channel::<QueuedCommand>(1);
+            let (sender, receiver) = tokio::sync::mpsc::channel::<QueuedWork>(1);
             drop(receiver);
             closed_senders.push(sender);
         }

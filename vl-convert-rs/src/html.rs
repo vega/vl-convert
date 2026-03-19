@@ -1,8 +1,9 @@
 use crate::converter::{
     classify_and_request_fonts, classify_scenegraph_fonts, GoogleFontRequest, HtmlFontAnalysis,
-    MissingFontsPolicy, Renderer, ResolvedPlugin, ValueOrString, VgOpts, VlConvertCommand,
+    InnerVlConverter, MissingFontsPolicy, Renderer, ResolvedPlugin, ValueOrString, VgOpts,
     VlConverter, VlOpts,
 };
+use crate::with_font_overlay;
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{
     extract_fonts_from_vega, extract_text_by_font, FontForHtml, FontInfo, FontKey, FontSource,
@@ -349,14 +350,13 @@ impl VlConverter {
 
         let vg_spec: ValueOrString = vega_spec.into();
         let msgpack_bytes: Vec<u8> = self
-            .request(
-                move |responder| VlConvertCommand::VgToSgMsgpack {
-                    vg_spec,
-                    vg_opts,
-                    responder,
-                },
-                "Vega to Scenegraph msgpack (HTML analysis)",
-            )
+            .run_on_worker(move |inner: &mut InnerVlConverter| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await)
+                })
+            })
             .await?;
         let sg: serde_json::Value = rmp_serde::from_slice(&msgpack_bytes)?;
         Ok(sg)
@@ -516,13 +516,9 @@ impl VlConverter {
                 let batches = if google_font_requests.is_empty() {
                     Vec::new()
                 } else {
-                    self.request(
-                        move |responder| VlConvertCommand::ResolveGoogleFonts {
-                            google_fonts: google_font_requests,
-                            responder,
-                        },
-                        "Resolve Google Fonts for font-face CSS",
-                    )
+                    self.run_on_worker(move |inner: &mut InnerVlConverter| {
+                        Box::pin(inner.resolve_google_fonts(Some(google_font_requests)))
+                    })
                     .await?
                 };
 

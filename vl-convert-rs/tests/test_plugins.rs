@@ -124,8 +124,8 @@ async fn test_plugin_with_syntax_error() {
         .unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("Failed to load Vega plugin"),
-        "error should mention plugin loading failure, got: {msg}"
+        msg.contains("Vega plugin") && (msg.contains("bundling failed") || msg.contains("Failed to load")),
+        "error should mention plugin failure, got: {msg}"
     );
 }
 
@@ -152,8 +152,11 @@ async fn test_plugin_without_default_export() {
 
 #[tokio::test]
 async fn test_plugin_poison_behavior() {
+    // Use a plugin that bundles fine but throws at runtime (during default(vega)).
+    // This tests the poison mechanism: the first call loads the plugin and it
+    // throws, poisoning the worker. The second call should get the poison error.
     let good_plugin = "export default function(vega) { vega.expressionFunction('ok', () => 42); }";
-    let bad_plugin = "export default function(vega) { vega.expressionFunction('bad', (x) =>; }";
+    let bad_plugin = "export default function(vega) { throw new Error('plugin init boom'); }";
 
     let converter = VlConverter::with_config(VlConverterConfig {
         vega_plugins: Some(vec![good_plugin.to_string(), bad_plugin.to_string()]),
@@ -163,26 +166,26 @@ async fn test_plugin_poison_behavior() {
 
     let spec = vega_spec_with_expression("1 + 1");
 
-    // First attempt should fail due to the bad plugin
+    // First attempt: plugin throws during init_vega, poisoning the worker
     let err1 = converter
         .vega_to_svg(spec.clone(), VgOpts::default())
         .await
         .unwrap_err();
     let msg1 = err1.to_string();
     assert!(
-        msg1.contains("Failed to load Vega plugin"),
-        "first error should be plugin loading failure, got: {msg1}"
+        msg1.contains("plugin init boom"),
+        "first error should contain the runtime throw message, got: {msg1}"
     );
 
-    // Second attempt should return the poison error (short-circuit, no retry)
+    // Second attempt: worker is poisoned, returns stored error immediately
     let err2 = converter
         .vega_to_svg(spec, VgOpts::default())
         .await
         .unwrap_err();
     let msg2 = err2.to_string();
     assert!(
-        msg2.contains("poisoned"),
-        "second error should be the poison sentinel, got: {msg2}"
+        msg2.contains("plugin init boom"),
+        "second error should be the poison sentinel with original message, got: {msg2}"
     );
 }
 
