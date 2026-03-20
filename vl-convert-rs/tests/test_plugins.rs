@@ -26,7 +26,6 @@ fn vega_spec_with_expression(expr: &str) -> serde_json::Value {
     })
 }
 
-// --- PNG baseline test ---
 
 #[test]
 fn test_plugin_custom_scheme_png() {
@@ -48,7 +47,6 @@ fn test_plugin_custom_scheme_png() {
     check_vg_png("plugin_custom_scheme", png_data.as_slice());
 }
 
-// --- Expression function tests ---
 
 #[tokio::test]
 async fn test_plugin_registers_expression_function() {
@@ -106,7 +104,6 @@ async fn test_multiple_plugins_register_different_functions() {
     );
 }
 
-// --- Error handling tests ---
 
 #[tokio::test]
 async fn test_plugin_with_syntax_error() {
@@ -190,7 +187,6 @@ async fn test_plugin_poison_behavior() {
     );
 }
 
-// --- HTML export tests ---
 
 #[tokio::test]
 async fn test_plugin_html_export_contains_module_script() {
@@ -236,7 +232,6 @@ async fn test_plugin_html_export_contains_module_script() {
     );
 }
 
-// --- File-path plugin tests ---
 
 #[tokio::test]
 async fn test_file_path_plugin() {
@@ -269,9 +264,7 @@ async fn test_file_path_plugin() {
     );
 }
 
-// --- Network-dependent tests ---
-//
-// These tests require internet access (esm.sh). They run in CI.
+// These tests require internet access (esm.sh).
 
 #[tokio::test]
 async fn test_url_plugin_end_to_end() {
@@ -339,7 +332,6 @@ export default function(vega) {
     );
 }
 
-// --- Per-request plugin tests ---
 
 #[tokio::test]
 async fn test_per_request_plugin_works() {
