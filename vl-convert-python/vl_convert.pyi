@@ -505,11 +505,9 @@ def vega_to_html(
     renderer
         Vega renderer. One of 'svg' (default), 'canvas',
         or 'hybrid' (where text is svg and other marks are canvas)
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     HTML document.
@@ -539,11 +537,9 @@ def vega_to_jpeg(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     JPEG image data.
@@ -570,11 +566,9 @@ def vega_to_pdf(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     PDF file bytes.
@@ -604,11 +598,9 @@ def vega_to_png(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     PNG image data.
@@ -636,11 +628,9 @@ def vega_to_scenegraph(
     format
         Output format: "dict" returns a Python dictionary (default),
         "msgpack" returns raw MessagePack bytes
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
@@ -664,11 +654,9 @@ def vega_to_svg(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     SVG image string.
@@ -817,11 +805,9 @@ def vegalite_to_html(
     renderer
         Vega renderer. One of 'svg' (default), 'canvas',
         or 'hybrid' (where text is svg and other marks are canvas)
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     HTML document.
@@ -864,11 +850,9 @@ def vegalite_to_jpeg(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     JPEG image data.
@@ -905,11 +889,9 @@ def vegalite_to_pdf(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     PDF image data.
@@ -952,11 +934,9 @@ def vegalite_to_png(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     PNG image data.
@@ -997,11 +977,9 @@ def vegalite_to_scenegraph(
     format
         Output format: "dict" returns a Python dictionary (default),
         "msgpack" returns raw MessagePack bytes
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
@@ -1038,11 +1016,9 @@ def vegalite_to_svg(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
-
     Returns
     -------
     SVG image string.

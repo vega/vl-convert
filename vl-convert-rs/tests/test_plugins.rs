@@ -26,7 +26,6 @@ fn vega_spec_with_expression(expr: &str) -> serde_json::Value {
     })
 }
 
-
 #[test]
 fn test_plugin_custom_scheme_png() {
     initialize();
@@ -46,7 +45,6 @@ fn test_plugin_custom_scheme_png() {
 
     check_vg_png("plugin_custom_scheme", png_data.as_slice());
 }
-
 
 #[tokio::test]
 async fn test_plugin_registers_expression_function() {
@@ -103,7 +101,6 @@ async fn test_multiple_plugins_register_different_functions() {
         "SVG should contain the result of addTen(7) = 17"
     );
 }
-
 
 #[tokio::test]
 async fn test_plugin_with_syntax_error() {
@@ -187,7 +184,6 @@ async fn test_plugin_poison_behavior() {
     );
 }
 
-
 #[tokio::test]
 async fn test_plugin_html_export_contains_module_script() {
     let plugin_source =
@@ -231,7 +227,6 @@ async fn test_plugin_html_export_contains_module_script() {
         "HTML should contain the __vlcLoadPlugin helper for inline plugin loading"
     );
 }
-
 
 #[tokio::test]
 async fn test_file_path_plugin() {
@@ -331,7 +326,6 @@ export default function(vega) {
         &svg[..svg.len().min(500)]
     );
 }
-
 
 #[tokio::test]
 async fn test_per_request_plugin_works() {
