@@ -3,7 +3,6 @@ use crate::converter::{
     InnerVlConverter, MissingFontsPolicy, Renderer, ResolvedPlugin, ValueOrString, VgOpts,
     VlConverter, VlOpts,
 };
-use crate::with_font_overlay;
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{
     extract_fonts_from_vega, extract_text_by_font, FontForHtml, FontInfo, FontKey, FontSource,
@@ -13,6 +12,7 @@ use crate::font_embed::{generate_font_face_css, inject_locale_chars, variants_by
 use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::text::{GOOGLE_FONTS_CLIENT, USVG_OPTIONS};
+use crate::with_font_overlay;
 use crate::VlVersion;
 use deno_core::anyhow::anyhow;
 use deno_core::error::AnyError;
@@ -354,7 +354,11 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                    )
                 })
             })
             .await?;

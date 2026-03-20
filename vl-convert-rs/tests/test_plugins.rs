@@ -124,7 +124,8 @@ async fn test_plugin_with_syntax_error() {
         .unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("Vega plugin") && (msg.contains("bundling failed") || msg.contains("Failed to load")),
+        msg.contains("Vega plugin")
+            && (msg.contains("bundling failed") || msg.contains("Failed to load")),
         "error should mention plugin failure, got: {msg}"
     );
 }

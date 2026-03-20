@@ -254,6 +254,27 @@ async fn bundle_source_plugin(
 
 /// Resolve and bundle all plugins. Runs async on a dedicated thread.
 /// Returns the resolved plugins (or None if no plugins configured).
+/// Bundle a single plugin entry (URL or source) into a ResolvedPlugin.
+async fn resolve_plugin(
+    entry: &str,
+    allowed_domains: &[String],
+) -> Result<ResolvedPlugin, AnyError> {
+    let is_url = entry.starts_with("http://") || entry.starts_with("https://");
+    if is_url {
+        let bundled = bundle_url_plugin(entry, allowed_domains).await?;
+        Ok(ResolvedPlugin {
+            original_url: Some(entry.to_string()),
+            bundled_source: bundled,
+        })
+    } else {
+        let bundled = bundle_source_plugin(entry, allowed_domains).await?;
+        Ok(ResolvedPlugin {
+            original_url: None,
+            bundled_source: bundled,
+        })
+    }
+}
+
 async fn resolve_and_bundle_plugins(
     config: &VlConverterConfig,
 ) -> Result<Option<Vec<ResolvedPlugin>>, AnyError> {
@@ -262,28 +283,10 @@ async fn resolve_and_bundle_plugins(
     };
     let mut resolved = Vec::new();
     for (i, entry) in plugins.iter().enumerate() {
-        let is_url = entry.starts_with("http://") || entry.starts_with("https://");
-
-        if is_url {
-            // URL plugin: always bundle. The bundler fetches the entry and
-            // all sub-imports (including relative imports) via HTTP.
-            // No separate fetch_plugin_url() call needed.
-            let bundled = bundle_url_plugin(entry, &config.plugin_import_domains)
-                .await
-                .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
-            resolved.push(ResolvedPlugin {
-                original_url: Some(entry.clone()),
-                bundled_source: bundled,
-            });
-        } else {
-            let bundled = bundle_source_plugin(entry, &config.plugin_import_domains)
-                .await
-                .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
-            resolved.push(ResolvedPlugin {
-                original_url: None,
-                bundled_source: bundled,
-            });
-        }
+        let plugin = resolve_plugin(entry, &config.plugin_import_domains)
+            .await
+            .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
+        resolved.push(plugin);
     }
     Ok(Some(resolved))
 }
@@ -1348,7 +1351,6 @@ macro_rules! with_font_overlay {
 }
 
 impl InnerVlConverter {
-
     async fn init_vega(&mut self) -> Result<(), AnyError> {
         if let Some(ref err) = self.plugin_init_error {
             bail!("Worker poisoned by plugin failure: {err}. Reconfigure to reset.");
@@ -2858,7 +2860,6 @@ vegaLiteToCanvas_{ver_name:?}(
         }
         Ok(batches)
     }
-
 }
 
 /// Deduplication key for a Google Font request.
@@ -3399,9 +3400,7 @@ impl VlConverter {
         });
 
         self.send_work_with_retry(boxed_work).await?;
-        resp_rx
-            .await
-            .map_err(|e| anyhow!("Worker dropped: {e}"))?
+        resp_rx.await.map_err(|e| anyhow!("Worker dropped: {e}"))?
     }
 
     /// Run a conversion on an ephemeral worker with a per-request plugin.
@@ -3446,23 +3445,12 @@ impl VlConverter {
                 .map_err(|e| anyhow!("Failed to build ephemeral worker runtime: {e}"))?;
             let local = tokio::task::LocalSet::new();
             local.block_on(&rt, async move {
-                let is_url =
-                    plugin_source.starts_with("http://") || plugin_source.starts_with("https://");
-                let bundled_source = if is_url {
-                    bundle_url_plugin(
-                        &plugin_source,
-                        &ctx.config.per_request_plugin_import_domains,
-                    )
-                    .await
-                    .map_err(|e| anyhow!("Per-request plugin fetch/bundle failed: {e}"))?
-                } else {
-                    bundle_source_plugin(
-                        &plugin_source,
-                        &ctx.config.per_request_plugin_import_domains,
-                    )
-                    .await
-                    .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?
-                };
+                let resolved = resolve_plugin(
+                    &plugin_source,
+                    &ctx.config.per_request_plugin_import_domains,
+                )
+                .await
+                .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?;
 
                 let mut inner = InnerVlConverter::try_new(ctx, font_baseline).await?;
                 inner.init_vega().await?;
@@ -3470,7 +3458,7 @@ impl VlConverter {
                 // Load per-request plugin (no poison: ephemeral worker)
                 let plugin_index = inner.ctx.resolved_plugins.as_ref().map_or(0, |p| p.len());
                 inner
-                    .load_plugin(plugin_index, &bundled_source, false)
+                    .load_plugin(plugin_index, &resolved.bundled_source, false)
                     .await?;
 
                 // Run the actual conversion
@@ -3581,10 +3569,8 @@ impl VlConverter {
         vl_opts: VlOpts,
     ) -> Result<serde_json::Value, AnyError> {
         let vl_spec = vl_spec.into();
-        self.run_on_worker(move |inner| {
-            Box::pin(inner.vegalite_to_vega(vl_spec, vl_opts))
-        })
-        .await
+        self.run_on_worker(move |inner| Box::pin(inner.vegalite_to_vega(vl_spec, vl_opts)))
+            .await
     }
 
     pub async fn vega_to_svg(
@@ -3607,14 +3593,19 @@ impl VlConverter {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
-                Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await) })
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                })
             })
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
-                Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await) })
-            }).await
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                })
+            })
+            .await
         }
     }
 
@@ -3634,7 +3625,9 @@ impl VlConverter {
         self.run_on_worker(move |inner| {
             let gf = vg_opts.google_fonts.take();
             let inner = &mut *inner;
-            Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_scenegraph(vg_spec, vg_opts).await) })
+            Box::pin(async move {
+                with_font_overlay!(inner, gf, inner.vega_to_scenegraph(vg_spec, vg_opts).await)
+            })
         })
         .await
     }
@@ -3656,7 +3649,11 @@ impl VlConverter {
             let gf = vg_opts.google_fonts.take();
             let inner = &mut *inner;
             Box::pin(async move {
-                with_font_overlay!(inner, gf, inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await)
+                with_font_overlay!(
+                    inner,
+                    gf,
+                    inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                )
             })
         })
         .await
@@ -3679,27 +3676,37 @@ impl VlConverter {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
-                    Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await) })
+                    Box::pin(async move {
+                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                    })
                 })
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
-                    Box::pin(async move { with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await) })
-                }).await
+                    Box::pin(async move {
+                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                    })
+                })
+                .await
             }
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
-                Box::pin(async move { with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await) })
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
+                })
             })
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
-                Box::pin(async move { with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await) })
-            }).await
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
+                })
+            })
+            .await
         }
     }
 
@@ -3728,7 +3735,11 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vegalite_to_scenegraph(vl_spec, vl_opts).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vegalite_to_scenegraph(vl_spec, vl_opts).await
+                    )
                 })
             })
             .await
@@ -3751,7 +3762,11 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                    )
                 })
             })
             .await
@@ -3760,7 +3775,11 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await
+                    )
                 })
             })
             .await
@@ -3795,7 +3814,9 @@ impl VlConverter {
                 Box::pin(async move {
                     with_font_overlay!(inner, gf, {
                         let spec_value = vg_spec.to_value()?;
-                        inner.vega_to_png(&spec_value, vg_opts, effective_scale, ppi).await
+                        inner
+                            .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
+                            .await
                     })
                 })
             })
@@ -3806,10 +3827,13 @@ impl VlConverter {
                 Box::pin(async move {
                     with_font_overlay!(inner, gf, {
                         let spec_value = vg_spec.to_value()?;
-                        inner.vega_to_png(&spec_value, vg_opts, effective_scale, ppi).await
+                        inner
+                            .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
+                            .await
                     })
                 })
-            }).await
+            })
+            .await
         }
     }
 
@@ -3838,7 +3862,9 @@ impl VlConverter {
                     Box::pin(async move {
                         with_font_overlay!(inner, gf, {
                             let spec_value = vg_spec.to_value()?;
-                            inner.vega_to_png(&spec_value, vg_opts, effective_scale, ppi).await
+                            inner
+                                .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
+                                .await
                         })
                     })
                 })
@@ -3849,10 +3875,13 @@ impl VlConverter {
                     Box::pin(async move {
                         with_font_overlay!(inner, gf, {
                             let spec_value = vg_spec.to_value()?;
-                            inner.vega_to_png(&spec_value, vg_opts, effective_scale, ppi).await
+                            inner
+                                .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
+                                .await
                         })
                     })
-                }).await
+                })
+                .await
             }
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
@@ -3861,7 +3890,9 @@ impl VlConverter {
                 Box::pin(async move {
                     with_font_overlay!(inner, gf, {
                         let spec_value = vl_spec.to_value()?;
-                        inner.vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi).await
+                        inner
+                            .vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi)
+                            .await
                     })
                 })
             })
@@ -3872,10 +3903,13 @@ impl VlConverter {
                 Box::pin(async move {
                     with_font_overlay!(inner, gf, {
                         let spec_value = vl_spec.to_value()?;
-                        inner.vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi).await
+                        inner
+                            .vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi)
+                            .await
                     })
                 })
-            }).await
+            })
+            .await
         }
     }
 
@@ -3904,7 +3938,13 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner
+                            .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
+                            .await
+                    )
                 })
             })
         } else {
@@ -3912,9 +3952,16 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner
+                            .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
+                            .await
+                    )
                 })
-            }).await
+            })
+            .await
         }
     }
 
@@ -3940,7 +3987,13 @@ impl VlConverter {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(inner, gf, inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy).await)
+                        with_font_overlay!(
+                            inner,
+                            gf,
+                            inner
+                                .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
+                                .await
+                        )
                     })
                 })
             } else {
@@ -3948,16 +4001,29 @@ impl VlConverter {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(inner, gf, inner.vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy).await)
+                        with_font_overlay!(
+                            inner,
+                            gf,
+                            inner
+                                .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
+                                .await
+                        )
                     })
-                }).await
+                })
+                .await
             }
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner
+                            .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
+                            .await
+                    )
                 })
             })
         } else {
@@ -3965,9 +4031,16 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner
+                            .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
+                            .await
+                    )
                 })
-            }).await
+            })
+            .await
         }
     }
 
@@ -3993,7 +4066,11 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
+                    )
                 })
             })
         } else {
@@ -4001,9 +4078,14 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
+                    )
                 })
-            }).await
+            })
+            .await
         }
     }
 
@@ -4026,7 +4108,11 @@ impl VlConverter {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(inner, gf, inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await)
+                        with_font_overlay!(
+                            inner,
+                            gf,
+                            inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
+                        )
                     })
                 })
             } else {
@@ -4034,16 +4120,25 @@ impl VlConverter {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(inner, gf, inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await)
+                        with_font_overlay!(
+                            inner,
+                            gf,
+                            inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
+                        )
                     })
-                }).await
+                })
+                .await
             }
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
+                    )
                 })
             })
         } else {
@@ -4051,9 +4146,14 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await)
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
+                    )
                 })
-            }).await
+            })
+            .await
         }
     }
 
@@ -4069,7 +4169,11 @@ impl VlConverter {
         self.run_on_worker(move |inner| {
             let inner = &mut *inner;
             Box::pin(async move {
-                with_font_overlay!(inner, google_fonts, inner.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy))
+                with_font_overlay!(
+                    inner,
+                    google_fonts,
+                    inner.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
+                )
             })
         })
         .await
@@ -4087,7 +4191,11 @@ impl VlConverter {
         self.run_on_worker(move |inner| {
             let inner = &mut *inner;
             Box::pin(async move {
-                with_font_overlay!(inner, google_fonts, inner.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy))
+                with_font_overlay!(
+                    inner,
+                    google_fonts,
+                    inner.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
+                )
             })
         })
         .await
@@ -4100,7 +4208,11 @@ impl VlConverter {
         self.run_on_worker(move |inner| {
             let inner = &mut *inner;
             Box::pin(async move {
-                with_font_overlay!(inner, google_fonts, inner.svg_to_pdf_with_worker_options(&svg, &image_policy))
+                with_font_overlay!(
+                    inner,
+                    google_fonts,
+                    inner.svg_to_pdf_with_worker_options(&svg, &image_policy)
+                )
             })
         })
         .await
@@ -4148,9 +4260,7 @@ impl VlConverter {
     ) -> Result<String, AnyError> {
         let snippet = snippet.into();
         self.run_on_worker(move |_inner: &mut InnerVlConverter| {
-            Box::pin(async move {
-                crate::html::bundle_vega_snippet(&snippet, vl_version).await
-            })
+            Box::pin(async move { crate::html::bundle_vega_snippet(&snippet, vl_version).await })
         })
         .await
     }
@@ -6096,11 +6206,10 @@ try {
         );
 
         let (sender, ticket) = pool.next_sender().unwrap();
-        let blocked_send = tokio::spawn(async move {
-            sender
-                .send(QueuedWork::new(make_test_work(), ticket))
-                .await
-        });
+        let blocked_send =
+            tokio::spawn(
+                async move { sender.send(QueuedWork::new(make_test_work(), ticket)).await },
+            );
         tokio::task::yield_now().await;
 
         assert_eq!(
