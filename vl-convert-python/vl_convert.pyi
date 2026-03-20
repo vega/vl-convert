@@ -164,6 +164,10 @@ if TYPE_CHECKING:
         google_fonts_cache_dir: str | None
         max_worker_heap_size_mb: int
         gc_after_conversion: bool
+        vega_plugins: list[str] | None
+        plugin_import_domains: list[str]
+        allow_per_request_plugins: bool
+        per_request_plugin_import_domains: list[str]
 
 __all__ = [
     "asyncio",
@@ -312,6 +316,10 @@ def configure(
     google_fonts: list[str | GoogleFontSpec] | None = None,
     max_worker_heap_size_mb: int | None = None,
     gc_after_conversion: bool | None = None,
+    vega_plugins: list[str] | None = None,
+    plugin_import_domains: list[str] | None = None,
+    allow_per_request_plugins: bool | None = None,
+    per_request_plugin_import_domains: list[str] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -330,8 +338,6 @@ def configure(
         Entries are normalized to include a trailing ``/`` and must not include userinfo,
         query, or fragment components. When provided, this list must be non-empty.
         When configured, HTTP redirects are denied instead of followed.
-        Per-call ``allowed_base_urls`` arguments on conversion functions override
-        this converter-level default when provided.
     google_fonts_cache_size_mb
         Maximum font cache size in megabytes. If ``None``, keep current value.
     auto_google_fonts
@@ -351,6 +357,24 @@ def configure(
     gc_after_conversion
         Whether to run V8 garbage collection after each conversion to release
         memory back to the OS. Default is False. If ``None``, keep current value.
+    vega_plugins
+        List of Vega plugins to load. Each entry is a file path (``.js``/``.mjs``),
+        URL (``https://...``), or inline ESM string. Plugins must be single-entry
+        ESM modules with a default export function accepting a ``vega`` object.
+        Multi-file plugins should be pre-bundled with esbuild or Rollup.
+        URL plugins auto-allow their domain for imports. ``None`` keeps current value.
+    plugin_import_domains
+        Domain patterns allowed for HTTP imports inside config-level plugins.
+        Empty list (default) disables HTTP imports.
+        Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
+        If ``None``, keep current value.
+    allow_per_request_plugins
+        Whether to accept per-request plugins via the ``vega_plugin`` parameter
+        on conversion functions. Default ``False``. If ``None``, keep current value.
+    per_request_plugin_import_domains
+        Domain patterns allowed for HTTP imports inside per-request plugins.
+        Separate from ``plugin_import_domains``. Empty list (default) disables
+        HTTP imports in per-request plugins. If ``None``, keep current value.
     """
     ...
 
@@ -459,6 +483,7 @@ def vega_to_html(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     renderer: Renderer | None = None,
+    vega_plugin: str | None = None,
 ) -> str:
     """
     Convert a Vega spec to an HTML document, optionally bundling dependencies.
@@ -480,7 +505,9 @@ def vega_to_html(
     renderer
         Vega renderer. One of 'svg' (default), 'canvas',
         or 'hybrid' (where text is svg and other marks are canvas)
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     HTML document.
@@ -491,9 +518,9 @@ def vega_to_jpeg(
     vg_spec: VlSpec,
     scale: float | None = None,
     quality: int | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to JPEG image data.
@@ -506,14 +533,13 @@ def vega_to_jpeg(
         Image scale factor (default 1.0)
     quality
         JPEG Quality between 0 (worst) and 100 (best). Default 90
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     JPEG image data.
@@ -523,9 +549,9 @@ def vega_to_jpeg(
 def vega_to_pdf(
     vg_spec: VlSpec,
     scale: float | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to PDF format.
@@ -536,14 +562,13 @@ def vega_to_pdf(
         Vega JSON specification string or dict
     scale
         Image scale factor (default 1.0)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     PDF file bytes.
@@ -554,9 +579,9 @@ def vega_to_png(
     vg_spec: VlSpec,
     scale: float | None = None,
     ppi: float | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to PNG image data.
@@ -569,14 +594,13 @@ def vega_to_png(
         Image scale factor (default 1.0)
     ppi
         Pixels per inch (default 72)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     PNG image data.
@@ -585,10 +609,10 @@ def vega_to_png(
 
 def vega_to_scenegraph(
     vg_spec: VlSpec,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     format: Literal["dict", "msgpack"] = "dict",
+    vega_plugin: str | None = None,
 ) -> dict[str, Any] | bytes:
     """
     Convert a Vega spec to a Vega Scenegraph.
@@ -597,9 +621,6 @@ def vega_to_scenegraph(
     ----------
     vg_spec
         Vega JSON specification string or dict
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -607,7 +628,9 @@ def vega_to_scenegraph(
     format
         Output format: "dict" returns a Python dictionary (default),
         "msgpack" returns raw MessagePack bytes
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
@@ -616,9 +639,9 @@ def vega_to_scenegraph(
 
 def vega_to_svg(
     vg_spec: VlSpec,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> str:
     """
     Convert a Vega spec to an SVG image string.
@@ -627,14 +650,13 @@ def vega_to_svg(
     ----------
     vg_spec
         Vega JSON specification string or dict
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     SVG image string.
@@ -754,6 +776,7 @@ def vegalite_to_html(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     renderer: Renderer | None = None,
+    vega_plugin: str | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to an HTML document, optionally bundling dependencies.
@@ -782,7 +805,9 @@ def vegalite_to_html(
     renderer
         Vega renderer. One of 'svg' (default), 'canvas',
         or 'hybrid' (where text is svg and other marks are canvas)
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     HTML document.
@@ -797,9 +822,9 @@ def vegalite_to_jpeg(
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     show_warnings: bool | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to JPEG image data using a particular version of the Vega-Lite JavaScript library.
@@ -821,14 +846,13 @@ def vegalite_to_jpeg(
         Named theme (e.g. "dark") to apply during conversion
     show_warnings
         Whether to print Vega-Lite compilation warnings (default false)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     JPEG image data.
@@ -841,9 +865,9 @@ def vegalite_to_pdf(
     scale: float | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to PDF image data using a particular version of the Vega-Lite JavaScript library.
@@ -861,14 +885,13 @@ def vegalite_to_pdf(
         Chart configuration object to apply during conversion
     theme
         Named theme (e.g. "dark") to apply during conversion
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     PDF image data.
@@ -883,9 +906,9 @@ def vegalite_to_png(
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     show_warnings: bool | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to PNG image data using a particular version of the Vega-Lite JavaScript library.
@@ -907,14 +930,13 @@ def vegalite_to_png(
         Named theme (e.g. "dark") to apply during conversion
     show_warnings
         Whether to print Vega-Lite compilation warnings (default false)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     PNG image data.
@@ -927,10 +949,10 @@ def vegalite_to_scenegraph(
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     show_warnings: bool | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     format: Literal["dict", "msgpack"] = "dict",
+    vega_plugin: str | None = None,
 ) -> dict[str, Any] | bytes:
     """
     Convert a Vega-Lite spec to a Vega Scenegraph using a particular version of the Vega-Lite JavaScript library.
@@ -948,9 +970,6 @@ def vegalite_to_scenegraph(
         Named theme (e.g. "dark") to apply during conversion
     show_warnings
         Whether to print Vega-Lite compilation warnings (default false)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -958,7 +977,9 @@ def vegalite_to_scenegraph(
     format
         Output format: "dict" returns a Python dictionary (default),
         "msgpack" returns raw MessagePack bytes
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
@@ -971,9 +992,9 @@ def vegalite_to_svg(
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     show_warnings: bool | None = None,
-    allowed_base_urls: list[str] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    vega_plugin: str | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to an SVG image string using a particular version of the Vega-Lite JavaScript library.
@@ -991,14 +1012,13 @@ def vegalite_to_svg(
         Named theme (e.g. "dark") to apply during conversion
     show_warnings
         Whether to print Vega-Lite compilation warnings (default false)
-    allowed_base_urls
-        List of allowed base URLs for external data requests.
-        Default allows any base URL
     format_locale
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
-
+    vega_plugin
+        Per-request Vega plugin (inline ESM string or URL).
+        Requires ``allow_per_request_plugins=True`` in ``configure()``.
     Returns
     -------
     SVG image string.
@@ -1128,6 +1148,10 @@ if TYPE_CHECKING:
             google_fonts: list[str | GoogleFontSpec] | None = None,
             max_worker_heap_size_mb: int | None = None,
             gc_after_conversion: bool | None = None,
+            vega_plugins: list[str] | None = None,
+            plugin_import_domains: list[str] | None = None,
+            allow_per_request_plugins: bool | None = None,
+            per_request_plugin_import_domains: list[str] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...
@@ -1163,6 +1187,7 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             renderer: Renderer | None = None,
+            vega_plugin: str | None = None,
         ) -> str:
             """Async version of ``vega_to_html``. See sync function for full documentation."""
             ...
@@ -1171,9 +1196,9 @@ if TYPE_CHECKING:
             vg_spec: VlSpec,
             scale: float | None = None,
             quality: int | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vega_to_jpeg``. See sync function for full documentation."""
             ...
@@ -1181,9 +1206,9 @@ if TYPE_CHECKING:
             self,
             vg_spec: VlSpec,
             scale: float | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vega_to_pdf``. See sync function for full documentation."""
             ...
@@ -1192,28 +1217,28 @@ if TYPE_CHECKING:
             vg_spec: VlSpec,
             scale: float | None = None,
             ppi: float | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vega_to_png``. See sync function for full documentation."""
             ...
         async def vega_to_scenegraph(
             self,
             vg_spec: VlSpec,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             format: Literal["dict", "msgpack"] = "dict",
+            vega_plugin: str | None = None,
         ) -> dict[str, Any] | bytes:
             """Async version of ``vega_to_scenegraph``. See sync function for full documentation."""
             ...
         async def vega_to_svg(
             self,
             vg_spec: VlSpec,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> str:
             """Async version of ``vega_to_svg``. See sync function for full documentation."""
             ...
@@ -1264,6 +1289,7 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             renderer: Renderer | None = None,
+            vega_plugin: str | None = None,
         ) -> str:
             """Async version of ``vegalite_to_html``. See sync function for full documentation."""
             ...
@@ -1276,9 +1302,9 @@ if TYPE_CHECKING:
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             show_warnings: bool | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vegalite_to_jpeg``. See sync function for full documentation."""
             ...
@@ -1289,9 +1315,9 @@ if TYPE_CHECKING:
             scale: float | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vegalite_to_pdf``. See sync function for full documentation."""
             ...
@@ -1304,9 +1330,9 @@ if TYPE_CHECKING:
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             show_warnings: bool | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> bytes:
             """Async version of ``vegalite_to_png``. See sync function for full documentation."""
             ...
@@ -1317,10 +1343,10 @@ if TYPE_CHECKING:
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             show_warnings: bool | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             format: Literal["dict", "msgpack"] = "dict",
+            vega_plugin: str | None = None,
         ) -> dict[str, Any] | bytes:
             """Async version of ``vegalite_to_scenegraph``. See sync function for full documentation."""
             ...
@@ -1331,9 +1357,9 @@ if TYPE_CHECKING:
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             show_warnings: bool | None = None,
-            allowed_base_urls: list[str] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            vega_plugin: str | None = None,
         ) -> str:
             """Async version of ``vegalite_to_svg``. See sync function for full documentation."""
             ...

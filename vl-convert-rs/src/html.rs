@@ -1,6 +1,7 @@
 use crate::converter::{
     classify_and_request_fonts, classify_scenegraph_fonts, GoogleFontRequest, HtmlFontAnalysis,
-    MissingFontsPolicy, Renderer, ValueOrString, VgOpts, VlConvertCommand, VlConverter, VlOpts,
+    InnerVlConverter, MissingFontsPolicy, Renderer, ResolvedPlugin, ValueOrString, VgOpts,
+    VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{
@@ -11,6 +12,7 @@ use crate::font_embed::{generate_font_face_css, inject_locale_chars, variants_by
 use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::text::{GOOGLE_FONTS_CLIENT, USVG_OPTIONS};
+use crate::with_font_overlay;
 use crate::VlVersion;
 use deno_core::anyhow::anyhow;
 use deno_core::error::AnyError;
@@ -18,9 +20,61 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use vl_convert_google_fonts::{family_to_id, FontStyle, VariantRequest};
 
+/// Escape a string for safe embedding inside a JavaScript template literal.
+///
+/// Handles backslashes, backticks, `${` interpolation sequences, and
+/// `</script>` sequences that would prematurely close the HTML script element.
+fn escape_for_template_literal(s: &str) -> String {
+    use std::sync::OnceLock;
+    static SCRIPT_RE: OnceLock<regex::Regex> = OnceLock::new();
+    let re = SCRIPT_RE.get_or_init(|| {
+        regex::RegexBuilder::new(r"</script")
+            .case_insensitive(true)
+            .build()
+            .unwrap()
+    });
+
+    let s = s
+        .replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace("${", "\\${");
+    // HTML safety: prevent </script> from terminating the script element
+    re.replace_all(&s, "<\\/script").into_owned()
+}
+
+/// Generate JavaScript lines that import and execute resolved plugins.
+///
+/// - `bundle=true` or file/inline plugins: embed source via blob URL using `__vlcLoadPlugin()`
+/// - `bundle=false` + URL plugin: use `import('{original_url}')` directly
+fn generate_plugin_imports(plugins: &[ResolvedPlugin], bundle: bool) -> String {
+    plugins
+        .iter()
+        .enumerate()
+        .map(|(i, plugin)| {
+            if let (false, Some(url)) = (bundle, &plugin.original_url) {
+                // bundle=false + URL plugin: import directly from CDN
+                // (browser fetches natively, handles caching)
+                format!(
+                    "        const __vlcPlugin{i} = await import('{url}');\n        __vlcPlugin{i}.default(window.vega);"
+                )
+            } else {
+                // bundle=true (all plugins), or bundle=false + file/inline plugin:
+                // embed bundled source via blob URL
+                let escaped = escape_for_template_literal(&plugin.bundled_source);
+                format!(
+                    "        const __vlcPlugin{i} = await __vlcLoadPlugin(`{escaped}`);\n        __vlcPlugin{i}.default(window.vega);"
+                )
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub fn get_vega_or_vegalite_script(
     spec: impl Into<ValueOrString>,
     opts: serde_json::Value,
+    resolved_plugins: Option<&[ResolvedPlugin]>,
+    bundle: bool,
 ) -> Result<String, AnyError> {
     let chart_id = "vega-chart";
     let spec_json = match spec.into() {
@@ -31,8 +85,40 @@ pub fn get_vega_or_vegalite_script(
     // Setup embed opts
     let opts = format!("const opts = {}", serde_json::to_string(&opts)?);
 
-    let index_js = format!(
-        r##"
+    let has_plugins = resolved_plugins.is_some_and(|p| !p.is_empty());
+
+    let index_js = if has_plugins {
+        let plugins = resolved_plugins.unwrap();
+        let plugin_imports = generate_plugin_imports(plugins, bundle);
+        format!(
+            r##"
+    try {{
+        async function __vlcLoadPlugin(src) {{
+            const blob = new Blob([src], {{type: 'text/javascript'}});
+            const url = URL.createObjectURL(blob);
+            const mod = await import(url);
+            URL.revokeObjectURL(url);
+            return mod;
+        }}
+        // Wait for all synchronous scripts (e.g. bundled Vega in <head>) to
+        // finish executing before reading window.vega. An `await import()`
+        // above yields back to the event loop, which can run before a large
+        // classic <script> in <head> completes. A setTimeout(0) macrotask
+        // schedules after all pending synchronous script execution.
+        await new Promise(r => setTimeout(r, 0));
+{plugin_imports}
+        const spec = {spec_json};
+        {opts}
+        await Promise.all([...document.fonts].map(f => f.load()));
+        await vegaEmbed('#{chart_id}', spec, opts);
+    }} catch(e) {{
+        console.error(e);
+    }}
+"##,
+        )
+    } else {
+        format!(
+            r##"
 {{
     const spec = {spec_json};
     {opts}
@@ -41,7 +127,8 @@ pub fn get_vega_or_vegalite_script(
         .catch(console.error);
 }}
 "##,
-    );
+        )
+    };
     Ok(index_js)
 }
 
@@ -73,8 +160,8 @@ pub async fn bundle_vega_snippet(snippet: &str, vl_version: VlVersion) -> Result
     let script = format!(
         r#"
 import vegaEmbed from "{JSDELIVR_URL}{VEGA_EMBED_PATH}.js"
-import vega from "{JSDELIVR_URL}{VEGA_PATH}.js"
-import vegaLite from "{JSDELIVR_URL}{VEGA_LITE_PATH}.js"
+import * as vega from "{JSDELIVR_URL}{VEGA_PATH}.js"
+import * as vegaLite from "{JSDELIVR_URL}{VEGA_LITE_PATH}.js"
 import lodashDebounce from "{JSDELIVR_URL}{DEBOUNCE_PATH}.js"
 {snippet}
 "#,
@@ -175,6 +262,7 @@ impl VlConverter {
         vl_version: VlVersion,
         bundle: bool,
         font_head_html: &str,
+        has_plugins: bool,
     ) -> Result<String, AnyError> {
         let script_tags = if bundle {
             format!(
@@ -192,6 +280,14 @@ impl VlConverter {
             "#,
                 vl_ver = vl_version.to_semver()
             )
+        };
+
+        // Use module script when plugins are present (required for dynamic import());
+        // otherwise keep the classic script for backward compatibility.
+        let script_type = if has_plugins {
+            "module"
+        } else {
+            "text/javascript"
         };
 
         Ok(format!(
@@ -214,7 +310,7 @@ impl VlConverter {
   </head>
   <body>
     <div id="vega-chart"></div>
-    <script type="text/javascript">
+    <script type="{script_type}">
 {code}
     </script>
   </body>
@@ -238,8 +334,6 @@ impl VlConverter {
         mut vg_opts: VgOpts,
         auto_google_fonts: bool,
     ) -> Result<serde_json::Value, AnyError> {
-        vg_opts.allowed_base_urls =
-            self.effective_allowed_base_urls(vg_opts.allowed_base_urls.take())?;
         let missing = self.inner.config.missing_fonts;
 
         if auto_google_fonts || missing != MissingFontsPolicy::Fallback {
@@ -256,14 +350,17 @@ impl VlConverter {
 
         let vg_spec: ValueOrString = vega_spec.into();
         let msgpack_bytes: Vec<u8> = self
-            .request(
-                move |responder| VlConvertCommand::VgToSgMsgpack {
-                    vg_spec,
-                    vg_opts,
-                    responder,
-                },
-                "Vega to Scenegraph msgpack (HTML analysis)",
-            )
+            .run_on_worker(move |inner: &mut InnerVlConverter| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                    )
+                })
+            })
             .await?;
         let sg: serde_json::Value = rmp_serde::from_slice(&msgpack_bytes)?;
         Ok(sg)
@@ -423,13 +520,9 @@ impl VlConverter {
                 let batches = if google_font_requests.is_empty() {
                     Vec::new()
                 } else {
-                    self.request(
-                        move |responder| VlConvertCommand::ResolveGoogleFonts {
-                            google_fonts: google_font_requests,
-                            responder,
-                        },
-                        "Resolve Google Fonts for font-face CSS",
-                    )
+                    self.run_on_worker(move |inner: &mut InnerVlConverter| {
+                        Box::pin(inner.resolve_google_fonts(Some(google_font_requests)))
+                    })
                     .await?
                 };
 
@@ -566,10 +659,10 @@ impl VlConverter {
     ) -> Result<Vec<FontInfo>, AnyError> {
         let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?;
         let vg_opts = VgOpts {
-            allowed_base_urls: vl_opts.allowed_base_urls,
             format_locale: vl_opts.format_locale,
             time_format_locale: vl_opts.time_format_locale,
             google_fonts: vl_opts.google_fonts,
+            vega_plugin: None,
         };
         self.vega_fonts(
             vega_spec,
@@ -645,6 +738,18 @@ impl VlConverter {
         }
     }
 
+    /// Convert a Vega-Lite spec to a self-contained HTML page.
+    ///
+    /// # `bundle` flag
+    ///
+    /// Controls how **Vega/vega-embed** are delivered:
+    /// - `true` — all Vega JS is inlined in a `<script>` tag; the page works offline.
+    /// - `false` — Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
+    ///
+    /// **Plugins are always bundled** (HTTP imports inlined via deno_emit) regardless
+    /// of this flag, with one exception: URL-backed plugins (e.g. `https://esm.sh/…`)
+    /// are fetched live from their original URL when `bundle=false`, so the browser
+    /// benefits from CDN caching. With `bundle=true` their source is inlined too.
     pub async fn vegalite_to_html(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -666,10 +771,10 @@ impl VlConverter {
                 .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
                 .await?;
             let vg_opts = VgOpts {
-                allowed_base_urls: vl_opts.allowed_base_urls.clone(),
                 format_locale: vl_opts.format_locale.clone(),
                 time_format_locale: vl_opts.time_format_locale.clone(),
                 google_fonts: vl_opts.google_fonts.clone(),
+                vega_plugin: None,
             };
             self.build_font_head_html(
                 vega_spec,
@@ -684,11 +789,52 @@ impl VlConverter {
             String::new()
         };
 
-        let code = get_vega_or_vegalite_script(vl_spec, vl_opts.to_embed_opts(renderer)?)?;
-        self.build_html(&code, vl_version, bundle, &font_head_html)
+        // Ensure plugins are resolved (triggers pool spawn if not yet started)
+        if self.inner.config.vega_plugins.is_some() {
+            self.warm_up()?;
+        }
+        let mut resolved_plugins_owned = self
+            .inner
+            .resolved_plugins
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_default();
+        // Append per-request plugin overlay if present
+        if let Some(ref plugin_source) = vl_opts.vega_plugin {
+            resolved_plugins_owned.push(ResolvedPlugin {
+                original_url: None,
+                bundled_source: plugin_source.clone(),
+            });
+        }
+        let resolved_plugins: Option<&[ResolvedPlugin]> = if resolved_plugins_owned.is_empty() {
+            None
+        } else {
+            Some(&resolved_plugins_owned)
+        };
+        let has_plugins = resolved_plugins.is_some();
+        let code = get_vega_or_vegalite_script(
+            vl_spec,
+            vl_opts.to_embed_opts(renderer)?,
+            resolved_plugins,
+            bundle,
+        )?;
+        self.build_html(&code, vl_version, bundle, &font_head_html, has_plugins)
             .await
     }
 
+    /// Convert a Vega spec to a self-contained HTML page.
+    ///
+    /// # `bundle` flag
+    ///
+    /// Controls how **Vega/vega-embed** are delivered:
+    /// - `true` — all Vega JS is inlined in a `<script>` tag; the page works offline.
+    /// - `false` — Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
+    ///
+    /// **Plugins are always bundled** (HTTP imports inlined via deno_emit) regardless
+    /// of this flag, with one exception: URL-backed plugins (e.g. `https://esm.sh/…`)
+    /// are fetched live from their original URL when `bundle=false`, so the browser
+    /// benefits from CDN caching. With `bundle=true` their source is inlined too.
     pub async fn vega_to_html(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -722,9 +868,44 @@ impl VlConverter {
             String::new()
         };
 
-        let code = get_vega_or_vegalite_script(vg_spec, vg_opts.to_embed_opts(renderer)?)?;
-        self.build_html(&code, Default::default(), bundle, &font_head_html)
-            .await
+        // Ensure plugins are resolved (triggers pool spawn if not yet started)
+        if self.inner.config.vega_plugins.is_some() {
+            self.warm_up()?;
+        }
+        let mut resolved_plugins_owned = self
+            .inner
+            .resolved_plugins
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_default();
+        // Append per-request plugin overlay if present
+        if let Some(ref plugin_source) = vg_opts.vega_plugin {
+            resolved_plugins_owned.push(ResolvedPlugin {
+                original_url: None,
+                bundled_source: plugin_source.clone(),
+            });
+        }
+        let resolved_plugins: Option<&[ResolvedPlugin]> = if resolved_plugins_owned.is_empty() {
+            None
+        } else {
+            Some(&resolved_plugins_owned)
+        };
+        let has_plugins = resolved_plugins.is_some();
+        let code = get_vega_or_vegalite_script(
+            vg_spec,
+            vg_opts.to_embed_opts(renderer)?,
+            resolved_plugins,
+            bundle,
+        )?;
+        self.build_html(
+            &code,
+            Default::default(),
+            bundle,
+            &font_head_html,
+            has_plugins,
+        )
+        .await
     }
 }
 

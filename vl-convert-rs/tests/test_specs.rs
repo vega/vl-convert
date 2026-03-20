@@ -1,26 +1,18 @@
+mod test_utils;
+
 use dssim::{Dssim, DssimImage};
 use rstest::rstest;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{VlConverter, VlVersion};
 
 use serde_json::Value;
-use std::sync::Once;
 use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VlOpts};
 
-static INIT: Once = Once::new();
-const BACKGROUND_COLOR: &str = "#abc";
+use test_utils::{check_vg_png, initialize, load_vg_spec, to_dssim};
 
-pub fn initialize() {
-    INIT.call_once(|| {
-        let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let fonts_dir = root_path.join("tests").join("fonts");
-        register_font_directory(fonts_dir.to_str().unwrap())
-            .expect("Failed to register test font directory");
-    });
-}
+const BACKGROUND_COLOR: &str = "#abc";
 
 fn load_vl_spec(name: &str) -> serde_json::Value {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -28,18 +20,6 @@ fn load_vl_spec(name: &str) -> serde_json::Value {
         .join("tests")
         .join("vl-specs")
         .join(format!("{}.vl.json", name));
-    let spec_str =
-        fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
-    serde_json::from_str(&spec_str)
-        .unwrap_or_else(|_| panic!("Failed to parse {:?} as JSON", spec_path))
-}
-
-fn load_vg_spec(name: &str) -> serde_json::Value {
-    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let spec_path = root_path
-        .join("tests")
-        .join("specs")
-        .join(format!("{}.vg.json", name));
     let spec_str =
         fs::read_to_string(&spec_path).unwrap_or_else(|_| panic!("Failed to read {:?}", spec_path));
     serde_json::from_str(&spec_str)
@@ -265,13 +245,6 @@ fn load_expected_png_dssim(
     dssim::load_image(&Dssim::new(), spec_path).ok()
 }
 
-fn to_dssim(img: &[u8]) -> Result<DssimImage<f32>, Box<dyn std::error::Error>> {
-    let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
-    tmpfile.write_all(img).unwrap();
-    dssim::load_image(&Dssim::new(), tmpfile.path())
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-}
-
 fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) -> PathBuf {
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let failed_dir = root_path
@@ -336,83 +309,6 @@ fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8])
         }
     } else {
         let path = write_failed_png(name, vl_version, theme, img);
-        panic!(
-            "Baseline image does not exist for {}.png. Failed image written to {:?}",
-            name, path
-        )
-    }
-}
-
-fn make_expected_vg_png_path(name: &str) -> PathBuf {
-    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    root_path
-        .join("tests")
-        .join("specs")
-        .join("expected")
-        .join(format!("{}.png", name))
-}
-
-fn load_expected_vg_png_dssim(name: &str) -> Option<DssimImage<f32>> {
-    let spec_path = make_expected_vg_png_path(name);
-    dssim::load_image(&Dssim::new(), spec_path).ok()
-}
-
-fn write_failed_vg_png(name: &str, img: &[u8]) -> PathBuf {
-    let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let failed_dir = root_path.join("tests").join("specs").join("failed");
-
-    fs::create_dir_all(failed_dir.clone()).unwrap();
-
-    let file_path = failed_dir.join(format!("{}.png", name));
-
-    let mut file = fs::File::create(file_path.clone()).unwrap();
-    file.write_all(img).unwrap();
-    file_path
-}
-
-fn check_vg_png(name: &str, img: &[u8]) {
-    let expected_dssim = load_expected_vg_png_dssim(name);
-    if let Some(expected_dssim) = expected_dssim {
-        match to_dssim(img) {
-            Ok(img_dssim) => {
-                let attr = Dssim::new();
-
-                // Wrap the comparison in a panic-catching block to handle size mismatches
-                let comparison_result =
-                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        attr.compare(&expected_dssim, img_dssim)
-                    }));
-
-                match comparison_result {
-                    Ok((diff, _)) => {
-                        if diff > 0.00011 {
-                            println!("DSSIM diff {diff}");
-                            let path = write_failed_vg_png(name, img);
-                            panic!(
-                                "Images don't match for {}.png. Failed image written to {:?}",
-                                name, path
-                            )
-                        }
-                    }
-                    Err(_) => {
-                        let path = write_failed_vg_png(name, img);
-                        panic!(
-                            "Image size mismatch for {}.png (cannot compare different sized images). Failed image written to {:?}",
-                            name, path
-                        )
-                    }
-                }
-            }
-            Err(e) => {
-                let path = write_failed_vg_png(name, img);
-                panic!(
-                    "Failed to process image for {}.png: {}. Failed image written to {:?}",
-                    name, e, path
-                )
-            }
-        }
-    } else {
-        let path = write_failed_vg_png(name, img);
         panic!(
             "Baseline image does not exist for {}.png. Failed image written to {:?}",
             name, path
@@ -611,7 +507,7 @@ mod test_svg {
 mod test_svg_allowed_base_url {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::{VgOpts, VlOpts};
+    use vl_convert_rs::converter::{VgOpts, VlOpts, VlConverterConfig};
     use vl_convert_rs::VlConverter;
 
     #[rstest]
@@ -623,8 +519,14 @@ mod test_svg_allowed_base_url {
         // Load example Vega-Lite spec
         let vl_spec = load_vl_spec(name);
 
-        // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        // Create converter with matching base URL on the config
+        let converter = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec![
+                "https://raw.githubusercontent.com/vega/vega-datasets".to_string()
+            ]),
+            ..Default::default()
+        }).unwrap();
 
         // Convert to vega first
         let vg_spec = block_on(converter.vegalite_to_vega(
@@ -637,15 +539,9 @@ mod test_svg_allowed_base_url {
         .unwrap();
 
         // Check with matching base URL
-        let allowed_base_urls = Some(vec![
-            "https://raw.githubusercontent.com/vega/vega-datasets".to_string()
-        ]);
         let svg = block_on(converter.vega_to_svg(
             vg_spec.clone(),
-            VgOpts {
-                allowed_base_urls: allowed_base_urls.clone(),
-                ..Default::default()
-            },
+            VgOpts::default(),
         ))
         .unwrap();
         check_svg(name, vl_version, None, &svg);
@@ -655,7 +551,6 @@ mod test_svg_allowed_base_url {
             vl_spec.clone(),
             VlOpts {
                 vl_version,
-                allowed_base_urls,
                 ..Default::default()
             },
         ))
@@ -663,24 +558,24 @@ mod test_svg_allowed_base_url {
         check_svg(name, vl_version, None, &svg);
 
         // Check for error with non-matching URL
-        let allowed_base_urls = Some(vec!["https://some-other-base".to_string()]);
+        let converter_blocked = VlConverter::with_config(VlConverterConfig {
+            allow_http_access: true,
+            allowed_base_urls: Some(vec!["https://some-other-base".to_string()]),
+            ..Default::default()
+        }).unwrap();
 
-        let Err(result) = block_on(converter.vega_to_svg(
+        let Err(result) = block_on(converter_blocked.vega_to_svg(
             vg_spec,
-            VgOpts {
-                allowed_base_urls: allowed_base_urls.clone(),
-                ..Default::default()
-            },
+            VgOpts::default(),
         )) else {
             panic!("Expected error")
         };
         assert!(result.to_string().contains("External data url not allowed"));
 
-        let Err(result) = block_on(converter.vegalite_to_svg(
+        let Err(result) = block_on(converter_blocked.vegalite_to_svg(
             vl_spec,
             VlOpts {
                 vl_version,
-                allowed_base_urls: allowed_base_urls.clone(),
                 ..Default::default()
             },
         )) else {
@@ -872,10 +767,11 @@ mod test_png_theme_config {
                     theme: Some(theme.to_string()),
                     config: Some(json!({"background": BACKGROUND_COLOR})),
                     show_warnings: false,
-                    allowed_base_urls: None,
+
                     format_locale: None,
                     time_format_locale: None,
                     google_fonts: None,
+                    vega_plugin: None,
                 },
                 Some(scale),
                 None
@@ -899,10 +795,11 @@ mod test_png_theme_config {
                     theme: None,
                     config: Some(json!({"background": BACKGROUND_COLOR})),
                     show_warnings: false,
-                    allowed_base_urls: None,
+
                     format_locale: None,
                     time_format_locale: None,
                     google_fonts: None,
+                    vega_plugin: None,
                 },
                 Some(scale),
                 None

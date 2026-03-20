@@ -48,6 +48,11 @@ pub async fn bundle(
         )
         .await;
 
+    // Propagate any graph-level errors (e.g. failed HTTP fetches) before
+    // handing off to the SWC bundler, which gives an opaque "Unable to output"
+    // error when the graph is incomplete.
+    graph.valid()?;
+
     bundle_graph(&graph, options)
 }
 

@@ -279,18 +279,17 @@ def test_sync_redirect_to_disallowed_url_raises_permission_error():
                 vlc.vega_to_svg(make_vega_data_url_spec(f"{allowed_base}/redirect.csv"))
 
 
-def test_sync_per_request_allowlist_override_for_svg_rasterization():
+def test_sync_config_allowlist_for_svg_rasterization():
     with run_test_http_server(
         {"/image.png": _route(200, PNG_1X1, {"Content-Type": "image/png"})}
     ) as base_url:
         vlc.configure(
             allow_http_access=True,
-            allowed_base_urls=["https://blocked.example/"],
+            allowed_base_urls=[base_url],
         )
         jpeg = vlc.vegalite_to_jpeg(
             make_vegalite_image_url_spec(f"{base_url}/image.png"),
             vl_version="v5_16",
-            allowed_base_urls=[base_url],
         )
         assert jpeg.startswith(b"\xff\xd8")
 
