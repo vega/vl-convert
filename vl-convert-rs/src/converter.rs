@@ -633,10 +633,10 @@ impl BaseUrlSetting {
             )),
             Self::Disabled => Ok(None),
             Self::Custom(url) => {
-                if url.contains("://") {
+                if Url::parse(url).is_ok() {
                     Ok(Some(url.clone()))
                 } else {
-                    // Filesystem path: convert to file:// URL
+                    // Not a valid URL: treat as filesystem path, convert to file:// URL
                     let path = portable_canonicalize(Path::new(url)).map_err(|err| {
                         anyhow!("Failed to resolve base_url path {url}: {err}")
                     })?;
@@ -657,7 +657,11 @@ impl BaseUrlSetting {
         match self {
             Self::Default => false,
             Self::Disabled => false,
-            Self::Custom(url) => !url.contains("://") || url.starts_with("file://"),
+            Self::Custom(url) => {
+                Url::parse(url)
+                    .map(|parsed| parsed.scheme() == "file")
+                    .unwrap_or(true) // Not a valid URL: bare filesystem path
+            }
         }
     }
 }
