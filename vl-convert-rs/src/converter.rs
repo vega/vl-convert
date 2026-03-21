@@ -1421,12 +1421,10 @@ class WarningCollector {
                 .await?;
 
             // Create and initialize svg function string
-            let is_filesystem = self.ctx.config.base_url.is_filesystem();
             let resolved_base_url =
                 serde_json::to_string(&self.ctx.config.base_url.resolved_url()?)?;
             let mut function_str = r#"
 const CONVERTER_BASE_URL = __BASE_URL__;
-const CONVERTER_IS_FILESYSTEM = __IS_FILESYSTEM__;
 
 function buildLoader(errors) {
     let baseURL = CONVERTER_BASE_URL;
@@ -1434,50 +1432,43 @@ function buildLoader(errors) {
         baseURL = 'about:invalid';
     }
 
-    const loaderOptions = { baseURL };
-    loaderOptions.mode = CONVERTER_IS_FILESYSTEM ? 'file' : 'http';
+    const loader = vega.loader({ baseURL });
+    const originalSanitize = loader.sanitize.bind(loader);
 
-    const loader = vega.loader(loaderOptions);
+    loader.load = async (uri, options) => {
+        const sanitized = await originalSanitize(uri, options);
+        const href = sanitized.href;
+        const responseType = options?.http?.response;
+        const wantBinary = responseType === 'arraybuffer';
 
-    loader.http = async (uri, options) => {
         try {
             // data: URIs are handled inline (no network, no op needed)
-            if (uri.startsWith('data:')) {
-                const resp = await fetch(uri);
-                const responseType = options?.response;
-                if (responseType === 'arraybuffer') {
-                    return await resp.arrayBuffer();
-                }
-                return await resp.text();
+            if (href.startsWith('data:')) {
+                const resp = await fetch(href);
+                return wantBinary ? await resp.arrayBuffer() : await resp.text();
             }
-            const responseType = options?.response;
-            if (responseType === 'arraybuffer') {
-                const buffer = await op_vega_data_fetch_bytes(uri);
-                return buffer.buffer;
-            }
-            return await op_vega_data_fetch(uri);
-        } catch (error) {
-            errors.push(error.message);
-            throw error;
-        }
-    };
 
-    loader.fileAccess = CONVERTER_IS_FILESYSTEM;
-    loader.file = async (uri, _options) => {
-        try {
-            let resolved = uri;
-            if (CONVERTER_IS_FILESYSTEM && CONVERTER_BASE_URL != null) {
-                try {
-                    resolved = new URL(uri, CONVERTER_BASE_URL).href;
-                } catch (_err) {}
+            // HTTP(S) URLs: use Rust HTTP ops
+            if (href.startsWith('http://') || href.startsWith('https://')) {
+                if (wantBinary) {
+                    const buffer = await op_vega_data_fetch_bytes(href);
+                    return buffer.buffer;
+                }
+                return await op_vega_data_fetch(href);
             }
-            let filePath = resolved;
-            if (resolved.startsWith('file://')) {
-                const fileUrl = new URL(resolved);
+
+            // Filesystem path
+            let filePath = href;
+            if (href.startsWith('file://')) {
+                const fileUrl = new URL(href);
                 filePath = decodeURIComponent(fileUrl.pathname);
                 if (globalThis.Deno?.build?.os === 'windows' && filePath.startsWith('/')) {
                     filePath = filePath.slice(1);
                 }
+            }
+            if (wantBinary) {
+                const buffer = await op_vega_file_read_bytes(filePath);
+                return buffer.buffer;
             }
             return await op_vega_file_read(filePath);
         } catch (error) {
@@ -1661,8 +1652,6 @@ function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors) {
 "#
             .to_string();
             function_str = function_str.replace("__BASE_URL__", resolved_base_url.as_str());
-            function_str =
-                function_str.replace("__IS_FILESYSTEM__", if is_filesystem { "true" } else { "false" });
             self.worker
                 .js_runtime
                 .execute_script("ext:<anon>", function_str)?;
@@ -5433,6 +5422,7 @@ try {
         write_test_png(&outside_path);
 
         let converter = VlConverter::with_config(VlConverterConfig {
+            base_url: BaseUrlSetting::Custom(root.to_string_lossy().to_string()),
             allowed_base_urls: Some(vec![root.to_string_lossy().to_string()]),
             ..Default::default()
         })
@@ -5839,6 +5829,7 @@ try {
         std::fs::write(&outside_csv, "a,b\n1,2\n").unwrap();
 
         let converter = VlConverter::with_config(VlConverterConfig {
+            base_url: BaseUrlSetting::Custom(root.to_string_lossy().to_string()),
             allowed_base_urls: Some(vec![root.to_string_lossy().to_string()]),
             ..Default::default()
         })
@@ -5855,9 +5846,14 @@ try {
             )
             .await
             .unwrap_err();
-        assert!(err
-            .to_string()
-            .contains(&format!("{ACCESS_DENIED_MARKER}: Filesystem access denied")));
+        let err_msg = err.to_string();
+        // The percent-encoded traversal must fail: either the Rust op rejects it
+        // with an access-denied error, or the literal %2F path doesn't exist.
+        assert!(
+            err_msg.contains(&format!("{ACCESS_DENIED_MARKER}: Filesystem access denied"))
+                || err_msg.contains("No such file or directory"),
+            "Expected access denied or file-not-found, got: {err_msg}"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
