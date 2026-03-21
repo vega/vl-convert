@@ -521,7 +521,6 @@ mod test_svg_allowed_base_url {
 
         // Create converter with matching base URL on the config
         let converter = VlConverter::with_config(VlConverterConfig {
-            allow_http_access: true,
             allowed_base_urls: Some(vec![
                 "https://raw.githubusercontent.com/vega/vega-datasets".to_string()
             ]),
@@ -559,7 +558,6 @@ mod test_svg_allowed_base_url {
 
         // Check for error with non-matching URL
         let converter_blocked = VlConverter::with_config(VlConverterConfig {
-            allow_http_access: true,
             allowed_base_urls: Some(vec!["https://some-other-base".to_string()]),
             ..Default::default()
         }).unwrap();
