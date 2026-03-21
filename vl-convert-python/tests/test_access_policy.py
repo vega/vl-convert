@@ -247,7 +247,7 @@ def test_sync_filesystem_root_allows_under_root(tmp_path: Path):
     root.mkdir()
     (root / "table.csv").write_text("a,b\n1,2\n", encoding="utf8")
 
-    vlc.configure(allowed_base_urls=[str(root) + "/"])
+    vlc.configure(base_url=str(root), allowed_base_urls=[str(root) + "/"])
     svg = vlc.vegalite_to_svg(
         make_vegalite_data_url_spec("table.csv"),
         vl_version="v5_16",

@@ -637,9 +637,8 @@ impl BaseUrlSetting {
                     Ok(Some(url.clone()))
                 } else {
                     // Not a valid URL: treat as filesystem path, convert to file:// URL
-                    let path = portable_canonicalize(Path::new(url)).map_err(|err| {
-                        anyhow!("Failed to resolve base_url path {url}: {err}")
-                    })?;
+                    let path = portable_canonicalize(Path::new(url))
+                        .map_err(|err| anyhow!("Failed to resolve base_url path {url}: {err}"))?;
                     let file_url = Url::from_directory_path(&path).map_err(|_| {
                         anyhow!(
                             "Failed to construct file URL from base_url path: {}",
@@ -1457,8 +1456,13 @@ function buildLoader(errors) {
                 return await op_vega_data_fetch(href);
             }
 
-            // Filesystem path (sanitize strips file:// prefix, so href is a bare path)
+            // Filesystem path (sanitize strips file:// prefix, so href is a bare path).
+            // On Windows, stripping file:// from file:///C:/path leaves /C:/path;
+            // remove the leading slash so the Rust op receives a valid Windows path.
             let filePath = decodeURIComponent(href);
+            if (globalThis.Deno?.build?.os === 'windows' && /^\/[A-Za-z]:/.test(filePath)) {
+                filePath = filePath.slice(1);
+            }
             if (wantBinary) {
                 const buffer = await op_vega_file_read_bytes(filePath);
                 return buffer.buffer;
@@ -3156,7 +3160,8 @@ impl VlConverter {
             .expect("allowed_base_urls were already validated");
         // Use base_url as usvg's resources_dir when it points to a local path
         let filesystem_root = if self.inner.config.base_url.is_filesystem() {
-            self.inner.config
+            self.inner
+                .config
                 .base_url
                 .resolved_url()
                 .ok()
