@@ -545,8 +545,6 @@ fn build_permissions(_config: &VlConverterConfig) -> Result<Permissions, AnyErro
     .map_err(|err| anyhow!("Failed to build Deno permissions: {err}"))
 }
 
-/// Extract the first filesystem path from `allowed_base_urls` and convert to a file:// URL.
-
 /// A JSON value that may already be serialized to a string.
 /// When the caller already has a JSON string (e.g. from Python), this avoids
 /// a redundant parse→Value→serialize round-trip.
