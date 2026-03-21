@@ -7,6 +7,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyModule};
 use pythonize::{depythonize, pythonize};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -95,6 +96,16 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
         "plugin_import_domains": config.plugin_import_domains,
         "allow_per_request_plugins": config.allow_per_request_plugins,
         "per_request_plugin_import_domains": config.per_request_plugin_import_domains,
+        "default_theme": config.default_theme,
+        "default_format_locale": config.default_format_locale.as_ref().map(|l| match l {
+            FormatLocale::Name(n) => serde_json::Value::String(n.clone()),
+            FormatLocale::Object(o) => serde_json::to_value(o).unwrap_or(serde_json::Value::Null),
+        }),
+        "default_time_format_locale": config.default_time_format_locale.as_ref().map(|l| match l {
+            TimeFormatLocale::Name(n) => serde_json::Value::String(n.clone()),
+            TimeFormatLocale::Object(o) => serde_json::to_value(o).unwrap_or(serde_json::Value::Null),
+        }),
+        "themes": config.themes,
     })
 }
 
@@ -118,6 +129,13 @@ struct ConverterConfigOverrides {
     plugin_import_domains: Option<Vec<String>>,
     allow_per_request_plugins: Option<bool>,
     per_request_plugin_import_domains: Option<Vec<String>>,
+    // None => no change, Some(None) => clear, Some(Some(theme)) => set
+    default_theme: Option<Option<String>>,
+    // None => no change, Some(None) => clear, Some(Some(locale)) => set
+    default_format_locale: Option<Option<FormatLocale>>,
+    // None => no change, Some(None) => clear, Some(Some(locale)) => set
+    default_time_format_locale: Option<Option<TimeFormatLocale>>,
+    themes: Option<Option<HashMap<String, serde_json::Value>>>,
 }
 
 fn parse_config_overrides(
@@ -297,6 +315,70 @@ fn parse_config_overrides(
                         })?);
                 }
             }
+            "default_theme" => {
+                if value.is_none() {
+                    overrides.default_theme = Some(None);
+                } else {
+                    overrides.default_theme =
+                        Some(Some(value.extract::<String>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid default_theme value for configure: {err}"
+                            )
+                        })?));
+                }
+            }
+            "default_format_locale" => {
+                if value.is_none() {
+                    overrides.default_format_locale = Some(None);
+                } else {
+                    let locale = parse_format_locale(value.clone().unbind()).map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid default_format_locale for configure: {err}"
+                        )
+                    })?;
+                    overrides.default_format_locale = Some(Some(locale));
+                }
+            }
+            "default_time_format_locale" => {
+                if value.is_none() {
+                    overrides.default_time_format_locale = Some(None);
+                } else {
+                    let locale =
+                        parse_time_format_locale(value.clone().unbind()).map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid default_time_format_locale for configure: {err}"
+                            )
+                        })?;
+                    overrides.default_time_format_locale = Some(Some(locale));
+                }
+            }
+            "themes" => {
+                if value.is_none() {
+                    overrides.themes = Some(None);
+                } else {
+                    let py_dict: &Bound<'_, PyDict> = value.downcast().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid themes value for configure (expected dict): {err}"
+                        )
+                    })?;
+                    let mut themes_map = HashMap::new();
+                    for (k, v) in py_dict.iter() {
+                        let key: String = k.extract().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid theme name (expected string): {err}"
+                            )
+                        })?;
+                        let val: serde_json::Value = depythonize(&v).map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid theme config for '{}': {err}",
+                                key
+                            )
+                        })?;
+                        themes_map.insert(key, val);
+                    }
+                    overrides.themes = Some(Some(themes_map));
+                }
+            }
             // Read-only config fields returned by get_config() are
             // silently ignored so that `configure(**get_config())` works.
             "google_fonts_cache_dir" => {}
@@ -360,6 +442,18 @@ fn apply_config_overrides(
     }
     if let Some(per_request_plugin_import_domains) = overrides.per_request_plugin_import_domains {
         config.per_request_plugin_import_domains = per_request_plugin_import_domains;
+    }
+    if let Some(default_theme) = overrides.default_theme {
+        config.default_theme = default_theme;
+    }
+    if let Some(default_format_locale) = overrides.default_format_locale {
+        config.default_format_locale = default_format_locale;
+    }
+    if let Some(default_time_format_locale) = overrides.default_time_format_locale {
+        config.default_time_format_locale = default_time_format_locale;
+    }
+    if let Some(themes) = overrides.themes {
+        config.themes = themes;
     }
     Ok(())
 }

@@ -753,12 +753,13 @@ impl VlConverter {
     pub async fn vegalite_to_html(
         &self,
         vl_spec: impl Into<ValueOrString>,
-        vl_opts: VlOpts,
+        mut vl_opts: VlOpts,
         bundle: bool,
         embed_local_fonts: bool,
         subset_fonts: bool,
         renderer: Renderer,
     ) -> Result<String, AnyError> {
+        self.apply_vl_defaults(&mut vl_opts);
         let vl_version = vl_opts.vl_version;
         let vl_spec = vl_spec.into();
 
@@ -838,12 +839,13 @@ impl VlConverter {
     pub async fn vega_to_html(
         &self,
         vg_spec: impl Into<ValueOrString>,
-        vg_opts: VgOpts,
+        mut vg_opts: VgOpts,
         bundle: bool,
         embed_local_fonts: bool,
         subset_fonts: bool,
         renderer: Renderer,
     ) -> Result<String, AnyError> {
+        self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
 
         let auto_install = self.inner.config.auto_google_fonts;
