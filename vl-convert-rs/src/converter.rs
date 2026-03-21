@@ -1457,15 +1457,8 @@ function buildLoader(errors) {
                 return await op_vega_data_fetch(href);
             }
 
-            // Filesystem path
-            let filePath = href;
-            if (href.startsWith('file://')) {
-                const fileUrl = new URL(href);
-                filePath = decodeURIComponent(fileUrl.pathname);
-                if (globalThis.Deno?.build?.os === 'windows' && filePath.startsWith('/')) {
-                    filePath = filePath.slice(1);
-                }
-            }
+            // Filesystem path (sanitize strips file:// prefix, so href is a bare path)
+            let filePath = decodeURIComponent(href);
             if (wantBinary) {
                 const buffer = await op_vega_file_read_bytes(filePath);
                 return buffer.buffer;
