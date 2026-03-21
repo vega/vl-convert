@@ -538,8 +538,6 @@ fn build_permissions(_config: &VlConverterConfig) -> Result<Permissions, AnyErro
     Permissions::from_options(
         &RuntimePermissionDescriptorParser::new(VlConvertNodeSys),
         &PermissionsOptions {
-            allow_read: None,
-            allow_net: None,
             prompt: false,
             ..Default::default()
         },
@@ -548,28 +546,6 @@ fn build_permissions(_config: &VlConverterConfig) -> Result<Permissions, AnyErro
 }
 
 /// Extract the first filesystem path from `allowed_base_urls` and convert to a file:// URL.
-/// This is a compatibility shim: the old code used `filesystem_root` directly; the new
-/// config embeds filesystem paths inside `allowed_base_urls`.
-fn filesystem_root_file_url_from_config(
-    config: &VlConverterConfig,
-) -> Result<Option<String>, AnyError> {
-    let Some(ref urls) = config.allowed_base_urls else {
-        return Ok(None);
-    };
-    for entry in urls {
-        let pattern = normalize_allowed_base_url(entry)?;
-        if let AllowedBaseUrlPattern::FilePathPrefix(path) = pattern {
-            let url = Url::from_directory_path(&path).map_err(|_| {
-                anyhow!(
-                    "Failed to construct file URL from allowed_base_urls filesystem path: {}",
-                    path.display()
-                )
-            })?;
-            return Ok(Some(url.to_string()));
-        }
-    }
-    Ok(None)
-}
 
 /// A JSON value that may already be serialized to a string.
 /// When the caller already has a JSON string (e.g. from Python), this avoids
@@ -651,11 +627,39 @@ pub enum BaseUrlSetting {
 
 impl BaseUrlSetting {
     /// Resolve to the actual base URL string, or None if disabled.
-    pub fn resolved_url(&self) -> Option<String> {
+    /// Filesystem paths are converted to file:// URLs.
+    pub fn resolved_url(&self) -> Result<Option<String>, AnyError> {
         match self {
-            Self::Default => Some("https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/".to_string()),
-            Self::Disabled => None,
-            Self::Custom(url) => Some(url.clone()),
+            Self::Default => Ok(Some(
+                "https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/".to_string(),
+            )),
+            Self::Disabled => Ok(None),
+            Self::Custom(url) => {
+                if url.contains("://") {
+                    Ok(Some(url.clone()))
+                } else {
+                    // Filesystem path: convert to file:// URL
+                    let path = portable_canonicalize(Path::new(url)).map_err(|err| {
+                        anyhow!("Failed to resolve base_url path {url}: {err}")
+                    })?;
+                    let file_url = Url::from_directory_path(&path).map_err(|_| {
+                        anyhow!(
+                            "Failed to construct file URL from base_url path: {}",
+                            path.display()
+                        )
+                    })?;
+                    Ok(Some(file_url.to_string()))
+                }
+            }
+        }
+    }
+
+    /// Whether this base URL resolves to a local filesystem path.
+    pub fn is_filesystem(&self) -> bool {
+        match self {
+            Self::Default => false,
+            Self::Disabled => false,
+            Self::Custom(url) => !url.contains("://") || url.starts_with("file://"),
         }
     }
 }
@@ -1415,31 +1419,21 @@ class WarningCollector {
                 .await?;
 
             // Create and initialize svg function string
-            let filesystem_base_url =
-                serde_json::to_string(&filesystem_root_file_url_from_config(&self.ctx.config)?)?;
+            let is_filesystem = self.ctx.config.base_url.is_filesystem();
             let resolved_base_url =
-                serde_json::to_string(&self.ctx.config.base_url.resolved_url())?;
+                serde_json::to_string(&self.ctx.config.base_url.resolved_url()?)?;
             let mut function_str = r#"
 const CONVERTER_BASE_URL = __BASE_URL__;
-const CONVERTER_FILESYSTEM_BASE_URL = __FILESYSTEM_BASE_URL__;
+const CONVERTER_IS_FILESYSTEM = __IS_FILESYSTEM__;
 
 function buildLoader(errors) {
-    const allowFilesystemAccess = CONVERTER_FILESYSTEM_BASE_URL != null;
     let baseURL = CONVERTER_BASE_URL;
-    if (allowFilesystemAccess) {
-        baseURL = CONVERTER_FILESYSTEM_BASE_URL;
-    }
     if (baseURL == null) {
-        // BaseUrlSetting::Disabled — no base URL for relative paths
         baseURL = 'about:invalid';
     }
 
     const loaderOptions = { baseURL };
-    if (allowFilesystemAccess) {
-        loaderOptions.mode = 'file';
-    } else {
-        loaderOptions.mode = 'http';
-    }
+    loaderOptions.mode = CONVERTER_IS_FILESYSTEM ? 'file' : 'http';
 
     const loader = vega.loader(loaderOptions);
 
@@ -1466,13 +1460,13 @@ function buildLoader(errors) {
         }
     };
 
-    loader.fileAccess = allowFilesystemAccess;
+    loader.fileAccess = CONVERTER_IS_FILESYSTEM;
     loader.file = async (uri, _options) => {
         try {
             let resolved = uri;
-            if (CONVERTER_FILESYSTEM_BASE_URL != null) {
+            if (CONVERTER_IS_FILESYSTEM && CONVERTER_BASE_URL != null) {
                 try {
-                    resolved = new URL(uri, CONVERTER_FILESYSTEM_BASE_URL).href;
+                    resolved = new URL(uri, CONVERTER_BASE_URL).href;
                 } catch (_err) {}
             }
             let filePath = resolved;
@@ -1666,7 +1660,7 @@ function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors) {
             .to_string();
             function_str = function_str.replace("__BASE_URL__", resolved_base_url.as_str());
             function_str =
-                function_str.replace("__FILESYSTEM_BASE_URL__", filesystem_base_url.as_str());
+                function_str.replace("__IS_FILESYSTEM__", if is_filesystem { "true" } else { "false" });
             self.worker
                 .js_runtime
                 .execute_script("ext:<anon>", function_str)?;
@@ -3176,16 +3170,18 @@ impl VlConverter {
     fn image_access_policy(&self) -> ImageAccessPolicy {
         let parsed = parse_allowed_base_urls_from_config(&self.inner.config)
             .expect("allowed_base_urls were already validated");
-        // Extract the first filesystem path from parsed patterns for usvg's resources_dir
-        let filesystem_root = parsed.as_ref().and_then(|patterns| {
-            patterns.iter().find_map(|p| {
-                if let AllowedBaseUrlPattern::FilePathPrefix(path) = p {
-                    Some(path.clone())
-                } else {
-                    None
-                }
-            })
-        });
+        // Use base_url as usvg's resources_dir when it points to a local path
+        let filesystem_root = if self.inner.config.base_url.is_filesystem() {
+            self.inner.config
+                .base_url
+                .resolved_url()
+                .ok()
+                .flatten()
+                .and_then(|url_str| Url::parse(&url_str).ok())
+                .and_then(|url| url.to_file_path().ok())
+        } else {
+            None
+        };
         ImageAccessPolicy {
             allowed_base_urls: parsed,
             filesystem_root,
