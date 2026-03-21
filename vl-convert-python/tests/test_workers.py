@@ -33,9 +33,10 @@ def test_configure_rejects_zero_num_workers():
         vlc.configure(num_workers=0)
 
 
-def test_configure_rejects_empty_allowed_base_urls():
-    with pytest.raises(ValueError):
-        vlc.configure(allowed_base_urls=[])
+def test_configure_accepts_empty_allowed_base_urls():
+    vlc.configure(allowed_base_urls=[])
+    config = vlc.get_config()
+    assert config["allowed_base_urls"] == []
 
 
 def test_parallel_threadpool_conversions_with_configured_workers():

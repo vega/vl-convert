@@ -118,10 +118,11 @@ def test_asyncio_configure_round_trip(tmp_path):
     run(scenario())
 
 
-def test_asyncio_configure_rejects_empty_allowed_base_urls():
+def test_asyncio_configure_accepts_empty_allowed_base_urls():
     async def scenario():
-        with pytest.raises(ValueError):
-            await vlca.configure(allowed_base_urls=[])
+        await vlca.configure(allowed_base_urls=[])
+        config = await vlca.get_config()
+        assert config["allowed_base_urls"] == []
 
     run(scenario())
 
