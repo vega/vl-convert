@@ -207,20 +207,20 @@ pub(crate) fn normalize_allowed_base_urls(
 
 /// Check whether a URL is permitted by the parsed allowlist patterns.
 ///
-/// When `patterns` is `None`, any `http:` or `https:` URL is allowed and all
-/// filesystem access (bare paths or `file://` URLs) is denied. This is the
-/// backward-compatible default.
+/// When `patterns` is `None`, any `http:`, `https:`, or `file:` URL is allowed,
+/// as are bare filesystem paths. This is the backward-compatible default.
 ///
 /// When `patterns` is `Some(list)`, the URL must match at least one pattern.
 pub(crate) fn is_access_allowed(url: &str, patterns: &Option<Vec<AllowedBaseUrlPattern>>) -> bool {
     match patterns {
         None => {
-            // Default: allow http/https, deny file/path
+            // Default: allow http/https/file and bare paths
             if let Ok(parsed) = Url::parse(url) {
                 let scheme = parsed.scheme();
-                scheme == "http" || scheme == "https"
+                scheme == "http" || scheme == "https" || scheme == "file"
             } else {
-                false
+                // Bare filesystem path
+                true
             }
         }
         Some(list) => {
