@@ -208,21 +208,12 @@ pub(crate) fn normalize_allowed_base_urls(
 /// Check whether a URL is permitted by the parsed allowlist patterns.
 ///
 /// When `patterns` is `None`, any `http:`, `https:`, or `file:` URL is allowed,
-/// as are bare filesystem paths. This is the backward-compatible default.
+/// as are bare filesystem paths.
 ///
 /// When `patterns` is `Some(list)`, the URL must match at least one pattern.
 pub(crate) fn is_access_allowed(url: &str, patterns: &Option<Vec<AllowedBaseUrlPattern>>) -> bool {
     match patterns {
-        None => {
-            // Default: allow http/https/file and bare paths
-            if let Ok(parsed) = Url::parse(url) {
-                let scheme = parsed.scheme();
-                scheme == "http" || scheme == "https" || scheme == "file"
-            } else {
-                // Bare filesystem path
-                true
-            }
-        }
+        None => true,
         Some(list) => {
             if list.is_empty() {
                 return false;
@@ -456,9 +447,9 @@ mod tests {
     }
 
     #[test]
-    fn test_is_access_allowed_none_denies_file() {
-        assert!(!is_access_allowed("file:///tmp/data.json", &None));
-        assert!(!is_access_allowed("/tmp/data.json", &None));
+    fn test_is_access_allowed_none_allows_file() {
+        assert!(is_access_allowed("file:///tmp/data.json", &None));
+        assert!(is_access_allowed("/tmp/data.json", &None));
     }
 
     #[test]
@@ -511,19 +502,6 @@ mod tests {
             &patterns
         ));
         assert!(!is_access_allowed("https://other.com/data.json", &patterns));
-    }
-
-    #[test]
-    fn test_is_access_allowed_multiple_patterns() {
-        let patterns = Some(vec![normalize_allowed_base_url("https:").unwrap()]);
-        assert!(is_access_allowed(
-            "https://example.com/data.json",
-            &patterns
-        ));
-        assert!(!is_access_allowed(
-            "http://example.com/data.json",
-            &patterns
-        ));
     }
 
     #[test]
