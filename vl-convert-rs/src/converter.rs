@@ -925,6 +925,62 @@ pub struct VlOpts {
     pub vega_plugin: Option<String>,
 }
 
+/// Options specific to SVG output format (font embedding).
+#[derive(Debug, Clone)]
+pub struct SvgOpts {
+    pub bundle: bool,
+    pub embed_local_fonts: bool,
+    pub subset_fonts: bool,
+}
+
+impl Default for SvgOpts {
+    fn default() -> Self {
+        Self {
+            bundle: false,
+            embed_local_fonts: false,
+            subset_fonts: true,
+        }
+    }
+}
+
+/// Options specific to HTML output format.
+#[derive(Debug, Clone)]
+pub struct HtmlOpts {
+    pub bundle: bool,
+    pub embed_local_fonts: bool,
+    pub subset_fonts: bool,
+    pub renderer: Renderer,
+}
+
+impl Default for HtmlOpts {
+    fn default() -> Self {
+        Self {
+            bundle: false,
+            embed_local_fonts: false,
+            subset_fonts: true,
+            renderer: Renderer::Svg,
+        }
+    }
+}
+
+/// Options specific to PNG output format.
+#[derive(Debug, Clone, Default)]
+pub struct PngOpts {
+    pub scale: Option<f32>,
+    pub ppi: Option<f32>,
+}
+
+/// Options specific to JPEG output format.
+#[derive(Debug, Clone, Default)]
+pub struct JpegOpts {
+    pub scale: Option<f32>,
+    pub quality: Option<u8>,
+}
+
+/// Options specific to PDF output format.
+#[derive(Debug, Clone, Default)]
+pub struct PdfOpts {}
+
 impl VlOpts {
     pub fn to_embed_opts(&self, renderer: Renderer) -> Result<serde_json::Value, AnyError> {
         let mut opts_map = serde_json::Map::new();
@@ -3177,7 +3233,7 @@ pub(crate) async fn classify_scenegraph_fonts(
 }
 
 /// Result of analyzing a rendered Vega scenegraph for font embedding.
-pub(crate) struct HtmlFontAnalysis {
+pub(crate) struct FontAnalysis {
     /// Classified font metadata (Google or Local).
     pub(crate) html_fonts: Vec<FontForHtml>,
     /// Characters used per (family, weight, style) — for subsetting.
@@ -3623,6 +3679,7 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
+        _svg_opts: SvgOpts,
     ) -> Result<String, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
@@ -3712,6 +3769,7 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
+        _svg_opts: SvgOpts,
     ) -> Result<String, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
@@ -3842,13 +3900,12 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
-        scale: Option<f32>,
-        ppi: Option<f32>,
+        png_opts: PngOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
-        let scale = scale.unwrap_or(1.0);
-        let ppi = ppi.unwrap_or(72.0);
+        let scale = png_opts.scale.unwrap_or(1.0);
+        let ppi = png_opts.ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
         let plugin = vg_opts.vega_plugin.take();
 
@@ -3894,13 +3951,12 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
-        scale: Option<f32>,
-        ppi: Option<f32>,
+        png_opts: PngOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
-        let scale = scale.unwrap_or(1.0);
-        let ppi = ppi.unwrap_or(72.0);
+        let scale = png_opts.scale.unwrap_or(1.0);
+        let ppi = png_opts.ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
         let plugin = vl_opts.vega_plugin.take();
 
@@ -3971,11 +4027,11 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
-        scale: Option<f32>,
-        quality: Option<u8>,
+        jpeg_opts: JpegOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
-        let scale = scale.unwrap_or(1.0);
+        let scale = jpeg_opts.scale.unwrap_or(1.0);
+        let quality = jpeg_opts.quality;
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
@@ -4024,11 +4080,11 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
-        scale: Option<f32>,
-        quality: Option<u8>,
+        jpeg_opts: JpegOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
-        let scale = scale.unwrap_or(1.0);
+        let scale = jpeg_opts.scale.unwrap_or(1.0);
+        let quality = jpeg_opts.quality;
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
@@ -4104,6 +4160,7 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
+        _pdf_opts: PdfOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
@@ -4150,6 +4207,7 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
+        _pdf_opts: PdfOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
@@ -4215,12 +4273,9 @@ impl VlConverter {
         }
     }
 
-    pub async fn svg_to_png(
-        &self,
-        svg: &str,
-        scale: f32,
-        ppi: Option<f32>,
-    ) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_png(&self, svg: &str, png_opts: PngOpts) -> Result<Vec<u8>, AnyError> {
+        let scale = png_opts.scale.unwrap_or(1.0);
+        let ppi = png_opts.ppi;
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
@@ -4237,12 +4292,9 @@ impl VlConverter {
         .await
     }
 
-    pub async fn svg_to_jpeg(
-        &self,
-        svg: &str,
-        scale: f32,
-        quality: Option<u8>,
-    ) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_jpeg(&self, svg: &str, jpeg_opts: JpegOpts) -> Result<Vec<u8>, AnyError> {
+        let scale = jpeg_opts.scale.unwrap_or(1.0);
+        let quality = jpeg_opts.quality;
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
@@ -4259,7 +4311,7 @@ impl VlConverter {
         .await
     }
 
-    pub async fn svg_to_pdf(&self, svg: &str) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_pdf(&self, svg: &str, _pdf_opts: PdfOpts) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
@@ -5530,8 +5582,10 @@ try {
         let subdomain_err = converter
             .svg_to_png(
                 &svg_with_href("https://example.com.evil.test/image.png"),
-                1.0,
-                None,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
             )
             .await
             .unwrap_err();
@@ -5542,8 +5596,10 @@ try {
         let userinfo_err = converter
             .svg_to_png(
                 &svg_with_href("https://example.com@evil.test/image.png"),
-                1.0,
-                None,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
             )
             .await
             .unwrap_err();
@@ -5566,7 +5622,13 @@ try {
         .unwrap();
 
         let err = converter
-            .svg_to_png(&svg_with_href(&href), 1.0, None)
+            .svg_to_png(
+                &svg_with_href(&href),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("Filesystem access denied"));
@@ -5591,20 +5653,38 @@ try {
         .unwrap();
 
         let allowed = converter
-            .svg_to_png(&svg_with_href("inside.png"), 1.0, None)
+            .svg_to_png(
+                &svg_with_href("inside.png"),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await;
         assert!(allowed.is_ok());
 
         let outside_href = Url::from_file_path(&outside_path).unwrap().to_string();
         let err = converter
-            .svg_to_png(&svg_with_href(&outside_href), 1.0, None)
+            .svg_to_png(
+                &svg_with_href(&outside_href),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         let message = err.to_string();
         assert!(message.contains("filesystem_root") || message.contains("access denied"));
 
         let err = converter
-            .svg_to_png(&svg_with_href("../outside.png"), 1.0, None)
+            .svg_to_png(
+                &svg_with_href("../outside.png"),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("filesystem_root"));
@@ -5620,7 +5700,13 @@ try {
         })
         .unwrap();
         let err = no_http_converter
-            .svg_to_png(&remote_svg, 1.0, None)
+            .svg_to_png(
+                &remote_svg,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         let msg = err.to_string().to_lowercase();
@@ -5637,7 +5723,13 @@ try {
         })
         .unwrap();
         let err = allowlisted_converter
-            .svg_to_png(&remote_svg, 1.0, None)
+            .svg_to_png(
+                &remote_svg,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("External data url not allowed"));
@@ -5653,7 +5745,16 @@ try {
         let svg = svg_with_href(
             "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAgMBgLP4r9kAAAAASUVORK5CYII=",
         );
-        let png = converter.svg_to_png(&svg, 1.0, None).await.unwrap();
+        let png = converter
+            .svg_to_png(
+                &svg,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
+            .await
+            .unwrap();
         assert!(png.starts_with(&[137, 80, 78, 71]));
     }
 
@@ -5667,7 +5768,7 @@ try {
         let spec = vega_spec_with_data_url("https://example.com/data.csv");
 
         let err = converter
-            .vega_to_pdf(spec, VgOpts::default())
+            .vega_to_pdf(spec, VgOpts::default(), PdfOpts::default())
             .await
             .unwrap_err();
         let message = err.to_string().to_ascii_lowercase();
@@ -5690,7 +5791,7 @@ try {
         let spec = vega_spec_with_data_url("data:text/csv,a,b%0A1,2");
 
         let svg = converter
-            .vega_to_svg(spec, VgOpts::default())
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
             .await
             .unwrap();
         assert!(svg.contains("<svg"));
@@ -5714,8 +5815,10 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
-                Some(1.0),
-                Some(72.0),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: Some(72.0),
+                },
             )
             .await;
         // The conversion should succeed (image just not loaded)
@@ -5743,8 +5846,10 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
-                Some(1.0),
-                Some(72.0),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: Some(72.0),
+                },
             )
             .await;
         assert!(
@@ -5763,7 +5868,7 @@ try {
         let spec = vega_spec_with_data_url("https://example.com/data.csv");
 
         let err = converter
-            .vega_to_pdf(spec, VgOpts::default())
+            .vega_to_pdf(spec, VgOpts::default(), PdfOpts::default())
             .await
             .unwrap_err();
         assert!(err.to_string().contains("External data url not allowed"));
@@ -5792,6 +5897,7 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
+                PdfOpts::default(),
             )
             .await
             .unwrap_err();
@@ -5826,6 +5932,7 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
+                SvgOpts::default(),
             )
             .await
             .unwrap_err();
@@ -5860,6 +5967,7 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
+                PdfOpts::default(),
             )
             .await
             .unwrap();
@@ -5890,18 +5998,22 @@ try {
                 vl_version: VlVersion::v5_16,
                 ..Default::default()
             },
-            true,
-            false,
-            true,
-            Renderer::Svg,
+            HtmlOpts {
+                bundle: true,
+                embed_local_fonts: false,
+                subset_fonts: true,
+                renderer: Renderer::Svg,
+            },
         ));
         assert_send_future(converter.vega_to_html(
             vg_spec,
             VgOpts::default(),
-            true,
-            false,
-            true,
-            Renderer::Svg,
+            HtmlOpts {
+                bundle: true,
+                embed_local_fonts: false,
+                subset_fonts: true,
+                renderer: Renderer::Svg,
+            },
         ));
     }
 
@@ -6174,6 +6286,7 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
+                SvgOpts::default(),
             )
             .await
             .unwrap();
@@ -6208,6 +6321,7 @@ try {
                             vl_version: VlVersion::v5_16,
                             ..Default::default()
                         },
+                        SvgOpts::default(),
                     )
                     .await
             }));
@@ -6396,7 +6510,9 @@ try {
             "marks": []
         });
 
-        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+        let result = converter
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
+            .await;
         // The relative URL resolves to about:invalid which the op rejects
         assert!(
             result.is_err() || {

@@ -1,6 +1,6 @@
 use crate::converter::{
-    classify_and_request_fonts, classify_scenegraph_fonts, GoogleFontRequest, HtmlFontAnalysis,
-    InnerVlConverter, MissingFontsPolicy, Renderer, ResolvedPlugin, ValueOrString, VgOpts,
+    classify_and_request_fonts, classify_scenegraph_fonts, FontAnalysis, GoogleFontRequest,
+    HtmlOpts, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin, ValueOrString, VgOpts,
     VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
@@ -378,7 +378,7 @@ impl VlConverter {
         vg_opts: VgOpts,
         auto_google_fonts: bool,
         embed_local_fonts: bool,
-    ) -> Result<HtmlFontAnalysis, AnyError> {
+    ) -> Result<FontAnalysis, AnyError> {
         let missing = self.inner.config.missing_fonts;
 
         let explicit_requests = vg_opts.google_fonts.clone();
@@ -442,7 +442,7 @@ impl VlConverter {
             }
         }
 
-        Ok(HtmlFontAnalysis {
+        Ok(FontAnalysis {
             html_fonts,
             chars_by_key,
             family_variants,
@@ -485,11 +485,11 @@ impl VlConverter {
     /// CDN URLs omit the `&text=` parameter.
     async fn build_font_info(
         &self,
-        analysis: HtmlFontAnalysis,
+        analysis: FontAnalysis,
         include_font_face: bool,
         subset_fonts: bool,
     ) -> Result<Vec<FontInfo>, AnyError> {
-        let HtmlFontAnalysis {
+        let FontAnalysis {
             html_fonts,
             chars_by_key,
             family_variants,
@@ -754,11 +754,14 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
-        bundle: bool,
-        embed_local_fonts: bool,
-        subset_fonts: bool,
-        renderer: Renderer,
+        html_opts: HtmlOpts,
     ) -> Result<String, AnyError> {
+        let HtmlOpts {
+            bundle,
+            embed_local_fonts,
+            subset_fonts,
+            renderer,
+        } = html_opts;
         self.apply_vl_defaults(&mut vl_opts);
         let vl_version = vl_opts.vl_version;
         let vl_spec = vl_spec.into();
@@ -840,11 +843,14 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
-        bundle: bool,
-        embed_local_fonts: bool,
-        subset_fonts: bool,
-        renderer: Renderer,
+        html_opts: HtmlOpts,
     ) -> Result<String, AnyError> {
+        let HtmlOpts {
+            bundle,
+            embed_local_fonts,
+            subset_fonts,
+            renderer,
+        } = html_opts;
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
 

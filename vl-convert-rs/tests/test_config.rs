@@ -1,6 +1,6 @@
 use serde_json::json;
 use std::collections::HashMap;
-use vl_convert_rs::converter::{VlConverterConfig, VlOpts};
+use vl_convert_rs::converter::{SvgOpts, VlConverterConfig, VlOpts};
 use vl_convert_rs::VlConverter;
 
 fn simple_vl_bar_spec() -> serde_json::Value {
@@ -28,7 +28,7 @@ async fn test_custom_theme_applied() {
     .unwrap();
 
     let svg = converter
-        .vegalite_to_svg(simple_vl_bar_spec(), VlOpts::default())
+        .vegalite_to_svg(simple_vl_bar_spec(), VlOpts::default(), SvgOpts::default())
         .await
         .unwrap();
 
@@ -59,6 +59,7 @@ async fn test_per_request_theme_overrides_default() {
                 theme: Some("dark".to_string()),
                 ..Default::default()
             },
+            SvgOpts::default(),
         )
         .await
         .unwrap();
@@ -116,7 +117,7 @@ async fn test_default_theme_without_custom_themes() {
     .unwrap();
 
     let svg = converter
-        .vegalite_to_svg(simple_vl_bar_spec(), VlOpts::default())
+        .vegalite_to_svg(simple_vl_bar_spec(), VlOpts::default(), SvgOpts::default())
         .await
         .unwrap();
 
@@ -147,7 +148,7 @@ async fn test_default_locale_applied() {
     });
 
     let svg = converter
-        .vegalite_to_svg(spec, VlOpts::default())
+        .vegalite_to_svg(spec, VlOpts::default(), SvgOpts::default())
         .await
         .unwrap();
 
@@ -189,6 +190,7 @@ async fn test_per_request_locale_overrides_default() {
                 )),
                 ..Default::default()
             },
+            SvgOpts::default(),
         )
         .await
         .unwrap();

@@ -669,6 +669,9 @@ def vega_to_svg(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
+    bundle: bool | None = None,
+    embed_local_fonts: bool | None = None,
+    subset_fonts: bool | None = None,
 ) -> str:
     """
     Convert a Vega spec to an SVG image string.
@@ -684,6 +687,12 @@ def vega_to_svg(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    bundle
+        Whether to bundle fonts into the SVG (not yet implemented)
+    embed_local_fonts
+        Whether to embed locally installed fonts (not yet implemented)
+    subset_fonts
+        Whether to subset fonts to only include used characters (not yet implemented, default True)
     Returns
     -------
     SVG image string.
@@ -1022,6 +1031,9 @@ def vegalite_to_svg(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
+    bundle: bool | None = None,
+    embed_local_fonts: bool | None = None,
+    subset_fonts: bool | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to an SVG image string using a particular version of the Vega-Lite JavaScript library.
@@ -1046,6 +1058,12 @@ def vegalite_to_svg(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    bundle
+        Whether to bundle fonts into the SVG (not yet implemented)
+    embed_local_fonts
+        Whether to embed locally installed fonts (not yet implemented)
+    subset_fonts
+        Whether to subset fonts to only include used characters (not yet implemented, default True)
     Returns
     -------
     SVG image string.
@@ -1270,6 +1288,9 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
+            bundle: bool | None = None,
+            embed_local_fonts: bool | None = None,
+            subset_fonts: bool | None = None,
         ) -> str:
             """Async version of ``vega_to_svg``. See sync function for full documentation."""
             ...
@@ -1391,6 +1412,9 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
+            bundle: bool | None = None,
+            embed_local_fonts: bool | None = None,
+            subset_fonts: bool | None = None,
         ) -> str:
             """Async version of ``vegalite_to_svg``. See sync function for full documentation."""
             ...
