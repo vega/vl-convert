@@ -161,7 +161,8 @@ if TYPE_CHECKING:
         auto_google_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
         google_fonts_cache_dir: str | None
-        max_worker_heap_size_mb: int
+        max_v8_heap_size_mb: int
+        max_v8_execution_time_secs: int
         gc_after_conversion: bool
         vega_plugins: list[str] | None
         plugin_import_domains: list[str]
@@ -316,7 +317,8 @@ def configure(
     auto_google_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
-    max_worker_heap_size_mb: int | None = None,
+    max_v8_heap_size_mb: int | None = None,
+    max_v8_execution_time_secs: int | None = None,
     gc_after_conversion: bool | None = None,
     vega_plugins: list[str] | None = None,
     plugin_import_domains: list[str] | None = None,
@@ -359,8 +361,12 @@ def configure(
         (list of ``(weight, style)`` tuples). Fonts are downloaded and
         registered on each conversion call. ``None`` keeps current value.
         Pass ``[]`` to clear.
-    max_worker_heap_size_mb
+    max_v8_heap_size_mb
         Maximum V8 heap size per worker in megabytes. Default is 0 (no limit).
+        If ``None``, keep current value.
+    max_v8_execution_time_secs
+        Maximum V8 execution time in seconds. Default is 0 (no limit).
+        When exceeded, V8 execution is terminated and an error is returned.
         If ``None``, keep current value.
     gc_after_conversion
         Whether to run V8 garbage collection after each conversion to release
@@ -1166,7 +1172,8 @@ if TYPE_CHECKING:
             auto_google_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
-            max_worker_heap_size_mb: int | None = None,
+            max_v8_heap_size_mb: int | None = None,
+            max_v8_execution_time_secs: int | None = None,
             gc_after_conversion: bool | None = None,
             vega_plugins: list[str] | None = None,
             plugin_import_domains: list[str] | None = None,

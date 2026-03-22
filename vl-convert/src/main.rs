@@ -75,7 +75,11 @@ struct Cli {
 
     /// Maximum V8 heap size per worker in megabytes [default: 0 = no limit]
     #[arg(long, global = true, default_value_t = 0)]
-    max_worker_heap_size_mb: usize,
+    max_v8_heap_size_mb: usize,
+
+    /// Maximum V8 execution time in seconds [default: 0 = no limit]
+    #[arg(long, global = true, default_value_t = 0)]
+    max_v8_execution_time_secs: u64,
 
     /// Run V8 garbage collection after each conversion to release memory
     #[arg(long, global = true)]
@@ -692,7 +696,8 @@ async fn main() -> Result<(), anyhow::Error> {
         google_font: google_font_families,
         auto_google_fonts,
         missing_fonts: missing_fonts_arg,
-        max_worker_heap_size_mb,
+        max_v8_heap_size_mb,
+        max_v8_execution_time_secs,
         gc_after_conversion,
         vega_plugin,
         plugin_import_domains,
@@ -730,7 +735,8 @@ async fn main() -> Result<(), anyhow::Error> {
         auto_google_fonts,
         missing_fonts,
         google_fonts: config_google_fonts.clone(),
-        max_worker_heap_size_mb,
+        max_v8_heap_size_mb,
+        max_v8_execution_time_secs,
         gc_after_conversion,
         vega_plugins,
         plugin_import_domains,

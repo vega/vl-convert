@@ -1036,7 +1036,7 @@ mod test_heap_limit {
     #[tokio::test]
     async fn test_heap_limit_exceeded_and_recovery() {
         let converter = VlConverter::with_config(VlConverterConfig {
-            max_worker_heap_size_mb: 256,
+            max_v8_heap_size_mb: 256,
             ..Default::default()
         })
         .expect("Failed to create converter with small heap");
@@ -1097,7 +1097,7 @@ mod test_heap_limit {
     #[tokio::test]
     async fn test_heap_limit_restored_after_recovery() {
         let converter = VlConverter::with_config(VlConverterConfig {
-            max_worker_heap_size_mb: 256,
+            max_v8_heap_size_mb: 256,
             ..Default::default()
         })
         .expect("Failed to create converter with small heap");
@@ -1143,15 +1143,15 @@ mod test_heap_limit {
         );
     }
 
-    /// Verify that max_worker_heap_size_mb=0 (no limit) works: no callback
+    /// Verify that max_v8_heap_size_mb=0 (no limit) works: no callback
     /// is registered and a normal conversion succeeds.
     #[tokio::test]
     async fn test_no_heap_limit() {
         let converter = VlConverter::with_config(VlConverterConfig {
-            max_worker_heap_size_mb: 0,
+            max_v8_heap_size_mb: 0,
             ..Default::default()
         })
-        .expect("max_worker_heap_size_mb=0 should be valid");
+        .expect("max_v8_heap_size_mb=0 should be valid");
 
         let spec = serde_json::json!({
             "$schema": "https://vega.github.io/schema/vega/v5.json",
@@ -1168,21 +1168,110 @@ mod test_heap_limit {
         );
     }
 
-    /// Verify that max_worker_heap_size_mb below the minimum is rejected
+    /// Verify that max_v8_heap_size_mb below the minimum is rejected
     /// at config time, not deferred to first use.
     #[test]
     fn test_min_heap_size_validation() {
         let result = VlConverter::with_config(VlConverterConfig {
-            max_worker_heap_size_mb: 1,
+            max_v8_heap_size_mb: 1,
             ..Default::default()
         });
         let err = result
             .err()
-            .expect("max_worker_heap_size_mb=1 should be rejected");
+            .expect("max_v8_heap_size_mb=1 should be rejected");
         let msg = err.to_string();
         assert!(
             msg.contains("too small for V8 to initialize"),
             "Should mention V8 initialization, got: {msg}"
+        );
+    }
+
+    /// Verify that exceeding the conversion timeout returns a specific error,
+    /// the worker recovers, and can process a subsequent conversion.
+    /// Uses a per-request plugin with an infinite loop to reliably trigger the
+    /// timeout without hitting V8's default memory limit.
+    #[tokio::test]
+    async fn test_conversion_timeout_and_recovery() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            max_v8_execution_time_secs: 2,
+            allow_per_request_plugins: true,
+            ..Default::default()
+        })
+        .expect("Failed to create converter with timeout");
+
+        // Plugin registers an expression function that loops forever
+        let infinite_plugin = r#"
+            export default function(vega) {
+                vega.expressionFunction('spin', function() {
+                    for (;;) {}
+                });
+            }
+        "#;
+
+        let slow_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "signals": [{
+                "name": "s",
+                "init": "spin()"
+            }],
+            "marks": []
+        });
+
+        let opts = VgOpts {
+            vega_plugin: Some(infinite_plugin.to_string()),
+            ..Default::default()
+        };
+        let result = converter.vega_to_svg(slow_spec, opts).await;
+        let err = result.expect_err("Expected timeout error, got Ok");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("timed out"),
+            "Error should mention timeout, got: {msg}"
+        );
+        assert!(
+            msg.contains("max_v8_execution_time_secs"),
+            "Error should mention config parameter, got: {msg}"
+        );
+
+        // The ephemeral worker is discarded after the timeout, but the converter
+        // itself should still work for normal conversions (on a pool worker).
+        let small_spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "marks": []
+        });
+        let result = converter.vega_to_svg(small_spec, VgOpts::default()).await;
+        assert!(
+            result.is_ok(),
+            "Conversion should succeed after timeout recovery, got: {:?}",
+            result.err()
+        );
+    }
+
+    /// Verify that max_v8_execution_time_secs=0 (no limit) works normally.
+    #[tokio::test]
+    async fn test_no_conversion_timeout() {
+        let converter = VlConverter::with_config(VlConverterConfig {
+            max_v8_execution_time_secs: 0,
+            ..Default::default()
+        })
+        .expect("max_v8_execution_time_secs=0 should be valid");
+
+        let spec = serde_json::json!({
+            "$schema": "https://vega.github.io/schema/vega/v5.json",
+            "width": 10,
+            "height": 10,
+            "marks": []
+        });
+
+        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+        assert!(
+            result.is_ok(),
+            "Conversion with no timeout should succeed: {:?}",
+            result.err()
         );
     }
 

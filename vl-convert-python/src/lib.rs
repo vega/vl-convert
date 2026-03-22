@@ -90,7 +90,8 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
         },
         "google_fonts_cache_dir": vl_convert_rs::google_fonts_cache_dir()
             .map(|p| p.to_string_lossy().into_owned()),
-        "max_worker_heap_size_mb": config.max_worker_heap_size_mb,
+        "max_v8_heap_size_mb": config.max_v8_heap_size_mb,
+        "max_v8_execution_time_secs": config.max_v8_execution_time_secs,
         "gc_after_conversion": config.gc_after_conversion,
         "vega_plugins": config.vega_plugins,
         "plugin_import_domains": config.plugin_import_domains,
@@ -120,7 +121,8 @@ struct ConverterConfigOverrides {
     missing_fonts: Option<MissingFontsPolicy>,
     // None => no change, Some(None) => clear, Some(Some(fonts)) => set
     google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
-    max_worker_heap_size_mb: Option<usize>,
+    max_v8_heap_size_mb: Option<usize>,
+    max_v8_execution_time_secs: Option<u64>,
     gc_after_conversion: Option<bool>,
     // None => no change, Some(None) => clear, Some(Some(plugins)) => set
     vega_plugins: Option<Option<Vec<String>>>,
@@ -244,12 +246,22 @@ fn parse_config_overrides(
                     overrides.google_fonts = Some(parsed);
                 }
             }
-            "max_worker_heap_size_mb" => {
+            "max_v8_heap_size_mb" => {
                 if !value.is_none() {
-                    overrides.max_worker_heap_size_mb =
+                    overrides.max_v8_heap_size_mb =
                         Some(value.extract::<usize>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
-                                "Invalid max_worker_heap_size_mb value for configure: {err}"
+                                "Invalid max_v8_heap_size_mb value for configure: {err}"
+                            )
+                        })?);
+                }
+            }
+            "max_v8_execution_time_secs" => {
+                if !value.is_none() {
+                    overrides.max_v8_execution_time_secs =
+                        Some(value.extract::<u64>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid max_v8_execution_time_secs value for configure: {err}"
                             )
                         })?);
                 }
@@ -417,8 +429,11 @@ fn apply_config_overrides(
             .map_err(|e| vl_convert_rs::anyhow::anyhow!("Failed to write google_fonts: {e}"))?;
         *guard = google_fonts;
     }
-    if let Some(max_worker_heap_size_mb) = overrides.max_worker_heap_size_mb {
-        config.max_worker_heap_size_mb = max_worker_heap_size_mb;
+    if let Some(max_v8_heap_size_mb) = overrides.max_v8_heap_size_mb {
+        config.max_v8_heap_size_mb = max_v8_heap_size_mb;
+    }
+    if let Some(max_v8_execution_time_secs) = overrides.max_v8_execution_time_secs {
+        config.max_v8_execution_time_secs = max_v8_execution_time_secs;
     }
     if let Some(gc_after_conversion) = overrides.gc_after_conversion {
         config.gc_after_conversion = gc_after_conversion;

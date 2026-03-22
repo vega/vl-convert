@@ -192,9 +192,9 @@ fn worker_queue_capacity(num_workers: usize) -> usize {
     num_workers.saturating_mul(32).max(32)
 }
 
-/// Minimum `max_worker_heap_size_mb` in MB. Values below this cause V8 to
+/// Minimum `max_v8_heap_size_mb` in MB. Values below this cause V8 to
 /// abort during isolate creation (unrecoverable).
-const MIN_WORKER_HEAP_SIZE_MB: usize = 64;
+const MIN_V8_HEAP_SIZE_MB: usize = 64;
 
 /// Bundle a URL plugin using the URL as the deno_emit entry specifier.
 async fn bundle_url_plugin(url: &str, allowed_domains: &[String]) -> Result<String, AnyError> {
@@ -375,18 +375,23 @@ fn spawn_worker_pool(
                     // Keep the ticket alive for the full loop iteration so outstanding
                     // covers the work execution (drop happens at iteration end).
                     let (work, _ticket) = queued_work.into_parts();
+
+                    let timer = inner.start_conversion_timer();
                     (work)(&mut inner).await;
+                    inner.cancel_conversion_timer(timer);
 
                     // If V8 execution was terminated (e.g. by the near-heap-limit
-                    // callback), clear the terminated state so the worker can
-                    // process subsequent commands, then restore the original
-                    // heap limit and re-register the callback.
+                    // callback or the conversion timeout timer), clear the
+                    // terminated state so the worker can process subsequent
+                    // commands, then restore the original heap limit and
+                    // re-register the callback.
                     inner
                         .worker
                         .js_runtime
                         .v8_isolate()
                         .cancel_terminate_execution();
                     inner.restore_heap_limit_if_needed();
+                    inner.reset_timeout_if_needed();
 
                     if inner.ctx.config.gc_after_conversion {
                         inner
@@ -465,14 +470,12 @@ fn normalize_converter_config(
         }
     }
 
-    if config.max_worker_heap_size_mb > 0
-        && config.max_worker_heap_size_mb < MIN_WORKER_HEAP_SIZE_MB
-    {
+    if config.max_v8_heap_size_mb > 0 && config.max_v8_heap_size_mb < MIN_V8_HEAP_SIZE_MB {
         bail!(
-            "max_worker_heap_size_mb is {} MB, which is too small for V8 to \
+            "max_v8_heap_size_mb is {} MB, which is too small for V8 to \
              initialize. Set to {} or higher, or use 0 for no limit.",
-            config.max_worker_heap_size_mb,
-            MIN_WORKER_HEAP_SIZE_MB,
+            config.max_v8_heap_size_mb,
+            MIN_V8_HEAP_SIZE_MB,
         );
     }
 
@@ -702,7 +705,13 @@ pub struct VlConverterConfig {
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
     /// Maximum V8 heap size in megabytes per worker. Defaults to 0 (no limit).
     /// Set to a positive value to cap V8 heap usage per worker.
-    pub max_worker_heap_size_mb: usize,
+    pub max_v8_heap_size_mb: usize,
+    /// Maximum V8 execution time in seconds. Defaults to 0 (no limit).
+    /// When exceeded, V8 execution is terminated and an error is returned.
+    /// Only applies to the V8/JavaScript portion of the conversion (Vega
+    /// evaluation, plugin loading); Rust-side post-processing is not subject
+    /// to this limit.
+    pub max_v8_execution_time_secs: u64,
     /// Whether to run V8 garbage collection after each conversion to release
     /// memory back to the OS. Defaults to false. Enabling this reduces peak
     /// memory between conversions at the cost of slower throughput.
@@ -764,7 +773,8 @@ impl Default for VlConverterConfig {
             auto_google_fonts: false,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: None,
-            max_worker_heap_size_mb: 0,
+            max_v8_heap_size_mb: 0,
+            max_v8_execution_time_secs: 0,
             gc_after_conversion: false,
             vega_plugins: None,
             plugin_import_domains: Vec::new(),
@@ -1143,6 +1153,15 @@ impl WorkerFontState {
     }
 }
 
+/// Per-conversion timeout timer state. Created before each conversion
+/// and cancelled/joined after. The timer thread sleeps using `recv_timeout`
+/// on a cancellation channel; if the timeout elapses it sets the flag and
+/// calls `terminate_execution()` on the V8 isolate handle.
+struct ConversionTimer {
+    cancel_tx: std::sync::mpsc::Sender<()>,
+    thread: std::thread::JoinHandle<()>,
+}
+
 /// State shared between the near-heap-limit callback and the worker loop.
 /// The callback sets `heap_limit_hit` to `true` when it fires, allowing
 /// the worker loop to produce a specific error message.
@@ -1190,8 +1209,11 @@ pub(crate) struct InnerVlConverter {
     usvg_options: usvg::Options<'static>,
     ctx: Arc<ConverterContext>,
     /// Pointer to the heap-limit callback data (leaked Box). `None` when
-    /// `max_worker_heap_size_mb` is 0 (no limit).
+    /// `max_v8_heap_size_mb` is 0 (no limit).
     heap_limit_data: Option<*const HeapLimitCallbackData>,
+    /// Shared flag set by the timeout timer thread when a conversion exceeds
+    /// `max_v8_execution_time_secs`. Checked by `annotate_timeout_error()`.
+    timeout_hit: Arc<std::sync::atomic::AtomicBool>,
     /// Set when a plugin fails during init_vega(). Subsequent commands
     /// return this error immediately (no retry on the tainted isolate).
     plugin_init_error: Option<String>,
@@ -1231,7 +1253,7 @@ impl InnerVlConverter {
             let max_bytes = self
                 .ctx
                 .config
-                .max_worker_heap_size_mb
+                .max_v8_heap_size_mb
                 .saturating_mul(1024 * 1024);
             let isolate = self.worker.js_runtime.v8_isolate();
 
@@ -1248,6 +1270,11 @@ impl InnerVlConverter {
                 near_heap_limit_callback,
                 ptr as *const _ as *mut std::ffi::c_void,
             );
+
+            // Clear plugin poisoning so the next request retries init.
+            // Don't reset vega_initialized — the modules are still in V8's
+            // cache and the GC above reclaimed enough headroom to continue.
+            self.plugin_init_error = None;
         }
     }
 
@@ -1264,10 +1291,82 @@ impl InnerVlConverter {
                     "V8 heap limit exceeded (configured: {} MB). \
                      Worker memory: {used_mb:.1} MB used, {total_mb:.1} MB total, \
                      {external_mb:.1} MB external. \
-                     Increase max_worker_heap_size_mb or set to 0 for no limit.",
-                    self.ctx.config.max_worker_heap_size_mb,
+                     Increase max_v8_heap_size_mb or set to 0 for no limit.",
+                    self.ctx.config.max_v8_heap_size_mb,
                 )))
             }
+            other => other,
+        }
+    }
+
+    /// Start a conversion timeout timer. Returns `None` if the timeout is
+    /// disabled (0). The returned `ConversionTimer` must be cancelled after
+    /// the conversion completes by calling `cancel_conversion_timer()`.
+    fn start_conversion_timer(&mut self) -> Option<ConversionTimer> {
+        self.start_conversion_timer_with_duration(std::time::Duration::from_secs(
+            self.ctx.config.max_v8_execution_time_secs,
+        ))
+    }
+
+    /// Start a conversion timeout timer with an explicit duration. Used by
+    /// ephemeral workers that subtract already-elapsed time from the budget.
+    fn start_conversion_timer_with_duration(
+        &mut self,
+        duration: std::time::Duration,
+    ) -> Option<ConversionTimer> {
+        if duration.is_zero() {
+            return None;
+        }
+        let timeout_hit = self.timeout_hit.clone();
+        let handle = self.worker.js_runtime.v8_isolate().thread_safe_handle();
+        let (cancel_tx, cancel_rx) = std::sync::mpsc::channel::<()>();
+        let thread = std::thread::spawn(move || {
+            if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
+                cancel_rx.recv_timeout(duration)
+            {
+                timeout_hit.store(true, std::sync::atomic::Ordering::Release);
+                handle.terminate_execution();
+            }
+        });
+        Some(ConversionTimer { cancel_tx, thread })
+    }
+
+    /// Cancel a running conversion timer and join its thread. Safe to call
+    /// even if the timer already fired.
+    fn cancel_conversion_timer(&self, timer: Option<ConversionTimer>) {
+        if let Some(timer) = timer {
+            drop(timer.cancel_tx);
+            let _ = timer.thread.join();
+        }
+    }
+
+    /// Returns `true` if the conversion timeout timer has fired.
+    fn timeout_was_hit(&self) -> bool {
+        self.timeout_hit.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    /// Reset the timeout flag after a timed-out conversion so the worker
+    /// can process subsequent requests. Also clears plugin poisoning and
+    /// vega init state so the next request retries initialization.
+    fn reset_timeout_if_needed(&mut self) {
+        if self
+            .timeout_hit
+            .swap(false, std::sync::atomic::Ordering::AcqRel)
+        {
+            self.plugin_init_error = None;
+            self.vega_initialized = false;
+        }
+    }
+
+    /// If the timeout timer fired, annotate the error with timeout details.
+    /// Otherwise return the result unchanged.
+    fn annotate_timeout_error<T>(&self, result: Result<T, AnyError>) -> Result<T, AnyError> {
+        match result {
+            Err(original) if self.timeout_was_hit() => Err(original.context(format!(
+                "Conversion timed out (configured: {} seconds). \
+                 Increase max_v8_execution_time_secs or set to 0 for no limit.",
+                self.ctx.config.max_v8_execution_time_secs,
+            ))),
             other => other,
         }
     }
@@ -1904,11 +2003,8 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLoca
         // Configure WorkerOptions with our custom extensions and V8 snapshot.
         // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
         // This is required for container compatibility (manylinux, slim images).
-        let create_params = if ctx.config.max_worker_heap_size_mb > 0 {
-            let max_bytes = ctx
-                .config
-                .max_worker_heap_size_mb
-                .saturating_mul(1024 * 1024);
+        let create_params = if ctx.config.max_v8_heap_size_mb > 0 {
+            let max_bytes = ctx.config.max_v8_heap_size_mb.saturating_mul(1024 * 1024);
             Some(v8::CreateParams::default().heap_limits(0, max_bytes))
         } else {
             None
@@ -1931,7 +2027,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLoca
 
         // Register a near-heap-limit callback so V8 terminates JS execution
         // instead of calling FatalProcessOutOfMemory() (which aborts the process).
-        let heap_limit_data = if ctx.config.max_worker_heap_size_mb > 0 {
+        let heap_limit_data = if ctx.config.max_v8_heap_size_mb > 0 {
             let isolate = worker.js_runtime.v8_isolate();
             let cb_data = Box::new(HeapLimitCallbackData {
                 handle: isolate.thread_safe_handle(),
@@ -1981,6 +2077,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLoca
             font_state,
             ctx,
             heap_limit_data,
+            timeout_hit: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             plugin_init_error: None,
         };
 
@@ -3264,8 +3361,9 @@ impl VlConverter {
                     return;
                 }
                 let result = work(inner).await;
-                // Decorate heap-limit errors with V8 memory stats
+                // Decorate heap-limit and timeout errors
                 let result = inner.annotate_heap_limit_error(result);
+                let result = inner.annotate_timeout_error(result);
                 let _ = resp_tx.send(result);
             })
         });
@@ -3318,24 +3416,73 @@ impl VlConverter {
                 .map_err(|e| anyhow!("Failed to build ephemeral worker runtime: {e}"))?;
             let local = tokio::task::LocalSet::new();
             local.block_on(&rt, async move {
-                let resolved = resolve_plugin(
-                    &plugin_source,
-                    &ctx.config.per_request_plugin_import_domains,
-                )
-                .await
-                .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?;
+                let timeout_secs = ctx.config.max_v8_execution_time_secs;
+                let deadline = if timeout_secs > 0 {
+                    Some(std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs))
+                } else {
+                    None
+                };
+
+                // Wrap plugin resolution in tokio::time::timeout if a deadline is set,
+                // since terminate_execution() can't help before V8 exists.
+                let resolved = if let Some(deadline) = deadline {
+                    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                    tokio::time::timeout(
+                        remaining,
+                        resolve_plugin(
+                            &plugin_source,
+                            &ctx.config.per_request_plugin_import_domains,
+                        ),
+                    )
+                    .await
+                    .map_err(|_| {
+                        anyhow!(
+                            "Conversion timed out during plugin resolution \
+                             (configured: {timeout_secs} seconds). \
+                             Increase max_v8_execution_time_secs or set to 0 for no limit."
+                        )
+                    })?
+                    .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?
+                } else {
+                    resolve_plugin(
+                        &plugin_source,
+                        &ctx.config.per_request_plugin_import_domains,
+                    )
+                    .await
+                    .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?
+                };
 
                 let mut inner = InnerVlConverter::try_new(ctx, font_baseline).await?;
-                inner.init_vega().await?;
 
-                // Load per-request plugin (no poison: ephemeral worker)
-                let plugin_index = inner.ctx.resolved_plugins.as_ref().map_or(0, |p| p.len());
+                // Arm the V8 watchdog timer with remaining budget
+                let timer = if let Some(deadline) = deadline {
+                    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                    inner.start_conversion_timer_with_duration(remaining)
+                } else {
+                    None
+                };
+
+                // Run init, plugin load, and conversion under the timer.
+                // Use a closure so we always clean up the timer on all paths.
+                let result = async {
+                    inner.init_vega().await?;
+                    let plugin_index = inner.ctx.resolved_plugins.as_ref().map_or(0, |p| p.len());
+                    inner
+                        .load_plugin(plugin_index, &resolved.bundled_source, false)
+                        .await?;
+                    work(&mut inner).await
+                }
+                .await;
+
+                inner.cancel_conversion_timer(timer);
                 inner
-                    .load_plugin(plugin_index, &resolved.bundled_source, false)
-                    .await?;
-
-                // Run the actual conversion
-                work(&mut inner).await
+                    .worker
+                    .js_runtime
+                    .v8_isolate()
+                    .cancel_terminate_execution();
+                let result = inner.annotate_timeout_error(result);
+                inner.reset_timeout_if_needed();
+                result
             })
         })
         .join()
