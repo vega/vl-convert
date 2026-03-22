@@ -5606,8 +5606,6 @@ try {
         );
     }
 
-
-
     #[tokio::test]
     async fn test_vega_to_pdf_denies_disallowed_base_url() {
         let converter = VlConverter::with_config(VlConverterConfig {
