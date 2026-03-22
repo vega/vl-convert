@@ -470,9 +470,7 @@ fn normalize_converter_config(
         }
     }
 
-    if config.max_v8_heap_size_mb > 0
-        && config.max_v8_heap_size_mb < MIN_V8_HEAP_SIZE_MB
-    {
+    if config.max_v8_heap_size_mb > 0 && config.max_v8_heap_size_mb < MIN_V8_HEAP_SIZE_MB {
         bail!(
             "max_v8_heap_size_mb is {} MB, which is too small for V8 to \
              initialize. Set to {} or higher, or use 0 for no limit.",
@@ -711,7 +709,7 @@ pub struct VlConverterConfig {
     /// Maximum V8 execution time in seconds. Defaults to 0 (no limit).
     /// When exceeded, V8 execution is terminated and an error is returned.
     /// Only applies to the V8/JavaScript portion of the conversion (Vega
-    /// evaluation, plugin loading); Rust-side post-processing is not subject 
+    /// evaluation, plugin loading); Rust-side post-processing is not subject
     /// to this limit.
     pub max_v8_execution_time_secs: u64,
     /// Whether to run V8 garbage collection after each conversion to release
@@ -1350,7 +1348,10 @@ impl InnerVlConverter {
     /// can process subsequent requests. Also clears plugin poisoning and
     /// vega init state so the next request retries initialization.
     fn reset_timeout_if_needed(&mut self) {
-        if self.timeout_hit.swap(false, std::sync::atomic::Ordering::AcqRel) {
+        if self
+            .timeout_hit
+            .swap(false, std::sync::atomic::Ordering::AcqRel)
+        {
             self.plugin_init_error = None;
             self.vega_initialized = false;
         }
@@ -2002,10 +2003,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLoca
         // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
         // This is required for container compatibility (manylinux, slim images).
         let create_params = if ctx.config.max_v8_heap_size_mb > 0 {
-            let max_bytes = ctx
-                .config
-                .max_v8_heap_size_mb
-                .saturating_mul(1024 * 1024);
+            let max_bytes = ctx.config.max_v8_heap_size_mb.saturating_mul(1024 * 1024);
             Some(v8::CreateParams::default().heap_limits(0, max_bytes))
         } else {
             None
