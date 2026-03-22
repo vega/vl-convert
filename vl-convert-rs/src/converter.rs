@@ -633,10 +633,10 @@ impl BaseUrlSetting {
             )),
             Self::Disabled => Ok(None),
             Self::Custom(url) => {
-                if Url::parse(url).is_ok() {
+                if !is_filesystem_path(url) && Url::parse(url).is_ok() {
                     Ok(Some(url.clone()))
                 } else {
-                    // Not a valid URL: treat as filesystem path, convert to file:// URL
+                    // Filesystem path: convert to file:// URL
                     let path = portable_canonicalize(Path::new(url))
                         .map_err(|err| anyhow!("Failed to resolve base_url path {url}: {err}"))?;
                     let file_url = Url::from_directory_path(&path).map_err(|_| {
@@ -657,12 +657,29 @@ impl BaseUrlSetting {
             Self::Default => false,
             Self::Disabled => false,
             Self::Custom(url) => {
+                if is_filesystem_path(url) {
+                    return true;
+                }
                 Url::parse(url)
                     .map(|parsed| parsed.scheme() == "file")
                     .unwrap_or(true) // Not a valid URL: bare filesystem path
             }
         }
     }
+}
+
+/// Check if a string looks like a filesystem path rather than a URL.
+/// Detects absolute Unix paths (/...) and Windows drive letter paths (C:\..., C:/...).
+fn is_filesystem_path(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.first() == Some(&b'/') {
+        return true;
+    }
+    // Windows drive letter: single ASCII letter followed by :\ or :/
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -5409,7 +5426,6 @@ try {
     }
 
     #[tokio::test]
-    #[cfg_attr(target_os = "windows", ignore = "file:// base_url path handling on Windows needs investigation")]
     async fn test_svg_helper_enforces_filesystem_root() {
         let temp_dir = tempfile::tempdir().unwrap();
         let root = temp_dir.path().join("root");
