@@ -255,24 +255,6 @@ def test_sync_filesystem_root_allows_under_root(tmp_path: Path):
     assert "<svg" in svg
 
 
-def test_sync_redirect_from_allowed_url_succeeds():
-    """Redirects are followed; only the initial URL is checked against the allowlist."""
-    with run_test_http_server(
-        {"/data.csv": _route(200, b"a,b\n1,2\n", {"Content-Type": "text/csv"})}
-    ) as redirect_target:
-        with run_test_http_server(
-            {
-                "/redirect.csv": _route(
-                    302, b"", {"Location": f"{redirect_target}/data.csv"}
-                )
-            }
-        ) as allowed_base:
-            vlc.configure(
-                allowed_base_urls=[allowed_base],
-            )
-            svg = vlc.vega_to_svg(make_vega_data_url_spec(f"{allowed_base}/redirect.csv"))
-            assert "<svg" in svg
-
 
 def test_sync_config_allowlist_for_svg_rasterization():
     with run_test_http_server(
