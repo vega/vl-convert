@@ -9,13 +9,12 @@ use pythonize::{depythonize, pythonize};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    FormatLocale, GoogleFontRequest, MissingFontsPolicy, Renderer, TimeFormatLocale, ValueOrString,
-    VgOpts, VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
+    BaseUrlSetting, FormatLocale, GoogleFontRequest, MissingFontsPolicy, Renderer,
+    TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -74,13 +73,14 @@ fn converter_config() -> Result<VlConverterConfig, vl_convert_rs::anyhow::Error>
 }
 
 fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
+    let base_url_value = match &config.base_url {
+        BaseUrlSetting::Default => serde_json::Value::Bool(true),
+        BaseUrlSetting::Disabled => serde_json::Value::Bool(false),
+        BaseUrlSetting::Custom(url) => serde_json::Value::String(url.clone()),
+    };
     serde_json::json!({
         "num_workers": config.num_workers,
-        "allow_http_access": config.allow_http_access,
-        "filesystem_root": config
-            .filesystem_root
-            .as_ref()
-            .map(|root| root.to_string_lossy().to_string()),
+        "base_url": base_url_value,
         "allowed_base_urls": config.allowed_base_urls,
         "auto_google_fonts": config.auto_google_fonts,
         "missing_fonts": match config.missing_fonts {
@@ -112,9 +112,7 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
 #[derive(Default)]
 struct ConverterConfigOverrides {
     num_workers: Option<usize>,
-    allow_http_access: Option<bool>,
-    // None => no change, Some(None) => clear, Some(Some(path)) => set
-    filesystem_root: Option<Option<PathBuf>>,
+    base_url: Option<BaseUrlSetting>,
     // None => no change, Some(None) => clear, Some(Some(urls)) => set
     allowed_base_urls: Option<Option<Vec<String>>>,
     google_fonts_cache_size_mb: Option<u64>,
@@ -160,26 +158,23 @@ fn parse_config_overrides(
                     })?);
                 }
             }
-            "allow_http_access" => {
-                if !value.is_none() {
-                    overrides.allow_http_access = Some(value.extract::<bool>().map_err(|err| {
-                        vl_convert_rs::anyhow::anyhow!(
-                            "Invalid allow_http_access value for configure: {err}"
-                        )
-                    })?);
-                }
-            }
-            "filesystem_root" => {
+            "base_url" => {
                 if value.is_none() {
-                    overrides.filesystem_root = Some(None);
+                    overrides.base_url = Some(BaseUrlSetting::Default);
+                } else if let Ok(b) = value.extract::<bool>() {
+                    overrides.base_url = Some(if b {
+                        BaseUrlSetting::Default
+                    } else {
+                        BaseUrlSetting::Disabled
+                    });
                 } else {
-                    overrides.filesystem_root = Some(Some(PathBuf::from(
-                        value.extract::<String>().map_err(|err| {
-                            vl_convert_rs::anyhow::anyhow!(
-                                "Invalid filesystem_root value for configure: {err}"
-                            )
-                        })?,
-                    )));
+                    let s = value.extract::<String>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid base_url value for configure: {err}. \
+                             Expected None, True, False, or a string URL"
+                        )
+                    })?;
+                    overrides.base_url = Some(BaseUrlSetting::Custom(s));
                 }
             }
             "allowed_base_urls" => {
@@ -400,11 +395,8 @@ fn apply_config_overrides(
     if let Some(num_workers) = overrides.num_workers {
         config.num_workers = num_workers;
     }
-    if let Some(allow_http_access) = overrides.allow_http_access {
-        config.allow_http_access = allow_http_access;
-    }
-    if let Some(filesystem_root) = overrides.filesystem_root {
-        config.filesystem_root = filesystem_root;
+    if let Some(base_url) = overrides.base_url {
+        config.base_url = base_url;
     }
     if let Some(allowed_base_urls) = overrides.allowed_base_urls {
         config.allowed_base_urls = allowed_base_urls;

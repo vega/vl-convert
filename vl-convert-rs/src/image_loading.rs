@@ -1,4 +1,5 @@
 use crate::converter::ACCESS_DENIED_MARKER;
+use crate::data_ops::AllowedBaseUrlPattern;
 use backon::{BlockingRetryable, ExponentialBuilder};
 use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
@@ -13,25 +14,16 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use usvg::{ImageHrefResolver, Options};
 
-static VL_CONVERT_USER_AGENT: &str =
+pub(crate) static VL_CONVERT_USER_AGENT: &str =
     concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 lazy_static! {
-    static ref BLOCKING_CLIENT_FOLLOW_REDIRECTS: reqwest::blocking::Client =
-        reqwest::blocking::ClientBuilder::new()
-            .user_agent(VL_CONVERT_USER_AGENT)
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .build()
-            .expect("Failed to construct blocking reqwest client");
-    static ref BLOCKING_CLIENT_NO_REDIRECTS: reqwest::blocking::Client =
-        reqwest::blocking::ClientBuilder::new()
-            .user_agent(VL_CONVERT_USER_AGENT)
-            .redirect(reqwest::redirect::Policy::none())
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .build()
-            .expect("Failed to construct blocking reqwest client");
+    static ref BLOCKING_CLIENT: reqwest::blocking::Client = reqwest::blocking::ClientBuilder::new()
+        .user_agent(VL_CONVERT_USER_AGENT)
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
+        .build()
+        .expect("Failed to construct blocking reqwest client");
 }
 
 thread_local! {
@@ -41,12 +33,10 @@ thread_local! {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageAccessPolicy {
-    /// Whether HTTP(S) image hrefs are allowed.
-    pub allow_http_access: bool,
-    /// Filesystem root for local image hrefs. `None` disables local file access.
+    /// Parsed allowlist patterns (passed directly to `is_access_allowed()`).
+    pub allowed_base_urls: Option<Vec<AllowedBaseUrlPattern>>,
+    /// Filesystem root for usvg's `resources_dir` (needed for SVG image resolution).
     pub filesystem_root: Option<PathBuf>,
-    /// Optional HTTP(S) base URL allowlist for image hrefs.
-    pub allowed_base_urls: Option<Vec<String>>,
 }
 
 struct PolicyScopeGuard {
@@ -105,17 +95,8 @@ fn access_denied_message(detail: impl AsRef<str>) -> String {
     format!("{ACCESS_DENIED_MARKER}: {}", detail.as_ref())
 }
 
-fn normalize_http_url_for_allowlist(uri: &str) -> Result<String, AnyError> {
-    Ok(Url::parse(uri)?.to_string())
-}
-
-fn is_url_allowed(uri: &str, allowed_base_urls: &[String]) -> bool {
-    let Ok(normalized_uri) = normalize_http_url_for_allowlist(uri) else {
-        return false;
-    };
-    allowed_base_urls
-        .iter()
-        .any(|allowed_url| normalized_uri.starts_with(allowed_url))
+fn is_url_allowed(uri: &str, patterns: &Option<Vec<AllowedBaseUrlPattern>>) -> bool {
+    crate::data_ops::is_access_allowed(uri, patterns)
 }
 
 fn resolve_local_href_path(href: &str, opts: &Options) -> Result<PathBuf, AnyError> {
@@ -182,36 +163,20 @@ enum HttpFetchOutcome {
 
 fn fetch_http_blocking(
     href: &str,
-    allowed_base_urls: Option<&[String]>,
+    allowed_base_urls: &Option<Vec<AllowedBaseUrlPattern>>,
 ) -> Result<HttpFetchOutcome, reqwest::Error> {
-    if let Some(allowed_base_urls) = allowed_base_urls {
-        if !is_url_allowed(href, allowed_base_urls) {
-            return Ok(HttpFetchOutcome::AccessDenied {
-                message: access_denied_message(format!("External data url not allowed: {href}")),
-            });
-        }
+    if !is_url_allowed(href, allowed_base_urls) {
+        return Ok(HttpFetchOutcome::AccessDenied {
+            message: access_denied_message(format!("External data url not allowed: {href}")),
+        });
     }
 
-    let client = if allowed_base_urls.is_some() {
-        &*BLOCKING_CLIENT_NO_REDIRECTS
-    } else {
-        &*BLOCKING_CLIENT_FOLLOW_REDIRECTS
-    };
-
-    let response = client.get(href).send()?;
+    let response = BLOCKING_CLIENT.get(href).send()?;
     let status = response.status();
     let content_type = response
         .headers()
         .get(CONTENT_TYPE)
         .and_then(|h| h.to_str().ok().map(|c| c.to_string()));
-
-    if allowed_base_urls.is_some() && status.is_redirection() {
-        return Ok(HttpFetchOutcome::AccessDenied {
-            message: access_denied_message(format!(
-                "Redirected HTTP URLs are not allowed when allowed_base_urls is configured: {href}"
-            )),
-        });
-    }
 
     match status {
         StatusCode::OK => {
@@ -255,20 +220,11 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
 
         if href.starts_with("http://") || href.starts_with("https://") {
             if let Some(policy) = policy.as_ref() {
-                if !policy.allow_http_access {
+                if !is_url_allowed(href, &policy.allowed_base_urls) {
                     push_access_error(access_denied_message(format!(
-                        "HTTP access denied by converter policy for image URL: {href}"
+                        "External data url not allowed: {href}"
                     )));
                     return None;
-                }
-
-                if let Some(allowed_base_urls) = &policy.allowed_base_urls {
-                    if !is_url_allowed(href, allowed_base_urls) {
-                        push_access_error(access_denied_message(format!(
-                            "External data url not allowed: {href}"
-                        )));
-                        return None;
-                    }
                 }
             }
 
@@ -276,10 +232,10 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
             // interfering with the worker pool's single-threaded Tokio runtime.
             let allowed_base_urls = policy
                 .as_ref()
-                .and_then(|policy| policy.allowed_base_urls.as_deref());
+                .and_then(|policy| policy.allowed_base_urls.clone());
             let fetch_outcome = std::thread::scope(|s| {
                 s.spawn(move || {
-                    let result = (|| fetch_http_blocking(href, allowed_base_urls))
+                    let result = (|| fetch_http_blocking(href, &allowed_base_urls))
                         .retry(
                             ExponentialBuilder::default()
                                 .with_min_delay(Duration::from_millis(500))
@@ -411,9 +367,8 @@ mod tests {
 
     fn test_policy(label: &str) -> ImageAccessPolicy {
         ImageAccessPolicy {
-            allow_http_access: false,
+            allowed_base_urls: Some(Vec::new()),
             filesystem_root: Some(PathBuf::from(format!("/tmp/{label}"))),
-            allowed_base_urls: None,
         }
     }
 

@@ -115,13 +115,14 @@ import {
   op_canvas_decode_image,
   op_canvas_get_image_info,
   op_canvas_decode_svg_at_size,
+  // Data loading ops
+  op_vega_data_fetch_bytes,
+  op_vega_file_read_bytes,
 } from "ext:core/ops";
 
 function unsupported(methodName) {
   throw new Error(`${methodName} is not supported by vl-convert canvas polyfill`);
 }
-
-const DEFAULT_ACCESS_DENIED_MARKER = "VLC_ACCESS_DENIED";
 
 function uint8ArrayToBase64(bytes) {
   const chunkSize = 0x8000;
@@ -397,25 +398,7 @@ class Image {
   }
 
   async #loadImage(url) {
-    const accessDeniedMarker =
-      globalThis.__vlConvertAccessDeniedMarker ?? DEFAULT_ACCESS_DENIED_MARKER;
-    const accessErrors = globalThis.__vlConvertAccessErrors;
-    const recordAccessError = (message) => {
-      if (Array.isArray(accessErrors)) {
-        accessErrors.push(message);
-      }
-    };
-
     try {
-      const allowHttpAccess = globalThis.__vlConvertAllowHttpAccess;
-      const allowedBaseUrls = globalThis.__vlConvertAllowedBaseUrls;
-
-      const denyAccess = (detail) => {
-        const message = `${accessDeniedMarker}: ${detail}`;
-        recordAccessError(message);
-        throw new Error(message);
-      };
-
       const hasScheme = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(url);
       const isWindowsPath = /^[A-Za-z]:[\\/]/.test(url);
       const isFileUrl = url.startsWith("file://");
@@ -435,9 +418,8 @@ class Image {
             filePath = filePath.slice(1);
           }
         }
-        bytes = await Deno.readFile(filePath);
+        bytes = new Uint8Array(await op_vega_file_read_bytes(filePath));
       } else {
-        // Only enforce policy for HTTP(S). Other schemes (e.g. data:) are handled by fetch.
         let normalizedUrl = null;
         let isHttpUrl = false;
         try {
@@ -445,71 +427,13 @@ class Image {
           normalizedUrl = parsedUrl.href;
           isHttpUrl = parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
         } catch (_err) {
-          // Leave invalid/non-standard URL handling to fetch.
+          // Leave invalid/non-standard URL handling to the fallback path.
         }
 
         if (isHttpUrl) {
-          if (allowHttpAccess === false) {
-            denyAccess(`HTTP access denied by converter policy: ${url}`);
-          }
-          if (
-            allowedBaseUrls != null &&
-            !allowedBaseUrls.some((allowedUrl) => normalizedUrl.startsWith(allowedUrl))
-          ) {
-            denyAccess(`External data url not allowed: ${normalizedUrl}`);
-          }
-
-          const response = await (async () => {
-            try {
-              return await fetch(normalizedUrl, {
-                redirect: allowedBaseUrls != null ? "error" : "follow",
-              });
-            } catch (error) {
-              if (allowedBaseUrls != null) {
-                const message = String(error?.message ?? error).toLowerCase();
-                if (message.includes("redirect") || message.includes("location")) {
-                  denyAccess(
-                    `Redirected HTTP URLs are not allowed when allowed_base_urls is configured: ${normalizedUrl}`,
-                  );
-                }
-              }
-              throw error;
-            }
-          })();
-          let finalUrl = normalizedUrl;
-          try {
-            if (typeof response.url === "string" && response.url.length > 0) {
-              finalUrl = new URL(response.url).href;
-            }
-          } catch (_err) {
-            // Keep requested URL when final response URL is unavailable/invalid.
-          }
-          if (
-            allowedBaseUrls != null &&
-            (
-              response.type === "opaqueredirect" ||
-              response.redirected ||
-              finalUrl !== normalizedUrl
-            )
-          ) {
-            denyAccess(
-              `Redirected HTTP URLs are not allowed when allowed_base_urls is configured: ${normalizedUrl}`,
-            );
-          }
-          if (
-            allowedBaseUrls != null &&
-            !allowedBaseUrls.some((allowedUrl) => finalUrl.startsWith(allowedUrl))
-          ) {
-            denyAccess(`External data url not allowed: ${finalUrl}`);
-          }
-
-          if (!response.ok) {
-            throw new Error(`Failed to fetch image: ${response.status}`);
-          }
-          const arrayBuffer = await response.arrayBuffer();
-          bytes = new Uint8Array(arrayBuffer);
+          bytes = new Uint8Array(await op_vega_data_fetch_bytes(normalizedUrl));
         } else {
-          // Fetch remote/data URL images
+          // Handle data: URLs and other non-HTTP schemes via fetch
           const response = await fetch(url);
           if (!response.ok) {
             throw new Error(`Failed to fetch image: ${response.status}`);
@@ -553,18 +477,6 @@ class Image {
         },
       };
     } catch (error) {
-      const message = String(error?.message ?? error);
-      if (!message.includes(accessDeniedMarker)) {
-        const lower = message.toLowerCase();
-        if (
-          lower.includes("requires read access") ||
-          lower.includes("requires net access") ||
-          lower.includes("permission denied") ||
-          lower.includes("access denied")
-        ) {
-          recordAccessError(`${accessDeniedMarker}: ${message}`);
-        }
-      }
       return { ok: false, error };
     }
   }

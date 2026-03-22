@@ -4,12 +4,12 @@
 use clap::{Parser, Subcommand};
 use itertools::Itertools;
 use std::io::{self, IsTerminal, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
-    vega_to_url, vegalite_to_url, FormatLocale, GoogleFontRequest, MissingFontsPolicy, Renderer,
-    TimeFormatLocale, VgOpts, VlConverter, VlConverterConfig, VlOpts,
+    vega_to_url, vegalite_to_url, BaseUrlSetting, FormatLocale, GoogleFontRequest,
+    MissingFontsPolicy, Renderer, TimeFormatLocale, VgOpts, VlConverter, VlConverterConfig, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
@@ -40,17 +40,24 @@ const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
 #[command(version, name = "vl-convert")]
 #[command(about = "vl-convert: A utility for converting Vega-Lite specifications", long_about = None)]
 struct Cli {
-    /// Whether HTTP(S) access is allowed during conversion
-    #[arg(long, global = true, default_value_t = true, action = clap::ArgAction::Set)]
-    allow_http_access: bool,
-
-    /// Disable HTTP(S) access during conversion (alias for --allow-http-access=false)
-    #[arg(long, global = true, default_value_t = false)]
-    no_http_access: bool,
-
-    /// Root directory for local filesystem access. If omitted, filesystem access is disabled.
+    /// Custom base URL for resolving relative data paths in Vega specs.
+    /// Can be a URL (https://...) or a local filesystem path (/data/).
     #[arg(long, global = true)]
-    filesystem_root: Option<String>,
+    base_url: Option<String>,
+
+    /// Disable relative path resolution (relative data paths produce an error)
+    #[arg(long, global = true, conflicts_with = "base_url")]
+    no_base_url: bool,
+
+    /// Allowed base URL pattern for external data access.
+    /// Supports CSP-style patterns: "https:" (scheme), "https://example.com/" (prefix),
+    /// "/data/" (filesystem). May be specified multiple times.
+    #[arg(long = "allowed-base-url", global = true)]
+    allowed_base_url: Vec<String>,
+
+    /// Disable all external data access (empty allowlist)
+    #[arg(long, global = true, conflicts_with = "allowed_base_url")]
+    no_allowed_urls: bool,
 
     /// Register a font from Google Fonts. Use "Family" for all variants,
     /// or "Family:400,700italic" for specific weight/style combinations.
@@ -155,10 +162,6 @@ enum Commands {
         #[arg(long)]
         font_dir: Option<String>,
 
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -205,10 +208,6 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
-
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -257,10 +256,6 @@ enum Commands {
         #[arg(long)]
         font_dir: Option<String>,
 
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -299,10 +294,6 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
-
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -438,10 +429,6 @@ enum Commands {
         #[arg(long)]
         font_dir: Option<String>,
 
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -472,10 +459,6 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
-
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -508,10 +491,6 @@ enum Commands {
         #[arg(long)]
         font_dir: Option<String>,
 
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -534,10 +513,6 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
-
-        /// Allowed base URL for external data requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -656,10 +631,6 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
-
-        /// Allowed base URL for external image requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert an SVG image to a JPEG image
@@ -683,10 +654,6 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
-
-        /// Allowed base URL for external image requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
     },
 
     /// Convert an SVG image to a PDF image
@@ -702,10 +669,6 @@ enum Commands {
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
-
-        /// Allowed base URL for external image requests. Default allows any base URL
-        #[arg(short, long)]
-        allowed_base_url: Option<Vec<String>>,
     },
 
     /// List available themes
@@ -722,9 +685,10 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let Cli {
-        mut allow_http_access,
-        no_http_access,
-        filesystem_root,
+        base_url,
+        no_base_url,
+        allowed_base_url,
+        no_allowed_urls,
         google_font: google_font_families,
         auto_google_fonts,
         missing_fonts: missing_fonts_arg,
@@ -734,9 +698,6 @@ async fn main() -> Result<(), anyhow::Error> {
         plugin_import_domains,
         command,
     } = Cli::parse();
-    if no_http_access {
-        allow_http_access = false;
-    }
     let missing_fonts = missing_fonts_arg.to_policy();
     let config_google_fonts = parse_google_font_requests(&google_font_families)?;
     let vega_plugins = if vega_plugin.is_empty() {
@@ -746,11 +707,26 @@ async fn main() -> Result<(), anyhow::Error> {
     };
     let plugin_import_domains = flatten_plugin_domains(&plugin_import_domains);
 
+    let base_url_setting = if no_base_url {
+        BaseUrlSetting::Disabled
+    } else if let Some(url) = base_url {
+        BaseUrlSetting::Custom(url)
+    } else {
+        BaseUrlSetting::Default
+    };
+
+    let allowed_base_urls = if no_allowed_urls {
+        Some(vec![])
+    } else if allowed_base_url.is_empty() {
+        None
+    } else {
+        Some(allowed_base_url)
+    };
+
     let base_config = VlConverterConfig {
         num_workers: 1,
-        allow_http_access,
-        filesystem_root: filesystem_root.map(PathBuf::from),
-        allowed_base_urls: None,
+        base_url: base_url_setting,
+        allowed_base_urls,
         auto_google_fonts,
         missing_fonts,
         google_fonts: config_google_fonts.clone(),
@@ -797,13 +773,10 @@ async fn main() -> Result<(), anyhow::Error> {
             config,
             show_warnings,
             font_dir,
-            allowed_base_url,
             format_locale,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
             vl_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -813,7 +786,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 show_warnings,
                 format_locale,
                 time_format_locale,
-                config_with_urls,
+                base_config,
             )
             .await?
         }
@@ -827,13 +800,10 @@ async fn main() -> Result<(), anyhow::Error> {
             ppi,
             show_warnings,
             font_dir,
-            allowed_base_url,
             format_locale,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
             vl_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -845,7 +815,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 show_warnings,
                 format_locale,
                 time_format_locale,
-                config_with_urls,
+                base_config,
             )
             .await?
         }
@@ -859,13 +829,10 @@ async fn main() -> Result<(), anyhow::Error> {
             quality,
             show_warnings,
             font_dir,
-            allowed_base_url,
             format_locale,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
             vl_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -877,7 +844,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 show_warnings,
                 format_locale,
                 time_format_locale,
-                config_with_urls,
+                base_config,
             )
             .await?
         }
@@ -889,13 +856,10 @@ async fn main() -> Result<(), anyhow::Error> {
             config,
             show_warnings,
             font_dir,
-            allowed_base_url,
             format_locale,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
             vl_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -905,7 +869,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 show_warnings,
                 format_locale,
                 time_format_locale,
-                config_with_urls,
+                base_config,
             )
             .await?
         }
@@ -1020,19 +984,16 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             font_dir,
-            allowed_base_url,
             format_locale,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
             vg_2_svg(
                 input.as_deref(),
                 output.as_deref(),
                 format_locale,
                 time_format_locale,
-                config_with_urls,
+                base_config,
             )
             .await?
         }
@@ -1042,13 +1003,10 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             ppi,
             font_dir,
-            allowed_base_url,
             format_locale,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
             vg_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -1056,7 +1014,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 ppi,
                 format_locale,
                 time_format_locale,
-                config_with_urls,
+                base_config,
             )
             .await?
         }
@@ -1066,13 +1024,10 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             quality,
             font_dir,
-            allowed_base_url,
             format_locale,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
             vg_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -1080,7 +1035,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 quality,
                 format_locale,
                 time_format_locale,
-                config_with_urls,
+                base_config,
             )
             .await?
         }
@@ -1088,19 +1043,16 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             font_dir,
-            allowed_base_url,
             format_locale,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
             vg_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
                 format_locale,
                 time_format_locale,
-                config_with_urls,
+                base_config,
             )
             .await?
         }
@@ -1199,13 +1151,10 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             ppi,
             font_dir,
-            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
-            let converter = VlConverter::with_config(config_with_urls)?;
+            let converter = VlConverter::with_config(base_config)?;
             let png_data = converter.svg_to_png(&svg, scale, Some(ppi)).await?;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
         }
@@ -1215,13 +1164,10 @@ async fn main() -> Result<(), anyhow::Error> {
             scale,
             quality,
             font_dir,
-            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
-            let converter = VlConverter::with_config(config_with_urls)?;
+            let converter = VlConverter::with_config(base_config)?;
             let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality)).await?;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
         }
@@ -1229,13 +1175,10 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             font_dir,
-            allowed_base_url,
         } => {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
-            let mut config_with_urls = base_config;
-            config_with_urls.allowed_base_urls = allowed_base_url;
-            let converter = VlConverter::with_config(config_with_urls)?;
+            let converter = VlConverter::with_config(base_config)?;
             let pdf_data = converter.svg_to_pdf(&svg).await?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
         }

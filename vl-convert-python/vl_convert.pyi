@@ -156,8 +156,7 @@ if TYPE_CHECKING:
 
     class ConverterConfig(TypedDict):
         num_workers: int
-        allow_http_access: bool
-        filesystem_root: str | None
+        base_url: str | bool
         allowed_base_urls: list[str] | None
         auto_google_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
@@ -311,8 +310,7 @@ def register_font_directory(font_dir: str) -> None:
 
 def configure(
     num_workers: int | None = None,
-    allow_http_access: bool | None = None,
-    filesystem_root: str | None = None,
+    base_url: str | bool | None = None,
     allowed_base_urls: list[str] | None = None,
     google_fonts_cache_size_mb: int | None = None,
     auto_google_fonts: bool | None = None,
@@ -336,16 +334,18 @@ def configure(
     ----------
     num_workers
         Worker count (must be >= 1). If ``None``, keep current value.
-    allow_http_access
-        Whether HTTP(S) access is permitted for external resources. If ``None``, keep current value.
-        This controls only ``http://`` and ``https://`` URLs; ``data:`` URLs remain allowed.
-    filesystem_root
-        Root directory for filesystem access. ``None`` clears filesystem access root.
+    base_url
+        Base URL for resolving relative data paths in Vega specs.
+        ``None`` or ``True`` uses the default (vega-datasets CDN).
+        ``False`` disables relative path resolution.
+        A string sets a custom base URL or filesystem path.
+        If ``None``, keep current value.
     allowed_base_urls
-        Optional allowlist prefixes for HTTP(S) URLs. ``None`` clears this allowlist.
-        Entries are normalized to include a trailing ``/`` and must not include userinfo,
-        query, or fragment components. When provided, this list must be non-empty.
-        When configured, HTTP redirects are denied instead of followed.
+        Allowlist for data access (HTTP URLs, filesystem paths).
+        Uses CSP-style patterns: ``"https:"`` (scheme), ``"https://example.com/"``
+        (prefix), ``"/data/"`` (filesystem). ``None`` allows any HTTP/HTTPS,
+        no filesystem (default). ``[]`` disables all external access.
+        ``["*"]`` allows everything including filesystem.
     google_fonts_cache_size_mb
         Maximum font cache size in megabytes. If ``None``, keep current value.
     auto_google_fonts
@@ -1160,8 +1160,7 @@ if TYPE_CHECKING:
         async def configure(
             self,
             num_workers: int | None = None,
-            allow_http_access: bool | None = None,
-            filesystem_root: str | None = None,
+            base_url: str | bool | None = None,
             allowed_base_urls: list[str] | None = None,
             google_fonts_cache_size_mb: int | None = None,
             auto_google_fonts: bool | None = None,

@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod converter;
+pub(crate) mod data_ops;
 pub mod deno_emit;
 pub mod deno_stubs;
 pub mod extract;
@@ -17,7 +18,8 @@ extern crate lazy_static;
 extern crate deno_core;
 
 pub use converter::{
-    GoogleFontRequest, Renderer, VgOpts, VlConverter, VlConverterConfig, VlOpts, WorkerMemoryUsage,
+    BaseUrlSetting, GoogleFontRequest, Renderer, VgOpts, VlConverter, VlConverterConfig, VlOpts,
+    WorkerMemoryUsage,
 };
 pub use deno_core::anyhow;
 pub use extract::{FontInfo, FontSource, FontVariant};
