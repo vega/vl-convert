@@ -1272,8 +1272,9 @@ impl InnerVlConverter {
             );
 
             // Clear plugin poisoning so the next request retries init.
+            // Don't reset vega_initialized — the modules are still in V8's
+            // cache and the GC above reclaimed enough headroom to continue.
             self.plugin_init_error = None;
-            self.vega_initialized = false;
         }
     }
 
