@@ -175,15 +175,15 @@ enum Commands {
         #[arg(long)]
         time_format_locale: Option<String>,
 
-        /// Bundle fonts into the SVG (not yet implemented)
+        /// Bundle fonts and images into a self-contained SVG
         #[arg(long)]
         bundle: bool,
 
-        /// Embed locally installed fonts (not yet implemented)
+        /// Embed locally installed fonts as base64 @font-face
         #[arg(long)]
         embed_local_fonts: bool,
 
-        /// Disable font subsetting (not yet implemented)
+        /// Disable font subsetting (embed full font files)
         #[arg(long)]
         no_subset_fonts: bool,
     },
@@ -454,15 +454,15 @@ enum Commands {
         #[arg(long)]
         time_format_locale: Option<String>,
 
-        /// Bundle fonts into the SVG (not yet implemented)
+        /// Bundle fonts and images into a self-contained SVG
         #[arg(long)]
         bundle: bool,
 
-        /// Embed locally installed fonts (not yet implemented)
+        /// Embed locally installed fonts as base64 @font-face
         #[arg(long)]
         embed_local_fonts: bool,
 
-        /// Disable font subsetting (not yet implemented)
+        /// Disable font subsetting (embed full font files)
         #[arg(long)]
         no_subset_fonts: bool,
     },
@@ -806,11 +806,16 @@ async fn main() -> Result<(), anyhow::Error> {
             font_dir,
             format_locale,
             time_format_locale,
-            bundle: _,
-            embed_local_fonts: _,
-            no_subset_fonts: _,
+            bundle,
+            embed_local_fonts,
+            no_subset_fonts,
         } => {
             register_font_dir(font_dir)?;
+            let svg_opts = SvgOpts {
+                bundle,
+                embed_local_fonts,
+                subset_fonts: !no_subset_fonts,
+            };
             vl_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -820,6 +825,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 show_warnings,
                 format_locale,
                 time_format_locale,
+                svg_opts,
                 base_config,
             )
             .await?
@@ -1021,17 +1027,23 @@ async fn main() -> Result<(), anyhow::Error> {
             output,
             font_dir,
             format_locale,
-            bundle: _,
-            embed_local_fonts: _,
-            no_subset_fonts: _,
+            bundle,
+            embed_local_fonts,
+            no_subset_fonts,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let svg_opts = SvgOpts {
+                bundle,
+                embed_local_fonts,
+                subset_fonts: !no_subset_fonts,
+            };
             vg_2_svg(
                 input.as_deref(),
                 output.as_deref(),
                 format_locale,
                 time_format_locale,
+                svg_opts,
                 base_config,
             )
             .await?
@@ -1647,6 +1659,7 @@ async fn vg_2_svg(
     output: Option<&str>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    svg_opts: SvgOpts,
     converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
@@ -1666,7 +1679,7 @@ async fn vg_2_svg(
                 google_fonts: None,
                 vega_plugin: None,
             },
-            SvgOpts::default(),
+            svg_opts,
         )
         .await
     {
@@ -1820,6 +1833,7 @@ async fn vl_2_svg(
     show_warnings: bool,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    svg_opts: SvgOpts,
     converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
@@ -1845,7 +1859,7 @@ async fn vl_2_svg(
                 google_fonts: None,
                 vega_plugin: None,
             },
-            SvgOpts::default(),
+            svg_opts,
         )
         .await
     {

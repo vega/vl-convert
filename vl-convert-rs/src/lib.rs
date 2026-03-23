@@ -9,6 +9,7 @@ pub mod font_embed;
 pub mod html;
 pub mod image_loading;
 pub mod module_loader;
+pub(crate) mod svg_font;
 pub mod text;
 
 #[macro_use]

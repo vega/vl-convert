@@ -360,6 +360,146 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
     })
 }
 
+/// Infer MIME type from image bytes (magic bytes) or content-type header.
+fn infer_image_mime(bytes: &[u8], content_type: Option<&str>) -> &'static str {
+    // Check magic bytes first
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G']) {
+        return "image/png";
+    }
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return "image/jpeg";
+    }
+    if bytes.starts_with(b"GIF8") {
+        return "image/gif";
+    }
+    if bytes.starts_with(b"RIFF") && bytes.len() > 12 && &bytes[8..12] == b"WEBP" {
+        return "image/webp";
+    }
+    if bytes.starts_with(b"<?xml") || bytes.starts_with(b"<svg") {
+        return "image/svg+xml";
+    }
+    // Fall back to content-type header
+    if let Some(ct) = content_type {
+        if ct.starts_with("image/") {
+            // Return a static str for common types
+            if ct.starts_with("image/png") {
+                return "image/png";
+            }
+            if ct.starts_with("image/jpeg") {
+                return "image/jpeg";
+            }
+            if ct.starts_with("image/gif") {
+                return "image/gif";
+            }
+            if ct.starts_with("image/webp") {
+                return "image/webp";
+            }
+            if ct.starts_with("image/svg+xml") {
+                return "image/svg+xml";
+            }
+        }
+    }
+    "application/octet-stream"
+}
+
+/// Fetch an HTTP image URL (policy-checked), returning `(mime, base64)`.
+///
+/// Returns an error if the URL is denied by policy or the fetch fails.
+pub(crate) fn fetch_and_encode_image_http(
+    href: &str,
+    allowed_base_urls: &Option<Vec<AllowedBaseUrlPattern>>,
+) -> Result<(String, String), AnyError> {
+    use base64::Engine;
+
+    if !is_url_allowed(href, allowed_base_urls) {
+        bail!("Image URL not allowed by policy: {href}");
+    }
+
+    let outcome = std::thread::scope(|s| {
+        let handle = s.spawn(move || {
+            (|| fetch_http_blocking(href, allowed_base_urls))
+                .retry(
+                    ExponentialBuilder::default()
+                        .with_min_delay(Duration::from_millis(500))
+                        .with_max_delay(Duration::from_secs(10))
+                        .with_max_times(4),
+                )
+                .when(|e| {
+                    e.status()
+                        .map(|s| s.is_server_error() || s == StatusCode::TOO_MANY_REQUESTS)
+                        .unwrap_or(true)
+                })
+                .call()
+        });
+        handle.join().expect("Image fetch thread panicked")
+    });
+
+    match outcome {
+        Ok(HttpFetchOutcome::Success {
+            bytes,
+            content_type,
+        }) => {
+            let mime = infer_image_mime(&bytes, content_type.as_deref());
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+            Ok((mime.to_string(), b64))
+        }
+        Ok(HttpFetchOutcome::AccessDenied { message }) => {
+            bail!("{message}")
+        }
+        Ok(HttpFetchOutcome::Failed) => {
+            bail!("Failed to fetch image from URL: {href}")
+        }
+        Err(e) => {
+            bail!("Failed to fetch image from URL {href}: {e}")
+        }
+    }
+}
+
+/// Resolve a local image path (relative or file://), check it against
+/// `filesystem_root`, read the file, and return `(mime, base64)`.
+///
+/// Relative paths are resolved against `resources_dir` (derived from the
+/// converter's `base_url`).
+pub(crate) fn resolve_and_read_local_image(
+    href: &str,
+    filesystem_root: Option<&Path>,
+    resources_dir: Option<&Path>,
+) -> Result<(String, String), AnyError> {
+    use base64::Engine;
+
+    // Resolve the path
+    let abs_path = if href.starts_with("file://") {
+        let url = Url::parse(href)?;
+        url.to_file_path()
+            .map_err(|_| anyhow!("Invalid file URL path: {href}"))?
+    } else {
+        // Relative path — resolve against resources_dir
+        match resources_dir {
+            Some(dir) => dir.join(href),
+            None => bail!(
+                "Cannot resolve relative image path '{href}' without a filesystem-backed base_url"
+            ),
+        }
+    };
+
+    // Check containment under filesystem_root
+    if let Some(root) = filesystem_root {
+        ensure_path_is_under_root(&abs_path, root)?;
+    }
+
+    // Read the file
+    let bytes = std::fs::read(&abs_path).map_err(|e| {
+        anyhow!(
+            "Failed to read local image file {}: {e}",
+            abs_path.display()
+        )
+    })?;
+
+    let mime = infer_image_mime(&bytes, None);
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok((mime.to_string(), b64))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
