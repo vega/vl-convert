@@ -728,7 +728,6 @@ impl VlConverter {
     ) -> Result<String, AnyError> {
         let HtmlOpts {
             bundle,
-            embed_local_fonts,
             subset_fonts,
             renderer,
         } = html_opts;
@@ -737,7 +736,7 @@ impl VlConverter {
         let vl_spec = vl_spec.into();
 
         let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = embed_local_fonts;
+        let embed_local = self.inner.config.embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vl_opts.google_fonts.is_some();
         let font_head_html = if has_font_work {
@@ -817,7 +816,6 @@ impl VlConverter {
     ) -> Result<String, AnyError> {
         let HtmlOpts {
             bundle,
-            embed_local_fonts,
             subset_fonts,
             renderer,
         } = html_opts;
@@ -825,7 +823,7 @@ impl VlConverter {
         let vg_spec = vg_spec.into();
 
         let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = embed_local_fonts;
+        let embed_local = self.inner.config.embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vg_opts.google_fonts.is_some();
         let font_head_html = if has_font_work {

@@ -84,6 +84,7 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
         "base_url": base_url_value,
         "allowed_base_urls": config.allowed_base_urls,
         "auto_google_fonts": config.auto_google_fonts,
+        "embed_local_fonts": config.embed_local_fonts,
         "missing_fonts": match config.missing_fonts {
             MissingFontsPolicy::Fallback => "fallback",
             MissingFontsPolicy::Warn => "warn",
@@ -119,6 +120,7 @@ struct ConverterConfigOverrides {
     allowed_base_urls: Option<Option<Vec<String>>>,
     google_fonts_cache_size_mb: Option<u64>,
     auto_google_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
     missing_fonts: Option<MissingFontsPolicy>,
     // None => no change, Some(None) => clear, Some(Some(fonts)) => set
     google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
@@ -207,6 +209,15 @@ fn parse_config_overrides(
                     overrides.auto_google_fonts = Some(value.extract::<bool>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid auto_google_fonts value for configure: {err}"
+                        )
+                    })?);
+                }
+            }
+            "embed_local_fonts" => {
+                if !value.is_none() {
+                    overrides.embed_local_fonts = Some(value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid embed_local_fonts value for configure: {err}"
                         )
                     })?);
                 }
@@ -421,6 +432,9 @@ fn apply_config_overrides(
     if let Some(auto_google_fonts) = overrides.auto_google_fonts {
         config.auto_google_fonts = auto_google_fonts;
     }
+    if let Some(embed_local_fonts) = overrides.embed_local_fonts {
+        config.embed_local_fonts = embed_local_fonts;
+    }
     if let Some(missing_fonts) = overrides.missing_fonts {
         config.missing_fonts = missing_fonts;
     }
@@ -488,6 +502,74 @@ where
 {
     let converter = converter_read_handle()?;
     Python::with_gil(|py| py.allow_threads(move || PYTHON_RUNTIME.block_on(make_future(converter))))
+}
+
+/// Temporarily override `embed_local_fonts` in the global converter config,
+/// run a conversion, and restore the original value afterward.
+/// If `embed_local_fonts` is `None`, the current config value is used unchanged.
+fn with_embed_local_fonts_override<R, Fut, F>(
+    embed_local_fonts: Option<bool>,
+    make_future: F,
+) -> Result<R, vl_convert_rs::anyhow::Error>
+where
+    F: FnOnce(Arc<VlConverterRs>) -> Fut + Send + 'static,
+    Fut: Future<Output = Result<R, vl_convert_rs::anyhow::Error>> + 'static,
+    R: Send + 'static,
+{
+    let original = if let Some(elf) = embed_local_fonts {
+        let config = converter_config()?;
+        if config.embed_local_fonts != elf {
+            let overrides = ConverterConfigOverrides {
+                embed_local_fonts: Some(elf),
+                ..Default::default()
+            };
+            configure_converter_with_config_overrides(overrides)?;
+            Some(config.embed_local_fonts)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let result = run_converter_future(make_future);
+
+    // Restore original value if we changed it
+    if let Some(orig) = original {
+        let restore = ConverterConfigOverrides {
+            embed_local_fonts: Some(orig),
+            ..Default::default()
+        };
+        let _ = configure_converter_with_config_overrides(restore);
+    }
+
+    result
+}
+
+/// Get a converter handle with a temporary `embed_local_fonts` override.
+/// The global config is restored immediately; the returned Arc retains the overridden config.
+fn converter_with_embed_local_fonts_override(
+    embed_local_fonts: Option<bool>,
+) -> Result<Arc<VlConverterRs>, vl_convert_rs::anyhow::Error> {
+    if let Some(elf) = embed_local_fonts {
+        let config = converter_config()?;
+        if config.embed_local_fonts != elf {
+            let overrides = ConverterConfigOverrides {
+                embed_local_fonts: Some(elf),
+                ..Default::default()
+            };
+            configure_converter_with_config_overrides(overrides)?;
+            let handle = converter_read_handle()?;
+            // Restore original value
+            let restore = ConverterConfigOverrides {
+                embed_local_fonts: Some(config.embed_local_fonts),
+                ..Default::default()
+            };
+            let _ = configure_converter_with_config_overrides(restore);
+            return Ok(handle);
+        }
+    }
+    converter_read_handle()
 }
 
 fn is_permission_denied_message(message: &str) -> bool {
@@ -644,16 +726,16 @@ fn vega_to_svg(
 
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
-        embed_local_fonts: embed_local_fonts.unwrap_or(false),
         subset_fonts: subset_fonts.unwrap_or(true),
     };
 
-    let svg = match run_converter_future(move |converter| async move {
-        converter.vega_to_svg(vg_spec, vg_opts, svg_opts).await
-    }) {
-        Ok(vega_spec) => vega_spec,
-        Err(err) => return Err(prefixed_py_error("Vega to SVG conversion failed", err)),
-    };
+    let svg =
+        match with_embed_local_fonts_override(embed_local_fonts, move |converter| async move {
+            converter.vega_to_svg(vg_spec, vg_opts, svg_opts).await
+        }) {
+            Ok(vega_spec) => vega_spec,
+            Err(err) => return Err(prefixed_py_error("Vega to SVG conversion failed", err)),
+        };
     Ok(svg)
 }
 
@@ -769,16 +851,16 @@ fn vegalite_to_svg(
 
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
-        embed_local_fonts: embed_local_fonts.unwrap_or(false),
         subset_fonts: subset_fonts.unwrap_or(true),
     };
 
-    let svg = match run_converter_future(move |converter| async move {
-        converter.vegalite_to_svg(vl_spec, vl_opts, svg_opts).await
-    }) {
-        Ok(vega_spec) => vega_spec,
-        Err(err) => return Err(prefixed_py_error("Vega-Lite to SVG conversion failed", err)),
-    };
+    let svg =
+        match with_embed_local_fonts_override(embed_local_fonts, move |converter| async move {
+            converter.vegalite_to_svg(vl_spec, vl_opts, svg_opts).await
+        }) {
+            Ok(vega_spec) => vega_spec,
+            Err(err) => return Err(prefixed_py_error("Vega-Lite to SVG conversion failed", err)),
+        };
     Ok(svg)
 }
 
@@ -1299,11 +1381,10 @@ fn vegalite_to_html(
 
     let html_opts = HtmlOpts {
         bundle: bundle.unwrap_or(false),
-        embed_local_fonts: embed_local_fonts.unwrap_or(false),
         subset_fonts,
         renderer,
     };
-    run_converter_future(move |converter| async move {
+    with_embed_local_fonts_override(embed_local_fonts, move |converter| async move {
         converter
             .vegalite_to_html(vl_spec, vl_opts, html_opts)
             .await
@@ -1352,11 +1433,10 @@ fn vega_to_html(
     };
     let html_opts = HtmlOpts {
         bundle: bundle.unwrap_or(false),
-        embed_local_fonts: embed_local_fonts.unwrap_or(false),
         subset_fonts,
         renderer,
     };
-    run_converter_future(move |converter| async move {
+    with_embed_local_fonts_override(embed_local_fonts, move |converter| async move {
         converter.vega_to_html(vg_spec, vg_opts, html_opts).await
     })
     .map_err(|err| prefixed_py_error("Vega to HTML conversion failed", err))
@@ -1418,8 +1498,9 @@ fn vegalite_fonts(
     };
 
     let result = run_converter_future(move |converter| async move {
-        let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-        let embed_lf = embed_local_fonts.unwrap_or(false);
+        let config = converter.config();
+        let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
+        let embed_lf = embed_local_fonts.unwrap_or(config.embed_local_fonts);
         converter
             .vegalite_fonts(
                 vl_spec,
@@ -1476,8 +1557,9 @@ fn vega_fonts(
     };
 
     let result = run_converter_future(move |converter| async move {
-        let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-        let embed_lf = embed_local_fonts.unwrap_or(false);
+        let config = converter.config();
+        let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
+        let embed_lf = embed_local_fonts.unwrap_or(config.embed_local_fonts);
         converter
             .vega_fonts(
                 vg_spec,
@@ -2073,20 +2155,24 @@ fn vega_to_svg_asyncio<'py>(
     };
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
-        embed_local_fonts: embed_local_fonts.unwrap_or(false),
         subset_fonts: subset_fonts.unwrap_or(true),
     };
 
-    run_converter_future_async(
-        py,
-        move |converter| async move { converter.vega_to_svg(vg_spec, vg_opts, svg_opts).await },
-        "Vega to SVG conversion failed",
-        |py, value| {
+    let converter = converter_with_embed_local_fonts_override(embed_local_fonts)
+        .map_err(|err| prefixed_py_error("Vega to SVG conversion failed", err))?;
+
+    let error_prefix = "Vega to SVG conversion failed";
+    future_into_py_object(py, async move {
+        let value = converter
+            .vega_to_svg(vg_spec, vg_opts, svg_opts)
+            .await
+            .map_err(|err| prefixed_py_error(error_prefix, err))?;
+        Python::with_gil(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
-        },
-    )
+        })
+    })
 }
 
 #[doc = async_variant_doc!("vega_to_scenegraph")]
@@ -2180,20 +2266,24 @@ fn vegalite_to_svg_asyncio<'py>(
     };
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
-        embed_local_fonts: embed_local_fonts.unwrap_or(false),
         subset_fonts: subset_fonts.unwrap_or(true),
     };
 
-    run_converter_future_async(
-        py,
-        move |converter| async move { converter.vegalite_to_svg(vl_spec, vl_opts, svg_opts).await },
-        "Vega-Lite to SVG conversion failed",
-        |py, value| {
+    let converter = converter_with_embed_local_fonts_override(embed_local_fonts)
+        .map_err(|err| prefixed_py_error("Vega-Lite to SVG conversion failed", err))?;
+
+    let error_prefix = "Vega-Lite to SVG conversion failed";
+    future_into_py_object(py, async move {
+        let value = converter
+            .vegalite_to_svg(vl_spec, vl_opts, svg_opts)
+            .await
+            .map_err(|err| prefixed_py_error(error_prefix, err))?;
+        Python::with_gil(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
-        },
-    )
+        })
+    })
 }
 
 #[doc = async_variant_doc!("vegalite_to_scenegraph")]
@@ -2604,29 +2694,29 @@ fn vegalite_to_html_asyncio<'py>(
         vega_plugin,
     };
 
-    run_converter_future_async(
-        py,
-        move |converter| async move {
-            converter
-                .vegalite_to_html(
-                    vl_spec,
-                    vl_opts,
-                    HtmlOpts {
-                        bundle: bundle.unwrap_or(false),
-                        embed_local_fonts: embed_local_fonts.unwrap_or(false),
-                        subset_fonts,
-                        renderer,
-                    },
-                )
-                .await
-        },
-        "Vega-Lite to HTML conversion failed",
-        |py, value| {
+    let converter = converter_with_embed_local_fonts_override(embed_local_fonts)
+        .map_err(|err| prefixed_py_error("Vega-Lite to HTML conversion failed", err))?;
+
+    let error_prefix = "Vega-Lite to HTML conversion failed";
+    future_into_py_object(py, async move {
+        let value = converter
+            .vegalite_to_html(
+                vl_spec,
+                vl_opts,
+                HtmlOpts {
+                    bundle: bundle.unwrap_or(false),
+                    subset_fonts,
+                    renderer,
+                },
+            )
+            .await
+            .map_err(|err| prefixed_py_error(error_prefix, err))?;
+        Python::with_gil(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
-        },
-    )
+        })
+    })
 }
 
 #[doc = async_variant_doc!("vega_to_html")]
@@ -2659,29 +2749,29 @@ fn vega_to_html_asyncio<'py>(
         vega_plugin,
     };
 
-    run_converter_future_async(
-        py,
-        move |converter| async move {
-            converter
-                .vega_to_html(
-                    vg_spec,
-                    vg_opts,
-                    HtmlOpts {
-                        bundle: bundle.unwrap_or(false),
-                        embed_local_fonts: embed_local_fonts.unwrap_or(false),
-                        subset_fonts,
-                        renderer,
-                    },
-                )
-                .await
-        },
-        "Vega to HTML conversion failed",
-        |py, value| {
+    let converter = converter_with_embed_local_fonts_override(embed_local_fonts)
+        .map_err(|err| prefixed_py_error("Vega to HTML conversion failed", err))?;
+
+    let error_prefix = "Vega to HTML conversion failed";
+    future_into_py_object(py, async move {
+        let value = converter
+            .vega_to_html(
+                vg_spec,
+                vg_opts,
+                HtmlOpts {
+                    bundle: bundle.unwrap_or(false),
+                    subset_fonts,
+                    renderer,
+                },
+            )
+            .await
+            .map_err(|err| prefixed_py_error(error_prefix, err))?;
+        Python::with_gil(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
-        },
-    )
+        })
+    })
 }
 
 #[doc = async_variant_doc!("vegalite_fonts")]
@@ -2727,8 +2817,9 @@ fn vegalite_fonts_asyncio<'py>(
     run_converter_future_async(
         py,
         move |converter| async move {
-            let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-            let embed_lf = embed_local_fonts.unwrap_or(false);
+            let config = converter.config();
+            let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
+            let embed_lf = embed_local_fonts.unwrap_or(config.embed_local_fonts);
             converter
                 .vegalite_fonts(
                     vl_spec,
@@ -2778,8 +2869,9 @@ fn vega_fonts_asyncio<'py>(
     run_converter_future_async(
         py,
         move |converter| async move {
-            let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-            let embed_lf = embed_local_fonts.unwrap_or(false);
+            let config = converter.config();
+            let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
+            let embed_lf = embed_local_fonts.unwrap_or(config.embed_local_fonts);
             converter
                 .vega_fonts(
                     vg_spec,

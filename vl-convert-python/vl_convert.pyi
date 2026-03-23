@@ -159,6 +159,7 @@ if TYPE_CHECKING:
         base_url: str | bool
         allowed_base_urls: list[str] | None
         auto_google_fonts: bool
+        embed_local_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
         google_fonts_cache_dir: str | None
         max_v8_heap_size_mb: int
@@ -315,6 +316,7 @@ def configure(
     allowed_base_urls: list[str] | None = None,
     google_fonts_cache_size_mb: int | None = None,
     auto_google_fonts: bool | None = None,
+    embed_local_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
     max_v8_heap_size_mb: int | None = None,
@@ -352,6 +354,10 @@ def configure(
         Maximum font cache size in megabytes. If ``None``, keep current value.
     auto_google_fonts
         Automatically download missing fonts from Google Fonts. If ``None``, keep current value.
+    embed_local_fonts
+        Embed locally available fonts as base64-encoded data URIs in SVG and HTML
+        output. Does not apply to PDF/PNG/JPEG (which always embed fonts via fontdb).
+        If ``None``, keep current value.
     missing_fonts
         Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
         If ``None``, keep current value.
@@ -1188,6 +1194,7 @@ if TYPE_CHECKING:
             allowed_base_urls: list[str] | None = None,
             google_fonts_cache_size_mb: int | None = None,
             auto_google_fonts: bool | None = None,
+            embed_local_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
             max_v8_heap_size_mb: int | None = None,

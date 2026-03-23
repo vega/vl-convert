@@ -697,6 +697,10 @@ pub struct VlConverterConfig {
     pub allowed_base_urls: Option<Vec<String>>,
     /// Whether to auto-download missing fonts from Google Fonts.
     pub auto_google_fonts: bool,
+    /// Whether to embed locally-available fonts as base64 `@font-face` blocks
+    /// in HTML and SVG output. Defaults to false.
+    /// Does not apply to PDF/PNG/JPEG, which always embed fonts via fontdb.
+    pub embed_local_fonts: bool,
     /// How to handle missing first-choice fonts: silently fallback, warn, or error.
     pub missing_fonts: MissingFontsPolicy,
     /// Google Fonts to register for all conversions. Each request specifies a
@@ -771,6 +775,7 @@ impl Default for VlConverterConfig {
             base_url: BaseUrlSetting::Default,
             allowed_base_urls: None,
             auto_google_fonts: false,
+            embed_local_fonts: false,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: None,
             max_v8_heap_size_mb: 0,
@@ -929,7 +934,6 @@ pub struct VlOpts {
 #[derive(Debug, Clone)]
 pub struct SvgOpts {
     pub bundle: bool,
-    pub embed_local_fonts: bool,
     pub subset_fonts: bool,
 }
 
@@ -937,7 +941,6 @@ impl Default for SvgOpts {
     fn default() -> Self {
         Self {
             bundle: false,
-            embed_local_fonts: false,
             subset_fonts: true,
         }
     }
@@ -947,7 +950,6 @@ impl Default for SvgOpts {
 #[derive(Debug, Clone)]
 pub struct HtmlOpts {
     pub bundle: bool,
-    pub embed_local_fonts: bool,
     pub subset_fonts: bool,
     pub renderer: Renderer,
 }
@@ -956,7 +958,6 @@ impl Default for HtmlOpts {
     fn default() -> Self {
         Self {
             bundle: false,
-            embed_local_fonts: false,
             subset_fonts: true,
             renderer: Renderer::Svg,
         }
@@ -3765,7 +3766,7 @@ impl VlConverter {
         let classified_fonts = classify_scenegraph_fonts(
             &families,
             config.auto_google_fonts,
-            svg_opts.embed_local_fonts,
+            config.embed_local_fonts,
             config.missing_fonts,
             &explicit_google_families,
         )
@@ -6119,7 +6120,6 @@ try {
             },
             HtmlOpts {
                 bundle: true,
-                embed_local_fonts: false,
                 subset_fonts: true,
                 renderer: Renderer::Svg,
             },
@@ -6129,7 +6129,6 @@ try {
             VgOpts::default(),
             HtmlOpts {
                 bundle: true,
-                embed_local_fonts: false,
                 subset_fonts: true,
                 renderer: Renderer::Svg,
             },
