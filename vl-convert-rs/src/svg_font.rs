@@ -1,22 +1,22 @@
 //! SVG font embedding and image inlining.
 //!
-//! Implements the `process_svg()` pipeline: single-parse extraction via
-//! [`analyze_svg`], font CSS assembly, image inlining, and batch-edit
-//! application in reverse byte-position order.
+//! Implements the `process_svg()` pipeline: font CSS assembly, image inlining,
+//! and batch-edit application in reverse byte-position order.
+//!
+//! Callers provide pre-computed [`SvgAnalysis`] and classified font data so
+//! that the SVG is parsed only once (in `postprocess_svg`).
 
-use crate::converter::{classify_scenegraph_fonts, MissingFontsPolicy, SvgOpts, VlConverterConfig};
-use crate::extract::{analyze_svg, FontForHtml, FontKey, FontSource, SvgAnalysis};
-use crate::font_embed::{generate_font_face_css, variants_by_family};
+use crate::converter::{MissingFontsPolicy, SvgOpts, VlConverterConfig};
+use crate::extract::{FontForHtml, FontKey, FontSource, SvgAnalysis};
+use crate::font_embed::{generate_font_face_css, resolve_cdn_variants};
 use crate::html::font_import_rule;
 use crate::image_loading::{
     fetch_and_encode_image_http, resolve_and_read_local_image, ImageAccessPolicy,
 };
-use crate::text::GOOGLE_FONTS_CLIENT;
 use deno_core::error::AnyError;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::ops::Range;
 use std::path::Path;
-use vl_convert_google_fonts::{FontStyle, VariantRequest};
 
 /// A pending modification to the SVG string, identified by byte range.
 #[derive(Debug)]
@@ -39,8 +39,9 @@ fn apply_edits(mut svg: String, mut edits: Vec<SvgEdit>) -> String {
     // Sort descending by start position
     edits.sort_by(|a, b| b.range.start.cmp(&a.range.start));
 
-    // Debug-assert non-overlapping
-    debug_assert!(
+    // Hard assert: overlapping edits would silently corrupt the SVG in
+    // release builds if this were only a debug_assert.
+    assert!(
         {
             let mut ok = true;
             for pair in edits.windows(2) {
@@ -62,13 +63,6 @@ fn apply_edits(mut svg: String, mut edits: Vec<SvgEdit>) -> String {
     svg
 }
 
-/// Escape CSS for embedding inside SVG XML.
-///
-/// Google Fonts URLs contain `&` which must become `&amp;` in XML.
-fn xml_escape_css(css: &str) -> String {
-    css.replace('&', "&amp;")
-}
-
 /// Build the font CSS string for SVG embedding.
 ///
 /// Returns the assembled CSS with `@import` rules before `@font-face` blocks.
@@ -76,8 +70,8 @@ fn xml_escape_css(css: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 fn build_svg_font_css(
     analysis: &SvgAnalysis,
-    html_fonts: &[FontForHtml],
-    family_variants: &HashMap<String, BTreeSet<(String, String)>>,
+    classified_fonts: &[FontForHtml],
+    cdn_variants: &HashMap<String, BTreeSet<(String, String)>>,
     bundle: bool,
     subset_fonts: bool,
     missing_fonts: &MissingFontsPolicy,
@@ -99,10 +93,10 @@ fn build_svg_font_css(
 
     if bundle {
         // Embedded mode: all selected fonts as @font-face with base64 WOFF2
-        if !html_fonts.is_empty() {
+        if !classified_fonts.is_empty() {
             let font_face_index = generate_font_face_css(
                 &analysis.chars_by_key,
-                html_fonts,
+                classified_fonts,
                 missing_fonts,
                 fontdb,
                 loaded_batches,
@@ -127,9 +121,9 @@ fn build_svg_font_css(
         // Reference mode: @import for Google fonts, @font-face for local fonts
 
         // @import rules first (Google fonts only)
-        for f in html_fonts {
+        for f in classified_fonts {
             if let FontSource::Google { .. } = &f.source {
-                if let Some(cdn_set) = family_variants.get(&f.family) {
+                if let Some(cdn_set) = cdn_variants.get(&f.family) {
                     let text: Option<String> = family_chars
                         .get(&f.family)
                         .map(|chars| chars.iter().collect());
@@ -141,17 +135,16 @@ fn build_svg_font_css(
         }
 
         // @font-face blocks for local fonts only
-        let local_fonts: Vec<&FontForHtml> = html_fonts
+        let local_fonts: Vec<FontForHtml> = classified_fonts
             .iter()
             .filter(|f| matches!(f.source, FontSource::Local))
+            .cloned()
             .collect();
 
         if !local_fonts.is_empty() {
-            let local_html_fonts: Vec<FontForHtml> =
-                local_fonts.iter().map(|f| (*f).clone()).collect();
             let font_face_index = generate_font_face_css(
                 &analysis.chars_by_key,
-                &local_html_fonts,
+                &local_fonts,
                 missing_fonts,
                 fontdb,
                 loaded_batches,
@@ -178,94 +171,39 @@ fn build_svg_font_css(
 
 /// Process a rendered SVG string to embed fonts and/or inline images.
 ///
-/// This is the main entry point for SVG font bundling. It:
-/// 1. Parses the SVG once with roxmltree
-/// 2. Extracts font data and image references
-/// 3. Classifies fonts (Google vs Local)
-/// 4. Builds font CSS (@import or @font-face)
-/// 5. Inlines images (if bundle=true)
-/// 6. Applies all edits in reverse order
+/// Callers must provide pre-computed `analysis` and `classified_fonts` so the
+/// SVG is not re-parsed. This function:
+/// 1. Resolves CDN variants (non-bundle mode)
+/// 2. Builds font CSS (@import or @font-face)
+/// 3. Inlines images (if bundle=true)
+/// 4. Applies all edits in reverse order
 ///
 /// Returns the modified SVG string, or the original if no edits are needed.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_svg(
     svg: String,
     svg_opts: &SvgOpts,
+    analysis: &SvgAnalysis,
+    classified_fonts: &[FontForHtml],
+    family_variants: &HashMap<String, BTreeSet<(String, String)>>,
     config: &VlConverterConfig,
     fontdb: &fontdb::Database,
     loaded_batches: &[vl_convert_google_fonts::LoadedFontBatch],
     image_policy: &ImageAccessPolicy,
     resources_dir: Option<&Path>,
 ) -> Result<String, AnyError> {
-    // 1. Parse SVG and extract fonts + image refs
-    let analysis = analyze_svg(&svg)?;
-
-    // 2. Classify fonts
-    let explicit_google_families: HashSet<String> = HashSet::new();
-    let families: std::collections::BTreeSet<String> = analysis.families.iter().cloned().collect();
-    let html_fonts = classify_scenegraph_fonts(
-        &families,
-        config.auto_google_fonts,
-        svg_opts.embed_local_fonts,
-        config.missing_fonts,
-        &explicit_google_families,
-    )
-    .await?;
-
-    // 3. Compute family variants
-    let family_variants = variants_by_family(&analysis.chars_by_key);
-
-    // 4. Resolve CDN variants for @import rules (non-bundle mode)
-    let cdn_variants: HashMap<String, BTreeSet<(String, String)>> = if !svg_opts.bundle {
-        let mut cdn_map = HashMap::new();
-        for f in &html_fonts {
-            if let FontSource::Google { .. } = &f.source {
-                if let Some(vs) = family_variants.get(&f.family) {
-                    let requested: Vec<VariantRequest> = vs
-                        .iter()
-                        .map(|(w, s)| VariantRequest {
-                            weight: w.parse().unwrap_or(400),
-                            style: s.parse().unwrap_or(FontStyle::Normal),
-                        })
-                        .collect();
-                    match GOOGLE_FONTS_CLIENT
-                        .resolve_available_variants(&f.family, &requested)
-                        .await
-                    {
-                        Ok(resolved) => {
-                            let set: BTreeSet<(String, String)> = resolved
-                                .into_iter()
-                                .map(|v| (v.weight.to_string(), v.style.as_str().to_string()))
-                                .collect();
-                            cdn_map.insert(f.family.clone(), set);
-                        }
-                        Err(e) => {
-                            log::warn!(
-                                "Failed to resolve variants for '{}': {e}, skipping CDN URL",
-                                f.family
-                            );
-                        }
-                    }
-                }
-            }
-        }
-        cdn_map
+    // 1. Resolve CDN variants for @import rules (non-bundle mode)
+    let cdn_variants = if !svg_opts.bundle {
+        resolve_cdn_variants(classified_fonts, family_variants).await
     } else {
-        // In bundle mode, family_variants is used directly for @font-face generation
-        family_variants.clone()
+        HashMap::new()
     };
 
-    // Use resolved CDN variants for non-bundle mode, original for bundle mode
-    let variants_for_css = if svg_opts.bundle {
-        &family_variants
-    } else {
-        &cdn_variants
-    };
-
-    // 5. Build font CSS
+    // 2. Build font CSS
     let css = build_svg_font_css(
-        &analysis,
-        &html_fonts,
-        variants_for_css,
+        analysis,
+        classified_fonts,
+        &cdn_variants,
         svg_opts.bundle,
         svg_opts.subset_fonts,
         &config.missing_fonts,
@@ -273,15 +211,16 @@ pub(crate) async fn process_svg(
         loaded_batches,
     )?;
 
-    // 6. Collect edits
+    // 3. Collect edits
     let mut edits: Vec<SvgEdit> = Vec::new();
 
     // Insert <defs><style> if we have CSS content
     if !css.is_empty() {
-        let escaped_css = xml_escape_css(&css);
+        // CDATA wrapping prevents XML parsing issues with CSS content
+        // (e.g., `&` in Google Fonts URLs, `</style>` in font names)
         edits.push(SvgEdit {
             range: analysis.insert_pos..analysis.insert_pos,
-            replacement: format!("<defs><style>\n{escaped_css}\n</style></defs>\n"),
+            replacement: format!("<defs><style><![CDATA[\n{css}\n]]></style></defs>\n"),
         });
     }
 
@@ -308,7 +247,7 @@ pub(crate) async fn process_svg(
         }
     }
 
-    // 7. Apply edits or return unchanged
+    // 4. Apply edits or return unchanged
     if edits.is_empty() {
         Ok(svg)
     } else {
@@ -375,17 +314,19 @@ mod tests {
     }
 
     #[test]
-    fn test_xml_escape_css() {
-        let css = r#"@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400&display=swap");"#;
-        let escaped = xml_escape_css(css);
-        assert!(escaped.contains("&amp;display"));
-        assert!(!escaped.contains("&display"));
-    }
-
-    #[test]
-    fn test_xml_escape_css_no_ampersand() {
-        let css = "@font-face { font-family: 'Roboto'; }";
-        let escaped = xml_escape_css(css);
-        assert_eq!(escaped, css);
+    #[should_panic(expected = "non-overlapping")]
+    fn test_apply_edits_overlapping_panics() {
+        let svg = "<svg>abcdefghij</svg>".to_string();
+        let edits = vec![
+            SvgEdit {
+                range: 5..8,
+                replacement: "X".to_string(),
+            },
+            SvgEdit {
+                range: 7..10,
+                replacement: "Y".to_string(),
+            },
+        ];
+        apply_edits(svg, edits);
     }
 }

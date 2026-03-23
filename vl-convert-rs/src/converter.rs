@@ -3685,6 +3685,14 @@ impl VlConverter {
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
+        // Extract user-specified Google font families BEFORE auto-detection
+        // merges in, so classify_scenegraph_fonts treats them as explicit.
+        let explicit_google_families: HashSet<String> = vg_opts
+            .google_fonts
+            .as_ref()
+            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
+            .unwrap_or_default();
+
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
             vg_opts
@@ -3712,12 +3720,21 @@ impl VlConverter {
             .await?
         };
 
-        self.postprocess_svg(svg, &svg_opts).await
+        self.postprocess_svg(svg, &svg_opts, explicit_google_families)
+            .await
     }
 
     /// Post-process a rendered SVG to embed fonts and/or inline images
     /// according to the given `SvgOpts`.
-    async fn postprocess_svg(&self, svg: String, svg_opts: &SvgOpts) -> Result<String, AnyError> {
+    ///
+    /// Parses the SVG once, classifies fonts, resolves Google Font data, then
+    /// delegates to [`crate::svg_font::process_svg`] with all pre-computed data.
+    async fn postprocess_svg(
+        &self,
+        svg: String,
+        svg_opts: &SvgOpts,
+        explicit_google_families: HashSet<String>,
+    ) -> Result<String, AnyError> {
         let config = self.config();
         let image_policy = self.image_access_policy();
         let resources_dir = if config.base_url.is_filesystem() {
@@ -3739,28 +3756,29 @@ impl VlConverter {
             .fontdb
             .clone();
 
-        // Analyze SVG to find what Google Fonts need loading
+        // Analyze SVG once — extract fonts, image refs, insertion point
         let analysis = crate::extract::analyze_svg(&svg)?;
         let families: std::collections::BTreeSet<String> =
             analysis.families.iter().cloned().collect();
 
-        // Classify fonts to discover which are Google vs Local
-        let html_fonts = classify_scenegraph_fonts(
+        // Classify fonts once with proper explicit families
+        let classified_fonts = classify_scenegraph_fonts(
             &families,
             config.auto_google_fonts,
             svg_opts.embed_local_fonts,
             config.missing_fonts,
-            &HashSet::new(),
+            &explicit_google_families,
         )
         .await?;
 
+        // Compute variants once before building Google font requests
+        let family_variants = crate::font_embed::variants_by_family(&analysis.chars_by_key);
+
         // Resolve Google Font batches (needed for @font-face subsetting)
-        let google_font_requests: Vec<GoogleFontRequest> = html_fonts
+        let google_font_requests: Vec<GoogleFontRequest> = classified_fonts
             .iter()
             .filter_map(|f| match &f.source {
                 crate::extract::FontSource::Google { .. } => {
-                    let family_variants =
-                        crate::font_embed::variants_by_family(&analysis.chars_by_key);
                     let variants = family_variants.get(&f.family).map(|vs| {
                         vs.iter()
                             .map(|(w, s)| vl_convert_google_fonts::VariantRequest {
@@ -3792,6 +3810,9 @@ impl VlConverter {
         crate::svg_font::process_svg(
             svg,
             svg_opts,
+            &analysis,
+            &classified_fonts,
+            &family_variants,
             &config,
             &fontdb,
             &loaded_batches,
@@ -3863,6 +3884,13 @@ impl VlConverter {
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
 
+        // Extract user-specified Google font families before they're consumed
+        let explicit_google_families: HashSet<String> = vl_opts
+            .google_fonts
+            .as_ref()
+            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
+            .unwrap_or_default();
+
         let svg = if let Some((vega_spec, mut vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
@@ -3905,7 +3933,8 @@ impl VlConverter {
             .await?
         };
 
-        self.postprocess_svg(svg, &svg_opts).await
+        self.postprocess_svg(svg, &svg_opts, explicit_google_families)
+            .await
     }
 
     pub async fn vegalite_to_scenegraph(

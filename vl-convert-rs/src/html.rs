@@ -11,7 +11,7 @@ use crate::extract::{
 use crate::font_embed::{generate_font_face_css, inject_locale_chars, variants_by_family};
 use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
-use crate::text::{GOOGLE_FONTS_CLIENT, USVG_OPTIONS};
+use crate::text::USVG_OPTIONS;
 use crate::with_font_overlay;
 use crate::VlVersion;
 use deno_core::anyhow::anyhow;
@@ -544,38 +544,8 @@ impl VlConverter {
                 HashMap::new()
             };
 
-        let mut cdn_variants: HashMap<String, BTreeSet<(String, String)>> = HashMap::new();
-        for f in &html_fonts {
-            if let FontSource::Google { .. } = &f.source {
-                if let Some(vs) = family_variants.get(&f.family) {
-                    let requested: Vec<VariantRequest> = vs
-                        .iter()
-                        .map(|(w, s)| VariantRequest {
-                            weight: w.parse().unwrap_or(400),
-                            style: s.parse().unwrap_or(FontStyle::Normal),
-                        })
-                        .collect();
-                    match GOOGLE_FONTS_CLIENT
-                        .resolve_available_variants(&f.family, &requested)
-                        .await
-                    {
-                        Ok(resolved) => {
-                            let set: BTreeSet<(String, String)> = resolved
-                                .into_iter()
-                                .map(|v| (v.weight.to_string(), v.style.as_str().to_string()))
-                                .collect();
-                            cdn_variants.insert(f.family.clone(), set);
-                        }
-                        Err(e) => {
-                            log::warn!(
-                                "Failed to resolve variants for '{}': {e}, skipping CDN URL",
-                                f.family
-                            );
-                        }
-                    }
-                }
-            }
-        }
+        let cdn_variants =
+            crate::font_embed::resolve_cdn_variants(&html_fonts, &family_variants).await;
 
         let family_chars: HashMap<String, BTreeSet<char>> = if subset_fonts {
             let mut map: HashMap<String, BTreeSet<char>> = HashMap::new();

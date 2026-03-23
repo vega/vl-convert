@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use crate::converter::MissingFontsPolicy;
 use crate::extract::{FontForHtml, FontKey, FontSource};
+use crate::text::GOOGLE_FONTS_CLIENT;
 use vl_convert_google_fonts::{find_closest_variant, FontStyle, LoadedFontBatch, VariantRequest};
 
 /// Format a single `@font-face` CSS block from a WOFF2-encoded artifact.
@@ -161,6 +162,51 @@ pub fn variants_by_family(
             .insert((key.weight.clone(), key.style.clone()));
     }
     result
+}
+
+/// Resolve which font variants are actually available on the Google Fonts CDN
+/// for each classified Google font family.
+///
+/// For each Google font, converts the requested `(weight, style)` pairs into
+/// `VariantRequest`s, queries the CDN, and returns the resolved variants.
+/// Failures are logged as warnings and the family is skipped.
+pub async fn resolve_cdn_variants(
+    classified_fonts: &[FontForHtml],
+    family_variants: &HashMap<String, BTreeSet<(String, String)>>,
+) -> HashMap<String, BTreeSet<(String, String)>> {
+    let mut cdn_map = HashMap::new();
+    for f in classified_fonts {
+        if let FontSource::Google { .. } = &f.source {
+            if let Some(vs) = family_variants.get(&f.family) {
+                let requested: Vec<VariantRequest> = vs
+                    .iter()
+                    .map(|(w, s)| VariantRequest {
+                        weight: w.parse().unwrap_or(400),
+                        style: s.parse().unwrap_or(FontStyle::Normal),
+                    })
+                    .collect();
+                match GOOGLE_FONTS_CLIENT
+                    .resolve_available_variants(&f.family, &requested)
+                    .await
+                {
+                    Ok(resolved) => {
+                        let set: BTreeSet<(String, String)> = resolved
+                            .into_iter()
+                            .map(|v| (v.weight.to_string(), v.style.as_str().to_string()))
+                            .collect();
+                        cdn_map.insert(f.family.clone(), set);
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to resolve variants for '{}': {e}, skipping CDN URL",
+                            f.family
+                        );
+                    }
+                }
+            }
+        }
+    }
+    cdn_map
 }
 
 /// Generate `@font-face` CSS blocks with subsetted WOFF2 fonts, indexed by

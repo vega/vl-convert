@@ -440,6 +440,13 @@ pub(crate) fn fetch_and_encode_image_http(
             content_type,
         }) => {
             let mime = infer_image_mime(&bytes, content_type.as_deref());
+            if mime == "application/octet-stream" {
+                bail!(
+                    "Response from {href} is not a recognized image format \
+                     (content-type: {})",
+                    content_type.as_deref().unwrap_or("none")
+                );
+            }
             let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
             Ok((mime.to_string(), b64))
         }
@@ -496,6 +503,12 @@ pub(crate) fn resolve_and_read_local_image(
     })?;
 
     let mime = infer_image_mime(&bytes, None);
+    if mime == "application/octet-stream" {
+        bail!(
+            "File {} is not a recognized image format",
+            abs_path.display()
+        );
+    }
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok((mime.to_string(), b64))
 }
