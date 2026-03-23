@@ -206,8 +206,8 @@ def test_pacifico_bundle(page, update_baselines):
 
 def test_local_font_bundle(page, update_baselines):
     vlc.register_font_directory(str(fonts_dir / "Caveat" / "static"))
-    vlc.configure(auto_google_fonts=False)
-    html = vlc.vegalite_to_html(load_spec("local_font"), bundle=True, embed_local_fonts=True)
+    vlc.configure(auto_google_fonts=False, embed_local_fonts=True)
+    html = vlc.vegalite_to_html(load_spec("local_font"), bundle=True)
     screenshot = render_html(page, html, "local_font_bundle.png", block_network=True)
     compare_screenshot(screenshot, "local_font_bundle.png", update_baselines)
 
