@@ -160,6 +160,7 @@ if TYPE_CHECKING:
         allowed_base_urls: list[str] | None
         auto_google_fonts: bool
         embed_local_fonts: bool
+        subset_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
         google_fonts_cache_dir: str | None
         max_v8_heap_size_mb: int
@@ -317,6 +318,7 @@ def configure(
     google_fonts_cache_size_mb: int | None = None,
     auto_google_fonts: bool | None = None,
     embed_local_fonts: bool | None = None,
+    subset_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
     max_v8_heap_size_mb: int | None = None,
@@ -510,7 +512,6 @@ def svg_to_png(svg: str, scale: float | None = None, ppi: float | None = None) -
 def vega_to_html(
     vg_spec: VlSpec,
     bundle: bool | None = None,
-    subset_fonts: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
@@ -527,9 +528,6 @@ def vega_to_html(
     bundle
         If True, bundle all dependencies in HTML file.
         If False (default), HTML file will load dependencies from only CDN
-    subset_fonts
-        If True (default), subset fonts to only the characters used in the
-        chart. Set to False if the chart dynamically loads content.
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -675,7 +673,6 @@ def vega_to_svg(
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
     bundle: bool | None = None,
-    subset_fonts: bool | None = None,
 ) -> str:
     """
     Convert a Vega spec to an SVG image string.
@@ -693,8 +690,6 @@ def vega_to_svg(
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
     bundle
         Whether to bundle fonts into the SVG (not yet implemented)
-    subset_fonts
-        Whether to subset fonts to only include used characters (not yet implemented, default True)
     Returns
     -------
     SVG image string.
@@ -725,7 +720,6 @@ def vegalite_fonts(
     theme: VegaThemes | None = None,
     auto_google_fonts: bool | None = None,
     include_font_face: bool = False,
-    subset_fonts: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
@@ -750,10 +744,6 @@ def vegalite_fonts(
     include_font_face
         Whether to run the font subsetting pipeline and populate
         the ``font_face`` field on each variant (default False)
-    subset_fonts
-        If True (default), subset fonts to only the characters used.
-        If False, include full fonts. Only relevant when
-        ``include_font_face=True``.
 
     Returns
     -------
@@ -765,7 +755,6 @@ def vega_fonts(
     vg_spec: VlSpec,
     auto_google_fonts: bool | None = None,
     include_font_face: bool = False,
-    subset_fonts: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
@@ -783,10 +772,6 @@ def vega_fonts(
     include_font_face
         Whether to run the font subsetting pipeline and populate
         the ``font_face`` field on each variant (default False)
-    subset_fonts
-        If True (default), subset fonts to only the characters used.
-        If False, include full fonts. Only relevant when
-        ``include_font_face=True``.
 
     Returns
     -------
@@ -798,7 +783,6 @@ def vegalite_to_html(
     vl_spec: VlSpec,
     vl_version: str | None = None,
     bundle: bool | None = None,
-    subset_fonts: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
@@ -820,9 +804,6 @@ def vegalite_to_html(
     bundle
         If True, bundle all dependencies in HTML file
         If False (default), HTML file will load dependencies from only CDN
-    subset_fonts
-        If True (default), subset fonts to only the characters used in the
-        chart. Set to False if the chart dynamically loads content.
     config
         Chart configuration object to apply during conversion
     theme
@@ -1025,7 +1006,6 @@ def vegalite_to_svg(
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
     bundle: bool | None = None,
-    subset_fonts: bool | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to an SVG image string using a particular version of the Vega-Lite JavaScript library.
@@ -1052,8 +1032,6 @@ def vegalite_to_svg(
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
     bundle
         Whether to bundle fonts into the SVG (not yet implemented)
-    subset_fonts
-        Whether to subset fonts to only include used characters (not yet implemented, default True)
     Returns
     -------
     SVG image string.
@@ -1179,6 +1157,7 @@ if TYPE_CHECKING:
             google_fonts_cache_size_mb: int | None = None,
             auto_google_fonts: bool | None = None,
             embed_local_fonts: bool | None = None,
+            subset_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
             max_v8_heap_size_mb: int | None = None,
@@ -1221,7 +1200,6 @@ if TYPE_CHECKING:
             self,
             vg_spec: VlSpec,
             bundle: bool | None = None,
-            subset_fonts: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
@@ -1279,7 +1257,6 @@ if TYPE_CHECKING:
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
             bundle: bool | None = None,
-            subset_fonts: bool | None = None,
         ) -> str:
             """Async version of ``vega_to_svg``. See sync function for full documentation."""
             ...
@@ -1296,7 +1273,6 @@ if TYPE_CHECKING:
             theme: VegaThemes | None = None,
             auto_google_fonts: bool | None = None,
             include_font_face: bool = False,
-            subset_fonts: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
@@ -1308,7 +1284,6 @@ if TYPE_CHECKING:
             vg_spec: VlSpec,
             auto_google_fonts: bool | None = None,
             include_font_face: bool = False,
-            subset_fonts: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
@@ -1320,7 +1295,6 @@ if TYPE_CHECKING:
             vl_spec: VlSpec,
             vl_version: str | None = None,
             bundle: bool | None = None,
-            subset_fonts: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
@@ -1399,7 +1373,6 @@ if TYPE_CHECKING:
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
             bundle: bool | None = None,
-            subset_fonts: bool | None = None,
         ) -> str:
             """Async version of ``vegalite_to_svg``. See sync function for full documentation."""
             ...

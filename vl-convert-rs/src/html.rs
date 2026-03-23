@@ -656,9 +656,9 @@ impl VlConverter {
         bundle: bool,
         auto_install: bool,
         embed_local: bool,
-        subset_fonts: bool,
     ) -> Result<String, AnyError> {
         let include_font_face = bundle || embed_local;
+        let subset_fonts = self.inner.config.subset_fonts;
         let fonts = self
             .vega_fonts(
                 vega_spec,
@@ -726,11 +726,7 @@ impl VlConverter {
         mut vl_opts: VlOpts,
         html_opts: HtmlOpts,
     ) -> Result<String, AnyError> {
-        let HtmlOpts {
-            bundle,
-            subset_fonts,
-            renderer,
-        } = html_opts;
+        let HtmlOpts { bundle, renderer } = html_opts;
         self.apply_vl_defaults(&mut vl_opts);
         let vl_version = vl_opts.vl_version;
         let vl_spec = vl_spec.into();
@@ -749,15 +745,8 @@ impl VlConverter {
                 google_fonts: vl_opts.google_fonts.clone(),
                 vega_plugin: None,
             };
-            self.build_font_head_html(
-                vega_spec,
-                vg_opts,
-                bundle,
-                auto_install,
-                embed_local,
-                subset_fonts,
-            )
-            .await?
+            self.build_font_head_html(vega_spec, vg_opts, bundle, auto_install, embed_local)
+                .await?
         } else {
             String::new()
         };
@@ -814,11 +803,7 @@ impl VlConverter {
         mut vg_opts: VgOpts,
         html_opts: HtmlOpts,
     ) -> Result<String, AnyError> {
-        let HtmlOpts {
-            bundle,
-            subset_fonts,
-            renderer,
-        } = html_opts;
+        let HtmlOpts { bundle, renderer } = html_opts;
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
 
@@ -837,7 +822,6 @@ impl VlConverter {
                 bundle,
                 auto_install,
                 embed_local,
-                subset_fonts,
             )
             .await?
         } else {

@@ -397,7 +397,7 @@ mod test_vegalite_to_html_no_bundle {
         let converter = VlConverter::new();
 
         let html_result = block_on(
-            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, HtmlOpts { bundle: false, subset_fonts: true, renderer: Renderer::Canvas })
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, HtmlOpts { bundle: false, renderer: Renderer::Canvas })
         ).unwrap();
 
         // Check for expected patterns
@@ -445,7 +445,7 @@ mod test_vegalite_to_html_bundle {
         let converter = VlConverter::new();
 
         let html_result = block_on(
-            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, HtmlOpts { bundle: true, subset_fonts: true, renderer: Renderer::Svg })
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, HtmlOpts { bundle: true, renderer: Renderer::Svg })
         ).unwrap();
 
         // Check for expected patterns

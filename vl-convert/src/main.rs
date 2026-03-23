@@ -74,6 +74,10 @@ struct Cli {
     #[arg(long, global = true)]
     embed_local_fonts: bool,
 
+    /// Disable font subsetting (embed full font files instead of only used characters)
+    #[arg(long, global = true)]
+    no_subset_fonts: bool,
+
     /// Missing-font behavior: fallback silently, warn, or error.
     #[arg(long, global = true, value_enum, default_value_t = MissingFontsArg::Fallback)]
     missing_fonts: MissingFontsArg,
@@ -182,10 +186,6 @@ enum Commands {
         /// Bundle fonts and images into a self-contained SVG
         #[arg(long)]
         bundle: bool,
-
-        /// Disable font subsetting (embed full font files)
-        #[arg(long)]
-        no_subset_fonts: bool,
     },
 
     /// Convert a Vega-Lite specification to an PNG image
@@ -363,11 +363,6 @@ enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
-        /// Disable font subsetting. By default, only the characters used in the
-        /// chart are included. Use this flag if the chart dynamically loads content.
-        #[arg(long = "no-subset-fonts")]
-        no_subset_fonts: bool,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -407,10 +402,6 @@ enum Commands {
         #[arg(long = "include-font-face")]
         include_font_face: bool,
 
-        /// Disable font subsetting (include full fonts)
-        #[arg(long = "no-subset-fonts")]
-        no_subset_fonts: bool,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -449,10 +440,6 @@ enum Commands {
         /// Bundle fonts and images into a self-contained SVG
         #[arg(long)]
         bundle: bool,
-
-        /// Disable font subsetting (embed full font files)
-        #[arg(long)]
-        no_subset_fonts: bool,
     },
 
     /// Convert a Vega specification to an PNG image
@@ -570,11 +557,6 @@ enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
-        /// Disable font subsetting. By default, only the characters used in the
-        /// chart are included. Use this flag if the chart dynamically loads content.
-        #[arg(long = "no-subset-fonts")]
-        no_subset_fonts: bool,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -601,10 +583,6 @@ enum Commands {
         /// Include @font-face CSS blocks in the output
         #[arg(long = "include-font-face")]
         include_font_face: bool,
-
-        /// Disable font subsetting (include full fonts)
-        #[arg(long = "no-subset-fonts")]
-        no_subset_fonts: bool,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -701,6 +679,7 @@ async fn main() -> Result<(), anyhow::Error> {
         google_font: google_font_families,
         auto_google_fonts,
         embed_local_fonts,
+        no_subset_fonts,
         missing_fonts: missing_fonts_arg,
         max_v8_heap_size_mb,
         max_v8_execution_time_secs,
@@ -740,6 +719,7 @@ async fn main() -> Result<(), anyhow::Error> {
         allowed_base_urls,
         auto_google_fonts,
         embed_local_fonts,
+        subset_fonts: !no_subset_fonts,
         missing_fonts,
         google_fonts: config_google_fonts.clone(),
         max_v8_heap_size_mb,
@@ -789,13 +769,9 @@ async fn main() -> Result<(), anyhow::Error> {
             format_locale,
             time_format_locale,
             bundle,
-            no_subset_fonts,
         } => {
             register_font_dir(font_dir)?;
-            let svg_opts = SvgOpts {
-                bundle,
-                subset_fonts: !no_subset_fonts,
-            };
+            let svg_opts = SvgOpts { bundle };
             vl_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -910,7 +886,6 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             bundle,
-            no_subset_fonts,
             format_locale,
             time_format_locale,
             renderer,
@@ -942,7 +917,6 @@ async fn main() -> Result<(), anyhow::Error> {
                     },
                     HtmlOpts {
                         bundle,
-                        subset_fonts: !no_subset_fonts,
                         renderer: Renderer::from_str(&renderer)?,
                     },
                 )
@@ -956,7 +930,6 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             include_font_face,
-            no_subset_fonts,
             format_locale,
             time_format_locale,
             pretty,
@@ -972,6 +945,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
             let auto_google_fonts = base_config.auto_google_fonts;
             let embed_local_fonts = base_config.embed_local_fonts;
+            let subset_fonts = base_config.subset_fonts;
             let converter = VlConverter::with_config(base_config)?;
             let fonts = converter
                 .vegalite_fonts(
@@ -990,7 +964,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     auto_google_fonts,
                     embed_local_fonts,
                     include_font_face,
-                    !no_subset_fonts,
+                    subset_fonts,
                 )
                 .await?;
             let json = if pretty {
@@ -1006,14 +980,10 @@ async fn main() -> Result<(), anyhow::Error> {
             font_dir,
             format_locale,
             bundle,
-            no_subset_fonts,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
-            let svg_opts = SvgOpts {
-                bundle,
-                subset_fonts: !no_subset_fonts,
-            };
+            let svg_opts = SvgOpts { bundle };
             vg_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -1097,7 +1067,6 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             bundle,
-            no_subset_fonts,
             format_locale,
             time_format_locale,
             renderer,
@@ -1124,7 +1093,6 @@ async fn main() -> Result<(), anyhow::Error> {
                     },
                     HtmlOpts {
                         bundle,
-                        subset_fonts: !no_subset_fonts,
                         renderer: Renderer::from_str(&renderer)?,
                     },
                 )
@@ -1135,7 +1103,6 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             include_font_face,
-            no_subset_fonts,
             format_locale,
             time_format_locale,
             pretty,
@@ -1149,6 +1116,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
             let auto_google_fonts = base_config.auto_google_fonts;
             let embed_local_fonts = base_config.embed_local_fonts;
+            let subset_fonts = base_config.subset_fonts;
             let converter = VlConverter::with_config(base_config)?;
             let fonts = converter
                 .vega_fonts(
@@ -1162,7 +1130,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     auto_google_fonts,
                     embed_local_fonts,
                     include_font_face,
-                    !no_subset_fonts,
+                    subset_fonts,
                 )
                 .await?;
             let json = if pretty {

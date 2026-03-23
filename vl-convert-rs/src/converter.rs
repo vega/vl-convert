@@ -701,6 +701,10 @@ pub struct VlConverterConfig {
     /// in HTML and SVG output. Defaults to false.
     /// Does not apply to PDF/PNG/JPEG, which always embed fonts via fontdb.
     pub embed_local_fonts: bool,
+    /// Whether to subset embedded fonts to only the characters used.
+    /// Defaults to true. Applies to HTML and SVG output.
+    /// When false, full font files are embedded and CDN URLs omit the `&text=` parameter.
+    pub subset_fonts: bool,
     /// How to handle missing first-choice fonts: silently fallback, warn, or error.
     pub missing_fonts: MissingFontsPolicy,
     /// Google Fonts to register for all conversions. Each request specifies a
@@ -776,6 +780,7 @@ impl Default for VlConverterConfig {
             allowed_base_urls: None,
             auto_google_fonts: false,
             embed_local_fonts: false,
+            subset_fonts: true,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: None,
             max_v8_heap_size_mb: 0,
@@ -930,27 +935,16 @@ pub struct VlOpts {
     pub vega_plugin: Option<String>,
 }
 
-/// Options specific to SVG output format (font embedding).
-#[derive(Debug, Clone)]
+/// Options specific to SVG output format.
+#[derive(Debug, Clone, Default)]
 pub struct SvgOpts {
     pub bundle: bool,
-    pub subset_fonts: bool,
-}
-
-impl Default for SvgOpts {
-    fn default() -> Self {
-        Self {
-            bundle: false,
-            subset_fonts: true,
-        }
-    }
 }
 
 /// Options specific to HTML output format.
 #[derive(Debug, Clone)]
 pub struct HtmlOpts {
     pub bundle: bool,
-    pub subset_fonts: bool,
     pub renderer: Renderer,
 }
 
@@ -958,7 +952,6 @@ impl Default for HtmlOpts {
     fn default() -> Self {
         Self {
             bundle: false,
-            subset_fonts: true,
             renderer: Renderer::Svg,
         }
     }
@@ -6120,7 +6113,6 @@ try {
             },
             HtmlOpts {
                 bundle: true,
-                subset_fonts: true,
                 renderer: Renderer::Svg,
             },
         ));
@@ -6129,7 +6121,6 @@ try {
             VgOpts::default(),
             HtmlOpts {
                 bundle: true,
-                subset_fonts: true,
                 renderer: Renderer::Svg,
             },
         ));

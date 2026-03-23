@@ -73,7 +73,7 @@ fn build_svg_font_css(
     classified_fonts: &[FontForHtml],
     cdn_variants: &HashMap<String, BTreeSet<(String, String)>>,
     bundle: bool,
-    subset_fonts: bool,
+    config: &VlConverterConfig,
     missing_fonts: &MissingFontsPolicy,
     fontdb: &fontdb::Database,
     loaded_batches: &[vl_convert_google_fonts::LoadedFontBatch],
@@ -81,6 +81,7 @@ fn build_svg_font_css(
     let mut css_parts: Vec<String> = Vec::new();
 
     // Compute per-family character sets for subsetting/CDN text param
+    let subset_fonts = config.subset_fonts;
     let family_chars: HashMap<String, BTreeSet<char>> = if subset_fonts {
         let mut map: HashMap<String, BTreeSet<char>> = HashMap::new();
         for (key, chars) in &analysis.chars_by_key {
@@ -205,7 +206,7 @@ pub(crate) async fn process_svg(
         classified_fonts,
         &cdn_variants,
         svg_opts.bundle,
-        svg_opts.subset_fonts,
+        config,
         &config.missing_fonts,
         fontdb,
         loaded_batches,

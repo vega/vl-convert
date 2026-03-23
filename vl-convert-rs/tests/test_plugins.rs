@@ -226,8 +226,6 @@ async fn test_plugin_html_export_contains_module_script() {
             VgOpts::default(),
             HtmlOpts {
                 bundle: true,
-
-                subset_fonts: true,
                 renderer: Renderer::Svg,
             },
         )
@@ -511,8 +509,6 @@ async fn test_per_request_plugin_html_export() {
             },
             HtmlOpts {
                 bundle: true,
-
-                subset_fonts: false,
                 renderer: Renderer::Svg,
             },
         )
