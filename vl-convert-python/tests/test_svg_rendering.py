@@ -170,6 +170,11 @@ def render_svg_inline(page, svg: str, baseline_name: str, *, block_network: bool
     html_path = html_dir / baseline_name.replace(".png", ".html")
     html_path.write_text(html)
 
+    svg_dir = baselines_dir / "svg"
+    svg_dir.mkdir(parents=True, exist_ok=True)
+    svg_path = svg_dir / baseline_name.replace(".png", ".svg")
+    svg_path.write_text(svg)
+
     page.goto(f"file://{html_path}", wait_until="networkidle")
     page.wait_for_function(
         """() => {
@@ -194,6 +199,11 @@ def render_svg_served(page, svg: str, svg_server, filename: str) -> bytes:
     html_dir = baselines_dir / "html"
     html_dir.mkdir(parents=True, exist_ok=True)
     (html_dir / filename).write_text(html)
+
+    svg_dir = baselines_dir / "svg"
+    svg_dir.mkdir(parents=True, exist_ok=True)
+    svg_path = svg_dir / filename.replace(".html", ".svg")
+    svg_path.write_text(svg)
 
     page.goto(f"http://localhost:{port}/{filename}", wait_until="networkidle")
     page.wait_for_function(
