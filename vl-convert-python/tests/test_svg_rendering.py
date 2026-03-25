@@ -254,8 +254,8 @@ def test_svg_pacifico_bundle(page, update_baselines):
 
 def test_svg_local_font_bundle(page, update_baselines):
     vlc.register_font_directory(str(fonts_dir / "Caveat" / "static"))
-    vlc.configure(auto_google_fonts=False)
-    svg = vlc.vegalite_to_svg(load_spec("local_font"), bundle=True, embed_local_fonts=True)
+    vlc.configure(auto_google_fonts=False, embed_local_fonts=True)
+    svg = vlc.vegalite_to_svg(load_spec("local_font"), bundle=True)
 
     assert "<defs><style>" in svg
     assert "@font-face" in svg
@@ -268,10 +268,47 @@ def test_svg_local_font_bundle(page, update_baselines):
 # --- No Google Fonts, no embed_local: SVG unchanged ---
 
 def test_svg_no_fonts_unchanged(page, update_baselines):
-    vlc.configure(auto_google_fonts=False)
+    vlc.configure(auto_google_fonts=False, embed_local_fonts=False)
     svg = vlc.vegalite_to_svg(load_spec("pacifico_title"), bundle=False)
 
     # pacifico_title uses Pacifico which is a Google Font,
     # but with auto_google_fonts=False it won't be detected
     assert "<defs><style>" not in svg
     assert "@font-face" not in svg
+
+
+# --- Remote images: bundled (inlined as data URIs, network blocked) ---
+
+def test_svg_remote_images_bundle(page, update_baselines):
+    vlc.configure(auto_google_fonts=True)
+    svg = vlc.vegalite_to_svg(load_spec("remote_images"), bundle=True)
+
+    # All image hrefs should be replaced with data URIs
+    # (URLs may still appear in aria-label text, so check href attributes specifically)
+    import re
+    image_hrefs = re.findall(r'<image[^>]*href="([^"]+)"', svg)
+    for href in image_hrefs:
+        assert href.startswith("data:image/"), f"Image href not inlined: {href[:80]}"
+    assert len(image_hrefs) == 3
+
+    screenshot = render_svg_inline(page, svg, "svg_remote_images_bundle.png", block_network=True)
+    compare_screenshot(screenshot, "svg_remote_images_bundle.png", update_baselines)
+
+
+# --- Remote images: not bundled (original URLs preserved) ---
+
+def test_svg_remote_images_no_bundle(page, svg_server, update_baselines):
+    vlc.configure(auto_google_fonts=True)
+    svg = vlc.vegalite_to_svg(load_spec("remote_images"), bundle=False)
+
+    # External image hrefs should be preserved (not inlined)
+    import re
+    image_hrefs = re.findall(r'<image[^>]*href="([^"]+)"', svg)
+    for href in image_hrefs:
+        assert not href.startswith("data:"), f"Image href should not be inlined: {href[:80]}"
+    assert len(image_hrefs) == 3
+
+    screenshot = render_svg_served(
+        page, svg, svg_server, "svg_remote_images_no_bundle.html"
+    )
+    compare_screenshot(screenshot, "svg_remote_images_no_bundle.png", update_baselines)
