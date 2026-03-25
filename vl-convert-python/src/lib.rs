@@ -646,6 +646,8 @@ fn vegalite_to_vega(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     bundle (bool): If True, embed fonts and images as self-contained data URIs
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
@@ -688,6 +690,7 @@ fn vega_to_svg(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
@@ -750,6 +753,8 @@ fn vega_to_scenegraph(
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     bundle (bool): If True, embed fonts and images as self-contained data URIs
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
@@ -815,6 +820,7 @@ fn vegalite_to_svg(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
@@ -892,6 +898,7 @@ fn vegalite_to_scenegraph(
 ///     ppi (float): Pixels per inch (default 72)
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
@@ -944,6 +951,7 @@ fn vega_to_png(
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
@@ -1004,6 +1012,7 @@ fn vegalite_to_png(
 ///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
@@ -1056,6 +1065,7 @@ fn vega_to_jpeg(
 ///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
@@ -1122,6 +1132,7 @@ fn vegalite_to_jpeg(
 ///     scale (float): Image scale factor (default 1.0)
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     bytes: PDF file bytes
 #[pyfunction]
@@ -1170,6 +1181,7 @@ fn vega_to_pdf(
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     bytes: PDF image data
 #[pyfunction]
@@ -1263,14 +1275,16 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.15')
 ///         (default to latest)
-///     bundle (bool): If True, bundle all dependencies in HTML file
+///     bundle (bool): If True, bundle all dependencies in HTML file.
 ///         If False (default), HTML file will load dependencies from only CDN
+///     google_fonts (list): Google Fonts for this conversion
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     renderer (str): Vega renderer. One of 'svg' (default), 'canvas',
 ///         or 'hybrid' (where text is svg and other marks are canvas)
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
@@ -1330,12 +1344,14 @@ fn vegalite_to_html(
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
-///     bundle (bool): If True, bundle all dependencies in HTML file
+///     bundle (bool): If True, bundle all dependencies in HTML file.
 ///         If False (default), HTML file will load dependencies from only CDN
+///     google_fonts (list): Google Fonts for this conversion
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     renderer (str): Vega renderer. One of 'svg' (default), 'canvas',
 ///         or 'hybrid' (where text is svg and other marks are canvas)
+///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
@@ -1384,6 +1400,9 @@ fn vega_to_html(
 ///         (default: use converter config)
 ///     include_font_face (bool): Whether to run the font subsetting pipeline
 ///         and populate the font_face field on each variant (default False)
+///     google_fonts (list): Google Fonts for this conversion
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     list[FontInfo]: Structured font metadata for each font used by the chart
 #[pyfunction]
@@ -1454,6 +1473,9 @@ fn vegalite_fonts(
 ///         (default: use converter config)
 ///     include_font_face (bool): Whether to run the font subsetting pipeline
 ///         and populate the font_face field on each variant (default False)
+///     google_fonts (list): Google Fonts for this conversion
+///     format_locale (str | dict): d3-format locale name or dictionary
+///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
 ///     list[FontInfo]: Structured font metadata for each font used by the chart
 #[pyfunction]
@@ -1699,7 +1721,7 @@ fn parse_embedded_locale_json(raw: &str, kind: &str) -> PyResult<serde_json::Val
 ///     font_dir (str): Absolute path to a directory containing font files
 ///
 /// Returns:
-///     bytes: PNG image data
+///     None
 #[pyfunction]
 #[pyo3(signature = (font_dir))]
 fn register_font_directory(font_dir: &str) -> PyResult<()> {

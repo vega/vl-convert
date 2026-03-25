@@ -217,8 +217,6 @@ def render_svg_served(page, svg: str, svg_server, filename: str) -> bytes:
     return chart.screenshot()
 
 
-# --- Google Fonts: bundled (self-contained, network blocked) ---
-
 def test_svg_google_fonts_bundle(page, update_baselines):
     vlc.configure(auto_google_fonts=True)
     svg = vlc.vegalite_to_svg(load_spec_inline("google_fonts"), bundle=True)
@@ -230,8 +228,6 @@ def test_svg_google_fonts_bundle(page, update_baselines):
     screenshot = render_svg_inline(page, svg, "svg_google_fonts_bundle.png", block_network=True)
     compare_screenshot(screenshot, "svg_google_fonts_bundle.png", update_baselines)
 
-
-# --- Google Fonts: CDN references (@import, needs HTTP server) ---
 
 def test_svg_google_fonts_cdn(page, svg_server, update_baselines):
     vlc.configure(auto_google_fonts=True)
@@ -247,8 +243,6 @@ def test_svg_google_fonts_cdn(page, svg_server, update_baselines):
     compare_screenshot(screenshot, "svg_google_fonts_cdn.png", update_baselines)
 
 
-# --- Pacifico (distinctive Google Font): bundled ---
-
 def test_svg_pacifico_bundle(page, update_baselines):
     vlc.configure(auto_google_fonts=True)
     svg = vlc.vegalite_to_svg(load_spec("pacifico_title"), bundle=True)
@@ -259,8 +253,6 @@ def test_svg_pacifico_bundle(page, update_baselines):
     screenshot = render_svg_inline(page, svg, "svg_pacifico_bundle.png", block_network=True)
     compare_screenshot(screenshot, "svg_pacifico_bundle.png", update_baselines)
 
-
-# --- Local font: bundled with embed_local_fonts ---
 
 def test_svg_local_font_bundle(page, update_baselines):
     vlc.register_font_directory(str(fonts_dir / "Caveat" / "static"))
@@ -275,8 +267,6 @@ def test_svg_local_font_bundle(page, update_baselines):
     compare_screenshot(screenshot, "svg_local_font_bundle.png", update_baselines)
 
 
-# --- No Google Fonts, no embed_local: SVG unchanged ---
-
 def test_svg_no_fonts_unchanged(page, update_baselines):
     vlc.configure(auto_google_fonts=False, embed_local_fonts=False)
     svg = vlc.vegalite_to_svg(load_spec("pacifico_title"), bundle=False)
@@ -286,8 +276,6 @@ def test_svg_no_fonts_unchanged(page, update_baselines):
     assert "<defs><style>" not in svg
     assert "@font-face" not in svg
 
-
-# --- Remote images: bundled (inlined as data URIs, network blocked) ---
 
 def test_svg_remote_images_bundle(page, update_baselines):
     vlc.configure(auto_google_fonts=True)
@@ -304,8 +292,6 @@ def test_svg_remote_images_bundle(page, update_baselines):
     screenshot = render_svg_inline(page, svg, "svg_remote_images_bundle.png", block_network=True)
     compare_screenshot(screenshot, "svg_remote_images_bundle.png", update_baselines)
 
-
-# --- Remote images: not bundled (original URLs preserved) ---
 
 def test_svg_remote_images_no_bundle(page, svg_server, update_baselines):
     vlc.configure(auto_google_fonts=True)
