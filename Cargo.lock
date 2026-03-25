@@ -9907,6 +9907,7 @@ dependencies = [
  "reqwest",
  "resvg",
  "rmp-serde",
+ "roxmltree",
  "rstest",
  "serde",
  "serde_json",

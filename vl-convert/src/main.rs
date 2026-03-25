@@ -8,8 +8,9 @@ use std::path::Path;
 use std::str::FromStr;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
-    vega_to_url, vegalite_to_url, BaseUrlSetting, FormatLocale, GoogleFontRequest,
-    MissingFontsPolicy, Renderer, TimeFormatLocale, VgOpts, VlConverter, VlConverterConfig, VlOpts,
+    vega_to_url, vegalite_to_url, BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts,
+    JpegOpts, MissingFontsPolicy, PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, VgOpts,
+    VlConverter, VlConverterConfig, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
@@ -68,6 +69,14 @@ struct Cli {
     /// Automatically download missing fonts from Google Fonts.
     #[arg(long, global = true)]
     auto_google_fonts: bool,
+
+    /// Embed locally installed fonts as base64 @font-face in HTML and SVG output.
+    #[arg(long, global = true)]
+    embed_local_fonts: bool,
+
+    /// Disable font subsetting (embed full font files instead of only used characters)
+    #[arg(long, global = true)]
+    no_subset_fonts: bool,
 
     /// Missing-font behavior: fallback silently, warn, or error.
     #[arg(long, global = true, value_enum, default_value_t = MissingFontsArg::Fallback)]
@@ -173,6 +182,10 @@ enum Commands {
         /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
+
+        /// Bundle fonts and images into a self-contained SVG
+        #[arg(long)]
+        bundle: bool,
     },
 
     /// Convert a Vega-Lite specification to an PNG image
@@ -350,15 +363,6 @@ enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
-        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS in HTML output
-        #[arg(long = "embed-local-fonts")]
-        embed_local_fonts: bool,
-
-        /// Disable font subsetting. By default, only the characters used in the
-        /// chart are included. Use this flag if the chart dynamically loads content.
-        #[arg(long = "no-subset-fonts")]
-        no_subset_fonts: bool,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -394,17 +398,9 @@ enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS
-        #[arg(long = "embed-local-fonts")]
-        embed_local_fonts: bool,
-
         /// Include @font-face CSS blocks in the output
         #[arg(long = "include-font-face")]
         include_font_face: bool,
-
-        /// Disable font subsetting (include full fonts)
-        #[arg(long = "no-subset-fonts")]
-        no_subset_fonts: bool,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -440,6 +436,10 @@ enum Commands {
         /// d3-time-format locale name or file with .json extension
         #[arg(long)]
         time_format_locale: Option<String>,
+
+        /// Bundle fonts and images into a self-contained SVG
+        #[arg(long)]
+        bundle: bool,
     },
 
     /// Convert a Vega specification to an PNG image
@@ -557,15 +557,6 @@ enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
-        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS in HTML output
-        #[arg(long = "embed-local-fonts")]
-        embed_local_fonts: bool,
-
-        /// Disable font subsetting. By default, only the characters used in the
-        /// chart are included. Use this flag if the chart dynamically loads content.
-        #[arg(long = "no-subset-fonts")]
-        no_subset_fonts: bool,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -589,17 +580,9 @@ enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Embed locally-available fonts (system, --font-dir) as @font-face CSS
-        #[arg(long = "embed-local-fonts")]
-        embed_local_fonts: bool,
-
         /// Include @font-face CSS blocks in the output
         #[arg(long = "include-font-face")]
         include_font_face: bool,
-
-        /// Disable font subsetting (include full fonts)
-        #[arg(long = "no-subset-fonts")]
-        no_subset_fonts: bool,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -695,6 +678,8 @@ async fn main() -> Result<(), anyhow::Error> {
         no_allowed_urls,
         google_font: google_font_families,
         auto_google_fonts,
+        embed_local_fonts,
+        no_subset_fonts,
         missing_fonts: missing_fonts_arg,
         max_v8_heap_size_mb,
         max_v8_execution_time_secs,
@@ -733,6 +718,8 @@ async fn main() -> Result<(), anyhow::Error> {
         base_url: base_url_setting,
         allowed_base_urls,
         auto_google_fonts,
+        embed_local_fonts,
+        subset_fonts: !no_subset_fonts,
         missing_fonts,
         google_fonts: config_google_fonts.clone(),
         max_v8_heap_size_mb,
@@ -781,8 +768,10 @@ async fn main() -> Result<(), anyhow::Error> {
             font_dir,
             format_locale,
             time_format_locale,
+            bundle,
         } => {
             register_font_dir(font_dir)?;
+            let svg_opts = SvgOpts { bundle };
             vl_2_svg(
                 input.as_deref(),
                 output.as_deref(),
@@ -792,6 +781,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 show_warnings,
                 format_locale,
                 time_format_locale,
+                svg_opts,
                 base_config,
             )
             .await?
@@ -896,8 +886,6 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             bundle,
-            embed_local_fonts,
-            no_subset_fonts,
             format_locale,
             time_format_locale,
             renderer,
@@ -927,10 +915,10 @@ async fn main() -> Result<(), anyhow::Error> {
                         google_fonts,
                         vega_plugin: None,
                     },
-                    bundle,
-                    embed_local_fonts,
-                    !no_subset_fonts,
-                    Renderer::from_str(&renderer)?,
+                    HtmlOpts {
+                        bundle,
+                        renderer: Renderer::from_str(&renderer)?,
+                    },
                 )
                 .await?;
             write_output_string(output.as_deref(), &html)?;
@@ -941,9 +929,7 @@ async fn main() -> Result<(), anyhow::Error> {
             vl_version,
             theme,
             config,
-            embed_local_fonts,
             include_font_face,
-            no_subset_fonts,
             format_locale,
             time_format_locale,
             pretty,
@@ -958,6 +944,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 parse_time_format_locale_option(time_format_locale.as_deref())?;
 
             let auto_google_fonts = base_config.auto_google_fonts;
+            let embed_local_fonts = base_config.embed_local_fonts;
+            let subset_fonts = base_config.subset_fonts;
             let converter = VlConverter::with_config(base_config)?;
             let fonts = converter
                 .vegalite_fonts(
@@ -976,7 +964,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     auto_google_fonts,
                     embed_local_fonts,
                     include_font_face,
-                    !no_subset_fonts,
+                    subset_fonts,
                 )
                 .await?;
             let json = if pretty {
@@ -991,14 +979,17 @@ async fn main() -> Result<(), anyhow::Error> {
             output,
             font_dir,
             format_locale,
+            bundle,
             time_format_locale,
         } => {
             register_font_dir(font_dir)?;
+            let svg_opts = SvgOpts { bundle };
             vg_2_svg(
                 input.as_deref(),
                 output.as_deref(),
                 format_locale,
                 time_format_locale,
+                svg_opts,
                 base_config,
             )
             .await?
@@ -1076,8 +1067,6 @@ async fn main() -> Result<(), anyhow::Error> {
             input,
             output,
             bundle,
-            embed_local_fonts,
-            no_subset_fonts,
             format_locale,
             time_format_locale,
             renderer,
@@ -1102,10 +1091,10 @@ async fn main() -> Result<(), anyhow::Error> {
                         google_fonts,
                         vega_plugin: None,
                     },
-                    bundle,
-                    embed_local_fonts,
-                    !no_subset_fonts,
-                    Renderer::from_str(&renderer)?,
+                    HtmlOpts {
+                        bundle,
+                        renderer: Renderer::from_str(&renderer)?,
+                    },
                 )
                 .await?;
             write_output_string(output.as_deref(), &html)?;
@@ -1113,9 +1102,7 @@ async fn main() -> Result<(), anyhow::Error> {
         Vg2fonts {
             input,
             output,
-            embed_local_fonts,
             include_font_face,
-            no_subset_fonts,
             format_locale,
             time_format_locale,
             pretty,
@@ -1128,6 +1115,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 parse_time_format_locale_option(time_format_locale.as_deref())?;
 
             let auto_google_fonts = base_config.auto_google_fonts;
+            let embed_local_fonts = base_config.embed_local_fonts;
+            let subset_fonts = base_config.subset_fonts;
             let converter = VlConverter::with_config(base_config)?;
             let fonts = converter
                 .vega_fonts(
@@ -1141,7 +1130,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     auto_google_fonts,
                     embed_local_fonts,
                     include_font_face,
-                    !no_subset_fonts,
+                    subset_fonts,
                 )
                 .await?;
             let json = if pretty {
@@ -1161,7 +1150,15 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
-            let png_data = converter.svg_to_png(&svg, scale, Some(ppi)).await?;
+            let png_data = converter
+                .svg_to_png(
+                    &svg,
+                    PngOpts {
+                        scale: Some(scale),
+                        ppi: Some(ppi),
+                    },
+                )
+                .await?;
             write_output_binary(output.as_deref(), &png_data, "PNG")?;
         }
         Svg2jpeg {
@@ -1174,7 +1171,15 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
-            let jpeg_data = converter.svg_to_jpeg(&svg, scale, Some(quality)).await?;
+            let jpeg_data = converter
+                .svg_to_jpeg(
+                    &svg,
+                    JpegOpts {
+                        scale: Some(scale),
+                        quality: Some(quality),
+                    },
+                )
+                .await?;
             write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
         }
         Svg2pdf {
@@ -1185,7 +1190,7 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
-            let pdf_data = converter.svg_to_pdf(&svg).await?;
+            let pdf_data = converter.svg_to_pdf(&svg, PdfOpts::default()).await?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
         }
         LsThemes => list_themes().await?,
@@ -1596,6 +1601,7 @@ async fn vg_2_svg(
     output: Option<&str>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    svg_opts: SvgOpts,
     converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
@@ -1615,6 +1621,7 @@ async fn vg_2_svg(
                 google_fonts: None,
                 vega_plugin: None,
             },
+            svg_opts,
         )
         .await
     {
@@ -1656,8 +1663,10 @@ async fn vg_2_png(
                 google_fonts: None,
                 vega_plugin: None,
             },
-            Some(scale),
-            Some(ppi),
+            PngOpts {
+                scale: Some(scale),
+                ppi: Some(ppi),
+            },
         )
         .await
     {
@@ -1699,8 +1708,10 @@ async fn vg_2_jpeg(
                 google_fonts: None,
                 vega_plugin: None,
             },
-            Some(scale),
-            Some(quality),
+            JpegOpts {
+                scale: Some(scale),
+                quality: Some(quality),
+            },
         )
         .await
     {
@@ -1739,6 +1750,7 @@ async fn vg_2_pdf(
                 google_fonts: None,
                 vega_plugin: None,
             },
+            PdfOpts::default(),
         )
         .await
     {
@@ -1763,6 +1775,7 @@ async fn vl_2_svg(
     show_warnings: bool,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    svg_opts: SvgOpts,
     converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
@@ -1788,6 +1801,7 @@ async fn vl_2_svg(
                 google_fonts: None,
                 vega_plugin: None,
             },
+            svg_opts,
         )
         .await
     {
@@ -1839,8 +1853,10 @@ async fn vl_2_png(
                 google_fonts: None,
                 vega_plugin: None,
             },
-            Some(scale),
-            Some(ppi),
+            PngOpts {
+                scale: Some(scale),
+                ppi: Some(ppi),
+            },
         )
         .await
     {
@@ -1892,8 +1908,10 @@ async fn vl_2_jpeg(
                 google_fonts: None,
                 vega_plugin: None,
             },
-            Some(scale),
-            Some(quality),
+            JpegOpts {
+                scale: Some(scale),
+                quality: Some(quality),
+            },
         )
         .await
     {
@@ -1943,6 +1961,7 @@ async fn vl_2_pdf(
                 google_fonts: None,
                 vega_plugin: None,
             },
+            PdfOpts::default(),
         )
         .await
     {

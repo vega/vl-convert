@@ -9,6 +9,7 @@ pub mod font_embed;
 pub mod html;
 pub mod image_loading;
 pub mod module_loader;
+pub(crate) mod svg_font;
 pub mod text;
 
 #[macro_use]
@@ -18,8 +19,8 @@ extern crate lazy_static;
 extern crate deno_core;
 
 pub use converter::{
-    BaseUrlSetting, GoogleFontRequest, Renderer, VgOpts, VlConverter, VlConverterConfig, VlOpts,
-    WorkerMemoryUsage,
+    BaseUrlSetting, GoogleFontRequest, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts,
+    VgOpts, VlConverter, VlConverterConfig, VlOpts, WorkerMemoryUsage,
 };
 pub use deno_core::anyhow;
 pub use extract::{FontInfo, FontSource, FontVariant};

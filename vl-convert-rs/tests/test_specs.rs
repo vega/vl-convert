@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use vl_convert_rs::{VlConverter, VlVersion};
 
 use serde_json::Value;
-use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VlOpts};
+use vl_convert_rs::converter::{
+    FormatLocale, JpegOpts, PngOpts, SvgOpts, TimeFormatLocale, VlOpts,
+};
 
 use test_utils::{check_vg_png, initialize, load_vg_spec, to_dssim};
 
@@ -365,7 +367,7 @@ mod test_vegalite_to_vega {
 mod test_vegalite_to_html_no_bundle {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::{Renderer, VlOpts};
+    use vl_convert_rs::converter::{HtmlOpts, Renderer, VlOpts};
     use vl_convert_rs::VlConverter;
 
     #[rstest]
@@ -395,7 +397,7 @@ mod test_vegalite_to_html_no_bundle {
         let converter = VlConverter::new();
 
         let html_result = block_on(
-            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, false, false, true, Renderer::Canvas)
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, HtmlOpts { bundle: false, renderer: Renderer::Canvas })
         ).unwrap();
 
         // Check for expected patterns
@@ -413,7 +415,7 @@ mod test_vegalite_to_html_no_bundle {
 mod test_vegalite_to_html_bundle {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::{Renderer, VlOpts};
+    use vl_convert_rs::converter::{HtmlOpts, Renderer, VlOpts};
     use vl_convert_rs::VlConverter;
 
     #[rstest]
@@ -443,7 +445,7 @@ mod test_vegalite_to_html_bundle {
         let converter = VlConverter::new();
 
         let html_result = block_on(
-            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, true, false, true, Renderer::Svg)
+            converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, HtmlOpts { bundle: true, renderer: Renderer::Svg })
         ).unwrap();
 
         // Check for expected patterns
@@ -491,11 +493,11 @@ mod test_svg {
         let vg_spec =
             block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})).unwrap();
 
-        let svg = block_on(converter.vega_to_svg(vg_spec, Default::default())).unwrap();
+        let svg = block_on(converter.vega_to_svg(vg_spec, Default::default(), SvgOpts::default())).unwrap();
         check_svg(name, vl_version, None, &svg);
 
         // Convert directly to svg
-        let svg = block_on(converter.vegalite_to_svg(vl_spec, VlOpts{vl_version, ..Default::default()})).unwrap();
+        let svg = block_on(converter.vegalite_to_svg(vl_spec, VlOpts{vl_version, ..Default::default()}, SvgOpts::default())).unwrap();
         check_svg(name, vl_version, None, &svg);
     }
 
@@ -507,7 +509,7 @@ mod test_svg {
 mod test_svg_allowed_base_url {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::{VgOpts, VlOpts, VlConverterConfig};
+    use vl_convert_rs::converter::{SvgOpts, VgOpts, VlOpts, VlConverterConfig};
     use vl_convert_rs::VlConverter;
 
     #[rstest]
@@ -541,6 +543,7 @@ mod test_svg_allowed_base_url {
         let svg = block_on(converter.vega_to_svg(
             vg_spec.clone(),
             VgOpts::default(),
+            SvgOpts::default(),
         ))
         .unwrap();
         check_svg(name, vl_version, None, &svg);
@@ -552,6 +555,7 @@ mod test_svg_allowed_base_url {
                 vl_version,
                 ..Default::default()
             },
+            SvgOpts::default(),
         ))
         .unwrap();
         check_svg(name, vl_version, None, &svg);
@@ -565,6 +569,7 @@ mod test_svg_allowed_base_url {
         let Err(result) = block_on(converter_blocked.vega_to_svg(
             vg_spec,
             VgOpts::default(),
+            SvgOpts::default(),
         )) else {
             panic!("Expected error")
         };
@@ -576,6 +581,7 @@ mod test_svg_allowed_base_url {
                 vl_version,
                 ..Default::default()
             },
+            SvgOpts::default(),
         )) else {
             panic!("Expected error")
         };
@@ -675,12 +681,12 @@ mod test_png_no_theme {
             converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})
         ).unwrap();
 
-        let png_data = block_on(converter.vega_to_png(vg_spec, Default::default(), Some(scale), None)).unwrap();
+        let png_data = block_on(converter.vega_to_png(vg_spec, Default::default(), PngOpts { scale: Some(scale), ppi: None })).unwrap();
         check_png(name, vl_version, None, png_data.as_slice());
 
         // Convert directly to png
         let png_data = block_on(
-            converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(scale), None)
+            converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, PngOpts { scale: Some(scale), ppi: None })
         ).unwrap();
         check_png(name, vl_version, None, png_data.as_slice());
     }
@@ -714,11 +720,11 @@ mod test_png_google_fonts {
             converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})
         ).unwrap();
 
-        let png_data = block_on(converter.vega_to_png(vg_spec, Default::default(), Some(2.0), None)).unwrap();
+        let png_data = block_on(converter.vega_to_png(vg_spec, Default::default(), PngOpts { scale: Some(2.0), ppi: None })).unwrap();
         check_png("google_fonts", vl_version, None, png_data.as_slice());
 
         let png_data = block_on(
-            converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, Some(2.0), None)
+            converter.vegalite_to_png(vl_spec, VlOpts{vl_version, ..Default::default()}, PngOpts { scale: Some(2.0), ppi: None })
         ).unwrap();
         check_png("google_fonts", vl_version, None, png_data.as_slice());
     }
@@ -771,8 +777,7 @@ mod test_png_theme_config {
                     google_fonts: None,
                     vega_plugin: None,
                 },
-                Some(scale),
-                None
+                PngOpts { scale: Some(scale), ppi: None },
             )
         ).unwrap();
         check_png(name, vl_version, Some(theme), png_data.as_slice());
@@ -799,8 +804,7 @@ mod test_png_theme_config {
                     google_fonts: None,
                     vega_plugin: None,
                 },
-                Some(scale),
-                None
+                PngOpts { scale: Some(scale), ppi: None },
             )
         ).unwrap();
         check_png(name, vl_version, Some(theme), png_data.as_slice());
@@ -828,8 +832,10 @@ async fn test_font_with_quotes() {
                 vl_version,
                 ..Default::default()
             },
-            Some(2.0),
-            None,
+            PngOpts {
+                scale: Some(2.0),
+                ppi: None,
+            },
         )
         .await
         .unwrap();
@@ -863,8 +869,10 @@ async fn test_locale() {
                 time_format_locale: Some(TimeFormatLocale::Object(time_format_locale)),
                 ..Default::default()
             },
-            Some(2.0),
-            None,
+            PngOpts {
+                scale: Some(2.0),
+                ppi: None,
+            },
         )
         .await
         .unwrap();
@@ -883,8 +891,10 @@ async fn test_locale() {
                 )),
                 ..Default::default()
             },
-            Some(2.0),
-            None,
+            PngOpts {
+                scale: Some(2.0),
+                ppi: None,
+            },
         )
         .await
         .unwrap();
@@ -925,13 +935,13 @@ mod test_jpeg {
         let vg_spec =
             block_on(converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})).unwrap();
 
-        let jpeg_bytes = block_on(converter.vega_to_jpeg(vg_spec, Default::default(), None, None)).unwrap();
+        let jpeg_bytes = block_on(converter.vega_to_jpeg(vg_spec, Default::default(), JpegOpts::default())).unwrap();
 
         // Check for JPEG prefix
         assert_eq!(&jpeg_bytes.as_slice()[..10], b"\xff\xd8\xff\xe0\x00\x10JFIF");
 
         // Convert directly to JPEG
-        let jpeg_bytes = block_on(converter.vegalite_to_jpeg(vl_spec, VlOpts{vl_version, ..Default::default()}, None, None)).unwrap();
+        let jpeg_bytes = block_on(converter.vegalite_to_jpeg(vl_spec, VlOpts{vl_version, ..Default::default()}, JpegOpts::default())).unwrap();
         assert_eq!(&jpeg_bytes.as_slice()[..10], b"\xff\xd8\xff\xe0\x00\x10JFIF");
     }
 
@@ -957,7 +967,7 @@ mod test_vega_label_transform {
         let converter = VlConverter::new();
 
         let png_data = block_on(
-            converter.vega_to_png(vg_spec, Default::default(), Some(scale), None)
+            converter.vega_to_png(vg_spec, Default::default(), PngOpts { scale: Some(scale), ppi: None })
         ).unwrap();
 
         check_vg_png(name, png_data.as_slice());
@@ -974,7 +984,16 @@ async fn check_svg_to_png_baseline(name: &str, svg: &str) {
     })
     .unwrap();
 
-    let png_data = converter.svg_to_png(svg, 2.0, None).await.unwrap();
+    let png_data = converter
+        .svg_to_png(
+            svg,
+            PngOpts {
+                scale: Some(2.0),
+                ppi: None,
+            },
+        )
+        .await
+        .unwrap();
 
     let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
     let expected_path = root_path
@@ -1026,7 +1045,7 @@ async fn test_svg_to_png_auto_google_fonts_pacifico() {
 }
 
 mod test_heap_limit {
-    use vl_convert_rs::converter::{VgOpts, VlConverterConfig};
+    use vl_convert_rs::converter::{SvgOpts, VgOpts, VlConverterConfig};
     use vl_convert_rs::VlConverter;
 
     /// Verify that exceeding the V8 heap limit returns a specific error
@@ -1062,7 +1081,9 @@ mod test_heap_limit {
             "marks": []
         });
 
-        let result = converter.vega_to_svg(big_spec, VgOpts::default()).await;
+        let result = converter
+            .vega_to_svg(big_spec, VgOpts::default(), SvgOpts::default())
+            .await;
         let err = result.expect_err("Expected heap limit error, got Ok");
         let msg = err.to_string();
         assert!(
@@ -1084,7 +1105,9 @@ mod test_heap_limit {
             "height": 10,
             "marks": []
         });
-        let result = converter.vega_to_svg(small_spec, VgOpts::default()).await;
+        let result = converter
+            .vega_to_svg(small_spec, VgOpts::default(), SvgOpts::default())
+            .await;
         assert!(
             result.is_ok(),
             "Conversion should succeed after recovery, got: {:?}",
@@ -1117,7 +1140,7 @@ mod test_heap_limit {
 
         // First OOM
         let result = converter
-            .vega_to_svg(big_spec.clone(), VgOpts::default())
+            .vega_to_svg(big_spec.clone(), VgOpts::default(), SvgOpts::default())
             .await;
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("V8 heap limit exceeded"), "First OOM: {msg}");
@@ -1130,12 +1153,14 @@ mod test_heap_limit {
             "marks": []
         });
         assert!(converter
-            .vega_to_svg(small_spec, VgOpts::default())
+            .vega_to_svg(small_spec, VgOpts::default(), SvgOpts::default())
             .await
             .is_ok());
 
         // Second OOM — proves the limit was restored, not stuck at 2×
-        let result = converter.vega_to_svg(big_spec, VgOpts::default()).await;
+        let result = converter
+            .vega_to_svg(big_spec, VgOpts::default(), SvgOpts::default())
+            .await;
         let msg = result.unwrap_err().to_string();
         assert!(
             msg.contains("V8 heap limit exceeded"),
@@ -1160,7 +1185,9 @@ mod test_heap_limit {
             "marks": []
         });
 
-        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+        let result = converter
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
+            .await;
         assert!(
             result.is_ok(),
             "Conversion with no heap limit should succeed: {:?}",
@@ -1223,7 +1250,9 @@ mod test_heap_limit {
             vega_plugin: Some(infinite_plugin.to_string()),
             ..Default::default()
         };
-        let result = converter.vega_to_svg(slow_spec, opts).await;
+        let result = converter
+            .vega_to_svg(slow_spec, opts, SvgOpts::default())
+            .await;
         let err = result.expect_err("Expected timeout error, got Ok");
         let msg = err.to_string();
         assert!(
@@ -1243,7 +1272,9 @@ mod test_heap_limit {
             "height": 10,
             "marks": []
         });
-        let result = converter.vega_to_svg(small_spec, VgOpts::default()).await;
+        let result = converter
+            .vega_to_svg(small_spec, VgOpts::default(), SvgOpts::default())
+            .await;
         assert!(
             result.is_ok(),
             "Conversion should succeed after timeout recovery, got: {:?}",
@@ -1267,7 +1298,9 @@ mod test_heap_limit {
             "marks": []
         });
 
-        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+        let result = converter
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
+            .await;
         assert!(
             result.is_ok(),
             "Conversion with no timeout should succeed: {:?}",
@@ -1291,7 +1324,9 @@ mod test_heap_limit {
             "marks": []
         });
 
-        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+        let result = converter
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
+            .await;
         assert!(
             result.is_ok(),
             "Conversion with gc_after_conversion should succeed: {:?}",

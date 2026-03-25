@@ -13,8 +13,9 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    BaseUrlSetting, FormatLocale, GoogleFontRequest, MissingFontsPolicy, Renderer,
-    TimeFormatLocale, ValueOrString, VgOpts, VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
+    BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts, JpegOpts, MissingFontsPolicy,
+    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, ValueOrString, VgOpts,
+    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -83,6 +84,8 @@ fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
         "base_url": base_url_value,
         "allowed_base_urls": config.allowed_base_urls,
         "auto_google_fonts": config.auto_google_fonts,
+        "embed_local_fonts": config.embed_local_fonts,
+        "subset_fonts": config.subset_fonts,
         "missing_fonts": match config.missing_fonts {
             MissingFontsPolicy::Fallback => "fallback",
             MissingFontsPolicy::Warn => "warn",
@@ -118,6 +121,8 @@ struct ConverterConfigOverrides {
     allowed_base_urls: Option<Option<Vec<String>>>,
     google_fonts_cache_size_mb: Option<u64>,
     auto_google_fonts: Option<bool>,
+    embed_local_fonts: Option<bool>,
+    subset_fonts: Option<bool>,
     missing_fonts: Option<MissingFontsPolicy>,
     // None => no change, Some(None) => clear, Some(Some(fonts)) => set
     google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
@@ -206,6 +211,24 @@ fn parse_config_overrides(
                     overrides.auto_google_fonts = Some(value.extract::<bool>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid auto_google_fonts value for configure: {err}"
+                        )
+                    })?);
+                }
+            }
+            "embed_local_fonts" => {
+                if !value.is_none() {
+                    overrides.embed_local_fonts = Some(value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid embed_local_fonts value for configure: {err}"
+                        )
+                    })?);
+                }
+            }
+            "subset_fonts" => {
+                if !value.is_none() {
+                    overrides.subset_fonts = Some(value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid subset_fonts value for configure: {err}"
                         )
                     })?);
                 }
@@ -420,6 +443,12 @@ fn apply_config_overrides(
     if let Some(auto_google_fonts) = overrides.auto_google_fonts {
         config.auto_google_fonts = auto_google_fonts;
     }
+    if let Some(embed_local_fonts) = overrides.embed_local_fonts {
+        config.embed_local_fonts = embed_local_fonts;
+    }
+    if let Some(subset_fonts) = overrides.subset_fonts {
+        config.subset_fonts = subset_fonts;
+    }
     if let Some(missing_fonts) = overrides.missing_fonts {
         config.missing_fonts = missing_fonts;
     }
@@ -620,12 +649,13 @@ fn vegalite_to_vega(
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None))]
+#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None))]
 fn vega_to_svg(
     vg_spec: PyObject,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    bundle: Option<bool>,
 ) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -638,8 +668,12 @@ fn vega_to_svg(
         vega_plugin,
     };
 
+    let svg_opts = SvgOpts {
+        bundle: bundle.unwrap_or(false),
+    };
+
     let svg = match run_converter_future(move |converter| async move {
-        converter.vega_to_svg(vg_spec, vg_opts).await
+        converter.vega_to_svg(vg_spec, vg_opts, svg_opts).await
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega to SVG conversion failed", err)),
@@ -720,7 +754,7 @@ fn vega_to_scenegraph(
 ///     str: SVG image string
 #[pyfunction]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None)
 )]
 fn vegalite_to_svg(
     vl_spec: PyObject,
@@ -731,6 +765,7 @@ fn vegalite_to_svg(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    bundle: Option<bool>,
 ) -> PyResult<String> {
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = parse_optional_config(config)?;
@@ -754,8 +789,12 @@ fn vegalite_to_svg(
         vega_plugin,
     };
 
+    let svg_opts = SvgOpts {
+        bundle: bundle.unwrap_or(false),
+    };
+
     let svg = match run_converter_future(move |converter| async move {
-        converter.vegalite_to_svg(vl_spec, vl_opts).await
+        converter.vegalite_to_svg(vl_spec, vl_opts, svg_opts).await
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega-Lite to SVG conversion failed", err)),
@@ -878,8 +917,9 @@ fn vega_to_png(
         vega_plugin,
     };
 
+    let png_opts = PngOpts { scale, ppi };
     let png_data = match run_converter_future(move |converter| async move {
-        converter.vega_to_png(vg_spec, vg_opts, scale, ppi).await
+        converter.vega_to_png(vg_spec, vg_opts, png_opts).await
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega to PNG conversion failed", err)),
@@ -943,10 +983,9 @@ fn vegalite_to_png(
         vega_plugin,
     };
 
+    let png_opts = PngOpts { scale, ppi };
     let png_data = match run_converter_future(move |converter| async move {
-        converter
-            .vegalite_to_png(vl_spec, vl_opts, scale, ppi)
-            .await
+        converter.vegalite_to_png(vl_spec, vl_opts, png_opts).await
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega-Lite to PNG conversion failed", err)),
@@ -990,10 +1029,9 @@ fn vega_to_jpeg(
         vega_plugin,
     };
 
+    let jpeg_opts = JpegOpts { scale, quality };
     let jpeg_data = match run_converter_future(move |converter| async move {
-        converter
-            .vega_to_jpeg(vg_spec, vg_opts, scale, quality)
-            .await
+        converter.vega_to_jpeg(vg_spec, vg_opts, jpeg_opts).await
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega to JPEG conversion failed", err)),
@@ -1057,9 +1095,10 @@ fn vegalite_to_jpeg(
         vega_plugin,
     };
 
+    let jpeg_opts = JpegOpts { scale, quality };
     let jpeg_data = match run_converter_future(move |converter| async move {
         converter
-            .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality)
+            .vegalite_to_jpeg(vl_spec, vl_opts, jpeg_opts)
             .await
     }) {
         Ok(vega_spec) => vega_spec,
@@ -1107,7 +1146,9 @@ fn vega_to_pdf(
     };
 
     let pdf_bytes = match run_converter_future(move |converter| async move {
-        converter.vega_to_pdf(vg_spec, vg_opts).await
+        converter
+            .vega_to_pdf(vg_spec, vg_opts, PdfOpts::default())
+            .await
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega to PDF conversion failed", err)),
@@ -1168,7 +1209,9 @@ fn vegalite_to_pdf(
     };
 
     let pdf_data = match run_converter_future(move |converter| async move {
-        converter.vegalite_to_pdf(vl_spec, vl_opts).await
+        converter
+            .vegalite_to_pdf(vl_spec, vl_opts, PdfOpts::default())
+            .await
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega-Lite to PDF conversion failed", err)),
@@ -1232,14 +1275,12 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
 ///     string: HTML document
 #[pyfunction]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, bundle=None, embed_local_fonts=None, subset_fonts=None, google_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, bundle=None, google_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None)
 )]
 fn vegalite_to_html(
     vl_spec: PyObject,
     vl_version: Option<&str>,
     bundle: Option<bool>,
-    embed_local_fonts: Option<bool>,
-    subset_fonts: Option<bool>,
     google_fonts: Option<Vec<PyObject>>,
     config: Option<PyObject>,
     theme: Option<String>,
@@ -1259,7 +1300,6 @@ fn vegalite_to_html(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let renderer = Renderer::from_str(&renderer)?;
-    let subset_fonts = subset_fonts.unwrap_or(true);
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vl_opts = VlOpts {
@@ -1274,16 +1314,13 @@ fn vegalite_to_html(
         vega_plugin,
     };
 
+    let html_opts = HtmlOpts {
+        bundle: bundle.unwrap_or(false),
+        renderer,
+    };
     run_converter_future(move |converter| async move {
         converter
-            .vegalite_to_html(
-                vl_spec,
-                vl_opts,
-                bundle.unwrap_or(false),
-                embed_local_fonts.unwrap_or(false),
-                subset_fonts,
-                renderer,
-            )
+            .vegalite_to_html(vl_spec, vl_opts, html_opts)
             .await
     })
     .map_err(|err| prefixed_py_error("Vega-Lite to HTML conversion failed", err))
@@ -1302,12 +1339,10 @@ fn vegalite_to_html(
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
-#[pyo3(signature = (vg_spec, bundle=None, embed_local_fonts=None, subset_fonts=None, google_fonts=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None))]
+#[pyo3(signature = (vg_spec, bundle=None, google_fonts=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None))]
 fn vega_to_html(
     vg_spec: PyObject,
     bundle: Option<bool>,
-    embed_local_fonts: Option<bool>,
-    subset_fonts: Option<bool>,
     google_fonts: Option<Vec<PyObject>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
@@ -1319,7 +1354,6 @@ fn vega_to_html(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let renderer = Renderer::from_str(&renderer)?;
-    let subset_fonts = subset_fonts.unwrap_or(true);
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
@@ -1328,17 +1362,12 @@ fn vega_to_html(
         google_fonts: effective_google_fonts(google_fonts),
         vega_plugin,
     };
+    let html_opts = HtmlOpts {
+        bundle: bundle.unwrap_or(false),
+        renderer,
+    };
     run_converter_future(move |converter| async move {
-        converter
-            .vega_to_html(
-                vg_spec,
-                vg_opts,
-                bundle.unwrap_or(false),
-                embed_local_fonts.unwrap_or(false),
-                subset_fonts,
-                renderer,
-            )
-            .await
+        converter.vega_to_html(vg_spec, vg_opts, html_opts).await
     })
     .map_err(|err| prefixed_py_error("Vega to HTML conversion failed", err))
 }
@@ -1353,14 +1382,12 @@ fn vega_to_html(
 ///     theme (str): Named theme (e.g. "dark")
 ///     auto_google_fonts (bool): Override auto-download from Google Fonts
 ///         (default: use converter config)
-///     embed_local_fonts (bool): Override local font embedding
-///         (default: use converter config)
 ///     include_font_face (bool): Whether to run the font subsetting pipeline
 ///         and populate the font_face field on each variant (default False)
 /// Returns:
 ///     list[FontInfo]: Structured font metadata for each font used by the chart
 #[pyfunction]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, embed_local_fonts=None, include_font_face=false, subset_fonts=None, google_fonts=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 fn vegalite_fonts(
     py: Python<'_>,
     vl_spec: PyObject,
@@ -1368,9 +1395,7 @@ fn vegalite_fonts(
     config: Option<PyObject>,
     theme: Option<String>,
     auto_google_fonts: Option<bool>,
-    embed_local_fonts: Option<bool>,
     include_font_face: bool,
-    subset_fonts: Option<bool>,
     google_fonts: Option<Vec<PyObject>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
@@ -1399,8 +1424,10 @@ fn vegalite_fonts(
     };
 
     let result = run_converter_future(move |converter| async move {
-        let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-        let embed_lf = embed_local_fonts.unwrap_or(false);
+        let config = converter.config();
+        let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
+        let embed_lf = config.embed_local_fonts;
+        let subset_f = config.subset_fonts;
         converter
             .vegalite_fonts(
                 vl_spec,
@@ -1408,7 +1435,7 @@ fn vegalite_fonts(
                 auto_gf,
                 embed_lf,
                 include_font_face,
-                subset_fonts.unwrap_or(true),
+                subset_f,
             )
             .await
     })
@@ -1425,21 +1452,17 @@ fn vegalite_fonts(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     auto_google_fonts (bool): Override auto-download from Google Fonts
 ///         (default: use converter config)
-///     embed_local_fonts (bool): Override local font embedding
-///         (default: use converter config)
 ///     include_font_face (bool): Whether to run the font subsetting pipeline
 ///         and populate the font_face field on each variant (default False)
 /// Returns:
 ///     list[FontInfo]: Structured font metadata for each font used by the chart
 #[pyfunction]
-#[pyo3(signature = (vg_spec, auto_google_fonts=None, embed_local_fonts=None, include_font_face=false, subset_fonts=None, google_fonts=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vg_spec, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 fn vega_fonts(
     py: Python<'_>,
     vg_spec: PyObject,
     auto_google_fonts: Option<bool>,
-    embed_local_fonts: Option<bool>,
     include_font_face: bool,
-    subset_fonts: Option<bool>,
     google_fonts: Option<Vec<PyObject>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
@@ -1457,8 +1480,10 @@ fn vega_fonts(
     };
 
     let result = run_converter_future(move |converter| async move {
-        let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-        let embed_lf = embed_local_fonts.unwrap_or(false);
+        let config = converter.config();
+        let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
+        let embed_lf = config.embed_local_fonts;
+        let subset_f = config.subset_fonts;
         converter
             .vega_fonts(
                 vg_spec,
@@ -1466,7 +1491,7 @@ fn vega_fonts(
                 auto_gf,
                 embed_lf,
                 include_font_face,
-                subset_fonts.unwrap_or(true),
+                subset_f,
             )
             .await
     })
@@ -1489,10 +1514,12 @@ fn vega_fonts(
 #[pyo3(signature = (svg, scale=None, ppi=None))]
 fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
     let svg = svg.to_string();
-    let png_data = run_converter_future(move |converter| async move {
-        converter.svg_to_png(&svg, scale.unwrap_or(1.0), ppi).await
-    })
-    .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
+    let png_opts = PngOpts { scale, ppi };
+    let png_data =
+        run_converter_future(
+            move |converter| async move { converter.svg_to_png(&svg, png_opts).await },
+        )
+        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
         PyBytes::new(py, png_data.as_slice()).into()
     }))
@@ -1510,10 +1537,9 @@ fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObj
 #[pyo3(signature = (svg, scale=None, quality=None))]
 fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
     let svg = svg.to_string();
+    let jpeg_opts = JpegOpts { scale, quality };
     let jpeg_data = run_converter_future(move |converter| async move {
-        converter
-            .svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality)
-            .await
+        converter.svg_to_jpeg(&svg, jpeg_opts).await
     })
     .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
@@ -1533,9 +1559,10 @@ fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<P
 fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let svg = svg.to_string();
-    let pdf_data =
-        run_converter_future(move |converter| async move { converter.svg_to_pdf(&svg).await })
-            .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
+    let pdf_data = run_converter_future(move |converter| async move {
+        converter.svg_to_pdf(&svg, PdfOpts::default()).await
+    })
+    .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
         PyBytes::new(py, pdf_data.as_slice()).into()
     }))
@@ -2030,13 +2057,14 @@ fn vegalite_to_vega_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_svg")]
 #[pyfunction(name = "vega_to_svg")]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None))]
+#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None))]
 fn vega_to_svg_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    bundle: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -2047,17 +2075,25 @@ fn vega_to_svg_asyncio<'py>(
         google_fonts: effective_google_fonts(None),
         vega_plugin,
     };
+    let svg_opts = SvgOpts {
+        bundle: bundle.unwrap_or(false),
+    };
 
-    run_converter_future_async(
-        py,
-        move |converter| async move { converter.vega_to_svg(vg_spec, vg_opts).await },
-        "Vega to SVG conversion failed",
-        |py, value| {
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("Vega to SVG conversion failed", err))?;
+
+    let error_prefix = "Vega to SVG conversion failed";
+    future_into_py_object(py, async move {
+        let value = converter
+            .vega_to_svg(vg_spec, vg_opts, svg_opts)
+            .await
+            .map_err(|err| prefixed_py_error(error_prefix, err))?;
+        Python::with_gil(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
-        },
-    )
+        })
+    })
 }
 
 #[doc = async_variant_doc!("vega_to_scenegraph")]
@@ -2114,7 +2150,7 @@ fn vega_to_scenegraph_asyncio<'py>(
 #[doc = async_variant_doc!("vegalite_to_svg")]
 #[pyfunction(name = "vegalite_to_svg")]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None)
 )]
 fn vegalite_to_svg_asyncio<'py>(
     py: Python<'py>,
@@ -2126,6 +2162,7 @@ fn vegalite_to_svg_asyncio<'py>(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    bundle: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = parse_optional_config(config)?;
@@ -2146,17 +2183,25 @@ fn vegalite_to_svg_asyncio<'py>(
         google_fonts: effective_google_fonts(None),
         vega_plugin,
     };
+    let svg_opts = SvgOpts {
+        bundle: bundle.unwrap_or(false),
+    };
 
-    run_converter_future_async(
-        py,
-        move |converter| async move { converter.vegalite_to_svg(vl_spec, vl_opts).await },
-        "Vega-Lite to SVG conversion failed",
-        |py, value| {
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("Vega-Lite to SVG conversion failed", err))?;
+
+    let error_prefix = "Vega-Lite to SVG conversion failed";
+    future_into_py_object(py, async move {
+        let value = converter
+            .vegalite_to_svg(vl_spec, vl_opts, svg_opts)
+            .await
+            .map_err(|err| prefixed_py_error(error_prefix, err))?;
+        Python::with_gil(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
-        },
-    )
+        })
+    })
 }
 
 #[doc = async_variant_doc!("vegalite_to_scenegraph")]
@@ -2254,7 +2299,11 @@ fn vega_to_png_asyncio<'py>(
 
     run_converter_future_async(
         py,
-        move |converter| async move { converter.vega_to_png(vg_spec, vg_opts, scale, ppi).await },
+        move |converter| async move {
+            converter
+                .vega_to_png(vg_spec, vg_opts, PngOpts { scale, ppi })
+                .await
+        },
         "Vega to PNG conversion failed",
         |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
     )
@@ -2302,7 +2351,7 @@ fn vegalite_to_png_asyncio<'py>(
         py,
         move |converter| async move {
             converter
-                .vegalite_to_png(vl_spec, vl_opts, scale, ppi)
+                .vegalite_to_png(vl_spec, vl_opts, PngOpts { scale, ppi })
                 .await
         },
         "Vega-Lite to PNG conversion failed",
@@ -2338,7 +2387,7 @@ fn vega_to_jpeg_asyncio<'py>(
         py,
         move |converter| async move {
             converter
-                .vega_to_jpeg(vg_spec, vg_opts, scale, quality)
+                .vega_to_jpeg(vg_spec, vg_opts, JpegOpts { scale, quality })
                 .await
         },
         "Vega to JPEG conversion failed",
@@ -2388,7 +2437,7 @@ fn vegalite_to_jpeg_asyncio<'py>(
         py,
         move |converter| async move {
             converter
-                .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality)
+                .vegalite_to_jpeg(vl_spec, vl_opts, JpegOpts { scale, quality })
                 .await
         },
         "Vega-Lite to JPEG conversion failed",
@@ -2420,7 +2469,11 @@ fn vega_to_pdf_asyncio<'py>(
 
     run_converter_future_async(
         py,
-        move |converter| async move { converter.vega_to_pdf(vg_spec, vg_opts).await },
+        move |converter| async move {
+            converter
+                .vega_to_pdf(vg_spec, vg_opts, PdfOpts::default())
+                .await
+        },
         "Vega to PDF conversion failed",
         |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
     )
@@ -2465,7 +2518,11 @@ fn vegalite_to_pdf_asyncio<'py>(
 
     run_converter_future_async(
         py,
-        move |converter| async move { converter.vegalite_to_pdf(vl_spec, vl_opts).await },
+        move |converter| async move {
+            converter
+                .vegalite_to_pdf(vl_spec, vl_opts, PdfOpts::default())
+                .await
+        },
         "Vega-Lite to PDF conversion failed",
         |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
     )
@@ -2512,15 +2569,13 @@ fn vega_to_url_asyncio<'py>(
 #[doc = async_variant_doc!("vegalite_to_html")]
 #[pyfunction(name = "vegalite_to_html")]
 #[pyo3(
-    signature = (vl_spec, vl_version=None, bundle=None, embed_local_fonts=None, subset_fonts=None, google_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None)
+    signature = (vl_spec, vl_version=None, bundle=None, google_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None)
 )]
 fn vegalite_to_html_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
     vl_version: Option<&str>,
     bundle: Option<bool>,
-    embed_local_fonts: Option<bool>,
-    subset_fonts: Option<bool>,
     google_fonts: Option<Vec<PyObject>>,
     config: Option<PyObject>,
     theme: Option<String>,
@@ -2540,7 +2595,6 @@ fn vegalite_to_html_asyncio<'py>(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let renderer = Renderer::from_str(&renderer)?;
-    let subset_fonts = subset_fonts.unwrap_or(true);
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vl_opts = VlOpts {
@@ -2555,38 +2609,37 @@ fn vegalite_to_html_asyncio<'py>(
         vega_plugin,
     };
 
-    run_converter_future_async(
-        py,
-        move |converter| async move {
-            converter
-                .vegalite_to_html(
-                    vl_spec,
-                    vl_opts,
-                    bundle.unwrap_or(false),
-                    embed_local_fonts.unwrap_or(false),
-                    subset_fonts,
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("Vega-Lite to HTML conversion failed", err))?;
+
+    let error_prefix = "Vega-Lite to HTML conversion failed";
+    future_into_py_object(py, async move {
+        let value = converter
+            .vegalite_to_html(
+                vl_spec,
+                vl_opts,
+                HtmlOpts {
+                    bundle: bundle.unwrap_or(false),
                     renderer,
-                )
-                .await
-        },
-        "Vega-Lite to HTML conversion failed",
-        |py, value| {
+                },
+            )
+            .await
+            .map_err(|err| prefixed_py_error(error_prefix, err))?;
+        Python::with_gil(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
-        },
-    )
+        })
+    })
 }
 
 #[doc = async_variant_doc!("vega_to_html")]
 #[pyfunction(name = "vega_to_html")]
-#[pyo3(signature = (vg_spec, bundle=None, embed_local_fonts=None, subset_fonts=None, google_fonts=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None))]
+#[pyo3(signature = (vg_spec, bundle=None, google_fonts=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None))]
 fn vega_to_html_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
     bundle: Option<bool>,
-    embed_local_fonts: Option<bool>,
-    subset_fonts: Option<bool>,
     google_fonts: Option<Vec<PyObject>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
@@ -2598,7 +2651,6 @@ fn vega_to_html_asyncio<'py>(
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let renderer = renderer.unwrap_or_else(|| "svg".to_string());
     let renderer = Renderer::from_str(&renderer)?;
-    let subset_fonts = subset_fonts.unwrap_or(true);
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
@@ -2608,32 +2660,33 @@ fn vega_to_html_asyncio<'py>(
         vega_plugin,
     };
 
-    run_converter_future_async(
-        py,
-        move |converter| async move {
-            converter
-                .vega_to_html(
-                    vg_spec,
-                    vg_opts,
-                    bundle.unwrap_or(false),
-                    embed_local_fonts.unwrap_or(false),
-                    subset_fonts,
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("Vega to HTML conversion failed", err))?;
+
+    let error_prefix = "Vega to HTML conversion failed";
+    future_into_py_object(py, async move {
+        let value = converter
+            .vega_to_html(
+                vg_spec,
+                vg_opts,
+                HtmlOpts {
+                    bundle: bundle.unwrap_or(false),
                     renderer,
-                )
-                .await
-        },
-        "Vega to HTML conversion failed",
-        |py, value| {
+                },
+            )
+            .await
+            .map_err(|err| prefixed_py_error(error_prefix, err))?;
+        Python::with_gil(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
-        },
-    )
+        })
+    })
 }
 
 #[doc = async_variant_doc!("vegalite_fonts")]
 #[pyfunction(name = "vegalite_fonts")]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, embed_local_fonts=None, include_font_face=false, subset_fonts=None, google_fonts=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 fn vegalite_fonts_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -2641,9 +2694,7 @@ fn vegalite_fonts_asyncio<'py>(
     config: Option<PyObject>,
     theme: Option<String>,
     auto_google_fonts: Option<bool>,
-    embed_local_fonts: Option<bool>,
     include_font_face: bool,
-    subset_fonts: Option<bool>,
     google_fonts: Option<Vec<PyObject>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
@@ -2674,8 +2725,10 @@ fn vegalite_fonts_asyncio<'py>(
     run_converter_future_async(
         py,
         move |converter| async move {
-            let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-            let embed_lf = embed_local_fonts.unwrap_or(false);
+            let config = converter.config();
+            let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
+            let embed_lf = config.embed_local_fonts;
+            let subset_f = config.subset_fonts;
             converter
                 .vegalite_fonts(
                     vl_spec,
@@ -2683,7 +2736,7 @@ fn vegalite_fonts_asyncio<'py>(
                     auto_gf,
                     embed_lf,
                     include_font_face,
-                    subset_fonts.unwrap_or(true),
+                    subset_f,
                 )
                 .await
         },
@@ -2698,14 +2751,12 @@ fn vegalite_fonts_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_fonts")]
 #[pyfunction(name = "vega_fonts")]
-#[pyo3(signature = (vg_spec, auto_google_fonts=None, embed_local_fonts=None, include_font_face=false, subset_fonts=None, google_fonts=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vg_spec, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 fn vega_fonts_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
     auto_google_fonts: Option<bool>,
-    embed_local_fonts: Option<bool>,
     include_font_face: bool,
-    subset_fonts: Option<bool>,
     google_fonts: Option<Vec<PyObject>>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
@@ -2725,8 +2776,10 @@ fn vega_fonts_asyncio<'py>(
     run_converter_future_async(
         py,
         move |converter| async move {
-            let auto_gf = auto_google_fonts.unwrap_or(converter.config().auto_google_fonts);
-            let embed_lf = embed_local_fonts.unwrap_or(false);
+            let config = converter.config();
+            let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
+            let embed_lf = config.embed_local_fonts;
+            let subset_f = config.subset_fonts;
             converter
                 .vega_fonts(
                     vg_spec,
@@ -2734,7 +2787,7 @@ fn vega_fonts_asyncio<'py>(
                     auto_gf,
                     embed_lf,
                     include_font_face,
-                    subset_fonts.unwrap_or(true),
+                    subset_f,
                 )
                 .await
         },
@@ -2759,7 +2812,7 @@ fn svg_to_png_asyncio<'py>(
     let svg = svg.to_string();
     run_converter_future_async(
         py,
-        move |converter| async move { converter.svg_to_png(&svg, scale.unwrap_or(1.0), ppi).await },
+        move |converter| async move { converter.svg_to_png(&svg, PngOpts { scale, ppi }).await },
         "SVG to PNG conversion failed",
         |py, data| Ok(PyBytes::new(py, data.as_slice()).into()),
     )
@@ -2779,7 +2832,7 @@ fn svg_to_jpeg_asyncio<'py>(
         py,
         move |converter| async move {
             converter
-                .svg_to_jpeg(&svg, scale.unwrap_or(1.0), quality)
+                .svg_to_jpeg(&svg, JpegOpts { scale, quality })
                 .await
         },
         "SVG to JPEG conversion failed",
@@ -2799,7 +2852,7 @@ fn svg_to_pdf_asyncio<'py>(
     let svg = svg.to_string();
     run_converter_future_async(
         py,
-        move |converter| async move { converter.svg_to_pdf(&svg).await },
+        move |converter| async move { converter.svg_to_pdf(&svg, PdfOpts::default()).await },
         "SVG to PDF conversion failed",
         |py, data| Ok(PyBytes::new(py, data.as_slice()).into()),
     )

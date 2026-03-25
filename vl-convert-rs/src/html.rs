@@ -1,17 +1,17 @@
 use crate::converter::{
-    classify_and_request_fonts, classify_scenegraph_fonts, GoogleFontRequest, HtmlFontAnalysis,
-    InnerVlConverter, MissingFontsPolicy, Renderer, ResolvedPlugin, ValueOrString, VgOpts,
+    classify_and_request_fonts, classify_scenegraph_fonts, FontAnalysis, GoogleFontRequest,
+    HtmlOpts, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin, ValueOrString, VgOpts,
     VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{
-    extract_fonts_from_vega, extract_text_by_font, FontForHtml, FontInfo, FontKey, FontSource,
+    extract_fonts_from_vega, extract_text_by_font, ClassifiedFont, FontInfo, FontKey, FontSource,
     FontVariant,
 };
 use crate::font_embed::{generate_font_face_css, inject_locale_chars, variants_by_family};
 use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
-use crate::text::{GOOGLE_FONTS_CLIENT, USVG_OPTIONS};
+use crate::text::USVG_OPTIONS;
 use crate::with_font_overlay;
 use crate::VlVersion;
 use deno_core::anyhow::anyhow;
@@ -207,7 +207,7 @@ fn format_css2_axis(variants: &BTreeSet<(String, String)>) -> String {
 ///
 /// Returns `None` for local fonts.
 pub fn font_cdn_url(
-    font: &FontForHtml,
+    font: &ClassifiedFont,
     variants: &BTreeSet<(String, String)>,
     text: Option<&str>,
 ) -> Option<String> {
@@ -232,7 +232,7 @@ pub fn font_cdn_url(
 /// Return an HTML `<link rel="stylesheet">` tag for a font.
 /// Returns `None` for local fonts.
 pub fn font_link_tag(
-    font: &FontForHtml,
+    font: &ClassifiedFont,
     variants: &BTreeSet<(String, String)>,
     text: Option<&str>,
 ) -> Option<String> {
@@ -243,7 +243,7 @@ pub fn font_link_tag(
 /// Return a CSS `@import` rule for a font.
 /// Returns `None` for local fonts.
 pub fn font_import_rule(
-    font: &FontForHtml,
+    font: &ClassifiedFont,
     variants: &BTreeSet<(String, String)>,
     text: Option<&str>,
 ) -> Option<String> {
@@ -372,13 +372,13 @@ impl VlConverter {
     ///
     /// This is the single point of truth for font analysis — called once per
     /// HTML generation or `vega_fonts` / `vegalite_fonts` invocation.
-    async fn analyze_html_fonts(
+    async fn analyze_classified_fonts(
         &self,
         vega_spec: serde_json::Value,
         vg_opts: VgOpts,
         auto_google_fonts: bool,
         embed_local_fonts: bool,
-    ) -> Result<HtmlFontAnalysis, AnyError> {
+    ) -> Result<FontAnalysis, AnyError> {
         let missing = self.inner.config.missing_fonts;
 
         let explicit_requests = vg_opts.google_fonts.clone();
@@ -411,7 +411,7 @@ impl VlConverter {
             .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
             .unwrap_or_default();
 
-        let mut html_fonts = classify_scenegraph_fonts(
+        let mut classified_fonts = classify_scenegraph_fonts(
             &families,
             auto_google_fonts,
             embed_local_fonts,
@@ -423,11 +423,12 @@ impl VlConverter {
         let mut family_variants = variants_by_family(&chars_by_key);
 
         if let Some(ref requests) = explicit_requests {
-            let known: HashSet<String> = html_fonts.iter().map(|f| f.family.clone()).collect();
+            let known: HashSet<String> =
+                classified_fonts.iter().map(|f| f.family.clone()).collect();
             for req in requests {
                 if !known.contains(&req.family) {
                     if let Some(font_id) = family_to_id(&req.family) {
-                        html_fonts.push(FontForHtml {
+                        classified_fonts.push(ClassifiedFont {
                             family: req.family.clone(),
                             source: FontSource::Google { font_id },
                         });
@@ -442,8 +443,8 @@ impl VlConverter {
             }
         }
 
-        Ok(HtmlFontAnalysis {
-            html_fonts,
+        Ok(FontAnalysis {
+            classified_fonts,
             chars_by_key,
             family_variants,
         })
@@ -470,7 +471,7 @@ impl VlConverter {
         };
 
         let analysis = self
-            .analyze_html_fonts(spec_value, vg_opts, auto_google_fonts, embed_local_fonts)
+            .analyze_classified_fonts(spec_value, vg_opts, auto_google_fonts, embed_local_fonts)
             .await?;
 
         self.build_font_info(analysis, include_font_face, subset_fonts)
@@ -485,19 +486,19 @@ impl VlConverter {
     /// CDN URLs omit the `&text=` parameter.
     async fn build_font_info(
         &self,
-        analysis: HtmlFontAnalysis,
+        analysis: FontAnalysis,
         include_font_face: bool,
         subset_fonts: bool,
     ) -> Result<Vec<FontInfo>, AnyError> {
-        let HtmlFontAnalysis {
-            html_fonts,
+        let FontAnalysis {
+            classified_fonts,
             chars_by_key,
             family_variants,
         } = analysis;
 
         let font_face_index: HashMap<FontKey, String> =
-            if include_font_face && !html_fonts.is_empty() {
-                let google_font_requests: Vec<GoogleFontRequest> = html_fonts
+            if include_font_face && !classified_fonts.is_empty() {
+                let google_font_requests: Vec<GoogleFontRequest> = classified_fonts
                     .iter()
                     .filter_map(|f| match &f.source {
                         FontSource::Google { .. } => {
@@ -534,7 +535,7 @@ impl VlConverter {
                     .clone();
                 generate_font_face_css(
                     &chars_by_key,
-                    &html_fonts,
+                    &classified_fonts,
                     &missing,
                     &fontdb,
                     &batches,
@@ -544,38 +545,8 @@ impl VlConverter {
                 HashMap::new()
             };
 
-        let mut cdn_variants: HashMap<String, BTreeSet<(String, String)>> = HashMap::new();
-        for f in &html_fonts {
-            if let FontSource::Google { .. } = &f.source {
-                if let Some(vs) = family_variants.get(&f.family) {
-                    let requested: Vec<VariantRequest> = vs
-                        .iter()
-                        .map(|(w, s)| VariantRequest {
-                            weight: w.parse().unwrap_or(400),
-                            style: s.parse().unwrap_or(FontStyle::Normal),
-                        })
-                        .collect();
-                    match GOOGLE_FONTS_CLIENT
-                        .resolve_available_variants(&f.family, &requested)
-                        .await
-                    {
-                        Ok(resolved) => {
-                            let set: BTreeSet<(String, String)> = resolved
-                                .into_iter()
-                                .map(|v| (v.weight.to_string(), v.style.as_str().to_string()))
-                                .collect();
-                            cdn_variants.insert(f.family.clone(), set);
-                        }
-                        Err(e) => {
-                            log::warn!(
-                                "Failed to resolve variants for '{}': {e}, skipping CDN URL",
-                                f.family
-                            );
-                        }
-                    }
-                }
-            }
-        }
+        let cdn_variants =
+            crate::font_embed::resolve_cdn_variants(&classified_fonts, &family_variants).await;
 
         let family_chars: HashMap<String, BTreeSet<char>> = if subset_fonts {
             let mut map: HashMap<String, BTreeSet<char>> = HashMap::new();
@@ -587,7 +558,7 @@ impl VlConverter {
             HashMap::new()
         };
 
-        let results: Vec<FontInfo> = html_fonts
+        let results: Vec<FontInfo> = classified_fonts
             .iter()
             .map(|f| {
                 let text: Option<String> = family_chars
@@ -686,9 +657,9 @@ impl VlConverter {
         bundle: bool,
         auto_install: bool,
         embed_local: bool,
-        subset_fonts: bool,
     ) -> Result<String, AnyError> {
         let include_font_face = bundle || embed_local;
+        let subset_fonts = self.inner.config.subset_fonts;
         let fonts = self
             .vega_fonts(
                 vega_spec,
@@ -754,17 +725,15 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
-        bundle: bool,
-        embed_local_fonts: bool,
-        subset_fonts: bool,
-        renderer: Renderer,
+        html_opts: HtmlOpts,
     ) -> Result<String, AnyError> {
+        let HtmlOpts { bundle, renderer } = html_opts;
         self.apply_vl_defaults(&mut vl_opts);
         let vl_version = vl_opts.vl_version;
         let vl_spec = vl_spec.into();
 
         let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = embed_local_fonts;
+        let embed_local = self.inner.config.embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vl_opts.google_fonts.is_some();
         let font_head_html = if has_font_work {
@@ -777,15 +746,8 @@ impl VlConverter {
                 google_fonts: vl_opts.google_fonts.clone(),
                 vega_plugin: None,
             };
-            self.build_font_head_html(
-                vega_spec,
-                vg_opts,
-                bundle,
-                auto_install,
-                embed_local,
-                subset_fonts,
-            )
-            .await?
+            self.build_font_head_html(vega_spec, vg_opts, bundle, auto_install, embed_local)
+                .await?
         } else {
             String::new()
         };
@@ -840,16 +802,14 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
-        bundle: bool,
-        embed_local_fonts: bool,
-        subset_fonts: bool,
-        renderer: Renderer,
+        html_opts: HtmlOpts,
     ) -> Result<String, AnyError> {
+        let HtmlOpts { bundle, renderer } = html_opts;
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
 
         let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = embed_local_fonts;
+        let embed_local = self.inner.config.embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vg_opts.google_fonts.is_some();
         let font_head_html = if has_font_work {
@@ -863,7 +823,6 @@ impl VlConverter {
                 bundle,
                 auto_install,
                 embed_local,
-                subset_fonts,
             )
             .await?
         } else {
@@ -915,8 +874,8 @@ impl VlConverter {
 mod tests {
     use super::*;
 
-    fn google_font(family: &str) -> FontForHtml {
-        FontForHtml {
+    fn google_font(family: &str) -> ClassifiedFont {
+        ClassifiedFont {
             family: family.to_string(),
             source: FontSource::Google {
                 font_id: family.to_lowercase().replace(' ', "-"),
@@ -924,8 +883,8 @@ mod tests {
         }
     }
 
-    fn local_font(family: &str) -> FontForHtml {
-        FontForHtml {
+    fn local_font(family: &str) -> ClassifiedFont {
+        ClassifiedFont {
             family: family.to_string(),
             source: FontSource::Local,
         }

@@ -3,7 +3,7 @@ mod test_utils;
 use futures::executor::block_on;
 use serde_json::json;
 use test_utils::{check_vg_png, initialize, load_vg_spec};
-use vl_convert_rs::converter::{Renderer, VgOpts, VlConverterConfig};
+use vl_convert_rs::converter::{HtmlOpts, PngOpts, Renderer, SvgOpts, VgOpts, VlConverterConfig};
 use vl_convert_rs::VlConverter;
 
 /// Helper: build a minimal Vega spec that renders a text mark showing
@@ -40,8 +40,15 @@ fn test_plugin_custom_scheme_png() {
     .unwrap();
 
     let vg_spec = load_vg_spec("plugin_custom_scheme");
-    let png_data =
-        block_on(converter.vega_to_png(vg_spec, VgOpts::default(), Some(2.0), None)).unwrap();
+    let png_data = block_on(converter.vega_to_png(
+        vg_spec,
+        VgOpts::default(),
+        PngOpts {
+            scale: Some(2.0),
+            ppi: None,
+        },
+    ))
+    .unwrap();
 
     check_vg_png("plugin_custom_scheme", png_data.as_slice());
 }
@@ -58,7 +65,7 @@ async fn test_plugin_registers_expression_function() {
 
     let spec = vega_spec_with_expression("double(7)");
     let svg = converter
-        .vega_to_svg(spec, VgOpts::default())
+        .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap();
 
@@ -83,7 +90,7 @@ async fn test_multiple_plugins_register_different_functions() {
 
     let spec_triple = vega_spec_with_expression("triple(4)");
     let svg_triple = converter
-        .vega_to_svg(spec_triple, VgOpts::default())
+        .vega_to_svg(spec_triple, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap();
     assert!(
@@ -93,7 +100,7 @@ async fn test_multiple_plugins_register_different_functions() {
 
     let spec_add = vega_spec_with_expression("addTen(7)");
     let svg_add = converter
-        .vega_to_svg(spec_add, VgOpts::default())
+        .vega_to_svg(spec_add, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap();
     assert!(
@@ -113,7 +120,7 @@ async fn test_plugin_with_syntax_error() {
 
     let spec = vega_spec_with_expression("1 + 1");
     let err = converter
-        .vega_to_svg(spec, VgOpts::default())
+        .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap_err();
     let msg = err.to_string();
@@ -135,7 +142,7 @@ async fn test_plugin_without_default_export() {
 
     let spec = vega_spec_with_expression("1 + 1");
     let err = converter
-        .vega_to_svg(spec, VgOpts::default())
+        .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap_err();
     let msg = err.to_string();
@@ -163,7 +170,7 @@ async fn test_plugin_poison_behavior() {
 
     // First attempt: plugin throws during init_vega, poisoning the worker
     let err1 = converter
-        .vega_to_svg(spec.clone(), VgOpts::default())
+        .vega_to_svg(spec.clone(), VgOpts::default(), SvgOpts::default())
         .await
         .unwrap_err();
     let msg1 = err1.to_string();
@@ -174,7 +181,7 @@ async fn test_plugin_poison_behavior() {
 
     // Second attempt: worker is poisoned, returns stored error immediately
     let err2 = converter
-        .vega_to_svg(spec, VgOpts::default())
+        .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap_err();
     let msg2 = err2.to_string();
@@ -214,7 +221,14 @@ async fn test_plugin_html_export_contains_module_script() {
     });
 
     let html = converter
-        .vega_to_html(spec, VgOpts::default(), true, false, true, Renderer::Svg)
+        .vega_to_html(
+            spec,
+            VgOpts::default(),
+            HtmlOpts {
+                bundle: true,
+                renderer: Renderer::Svg,
+            },
+        )
         .await
         .unwrap();
 
@@ -248,7 +262,7 @@ async fn test_file_path_plugin() {
 
     let spec = vega_spec_with_expression("fromFile(7)");
     let svg = converter
-        .vega_to_svg(spec, VgOpts::default())
+        .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap();
 
@@ -283,7 +297,7 @@ export default function(vega) {
 
     let spec = vega_spec_with_expression("d3scaled(0.5)");
     let svg = converter
-        .vega_to_svg(spec, VgOpts::default())
+        .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .expect("URL plugin conversion must succeed (requires network)");
 
@@ -316,7 +330,7 @@ export default function(vega) {
 
     let spec = vega_spec_with_expression("d3scaled10(5)");
     let svg = converter
-        .vega_to_svg(spec, VgOpts::default())
+        .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .expect("Inline plugin with HTTP import must succeed (requires network)");
 
@@ -346,6 +360,7 @@ async fn test_per_request_plugin_works() {
                 vega_plugin: Some(plugin_source.to_string()),
                 ..Default::default()
             },
+            SvgOpts::default(),
         )
         .await
         .unwrap();
@@ -378,6 +393,7 @@ async fn test_per_request_plugin_isolation() {
                 vega_plugin: Some(plugin_source.to_string()),
                 ..Default::default()
             },
+            SvgOpts::default(),
         )
         .await
         .unwrap();
@@ -385,7 +401,9 @@ async fn test_per_request_plugin_isolation() {
 
     // Second conversion WITHOUT plugin — 'ephExpr' should NOT be available
     // (true isolation: the ephemeral worker was dropped)
-    let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+    let result = converter
+        .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
+        .await;
     // The conversion should either fail (unknown expression) or produce no "777"
     match result {
         Ok(svg) => {
@@ -412,6 +430,7 @@ async fn test_per_request_plugin_disabled_by_default() {
                 vega_plugin: Some("export default function(vega) {}".to_string()),
                 ..Default::default()
             },
+            SvgOpts::default(),
         )
         .await
         .unwrap_err();
@@ -447,6 +466,7 @@ async fn test_per_request_plugin_with_config_level_plugins() {
                 vega_plugin: Some(request_plugin.to_string()),
                 ..Default::default()
             },
+            SvgOpts::default(),
         )
         .await
         .unwrap();
@@ -487,10 +507,10 @@ async fn test_per_request_plugin_html_export() {
                 vega_plugin: Some(plugin_source.to_string()),
                 ..Default::default()
             },
-            true,
-            false,
-            false,
-            Renderer::Svg,
+            HtmlOpts {
+                bundle: true,
+                renderer: Renderer::Svg,
+            },
         )
         .await
         .unwrap();

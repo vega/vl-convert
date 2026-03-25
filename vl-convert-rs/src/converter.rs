@@ -45,7 +45,7 @@ use image::ImageReader;
 use resvg::render;
 
 use crate::extract::{
-    extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus, FontForHtml,
+    extract_fonts_from_vega, is_available, resolve_first_fonts, ClassifiedFont, FirstFontStatus,
     FontKey, FontSource,
 };
 use crate::text::{
@@ -697,6 +697,14 @@ pub struct VlConverterConfig {
     pub allowed_base_urls: Option<Vec<String>>,
     /// Whether to auto-download missing fonts from Google Fonts.
     pub auto_google_fonts: bool,
+    /// Whether to embed locally-available fonts as base64 `@font-face` blocks
+    /// in HTML and SVG output. Defaults to false.
+    /// Does not apply to PDF/PNG/JPEG, which always embed fonts via fontdb.
+    pub embed_local_fonts: bool,
+    /// Whether to subset embedded fonts to only the characters used.
+    /// Defaults to true. Applies to HTML and SVG output.
+    /// When false, full font files are embedded and CDN URLs omit the `&text=` parameter.
+    pub subset_fonts: bool,
     /// How to handle missing first-choice fonts: silently fallback, warn, or error.
     pub missing_fonts: MissingFontsPolicy,
     /// Google Fonts to register for all conversions. Each request specifies a
@@ -771,6 +779,8 @@ impl Default for VlConverterConfig {
             base_url: BaseUrlSetting::Default,
             allowed_base_urls: None,
             auto_google_fonts: false,
+            embed_local_fonts: false,
+            subset_fonts: true,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: None,
             max_v8_heap_size_mb: 0,
@@ -924,6 +934,46 @@ pub struct VlOpts {
     /// Per-request overlay plugin (inline ESM or URL). Requires `allow_per_request_plugins`.
     pub vega_plugin: Option<String>,
 }
+
+/// Options specific to SVG output format.
+#[derive(Debug, Clone, Default)]
+pub struct SvgOpts {
+    pub bundle: bool,
+}
+
+/// Options specific to HTML output format.
+#[derive(Debug, Clone)]
+pub struct HtmlOpts {
+    pub bundle: bool,
+    pub renderer: Renderer,
+}
+
+impl Default for HtmlOpts {
+    fn default() -> Self {
+        Self {
+            bundle: false,
+            renderer: Renderer::Svg,
+        }
+    }
+}
+
+/// Options specific to PNG output format.
+#[derive(Debug, Clone, Default)]
+pub struct PngOpts {
+    pub scale: Option<f32>,
+    pub ppi: Option<f32>,
+}
+
+/// Options specific to JPEG output format.
+#[derive(Debug, Clone, Default)]
+pub struct JpegOpts {
+    pub scale: Option<f32>,
+    pub quality: Option<u8>,
+}
+
+/// Options specific to PDF output format.
+#[derive(Debug, Clone, Default)]
+pub struct PdfOpts {}
 
 impl VlOpts {
     pub fn to_embed_opts(&self, renderer: Renderer) -> Result<serde_json::Value, AnyError> {
@@ -3086,10 +3136,10 @@ fn report_unavailable_fonts(
     Ok(())
 }
 
-/// Create a `FontForHtml` with `FontSource::Google` for a family name,
+/// Create a `ClassifiedFont` with `FontSource::Google` for a family name,
 /// or `None` if the name doesn't map to a valid Google Fonts ID.
-fn google_font_for_html(family: &str) -> Option<FontForHtml> {
-    Some(FontForHtml {
+fn classify_as_google_font(family: &str) -> Option<ClassifiedFont> {
+    Some(ClassifiedFont {
         family: family.to_string(),
         source: FontSource::Google {
             font_id: family_to_id(family)?,
@@ -3114,7 +3164,7 @@ pub(crate) async fn classify_scenegraph_fonts(
     embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     explicit_google_families: &HashSet<String>,
-) -> Result<Vec<FontForHtml>, AnyError> {
+) -> Result<Vec<ClassifiedFont>, AnyError> {
     if families.is_empty()
         || (!auto_google_fonts
             && !embed_local_fonts
@@ -3133,25 +3183,25 @@ pub(crate) async fn classify_scenegraph_fonts(
         HashSet::new()
     };
 
-    let mut html_fonts: Vec<FontForHtml> = Vec::new();
+    let mut classified_fonts: Vec<ClassifiedFont> = Vec::new();
     let mut unavailable: Vec<String> = Vec::new();
     for family in families {
         // Explicit per-call requests win immediately
         if explicit_google_families.contains(family) {
-            if let Some(font) = google_font_for_html(family) {
-                html_fonts.push(font);
+            if let Some(font) = classify_as_google_font(family) {
+                classified_fonts.push(font);
             }
             continue;
         }
         if auto_google_fonts && google_fonts_set.contains(family) {
-            if let Some(font) = google_font_for_html(family) {
-                html_fonts.push(font);
+            if let Some(font) = classify_as_google_font(family) {
+                classified_fonts.push(font);
                 continue;
             }
         }
         if is_available(family, &available) {
             if embed_local_fonts {
-                html_fonts.push(FontForHtml {
+                classified_fonts.push(ClassifiedFont {
                     family: family.clone(),
                     source: FontSource::Local,
                 });
@@ -3173,13 +3223,13 @@ pub(crate) async fn classify_scenegraph_fonts(
         missing_fonts,
     )?;
 
-    Ok(html_fonts)
+    Ok(classified_fonts)
 }
 
 /// Result of analyzing a rendered Vega scenegraph for font embedding.
-pub(crate) struct HtmlFontAnalysis {
+pub(crate) struct FontAnalysis {
     /// Classified font metadata (Google or Local).
-    pub(crate) html_fonts: Vec<FontForHtml>,
+    pub(crate) classified_fonts: Vec<ClassifiedFont>,
     /// Characters used per (family, weight, style) — for subsetting.
     pub(crate) chars_by_key: HashMap<FontKey, BTreeSet<char>>,
     /// (weight, style) variants per family — for CDN URLs.
@@ -3623,10 +3673,19 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
+        svg_opts: SvgOpts,
     ) -> Result<String, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
+
+        // Extract user-specified Google font families BEFORE auto-detection
+        // merges in, so classify_scenegraph_fonts treats them as explicit.
+        let explicit_google_families: HashSet<String> = vg_opts
+            .google_fonts
+            .as_ref()
+            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
+            .unwrap_or_default();
 
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !auto_requests.is_empty() {
@@ -3636,14 +3695,14 @@ impl VlConverter {
                 .extend(auto_requests);
         }
 
-        if let Some(plugin_source) = plugin {
+        let svg = if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
                     with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
                 })
-            })
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -3652,8 +3711,109 @@ impl VlConverter {
                     with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
                 })
             })
+            .await?
+        };
+
+        self.postprocess_svg(svg, &svg_opts, explicit_google_families)
             .await
-        }
+    }
+
+    /// Post-process a rendered SVG to embed fonts and/or inline images
+    /// according to the given `SvgOpts`.
+    ///
+    /// Parses the SVG once, classifies fonts, resolves Google Font data, then
+    /// delegates to [`crate::svg_font::process_svg`] with all pre-computed data.
+    async fn postprocess_svg(
+        &self,
+        svg: String,
+        svg_opts: &SvgOpts,
+        explicit_google_families: HashSet<String>,
+    ) -> Result<String, AnyError> {
+        let config = self.config();
+        let image_policy = self.image_access_policy();
+        let resources_dir = if config.base_url.is_filesystem() {
+            config
+                .base_url
+                .resolved_url()
+                .ok()
+                .flatten()
+                .and_then(|url_str| Url::parse(&url_str).ok())
+                .and_then(|url| url.to_file_path().ok())
+        } else {
+            None
+        };
+
+        // Get fontdb snapshot
+        let fontdb = crate::text::USVG_OPTIONS
+            .lock()
+            .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
+            .fontdb
+            .clone();
+
+        // Analyze SVG once — extract fonts, image refs, insertion point
+        let analysis = crate::extract::analyze_svg(&svg)?;
+        let families: std::collections::BTreeSet<String> =
+            analysis.families.iter().cloned().collect();
+
+        // Classify fonts once with proper explicit families
+        let classified_fonts = classify_scenegraph_fonts(
+            &families,
+            config.auto_google_fonts,
+            config.embed_local_fonts,
+            config.missing_fonts,
+            &explicit_google_families,
+        )
+        .await?;
+
+        // Compute variants once before building Google font requests
+        let family_variants = crate::font_embed::variants_by_family(&analysis.chars_by_key);
+
+        // Resolve Google Font batches (needed for @font-face subsetting)
+        let google_font_requests: Vec<GoogleFontRequest> = classified_fonts
+            .iter()
+            .filter_map(|f| match &f.source {
+                crate::extract::FontSource::Google { .. } => {
+                    let variants = family_variants.get(&f.family).map(|vs| {
+                        vs.iter()
+                            .map(|(w, s)| vl_convert_google_fonts::VariantRequest {
+                                weight: w.parse().unwrap_or(400),
+                                style: s
+                                    .parse()
+                                    .unwrap_or(vl_convert_google_fonts::FontStyle::Normal),
+                            })
+                            .collect::<Vec<_>>()
+                    });
+                    Some(GoogleFontRequest {
+                        family: f.family.clone(),
+                        variants,
+                    })
+                }
+                _ => None,
+            })
+            .collect();
+
+        let loaded_batches = if google_font_requests.is_empty() {
+            Vec::new()
+        } else {
+            self.run_on_worker(move |inner: &mut InnerVlConverter| {
+                Box::pin(inner.resolve_google_fonts(Some(google_font_requests)))
+            })
+            .await?
+        };
+
+        crate::svg_font::process_svg(
+            svg,
+            svg_opts,
+            &analysis,
+            &classified_fonts,
+            &family_variants,
+            &config,
+            &fontdb,
+            &loaded_batches,
+            &image_policy,
+            resources_dir.as_deref(),
+        )
+        .await
     }
 
     pub async fn vega_to_scenegraph(
@@ -3712,12 +3872,20 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
+        svg_opts: SvgOpts,
     ) -> Result<String, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        // Extract user-specified Google font families before they're consumed
+        let explicit_google_families: HashSet<String> = vl_opts
+            .google_fonts
+            .as_ref()
+            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
+            .unwrap_or_default();
+
+        let svg = if let Some((vega_spec, mut vg_opts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -3729,7 +3897,7 @@ impl VlConverter {
                     Box::pin(async move {
                         with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
                     })
-                })
+                })?
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -3738,7 +3906,7 @@ impl VlConverter {
                         with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
                     })
                 })
-                .await
+                .await?
             }
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
@@ -3747,7 +3915,7 @@ impl VlConverter {
                 Box::pin(async move {
                     with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
                 })
-            })
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -3756,8 +3924,11 @@ impl VlConverter {
                     with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
                 })
             })
+            .await?
+        };
+
+        self.postprocess_svg(svg, &svg_opts, explicit_google_families)
             .await
-        }
     }
 
     pub async fn vegalite_to_scenegraph(
@@ -3842,13 +4013,12 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
-        scale: Option<f32>,
-        ppi: Option<f32>,
+        png_opts: PngOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
-        let scale = scale.unwrap_or(1.0);
-        let ppi = ppi.unwrap_or(72.0);
+        let scale = png_opts.scale.unwrap_or(1.0);
+        let ppi = png_opts.ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
         let plugin = vg_opts.vega_plugin.take();
 
@@ -3894,13 +4064,12 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
-        scale: Option<f32>,
-        ppi: Option<f32>,
+        png_opts: PngOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
-        let scale = scale.unwrap_or(1.0);
-        let ppi = ppi.unwrap_or(72.0);
+        let scale = png_opts.scale.unwrap_or(1.0);
+        let ppi = png_opts.ppi.unwrap_or(72.0);
         let effective_scale = scale * ppi / 72.0;
         let plugin = vl_opts.vega_plugin.take();
 
@@ -3971,11 +4140,11 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
-        scale: Option<f32>,
-        quality: Option<u8>,
+        jpeg_opts: JpegOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
-        let scale = scale.unwrap_or(1.0);
+        let scale = jpeg_opts.scale.unwrap_or(1.0);
+        let quality = jpeg_opts.quality;
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
@@ -4024,11 +4193,11 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
-        scale: Option<f32>,
-        quality: Option<u8>,
+        jpeg_opts: JpegOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
-        let scale = scale.unwrap_or(1.0);
+        let scale = jpeg_opts.scale.unwrap_or(1.0);
+        let quality = jpeg_opts.quality;
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
@@ -4104,6 +4273,7 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
+        _pdf_opts: PdfOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
@@ -4150,6 +4320,7 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
+        _pdf_opts: PdfOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
@@ -4215,12 +4386,9 @@ impl VlConverter {
         }
     }
 
-    pub async fn svg_to_png(
-        &self,
-        svg: &str,
-        scale: f32,
-        ppi: Option<f32>,
-    ) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_png(&self, svg: &str, png_opts: PngOpts) -> Result<Vec<u8>, AnyError> {
+        let scale = png_opts.scale.unwrap_or(1.0);
+        let ppi = png_opts.ppi;
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
@@ -4237,12 +4405,9 @@ impl VlConverter {
         .await
     }
 
-    pub async fn svg_to_jpeg(
-        &self,
-        svg: &str,
-        scale: f32,
-        quality: Option<u8>,
-    ) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_jpeg(&self, svg: &str, jpeg_opts: JpegOpts) -> Result<Vec<u8>, AnyError> {
+        let scale = jpeg_opts.scale.unwrap_or(1.0);
+        let quality = jpeg_opts.quality;
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
@@ -4259,7 +4424,7 @@ impl VlConverter {
         .await
     }
 
-    pub async fn svg_to_pdf(&self, svg: &str) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_pdf(&self, svg: &str, _pdf_opts: PdfOpts) -> Result<Vec<u8>, AnyError> {
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
@@ -5530,8 +5695,10 @@ try {
         let subdomain_err = converter
             .svg_to_png(
                 &svg_with_href("https://example.com.evil.test/image.png"),
-                1.0,
-                None,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
             )
             .await
             .unwrap_err();
@@ -5542,8 +5709,10 @@ try {
         let userinfo_err = converter
             .svg_to_png(
                 &svg_with_href("https://example.com@evil.test/image.png"),
-                1.0,
-                None,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
             )
             .await
             .unwrap_err();
@@ -5566,7 +5735,13 @@ try {
         .unwrap();
 
         let err = converter
-            .svg_to_png(&svg_with_href(&href), 1.0, None)
+            .svg_to_png(
+                &svg_with_href(&href),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("Filesystem access denied"));
@@ -5591,20 +5766,38 @@ try {
         .unwrap();
 
         let allowed = converter
-            .svg_to_png(&svg_with_href("inside.png"), 1.0, None)
+            .svg_to_png(
+                &svg_with_href("inside.png"),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await;
         assert!(allowed.is_ok());
 
         let outside_href = Url::from_file_path(&outside_path).unwrap().to_string();
         let err = converter
-            .svg_to_png(&svg_with_href(&outside_href), 1.0, None)
+            .svg_to_png(
+                &svg_with_href(&outside_href),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         let message = err.to_string();
         assert!(message.contains("filesystem_root") || message.contains("access denied"));
 
         let err = converter
-            .svg_to_png(&svg_with_href("../outside.png"), 1.0, None)
+            .svg_to_png(
+                &svg_with_href("../outside.png"),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("filesystem_root"));
@@ -5620,7 +5813,13 @@ try {
         })
         .unwrap();
         let err = no_http_converter
-            .svg_to_png(&remote_svg, 1.0, None)
+            .svg_to_png(
+                &remote_svg,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         let msg = err.to_string().to_lowercase();
@@ -5637,7 +5836,13 @@ try {
         })
         .unwrap();
         let err = allowlisted_converter
-            .svg_to_png(&remote_svg, 1.0, None)
+            .svg_to_png(
+                &remote_svg,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("External data url not allowed"));
@@ -5653,7 +5858,16 @@ try {
         let svg = svg_with_href(
             "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAgMBgLP4r9kAAAAASUVORK5CYII=",
         );
-        let png = converter.svg_to_png(&svg, 1.0, None).await.unwrap();
+        let png = converter
+            .svg_to_png(
+                &svg,
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: None,
+                },
+            )
+            .await
+            .unwrap();
         assert!(png.starts_with(&[137, 80, 78, 71]));
     }
 
@@ -5667,7 +5881,7 @@ try {
         let spec = vega_spec_with_data_url("https://example.com/data.csv");
 
         let err = converter
-            .vega_to_pdf(spec, VgOpts::default())
+            .vega_to_pdf(spec, VgOpts::default(), PdfOpts::default())
             .await
             .unwrap_err();
         let message = err.to_string().to_ascii_lowercase();
@@ -5690,7 +5904,7 @@ try {
         let spec = vega_spec_with_data_url("data:text/csv,a,b%0A1,2");
 
         let svg = converter
-            .vega_to_svg(spec, VgOpts::default())
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
             .await
             .unwrap();
         assert!(svg.contains("<svg"));
@@ -5714,8 +5928,10 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
-                Some(1.0),
-                Some(72.0),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: Some(72.0),
+                },
             )
             .await;
         // The conversion should succeed (image just not loaded)
@@ -5743,8 +5959,10 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
-                Some(1.0),
-                Some(72.0),
+                PngOpts {
+                    scale: Some(1.0),
+                    ppi: Some(72.0),
+                },
             )
             .await;
         assert!(
@@ -5763,7 +5981,7 @@ try {
         let spec = vega_spec_with_data_url("https://example.com/data.csv");
 
         let err = converter
-            .vega_to_pdf(spec, VgOpts::default())
+            .vega_to_pdf(spec, VgOpts::default(), PdfOpts::default())
             .await
             .unwrap_err();
         assert!(err.to_string().contains("External data url not allowed"));
@@ -5792,6 +6010,7 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
+                PdfOpts::default(),
             )
             .await
             .unwrap_err();
@@ -5826,6 +6045,7 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
+                SvgOpts::default(),
             )
             .await
             .unwrap_err();
@@ -5860,6 +6080,7 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
+                PdfOpts::default(),
             )
             .await
             .unwrap();
@@ -5890,18 +6111,18 @@ try {
                 vl_version: VlVersion::v5_16,
                 ..Default::default()
             },
-            true,
-            false,
-            true,
-            Renderer::Svg,
+            HtmlOpts {
+                bundle: true,
+                renderer: Renderer::Svg,
+            },
         ));
         assert_send_future(converter.vega_to_html(
             vg_spec,
             VgOpts::default(),
-            true,
-            false,
-            true,
-            Renderer::Svg,
+            HtmlOpts {
+                bundle: true,
+                renderer: Renderer::Svg,
+            },
         ));
     }
 
@@ -6174,6 +6395,7 @@ try {
                     vl_version: VlVersion::v5_16,
                     ..Default::default()
                 },
+                SvgOpts::default(),
             )
             .await
             .unwrap();
@@ -6208,6 +6430,7 @@ try {
                             vl_version: VlVersion::v5_16,
                             ..Default::default()
                         },
+                        SvgOpts::default(),
                     )
                     .await
             }));
@@ -6396,7 +6619,9 @@ try {
             "marks": []
         });
 
-        let result = converter.vega_to_svg(spec, VgOpts::default()).await;
+        let result = converter
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
+            .await;
         // The relative URL resolves to about:invalid which the op rejects
         assert!(
             result.is_err() || {
