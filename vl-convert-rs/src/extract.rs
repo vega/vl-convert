@@ -21,9 +21,9 @@ pub enum FontSource {
     Local,
 }
 
-/// Metadata for a font that should be embedded or linked in HTML output.
+/// A font classified by source (Google or Local) for embedding or linking in SVG/HTML output.
 #[derive(Debug, Clone)]
-pub struct FontForHtml {
+pub struct ClassifiedFont {
     /// The font family name (e.g., "Roboto", "Playfair Display").
     pub family: String,
     /// Where the font data comes from.

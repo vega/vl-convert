@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::converter::MissingFontsPolicy;
-use crate::extract::{FontForHtml, FontKey, FontSource};
+use crate::extract::{ClassifiedFont, FontKey, FontSource};
 use crate::text::GOOGLE_FONTS_CLIENT;
 use vl_convert_google_fonts::{find_closest_variant, FontStyle, LoadedFontBatch, VariantRequest};
 
@@ -171,7 +171,7 @@ pub fn variants_by_family(
 /// `VariantRequest`s, queries the CDN, and returns the resolved variants.
 /// Failures are logged as warnings and the family is skipped.
 pub async fn resolve_cdn_variants(
-    classified_fonts: &[FontForHtml],
+    classified_fonts: &[ClassifiedFont],
     family_variants: &HashMap<String, BTreeSet<(String, String)>>,
 ) -> HashMap<String, BTreeSet<(String, String)>> {
     let mut cdn_map = HashMap::new();
@@ -213,12 +213,12 @@ pub async fn resolve_cdn_variants(
 /// `(family, weight, style)`.
 ///
 /// For each (family, weight, style) in `chars_by_font_key` that matches a
-/// font in `html_fonts`, locates the font data (from Google Fonts loaded
+/// font in `classified_fonts`, locates the font data (from Google Fonts loaded
 /// batches or fontdb), subsets to only the required characters, encodes as
 /// WOFF2, and produces base64-encoded `@font-face` CSS blocks.
 pub fn generate_font_face_css(
     chars_by_font_key: &HashMap<FontKey, BTreeSet<char>>,
-    html_fonts: &[FontForHtml],
+    classified_fonts: &[ClassifiedFont],
     mode: &MissingFontsPolicy,
     fontdb: &fontdb::Database,
     loaded_batches: &[LoadedFontBatch],
@@ -226,7 +226,7 @@ pub fn generate_font_face_css(
 ) -> Result<HashMap<FontKey, String>, anyhow::Error> {
     let mut css_blocks = HashMap::new();
 
-    for font_info in html_fonts {
+    for font_info in classified_fonts {
         match &font_info.source {
             FontSource::Google { font_id } => {
                 generate_google_fonts_css(
@@ -257,7 +257,7 @@ pub fn generate_font_face_css(
 
 /// Generate CSS for a Google Fonts font using in-memory loaded font data.
 fn generate_google_fonts_css(
-    font_info: &FontForHtml,
+    font_info: &ClassifiedFont,
     font_id: &str,
     chars_by_font_key: &HashMap<FontKey, BTreeSet<char>>,
     mode: &MissingFontsPolicy,
@@ -383,7 +383,7 @@ fn generate_google_fonts_css(
 
 /// Generate CSS for a locally-available font via fontdb lookup.
 fn generate_local_font_css(
-    font_info: &FontForHtml,
+    font_info: &ClassifiedFont,
     chars_by_font_key: &HashMap<FontKey, BTreeSet<char>>,
     mode: &MissingFontsPolicy,
     fontdb: &fontdb::Database,
@@ -558,7 +558,7 @@ mod tests {
     #[test]
     fn test_generate_local_font_css_happy_path() {
         let db = make_fontdb_with_caveat();
-        let font = FontForHtml {
+        let font = ClassifiedFont {
             family: "Caveat".to_string(),
             source: FontSource::Local,
         };
@@ -597,7 +597,7 @@ mod tests {
     #[test]
     fn test_generate_local_font_css_fallback_on_subset_error() {
         let db = make_fontdb_with_liberation_sans();
-        let font = FontForHtml {
+        let font = ClassifiedFont {
             family: "Liberation Sans".to_string(),
             source: FontSource::Local,
         };
@@ -627,7 +627,7 @@ mod tests {
     #[test]
     fn test_generate_local_font_css_error_on_subset_error() {
         let db = make_fontdb_with_liberation_sans();
-        let font = FontForHtml {
+        let font = ClassifiedFont {
             family: "Liberation Sans".to_string(),
             source: FontSource::Local,
         };
@@ -657,7 +657,7 @@ mod tests {
     #[test]
     fn test_generate_font_face_css_local_happy_path() {
         let db = make_fontdb_with_caveat();
-        let fonts = vec![FontForHtml {
+        let fonts = vec![ClassifiedFont {
             family: "Caveat".to_string(),
             source: FontSource::Local,
         }];
@@ -693,7 +693,7 @@ mod tests {
     #[test]
     fn test_generate_font_face_css_empty_fontdb() {
         let db = fontdb::Database::new();
-        let fonts = vec![FontForHtml {
+        let fonts = vec![ClassifiedFont {
             family: "Missing".to_string(),
             source: FontSource::Local,
         }];

@@ -45,7 +45,7 @@ use image::ImageReader;
 use resvg::render;
 
 use crate::extract::{
-    extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus, FontForHtml,
+    extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus, ClassifiedFont,
     FontKey, FontSource,
 };
 use crate::text::{
@@ -3136,10 +3136,10 @@ fn report_unavailable_fonts(
     Ok(())
 }
 
-/// Create a `FontForHtml` with `FontSource::Google` for a family name,
+/// Create a `ClassifiedFont` with `FontSource::Google` for a family name,
 /// or `None` if the name doesn't map to a valid Google Fonts ID.
-fn google_font_for_html(family: &str) -> Option<FontForHtml> {
-    Some(FontForHtml {
+fn classify_as_google_font(family: &str) -> Option<ClassifiedFont> {
+    Some(ClassifiedFont {
         family: family.to_string(),
         source: FontSource::Google {
             font_id: family_to_id(family)?,
@@ -3164,7 +3164,7 @@ pub(crate) async fn classify_scenegraph_fonts(
     embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     explicit_google_families: &HashSet<String>,
-) -> Result<Vec<FontForHtml>, AnyError> {
+) -> Result<Vec<ClassifiedFont>, AnyError> {
     if families.is_empty()
         || (!auto_google_fonts
             && !embed_local_fonts
@@ -3183,25 +3183,25 @@ pub(crate) async fn classify_scenegraph_fonts(
         HashSet::new()
     };
 
-    let mut html_fonts: Vec<FontForHtml> = Vec::new();
+    let mut classified_fonts: Vec<ClassifiedFont> = Vec::new();
     let mut unavailable: Vec<String> = Vec::new();
     for family in families {
         // Explicit per-call requests win immediately
         if explicit_google_families.contains(family) {
-            if let Some(font) = google_font_for_html(family) {
-                html_fonts.push(font);
+            if let Some(font) = classify_as_google_font(family) {
+                classified_fonts.push(font);
             }
             continue;
         }
         if auto_google_fonts && google_fonts_set.contains(family) {
-            if let Some(font) = google_font_for_html(family) {
-                html_fonts.push(font);
+            if let Some(font) = classify_as_google_font(family) {
+                classified_fonts.push(font);
                 continue;
             }
         }
         if is_available(family, &available) {
             if embed_local_fonts {
-                html_fonts.push(FontForHtml {
+                classified_fonts.push(ClassifiedFont {
                     family: family.clone(),
                     source: FontSource::Local,
                 });
@@ -3223,13 +3223,13 @@ pub(crate) async fn classify_scenegraph_fonts(
         missing_fonts,
     )?;
 
-    Ok(html_fonts)
+    Ok(classified_fonts)
 }
 
 /// Result of analyzing a rendered Vega scenegraph for font embedding.
 pub(crate) struct FontAnalysis {
     /// Classified font metadata (Google or Local).
-    pub(crate) html_fonts: Vec<FontForHtml>,
+    pub(crate) classified_fonts: Vec<ClassifiedFont>,
     /// Characters used per (family, weight, style) — for subsetting.
     pub(crate) chars_by_key: HashMap<FontKey, BTreeSet<char>>,
     /// (weight, style) variants per family — for CDN URLs.

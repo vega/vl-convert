@@ -7,7 +7,7 @@
 //! that the SVG is parsed only once (in `postprocess_svg`).
 
 use crate::converter::{MissingFontsPolicy, SvgOpts, VlConverterConfig};
-use crate::extract::{FontForHtml, FontKey, FontSource, SvgAnalysis};
+use crate::extract::{ClassifiedFont, FontKey, FontSource, SvgAnalysis};
 use crate::font_embed::{generate_font_face_css, resolve_cdn_variants};
 use crate::html::font_import_rule;
 use crate::image_loading::{
@@ -70,7 +70,7 @@ fn apply_edits(mut svg: String, mut edits: Vec<SvgEdit>) -> String {
 #[allow(clippy::too_many_arguments)]
 fn build_svg_font_css(
     analysis: &SvgAnalysis,
-    classified_fonts: &[FontForHtml],
+    classified_fonts: &[ClassifiedFont],
     cdn_variants: &HashMap<String, BTreeSet<(String, String)>>,
     bundle: bool,
     config: &VlConverterConfig,
@@ -136,7 +136,7 @@ fn build_svg_font_css(
         }
 
         // @font-face blocks for local fonts only
-        let local_fonts: Vec<FontForHtml> = classified_fonts
+        let local_fonts: Vec<ClassifiedFont> = classified_fonts
             .iter()
             .filter(|f| matches!(f.source, FontSource::Local))
             .cloned()
@@ -185,7 +185,7 @@ pub(crate) async fn process_svg(
     svg: String,
     svg_opts: &SvgOpts,
     analysis: &SvgAnalysis,
-    classified_fonts: &[FontForHtml],
+    classified_fonts: &[ClassifiedFont],
     family_variants: &HashMap<String, BTreeSet<(String, String)>>,
     config: &VlConverterConfig,
     fontdb: &fontdb::Database,
