@@ -360,6 +360,9 @@ def configure(
         Embed locally available fonts as base64-encoded data URIs in SVG and HTML
         output. Does not apply to PDF/PNG/JPEG (which always embed fonts via fontdb).
         If ``None``, keep current value.
+    subset_fonts
+        Subset fonts to only the characters used in the chart. Applies to SVG
+        and HTML output. Default is ``True``. If ``None``, keep current value.
     missing_fonts
         Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
         If ``None``, keep current value.
@@ -528,6 +531,9 @@ def vega_to_html(
     bundle
         If True, bundle all dependencies in HTML file.
         If False (default), HTML file will load dependencies from only CDN
+    google_fonts
+        Google Fonts to use for this conversion. Each entry is a family name
+        string or a dict with ``"family"`` and optional ``"variants"``.
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -689,7 +695,8 @@ def vega_to_svg(
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
     bundle
-        Whether to bundle fonts into the SVG (not yet implemented)
+        If True, embed fonts and images as self-contained data URIs.
+        If False (default), use ``@import`` references for Google Fonts.
     Returns
     -------
     SVG image string.
@@ -744,6 +751,13 @@ def vegalite_fonts(
     include_font_face
         Whether to run the font subsetting pipeline and populate
         the ``font_face`` field on each variant (default False)
+    google_fonts
+        Google Fonts to use for this conversion. Each entry is a family name
+        string or a dict with ``"family"`` and optional ``"variants"``.
+    format_locale
+        d3-format locale name or dictionary
+    time_format_locale
+        d3-time-format locale name or dictionary
 
     Returns
     -------
@@ -772,6 +786,13 @@ def vega_fonts(
     include_font_face
         Whether to run the font subsetting pipeline and populate
         the ``font_face`` field on each variant (default False)
+    google_fonts
+        Google Fonts to use for this conversion. Each entry is a family name
+        string or a dict with ``"family"`` and optional ``"variants"``.
+    format_locale
+        d3-format locale name or dictionary
+    time_format_locale
+        d3-time-format locale name or dictionary
 
     Returns
     -------
@@ -802,8 +823,11 @@ def vegalite_to_html(
         Vega-Lite library version string (e.g. 'v5.15')
         (default to latest)
     bundle
-        If True, bundle all dependencies in HTML file
+        If True, bundle all dependencies in HTML file.
         If False (default), HTML file will load dependencies from only CDN
+    google_fonts
+        Google Fonts to use for this conversion. Each entry is a family name
+        string or a dict with ``"family"`` and optional ``"variants"``.
     config
         Chart configuration object to apply during conversion
     theme
@@ -1031,7 +1055,8 @@ def vegalite_to_svg(
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
     bundle
-        Whether to bundle fonts into the SVG (not yet implemented)
+        If True, embed fonts and images as self-contained data URIs.
+        If False (default), use ``@import`` references for Google Fonts.
     Returns
     -------
     SVG image string.
