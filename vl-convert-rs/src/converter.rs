@@ -45,7 +45,7 @@ use image::ImageReader;
 use resvg::render;
 
 use crate::extract::{
-    extract_fonts_from_vega, is_available, resolve_first_fonts, FirstFontStatus, ClassifiedFont,
+    extract_fonts_from_vega, is_available, resolve_first_fonts, ClassifiedFont, FirstFontStatus,
     FontKey, FontSource,
 };
 use crate::text::{

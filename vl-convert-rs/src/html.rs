@@ -423,7 +423,8 @@ impl VlConverter {
         let mut family_variants = variants_by_family(&chars_by_key);
 
         if let Some(ref requests) = explicit_requests {
-            let known: HashSet<String> = classified_fonts.iter().map(|f| f.family.clone()).collect();
+            let known: HashSet<String> =
+                classified_fonts.iter().map(|f| f.family.clone()).collect();
             for req in requests {
                 if !known.contains(&req.family) {
                     if let Some(font_id) = family_to_id(&req.family) {
