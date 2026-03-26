@@ -589,7 +589,9 @@ macro_rules! async_variant_doc {
 ///         (default to latest)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
+///         via Python's logging module. Use ``import logging;
+///         logging.basicConfig(level=logging.WARNING)`` to see them.
 /// Returns:
 ///     dict: Vega JSON specification dict
 #[pyfunction]
@@ -601,6 +603,7 @@ fn vegalite_to_vega(
     theme: Option<String>,
     show_warnings: Option<bool>,
 ) -> PyResult<PyObject> {
+    handle_show_warnings(show_warnings);
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = parse_optional_config(config)?;
 
@@ -614,8 +617,6 @@ fn vegalite_to_vega(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
-
         format_locale: None,
         time_format_locale: None,
         google_fonts: effective_google_fonts(None),
@@ -750,7 +751,9 @@ fn vega_to_scenegraph(
 ///         (default to latest)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
+///         via Python's logging module. Use ``import logging;
+///         logging.basicConfig(level=logging.WARNING)`` to see them.
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
@@ -772,6 +775,7 @@ fn vegalite_to_svg(
     vega_plugin: Option<String>,
     bundle: Option<bool>,
 ) -> PyResult<String> {
+    handle_show_warnings(show_warnings);
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -787,7 +791,6 @@ fn vegalite_to_svg(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -816,7 +819,9 @@ fn vegalite_to_svg(
 ///         (default to latest)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
+///         via Python's logging module. Use ``import logging;
+///         logging.basicConfig(level=logging.WARNING)`` to see them.
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
@@ -838,6 +843,7 @@ fn vegalite_to_scenegraph(
     format: &str,
     vega_plugin: Option<String>,
 ) -> PyResult<PyObject> {
+    handle_show_warnings(show_warnings);
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -852,7 +858,6 @@ fn vegalite_to_scenegraph(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -948,7 +953,9 @@ fn vega_to_png(
 ///     ppi (float): Pixels per inch (default 72)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
+///         via Python's logging module. Use ``import logging;
+///         logging.basicConfig(level=logging.WARNING)`` to see them.
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
@@ -970,6 +977,7 @@ fn vegalite_to_png(
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
 ) -> PyResult<PyObject> {
+    handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -984,7 +992,6 @@ fn vegalite_to_png(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -1062,7 +1069,9 @@ fn vega_to_jpeg(
 ///     quality (int): JPEG Quality between 0 (worst) and 100 (best). Default 90
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
-///     show_warnings (bool | None): Whether to print Vega-Lite compilation warnings (default false)
+///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
+///         via Python's logging module. Use ``import logging;
+///         logging.basicConfig(level=logging.WARNING)`` to see them.
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
@@ -1084,6 +1093,7 @@ fn vegalite_to_jpeg(
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
 ) -> PyResult<PyObject> {
+    handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -1098,7 +1108,6 @@ fn vegalite_to_jpeg(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -1213,7 +1222,6 @@ fn vegalite_to_pdf(
         vl_version,
         config,
         theme,
-        show_warnings: false,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -1320,7 +1328,6 @@ fn vegalite_to_html(
         vl_version,
         config,
         theme,
-        show_warnings: false,
 
         format_locale,
         time_format_locale,
@@ -1434,7 +1441,6 @@ fn vegalite_fonts(
         vl_version,
         config,
         theme,
-        show_warnings: false,
 
         format_locale,
         time_format_locale,
@@ -1617,6 +1623,26 @@ fn parse_json_spec(vl_spec: PyObject) -> PyResult<serde_json::Value> {
 
 fn parse_optional_config(config: Option<PyObject>) -> PyResult<Option<serde_json::Value>> {
     config.map(parse_json_spec).transpose()
+}
+
+fn handle_show_warnings(show_warnings: Option<bool>) {
+    if show_warnings == Some(true) {
+        Python::with_gil(|py| {
+            let _ = PyErr::warn(
+                py,
+                &py.get_type::<pyo3::exceptions::PyDeprecationWarning>(),
+                c"show_warnings is deprecated. Warnings are now always forwarded \
+                 via Python's logging module. Configure with: \
+                 import logging; logging.basicConfig(level=logging.WARNING)",
+                1,
+            );
+            let _ = py.run(
+                c"import logging; logging.basicConfig(level=logging.WARNING)",
+                None,
+                None,
+            );
+        });
+    }
 }
 
 /// Helper function to parse a Python string or dict as a ValueOrString.
@@ -2046,6 +2072,7 @@ fn vegalite_to_vega_asyncio<'py>(
     theme: Option<String>,
     show_warnings: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    handle_show_warnings(show_warnings);
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = parse_optional_config(config)?;
     let vl_version = if let Some(vl_version) = vl_version {
@@ -2057,8 +2084,6 @@ fn vegalite_to_vega_asyncio<'py>(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
-
         format_locale: None,
         time_format_locale: None,
         google_fonts: effective_google_fonts(None),
@@ -2186,6 +2211,7 @@ fn vegalite_to_svg_asyncio<'py>(
     vega_plugin: Option<String>,
     bundle: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    handle_show_warnings(show_warnings);
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -2199,7 +2225,6 @@ fn vegalite_to_svg_asyncio<'py>(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2243,6 +2268,7 @@ fn vegalite_to_scenegraph_asyncio<'py>(
     format: &str,
     vega_plugin: Option<String>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    handle_show_warnings(show_warnings);
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -2255,7 +2281,6 @@ fn vegalite_to_scenegraph_asyncio<'py>(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2349,6 +2374,7 @@ fn vegalite_to_png_asyncio<'py>(
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -2362,7 +2388,6 @@ fn vegalite_to_png_asyncio<'py>(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2435,6 +2460,7 @@ fn vegalite_to_jpeg_asyncio<'py>(
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -2448,7 +2474,6 @@ fn vegalite_to_jpeg_asyncio<'py>(
         vl_version,
         config,
         theme,
-        show_warnings: show_warnings.unwrap_or(false),
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2531,7 +2556,6 @@ fn vegalite_to_pdf_asyncio<'py>(
         vl_version,
         config,
         theme,
-        show_warnings: false,
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(None),
@@ -2623,7 +2647,6 @@ fn vegalite_to_html_asyncio<'py>(
         vl_version,
         config,
         theme,
-        show_warnings: false,
 
         format_locale,
         time_format_locale,
@@ -2736,7 +2759,6 @@ fn vegalite_fonts_asyncio<'py>(
         vl_version,
         config,
         theme,
-        show_warnings: false,
 
         format_locale,
         time_format_locale,

@@ -927,7 +927,6 @@ pub struct VlOpts {
     pub config: Option<serde_json::Value>,
     pub theme: Option<String>,
     pub vl_version: VlVersion,
-    pub show_warnings: bool,
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
@@ -1545,35 +1544,57 @@ import('{msgpack_url}').then((imported) => {{
                 .execute_script("ext:<anon>", import_code)?;
 
             let logger_code = r#"""
+var _logMessages = { error: new Map(), warn: new Map(), info: new Map(), debug: new Map() };
+
 class WarningCollector {
   constructor() {
-    this.warningsLogs = [];
+    this._level = 4;
   }
 
   level(lvl) {
-    if (lvl == null) return 0;
+    if (arguments.length === 0) return this._level;
+    this._level = lvl;
     return this;
   }
 
   error(msg) {
-    console.error(msg);
+    let m = _logMessages.error;
+    m.set(msg, (m.get(msg) || 0) + 1);
     return this;
   }
 
   warn(msg) {
-    this.warningsLogs.push(msg);
+    let m = _logMessages.warn;
+    m.set(msg, (m.get(msg) || 0) + 1);
     return this;
   }
 
-  // skip info an debug
-  info() {
+  info(msg) {
+    let m = _logMessages.info;
+    m.set(msg, (m.get(msg) || 0) + 1);
     return this;
   }
 
-  debug() {
+  debug(msg) {
+    let m = _logMessages.debug;
+    m.set(msg, (m.get(msg) || 0) + 1);
     return this;
   }
 }
+
+function _collapsedLogMessages() {
+  let result = {};
+  for (let level of ["error", "warn", "info", "debug"]) {
+    let entries = [];
+    for (let [msg, count] of _logMessages[level]) {
+      entries.push(count > 1 ? `(${count}x) ${msg}` : msg);
+    }
+    if (entries.length > 0) result[level] = entries;
+  }
+  return Object.keys(result).length > 0 ? JSON.stringify(result) : "";
+}
+
+var warningCollector = new WarningCollector();
             """#
             .to_string();
 
@@ -1646,7 +1667,7 @@ function buildLoader(errors) {
 function vegaToView(vgSpec, errors) {
     let runtime = vega.parse(vgSpec);
     const loader = buildLoader(errors);
-    return new vega.View(runtime, {renderer: 'none', loader});
+    return new vega.View(runtime, {renderer: 'none', loader, logLevel: vega.Warn, logger: warningCollector});
 }
 
 function vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors) {
@@ -1956,7 +1977,7 @@ import('{vl_url}').then((imported) => {{
             // Create and initialize function string
             let function_code = format!(
                 r#"
-function compileVegaLite_{ver_name}(vlSpec, config, theme, warnings) {{
+function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
     let options = {{}};
 
     // Handle config and theme
@@ -1968,25 +1989,23 @@ function compileVegaLite_{ver_name}(vlSpec, config, theme, warnings) {{
         options["config"] = config;
     }}
 
-    if (!warnings) {{
-        options["logger"] = new WarningCollector();
-    }}
+    options["logger"] = warningCollector;
 
     return {ver_name}.compile(vlSpec, options).spec
 }}
 
-function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings, formatLocale, timeFormatLocale, errors) {{
-    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
+function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, errors) {{
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
     return vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors)
 }}
 
-function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, formatLocale, timeFormatLocale, errors) {{
-    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
+function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, errors) {{
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
     return vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, errors)
 }}
 
-function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLocale, timeFormatLocale, scale, errors) {{
-    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
+function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, scale, errors) {{
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
     return vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors)
 }}
 "#,
@@ -2182,6 +2201,34 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLoca
         Ok(value)
     }
 
+    async fn emit_js_log_messages(&mut self) -> Result<(), AnyError> {
+        let json = self
+            .execute_script_to_string("_collapsedLogMessages()")
+            .await?;
+        if json.is_empty() {
+            return Ok(());
+        }
+        let messages: serde_json::Value = serde_json::from_str(&json)?;
+        if let Some(obj) = messages.as_object() {
+            for (level, entries) in obj {
+                if let Some(arr) = entries.as_array() {
+                    for entry in arr {
+                        if let Some(msg) = entry.as_str() {
+                            match level.as_str() {
+                                "error" => log::error!("{}", msg),
+                                "warn" => log::warn!("{}", msg),
+                                "info" => log::info!("{}", msg),
+                                "debug" => log::debug!("{}", msg),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub async fn vegalite_to_vega(
         &mut self,
         vl_spec: impl Into<ValueOrString>,
@@ -2201,21 +2248,21 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLoca
 
         let code = format!(
             r#"
+for (let k in _logMessages) _logMessages[k].clear();
 compileVegaLite_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
-    {theme_arg},
-    {show_warnings}
+    {theme_arg}
 )
 "#,
             ver_name = vl_opts.vl_version,
             spec_arg_id = spec_arg.id(),
             config_arg_id = config_arg.id(),
             theme_arg = theme_arg,
-            show_warnings = vl_opts.show_warnings,
         );
 
         let value = self.execute_script_to_json(&code).await?;
+        self.emit_js_log_messages().await?;
         Ok(value)
     }
 
@@ -2254,11 +2301,11 @@ compileVegaLite_{ver_name:?}(
             r#"
 var svg;
 var errors = [];
+for (let k in _logMessages) _logMessages[k].clear();
 vegaLiteToSvg_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
-    {show_warnings},
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
     errors,
@@ -2270,7 +2317,6 @@ vegaLiteToSvg_{ver_name:?}(
 }});
 "#,
             ver_name = vl_opts.vl_version,
-            show_warnings = vl_opts.show_warnings,
             spec_arg_id = spec_arg.id(),
             config_arg_id = config_arg.id(),
             format_locale_id = format_locale_arg.id(),
@@ -2291,6 +2337,7 @@ vegaLiteToSvg_{ver_name:?}(
             bail!("{access_errors}");
         }
 
+        self.emit_js_log_messages().await?;
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -2330,11 +2377,11 @@ vegaLiteToSvg_{ver_name:?}(
         let code = format!(
             r#"
 var errors = [];
+for (let k in _logMessages) _logMessages[k].clear();
 vegaLiteToScenegraph_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
-    {show_warnings},
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
     errors,
@@ -2346,7 +2393,6 @@ vegaLiteToScenegraph_{ver_name:?}(
 }})
 "#,
             ver_name = vl_opts.vl_version,
-            show_warnings = vl_opts.show_warnings,
             spec_arg_id = spec_arg.id(),
             config_arg_id = config_arg.id(),
             format_locale_id = format_locale_arg.id(),
@@ -2368,6 +2414,7 @@ vegaLiteToScenegraph_{ver_name:?}(
             bail!("{access_errors}");
         }
 
+        self.emit_js_log_messages().await?;
         result.take_result()
     }
 
@@ -2410,6 +2457,7 @@ vegaLiteToScenegraph_{ver_name:?}(
             r#"
 var svg;
 var errors = [];
+for (let k in _logMessages) _logMessages[k].clear();
 vegaToSvg(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
@@ -2441,6 +2489,7 @@ vegaToSvg(
             bail!("{access_errors}");
         }
 
+        self.emit_js_log_messages().await?;
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -2471,6 +2520,7 @@ vegaToSvg(
         let code = format!(
             r#"
 var errors = [];
+for (let k in _logMessages) _logMessages[k].clear();
 vegaToScenegraph(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
@@ -2503,6 +2553,7 @@ vegaToScenegraph(
             bail!("{access_errors}");
         }
 
+        self.emit_js_log_messages().await?;
         result.take_result()
     }
 
@@ -2598,6 +2649,7 @@ delete themes.default
             r#"
 var canvasPngData;
 var errors = [];
+for (let k in _logMessages) _logMessages[k].clear();
 vegaToCanvas(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
@@ -2630,6 +2682,7 @@ vegaToCanvas(
             bail!("{access_errors}");
         }
 
+        self.emit_js_log_messages().await?;
         let png_data = self.execute_script_to_bytes("canvasPngData").await?;
         Ok(png_data)
     }
@@ -2671,11 +2724,11 @@ vegaToCanvas(
             r#"
 var canvasPngData;
 var errors = [];
+for (let k in _logMessages) _logMessages[k].clear();
 vegaLiteToCanvas_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
-    {show_warnings},
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
     {scale},
@@ -2688,7 +2741,6 @@ vegaLiteToCanvas_{ver_name:?}(
 }})
 "#,
             ver_name = vl_opts.vl_version,
-            show_warnings = vl_opts.show_warnings,
             spec_arg_id = spec_arg.id(),
             config_arg_id = config_arg.id(),
             format_locale_id = format_locale_arg.id(),
@@ -2709,6 +2761,7 @@ vegaLiteToCanvas_{ver_name:?}(
             bail!("{access_errors}");
         }
 
+        self.emit_js_log_messages().await?;
         let png_data = self.execute_script_to_bytes("canvasPngData").await?;
         Ok(png_data)
     }

@@ -785,8 +785,6 @@ mod test_png_theme_config {
                     vl_version,
                     theme: Some(theme.to_string()),
                     config: Some(json!({"background": BACKGROUND_COLOR})),
-                    show_warnings: false,
-
                     format_locale: None,
                     time_format_locale: None,
                     google_fonts: None,
@@ -812,8 +810,6 @@ mod test_png_theme_config {
                     vl_version,
                     theme: None,
                     config: Some(json!({"background": BACKGROUND_COLOR})),
-                    show_warnings: false,
-
                     format_locale: None,
                     time_format_locale: None,
                     google_fonts: None,

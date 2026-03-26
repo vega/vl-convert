@@ -34,6 +34,26 @@ impl MissingFontsArg {
     }
 }
 
+#[derive(Debug, Clone, Copy, clap::ValueEnum, Default)]
+enum LogLevel {
+    Error,
+    #[default]
+    Warn,
+    Info,
+    Debug,
+}
+
+impl LogLevel {
+    fn to_filter(self) -> log::LevelFilter {
+        match self {
+            LogLevel::Error => log::LevelFilter::Error,
+            LogLevel::Warn => log::LevelFilter::Warn,
+            LogLevel::Info => log::LevelFilter::Info,
+            LogLevel::Debug => log::LevelFilter::Debug,
+        }
+    }
+}
+
 const DEFAULT_VL_VERSION: &str = "6.4";
 const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
 
@@ -108,6 +128,10 @@ struct Cli {
     #[arg(long = "plugin-import-domains", global = true)]
     plugin_import_domains: Vec<String>,
 
+    /// Log level for Vega/Vega-Lite messages
+    #[arg(long, global = true, value_enum, default_value_t = LogLevel::Warn)]
+    log_level: LogLevel,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -140,9 +164,6 @@ enum Commands {
         #[arg(short, long)]
         pretty: bool,
 
-        /// Whether to show Vega-Lite compilation warnings
-        #[arg(long)]
-        show_warnings: bool,
     },
 
     /// Convert a Vega-Lite specification to an SVG image
@@ -167,9 +188,6 @@ enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// Whether to show Vega-Lite compilation warnings
-        #[arg(long)]
-        show_warnings: bool,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -218,9 +236,6 @@ enum Commands {
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
 
-        /// Whether to show Vega-Lite compilation warnings
-        #[arg(long)]
-        show_warnings: bool,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -265,9 +280,6 @@ enum Commands {
         #[arg(short, long, default_value = "90")]
         quality: u8,
 
-        /// Whether to show Vega-Lite compilation warnings
-        #[arg(short, long)]
-        show_warnings: bool,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -304,9 +316,6 @@ enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// Whether to show Vega-Lite compilation warnings
-        #[arg(long)]
-        show_warnings: bool,
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -686,8 +695,13 @@ async fn main() -> Result<(), anyhow::Error> {
         gc_after_conversion,
         vega_plugin,
         plugin_import_domains,
+        log_level,
         command,
     } = Cli::parse();
+
+    env_logger::Builder::new()
+        .filter_module("vl_convert", log_level.to_filter())
+        .init();
     let missing_fonts = missing_fonts_arg.to_policy();
     let config_google_fonts = parse_google_font_requests(&google_font_families)?;
     let vega_plugins = if vega_plugin.is_empty() {
@@ -744,7 +758,6 @@ async fn main() -> Result<(), anyhow::Error> {
             theme,
             config,
             pretty,
-            show_warnings,
         } => {
             vl_2_vg(
                 input_vegalite_file.as_deref(),
@@ -753,7 +766,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 theme,
                 config,
                 pretty,
-                show_warnings,
                 base_config,
             )
             .await?
@@ -764,7 +776,6 @@ async fn main() -> Result<(), anyhow::Error> {
             vl_version,
             theme,
             config,
-            show_warnings,
             font_dir,
             format_locale,
             time_format_locale,
@@ -778,7 +789,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 &vl_version,
                 theme,
                 config,
-                show_warnings,
                 format_locale,
                 time_format_locale,
                 svg_opts,
@@ -794,7 +804,6 @@ async fn main() -> Result<(), anyhow::Error> {
             config,
             scale,
             ppi,
-            show_warnings,
             font_dir,
             format_locale,
             time_format_locale,
@@ -808,7 +817,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 config,
                 scale,
                 ppi,
-                show_warnings,
                 format_locale,
                 time_format_locale,
                 base_config,
@@ -823,7 +831,6 @@ async fn main() -> Result<(), anyhow::Error> {
             config,
             scale,
             quality,
-            show_warnings,
             font_dir,
             format_locale,
             time_format_locale,
@@ -837,7 +844,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 config,
                 scale,
                 quality,
-                show_warnings,
                 format_locale,
                 time_format_locale,
                 base_config,
@@ -850,7 +856,6 @@ async fn main() -> Result<(), anyhow::Error> {
             vl_version,
             theme,
             config,
-            show_warnings,
             font_dir,
             format_locale,
             time_format_locale,
@@ -862,7 +867,6 @@ async fn main() -> Result<(), anyhow::Error> {
                 &vl_version,
                 theme,
                 config,
-                show_warnings,
                 format_locale,
                 time_format_locale,
                 base_config,
@@ -908,8 +912,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         config,
                         theme,
                         vl_version,
-                        show_warnings: false,
-
+        
                         format_locale,
                         time_format_locale,
                         google_fonts,
@@ -954,8 +957,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         config,
                         theme,
                         vl_version,
-                        show_warnings: false,
-
+        
                         format_locale,
                         time_format_locale,
                         google_fonts,
@@ -1548,7 +1550,6 @@ async fn vl_2_vg(
     theme: Option<String>,
     config: Option<String>,
     pretty: bool,
-    show_warnings: bool,
     converter_config: VlConverterConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
@@ -1565,7 +1566,6 @@ async fn vl_2_vg(
                 vl_version,
                 theme,
                 config,
-                show_warnings,
                 format_locale: None,
                 time_format_locale: None,
                 google_fonts: None,
@@ -1772,7 +1772,6 @@ async fn vl_2_svg(
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
-    show_warnings: bool,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     svg_opts: SvgOpts,
@@ -1795,7 +1794,6 @@ async fn vl_2_svg(
                 vl_version,
                 config,
                 theme,
-                show_warnings,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -1825,7 +1823,6 @@ async fn vl_2_png(
     config: Option<String>,
     scale: f32,
     ppi: f32,
-    show_warnings: bool,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     converter_config: VlConverterConfig,
@@ -1847,7 +1844,6 @@ async fn vl_2_png(
                 vl_version,
                 config,
                 theme,
-                show_warnings,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -1880,7 +1876,6 @@ async fn vl_2_jpeg(
     config: Option<String>,
     scale: f32,
     quality: u8,
-    show_warnings: bool,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     converter_config: VlConverterConfig,
@@ -1902,7 +1897,6 @@ async fn vl_2_jpeg(
                 vl_version,
                 config,
                 theme,
-                show_warnings,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
@@ -1933,7 +1927,6 @@ async fn vl_2_pdf(
     vl_version: &str,
     theme: Option<String>,
     config: Option<String>,
-    show_warnings: bool,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     converter_config: VlConverterConfig,
@@ -1955,7 +1948,6 @@ async fn vl_2_pdf(
                 vl_version,
                 config,
                 theme,
-                show_warnings,
                 format_locale,
                 time_format_locale,
                 google_fonts: None,
