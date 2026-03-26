@@ -1629,9 +1629,10 @@ fn handle_show_warnings(show_warnings: Option<bool>) {
     if show_warnings == Some(true) {
         Python::with_gil(|py| {
             let _ = py.run(
-                c"import warnings, logging; \
-                  warnings.warn('show_warnings is deprecated. Warnings are now always forwarded via Python\\'s logging module. Configure with: import logging; logging.basicConfig(level=logging.WARNING)', DeprecationWarning, stacklevel=2); \
-                  logging.basicConfig(level=logging.WARNING)",
+                c"import warnings; warnings.warn(\
+                  'show_warnings is deprecated. Warnings are now always forwarded via '\
+                  'Python\\'s logging module. Configure with: import logging; '\
+                  'logging.basicConfig(level=logging.WARNING)', DeprecationWarning, stacklevel=2)",
                 None,
                 None,
             );

@@ -1546,7 +1546,23 @@ import('{msgpack_url}').then((imported) => {{
             let logger_code = r#"""
 var _logMessages = { error: new Map(), warn: new Map(), info: new Map(), debug: new Map() };
 
-class WarningCollector {
+function _clearLogMessages() {
+  for (let level of ["error", "warn", "info", "debug"]) _logMessages[level].clear();
+}
+
+function _collapsedLogMessages() {
+  let result = {};
+  for (let level of ["error", "warn", "info", "debug"]) {
+    let entries = [];
+    for (let [msg, count] of _logMessages[level]) {
+      entries.push(count > 1 ? `(${count}x) ${msg}` : msg);
+    }
+    if (entries.length > 0) result[level] = entries;
+  }
+  return Object.keys(result).length > 0 ? JSON.stringify(result) : "";
+}
+
+class LogCollector {
   constructor() {
     this._level = 4;
   }
@@ -1582,19 +1598,7 @@ class WarningCollector {
   }
 }
 
-function _collapsedLogMessages() {
-  let result = {};
-  for (let level of ["error", "warn", "info", "debug"]) {
-    let entries = [];
-    for (let [msg, count] of _logMessages[level]) {
-      entries.push(count > 1 ? `(${count}x) ${msg}` : msg);
-    }
-    if (entries.length > 0) result[level] = entries;
-  }
-  return Object.keys(result).length > 0 ? JSON.stringify(result) : "";
-}
-
-var warningCollector = new WarningCollector();
+var logCollector = new LogCollector();
             """#
             .to_string();
 
@@ -1667,7 +1671,7 @@ function buildLoader(errors) {
 function vegaToView(vgSpec, errors) {
     let runtime = vega.parse(vgSpec);
     const loader = buildLoader(errors);
-    return new vega.View(runtime, {renderer: 'none', loader, logLevel: vega.Warn, logger: warningCollector});
+    return new vega.View(runtime, {renderer: 'none', loader, logLevel: vega.Warn, logger: logCollector});
 }
 
 function vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors) {
@@ -1989,7 +1993,7 @@ function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
         options["config"] = config;
     }}
 
-    options["logger"] = warningCollector;
+    options["logger"] = logCollector;
 
     return {ver_name}.compile(vlSpec, options).spec
 }}
@@ -2201,14 +2205,27 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
         Ok(value)
     }
 
-    async fn emit_js_log_messages(&mut self) -> Result<(), AnyError> {
-        let json = self
+    async fn emit_js_log_messages(&mut self) {
+        let json = match self
             .execute_script_to_string("_collapsedLogMessages()")
-            .await?;
+            .await
+        {
+            Ok(json) => json,
+            Err(e) => {
+                log::debug!("Failed to retrieve JS log messages: {e}");
+                return;
+            }
+        };
         if json.is_empty() {
-            return Ok(());
+            return;
         }
-        let messages: serde_json::Value = serde_json::from_str(&json)?;
+        let messages: serde_json::Value = match serde_json::from_str(&json) {
+            Ok(v) => v,
+            Err(e) => {
+                log::debug!("Failed to parse JS log messages: {e}");
+                return;
+            }
+        };
         if let Some(obj) = messages.as_object() {
             for (level, entries) in obj {
                 if let Some(arr) = entries.as_array() {
@@ -2226,7 +2243,6 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
                 }
             }
         }
-        Ok(())
     }
 
     pub async fn vegalite_to_vega(
@@ -2248,7 +2264,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
 
         let code = format!(
             r#"
-for (let k in _logMessages) _logMessages[k].clear();
+_clearLogMessages();
 compileVegaLite_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
@@ -2262,7 +2278,7 @@ compileVegaLite_{ver_name:?}(
         );
 
         let value = self.execute_script_to_json(&code).await?;
-        self.emit_js_log_messages().await?;
+        self.emit_js_log_messages().await;
         Ok(value)
     }
 
@@ -2301,7 +2317,7 @@ compileVegaLite_{ver_name:?}(
             r#"
 var svg;
 var errors = [];
-for (let k in _logMessages) _logMessages[k].clear();
+_clearLogMessages();
 vegaLiteToSvg_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
@@ -2333,11 +2349,10 @@ vegaLiteToSvg_{ver_name:?}(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
-        self.emit_js_log_messages().await?;
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -2377,7 +2392,7 @@ vegaLiteToSvg_{ver_name:?}(
         let code = format!(
             r#"
 var errors = [];
-for (let k in _logMessages) _logMessages[k].clear();
+_clearLogMessages();
 vegaLiteToScenegraph_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
@@ -2410,11 +2425,10 @@ vegaLiteToScenegraph_{ver_name:?}(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
-        self.emit_js_log_messages().await?;
         result.take_result()
     }
 
@@ -2457,7 +2471,7 @@ vegaLiteToScenegraph_{ver_name:?}(
             r#"
 var svg;
 var errors = [];
-for (let k in _logMessages) _logMessages[k].clear();
+_clearLogMessages();
 vegaToSvg(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
@@ -2485,11 +2499,10 @@ vegaToSvg(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
-        self.emit_js_log_messages().await?;
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -2520,7 +2533,7 @@ vegaToSvg(
         let code = format!(
             r#"
 var errors = [];
-for (let k in _logMessages) _logMessages[k].clear();
+_clearLogMessages();
 vegaToScenegraph(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
@@ -2549,11 +2562,10 @@ vegaToScenegraph(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
-        self.emit_js_log_messages().await?;
         result.take_result()
     }
 
@@ -2649,7 +2661,7 @@ delete themes.default
             r#"
 var canvasPngData;
 var errors = [];
-for (let k in _logMessages) _logMessages[k].clear();
+_clearLogMessages();
 vegaToCanvas(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
@@ -2678,11 +2690,10 @@ vegaToCanvas(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
-        self.emit_js_log_messages().await?;
         let png_data = self.execute_script_to_bytes("canvasPngData").await?;
         Ok(png_data)
     }
@@ -2724,7 +2735,7 @@ vegaToCanvas(
             r#"
 var canvasPngData;
 var errors = [];
-for (let k in _logMessages) _logMessages[k].clear();
+_clearLogMessages();
 vegaLiteToCanvas_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
@@ -2757,11 +2768,10 @@ vegaLiteToCanvas_{ver_name:?}(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
-        self.emit_js_log_messages().await?;
         let png_data = self.execute_script_to_bytes("canvasPngData").await?;
         Ok(png_data)
     }
