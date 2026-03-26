@@ -163,7 +163,6 @@ enum Commands {
         /// Pretty-print JSON in output file
         #[arg(short, long)]
         pretty: bool,
-
     },
 
     /// Convert a Vega-Lite specification to an SVG image
@@ -187,7 +186,6 @@ enum Commands {
         /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
         #[arg(short, long)]
         config: Option<String>,
-
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -236,7 +234,6 @@ enum Commands {
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
 
-
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
@@ -280,7 +277,6 @@ enum Commands {
         #[arg(short, long, default_value = "90")]
         quality: u8,
 
-
         /// Additional directory to search for fonts
         #[arg(long)]
         font_dir: Option<String>,
@@ -315,7 +311,6 @@ enum Commands {
         /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
         #[arg(short, long)]
         config: Option<String>,
-
 
         /// Additional directory to search for fonts
         #[arg(long)]
@@ -912,7 +907,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         config,
                         theme,
                         vl_version,
-        
+
                         format_locale,
                         time_format_locale,
                         google_fonts,
@@ -957,7 +952,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         config,
                         theme,
                         vl_version,
-        
+
                         format_locale,
                         time_format_locale,
                         google_fonts,

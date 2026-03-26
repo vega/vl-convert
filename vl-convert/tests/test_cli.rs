@@ -1461,9 +1461,9 @@ mod test_stdin_stdout {
 }
 
 mod test_log_level {
+    use crate::*;
     use std::io::Write;
     use std::process::{Command, Stdio};
-    use crate::*;
 
     fn log_scale_spec() -> String {
         r#"{
@@ -1485,9 +1485,11 @@ mod test_log_level {
 
         let mut cmd = Command::cargo_bin("vl-convert")?;
         let mut child = cmd
-            .arg("--log-level").arg("warn")
+            .arg("--log-level")
+            .arg("warn")
             .arg("vl2svg")
-            .arg("-o").arg("-")
+            .arg("-o")
+            .arg("-")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1514,9 +1516,11 @@ mod test_log_level {
 
         let mut cmd = Command::cargo_bin("vl-convert")?;
         let mut child = cmd
-            .arg("--log-level").arg("error")
+            .arg("--log-level")
+            .arg("error")
             .arg("vl2svg")
-            .arg("-o").arg("-")
+            .arg("-o")
+            .arg("-")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
