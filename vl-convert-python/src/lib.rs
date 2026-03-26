@@ -1628,16 +1628,10 @@ fn parse_optional_config(config: Option<PyObject>) -> PyResult<Option<serde_json
 fn handle_show_warnings(show_warnings: Option<bool>) {
     if show_warnings == Some(true) {
         Python::with_gil(|py| {
-            let _ = PyErr::warn(
-                py,
-                &py.get_type::<pyo3::exceptions::PyDeprecationWarning>(),
-                c"show_warnings is deprecated. Warnings are now always forwarded \
-                 via Python's logging module. Configure with: \
-                 import logging; logging.basicConfig(level=logging.WARNING)",
-                1,
-            );
             let _ = py.run(
-                c"import logging; logging.basicConfig(level=logging.WARNING)",
+                c"import warnings, logging; \
+                  warnings.warn('show_warnings is deprecated. Warnings are now always forwarded via Python\\'s logging module. Configure with: import logging; logging.basicConfig(level=logging.WARNING)', DeprecationWarning, stacklevel=2); \
+                  logging.basicConfig(level=logging.WARNING)",
                 None,
                 None,
             );
