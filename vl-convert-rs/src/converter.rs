@@ -1544,58 +1544,44 @@ import('{msgpack_url}').then((imported) => {{
                 .execute_script("ext:<anon>", import_code)?;
 
             let logger_code = r#"""
-var _logMessages = { error: new Map(), warn: new Map(), info: new Map(), debug: new Map() };
+var _logEntries = [];
 
 function _clearLogMessages() {
-  for (let level of ["error", "warn", "info", "debug"]) _logMessages[level].clear();
+  _logEntries.length = 0;
 }
 
 function _collapsedLogMessages() {
-  let result = {};
-  for (let level of ["error", "warn", "info", "debug"]) {
-    let entries = [];
-    for (let [msg, count] of _logMessages[level]) {
-      entries.push(count > 1 ? `(${count}x) ${msg}` : msg);
+  if (_logEntries.length === 0) return "";
+  let result = [];
+  let i = 0;
+  while (i < _logEntries.length) {
+    let entry = _logEntries[i];
+    let count = 1;
+    while (i + count < _logEntries.length
+        && _logEntries[i + count].level === entry.level
+        && _logEntries[i + count].msg === entry.msg) {
+      count++;
     }
-    if (entries.length > 0) result[level] = entries;
+    result.push({
+      level: entry.level,
+      msg: count > 1 ? `(${count}x) ${entry.msg}` : entry.msg
+    });
+    i += count;
   }
-  return Object.keys(result).length > 0 ? JSON.stringify(result) : "";
+  return JSON.stringify(result);
 }
 
 class LogCollector {
-  constructor() {
-    this._level = 4;
-  }
-
+  constructor() { this._level = 4; }
   level(lvl) {
     if (arguments.length === 0) return this._level;
     this._level = lvl;
     return this;
   }
-
-  error(msg) {
-    let m = _logMessages.error;
-    m.set(msg, (m.get(msg) || 0) + 1);
-    return this;
-  }
-
-  warn(msg) {
-    let m = _logMessages.warn;
-    m.set(msg, (m.get(msg) || 0) + 1);
-    return this;
-  }
-
-  info(msg) {
-    let m = _logMessages.info;
-    m.set(msg, (m.get(msg) || 0) + 1);
-    return this;
-  }
-
-  debug(msg) {
-    let m = _logMessages.debug;
-    m.set(msg, (m.get(msg) || 0) + 1);
-    return this;
-  }
+  error(msg) { _logEntries.push({level: "error", msg}); return this; }
+  warn(msg)  { _logEntries.push({level: "warn", msg});  return this; }
+  info(msg)  { _logEntries.push({level: "info", msg});   return this; }
+  debug(msg) { _logEntries.push({level: "debug", msg});  return this; }
 }
 
 var logCollector = new LogCollector();
@@ -2219,28 +2205,22 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
         if json.is_empty() {
             return;
         }
-        let messages: serde_json::Value = match serde_json::from_str(&json) {
+        let entries: Vec<serde_json::Value> = match serde_json::from_str(&json) {
             Ok(v) => v,
             Err(e) => {
                 log::debug!("Failed to parse JS log messages: {e}");
                 return;
             }
         };
-        if let Some(obj) = messages.as_object() {
-            for (level, entries) in obj {
-                if let Some(arr) = entries.as_array() {
-                    for entry in arr {
-                        if let Some(msg) = entry.as_str() {
-                            match level.as_str() {
-                                "error" => log::error!("{}", msg),
-                                "warn" => log::warn!("{}", msg),
-                                "info" => log::info!("{}", msg),
-                                "debug" => log::debug!("{}", msg),
-                                _ => {}
-                            }
-                        }
-                    }
-                }
+        for entry in &entries {
+            let level = entry.get("level").and_then(|v| v.as_str()).unwrap_or("");
+            let msg = entry.get("msg").and_then(|v| v.as_str()).unwrap_or("");
+            match level {
+                "error" => log::error!("{}", msg),
+                "warn" => log::warn!("{}", msg),
+                "info" => log::info!("{}", msg),
+                "debug" => log::debug!("{}", msg),
+                _ => {}
             }
         }
     }
