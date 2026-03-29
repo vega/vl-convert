@@ -545,7 +545,7 @@ jobs:
               echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections &&
               apt-get install -y ttf-mscorefonts-installer fontconfig &&
               fc-cache -f &&
-              pip install /dist/*aarch64*.whl pytest scikit-image pypdfium2 &&
+              pip install /dist/*aarch64*.whl pytest scikit-image pypdfium2 inline-snapshot &&
               cd /workspace/vl-convert-python &&
               python /generate_images.py &&
               pytest -v
