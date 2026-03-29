@@ -591,7 +591,7 @@ macro_rules! async_variant_doc {
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
 ///         via Python's logging module. Use ``import logging;
-///         logging.basicConfig(level=logging.WARNING)`` to see them.
+///         logging.getLogger("vl_convert_rs").setLevel(logging.WARNING)`` to see them.
 /// Returns:
 ///     dict: Vega JSON specification dict
 #[pyfunction]
@@ -753,7 +753,7 @@ fn vega_to_scenegraph(
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
 ///         via Python's logging module. Use ``import logging;
-///         logging.basicConfig(level=logging.WARNING)`` to see them.
+///         logging.getLogger("vl_convert_rs").setLevel(logging.WARNING)`` to see them.
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
@@ -821,7 +821,7 @@ fn vegalite_to_svg(
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
 ///         via Python's logging module. Use ``import logging;
-///         logging.basicConfig(level=logging.WARNING)`` to see them.
+///         logging.getLogger("vl_convert_rs").setLevel(logging.WARNING)`` to see them.
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
@@ -955,7 +955,7 @@ fn vega_to_png(
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
 ///         via Python's logging module. Use ``import logging;
-///         logging.basicConfig(level=logging.WARNING)`` to see them.
+///         logging.getLogger("vl_convert_rs").setLevel(logging.WARNING)`` to see them.
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
@@ -1071,7 +1071,7 @@ fn vega_to_jpeg(
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     show_warnings (bool | None): Deprecated. Warnings are now forwarded
 ///         via Python's logging module. Use ``import logging;
-///         logging.basicConfig(level=logging.WARNING)`` to see them.
+///         logging.getLogger("vl_convert_rs").setLevel(logging.WARNING)`` to see them.
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
@@ -1632,7 +1632,7 @@ fn handle_show_warnings(show_warnings: Option<bool>) {
                 c"import warnings; warnings.warn(\
                   'show_warnings is deprecated. Warnings are now always forwarded via '\
                   'Python\\'s logging module. Configure with: import logging; '\
-                  'logging.basicConfig(level=logging.WARNING)', DeprecationWarning, stacklevel=2)",
+                  'logging.getLogger(\"vl_convert_rs\").setLevel(logging.WARNING)', DeprecationWarning, stacklevel=2)",
                 None,
                 None,
             );

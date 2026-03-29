@@ -1,4 +1,4 @@
-[workspace]
+[project]
 name = "vl-convert"
 # This version is not used for publishing packages and doesn't need to be kept in sync
 version = "0.0.1"
@@ -50,7 +50,8 @@ playwright = ">=1.40"
 [dependencies]
 python = "3.11.*"
 maturin = "1.8.*"
-pytest = ">=8.2.2,<8.3"
+pytest = ">=8.3,<9"
+inline-snapshot = ">=0.20,<1"
 rust = "1.91.*"
 scikit-image = ">=0.23.2,<0.24"
 protobuf = ">=4.25.3,<5"

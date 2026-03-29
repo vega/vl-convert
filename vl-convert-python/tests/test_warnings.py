@@ -1,7 +1,8 @@
 import logging
 import warnings
-import pytest
+
 import vl_convert as vlc
+from inline_snapshot import snapshot
 
 
 BRACKETS_SPEC = {
@@ -37,8 +38,11 @@ def test_vega_runtime_warnings_captured(caplog):
         vlc.vegalite_to_svg(BRACKETS_SPEC)
 
     warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
-    assert any("Infinite extent" in msg for msg in warning_messages), (
-        f"Expected 'Infinite extent' warning, got: {warning_messages}"
+    assert warning_messages == snapshot(
+        [
+            'Infinite extent for field "Travel in .inches": [Infinity, -Infinity]',
+            'Infinite extent for field "Force in .N": [Infinity, -Infinity]',
+        ]
     )
 
 
@@ -48,8 +52,11 @@ def test_vl_compilation_warnings_captured(caplog):
         vlc.vegalite_to_svg(LOG_SCALE_SPEC)
 
     warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
-    assert any("Log scale" in msg for msg in warning_messages), (
-        f"Expected 'Log scale' warning, got: {warning_messages}"
+    assert warning_messages == snapshot(
+        [
+            "Can not resolve event source: window",
+            "Log scale domain includes zero: [0,200]",
+        ]
     )
 
 

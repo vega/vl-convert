@@ -1547,7 +1547,7 @@ import('{msgpack_url}').then((imported) => {{
 var _logEntries = [];
 
 function _clearLogMessages() {
-  _logEntries.length = 0;
+  _logEntries.length = 0; // truncates array; old entries become GC-eligible
 }
 
 function _collapsedLogMessages() {
@@ -1657,7 +1657,7 @@ function buildLoader(errors) {
 function vegaToView(vgSpec, errors) {
     let runtime = vega.parse(vgSpec);
     const loader = buildLoader(errors);
-    return new vega.View(runtime, {renderer: 'none', loader, logLevel: vega.Warn, logger: logCollector});
+    return new vega.View(runtime, {renderer: 'none', loader, logLevel: vega.Debug, logger: logCollector});
 }
 
 function vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors) {
