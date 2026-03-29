@@ -319,7 +319,7 @@ fn validate_file_path(path: &str, policy: &DataAccessPolicy) -> Result<PathBuf, 
     Ok(canonical)
 }
 
-#[op2(async)]
+#[op2]
 #[string]
 pub async fn op_vega_data_fetch(
     state: Rc<RefCell<OpState>>,
@@ -351,7 +351,7 @@ pub async fn op_vega_data_fetch(
         .map_err(|e| JsErrorBox::generic(format!("Failed to read response body for '{url}': {e}")))
 }
 
-#[op2(async)]
+#[op2]
 #[buffer]
 pub async fn op_vega_data_fetch_bytes(
     state: Rc<RefCell<OpState>>,
@@ -384,7 +384,7 @@ pub async fn op_vega_data_fetch_bytes(
         .map_err(|e| JsErrorBox::generic(format!("Failed to read response body for '{url}': {e}")))
 }
 
-#[op2(async)]
+#[op2]
 #[string]
 pub async fn op_vega_file_read(
     state: Rc<RefCell<OpState>>,
@@ -405,7 +405,7 @@ pub async fn op_vega_file_read(
     })
 }
 
-#[op2(async)]
+#[op2]
 #[buffer]
 pub async fn op_vega_file_read_bytes(
     state: Rc<RefCell<OpState>>,
