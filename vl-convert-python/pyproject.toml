@@ -12,6 +12,14 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3,<9",
+    "inline-snapshot>=0.20,<1",
+    "scikit-image>=0.23.2,<0.24",
+    "pypdfium2>=4.30.0,<5",
+]
+
 [tool.maturin]
 sdist-include = ["*_thirdparty.*"]
 
