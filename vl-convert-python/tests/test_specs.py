@@ -224,6 +224,12 @@ def test_svg_pythonw(name, as_dict):
     assert response == "ok"
 
 
+# Specs with live map tiles need relaxed tolerance because OSM tiles
+# change over time as the provider updates their rendering style.
+MAP_TILE_SPECS = {"maptile_background"}
+MAP_TILE_TOL = 0.90
+
+
 @pytest.mark.parametrize(
     "name,scale",
     [
@@ -244,15 +250,16 @@ def test_png(name, scale, as_dict):
         vl_spec = json.loads(vl_spec)
 
     expected_png = load_expected_png(name, vl_version)
+    tol = MAP_TILE_TOL if name in MAP_TILE_SPECS else 0.994
 
     # Convert to vega first
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     png = vlc.vega_to_png(vg_spec, scale=scale)
-    check_png(png, expected_png, name=f"png_vega_{name}")
+    check_png(png, expected_png, tol=tol, name=f"png_vega_{name}")
 
     # Convert directly to image
     png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version, scale=scale)
-    check_png(png, expected_png, name=f"png_vegalite_{name}")
+    check_png(png, expected_png, tol=tol, name=f"png_vegalite_{name}")
 
 
 def test_png_google_fonts():
@@ -330,7 +337,7 @@ def test_jpeg(name, scale, as_dict):
         ("circle_binned", 0.97),
         ("stacked_bar_h", 0.975),
         ("remote_images", 0.98),
-        ("maptile_background", 0.97),
+        ("maptile_background", 0.90),
         ("no_text_in_font_metrics", 0.94),
         ("lookup_urls", 0.99),
     ],

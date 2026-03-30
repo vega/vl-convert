@@ -28,25 +28,25 @@ fn op_set_msgpack_result(_result_id: i32, #[buffer] _data: &[u8]) -> Result<(), 
     ))
 }
 
-#[op2(async)]
+#[op2]
 #[string]
 async fn op_vega_data_fetch(#[string] _url: String) -> Result<String, JsErrorBox> {
     Err(JsErrorBox::generic("op_vega_data_fetch stub"))
 }
 
-#[op2(async)]
+#[op2]
 #[buffer]
 async fn op_vega_data_fetch_bytes(#[string] _url: String) -> Result<Vec<u8>, JsErrorBox> {
     Err(JsErrorBox::generic("op_vega_data_fetch_bytes stub"))
 }
 
-#[op2(async)]
+#[op2]
 #[string]
 async fn op_vega_file_read(#[string] _path: String) -> Result<String, JsErrorBox> {
     Err(JsErrorBox::generic("op_vega_file_read stub"))
 }
 
-#[op2(async)]
+#[op2]
 #[buffer]
 async fn op_vega_file_read_bytes(#[string] _path: String) -> Result<Vec<u8>, JsErrorBox> {
     Err(JsErrorBox::generic("op_vega_file_read_bytes stub"))

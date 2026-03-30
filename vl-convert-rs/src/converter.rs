@@ -185,7 +185,7 @@ type WorkerTransferStateHandle = Rc<RefCell<WorkerTransferState>>;
 
 fn ensure_v8_platform_initialized() {
     static V8_INIT: Once = Once::new();
-    V8_INIT.call_once(|| deno_core::JsRuntime::init_platform(None, false));
+    V8_INIT.call_once(|| deno_core::JsRuntime::init_platform(None));
 }
 
 fn worker_queue_capacity(num_workers: usize) -> usize {
