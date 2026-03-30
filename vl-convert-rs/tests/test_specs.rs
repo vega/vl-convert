@@ -274,7 +274,13 @@ fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8])
     check_png_with_threshold(name, vl_version, theme, img, DEFAULT_THRESHOLD);
 }
 
-fn check_png_with_threshold(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8], threshold: f64) {
+fn check_png_with_threshold(
+    name: &str,
+    vl_version: VlVersion,
+    theme: Option<&str>,
+    img: &[u8],
+    threshold: f64,
+) {
     let expected_dssim = load_expected_png_dssim(name, vl_version, theme);
     if let Some(expected_dssim) = expected_dssim {
         match to_dssim(img) {
