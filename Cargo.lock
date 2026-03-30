@@ -10314,6 +10314,7 @@ dependencies = [
  "vl-convert-canvas2d",
  "vl-convert-canvas2d-deno",
  "vl-convert-google-fonts",
+ "winapi",
 ]
 
 [[package]]

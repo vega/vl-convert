@@ -52,6 +52,11 @@ escape8259 = "0.5.3"
 font-subset = { version = "0.1", features = ["woff2"] }
 urlencoding = "2"
 
+# Enable std feature so winapi::ctypes::c_void re-exports core::ffi::c_void,
+# matching std's RawHandle type. Without this, deno_io fails to compile on Windows.
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["std"] }
+
 [dev-dependencies]
 rstest = { workspace = true }
 dssim = { workspace = true }
