@@ -4,7 +4,6 @@
 use clap::{Parser, Subcommand};
 use itertools::Itertools;
 use std::io::{self, IsTerminal, Read, Write};
-use std::path::Path;
 use std::str::FromStr;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
@@ -55,12 +54,20 @@ impl LogLevel {
 }
 
 const DEFAULT_VL_VERSION: &str = "6.4";
-const DEFAULT_CONFIG_PATH: &str = "~/.config/vl-convert/config.json";
 
 #[derive(Debug, Parser)] // requires `derive` feature
 #[command(version, name = "vl-convert")]
 #[command(about = "vl-convert: A utility for converting Vega-Lite specifications", long_about = None)]
 struct Cli {
+    /// Path to JSONC converter config file.
+    /// Defaults to the platform config directory if the file exists.
+    #[arg(long, global = true)]
+    vlc_config: Option<String>,
+
+    /// Disable loading the default vlc-config file
+    #[arg(long, global = true, conflicts_with = "vlc_config")]
+    no_vlc_config: bool,
+
     /// Custom base URL for resolving relative data paths in Vega specs.
     /// Can be a URL (https://...) or a local filesystem path (/data/).
     #[arg(long, global = true)]
@@ -99,16 +106,16 @@ struct Cli {
     no_subset_fonts: bool,
 
     /// Missing-font behavior: fallback silently, warn, or error.
-    #[arg(long, global = true, value_enum, default_value_t = MissingFontsArg::Fallback)]
-    missing_fonts: MissingFontsArg,
+    #[arg(long, global = true, value_enum)]
+    missing_fonts: Option<MissingFontsArg>,
 
     /// Maximum V8 heap size per worker in megabytes [default: 0 = no limit]
-    #[arg(long, global = true, default_value_t = 0)]
-    max_v8_heap_size_mb: usize,
+    #[arg(long, global = true)]
+    max_v8_heap_size_mb: Option<usize>,
 
     /// Maximum V8 execution time in seconds [default: 0 = no limit]
-    #[arg(long, global = true, default_value_t = 0)]
-    max_v8_execution_time_secs: u64,
+    #[arg(long, global = true)]
+    max_v8_execution_time_secs: Option<u64>,
 
     /// Run V8 garbage collection after each conversion to release memory
     #[arg(long, global = true)]
@@ -156,7 +163,7 @@ enum Commands {
         #[arg(short, long)]
         theme: Option<String>,
 
-        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        /// Path to Vega-Lite config file
         #[arg(short, long)]
         config: Option<String>,
 
@@ -183,7 +190,7 @@ enum Commands {
         #[arg(long)]
         theme: Option<String>,
 
-        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        /// Path to Vega-Lite config file
         #[arg(short, long)]
         config: Option<String>,
 
@@ -222,7 +229,7 @@ enum Commands {
         #[arg(long)]
         theme: Option<String>,
 
-        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        /// Path to Vega-Lite config file
         #[arg(short, long)]
         config: Option<String>,
 
@@ -265,7 +272,7 @@ enum Commands {
         #[arg(long)]
         theme: Option<String>,
 
-        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        /// Path to Vega-Lite config file
         #[arg(short, long)]
         config: Option<String>,
 
@@ -308,7 +315,7 @@ enum Commands {
         #[arg(long)]
         theme: Option<String>,
 
-        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        /// Path to Vega-Lite config file
         #[arg(short, long)]
         config: Option<String>,
 
@@ -358,7 +365,7 @@ enum Commands {
         #[arg(long)]
         theme: Option<String>,
 
-        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        /// Path to Vega-Lite config file
         #[arg(short, long)]
         config: Option<String>,
 
@@ -398,7 +405,7 @@ enum Commands {
         #[arg(long)]
         theme: Option<String>,
 
-        /// Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
+        /// Path to Vega-Lite config file
         #[arg(short, long)]
         config: Option<String>,
 
@@ -671,78 +678,87 @@ enum Commands {
         /// Name of a theme
         theme: String,
     },
+
+    /// Print the default vlc-config file path
+    ConfigPath,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let Cli {
-        base_url,
-        no_base_url,
-        allowed_base_url,
-        no_allowed_urls,
-        google_font: google_font_families,
-        auto_google_fonts,
-        embed_local_fonts,
-        no_subset_fonts,
-        missing_fonts: missing_fonts_arg,
-        max_v8_heap_size_mb,
-        max_v8_execution_time_secs,
-        gc_after_conversion,
-        vega_plugin,
-        plugin_import_domains,
-        log_level,
-        command,
-    } = Cli::parse();
+    let cli = Cli::parse();
 
     env_logger::Builder::new()
-        .filter_module("vl_convert", log_level.to_filter())
+        .filter_module("vl_convert", cli.log_level.to_filter())
         .init();
-    let missing_fonts = missing_fonts_arg.to_policy();
-    let config_google_fonts = parse_google_font_requests(&google_font_families)?;
-    let vega_plugins = if vega_plugin.is_empty() {
+
+    // Handle config-path before loading the config so it works even with a broken config file.
+    if let Commands::ConfigPath = cli.command {
+        println!("{}", default_vlc_config_path().display());
+        return Ok(());
+    }
+
+    let google_font_families = cli.google_font.clone();
+    let plugin_import_domains = flatten_plugin_domains(&cli.plugin_import_domains);
+    let vega_plugins = if cli.vega_plugin.is_empty() {
         None
     } else {
-        Some(vega_plugin)
-    };
-    let plugin_import_domains = flatten_plugin_domains(&plugin_import_domains);
-
-    let base_url_setting = if no_base_url {
-        BaseUrlSetting::Disabled
-    } else if let Some(url) = base_url {
-        BaseUrlSetting::Custom(url)
-    } else {
-        BaseUrlSetting::Default
+        Some(cli.vega_plugin.clone())
     };
 
-    let allowed_base_urls = if no_allowed_urls {
-        Some(vec![])
-    } else if allowed_base_url.is_empty() {
-        None
-    } else {
-        Some(allowed_base_url)
-    };
+    let mut base_config = resolve_vlc_config(cli.vlc_config.as_deref(), cli.no_vlc_config)?;
 
-    let base_config = VlConverterConfig {
-        num_workers: 1,
-        base_url: base_url_setting,
-        allowed_base_urls,
-        auto_google_fonts,
-        embed_local_fonts,
-        subset_fonts: !no_subset_fonts,
-        missing_fonts,
-        google_fonts: config_google_fonts.clone(),
-        max_v8_heap_size_mb,
-        max_v8_execution_time_secs,
-        gc_after_conversion,
-        vega_plugins,
-        plugin_import_domains,
-        allow_per_request_plugins: false,
-        per_request_plugin_import_domains: Vec::new(),
-        default_theme: None,
-        default_format_locale: None,
-        default_time_format_locale: None,
-        themes: None,
-    };
+    if cli.base_url.is_some() || cli.no_base_url {
+        let base_url_setting = if cli.no_base_url {
+            BaseUrlSetting::Disabled
+        } else if let Some(ref url) = cli.base_url {
+            BaseUrlSetting::Custom(url.clone())
+        } else {
+            BaseUrlSetting::Default
+        };
+        base_config.base_url = base_url_setting;
+    }
+    if !cli.allowed_base_url.is_empty() || cli.no_allowed_urls {
+        let allowed_base_urls = if cli.no_allowed_urls {
+            Some(vec![])
+        } else {
+            Some(cli.allowed_base_url.clone())
+        };
+        base_config.allowed_base_urls = allowed_base_urls;
+    }
+    if cli.auto_google_fonts {
+        base_config.auto_google_fonts = true;
+    }
+    if cli.embed_local_fonts {
+        base_config.embed_local_fonts = true;
+    }
+    if cli.no_subset_fonts {
+        base_config.subset_fonts = false;
+    }
+    if let Some(ref mf) = cli.missing_fonts {
+        base_config.missing_fonts = mf.to_policy();
+    }
+    if let Some(heap) = cli.max_v8_heap_size_mb {
+        base_config.max_v8_heap_size_mb = heap;
+    }
+    if let Some(timeout) = cli.max_v8_execution_time_secs {
+        base_config.max_v8_execution_time_secs = timeout;
+    }
+    if cli.gc_after_conversion {
+        base_config.gc_after_conversion = true;
+    }
+    if vega_plugins.is_some() {
+        base_config.vega_plugins = vega_plugins;
+    }
+    if !plugin_import_domains.is_empty() {
+        base_config.plugin_import_domains = plugin_import_domains;
+    }
+    let google_fonts = parse_google_font_requests(&google_font_families)?;
+    if google_fonts.is_some() {
+        base_config.google_fonts = google_fonts;
+    }
+    base_config.num_workers = 1;
+
+    let command = cli.command;
 
     use crate::Commands::*;
     match command {
@@ -1190,8 +1206,9 @@ async fn main() -> Result<(), anyhow::Error> {
             let pdf_data = converter.svg_to_pdf(&svg, PdfOpts::default()).await?;
             write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
         }
-        LsThemes => list_themes().await?,
-        CatTheme { theme } => cat_theme(&theme).await?,
+        LsThemes => list_themes(base_config).await?,
+        CatTheme { theme } => cat_theme(&theme, base_config).await?,
+        ConfigPath => unreachable!("handled before config loading"),
     }
 
     Ok(())
@@ -1506,18 +1523,38 @@ fn write_stdout_bytes(data: &[u8]) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn normalize_config_path(config: Option<String>) -> Option<String> {
-    match config {
-        Some(config) => Some(shellexpand::tilde(config.trim()).to_string()),
-        None => {
-            let default_path = shellexpand::tilde(DEFAULT_CONFIG_PATH).to_string();
-            if Path::new(&default_path).exists() {
-                Some(default_path)
-            } else {
-                None
-            }
-        }
+fn default_vlc_config_path() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("vl-convert")
+        .join("vlc-config.jsonc")
+}
+
+fn resolve_vlc_config(
+    vlc_config: Option<&str>,
+    no_vlc_config: bool,
+) -> Result<VlConverterConfig, anyhow::Error> {
+    if no_vlc_config {
+        return Ok(VlConverterConfig::default());
     }
+    let path = match vlc_config {
+        Some(p) => {
+            let expanded = shellexpand::tilde(p.trim()).to_string();
+            std::path::PathBuf::from(expanded)
+        }
+        None => {
+            let default = default_vlc_config_path();
+            if !default.exists() {
+                return Ok(VlConverterConfig::default());
+            }
+            default
+        }
+    };
+    vl_convert_rs::converter::load_vlc_config_from_jsonc(&path)
+}
+
+fn normalize_config_path(config: Option<String>) -> Option<String> {
+    config.map(|c| shellexpand::tilde(c.trim()).to_string())
 }
 
 fn read_config_json(config: Option<String>) -> Result<Option<serde_json::Value>, anyhow::Error> {
@@ -1963,9 +2000,8 @@ async fn vl_2_pdf(
     Ok(())
 }
 
-async fn list_themes() -> Result<(), anyhow::Error> {
-    // Initialize converter
-    let converter = VlConverter::new();
+async fn list_themes(config: VlConverterConfig) -> Result<(), anyhow::Error> {
+    let converter = VlConverter::with_config(config)?;
 
     if let serde_json::Value::Object(themes) = converter.get_themes().await? {
         for theme in themes.keys().sorted() {
@@ -1978,9 +2014,8 @@ async fn list_themes() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn cat_theme(theme: &str) -> Result<(), anyhow::Error> {
-    // Initialize converter
-    let converter = VlConverter::new();
+async fn cat_theme(theme: &str, config: VlConverterConfig) -> Result<(), anyhow::Error> {
+    let converter = VlConverter::with_config(config)?;
 
     if let serde_json::Value::Object(themes) = converter.get_themes().await? {
         if let Some(theme_config) = themes.get(theme) {

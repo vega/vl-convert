@@ -19,6 +19,7 @@ shellexpand = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
 env_logger = { workspace = true }
+dirs = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

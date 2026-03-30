@@ -1876,7 +1876,7 @@ dependencies = [
  "ignore",
  "import_map",
  "indexmap 2.13.0",
- "jsonc-parser",
+ "jsonc-parser 0.28.0",
  "log",
  "serde",
  "serde_json",
@@ -2726,7 +2726,7 @@ dependencies = [
  "futures",
  "import_map",
  "indexmap 2.13.0",
- "jsonc-parser",
+ "jsonc-parser 0.28.0",
  "log",
  "node_resolver",
  "once_cell",
@@ -5380,6 +5380,15 @@ dependencies = [
  "futures-util",
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "jsonc-parser"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01958dcb05b69d9612853b47df8f7881810e4f61b5cedd8894be04291f28ccb9"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -10186,6 +10195,7 @@ version = "2.0.0-rc1"
 dependencies = [
  "assert_cmd",
  "clap",
+ "dirs",
  "dssim",
  "env_logger",
  "itertools 0.14.0",
@@ -10290,6 +10300,7 @@ dependencies = [
  "futures",
  "futures-util",
  "image 0.25.10",
+ "jsonc-parser 0.27.1",
  "lazy_static",
  "log",
  "lz-str",

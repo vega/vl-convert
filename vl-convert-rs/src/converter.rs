@@ -593,7 +593,8 @@ impl ValueOrString {
 /// checked (e.g. for `"Roboto, Arial, sans-serif"` only `Roboto` is examined).
 /// This matches Vega's rendering behavior, which tries the first font and falls
 /// back to system generics.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum MissingFontsPolicy {
     /// Silently fall back to the default font (no validation).
     #[default]
@@ -624,6 +625,20 @@ pub enum BaseUrlSetting {
     Disabled,
     /// Resolve relative paths against a custom base URL or filesystem path
     Custom(String),
+}
+
+impl<'de> serde::Deserialize<'de> for BaseUrlSetting {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        match s.as_str() {
+            "default" => Ok(BaseUrlSetting::Default),
+            "disabled" => Ok(BaseUrlSetting::Disabled),
+            _ => Ok(BaseUrlSetting::Custom(s)),
+        }
+    }
 }
 
 impl BaseUrlSetting {
@@ -685,7 +700,8 @@ fn is_filesystem_path(s: &str) -> bool {
         && (bytes[2] == b'\\' || bytes[2] == b'/')
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
 pub struct VlConverterConfig {
     pub num_workers: usize,
     /// Base URL for resolving relative data paths in Vega specs.
@@ -813,7 +829,7 @@ pub struct WorkerMemoryUsage {
     pub external_memory: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct GoogleFontRequest {
     pub family: String,
     pub variants: Option<Vec<VariantRequest>>,
@@ -851,7 +867,8 @@ impl VgOpts {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(untagged)]
 pub enum FormatLocale {
     Name(String),
     Object(serde_json::Value),
@@ -871,7 +888,8 @@ impl FormatLocale {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(untagged)]
 pub enum TimeFormatLocale {
     Name(String),
     Object(serde_json::Value),
@@ -4838,6 +4856,44 @@ pub fn vega_to_url(
     ))
 }
 
+/// Load a VlConverterConfig from a JSONC file. Relative file paths in
+/// `vega_plugins` and filesystem `base_url` values are resolved against
+/// the config file's parent directory.
+pub fn load_vlc_config_from_jsonc(path: &std::path::Path) -> Result<VlConverterConfig, AnyError> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| anyhow!("Failed to read vlc-config file {}: {}", path.display(), e))?;
+    let value = jsonc_parser::parse_to_serde_value(&text, &Default::default())
+        .map_err(|e| anyhow!("Failed to parse vlc-config JSONC {}: {}", path.display(), e))?;
+    let Some(value) = value else {
+        return Ok(VlConverterConfig::default());
+    };
+    let mut config: VlConverterConfig = serde_json::from_value(value)
+        .map_err(|e| anyhow!("Failed to deserialize vlc-config {}: {}", path.display(), e))?;
+
+    // Resolve relative paths against config file directory
+    if let Some(config_dir) = path.parent() {
+        // Resolve plugin paths
+        if let Some(ref mut plugins) = config.vega_plugins {
+            for plugin in plugins.iter_mut() {
+                let p = std::path::Path::new(plugin.as_str());
+                if p.is_relative() {
+                    *plugin = config_dir.join(p).to_string_lossy().to_string();
+                }
+            }
+        }
+        // Resolve base_url filesystem paths
+        if let BaseUrlSetting::Custom(ref mut url) = config.base_url {
+            let p = std::path::Path::new(url.as_str());
+            if p.is_relative() {
+                let resolved = config_dir.join(p);
+                *url = resolved.to_string_lossy().to_string();
+            }
+        }
+    }
+
+    Ok(config)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6715,5 +6771,115 @@ var __fetchResult = null;
             msg.contains("permission") || msg.contains("denied") || msg.contains("requires net"),
             "fetch() should be blocked by Deno permissions, got: {msg}"
         );
+    }
+}
+
+#[cfg(test)]
+mod config_serde_tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_config() {
+        let config: VlConverterConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(config, VlConverterConfig::default());
+    }
+
+    #[test]
+    fn test_base_url_setting_default() {
+        let config: VlConverterConfig = serde_json::from_str(r#"{"base_url": "default"}"#).unwrap();
+        assert_eq!(config.base_url, BaseUrlSetting::Default);
+    }
+
+    #[test]
+    fn test_base_url_setting_disabled() {
+        let config: VlConverterConfig =
+            serde_json::from_str(r#"{"base_url": "disabled"}"#).unwrap();
+        assert_eq!(config.base_url, BaseUrlSetting::Disabled);
+    }
+
+    #[test]
+    fn test_base_url_setting_custom() {
+        let config: VlConverterConfig =
+            serde_json::from_str(r#"{"base_url": "https://example.com/"}"#).unwrap();
+        assert_eq!(
+            config.base_url,
+            BaseUrlSetting::Custom("https://example.com/".to_string())
+        );
+    }
+
+    #[test]
+    fn test_missing_fonts_policy() {
+        for (json, expected) in [
+            ("\"fallback\"", MissingFontsPolicy::Fallback),
+            ("\"warn\"", MissingFontsPolicy::Warn),
+            ("\"error\"", MissingFontsPolicy::Error),
+        ] {
+            let policy: MissingFontsPolicy = serde_json::from_str(json).unwrap();
+            assert_eq!(policy, expected);
+        }
+    }
+
+    #[test]
+    fn test_format_locale_name() {
+        let locale: FormatLocale = serde_json::from_str(r#""de-DE""#).unwrap();
+        assert!(matches!(locale, FormatLocale::Name(ref s) if s == "de-DE"));
+    }
+
+    #[test]
+    fn test_format_locale_object() {
+        let locale: FormatLocale =
+            serde_json::from_str(r#"{"decimal": ",", "thousands": "."}"#).unwrap();
+        assert!(matches!(locale, FormatLocale::Object(_)));
+    }
+
+    #[test]
+    fn test_google_font_request() {
+        let req: GoogleFontRequest = serde_json::from_str(r#"{"family": "Roboto"}"#).unwrap();
+        assert_eq!(req.family, "Roboto");
+        assert!(req.variants.is_none());
+    }
+
+    #[test]
+    fn test_full_config() {
+        let json = r##"{
+            "num_workers": 2,
+            "auto_google_fonts": true,
+            "missing_fonts": "warn",
+            "max_v8_heap_size_mb": 512,
+            "default_theme": "dark",
+            "themes": {
+                "custom": {"background": "#333"}
+            }
+        }"##;
+        let config: VlConverterConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.num_workers, 2);
+        assert!(config.auto_google_fonts);
+        assert_eq!(config.missing_fonts, MissingFontsPolicy::Warn);
+        assert_eq!(config.max_v8_heap_size_mb, 512);
+        assert_eq!(config.default_theme, Some("dark".to_string()));
+        assert!(config.themes.is_some());
+    }
+
+    #[test]
+    fn test_jsonc_comments() {
+        let jsonc = r#"{
+            // This is a comment
+            "auto_google_fonts": true,
+            /* Block comment */
+            "missing_fonts": "warn"
+        }"#;
+        let value = jsonc_parser::parse_to_serde_value(jsonc, &Default::default())
+            .unwrap()
+            .unwrap();
+        let config: VlConverterConfig = serde_json::from_value(value).unwrap();
+        assert!(config.auto_google_fonts);
+        assert_eq!(config.missing_fonts, MissingFontsPolicy::Warn);
+    }
+
+    #[test]
+    fn test_unknown_fields_ignored() {
+        let json = r#"{"unknown_field": 42, "auto_google_fonts": true}"#;
+        let config: VlConverterConfig = serde_json::from_str(json).unwrap();
+        assert!(config.auto_google_fonts);
     }
 }
