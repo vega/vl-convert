@@ -224,20 +224,25 @@ def test_svg_pythonw(name, as_dict):
     assert response == "ok"
 
 
+# Specs with live map tiles need relaxed tolerance because OSM tiles
+# change over time as the provider updates their rendering style.
+MAP_TILE_SPECS = {"maptile_background"}
+MAP_TILE_TOL = 0.90
+
+
 @pytest.mark.parametrize(
-    "name,scale,tol",
+    "name,scale",
     [
-        ("circle_binned", 1.0, 0.994),
-        ("stacked_bar_h", 2.0, 0.994),
-        ("remote_images", 1.0, 0.994),
-        # Relaxed tolerance: OSM tiles change over time as the provider updates rendering
-        ("maptile_background", 1.0, 0.90),
-        ("no_text_in_font_metrics", 1.0, 0.994),
-        ("lookup_urls", 1.0, 0.994),
+        ("circle_binned", 1.0),
+        ("stacked_bar_h", 2.0),
+        ("remote_images", 1.0),
+        ("maptile_background", 1.0),
+        ("no_text_in_font_metrics", 1.0),
+        ("lookup_urls", 1.0),
     ],
 )
 @pytest.mark.parametrize("as_dict", [False])
-def test_png(name, scale, tol, as_dict):
+def test_png(name, scale, as_dict):
     vl_version = "v5_8"
     vl_spec = load_vl_spec(name)
 
@@ -245,6 +250,7 @@ def test_png(name, scale, tol, as_dict):
         vl_spec = json.loads(vl_spec)
 
     expected_png = load_expected_png(name, vl_version)
+    tol = MAP_TILE_TOL if name in MAP_TILE_SPECS else 0.994
 
     # Convert to vega first
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
@@ -331,7 +337,6 @@ def test_jpeg(name, scale, as_dict):
         ("circle_binned", 0.97),
         ("stacked_bar_h", 0.975),
         ("remote_images", 0.98),
-        # Relaxed tolerance: OSM tiles change over time as the provider updates rendering
         ("maptile_background", 0.90),
         ("no_text_in_font_metrics", 0.94),
         ("lookup_urls", 0.99),
