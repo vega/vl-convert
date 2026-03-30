@@ -268,10 +268,10 @@ fn write_failed_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img:
     file_path
 }
 
-const DEFAULT_DSSIM_THRESHOLD: f64 = 0.00011;
+const DEFAULT_THRESHOLD: f64 = 0.00011;
 
 fn check_png(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8]) {
-    check_png_with_threshold(name, vl_version, theme, img, DEFAULT_DSSIM_THRESHOLD);
+    check_png_with_threshold(name, vl_version, theme, img, DEFAULT_THRESHOLD);
 }
 
 fn check_png_with_threshold(name: &str, vl_version: VlVersion, theme: Option<&str>, img: &[u8], threshold: f64) {
@@ -648,27 +648,27 @@ mod test_png_no_theme {
     use vl_convert_rs::VlConverter;
 
     #[rstest(name, scale, dssim_threshold,
-        case("circle_binned", 1.0, DEFAULT_DSSIM_THRESHOLD),
-        case("circle_binned_base_url", 1.0, DEFAULT_DSSIM_THRESHOLD),
-        case("stacked_bar_h", 2.0, DEFAULT_DSSIM_THRESHOLD),
-        case("stacked_bar_h2", 2.0, DEFAULT_DSSIM_THRESHOLD),
-        case("bar_chart_trellis_compact", 2.0, DEFAULT_DSSIM_THRESHOLD),
-        case("line_with_log_scale", 2.0, DEFAULT_DSSIM_THRESHOLD),
-        case("remote_images", 1.0, DEFAULT_DSSIM_THRESHOLD),
+        case("circle_binned", 1.0, DEFAULT_THRESHOLD),
+        case("circle_binned_base_url", 1.0, DEFAULT_THRESHOLD),
+        case("stacked_bar_h", 2.0, DEFAULT_THRESHOLD),
+        case("stacked_bar_h2", 2.0, DEFAULT_THRESHOLD),
+        case("bar_chart_trellis_compact", 2.0, DEFAULT_THRESHOLD),
+        case("line_with_log_scale", 2.0, DEFAULT_THRESHOLD),
+        case("remote_images", 1.0, DEFAULT_THRESHOLD),
         // Map tile specs use a relaxed threshold because OSM tiles change
         // over time as the tile provider updates their rendering style.
         case("maptile_background", 1.0, 0.02),
         case("maptile_background_2", 1.0, 0.02),
-        case("float_font_size", 1.0, DEFAULT_DSSIM_THRESHOLD),
-        case("no_text_in_font_metrics", 1.0, DEFAULT_DSSIM_THRESHOLD),
-        case("custom_projection", 1.0, DEFAULT_DSSIM_THRESHOLD),
-        case("long_legend_label", 1.0, DEFAULT_DSSIM_THRESHOLD),
-        case("quakes_initial_selection", 1.0, DEFAULT_DSSIM_THRESHOLD),
+        case("float_font_size", 1.0, DEFAULT_THRESHOLD),
+        case("no_text_in_font_metrics", 1.0, DEFAULT_THRESHOLD),
+        case("custom_projection", 1.0, DEFAULT_THRESHOLD),
+        case("long_legend_label", 1.0, DEFAULT_THRESHOLD),
+        case("quakes_initial_selection", 1.0, DEFAULT_THRESHOLD),
         case("geoScale", 1.0, 0.02),
-        case("table_heatmap", 1.0, DEFAULT_DSSIM_THRESHOLD),
-        case("long_text_lable", 1.0, DEFAULT_DSSIM_THRESHOLD),
-        case("gh_174", 1.0, DEFAULT_DSSIM_THRESHOLD),
-        case("lookup_urls", 1.0, DEFAULT_DSSIM_THRESHOLD),
+        case("table_heatmap", 1.0, DEFAULT_THRESHOLD),
+        case("long_text_lable", 1.0, DEFAULT_THRESHOLD),
+        case("gh_174", 1.0, DEFAULT_THRESHOLD),
+        case("lookup_urls", 1.0, DEFAULT_THRESHOLD),
     )]
     fn test(
         name: &str,

@@ -225,18 +225,19 @@ def test_svg_pythonw(name, as_dict):
 
 
 @pytest.mark.parametrize(
-    "name,scale",
+    "name,scale,tol",
     [
-        ("circle_binned", 1.0),
-        ("stacked_bar_h", 2.0),
-        ("remote_images", 1.0),
-        ("maptile_background", 1.0),
-        ("no_text_in_font_metrics", 1.0),
-        ("lookup_urls", 1.0),
+        ("circle_binned", 1.0, 0.994),
+        ("stacked_bar_h", 2.0, 0.994),
+        ("remote_images", 1.0, 0.994),
+        # Relaxed tolerance: OSM tiles change over time as the provider updates rendering
+        ("maptile_background", 1.0, 0.90),
+        ("no_text_in_font_metrics", 1.0, 0.994),
+        ("lookup_urls", 1.0, 0.994),
     ],
 )
 @pytest.mark.parametrize("as_dict", [False])
-def test_png(name, scale, as_dict):
+def test_png(name, scale, tol, as_dict):
     vl_version = "v5_8"
     vl_spec = load_vl_spec(name)
 
@@ -248,11 +249,11 @@ def test_png(name, scale, as_dict):
     # Convert to vega first
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     png = vlc.vega_to_png(vg_spec, scale=scale)
-    check_png(png, expected_png, name=f"png_vega_{name}")
+    check_png(png, expected_png, tol=tol, name=f"png_vega_{name}")
 
     # Convert directly to image
     png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version, scale=scale)
-    check_png(png, expected_png, name=f"png_vegalite_{name}")
+    check_png(png, expected_png, tol=tol, name=f"png_vegalite_{name}")
 
 
 def test_png_google_fonts():
@@ -330,7 +331,8 @@ def test_jpeg(name, scale, as_dict):
         ("circle_binned", 0.97),
         ("stacked_bar_h", 0.975),
         ("remote_images", 0.98),
-        ("maptile_background", 0.97),
+        # Relaxed tolerance: OSM tiles change over time as the provider updates rendering
+        ("maptile_background", 0.90),
         ("no_text_in_font_metrics", 0.94),
         ("lookup_urls", 0.99),
     ],
