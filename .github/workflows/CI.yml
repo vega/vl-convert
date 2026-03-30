@@ -388,7 +388,7 @@ jobs:
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install maturin pytest scikit-image pypdfium2
+          pip install maturin
       - name: Build and install package
         env:
           RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
@@ -396,6 +396,7 @@ jobs:
           source .venv/bin/activate
           cd vl-convert-python
           maturin develop --release
+          pip install ".[test]"
       - name: Run tests
         run: |
           source .venv/bin/activate
@@ -545,7 +546,8 @@ jobs:
               echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | debconf-set-selections &&
               apt-get install -y ttf-mscorefonts-installer fontconfig &&
               fc-cache -f &&
-              pip install /dist/*aarch64*.whl pytest scikit-image pypdfium2 &&
+              WHL=\$(ls /dist/*aarch64*.whl) &&
+              pip install \"\${WHL}[test]\" &&
               cd /workspace/vl-convert-python &&
               python /generate_images.py &&
               pytest -v

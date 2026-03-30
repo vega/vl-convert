@@ -927,7 +927,6 @@ pub struct VlOpts {
     pub config: Option<serde_json::Value>,
     pub theme: Option<String>,
     pub vl_version: VlVersion,
-    pub show_warnings: bool,
     pub format_locale: Option<FormatLocale>,
     pub time_format_locale: Option<TimeFormatLocale>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
@@ -1545,35 +1544,47 @@ import('{msgpack_url}').then((imported) => {{
                 .execute_script("ext:<anon>", import_code)?;
 
             let logger_code = r#"""
-class WarningCollector {
-  constructor() {
-    this.warningsLogs = [];
-  }
+var _logEntries = [];
 
-  level(lvl) {
-    if (lvl == null) return 0;
-    return this;
-  }
-
-  error(msg) {
-    console.error(msg);
-    return this;
-  }
-
-  warn(msg) {
-    this.warningsLogs.push(msg);
-    return this;
-  }
-
-  // skip info an debug
-  info() {
-    return this;
-  }
-
-  debug() {
-    return this;
-  }
+function _clearLogMessages() {
+  _logEntries.length = 0; // truncates array; old entries become GC-eligible
 }
+
+function _collapsedLogMessages() {
+  if (_logEntries.length === 0) return "";
+  let result = [];
+  let i = 0;
+  while (i < _logEntries.length) {
+    let entry = _logEntries[i];
+    let count = 1;
+    while (i + count < _logEntries.length
+        && _logEntries[i + count].level === entry.level
+        && _logEntries[i + count].msg === entry.msg) {
+      count++;
+    }
+    result.push({
+      level: entry.level,
+      msg: count > 1 ? `(${count}x) ${entry.msg}` : entry.msg
+    });
+    i += count;
+  }
+  return JSON.stringify(result);
+}
+
+class LogCollector {
+  constructor() { this._level = 4; }
+  level(lvl) {
+    if (arguments.length === 0) return this._level;
+    this._level = lvl;
+    return this;
+  }
+  error(msg) { _logEntries.push({level: "error", msg}); return this; }
+  warn(msg)  { _logEntries.push({level: "warn", msg});  return this; }
+  info(msg)  { _logEntries.push({level: "info", msg});   return this; }
+  debug(msg) { _logEntries.push({level: "debug", msg});  return this; }
+}
+
+var logCollector = new LogCollector();
             """#
             .to_string();
 
@@ -1646,7 +1657,7 @@ function buildLoader(errors) {
 function vegaToView(vgSpec, errors) {
     let runtime = vega.parse(vgSpec);
     const loader = buildLoader(errors);
-    return new vega.View(runtime, {renderer: 'none', loader});
+    return new vega.View(runtime, {renderer: 'none', loader, logLevel: vega.Debug, logger: logCollector});
 }
 
 function vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors) {
@@ -1956,7 +1967,7 @@ import('{vl_url}').then((imported) => {{
             // Create and initialize function string
             let function_code = format!(
                 r#"
-function compileVegaLite_{ver_name}(vlSpec, config, theme, warnings) {{
+function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
     let options = {{}};
 
     // Handle config and theme
@@ -1968,25 +1979,23 @@ function compileVegaLite_{ver_name}(vlSpec, config, theme, warnings) {{
         options["config"] = config;
     }}
 
-    if (!warnings) {{
-        options["logger"] = new WarningCollector();
-    }}
+    options["logger"] = logCollector;
 
     return {ver_name}.compile(vlSpec, options).spec
 }}
 
-function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, warnings, formatLocale, timeFormatLocale, errors) {{
-    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
+function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, errors) {{
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
     return vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors)
 }}
 
-function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, warnings, formatLocale, timeFormatLocale, errors) {{
-    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
+function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, errors) {{
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
     return vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, errors)
 }}
 
-function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLocale, timeFormatLocale, scale, errors) {{
-    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme, warnings);
+function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, scale, errors) {{
+    let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
     return vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors)
 }}
 "#,
@@ -2182,6 +2191,40 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLoca
         Ok(value)
     }
 
+    async fn emit_js_log_messages(&mut self) {
+        let json = match self
+            .execute_script_to_string("_collapsedLogMessages()")
+            .await
+        {
+            Ok(json) => json,
+            Err(e) => {
+                vl_debug!("Failed to retrieve JS log messages: {e}");
+                return;
+            }
+        };
+        if json.is_empty() {
+            return;
+        }
+        let entries: Vec<serde_json::Value> = match serde_json::from_str(&json) {
+            Ok(v) => v,
+            Err(e) => {
+                vl_debug!("Failed to parse JS log messages: {e}");
+                return;
+            }
+        };
+        for entry in &entries {
+            let level = entry.get("level").and_then(|v| v.as_str()).unwrap_or("");
+            let msg = entry.get("msg").and_then(|v| v.as_str()).unwrap_or("");
+            match level {
+                "error" => vl_error!("{}", msg),
+                "warn" => vl_warn!("{}", msg),
+                "info" => vl_info!("{}", msg),
+                "debug" => vl_debug!("{}", msg),
+                _ => {}
+            }
+        }
+    }
+
     pub async fn vegalite_to_vega(
         &mut self,
         vl_spec: impl Into<ValueOrString>,
@@ -2201,21 +2244,21 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, warnings, formatLoca
 
         let code = format!(
             r#"
+_clearLogMessages();
 compileVegaLite_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
-    {theme_arg},
-    {show_warnings}
+    {theme_arg}
 )
 "#,
             ver_name = vl_opts.vl_version,
             spec_arg_id = spec_arg.id(),
             config_arg_id = config_arg.id(),
             theme_arg = theme_arg,
-            show_warnings = vl_opts.show_warnings,
         );
 
         let value = self.execute_script_to_json(&code).await?;
+        self.emit_js_log_messages().await;
         Ok(value)
     }
 
@@ -2254,11 +2297,11 @@ compileVegaLite_{ver_name:?}(
             r#"
 var svg;
 var errors = [];
+_clearLogMessages();
 vegaLiteToSvg_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
-    {show_warnings},
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
     errors,
@@ -2270,7 +2313,6 @@ vegaLiteToSvg_{ver_name:?}(
 }});
 "#,
             ver_name = vl_opts.vl_version,
-            show_warnings = vl_opts.show_warnings,
             spec_arg_id = spec_arg.id(),
             config_arg_id = config_arg.id(),
             format_locale_id = format_locale_arg.id(),
@@ -2287,10 +2329,10 @@ vegaLiteToSvg_{ver_name:?}(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -2330,11 +2372,11 @@ vegaLiteToSvg_{ver_name:?}(
         let code = format!(
             r#"
 var errors = [];
+_clearLogMessages();
 vegaLiteToScenegraph_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
-    {show_warnings},
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
     errors,
@@ -2346,7 +2388,6 @@ vegaLiteToScenegraph_{ver_name:?}(
 }})
 "#,
             ver_name = vl_opts.vl_version,
-            show_warnings = vl_opts.show_warnings,
             spec_arg_id = spec_arg.id(),
             config_arg_id = config_arg.id(),
             format_locale_id = format_locale_arg.id(),
@@ -2364,10 +2405,10 @@ vegaLiteToScenegraph_{ver_name:?}(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
         result.take_result()
     }
 
@@ -2410,6 +2451,7 @@ vegaLiteToScenegraph_{ver_name:?}(
             r#"
 var svg;
 var errors = [];
+_clearLogMessages();
 vegaToSvg(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
@@ -2437,10 +2479,10 @@ vegaToSvg(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
         let value = self.execute_script_to_string("svg").await?;
         Ok(value)
     }
@@ -2471,6 +2513,7 @@ vegaToSvg(
         let code = format!(
             r#"
 var errors = [];
+_clearLogMessages();
 vegaToScenegraph(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
@@ -2499,10 +2542,10 @@ vegaToScenegraph(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
         result.take_result()
     }
 
@@ -2598,6 +2641,7 @@ delete themes.default
             r#"
 var canvasPngData;
 var errors = [];
+_clearLogMessages();
 vegaToCanvas(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
@@ -2626,10 +2670,10 @@ vegaToCanvas(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
         let png_data = self.execute_script_to_bytes("canvasPngData").await?;
         Ok(png_data)
     }
@@ -2671,11 +2715,11 @@ vegaToCanvas(
             r#"
 var canvasPngData;
 var errors = [];
+_clearLogMessages();
 vegaLiteToCanvas_{ver_name:?}(
     JSON.parse(op_get_json_arg({spec_arg_id})),
     JSON.parse(op_get_json_arg({config_arg_id})),
     {theme_arg},
-    {show_warnings},
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
     {scale},
@@ -2688,7 +2732,6 @@ vegaLiteToCanvas_{ver_name:?}(
 }})
 "#,
             ver_name = vl_opts.vl_version,
-            show_warnings = vl_opts.show_warnings,
             spec_arg_id = spec_arg.id(),
             config_arg_id = config_arg.id(),
             format_locale_id = format_locale_arg.id(),
@@ -2705,10 +2748,10 @@ vegaLiteToCanvas_{ver_name:?}(
                 "Array.isArray(errors) && errors.length > 0 ? errors.join('\\n') : ''",
             )
             .await?;
+        self.emit_js_log_messages().await;
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-
         let png_data = self.execute_script_to_bytes("canvasPngData").await?;
         Ok(png_data)
     }
@@ -3085,7 +3128,7 @@ fn report_google_catalog_errors(
 
     if missing_fonts == MissingFontsPolicy::Warn {
         for (name, err) in api_errors {
-            log::warn!("auto_google_fonts: could not reach Google Fonts API for '{name}': {err}");
+            vl_warn!("auto_google_fonts: could not reach Google Fonts API for '{name}': {err}");
         }
     }
 
@@ -3123,12 +3166,12 @@ fn report_unavailable_fonts(
     if missing_fonts == MissingFontsPolicy::Warn {
         for name in unavailable_names {
             if auto_google_fonts {
-                log::warn!(
+                vl_warn!(
                     "auto_google_fonts: font '{name}' is not available on the system \
                      and not found in the Google Fonts catalog, skipping"
                 );
             } else {
-                log::warn!("missing_fonts=warn: font '{name}' is not available on the system");
+                vl_warn!("missing_fonts=warn: font '{name}' is not available on the system");
             }
         }
     }

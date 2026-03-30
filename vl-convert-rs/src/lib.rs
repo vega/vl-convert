@@ -1,5 +1,12 @@
 #![doc = include_str!("../README.md")]
 
+/// Logging macros that set `target: "vl_convert"` so that log messages are
+/// attributed to `vl_convert` rather than the internal crate name `vl_convert_rs`.
+macro_rules! vl_warn  { ($($arg:tt)*) => { log::warn!(target: "vl_convert", $($arg)*) }; }
+macro_rules! vl_info  { ($($arg:tt)*) => { log::info!(target: "vl_convert", $($arg)*) }; }
+macro_rules! vl_error { ($($arg:tt)*) => { log::error!(target: "vl_convert", $($arg)*) }; }
+macro_rules! vl_debug { ($($arg:tt)*) => { log::debug!(target: "vl_convert", $($arg)*) }; }
+
 pub mod converter;
 pub(crate) mod data_ops;
 pub mod deno_emit;
