@@ -666,6 +666,48 @@ fn test_ls_themes() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_ls_themes_with_vlc_config_custom_theme() -> Result<(), Box<dyn std::error::Error>> {
+    // Write a JSONC config (with comments and trailing commas) that registers a custom theme.
+    let mut config_file = NamedTempFile::with_suffix(".jsonc")?;
+    writeln!(
+        config_file,
+        r##"{{
+    // Custom theme for testing --vlc-config
+    "themes": {{
+        "my-custom-theme": {{
+            "background": "#ff0000", // bright red background
+            "view": {{ "stroke": "transparent" }},
+        }}
+    }},
+}}"##
+    )?;
+    let config_path = config_file.path().to_str().unwrap();
+
+    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let output = cmd
+        .arg("--vlc-config")
+        .arg(config_path)
+        .arg("ls-themes")
+        .output()?;
+
+    assert!(output.status.success(), "ls-themes failed: {:?}", output);
+    let output_str = String::from_utf8(output.stdout)?;
+
+    // Built-in themes must still appear
+    assert!(
+        output_str.contains("dark"),
+        "expected built-in theme 'dark' in output:\n{output_str}"
+    );
+    // Custom theme registered via vlc-config must appear
+    assert!(
+        output_str.contains("my-custom-theme"),
+        "expected custom theme 'my-custom-theme' in output:\n{output_str}"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_cat_theme() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("vl-convert")?;
     let cmd = cmd.arg("cat-theme").arg("dark");
