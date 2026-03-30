@@ -54,7 +54,12 @@ urlencoding = "2"
 
 # Enable std feature so winapi::ctypes::c_void re-exports core::ffi::c_void,
 # matching std's RawHandle type. Without this, deno_io fails to compile on Windows.
+# Must be in both dependencies and build-dependencies because resolver v2
+# resolves their features independently.
 [target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["std"] }
+
+[target.'cfg(windows)'.build-dependencies]
 winapi = { version = "0.3", features = ["std"] }
 
 [dev-dependencies]
