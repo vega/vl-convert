@@ -34,7 +34,7 @@ LOG_SCALE_SPEC = {
 
 def test_vega_runtime_warnings_captured(caplog):
     """Vega View expression errors (e.g. brackets in field names) are surfaced."""
-    with caplog.at_level(logging.WARNING, logger="vl_convert_rs"):
+    with caplog.at_level(logging.WARNING, logger="vl_convert"):
         vlc.vegalite_to_svg(BRACKETS_SPEC)
 
     warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
@@ -48,7 +48,7 @@ def test_vega_runtime_warnings_captured(caplog):
 
 def test_vl_compilation_warnings_captured(caplog):
     """Vega-Lite compilation warnings (e.g. log scale domain) are surfaced."""
-    with caplog.at_level(logging.WARNING, logger="vl_convert_rs"):
+    with caplog.at_level(logging.WARNING, logger="vl_convert"):
         vlc.vegalite_to_svg(LOG_SCALE_SPEC)
 
     warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
@@ -71,20 +71,20 @@ def test_no_warnings_for_valid_spec(caplog):
             "y": {"field": "a", "type": "nominal"},
         },
     }
-    with caplog.at_level(logging.WARNING, logger="vl_convert_rs"):
+    with caplog.at_level(logging.WARNING, logger="vl_convert"):
         vlc.vegalite_to_svg(spec)
 
     vl_warnings = [
         r.message
         for r in caplog.records
-        if r.levelno >= logging.WARNING and "vl_convert_rs" in r.name
+        if r.levelno >= logging.WARNING and "vl_convert" in r.name
     ]
     assert len(vl_warnings) == 0, f"Unexpected warnings: {vl_warnings}"
 
 
 def test_warnings_not_duplicated_across_calls(caplog):
     """Each conversion clears warnings from the previous call."""
-    with caplog.at_level(logging.WARNING, logger="vl_convert_rs"):
+    with caplog.at_level(logging.WARNING, logger="vl_convert"):
         vlc.vegalite_to_svg(LOG_SCALE_SPEC)
         first_count = sum(
             1 for r in caplog.records

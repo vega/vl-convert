@@ -215,7 +215,7 @@ pub fn custom_font_selector() -> FontSelectionFn<'static> {
             }
         }
 
-        log::warn!(
+        vl_warn!(
             "No match for '{}' font-family.",
             font.families()
                 .iter()
@@ -284,7 +284,7 @@ pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
                 .find(|f| f.1 == fontdb::Language::English_UnitedStates)
                 .unwrap_or(&base_face.families[0]);
 
-            log::warn!("Fallback from {} to {}.", base_family.0, new_family.0);
+            vl_warn!("Fallback from {} to {}.", base_family.0, new_family.0);
             return Some(face.id);
         }
 

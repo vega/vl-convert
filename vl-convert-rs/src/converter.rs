@@ -2198,7 +2198,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
         {
             Ok(json) => json,
             Err(e) => {
-                log::debug!("Failed to retrieve JS log messages: {e}");
+                vl_debug!("Failed to retrieve JS log messages: {e}");
                 return;
             }
         };
@@ -2208,7 +2208,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
         let entries: Vec<serde_json::Value> = match serde_json::from_str(&json) {
             Ok(v) => v,
             Err(e) => {
-                log::debug!("Failed to parse JS log messages: {e}");
+                vl_debug!("Failed to parse JS log messages: {e}");
                 return;
             }
         };
@@ -2216,10 +2216,10 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
             let level = entry.get("level").and_then(|v| v.as_str()).unwrap_or("");
             let msg = entry.get("msg").and_then(|v| v.as_str()).unwrap_or("");
             match level {
-                "error" => log::error!("{}", msg),
-                "warn" => log::warn!("{}", msg),
-                "info" => log::info!("{}", msg),
-                "debug" => log::debug!("{}", msg),
+                "error" => vl_error!("{}", msg),
+                "warn" => vl_warn!("{}", msg),
+                "info" => vl_info!("{}", msg),
+                "debug" => vl_debug!("{}", msg),
                 _ => {}
             }
         }
@@ -3128,7 +3128,7 @@ fn report_google_catalog_errors(
 
     if missing_fonts == MissingFontsPolicy::Warn {
         for (name, err) in api_errors {
-            log::warn!("auto_google_fonts: could not reach Google Fonts API for '{name}': {err}");
+            vl_warn!("auto_google_fonts: could not reach Google Fonts API for '{name}': {err}");
         }
     }
 
@@ -3166,12 +3166,12 @@ fn report_unavailable_fonts(
     if missing_fonts == MissingFontsPolicy::Warn {
         for name in unavailable_names {
             if auto_google_fonts {
-                log::warn!(
+                vl_warn!(
                     "auto_google_fonts: font '{name}' is not available on the system \
                      and not found in the Google Fonts catalog, skipping"
                 );
             } else {
-                log::warn!("missing_fonts=warn: font '{name}' is not available on the system");
+                vl_warn!("missing_fonts=warn: font '{name}' is not available on the system");
             }
         }
     }

@@ -197,7 +197,7 @@ pub async fn resolve_cdn_variants(
                         cdn_map.insert(f.family.clone(), set);
                     }
                     Err(e) => {
-                        log::warn!(
+                        vl_warn!(
                             "Failed to resolve variants for '{}': {e}, skipping CDN URL",
                             f.family
                         );
@@ -277,7 +277,7 @@ fn generate_google_fonts_css(
                 ));
             }
             MissingFontsPolicy::Warn => {
-                log::warn!(
+                vl_warn!(
                     "font_embed: no loaded data for '{}', skipping",
                     font_info.family
                 );
@@ -322,7 +322,7 @@ fn generate_google_fonts_css(
                     ));
                 }
                 MissingFontsPolicy::Warn => {
-                    log::warn!(
+                    vl_warn!(
                         "font_embed: no data for {} weight={} style={}, skipping",
                         font_key.family,
                         font_key.weight,
@@ -367,7 +367,7 @@ fn generate_google_fonts_css(
                     ));
                 }
                 MissingFontsPolicy::Warn => {
-                    log::warn!(
+                    vl_warn!(
                         "font_embed: failed to encode '{}': {}, skipping",
                         font_info.family,
                         e
@@ -439,13 +439,13 @@ fn generate_local_font_css(
                     );
                     match mode {
                         MissingFontsPolicy::Error => return Err(anyhow!(msg)),
-                        MissingFontsPolicy::Warn => log::warn!("font_embed: {msg}"),
+                        MissingFontsPolicy::Warn => vl_warn!("font_embed: {msg}"),
                         MissingFontsPolicy::Fallback => {}
                     }
                 }
                 None => {
                     if matches!(mode, MissingFontsPolicy::Warn) {
-                        log::warn!(
+                        vl_warn!(
                             "font_embed: fontdb could not provide face data for '{}'",
                             font_info.family
                         );
@@ -453,7 +453,7 @@ fn generate_local_font_css(
                 }
             }
         } else if matches!(mode, MissingFontsPolicy::Warn) {
-            log::warn!(
+            vl_warn!(
                 "font_embed: no fontdb match for '{}' weight={} style={}",
                 font_info.family,
                 font_key.weight,
