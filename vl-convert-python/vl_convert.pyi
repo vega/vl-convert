@@ -179,7 +179,7 @@ __all__ = [
     "asyncio",
     "configure",
     "load_config",
-    "get_default_config_path",
+    "get_config_path",
     "get_format_locale",
     "get_config",
     "get_local_tz",
@@ -429,9 +429,9 @@ def load_config(path: str | None = None) -> None:
     Parameters
     ----------
     path
-        Path to the JSONC config file. When omitted, loads from the platform
-        default location (print with ``vl-convert config-path``). If the
-        default file does not exist, resets to built-in defaults.
+        Path to the JSONC config file. When omitted, loads from the standard
+        location returned by ``get_config_path()``. If that file does not
+        exist, resets to built-in defaults.
 
     Raises
     ------
@@ -440,14 +440,18 @@ def load_config(path: str | None = None) -> None:
     """
     ...
 
-def get_default_config_path() -> str:
+def get_config_path() -> str:
     """
-    Return the platform default path that ``load_config()`` reads when no path is given.
+    Return the platform-standard path for the vl-convert JSONC config file.
+
+    This is the path ``load_config()`` reads when called without arguments,
+    and the same path printed by ``vl-convert config-path`` on the CLI.
+    The file may not exist.
 
     Returns
     -------
     str
-        Absolute path to the default JSONC config file. The file may not exist.
+        Absolute path to the standard JSONC config file.
     """
     ...
 

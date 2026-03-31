@@ -4894,6 +4894,18 @@ pub fn load_vlc_config_from_jsonc(path: &std::path::Path) -> Result<VlConverterC
     Ok(config)
 }
 
+/// Return the platform-standard path for the vl-convert JSONC config file.
+///
+/// The path is `<config_dir>/vl-convert/vlc-config.jsonc` where `config_dir`
+/// is the OS config directory (`~/.config` on Linux, `~/Library/Application Support`
+/// on macOS, `%APPDATA%` on Windows). The file may not exist.
+pub fn vlc_config_path() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("vl-convert")
+        .join("vlc-config.jsonc")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

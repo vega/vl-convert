@@ -693,7 +693,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Handle config-path before loading the config so it works even with a broken config file.
     if let Commands::ConfigPath = cli.command {
-        println!("{}", default_vlc_config_path().display());
+        println!("{}", vl_convert_rs::vlc_config_path().display());
         return Ok(());
     }
 
@@ -1523,13 +1523,6 @@ fn write_stdout_bytes(data: &[u8]) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn default_vlc_config_path() -> std::path::PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("vl-convert")
-        .join("vlc-config.jsonc")
-}
-
 fn resolve_vlc_config(
     vlc_config: Option<&str>,
     no_vlc_config: bool,
@@ -1543,14 +1536,14 @@ fn resolve_vlc_config(
             std::path::PathBuf::from(expanded)
         }
         None => {
-            let default = default_vlc_config_path();
+            let default = vl_convert_rs::vlc_config_path();
             if !default.exists() {
                 return Ok(VlConverterConfig::default());
             }
             default
         }
     };
-    vl_convert_rs::converter::load_vlc_config_from_jsonc(&path)
+    vl_convert_rs::load_vlc_config_from_jsonc(&path)
 }
 
 fn normalize_config_path(config: Option<String>) -> Option<String> {

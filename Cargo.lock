@@ -10195,7 +10195,6 @@ version = "2.0.0-rc1"
 dependencies = [
  "assert_cmd",
  "clap",
- "dirs",
  "dssim",
  "env_logger",
  "itertools 0.14.0",
@@ -10269,7 +10268,6 @@ dependencies = [
 name = "vl-convert-python"
 version = "2.0.0-rc1"
 dependencies = [
- "dirs",
  "futures",
  "lazy_static",
  "pyo3",
@@ -10293,6 +10291,7 @@ dependencies = [
  "deno_graph",
  "deno_runtime",
  "deno_semver",
+ "dirs",
  "dssim",
  "env_logger",
  "escape8259",

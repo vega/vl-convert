@@ -13,10 +13,11 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    load_vlc_config_from_jsonc, BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts,
-    JpegOpts, MissingFontsPolicy, PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale,
-    ValueOrString, VgOpts, VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
+    BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts, JpegOpts, MissingFontsPolicy,
+    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, ValueOrString, VgOpts,
+    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
 };
+use vl_convert_rs::{load_vlc_config_from_jsonc, vlc_config_path};
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
 };
@@ -1839,29 +1840,22 @@ fn configure(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))
 }
 
-fn default_vlc_config_path() -> std::path::PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("vl-convert")
-        .join("vlc-config.jsonc")
-}
-
-/// Return the platform-default vlc-config path as a string.
-#[pyfunction(name = "get_default_config_path")]
+/// Return the platform-standard path for the vl-convert JSONC config file.
+#[pyfunction(name = "get_config_path")]
 #[pyo3(signature = ())]
-fn get_default_config_path() -> String {
-    default_vlc_config_path().to_string_lossy().into_owned()
+fn get_config_path() -> String {
+    vlc_config_path().to_string_lossy().into_owned()
 }
 
 fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyhow::Error> {
     let config = match path {
         Some(p) => load_vlc_config_from_jsonc(std::path::Path::new(&p))?,
         None => {
-            let default = default_vlc_config_path();
-            if !default.exists() {
+            let standard = vlc_config_path();
+            if !standard.exists() {
                 VlConverterConfig::default()
             } else {
-                load_vlc_config_from_jsonc(&default)?
+                load_vlc_config_from_jsonc(&standard)?
             }
         }
     };
@@ -1880,8 +1874,8 @@ fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyhow::
 ///
 /// Args:
 ///     path (str | None): Path to the JSONC config file. When omitted, loads
-///         from the platform default location (print with ``vl-convert config-path``).
-///         If the default file does not exist, resets to built-in defaults.
+///         from the standard location returned by ``get_config_path()``.
+///         If that file does not exist, resets to built-in defaults.
 ///
 /// Raises:
 ///     ValueError: If the path is provided but the file cannot be read or parsed.
@@ -3299,7 +3293,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(configure, m)?)?;
     m.add_function(wrap_pyfunction!(load_config, m)?)?;
-    m.add_function(wrap_pyfunction!(get_default_config_path, m)?)?;
+    m.add_function(wrap_pyfunction!(get_config_path, m)?)?;
     m.add_function(wrap_pyfunction!(get_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_worker_memory_usage, m)?)?;
