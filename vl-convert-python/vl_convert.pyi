@@ -1200,9 +1200,7 @@ if TYPE_CHECKING:
         async def get_themes(self) -> dict[VegaThemes, dict[str, Any]]:
             """Async version of ``get_themes``. See sync function for full documentation."""
             ...
-        def get_time_format_locale(
-            self, name: TimeFormatLocaleName
-        ) -> dict[str, Any]:
+        def get_time_format_locale(self, name: TimeFormatLocaleName) -> dict[str, Any]:
             """See :func:`vl_convert.get_time_format_locale` for full documentation."""
             ...
         async def javascript_bundle(
