@@ -13,9 +13,9 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
-    BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts, JpegOpts, MissingFontsPolicy,
-    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, ValueOrString, VgOpts,
-    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
+    load_vlc_config_from_jsonc, BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts,
+    JpegOpts, MissingFontsPolicy, PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale,
+    ValueOrString, VgOpts, VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -1839,6 +1839,51 @@ fn configure(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))
 }
 
+fn default_vlc_config_path() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("vl-convert")
+        .join("vlc-config.jsonc")
+}
+
+fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyhow::Error> {
+    let config = match path {
+        Some(p) => load_vlc_config_from_jsonc(std::path::Path::new(&p))?,
+        None => {
+            let default = default_vlc_config_path();
+            if !default.exists() {
+                VlConverterConfig::default()
+            } else {
+                load_vlc_config_from_jsonc(&default)?
+            }
+        }
+    };
+    let mut guard = VL_CONVERTER.write().map_err(|e| {
+        vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
+    })?;
+    *guard = Arc::new(VlConverterRs::with_config(config)?);
+    Ok(())
+}
+
+/// Load converter configuration from a JSONC file, replacing the active config.
+///
+/// Unlike ``configure()``, which patches individual fields, ``load_config()``
+/// resets all settings to their defaults and then applies the file. Call
+/// ``configure()`` after ``load_config()`` to override specific fields in code.
+///
+/// Args:
+///     path (str | None): Path to the JSONC config file. When omitted, loads
+///         from the platform default location (print with ``vl-convert config-path``).
+///         If the default file does not exist, resets to built-in defaults.
+///
+/// Raises:
+///     ValueError: If the path is provided but the file cannot be read or parsed.
+#[pyfunction(name = "load_config")]
+#[pyo3(signature = (path=None))]
+fn load_config(path: Option<String>) -> PyResult<()> {
+    load_config_inner(path).map_err(|err| prefixed_py_error("Failed to load config", err))
+}
+
 /// Get the currently configured converter options.
 #[pyfunction(name = "get_config")]
 #[pyo3(signature = ())]
@@ -2932,6 +2977,16 @@ fn configure_asyncio<'py>(
     })
 }
 
+#[doc = async_variant_doc!("load_config")]
+#[pyfunction(name = "load_config")]
+#[pyo3(signature = (path=None))]
+fn load_config_asyncio<'py>(py: Python<'py>, path: Option<String>) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py_object(py, async move {
+        load_config_inner(path).map_err(|err| prefixed_py_error("Failed to load config", err))?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
 #[doc = async_variant_doc!("get_config")]
 #[pyfunction(name = "get_config")]
 #[pyo3(signature = ())]
@@ -3189,6 +3244,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(load_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_worker_memory_usage_asyncio, &asyncio)?)?;
@@ -3235,6 +3291,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(configure, m)?)?;
+    m.add_function(wrap_pyfunction!(load_config, m)?)?;
     m.add_function(wrap_pyfunction!(get_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_worker_memory_usage, m)?)?;

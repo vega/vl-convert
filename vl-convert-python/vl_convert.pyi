@@ -178,6 +178,7 @@ if TYPE_CHECKING:
 __all__ = [
     "asyncio",
     "configure",
+    "load_config",
     "get_format_locale",
     "get_config",
     "get_local_tz",
@@ -413,6 +414,28 @@ def configure(
         Custom named themes mapping names to Vega config objects.
         Registered alongside built-in vega-themes. Custom themes take
         priority over built-in themes if names collide. ``None`` clears.
+    """
+    ...
+
+def load_config(path: str | None = None) -> None:
+    """
+    Load converter configuration from a JSONC file, replacing the active config.
+
+    Unlike ``configure()``, which patches individual fields, ``load_config()``
+    resets all settings to their defaults and then applies the file. Call
+    ``configure()`` after ``load_config()`` to override specific fields in code.
+
+    Parameters
+    ----------
+    path
+        Path to the JSONC config file. When omitted, loads from the platform
+        default location (print with ``vl-convert config-path``). If the
+        default file does not exist, resets to built-in defaults.
+
+    Raises
+    ------
+    ValueError
+        If ``path`` is provided but the file cannot be read or parsed.
     """
     ...
 
@@ -1198,6 +1221,9 @@ if TYPE_CHECKING:
             themes: dict[str, dict[str, Any]] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
+            ...
+        async def load_config(self, path: str | None = None) -> None:
+            """Async version of ``load_config``. See sync function for full documentation."""
             ...
         async def get_config(self) -> ConverterConfig:
             """Async version of ``get_config``. See sync function for full documentation."""

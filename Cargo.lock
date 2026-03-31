@@ -10269,6 +10269,7 @@ dependencies = [
 name = "vl-convert-python"
 version = "2.0.0-rc1"
 dependencies = [
+ "dirs",
  "futures",
  "lazy_static",
  "pyo3",

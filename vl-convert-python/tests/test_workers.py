@@ -126,3 +126,64 @@ def test_configure_noop_when_called_without_args():
     vlc.configure()
     after = vlc.get_config()
     assert after == before
+
+
+def test_load_config_from_jsonc_file(tmp_path):
+    # Write a JSONC config with comments and trailing commas that registers a
+    # custom theme and sets missing_fonts policy.
+    config_file = tmp_path / "vlc-config.jsonc"
+    config_file.write_text(
+        """{
+    // Custom config for load_config test
+    "missing_fonts": "warn", // override default
+    "themes": {
+        "my-test-theme": {
+            "background": "#abcdef",
+        },
+    },
+}"""
+    )
+
+    vlc.load_config(str(config_file))
+
+    config = vlc.get_config()
+    assert config["missing_fonts"] == "warn"
+    themes = vlc.get_themes()
+    assert "my-test-theme" in themes
+    assert themes["my-test-theme"]["background"] == "#abcdef"
+    # Built-in themes are still present
+    assert "dark" in themes
+
+
+def test_load_config_resets_prior_configure_state(tmp_path):
+    # configure() patches are blown away by a subsequent load_config().
+    vlc.configure(missing_fonts="error", auto_google_fonts=True)
+    assert vlc.get_config()["missing_fonts"] == "error"
+    assert vlc.get_config()["auto_google_fonts"] is True
+
+    config_file = tmp_path / "vlc-config.jsonc"
+    config_file.write_text('{"missing_fonts": "warn"}')
+    vlc.load_config(str(config_file))
+
+    config = vlc.get_config()
+    assert config["missing_fonts"] == "warn"
+    # auto_google_fonts was not in the file → reset to default (False)
+    assert config["auto_google_fonts"] is False
+
+
+def test_load_config_then_configure_override(tmp_path):
+    # load_config establishes baseline, configure patches on top.
+    config_file = tmp_path / "vlc-config.jsonc"
+    config_file.write_text('{"missing_fonts": "warn"}')
+
+    vlc.load_config(str(config_file))
+    assert vlc.get_config()["missing_fonts"] == "warn"
+
+    # configure overrides the file-loaded value
+    vlc.configure(missing_fonts="error")
+    assert vlc.get_config()["missing_fonts"] == "error"
+
+
+def test_load_config_invalid_path_raises():
+    with pytest.raises(Exception):
+        vlc.load_config("/nonexistent/path/vlc-config.jsonc")
