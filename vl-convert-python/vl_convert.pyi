@@ -179,6 +179,7 @@ __all__ = [
     "asyncio",
     "configure",
     "load_config",
+    "get_default_config_path",
     "get_format_locale",
     "get_config",
     "get_local_tz",
@@ -436,6 +437,17 @@ def load_config(path: str | None = None) -> None:
     ------
     ValueError
         If ``path`` is provided but the file cannot be read or parsed.
+    """
+    ...
+
+def get_default_config_path() -> str:
+    """
+    Return the platform default path that ``load_config()`` reads when no path is given.
+
+    Returns
+    -------
+    str
+        Absolute path to the default JSONC config file. The file may not exist.
     """
     ...
 

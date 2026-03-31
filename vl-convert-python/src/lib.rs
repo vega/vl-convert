@@ -1846,6 +1846,13 @@ fn default_vlc_config_path() -> std::path::PathBuf {
         .join("vlc-config.jsonc")
 }
 
+/// Return the platform-default vlc-config path as a string.
+#[pyfunction(name = "get_default_config_path")]
+#[pyo3(signature = ())]
+fn get_default_config_path() -> String {
+    default_vlc_config_path().to_string_lossy().into_owned()
+}
+
 fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyhow::Error> {
     let config = match path {
         Some(p) => load_vlc_config_from_jsonc(std::path::Path::new(&p))?,
@@ -3292,6 +3299,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(configure, m)?)?;
     m.add_function(wrap_pyfunction!(load_config, m)?)?;
+    m.add_function(wrap_pyfunction!(get_default_config_path, m)?)?;
     m.add_function(wrap_pyfunction!(get_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_worker_memory_usage, m)?)?;
