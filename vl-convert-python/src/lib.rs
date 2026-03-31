@@ -3085,50 +3085,6 @@ fn get_themes_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     )
 }
 
-#[doc = async_variant_doc!("get_format_locale")]
-#[pyfunction(name = "get_format_locale")]
-#[pyo3(signature = (name))]
-fn get_format_locale_asyncio<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    let locale = match FORMATE_LOCALE_MAP.get(name) {
-        None => {
-            return Err(PyValueError::new_err(format!(
-                "Invalid format locale name: {name}\nSee https://github.com/d3/d3-format/tree/main/locale for available names"
-            )))
-        }
-        Some(locale) => parse_embedded_locale_json(locale, "format locale")?,
-    };
-
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &locale)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
-#[doc = async_variant_doc!("get_time_format_locale")]
-#[pyfunction(name = "get_time_format_locale")]
-#[pyo3(signature = (name))]
-fn get_time_format_locale_asyncio<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    let locale = match TIME_FORMATE_LOCALE_MAP.get(name) {
-        None => {
-            return Err(PyValueError::new_err(format!(
-                "Invalid time format locale name: {name}\nSee https://github.com/d3/d3-time-format/tree/main/locale for available names"
-            )))
-        }
-        Some(locale) => parse_embedded_locale_json(locale, "time format locale")?,
-    };
-
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &locale)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
 #[doc = async_variant_doc!("javascript_bundle")]
 #[pyfunction(name = "javascript_bundle")]
 #[pyo3(signature = (snippet=None, vl_version=None))]
@@ -3168,79 +3124,6 @@ fn javascript_bundle_asyncio<'py>(
     }
 }
 
-#[doc = async_variant_doc!("get_vega_version")]
-#[pyfunction(name = "get_vega_version")]
-#[pyo3(signature = ())]
-fn get_vega_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let value = VEGA_VERSION.to_string();
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &value)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
-#[doc = async_variant_doc!("get_vega_themes_version")]
-#[pyfunction(name = "get_vega_themes_version")]
-#[pyo3(signature = ())]
-fn get_vega_themes_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let value = VEGA_THEMES_VERSION.to_string();
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &value)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
-#[doc = async_variant_doc!("get_vega_embed_version")]
-#[pyfunction(name = "get_vega_embed_version")]
-#[pyo3(signature = ())]
-fn get_vega_embed_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let value = VEGA_EMBED_VERSION.to_string();
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &value)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
-#[doc = async_variant_doc!("get_config_path")]
-#[pyfunction(name = "get_config_path")]
-#[pyo3(signature = ())]
-fn get_config_path_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let value = vlc_config_path().to_string_lossy().into_owned();
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &value)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
-#[doc = async_variant_doc!("get_vegalite_versions")]
-#[pyfunction(name = "get_vegalite_versions")]
-#[pyo3(signature = ())]
-fn get_vegalite_versions_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let value: Vec<String> = VL_VERSIONS
-        .iter()
-        .map(|v| v.to_semver().to_string())
-        .collect();
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &value)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
 fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Returns Err if already initialized (expected on module re-import).
     // We intentionally ignore this value to make initialization idempotent.
@@ -3275,14 +3158,14 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(get_worker_memory_usage_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_themes_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_format_locale_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_time_format_locale_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_format_locale, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_time_format_locale, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(javascript_bundle_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_vega_version_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_vega_themes_version_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_vega_embed_version_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_vegalite_versions_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_config_path_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vega_version, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vega_themes_version, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vega_embed_version, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vegalite_versions, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_config_path, &asyncio)?)?;
 
     m.add_submodule(&asyncio)?;
     py.import("sys")?
