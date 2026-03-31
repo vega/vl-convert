@@ -788,6 +788,10 @@ pub(crate) struct ConverterContext {
     pub resolved_plugins: Option<Vec<ResolvedPlugin>>,
 }
 
+/// Backward-compatible alias for [`VlcConfig`].
+#[deprecated(since = "2.0.0", note = "use VlcConfig instead")]
+pub type VlConverterConfig = VlcConfig;
+
 impl Default for VlcConfig {
     fn default() -> Self {
         Self {
