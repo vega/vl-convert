@@ -1,6 +1,6 @@
 use serde_json::json;
 use std::collections::HashMap;
-use vl_convert_rs::converter::{SvgOpts, VlConverterConfig, VlOpts};
+use vl_convert_rs::converter::{SvgOpts, VlcConfig, VlOpts};
 use vl_convert_rs::VlConverter;
 
 fn simple_vl_bar_spec() -> serde_json::Value {
@@ -20,7 +20,7 @@ async fn test_custom_theme_applied() {
     let mut themes = HashMap::new();
     themes.insert("mytest".to_string(), json!({"background": "#abcdef"}));
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         themes: Some(themes),
         default_theme: Some("mytest".to_string()),
         ..Default::default()
@@ -44,7 +44,7 @@ async fn test_per_request_theme_overrides_default() {
     let mut themes = HashMap::new();
     themes.insert("mytest".to_string(), json!({"background": "#abcdef"}));
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         themes: Some(themes),
         default_theme: Some("mytest".to_string()),
         ..Default::default()
@@ -81,7 +81,7 @@ async fn test_custom_theme_visible_in_get_themes() {
     let mut themes = HashMap::new();
     themes.insert("corporate".to_string(), json!({"background": "#f5f5f5"}));
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         themes: Some(themes),
         ..Default::default()
     })
@@ -110,7 +110,7 @@ async fn test_custom_theme_visible_in_get_themes() {
 #[tokio::test]
 async fn test_default_theme_without_custom_themes() {
     // Using a built-in theme as default (no custom themes needed)
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         default_theme: Some("dark".to_string()),
         ..Default::default()
     })
@@ -129,7 +129,7 @@ async fn test_default_theme_without_custom_themes() {
 
 #[tokio::test]
 async fn test_default_locale_applied() {
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         default_format_locale: Some(vl_convert_rs::converter::FormatLocale::Name(
             "fr-FR".to_string(),
         )),
@@ -163,7 +163,7 @@ async fn test_default_locale_applied() {
 
 #[tokio::test]
 async fn test_per_request_locale_overrides_default() {
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         default_format_locale: Some(vl_convert_rs::converter::FormatLocale::Name(
             "fr-FR".to_string(),
         )),

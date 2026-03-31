@@ -14,10 +14,10 @@ use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts, JpegOpts, MissingFontsPolicy,
-    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, ValueOrString, VgOpts,
-    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
+    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, ValueOrString, VgOpts, VlcConfig,
+    VlOpts, ACCESS_DENIED_MARKER,
 };
-use vl_convert_rs::{load_vlc_config_from_jsonc, vlc_config_path};
+use vl_convert_rs::vlc_config_path;
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
 };
@@ -67,14 +67,14 @@ fn converter_read_handle() -> Result<Arc<VlConverterRs>, vl_convert_rs::anyhow::
         .map(|guard| guard.clone())
 }
 
-fn converter_config() -> Result<VlConverterConfig, vl_convert_rs::anyhow::Error> {
+fn converter_config() -> Result<VlcConfig, vl_convert_rs::anyhow::Error> {
     VL_CONVERTER
         .read()
         .map_err(|e| vl_convert_rs::anyhow::anyhow!("Failed to acquire converter read lock: {e}"))
         .map(|guard| guard.config())
 }
 
-fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
+fn converter_config_json(config: &VlcConfig) -> serde_json::Value {
     let base_url_value = match &config.base_url {
         BaseUrlSetting::Default => serde_json::Value::Bool(true),
         BaseUrlSetting::Disabled => serde_json::Value::Bool(false),
@@ -425,7 +425,7 @@ fn parse_config_overrides(
 }
 
 fn apply_config_overrides(
-    config: &mut VlConverterConfig,
+    config: &mut VlcConfig,
     overrides: ConverterConfigOverrides,
 ) -> Result<(), vl_convert_rs::anyhow::Error> {
     if let Some(num_workers) = overrides.num_workers {
@@ -1849,13 +1849,13 @@ fn get_config_path() -> String {
 
 fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyhow::Error> {
     let config = match path {
-        Some(p) => load_vlc_config_from_jsonc(std::path::Path::new(&p))?,
+        Some(p) => VlcConfig::from_file(std::path::Path::new(&p))?,
         None => {
             let standard = vlc_config_path();
             if !standard.exists() {
-                VlConverterConfig::default()
+                VlcConfig::default()
             } else {
-                load_vlc_config_from_jsonc(&standard)?
+                VlcConfig::from_file(&standard)?
             }
         }
     };

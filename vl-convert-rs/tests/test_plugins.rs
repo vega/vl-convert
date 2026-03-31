@@ -3,7 +3,7 @@ mod test_utils;
 use futures::executor::block_on;
 use serde_json::json;
 use test_utils::{check_vg_png, initialize, load_vg_spec};
-use vl_convert_rs::converter::{HtmlOpts, PngOpts, Renderer, SvgOpts, VgOpts, VlConverterConfig};
+use vl_convert_rs::converter::{HtmlOpts, PngOpts, Renderer, SvgOpts, VgOpts, VlcConfig};
 use vl_convert_rs::VlConverter;
 
 /// Helper: build a minimal Vega spec that renders a text mark showing
@@ -33,7 +33,7 @@ fn test_plugin_custom_scheme_png() {
     let plugin_source =
         "export default function(vega) { vega.scheme('testscheme', ['#ff0000', '#00ff00', '#0000ff']); }";
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![plugin_source.to_string()]),
         ..Default::default()
     })
@@ -57,7 +57,7 @@ fn test_plugin_custom_scheme_png() {
 async fn test_plugin_registers_expression_function() {
     let plugin_source =
         "export default function(vega) { vega.expressionFunction('double', (x) => x * 2); }";
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![plugin_source.to_string()]),
         ..Default::default()
     })
@@ -82,7 +82,7 @@ async fn test_multiple_plugins_register_different_functions() {
         "export default function(vega) { vega.expressionFunction('triple', (x) => x * 3); }";
     let plugin_b =
         "export default function(vega) { vega.expressionFunction('addTen', (x) => x + 10); }";
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![plugin_a.to_string(), plugin_b.to_string()]),
         ..Default::default()
     })
@@ -112,7 +112,7 @@ async fn test_multiple_plugins_register_different_functions() {
 #[tokio::test]
 async fn test_plugin_with_syntax_error() {
     let bad_plugin = "export default function(vega) { vega.expressionFunction('bad', (x) =>; }";
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![bad_plugin.to_string()]),
         ..Default::default()
     })
@@ -134,7 +134,7 @@ async fn test_plugin_with_syntax_error() {
 #[tokio::test]
 async fn test_plugin_without_default_export() {
     let no_default_plugin = "export const x = 1;";
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![no_default_plugin.to_string()]),
         ..Default::default()
     })
@@ -160,7 +160,7 @@ async fn test_plugin_poison_behavior() {
     let good_plugin = "export default function(vega) { vega.expressionFunction('ok', () => 42); }";
     let bad_plugin = "export default function(vega) { throw new Error('plugin init boom'); }";
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![good_plugin.to_string(), bad_plugin.to_string()]),
         ..Default::default()
     })
@@ -196,7 +196,7 @@ async fn test_plugin_html_export_contains_module_script() {
     let plugin_source =
         "export default function(vega) { vega.expressionFunction('myFn', (x) => x); }";
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![plugin_source.to_string()]),
         ..Default::default()
     })
@@ -254,7 +254,7 @@ async fn test_file_path_plugin() {
     )
     .unwrap();
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![plugin_path.to_str().unwrap().to_string()]),
         ..Default::default()
     })
@@ -288,7 +288,7 @@ export default function(vega) {
     vega.expressionFunction('d3scaled', (x) => s(x));
 }
 "#;
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![plugin_source.to_string()]),
         plugin_import_domains: vec!["esm.sh".to_string()],
         ..Default::default()
@@ -321,7 +321,7 @@ export default function(vega) {
     vega.expressionFunction('d3scaled10', (x) => s(x));
 }
 "#;
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![plugin_source.to_string()]),
         plugin_import_domains: vec!["esm.sh".to_string()],
         ..Default::default()
@@ -346,7 +346,7 @@ async fn test_per_request_plugin_works() {
     let plugin_source =
         "export default function(vega) { vega.expressionFunction('perReq', (x) => x + 99); }";
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         allow_per_request_plugins: true,
         ..Default::default()
     })
@@ -378,7 +378,7 @@ async fn test_per_request_plugin_isolation() {
     let plugin_source =
         "export default function(vega) { vega.expressionFunction('ephExpr', () => 777); }";
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         allow_per_request_plugins: true,
         ..Default::default()
     })
@@ -420,7 +420,7 @@ async fn test_per_request_plugin_isolation() {
 
 #[tokio::test]
 async fn test_per_request_plugin_disabled_by_default() {
-    let converter = VlConverter::with_config(VlConverterConfig::default()).unwrap();
+    let converter = VlConverter::with_config(VlcConfig::default()).unwrap();
 
     let spec = vega_spec_with_expression("1 + 1");
     let err = converter
@@ -450,7 +450,7 @@ async fn test_per_request_plugin_with_config_level_plugins() {
     let request_plugin =
         "export default function(vega) { vega.expressionFunction('reqFn', (x) => x + 50); }";
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         vega_plugins: Some(vec![config_plugin.to_string()]),
         allow_per_request_plugins: true,
         ..Default::default()
@@ -484,7 +484,7 @@ async fn test_per_request_plugin_html_export() {
     let plugin_source =
         "export default function(vega) { vega.expressionFunction('htmlReq', (x) => x); }";
 
-    let converter = VlConverter::with_config(VlConverterConfig {
+    let converter = VlConverter::with_config(VlcConfig {
         allow_per_request_plugins: true,
         ..Default::default()
     })

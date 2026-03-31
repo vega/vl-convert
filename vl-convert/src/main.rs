@@ -9,7 +9,7 @@ use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
     vega_to_url, vegalite_to_url, BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts,
     JpegOpts, MissingFontsPolicy, PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, VgOpts,
-    VlConverter, VlConverterConfig, VlOpts,
+    VlConverter, VlcConfig, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
@@ -1526,9 +1526,9 @@ fn write_stdout_bytes(data: &[u8]) -> Result<(), anyhow::Error> {
 fn resolve_vlc_config(
     vlc_config: Option<&str>,
     no_vlc_config: bool,
-) -> Result<VlConverterConfig, anyhow::Error> {
+) -> Result<VlcConfig, anyhow::Error> {
     if no_vlc_config {
-        return Ok(VlConverterConfig::default());
+        return Ok(VlcConfig::default());
     }
     let path = match vlc_config {
         Some(p) => {
@@ -1538,12 +1538,12 @@ fn resolve_vlc_config(
         None => {
             let default = vl_convert_rs::vlc_config_path();
             if !default.exists() {
-                return Ok(VlConverterConfig::default());
+                return Ok(VlcConfig::default());
             }
             default
         }
     };
-    vl_convert_rs::load_vlc_config_from_jsonc(&path)
+    VlcConfig::from_file(&path)
 }
 
 fn normalize_config_path(config: Option<String>) -> Option<String> {
@@ -1575,7 +1575,7 @@ async fn vl_2_vg(
     theme: Option<String>,
     config: Option<String>,
     pretty: bool,
-    converter_config: VlConverterConfig,
+    converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
     let vegalite_str = read_input_string(input)?;
@@ -1627,7 +1627,7 @@ async fn vg_2_svg(
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     svg_opts: SvgOpts,
-    converter_config: VlConverterConfig,
+    converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
     let vg_spec = parse_as_json(&vega_str)?;
@@ -1669,7 +1669,7 @@ async fn vg_2_png(
     ppi: f32,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    converter_config: VlConverterConfig,
+    converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
     let vg_spec = parse_as_json(&vega_str)?;
@@ -1714,7 +1714,7 @@ async fn vg_2_jpeg(
     quality: u8,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    converter_config: VlConverterConfig,
+    converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
     let vg_spec = parse_as_json(&vega_str)?;
@@ -1756,7 +1756,7 @@ async fn vg_2_pdf(
     output: Option<&str>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    converter_config: VlConverterConfig,
+    converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
     let vg_spec = parse_as_json(&vega_str)?;
@@ -1800,7 +1800,7 @@ async fn vl_2_svg(
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     svg_opts: SvgOpts,
-    converter_config: VlConverterConfig,
+    converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
     let vegalite_str = read_input_string(input)?;
@@ -1850,7 +1850,7 @@ async fn vl_2_png(
     ppi: f32,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    converter_config: VlConverterConfig,
+    converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
     let vegalite_str = read_input_string(input)?;
@@ -1903,7 +1903,7 @@ async fn vl_2_jpeg(
     quality: u8,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    converter_config: VlConverterConfig,
+    converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
     let vegalite_str = read_input_string(input)?;
@@ -1954,7 +1954,7 @@ async fn vl_2_pdf(
     config: Option<String>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
-    converter_config: VlConverterConfig,
+    converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
     let vegalite_str = read_input_string(input)?;
@@ -1993,7 +1993,7 @@ async fn vl_2_pdf(
     Ok(())
 }
 
-async fn list_themes(config: VlConverterConfig) -> Result<(), anyhow::Error> {
+async fn list_themes(config: VlcConfig) -> Result<(), anyhow::Error> {
     let converter = VlConverter::with_config(config)?;
 
     if let serde_json::Value::Object(themes) = converter.get_themes().await? {
@@ -2007,7 +2007,7 @@ async fn list_themes(config: VlConverterConfig) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-async fn cat_theme(theme: &str, config: VlConverterConfig) -> Result<(), anyhow::Error> {
+async fn cat_theme(theme: &str, config: VlcConfig) -> Result<(), anyhow::Error> {
     let converter = VlConverter::with_config(config)?;
 
     if let serde_json::Value::Object(themes) = converter.get_themes().await? {

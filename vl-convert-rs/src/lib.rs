@@ -26,9 +26,8 @@ extern crate lazy_static;
 extern crate deno_core;
 
 pub use converter::{
-    load_vlc_config_from_jsonc, vlc_config_path, BaseUrlSetting, GoogleFontRequest, HtmlOpts,
-    JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts, VgOpts, VlConverter, VlConverterConfig,
-    VlOpts, WorkerMemoryUsage,
+    vlc_config_path, BaseUrlSetting, GoogleFontRequest, HtmlOpts, JpegOpts, PdfOpts, PngOpts,
+    Renderer, SvgOpts, VgOpts, VlcConfig, VlConverter, VlOpts, WorkerMemoryUsage,
 };
 pub use deno_core::anyhow;
 pub use extract::{FontInfo, FontSource, FontVariant};
