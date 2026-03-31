@@ -831,6 +831,10 @@ impl VlcConfig {
                 allow_comments: true,
                 allow_trailing_commas: true,
                 allow_loose_object_property_names: false,
+                allow_missing_commas: false,
+                allow_single_quoted_strings: false,
+                allow_hexadecimal_numbers: false,
+                allow_unary_plus_numbers: false,
             },
         )
         .map_err(|e| anyhow!("Failed to parse config file {}: {}", path.display(), e))?;
