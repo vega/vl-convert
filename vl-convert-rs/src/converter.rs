@@ -825,8 +825,15 @@ impl VlcConfig {
     pub fn from_file(path: &std::path::Path) -> Result<Self, AnyError> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| anyhow!("Failed to read config file {}: {}", path.display(), e))?;
-        let value = jsonc_parser::parse_to_serde_value(&text, &Default::default())
-            .map_err(|e| anyhow!("Failed to parse config file {}: {}", path.display(), e))?;
+        let value = jsonc_parser::parse_to_serde_value(
+            &text,
+            &jsonc_parser::ParseOptions {
+                allow_comments: true,
+                allow_trailing_commas: true,
+                allow_loose_object_property_names: false,
+            },
+        )
+        .map_err(|e| anyhow!("Failed to parse config file {}: {}", path.display(), e))?;
         let Some(value) = value else {
             return Ok(VlcConfig::default());
         };
@@ -6883,9 +6890,19 @@ mod config_serde_tests {
             /* Block comment */
             "missing_fonts": "warn"
         }"#;
-        let value = jsonc_parser::parse_to_serde_value(jsonc, &Default::default())
-            .unwrap()
-            .unwrap();
+        let value = jsonc_parser::parse_to_serde_value(
+            jsonc,
+            &jsonc_parser::ParseOptions {
+                allow_comments: true,
+                allow_trailing_commas: true,
+                allow_loose_object_property_names: false,
+                allow_single_quoted_strings: false,
+                allow_hexadecimal_numbers: false,
+                allow_unary_plus_numbers: false,
+            },
+        )
+        .unwrap()
+        .unwrap();
         let config: VlcConfig = serde_json::from_value(value).unwrap();
         assert!(config.auto_google_fonts);
         assert_eq!(config.missing_fonts, MissingFontsPolicy::Warn);
