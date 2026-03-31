@@ -39,6 +39,8 @@ image = { workspace = true }
 lz-str = { workspace = true }
 regex = { workspace = true }
 tokio = { workspace = true }
+jsonc-parser = { workspace = true }
+dirs = { workspace = true }
 serde_json = { workspace = true }
 svgtypes = { workspace = true }
 tempfile = { workspace = true }

@@ -1876,7 +1876,7 @@ dependencies = [
  "ignore",
  "import_map",
  "indexmap 2.13.0",
- "jsonc-parser",
+ "jsonc-parser 0.28.0",
  "log",
  "serde",
  "serde_json",
@@ -2726,7 +2726,7 @@ dependencies = [
  "futures",
  "import_map",
  "indexmap 2.13.0",
- "jsonc-parser",
+ "jsonc-parser 0.28.0",
  "log",
  "node_resolver",
  "once_cell",
@@ -5389,6 +5389,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b187b7e06feb2c205d8ec71f12cd8f553e33477ec155ebfc34f8daa7f3ae4eab"
 dependencies = [
  "serde_json",
+]
+
+[[package]]
+name = "jsonc-parser"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8de0ffda8def4eb16ed430641db8056c2509b20e38f2dd327bdb4c83239f88c4"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -10282,6 +10291,7 @@ dependencies = [
  "deno_graph",
  "deno_runtime",
  "deno_semver",
+ "dirs",
  "dssim",
  "env_logger",
  "escape8259",
@@ -10290,6 +10300,7 @@ dependencies = [
  "futures",
  "futures-util",
  "image 0.25.10",
+ "jsonc-parser 0.32.1",
  "lazy_static",
  "log",
  "lz-str",

@@ -25,9 +25,11 @@ extern crate lazy_static;
 // extern crate deno_core makes it available at crate root for op2 and extension! macros
 extern crate deno_core;
 
+#[allow(deprecated)]
 pub use converter::{
-    BaseUrlSetting, GoogleFontRequest, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts,
-    VgOpts, VlConverter, VlConverterConfig, VlOpts, WorkerMemoryUsage,
+    vlc_config_path, BaseUrlSetting, GoogleFontRequest, HtmlOpts, JpegOpts, PdfOpts, PngOpts,
+    Renderer, SvgOpts, VgOpts, VlConverter, VlConverterConfig, VlOpts, VlcConfig,
+    WorkerMemoryUsage,
 };
 pub use deno_core::anyhow;
 pub use extract::{FontInfo, FontSource, FontVariant};

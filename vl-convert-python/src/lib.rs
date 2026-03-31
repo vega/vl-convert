@@ -14,8 +14,8 @@ use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts, JpegOpts, MissingFontsPolicy,
-    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, ValueOrString, VgOpts,
-    VlConverterConfig, VlOpts, ACCESS_DENIED_MARKER,
+    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, ValueOrString, VgOpts, VlOpts,
+    VlcConfig, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
@@ -23,6 +23,7 @@ use vl_convert_rs::module_loader::import_map::{
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 use vl_convert_rs::serde_json;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
+use vl_convert_rs::vlc_config_path;
 use vl_convert_rs::VlConverter as VlConverterRs;
 use vl_convert_rs::{FontStyle, VariantRequest};
 
@@ -66,14 +67,14 @@ fn converter_read_handle() -> Result<Arc<VlConverterRs>, vl_convert_rs::anyhow::
         .map(|guard| guard.clone())
 }
 
-fn converter_config() -> Result<VlConverterConfig, vl_convert_rs::anyhow::Error> {
+fn converter_config() -> Result<VlcConfig, vl_convert_rs::anyhow::Error> {
     VL_CONVERTER
         .read()
         .map_err(|e| vl_convert_rs::anyhow::anyhow!("Failed to acquire converter read lock: {e}"))
         .map(|guard| guard.config())
 }
 
-fn converter_config_json(config: &VlConverterConfig) -> serde_json::Value {
+fn converter_config_json(config: &VlcConfig) -> serde_json::Value {
     let base_url_value = match &config.base_url {
         BaseUrlSetting::Default => serde_json::Value::Bool(true),
         BaseUrlSetting::Disabled => serde_json::Value::Bool(false),
@@ -424,7 +425,7 @@ fn parse_config_overrides(
 }
 
 fn apply_config_overrides(
-    config: &mut VlConverterConfig,
+    config: &mut VlcConfig,
     overrides: ConverterConfigOverrides,
 ) -> Result<(), vl_convert_rs::anyhow::Error> {
     if let Some(num_workers) = overrides.num_workers {
@@ -1839,6 +1840,61 @@ fn configure(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))
 }
 
+/// Return the platform-standard path for the vl-convert JSONC config file.
+#[pyfunction(name = "get_config_path")]
+#[pyo3(signature = ())]
+fn get_config_path() -> String {
+    vlc_config_path().to_string_lossy().into_owned()
+}
+
+fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyhow::Error> {
+    let config = match path {
+        Some(p) => VlcConfig::from_file(std::path::Path::new(&p))?,
+        None => {
+            let standard = vlc_config_path();
+            if !standard.exists() {
+                VlcConfig::default()
+            } else {
+                VlcConfig::from_file(&standard)?
+            }
+        }
+    };
+    // Build the new converter before touching any shared state so that a
+    // construction error leaves the existing converter and google_fonts intact.
+    let new_converter = Arc::new(VlConverterRs::with_config(config)?);
+
+    // Both writes succeed or neither observable: clear the google_fonts
+    // side-channel and install the new converter under their respective locks.
+    let mut gf_guard = CONFIGURED_GOOGLE_FONTS.write().map_err(|e| {
+        vl_convert_rs::anyhow::anyhow!("Failed to acquire google_fonts write lock: {e}")
+    })?;
+    let mut guard = VL_CONVERTER.write().map_err(|e| {
+        vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
+    })?;
+    *gf_guard = None;
+    *guard = new_converter;
+    Ok(())
+}
+
+/// Load converter configuration from a JSONC file, replacing the active config.
+///
+/// Unlike ``configure()``, which patches individual fields, ``load_config()``
+/// resets all settings to their defaults and then applies the file. Call
+/// ``configure()`` after ``load_config()`` to override specific fields in code.
+///
+/// Args:
+///     path (str | None): Path to the JSONC config file. When omitted, loads
+///         from the standard location returned by ``get_config_path()``.
+///         If that file does not exist, resets to built-in defaults.
+///
+/// Raises:
+///     ValueError: If the path is provided but the file cannot be read or parsed.
+#[pyfunction(name = "load_config")]
+#[pyo3(signature = (path=None))]
+fn load_config(path: Option<String>) -> PyResult<()> {
+    load_config_inner(path).map_err(|err| prefixed_py_error("Failed to load config", err))
+}
+
 /// Get the currently configured converter options.
 #[pyfunction(name = "get_config")]
 #[pyo3(signature = ())]
@@ -2926,8 +2982,23 @@ fn configure_asyncio<'py>(
     let overrides = parse_config_overrides(kwargs)
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
     future_into_py_object(py, async move {
-        configure_converter_with_config_overrides(overrides)
+        tokio::task::spawn_blocking(move || configure_converter_with_config_overrides(overrides))
+            .await
+            .map_err(|err| prefixed_py_error("Failed to configure converter", err))?
             .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
+#[doc = async_variant_doc!("load_config")]
+#[pyfunction(name = "load_config")]
+#[pyo3(signature = (path=None))]
+fn load_config_asyncio<'py>(py: Python<'py>, path: Option<String>) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py_object(py, async move {
+        tokio::task::spawn_blocking(move || load_config_inner(path))
+            .await
+            .map_err(|err| prefixed_py_error("Failed to load config", err))?
+            .map_err(|err| prefixed_py_error("Failed to load config", err))?;
         Python::with_gil(|py| Ok(py.None().into()))
     })
 }
@@ -2937,7 +3008,9 @@ fn configure_asyncio<'py>(
 #[pyo3(signature = ())]
 fn get_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     future_into_py_object(py, async move {
-        let config = converter_config()
+        let config = tokio::task::spawn_blocking(converter_config)
+            .await
+            .map_err(|err| prefixed_py_error("Failed to read converter config", err))?
             .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
         Python::with_gil(|py| {
             pythonize(py, &converter_config_json(&config))
@@ -3019,50 +3092,6 @@ fn get_themes_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     )
 }
 
-#[doc = async_variant_doc!("get_format_locale")]
-#[pyfunction(name = "get_format_locale")]
-#[pyo3(signature = (name))]
-fn get_format_locale_asyncio<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    let locale = match FORMATE_LOCALE_MAP.get(name) {
-        None => {
-            return Err(PyValueError::new_err(format!(
-                "Invalid format locale name: {name}\nSee https://github.com/d3/d3-format/tree/main/locale for available names"
-            )))
-        }
-        Some(locale) => parse_embedded_locale_json(locale, "format locale")?,
-    };
-
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &locale)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
-#[doc = async_variant_doc!("get_time_format_locale")]
-#[pyfunction(name = "get_time_format_locale")]
-#[pyo3(signature = (name))]
-fn get_time_format_locale_asyncio<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    let locale = match TIME_FORMATE_LOCALE_MAP.get(name) {
-        None => {
-            return Err(PyValueError::new_err(format!(
-                "Invalid time format locale name: {name}\nSee https://github.com/d3/d3-time-format/tree/main/locale for available names"
-            )))
-        }
-        Some(locale) => parse_embedded_locale_json(locale, "time format locale")?,
-    };
-
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &locale)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
 #[doc = async_variant_doc!("javascript_bundle")]
 #[pyfunction(name = "javascript_bundle")]
 #[pyo3(signature = (snippet=None, vl_version=None))]
@@ -3102,65 +3131,6 @@ fn javascript_bundle_asyncio<'py>(
     }
 }
 
-#[doc = async_variant_doc!("get_vega_version")]
-#[pyfunction(name = "get_vega_version")]
-#[pyo3(signature = ())]
-fn get_vega_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let value = VEGA_VERSION.to_string();
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &value)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
-#[doc = async_variant_doc!("get_vega_themes_version")]
-#[pyfunction(name = "get_vega_themes_version")]
-#[pyo3(signature = ())]
-fn get_vega_themes_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let value = VEGA_THEMES_VERSION.to_string();
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &value)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
-#[doc = async_variant_doc!("get_vega_embed_version")]
-#[pyfunction(name = "get_vega_embed_version")]
-#[pyo3(signature = ())]
-fn get_vega_embed_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let value = VEGA_EMBED_VERSION.to_string();
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &value)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
-#[doc = async_variant_doc!("get_vegalite_versions")]
-#[pyfunction(name = "get_vegalite_versions")]
-#[pyo3(signature = ())]
-fn get_vegalite_versions_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let value: Vec<String> = VL_VERSIONS
-        .iter()
-        .map(|v| v.to_semver().to_string())
-        .collect();
-    future_into_py_object(py, async move {
-        Python::with_gil(|py| {
-            pythonize(py, &value)
-                .map_err(|err| PyValueError::new_err(err.to_string()))
-                .map(|obj| obj.into())
-        })
-    })
-}
-
 fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Returns Err if already initialized (expected on module re-import).
     // We intentionally ignore this value to make initialization idempotent.
@@ -3189,18 +3159,20 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(load_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(warm_up_workers_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_worker_memory_usage_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_local_tz_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_themes_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_format_locale_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_time_format_locale_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_format_locale, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_time_format_locale, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(javascript_bundle_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_vega_version_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_vega_themes_version_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_vega_embed_version_asyncio, &asyncio)?)?;
-    asyncio.add_function(wrap_pyfunction!(get_vegalite_versions_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vega_version, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vega_themes_version, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vega_embed_version, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_vegalite_versions, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_config_path, &asyncio)?)?;
 
     m.add_submodule(&asyncio)?;
     py.import("sys")?
@@ -3235,6 +3207,8 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(configure, m)?)?;
+    m.add_function(wrap_pyfunction!(load_config, m)?)?;
+    m.add_function(wrap_pyfunction!(get_config_path, m)?)?;
     m.add_function(wrap_pyfunction!(get_config, m)?)?;
     m.add_function(wrap_pyfunction!(warm_up_workers, m)?)?;
     m.add_function(wrap_pyfunction!(get_worker_memory_usage, m)?)?;

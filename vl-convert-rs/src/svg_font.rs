@@ -6,7 +6,7 @@
 //! Callers provide pre-computed [`SvgAnalysis`] and classified font data so
 //! that the SVG is parsed only once (in `postprocess_svg`).
 
-use crate::converter::{MissingFontsPolicy, SvgOpts, VlConverterConfig};
+use crate::converter::{MissingFontsPolicy, SvgOpts, VlcConfig};
 use crate::extract::{ClassifiedFont, FontKey, FontSource, SvgAnalysis};
 use crate::font_embed::{generate_font_face_css, resolve_cdn_variants};
 use crate::html::font_import_rule;
@@ -73,7 +73,7 @@ fn build_svg_font_css(
     classified_fonts: &[ClassifiedFont],
     cdn_variants: &HashMap<String, BTreeSet<(String, String)>>,
     bundle: bool,
-    config: &VlConverterConfig,
+    config: &VlcConfig,
     missing_fonts: &MissingFontsPolicy,
     fontdb: &fontdb::Database,
     loaded_batches: &[vl_convert_google_fonts::LoadedFontBatch],
@@ -187,7 +187,7 @@ pub(crate) async fn process_svg(
     analysis: &SvgAnalysis,
     classified_fonts: &[ClassifiedFont],
     family_variants: &HashMap<String, BTreeSet<(String, String)>>,
-    config: &VlConverterConfig,
+    config: &VlcConfig,
     fontdb: &fontdb::Database,
     loaded_batches: &[vl_convert_google_fonts::LoadedFontBatch],
     image_policy: &ImageAccessPolicy,

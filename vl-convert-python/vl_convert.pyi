@@ -178,6 +178,8 @@ if TYPE_CHECKING:
 __all__ = [
     "asyncio",
     "configure",
+    "load_config",
+    "get_config_path",
     "get_format_locale",
     "get_config",
     "get_local_tz",
@@ -413,6 +415,43 @@ def configure(
         Custom named themes mapping names to Vega config objects.
         Registered alongside built-in vega-themes. Custom themes take
         priority over built-in themes if names collide. ``None`` clears.
+    """
+    ...
+
+def load_config(path: str | None = None) -> None:
+    """
+    Load converter configuration from a JSONC file, replacing the active config.
+
+    Unlike ``configure()``, which patches individual fields, ``load_config()``
+    resets all settings to their defaults and then applies the file. Call
+    ``configure()`` after ``load_config()`` to override specific fields in code.
+
+    Parameters
+    ----------
+    path
+        Path to the JSONC config file. When omitted, loads from the standard
+        location returned by ``get_config_path()``. If that file does not
+        exist, resets to built-in defaults.
+
+    Raises
+    ------
+    ValueError
+        If ``path`` is provided but the file cannot be read or parsed.
+    """
+    ...
+
+def get_config_path() -> str:
+    """
+    Return the platform-standard path for the vl-convert JSONC config file.
+
+    This is the path ``load_config()`` reads when called without arguments,
+    and the same path printed by ``vl-convert config-path`` on the CLI.
+    The file may not exist.
+
+    Returns
+    -------
+    str
+        Absolute path to the standard JSONC config file.
     """
     ...
 
@@ -1152,8 +1191,8 @@ def get_vegalite_versions() -> list[str]:
 
 if TYPE_CHECKING:
     class _AsyncioModule:
-        async def get_format_locale(self, name: FormatLocaleName) -> dict[str, Any]:
-            """Async version of ``get_format_locale``. See sync function for full documentation."""
+        def get_format_locale(self, name: FormatLocaleName) -> dict[str, Any]:
+            """See :func:`vl_convert.get_format_locale` for full documentation."""
             ...
         async def get_local_tz(self) -> str | None:
             """Async version of ``get_local_tz``. See sync function for full documentation."""
@@ -1161,10 +1200,8 @@ if TYPE_CHECKING:
         async def get_themes(self) -> dict[VegaThemes, dict[str, Any]]:
             """Async version of ``get_themes``. See sync function for full documentation."""
             ...
-        async def get_time_format_locale(
-            self, name: TimeFormatLocaleName
-        ) -> dict[str, Any]:
-            """Async version of ``get_time_format_locale``. See sync function for full documentation."""
+        def get_time_format_locale(self, name: TimeFormatLocaleName) -> dict[str, Any]:
+            """See :func:`vl_convert.get_time_format_locale` for full documentation."""
             ...
         async def javascript_bundle(
             self, snippet: str | None = None, vl_version: str | None = None
@@ -1198,6 +1235,9 @@ if TYPE_CHECKING:
             themes: dict[str, dict[str, Any]] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
+            ...
+        async def load_config(self, path: str | None = None) -> None:
+            """Async version of ``load_config``. See sync function for full documentation."""
             ...
         async def get_config(self) -> ConverterConfig:
             """Async version of ``get_config``. See sync function for full documentation."""
@@ -1416,17 +1456,20 @@ if TYPE_CHECKING:
         ) -> dict[str, Any]:
             """Async version of ``vegalite_to_vega``. See sync function for full documentation."""
             ...
-        async def get_vega_version(self) -> str:
-            """Async version of ``get_vega_version``. See sync function for full documentation."""
+        def get_vega_version(self) -> str:
+            """See :func:`vl_convert.get_vega_version` for full documentation."""
             ...
-        async def get_vega_themes_version(self) -> str:
-            """Async version of ``get_vega_themes_version``. See sync function for full documentation."""
+        def get_vega_themes_version(self) -> str:
+            """See :func:`vl_convert.get_vega_themes_version` for full documentation."""
             ...
-        async def get_vega_embed_version(self) -> str:
-            """Async version of ``get_vega_embed_version``. See sync function for full documentation."""
+        def get_vega_embed_version(self) -> str:
+            """See :func:`vl_convert.get_vega_embed_version` for full documentation."""
             ...
-        async def get_vegalite_versions(self) -> list[str]:
-            """Async version of ``get_vegalite_versions``. See sync function for full documentation."""
+        def get_vegalite_versions(self) -> list[str]:
+            """See :func:`vl_convert.get_vegalite_versions` for full documentation."""
+            ...
+        def get_config_path(self) -> str:
+            """See :func:`vl_convert.get_config_path` for full documentation."""
             ...
 
     asyncio: _AsyncioModule

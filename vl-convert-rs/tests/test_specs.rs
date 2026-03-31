@@ -521,7 +521,7 @@ mod test_svg {
 mod test_svg_allowed_base_url {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::{SvgOpts, VgOpts, VlOpts, VlConverterConfig};
+    use vl_convert_rs::converter::{SvgOpts, VgOpts, VlOpts, VlcConfig};
     use vl_convert_rs::VlConverter;
 
     #[rstest]
@@ -534,7 +534,7 @@ mod test_svg_allowed_base_url {
         let vl_spec = load_vl_spec(name);
 
         // Create converter with matching base URL on the config
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![
                 "https://raw.githubusercontent.com/vega/vega-datasets".to_string()
             ]),
@@ -573,7 +573,7 @@ mod test_svg_allowed_base_url {
         check_svg(name, vl_version, None, &svg);
 
         // Check for error with non-matching URL
-        let converter_blocked = VlConverter::with_config(VlConverterConfig {
+        let converter_blocked = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec!["https://some-other-base".to_string()]),
             ..Default::default()
         }).unwrap();
@@ -714,7 +714,7 @@ mod test_png_no_theme {
 mod test_png_google_fonts {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::{GoogleFontRequest, VlConverterConfig, VlOpts};
+    use vl_convert_rs::converter::{GoogleFontRequest, VlcConfig, VlOpts};
     use vl_convert_rs::VlConverter;
 
     #[test]
@@ -723,7 +723,7 @@ mod test_png_google_fonts {
 
         let vl_version = VlVersion::v5_8;
         let vl_spec = load_vl_spec("google_fonts");
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             google_fonts: Some(vec![
                 GoogleFontRequest { family: "Bangers".to_string(), variants: None },
                 GoogleFontRequest { family: "Lugrasimo".to_string(), variants: None },
@@ -989,7 +989,7 @@ mod test_vega_label_transform {
 }
 
 async fn check_svg_to_png_baseline(name: &str, svg: &str) {
-    let converter = VlConverter::with_config(vl_convert_rs::converter::VlConverterConfig {
+    let converter = VlConverter::with_config(vl_convert_rs::converter::VlcConfig {
         auto_google_fonts: true,
         ..Default::default()
     })
@@ -1056,7 +1056,7 @@ async fn test_svg_to_png_auto_google_fonts_pacifico() {
 }
 
 mod test_heap_limit {
-    use vl_convert_rs::converter::{SvgOpts, VgOpts, VlConverterConfig};
+    use vl_convert_rs::converter::{SvgOpts, VgOpts, VlcConfig};
     use vl_convert_rs::VlConverter;
 
     /// Verify that exceeding the V8 heap limit returns a specific error
@@ -1065,7 +1065,7 @@ mod test_heap_limit {
     /// before and after the OOM.
     #[tokio::test]
     async fn test_heap_limit_exceeded_and_recovery() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             max_v8_heap_size_mb: 256,
             ..Default::default()
         })
@@ -1130,7 +1130,7 @@ mod test_heap_limit {
     /// the callback fires again on a second OOM.
     #[tokio::test]
     async fn test_heap_limit_restored_after_recovery() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             max_v8_heap_size_mb: 256,
             ..Default::default()
         })
@@ -1183,7 +1183,7 @@ mod test_heap_limit {
     /// is registered and a normal conversion succeeds.
     #[tokio::test]
     async fn test_no_heap_limit() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             max_v8_heap_size_mb: 0,
             ..Default::default()
         })
@@ -1210,7 +1210,7 @@ mod test_heap_limit {
     /// at config time, not deferred to first use.
     #[test]
     fn test_min_heap_size_validation() {
-        let result = VlConverter::with_config(VlConverterConfig {
+        let result = VlConverter::with_config(VlcConfig {
             max_v8_heap_size_mb: 1,
             ..Default::default()
         });
@@ -1230,7 +1230,7 @@ mod test_heap_limit {
     /// timeout without hitting V8's default memory limit.
     #[tokio::test]
     async fn test_conversion_timeout_and_recovery() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             max_v8_execution_time_secs: 2,
             allow_per_request_plugins: true,
             ..Default::default()
@@ -1296,7 +1296,7 @@ mod test_heap_limit {
     /// Verify that max_v8_execution_time_secs=0 (no limit) works normally.
     #[tokio::test]
     async fn test_no_conversion_timeout() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             max_v8_execution_time_secs: 0,
             ..Default::default()
         })
@@ -1322,7 +1322,7 @@ mod test_heap_limit {
     /// Smoke test that gc_after_conversion=true doesn't crash.
     #[tokio::test]
     async fn test_gc_after_conversion() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             gc_after_conversion: true,
             ..Default::default()
         })

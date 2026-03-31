@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "vl-convert"
 # This version is not used for publishing packages and doesn't need to be kept in sync
 version = "0.0.1"

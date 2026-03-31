@@ -45,6 +45,7 @@ fs4 = { version = "0.13", features = ["tokio", "sync"] }
 futures = "0.3.30"
 futures-util = "0.3.30"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
+jsonc-parser = { version = "0.32", features = ["serde"] }
 itertools = "0.14.0"
 lazy_static = "1.4.0"
 log = "0.4.20"

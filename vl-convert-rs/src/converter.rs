@@ -283,7 +283,7 @@ async fn resolve_plugin(
 }
 
 async fn resolve_and_bundle_plugins(
-    config: &VlConverterConfig,
+    config: &VlcConfig,
 ) -> Result<Option<Vec<ResolvedPlugin>>, AnyError> {
     let Some(ref plugins) = config.vega_plugins else {
         return Ok(None);
@@ -299,7 +299,7 @@ async fn resolve_and_bundle_plugins(
 }
 
 fn spawn_worker_pool(
-    config: Arc<VlConverterConfig>,
+    config: Arc<VlcConfig>,
 ) -> Result<(WorkerPool, Arc<ConverterContext>), AnyError> {
     let num_workers = config.num_workers;
     if num_workers < 1 {
@@ -455,9 +455,7 @@ pub(crate) fn portable_canonicalize(
     Ok(canonical)
 }
 
-fn normalize_converter_config(
-    mut config: VlConverterConfig,
-) -> Result<VlConverterConfig, AnyError> {
+fn normalize_converter_config(mut config: VlcConfig) -> Result<VlcConfig, AnyError> {
     if config.num_workers < 1 {
         bail!("num_workers must be >= 1");
     }
@@ -529,12 +527,12 @@ pub fn domain_matches_patterns(domain: &str, patterns: &[String]) -> bool {
 
 /// Helper to build parsed allowed_base_urls from a config's string patterns.
 fn parse_allowed_base_urls_from_config(
-    config: &VlConverterConfig,
+    config: &VlcConfig,
 ) -> Result<Option<Vec<AllowedBaseUrlPattern>>, AnyError> {
     normalize_allowed_base_urls(config.allowed_base_urls.clone())
 }
 
-fn build_permissions(_config: &VlConverterConfig) -> Result<Permissions, AnyError> {
+fn build_permissions(_config: &VlcConfig) -> Result<Permissions, AnyError> {
     // All network and filesystem access is denied at the Deno level.
     // Data fetching goes through Rust ops (op_vega_data_fetch, op_vega_file_read)
     // which enforce allowed_base_urls policies in Rust.
@@ -593,7 +591,8 @@ impl ValueOrString {
 /// checked (e.g. for `"Roboto, Arial, sans-serif"` only `Roboto` is examined).
 /// This matches Vega's rendering behavior, which tries the first font and falls
 /// back to system generics.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum MissingFontsPolicy {
     /// Silently fall back to the default font (no validation).
     #[default]
@@ -624,6 +623,20 @@ pub enum BaseUrlSetting {
     Disabled,
     /// Resolve relative paths against a custom base URL or filesystem path
     Custom(String),
+}
+
+impl<'de> serde::Deserialize<'de> for BaseUrlSetting {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        match s.as_str() {
+            "default" => Ok(BaseUrlSetting::Default),
+            "disabled" => Ok(BaseUrlSetting::Disabled),
+            _ => Ok(BaseUrlSetting::Custom(s)),
+        }
+    }
 }
 
 impl BaseUrlSetting {
@@ -685,8 +698,9 @@ fn is_filesystem_path(s: &str) -> bool {
         && (bytes[2] == b'\\' || bytes[2] == b'/')
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VlConverterConfig {
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(default)]
+pub struct VlcConfig {
     pub num_workers: usize,
     /// Base URL for resolving relative data paths in Vega specs.
     pub base_url: BaseUrlSetting,
@@ -763,7 +777,7 @@ pub struct VlConverterConfig {
 /// Shared context passed to all workers.
 #[derive(Debug, Clone)]
 pub(crate) struct ConverterContext {
-    pub config: VlConverterConfig,
+    pub config: VlcConfig,
     /// Parsed allowlist patterns derived from `config.allowed_base_urls`.
     /// Computed once at construction to avoid re-parsing on every request.
     pub parsed_allowed_base_urls: Option<Vec<AllowedBaseUrlPattern>>,
@@ -772,7 +786,11 @@ pub(crate) struct ConverterContext {
     pub resolved_plugins: Option<Vec<ResolvedPlugin>>,
 }
 
-impl Default for VlConverterConfig {
+/// Backward-compatible alias for [`VlcConfig`].
+#[deprecated(since = "2.0.0", note = "use VlcConfig instead")]
+pub type VlConverterConfig = VlcConfig;
+
+impl Default for VlcConfig {
     fn default() -> Self {
         Self {
             num_workers: 1,
@@ -798,6 +816,70 @@ impl Default for VlConverterConfig {
     }
 }
 
+impl VlcConfig {
+    /// Load a `VlcConfig` from a file. Supports JSONC (JSON with support for
+    /// comments and trailing commas). Relative paths in `vega_plugins` and
+    /// filesystem `base_url` values are resolved against the file's directory.
+    pub fn from_file(path: &std::path::Path) -> Result<Self, AnyError> {
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| anyhow!("Failed to read config file {}: {}", path.display(), e))?;
+        let value = jsonc_parser::parse_to_serde_value(
+            &text,
+            &jsonc_parser::ParseOptions {
+                allow_comments: true,
+                allow_trailing_commas: true,
+                allow_loose_object_property_names: false,
+                allow_missing_commas: false,
+                allow_single_quoted_strings: false,
+                allow_hexadecimal_numbers: false,
+                allow_unary_plus_numbers: false,
+            },
+        )
+        .map_err(|e| anyhow!("Failed to parse config file {}: {}", path.display(), e))?;
+        let Some(value) = value else {
+            return Ok(VlcConfig::default());
+        };
+        let mut config: VlcConfig = serde_json::from_value(value).map_err(|e| {
+            anyhow!(
+                "Failed to deserialize config file {}: {}",
+                path.display(),
+                e
+            )
+        })?;
+
+        // Resolve relative filesystem paths against the config file's directory.
+        // URL strings (containing "://") and inline ESM source (containing
+        // newlines or starting with "export"/"import") are left untouched.
+        if let Some(config_dir) = path.parent() {
+            if let Some(ref mut plugins) = config.vega_plugins {
+                for plugin in plugins.iter_mut() {
+                    if plugin.contains("://")
+                        || plugin.contains('\n')
+                        || plugin.starts_with("export")
+                        || plugin.starts_with("import")
+                    {
+                        continue;
+                    }
+                    let p = std::path::Path::new(plugin.as_str());
+                    if p.is_relative() {
+                        *plugin = config_dir.join(p).to_string_lossy().to_string();
+                    }
+                }
+            }
+            if let BaseUrlSetting::Custom(ref mut url) = config.base_url {
+                if !url.contains("://") {
+                    let p = std::path::Path::new(url.as_str());
+                    if p.is_relative() {
+                        *url = config_dir.join(p).to_string_lossy().to_string();
+                    }
+                }
+            }
+        }
+
+        Ok(config)
+    }
+}
+
 /// V8 memory usage for a single worker.
 #[derive(Debug, Clone)]
 pub struct WorkerMemoryUsage {
@@ -813,7 +895,7 @@ pub struct WorkerMemoryUsage {
     pub external_memory: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct GoogleFontRequest {
     pub family: String,
     pub variants: Option<Vec<VariantRequest>>,
@@ -851,7 +933,8 @@ impl VgOpts {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(untagged)]
 pub enum FormatLocale {
     Name(String),
     Object(serde_json::Value),
@@ -871,7 +954,8 @@ impl FormatLocale {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(untagged)]
 pub enum TimeFormatLocale {
     Name(String),
     Object(serde_json::Value),
@@ -3282,7 +3366,7 @@ pub(crate) struct FontAnalysis {
 pub(crate) struct VlConverterInner {
     vegaembed_bundles: Mutex<HashMap<VlVersion, String>>,
     pool: Mutex<Option<WorkerPool>>,
-    pub(crate) config: Arc<VlConverterConfig>,
+    pub(crate) config: Arc<VlcConfig>,
     /// Resolved plugins populated when the worker pool is first spawned.
     /// Separate from config because spawn_worker_pool() creates a new Arc
     /// but VlConverterInner.config is set at with_config() time.
@@ -3334,10 +3418,10 @@ pub struct VlConverter {
 
 impl VlConverter {
     pub fn new() -> Self {
-        Self::with_config(VlConverterConfig::default()).expect("default converter config is valid")
+        Self::with_config(VlcConfig::default()).expect("default converter config is valid")
     }
 
-    pub fn with_config(config: VlConverterConfig) -> Result<Self, AnyError> {
+    pub fn with_config(config: VlcConfig) -> Result<Self, AnyError> {
         let config = Arc::new(normalize_converter_config(config)?);
 
         // Initialize environment logger with filter to suppress noisy SWC tree-shaker spans
@@ -3358,7 +3442,7 @@ impl VlConverter {
         })
     }
 
-    pub fn config(&self) -> VlConverterConfig {
+    pub fn config(&self) -> VlcConfig {
         (*self.inner.config).clone()
     }
 
@@ -4838,6 +4922,18 @@ pub fn vega_to_url(
     ))
 }
 
+/// Return the platform-standard path for the vl-convert JSONC config file.
+///
+/// The path is `<config_dir>/vl-convert/vlc-config.jsonc` where `config_dir`
+/// is the OS config directory (`~/.config` on Linux, `~/Library/Application Support`
+/// on macOS, `%APPDATA%` on Windows). The file may not exist.
+pub fn vlc_config_path() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("vl-convert")
+        .join("vlc-config.jsonc")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5124,7 +5220,7 @@ mod tests {
     async fn test_execute_script_to_bytes_typed_array() {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
-                config: VlConverterConfig::default(),
+                config: VlcConfig::default(),
                 parsed_allowed_base_urls: None,
                 resolved_plugins: None,
             }),
@@ -5143,7 +5239,7 @@ mod tests {
     async fn test_canvas_png_and_image_data_are_typed_arrays() {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
-                config: VlConverterConfig::default(),
+                config: VlcConfig::default(),
                 parsed_allowed_base_urls: None,
                 resolved_plugins: None,
             }),
@@ -5198,7 +5294,7 @@ var __imageDataChecks = [
     async fn test_image_decode_and_load_events() {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
-                config: VlConverterConfig::default(),
+                config: VlcConfig::default(),
                 parsed_allowed_base_urls: None,
                 resolved_plugins: None,
             }),
@@ -5255,7 +5351,7 @@ var __imageDecodeLoadResult = null;
         // Use allowed_base_urls: Some(vec![]) to deny all HTTP access via ops
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
-                config: VlConverterConfig {
+                config: VlcConfig {
                     allowed_base_urls: Some(vec![]),
                     ..Default::default()
                 },
@@ -5325,7 +5421,7 @@ var __imageDecodeErrorResult = null;
     async fn test_image_decode_ignores_stale_src_results() {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
-                config: VlConverterConfig::default(),
+                config: VlcConfig::default(),
                 parsed_allowed_base_urls: None,
                 resolved_plugins: None,
             }),
@@ -5395,7 +5491,7 @@ var __imageRaceResult = null;
     async fn test_polyfill_unsupported_methods_throw() {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
-                config: VlConverterConfig::default(),
+                config: VlcConfig::default(),
                 parsed_allowed_base_urls: None,
                 resolved_plugins: None,
             }),
@@ -5603,7 +5699,7 @@ try {
 
     #[test]
     fn test_with_config_rejects_zero_num_workers() {
-        let err = VlConverter::with_config(VlConverterConfig {
+        let err = VlConverter::with_config(VlcConfig {
             num_workers: 0,
             ..Default::default()
         })
@@ -5614,7 +5710,7 @@ try {
 
     #[test]
     fn test_config_reports_configured_num_workers() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             num_workers: 4,
             ..Default::default()
         })
@@ -5704,7 +5800,7 @@ try {
     #[test]
     fn test_with_config_accepts_empty_allowed_base_urls() {
         // Empty list means no external access at all (valid config)
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![]),
             ..Default::default()
         });
@@ -5729,7 +5825,7 @@ try {
 
     #[tokio::test]
     async fn test_svg_helper_denies_subdomain_and_userinfo_url_confusion() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec!["https://example.com".to_string()]),
             ..Default::default()
         })
@@ -5771,7 +5867,7 @@ try {
         write_test_png(&local_image_path);
         let href = Url::from_file_path(&local_image_path).unwrap().to_string();
 
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![]),
             ..Default::default()
         })
@@ -5801,7 +5897,7 @@ try {
         let outside_path = temp_dir.path().join("outside.png");
         write_test_png(&outside_path);
 
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             base_url: BaseUrlSetting::Custom(root.to_string_lossy().to_string()),
             allowed_base_urls: Some(vec![root.to_string_lossy().to_string()]),
             ..Default::default()
@@ -5850,7 +5946,7 @@ try {
     async fn test_svg_helper_enforces_http_access_and_allowed_base_urls() {
         let remote_svg = svg_with_href("https://example.com/image.png");
 
-        let no_http_converter = VlConverter::with_config(VlConverterConfig {
+        let no_http_converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![]),
             ..Default::default()
         })
@@ -5873,7 +5969,7 @@ try {
             "expected access denied, got: {msg}"
         );
 
-        let allowlisted_converter = VlConverter::with_config(VlConverterConfig {
+        let allowlisted_converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec!["https://allowed.example/".to_string()]),
             ..Default::default()
         })
@@ -5893,7 +5989,7 @@ try {
 
     #[tokio::test]
     async fn test_svg_helper_allows_data_uri_when_http_disabled() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![]),
             ..Default::default()
         })
@@ -5916,7 +6012,7 @@ try {
 
     #[tokio::test]
     async fn test_vega_to_pdf_denies_http_access() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![]),
             ..Default::default()
         })
@@ -5939,7 +6035,7 @@ try {
 
     #[tokio::test]
     async fn test_vega_loader_allows_data_uri_when_http_disabled() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![]),
             ..Default::default()
         })
@@ -5955,7 +6051,7 @@ try {
 
     #[tokio::test]
     async fn test_vegalite_to_png_canvas_image_denies_http_access() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![]),
             ..Default::default()
         })
@@ -5986,7 +6082,7 @@ try {
 
     #[tokio::test]
     async fn test_vegalite_to_png_canvas_image_enforces_allowed_base_urls() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec!["https://allowed.example/".to_string()]),
             ..Default::default()
         })
@@ -6016,7 +6112,7 @@ try {
 
     #[tokio::test]
     async fn test_vega_to_pdf_denies_disallowed_base_url() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec!["https://allowed.example/".to_string()]),
             ..Default::default()
         })
@@ -6039,7 +6135,7 @@ try {
         std::fs::write(&outside_csv, "a,b\n1,2\n").unwrap();
         let outside_file_url = Url::from_file_path(&outside_csv).unwrap().to_string();
 
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![root.to_string_lossy().to_string()]),
             ..Default::default()
         })
@@ -6073,7 +6169,7 @@ try {
         let outside_csv = temp_dir.path().join("outside.csv");
         std::fs::write(&outside_csv, "a,b\n1,2\n").unwrap();
 
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             base_url: BaseUrlSetting::Custom(root.to_string_lossy().to_string()),
             allowed_base_urls: Some(vec![root.to_string_lossy().to_string()]),
             ..Default::default()
@@ -6110,7 +6206,7 @@ try {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>"#,
             ),
         )]);
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: Some(vec![server.origin()]),
             ..Default::default()
         })
@@ -6171,7 +6267,7 @@ try {
 
     #[tokio::test]
     async fn test_get_vegaembed_bundle_caches_result() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             num_workers: 1,
             ..Default::default()
         })
@@ -6196,7 +6292,7 @@ try {
 
     #[tokio::test]
     async fn test_bundle_vega_snippet_custom_snippet() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             num_workers: 1,
             ..Default::default()
         })
@@ -6342,7 +6438,7 @@ try {
     #[test]
     fn test_get_or_spawn_sender_respawns_closed_pool_without_explicit_reset() {
         let num_workers = 2;
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             num_workers,
             ..Default::default()
         })
@@ -6381,7 +6477,7 @@ try {
 
     #[test]
     fn test_get_or_spawn_sender_spawns_pool_without_request() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             num_workers: 2,
             ..Default::default()
         })
@@ -6414,7 +6510,7 @@ try {
 
     #[tokio::test]
     async fn test_get_or_spawn_sender_is_idempotent() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             num_workers: 2,
             ..Default::default()
         })
@@ -6447,7 +6543,7 @@ try {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_parallel_conversions_with_shared_converter() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             num_workers: 4,
             ..Default::default()
         })
@@ -6648,7 +6744,7 @@ try {
 
     #[tokio::test]
     async fn test_base_url_disabled_blocks_relative_paths() {
-        let converter = VlConverter::with_config(VlConverterConfig {
+        let converter = VlConverter::with_config(VlcConfig {
             base_url: BaseUrlSetting::Disabled,
             ..Default::default()
         })
@@ -6679,7 +6775,7 @@ try {
         // Verify that JS code calling fetch() directly gets a permission error
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
-                config: VlConverterConfig::default(),
+                config: VlcConfig::default(),
                 parsed_allowed_base_urls: None,
                 resolved_plugins: None,
             }),
@@ -6715,5 +6811,182 @@ var __fetchResult = null;
             msg.contains("permission") || msg.contains("denied") || msg.contains("requires net"),
             "fetch() should be blocked by Deno permissions, got: {msg}"
         );
+    }
+}
+
+#[cfg(test)]
+mod config_serde_tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn test_empty_config() {
+        let config: VlcConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(config, VlcConfig::default());
+    }
+
+    #[test]
+    fn test_base_url_setting_default() {
+        let config: VlcConfig = serde_json::from_str(r#"{"base_url": "default"}"#).unwrap();
+        assert_eq!(config.base_url, BaseUrlSetting::Default);
+    }
+
+    #[test]
+    fn test_base_url_setting_disabled() {
+        let config: VlcConfig = serde_json::from_str(r#"{"base_url": "disabled"}"#).unwrap();
+        assert_eq!(config.base_url, BaseUrlSetting::Disabled);
+    }
+
+    #[test]
+    fn test_base_url_setting_custom() {
+        let config: VlcConfig =
+            serde_json::from_str(r#"{"base_url": "https://example.com/"}"#).unwrap();
+        assert_eq!(
+            config.base_url,
+            BaseUrlSetting::Custom("https://example.com/".to_string())
+        );
+    }
+
+    #[test]
+    fn test_missing_fonts_policy() {
+        for (json, expected) in [
+            ("\"fallback\"", MissingFontsPolicy::Fallback),
+            ("\"warn\"", MissingFontsPolicy::Warn),
+            ("\"error\"", MissingFontsPolicy::Error),
+        ] {
+            let policy: MissingFontsPolicy = serde_json::from_str(json).unwrap();
+            assert_eq!(policy, expected);
+        }
+    }
+
+    #[test]
+    fn test_format_locale_name() {
+        let locale: FormatLocale = serde_json::from_str(r#""de-DE""#).unwrap();
+        assert!(matches!(locale, FormatLocale::Name(ref s) if s == "de-DE"));
+    }
+
+    #[test]
+    fn test_format_locale_object() {
+        let locale: FormatLocale =
+            serde_json::from_str(r#"{"decimal": ",", "thousands": "."}"#).unwrap();
+        assert!(matches!(locale, FormatLocale::Object(_)));
+    }
+
+    #[test]
+    fn test_google_font_request() {
+        let req: GoogleFontRequest = serde_json::from_str(r#"{"family": "Roboto"}"#).unwrap();
+        assert_eq!(req.family, "Roboto");
+        assert!(req.variants.is_none());
+    }
+
+    #[test]
+    fn test_full_config() {
+        let json = r##"{
+            "num_workers": 2,
+            "auto_google_fonts": true,
+            "missing_fonts": "warn",
+            "max_v8_heap_size_mb": 512,
+            "default_theme": "dark",
+            "themes": {
+                "custom": {"background": "#333"}
+            }
+        }"##;
+        let config: VlcConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.num_workers, 2);
+        assert!(config.auto_google_fonts);
+        assert_eq!(config.missing_fonts, MissingFontsPolicy::Warn);
+        assert_eq!(config.max_v8_heap_size_mb, 512);
+        assert_eq!(config.default_theme, Some("dark".to_string()));
+        assert!(config.themes.is_some());
+    }
+
+    #[test]
+    fn test_jsonc_comments() {
+        let jsonc = r#"{
+            // This is a comment
+            "auto_google_fonts": true,
+            /* Block comment */
+            "missing_fonts": "warn"
+        }"#;
+        let value: serde_json::Value = jsonc_parser::parse_to_serde_value(
+            jsonc,
+            &jsonc_parser::ParseOptions {
+                allow_comments: true,
+                allow_trailing_commas: true,
+                allow_loose_object_property_names: false,
+                allow_missing_commas: false,
+                allow_single_quoted_strings: false,
+                allow_hexadecimal_numbers: false,
+                allow_unary_plus_numbers: false,
+            },
+        )
+        .unwrap();
+        let config: VlcConfig = serde_json::from_value(value).unwrap();
+        assert!(config.auto_google_fonts);
+        assert_eq!(config.missing_fonts, MissingFontsPolicy::Warn);
+    }
+
+    #[test]
+    fn test_unknown_fields_ignored() {
+        let json = r#"{"unknown_field": 42, "auto_google_fonts": true}"#;
+        let config: VlcConfig = serde_json::from_str(json).unwrap();
+        assert!(config.auto_google_fonts);
+    }
+
+    #[test]
+    fn test_from_file_url_base_url_not_rebased() {
+        let mut config_file = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        writeln!(
+            config_file,
+            r#"{{"base_url": "https://cdn.example.com/data/"}}"#
+        )
+        .unwrap();
+        let config = VlcConfig::from_file(config_file.path()).unwrap();
+        assert_eq!(
+            config.base_url,
+            BaseUrlSetting::Custom("https://cdn.example.com/data/".to_string())
+        );
+    }
+
+    #[test]
+    fn test_from_file_url_plugin_not_rebased() {
+        let mut config_file = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        writeln!(
+            config_file,
+            r#"{{"vega_plugins": ["https://esm.sh/my-plugin@1.0"]}}"#
+        )
+        .unwrap();
+        let config = VlcConfig::from_file(config_file.path()).unwrap();
+        assert_eq!(
+            config.vega_plugins.as_deref(),
+            Some(&["https://esm.sh/my-plugin@1.0".to_string()][..])
+        );
+    }
+
+    #[test]
+    fn test_from_file_inline_esm_plugin_not_rebased() {
+        let inline = "export default function(vega) {}";
+        let mut config_file = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        writeln!(config_file, r#"{{"vega_plugins": ["{inline}"]}}"#).unwrap();
+        let config = VlcConfig::from_file(config_file.path()).unwrap();
+        assert_eq!(
+            config.vega_plugins.as_deref(),
+            Some(&[inline.to_string()][..])
+        );
+    }
+
+    #[test]
+    fn test_from_file_relative_plugin_rebased() {
+        let mut config_file = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        writeln!(config_file, r#"{{"vega_plugins": ["./my-plugin.js"]}}"#).unwrap();
+        let config = VlcConfig::from_file(config_file.path()).unwrap();
+        let expected = config_file
+            .path()
+            .parent()
+            .unwrap()
+            .join("./my-plugin.js")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(config.vega_plugins.as_deref(), Some(&[expected][..]));
     }
 }

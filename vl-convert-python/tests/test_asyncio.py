@@ -50,12 +50,26 @@ def test_asyncio_module_has_sync_callable_parity():
     assert async_callables == sync_callables
 
 
+SYNC_FUNCTIONS_IN_ASYNCIO = {
+    "get_format_locale",
+    "get_time_format_locale",
+    "get_vega_version",
+    "get_vega_themes_version",
+    "get_vega_embed_version",
+    "get_vegalite_versions",
+    "get_config_path",
+}
+
+
 def test_asyncio_functions_have_docstrings():
     for name in public_callable_names(vlc):
         doc = getattr(vlca, name).__doc__
-        assert isinstance(doc, str)
-        assert doc.strip()
-        assert f"vl_convert.{name}" in doc
+        assert isinstance(doc, str), f"{name} has no docstring"
+        assert doc.strip(), f"{name} has empty docstring"
+        if name not in SYNC_FUNCTIONS_IN_ASYNCIO:
+            assert f"vl_convert.{name}" in doc, (
+                f"asyncio.{name} docstring missing 'vl_convert.{name}'"
+            )
 
 
 def test_asyncio_smoke_and_sync_parity_shapes():
@@ -69,7 +83,7 @@ def test_asyncio_smoke_and_sync_parity_shapes():
         msgpack_scenegraph = await vlca.vega_to_scenegraph(vega, format="msgpack")
         assert isinstance(msgpack_scenegraph, bytes)
 
-        version = await vlca.get_vega_version()
+        version = vlca.get_vega_version()
         assert version == vlc.get_vega_version()
 
     run(scenario())
