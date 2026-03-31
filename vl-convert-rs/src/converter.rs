@@ -847,10 +847,19 @@ impl VlcConfig {
             )
         })?;
 
-        // Resolve relative paths against the config file's directory
+        // Resolve relative filesystem paths against the config file's directory.
+        // URL strings (containing "://") and inline ESM source (containing
+        // newlines or starting with "export"/"import") are left untouched.
         if let Some(config_dir) = path.parent() {
             if let Some(ref mut plugins) = config.vega_plugins {
                 for plugin in plugins.iter_mut() {
+                    if plugin.contains("://")
+                        || plugin.contains('\n')
+                        || plugin.starts_with("export")
+                        || plugin.starts_with("import")
+                    {
+                        continue;
+                    }
                     let p = std::path::Path::new(plugin.as_str());
                     if p.is_relative() {
                         *plugin = config_dir.join(p).to_string_lossy().to_string();
@@ -858,9 +867,11 @@ impl VlcConfig {
                 }
             }
             if let BaseUrlSetting::Custom(ref mut url) = config.base_url {
-                let p = std::path::Path::new(url.as_str());
-                if p.is_relative() {
-                    *url = config_dir.join(p).to_string_lossy().to_string();
+                if !url.contains("://") {
+                    let p = std::path::Path::new(url.as_str());
+                    if p.is_relative() {
+                        *url = config_dir.join(p).to_string_lossy().to_string();
+                    }
                 }
             }
         }
@@ -6806,6 +6817,7 @@ var __fetchResult = null;
 #[cfg(test)]
 mod config_serde_tests {
     use super::*;
+    use std::io::Write;
 
     #[test]
     fn test_empty_config() {
@@ -6896,18 +6908,18 @@ mod config_serde_tests {
             /* Block comment */
             "missing_fonts": "warn"
         }"#;
-        let value = jsonc_parser::parse_to_serde_value(
+        let value: serde_json::Value = jsonc_parser::parse_to_serde_value(
             jsonc,
             &jsonc_parser::ParseOptions {
                 allow_comments: true,
                 allow_trailing_commas: true,
                 allow_loose_object_property_names: false,
+                allow_missing_commas: false,
                 allow_single_quoted_strings: false,
                 allow_hexadecimal_numbers: false,
                 allow_unary_plus_numbers: false,
             },
         )
-        .unwrap()
         .unwrap();
         let config: VlcConfig = serde_json::from_value(value).unwrap();
         assert!(config.auto_google_fonts);
@@ -6919,5 +6931,62 @@ mod config_serde_tests {
         let json = r#"{"unknown_field": 42, "auto_google_fonts": true}"#;
         let config: VlcConfig = serde_json::from_str(json).unwrap();
         assert!(config.auto_google_fonts);
+    }
+
+    #[test]
+    fn test_from_file_url_base_url_not_rebased() {
+        let mut config_file = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        writeln!(
+            config_file,
+            r#"{{"base_url": "https://cdn.example.com/data/"}}"#
+        )
+        .unwrap();
+        let config = VlcConfig::from_file(config_file.path()).unwrap();
+        assert_eq!(
+            config.base_url,
+            BaseUrlSetting::Custom("https://cdn.example.com/data/".to_string())
+        );
+    }
+
+    #[test]
+    fn test_from_file_url_plugin_not_rebased() {
+        let mut config_file = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        writeln!(
+            config_file,
+            r#"{{"vega_plugins": ["https://esm.sh/my-plugin@1.0"]}}"#
+        )
+        .unwrap();
+        let config = VlcConfig::from_file(config_file.path()).unwrap();
+        assert_eq!(
+            config.vega_plugins.as_deref(),
+            Some(&["https://esm.sh/my-plugin@1.0".to_string()][..])
+        );
+    }
+
+    #[test]
+    fn test_from_file_inline_esm_plugin_not_rebased() {
+        let inline = "export default function(vega) {}";
+        let mut config_file = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        writeln!(config_file, r#"{{"vega_plugins": ["{inline}"]}}"#).unwrap();
+        let config = VlcConfig::from_file(config_file.path()).unwrap();
+        assert_eq!(
+            config.vega_plugins.as_deref(),
+            Some(&[inline.to_string()][..])
+        );
+    }
+
+    #[test]
+    fn test_from_file_relative_plugin_rebased() {
+        let mut config_file = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        writeln!(config_file, r#"{{"vega_plugins": ["./my-plugin.js"]}}"#).unwrap();
+        let config = VlcConfig::from_file(config_file.path()).unwrap();
+        let expected = config_file
+            .path()
+            .parent()
+            .unwrap()
+            .join("./my-plugin.js")
+            .to_string_lossy()
+            .to_string();
+        assert_eq!(config.vega_plugins.as_deref(), Some(&[expected][..]));
     }
 }

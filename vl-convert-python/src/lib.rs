@@ -1859,6 +1859,14 @@ fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyhow::
             }
         }
     };
+    // Reset the google_fonts side-channel so configure(google_fonts=...) state
+    // from a previous call does not bleed into the freshly loaded config.
+    let mut gf_guard = CONFIGURED_GOOGLE_FONTS.write().map_err(|e| {
+        vl_convert_rs::anyhow::anyhow!("Failed to acquire google_fonts write lock: {e}")
+    })?;
+    *gf_guard = None;
+    drop(gf_guard);
+
     let mut guard = VL_CONVERTER.write().map_err(|e| {
         vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
     })?;
