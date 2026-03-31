@@ -2982,7 +2982,9 @@ fn configure_asyncio<'py>(
     let overrides = parse_config_overrides(kwargs)
         .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
     future_into_py_object(py, async move {
-        configure_converter_with_config_overrides(overrides)
+        tokio::task::spawn_blocking(move || configure_converter_with_config_overrides(overrides))
+            .await
+            .map_err(|err| prefixed_py_error("Failed to configure converter", err))?
             .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
         Python::with_gil(|py| Ok(py.None().into()))
     })
@@ -2993,7 +2995,10 @@ fn configure_asyncio<'py>(
 #[pyo3(signature = (path=None))]
 fn load_config_asyncio<'py>(py: Python<'py>, path: Option<String>) -> PyResult<Bound<'py, PyAny>> {
     future_into_py_object(py, async move {
-        load_config_inner(path).map_err(|err| prefixed_py_error("Failed to load config", err))?;
+        tokio::task::spawn_blocking(move || load_config_inner(path))
+            .await
+            .map_err(|err| prefixed_py_error("Failed to load config", err))?
+            .map_err(|err| prefixed_py_error("Failed to load config", err))?;
         Python::with_gil(|py| Ok(py.None().into()))
     })
 }
@@ -3003,7 +3008,9 @@ fn load_config_asyncio<'py>(py: Python<'py>, path: Option<String>) -> PyResult<B
 #[pyo3(signature = ())]
 fn get_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
     future_into_py_object(py, async move {
-        let config = converter_config()
+        let config = tokio::task::spawn_blocking(converter_config)
+            .await
+            .map_err(|err| prefixed_py_error("Failed to read converter config", err))?
             .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
         Python::with_gil(|py| {
             pythonize(py, &converter_config_json(&config))
