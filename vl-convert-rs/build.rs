@@ -76,8 +76,6 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/js/bootstrap.js");
     println!("cargo:rerun-if-changed=src/data_ops.rs");
-    println!("cargo:warning=Creating V8 snapshot at {snapshot_path:?}");
-
     // Use deno_runtime's create_runtime_snapshot which includes all
     // the built-in extensions in the correct order, plus our custom extensions
     create_runtime_snapshot(
@@ -90,6 +88,4 @@ fn main() {
             vl_convert_runtime::lazy_init(),
         ],
     );
-
-    println!("cargo:warning=V8 snapshot created successfully");
 }
