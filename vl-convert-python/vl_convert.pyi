@@ -1470,5 +1470,8 @@ if TYPE_CHECKING:
         async def get_vegalite_versions(self) -> list[str]:
             """Async version of ``get_vegalite_versions``. See sync function for full documentation."""
             ...
+        async def get_config_path(self) -> str:
+            """Async version of ``get_config_path``. See sync function for full documentation."""
+            ...
 
     asyncio: _AsyncioModule

@@ -3210,6 +3210,20 @@ fn get_vega_embed_version_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, P
     })
 }
 
+#[doc = async_variant_doc!("get_config_path")]
+#[pyfunction(name = "get_config_path")]
+#[pyo3(signature = ())]
+fn get_config_path_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let value = vlc_config_path().to_string_lossy().into_owned();
+    future_into_py_object(py, async move {
+        Python::with_gil(|py| {
+            pythonize(py, &value)
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+                .map(|obj| obj.into())
+        })
+    })
+}
+
 #[doc = async_variant_doc!("get_vegalite_versions")]
 #[pyfunction(name = "get_vegalite_versions")]
 #[pyo3(signature = ())]
@@ -3268,6 +3282,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(get_vega_themes_version_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_vega_embed_version_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_vegalite_versions_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(get_config_path_asyncio, &asyncio)?)?;
 
     m.add_submodule(&asyncio)?;
     py.import("sys")?
