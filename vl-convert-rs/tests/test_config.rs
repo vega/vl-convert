@@ -1,6 +1,6 @@
 use serde_json::json;
 use std::collections::HashMap;
-use vl_convert_rs::converter::{SvgOpts, VlcConfig, VlOpts};
+use vl_convert_rs::converter::{SvgOpts, VlOpts, VlcConfig};
 use vl_convert_rs::VlConverter;
 
 fn simple_vl_bar_spec() -> serde_json::Value {

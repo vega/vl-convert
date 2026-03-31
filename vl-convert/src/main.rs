@@ -9,7 +9,7 @@ use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
     vega_to_url, vegalite_to_url, BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts,
     JpegOpts, MissingFontsPolicy, PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, VgOpts,
-    VlConverter, VlcConfig, VlOpts,
+    VlConverter, VlOpts, VlcConfig,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;

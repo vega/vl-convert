@@ -455,9 +455,7 @@ pub(crate) fn portable_canonicalize(
     Ok(canonical)
 }
 
-fn normalize_converter_config(
-    mut config: VlcConfig,
-) -> Result<VlcConfig, AnyError> {
+fn normalize_converter_config(mut config: VlcConfig) -> Result<VlcConfig, AnyError> {
     if config.num_workers < 1 {
         bail!("num_workers must be >= 1");
     }
@@ -841,8 +839,13 @@ impl VlcConfig {
         let Some(value) = value else {
             return Ok(VlcConfig::default());
         };
-        let mut config: VlcConfig = serde_json::from_value(value)
-            .map_err(|e| anyhow!("Failed to deserialize config file {}: {}", path.display(), e))?;
+        let mut config: VlcConfig = serde_json::from_value(value).map_err(|e| {
+            anyhow!(
+                "Failed to deserialize config file {}: {}",
+                path.display(),
+                e
+            )
+        })?;
 
         // Resolve relative paths against the config file's directory
         if let Some(config_dir) = path.parent() {
@@ -6818,8 +6821,7 @@ mod config_serde_tests {
 
     #[test]
     fn test_base_url_setting_disabled() {
-        let config: VlcConfig =
-            serde_json::from_str(r#"{"base_url": "disabled"}"#).unwrap();
+        let config: VlcConfig = serde_json::from_str(r#"{"base_url": "disabled"}"#).unwrap();
         assert_eq!(config.base_url, BaseUrlSetting::Disabled);
     }
 
