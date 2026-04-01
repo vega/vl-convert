@@ -425,11 +425,41 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         )
     }
 
+    /// Datadog-specific span that also extracts trace context from incoming
+    /// headers (W3C traceparent or Datadog x-datadog-trace-id/x-datadog-parent-id).
+    fn make_span_datadog(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+        let ua = req
+            .headers()
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let request_id = req
+            .headers()
+            .get("x-request-id")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        // Extract trace context: prefer W3C traceparent, fall back to Datadog headers
+        let (trace_id, span_id) = extract_trace_context(req.headers());
+
+        tracing::info_span!(
+            "request",
+            method = %req.method(),
+            uri = %req.uri(),
+            version = ?req.version(),
+            user_agent = %ua,
+            request_id = %request_id,
+            trace_id = %trace_id,
+            span_id = %span_id,
+        )
+    }
+
     let app = if serve_config.log_format == crate::LogFormat::Datadog {
         app.layer(
             TraceLayer::new_for_http()
                 .make_span_with(
-                    make_span as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
+                    make_span_datadog
+                        as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
                 )
                 .on_response(datadog_fmt::DatadogOnResponse),
         )
@@ -507,6 +537,43 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
     .await?;
 
     Ok(())
+}
+
+/// Extract trace context from W3C traceparent or Datadog headers.
+/// Returns (trace_id, span_id) as strings suitable for dd.trace_id / dd.span_id.
+/// Returns empty strings if no trace context is found.
+fn extract_trace_context(headers: &axum::http::HeaderMap) -> (String, String) {
+    // W3C traceparent: 00-<32-hex-trace-id>-<16-hex-parent-id>-<2-hex-flags>
+    if let Some(tp) = headers.get("traceparent").and_then(|v| v.to_str().ok()) {
+        let parts: Vec<&str> = tp.split('-').collect();
+        if parts.len() >= 3 {
+            let trace_id = parts[1].to_string();
+            // Convert 16-hex parent_id to decimal for dd.span_id
+            let span_id = u64::from_str_radix(parts[2], 16)
+                .map(|n| n.to_string())
+                .unwrap_or_default();
+            if !trace_id.is_empty() && !span_id.is_empty() {
+                return (trace_id, span_id);
+            }
+        }
+    }
+
+    // Datadog headers: x-datadog-trace-id (decimal), x-datadog-parent-id (decimal)
+    let dd_trace = headers
+        .get("x-datadog-trace-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let dd_span = headers
+        .get("x-datadog-parent-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    if !dd_trace.is_empty() && !dd_span.is_empty() {
+        return (dd_trace, dd_span);
+    }
+
+    (String::new(), String::new())
 }
 
 async fn auth_middleware(

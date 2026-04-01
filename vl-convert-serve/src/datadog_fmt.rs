@@ -20,6 +20,8 @@ fn remap_span_key(key: &str) -> Option<&'static str> {
         "version" => Some("http.version"),
         "user_agent" => Some("http.useragent"),
         "request_id" => Some("http.request_id"),
+        "trace_id" => Some("dd.trace_id"),
+        "span_id" => Some("dd.span_id"),
         _ => None,
     }
 }
@@ -64,6 +66,11 @@ where
                             >(&field_str)
                             {
                                 for (k, v) in &obj {
+                                    // Skip empty string values (e.g., trace_id when no
+                                    // trace context header is present)
+                                    if v.as_str() == Some("") {
+                                        continue;
+                                    }
                                     let key = remap_span_key(k).unwrap_or(k.as_str());
                                     map.serialize_entry(key, v).map_err(|_| fmt::Error)?;
                                 }
