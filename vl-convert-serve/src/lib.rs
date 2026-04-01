@@ -96,7 +96,6 @@ pub struct AppState {
     pub api_key: Option<ApiKey>,
     pub opaque_errors: bool,
     pub require_user_agent: bool,
-    pub num_workers: usize,
 }
 
 pub struct ApiKey(String);
@@ -178,7 +177,7 @@ pub fn parse_google_font_args(fonts: &[String]) -> Result<Vec<GoogleFontRequest>
         .collect()
 }
 
-fn build_cors_layer(cors_origin: &Option<String>, _api_key_set: bool) -> CorsLayer {
+fn build_cors_layer(cors_origin: &Option<String>) -> CorsLayer {
     let base = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
@@ -316,7 +315,6 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         api_key,
         opaque_errors: serve_config.opaque_errors,
         require_user_agent: serve_config.require_user_agent,
-        num_workers,
     });
 
     let router = build_router(
@@ -326,8 +324,7 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         serve_config.opaque_errors,
     );
 
-    // Build middleware stack (applied bottom-up, so first in list = outermost)
-    let cors = build_cors_layer(&serve_config.cors_origin, state.api_key.is_some());
+    let cors = build_cors_layer(&serve_config.cors_origin);
 
     // Build middleware stack (layers applied bottom-up: first listed = outermost)
     let mut app = router.layer(CompressionLayer::new());

@@ -62,11 +62,7 @@ where
                             >(&field_str)
                             {
                                 for (k, v) in &obj {
-                                    let key = remap_span_key(k).unwrap_or_else(|| {
-                                        // Leak is fine — span field names are static strings
-                                        // in practice (tower-http uses "method", "uri", "version")
-                                        Box::leak(k.clone().into_boxed_str())
-                                    });
+                                    let key = remap_span_key(k).unwrap_or(k.as_str());
                                     map.serialize_entry(key, v).map_err(|_| fmt::Error)?;
                                 }
                             }

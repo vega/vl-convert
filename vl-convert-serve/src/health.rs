@@ -17,6 +17,6 @@ pub async fn infoz(State(state): State<Arc<AppState>>) -> Json<Value> {
     Json(json!({
         "version": env!("CARGO_PKG_VERSION"),
         "vegalite_versions": super::VEGALITE_VERSIONS,
-        "workers": state.num_workers,
+        "workers": state.config.num_workers,
     }))
 }
