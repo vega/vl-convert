@@ -88,19 +88,9 @@ pub async fn vegalite_to_vega(
     let pretty = req.pretty;
     let spec = req.spec;
 
-    let result = state
-        .converter
-        .run_on_worker(move |inner| {
-            Box::pin(async move {
-                let vega = inner.vegalite_to_vega(spec, vl_opts).await?;
-                let logs = inner.drain_log_entries();
-                Ok((vega, logs))
-            })
-        })
-        .await;
-
-    match result {
-        Ok((vega, logs)) => {
+    match state.converter.vegalite_to_vega(spec, vl_opts).await {
+        Ok(vega) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &logs);
             let body = if pretty {
@@ -143,8 +133,9 @@ pub async fn vegalite_to_svg(
         .await
     {
         Ok(svg) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
@@ -180,8 +171,9 @@ pub async fn vegalite_to_png(
         .await
     {
         Ok(data) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/png")],
@@ -217,8 +209,9 @@ pub async fn vegalite_to_jpeg(
         .await
     {
         Ok(data) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
@@ -250,8 +243,9 @@ pub async fn vegalite_to_pdf(
         .await
     {
         Ok(data) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "application/pdf")],
@@ -298,8 +292,9 @@ pub async fn vegalite_to_html(
         .await
     {
         Ok(html) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
@@ -324,8 +319,9 @@ pub async fn vegalite_to_url(
 
     match converter_vegalite_to_url(&spec, fullscreen) {
         Ok(url) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (headers, Json(UrlResponse { url })).into_response()
         }
         Err(e) => error_response(

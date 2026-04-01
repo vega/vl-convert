@@ -398,11 +398,26 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         .layer(cors)
         .layer(PropagateRequestIdLayer::x_request_id());
 
+    fn make_span(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+        let ua = req
+            .headers()
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        tracing::info_span!(
+            "request",
+            method = %req.method(),
+            uri = %req.uri(),
+            version = ?req.version(),
+            user_agent = %ua,
+        )
+    }
+
     let app = if serve_config.log_format == crate::LogFormat::Datadog {
         app.layer(
             TraceLayer::new_for_http()
                 .make_span_with(
-                    tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::INFO),
+                    make_span as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
                 )
                 .on_response(datadog_fmt::DatadogOnResponse),
         )
@@ -410,7 +425,7 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         app.layer(
             TraceLayer::new_for_http()
                 .make_span_with(
-                    tower_http::trace::DefaultMakeSpan::new().level(tracing::Level::INFO),
+                    make_span as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
                 )
                 .on_response(
                     tower_http::trace::DefaultOnResponse::new().level(tracing::Level::INFO),

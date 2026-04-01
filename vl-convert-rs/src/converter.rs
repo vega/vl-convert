@@ -2433,7 +2433,6 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
     }
 
     async fn emit_js_log_messages(&mut self) {
-        self.last_log_entries.clear();
         let json = match self
             .execute_script_to_string("_collapsedLogMessages()")
             .await
@@ -3744,6 +3743,14 @@ impl VlConverter {
                     .map_err(|err| anyhow!("Failed to send request after retry: {err}"))
             }
         }
+    }
+
+    /// Drain accumulated log entries (WARN/ERROR) from the most recent conversion(s).
+    /// Returns and clears all entries. Thread-safe — dispatches to a worker.
+    pub async fn drain_logs(&self) -> Vec<String> {
+        self.run_on_worker(|inner| Box::pin(async move { Ok(inner.drain_log_entries()) }))
+            .await
+            .unwrap_or_default()
     }
 
     #[doc(hidden)]

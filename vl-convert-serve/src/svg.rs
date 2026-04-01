@@ -20,8 +20,9 @@ pub async fn svg_to_png(
 
     match state.converter.svg_to_png(&req.svg, png_opts).await {
         Ok(data) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/png")],
@@ -48,8 +49,9 @@ pub async fn svg_to_jpeg(
 
     match state.converter.svg_to_jpeg(&req.svg, jpeg_opts).await {
         Ok(data) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
@@ -75,8 +77,9 @@ pub async fn svg_to_pdf(
         .await
     {
         Ok(data) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "application/pdf")],

@@ -74,8 +74,9 @@ pub async fn vega_to_svg(
 
     match state.converter.vega_to_svg(spec, vg_opts, svg_opts).await {
         Ok(svg) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
@@ -107,8 +108,9 @@ pub async fn vega_to_png(
 
     match state.converter.vega_to_png(spec, vg_opts, png_opts).await {
         Ok(data) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/png")],
@@ -140,8 +142,9 @@ pub async fn vega_to_jpeg(
 
     match state.converter.vega_to_jpeg(spec, vg_opts, jpeg_opts).await {
         Ok(data) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
@@ -173,8 +176,9 @@ pub async fn vega_to_pdf(
         .await
     {
         Ok(data) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "application/pdf")],
@@ -217,8 +221,9 @@ pub async fn vega_to_html(
 
     match state.converter.vega_to_html(spec, vg_opts, html_opts).await {
         Ok(html) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
@@ -243,8 +248,9 @@ pub async fn vega_to_url(
 
     match converter_vega_to_url(&spec, fullscreen) {
         Ok(url) => {
+            let logs = state.converter.drain_logs().await;
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &[]);
+            append_vlc_logs_header(&mut headers, &logs);
             (headers, Json(UrlResponse { url })).into_response()
         }
         Err(e) => error_response(

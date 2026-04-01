@@ -18,6 +18,7 @@ fn remap_span_key(key: &str) -> Option<&'static str> {
         "method" => Some("http.method"),
         "uri" => Some("http.url"),
         "version" => Some("http.version"),
+        "user_agent" => Some("http.useragent"),
         _ => None,
     }
 }
