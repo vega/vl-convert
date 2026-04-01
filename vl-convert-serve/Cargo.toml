@@ -1,0 +1,30 @@
+[package]
+name = "vl-convert-serve"
+version = "2.0.0-rc1"
+edition = "2021"
+license = "BSD-3-Clause"
+readme = "README.md"
+homepage = "https://github.com/jonmmease/vl-convert"
+repository = "https://github.com/jonmmease/vl-convert"
+description = "HTTP server for converting Vega-Lite and Vega specifications to static images"
+keywords = ["Visualization", "Vega", "Vega-Lite", "Server"]
+
+[dependencies]
+vl-convert-rs = { path = "../vl-convert-rs", version = "2.0.0-rc1" }
+vl-convert-google-fonts = { path = "../vl-convert-google-fonts", version = "2.0.0-rc1" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+log = { workspace = true }
+itertools = { workspace = true }
+axum = { version = "0.7", features = ["json"] }
+tower = { version = "0.5", features = ["timeout", "limit", "load-shed"] }
+tower-http = { version = "0.6", features = ["catch-panic", "compression-full", "cors", "request-id", "timeout", "trace", "propagate-header", "util"] }
+subtle = "2"
+http = "1"
+tracing = "0.1"
+tracing-log = "0.2"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+tower_governor = { version = "0.4", default-features = true }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }

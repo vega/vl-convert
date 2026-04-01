@@ -26,9 +26,15 @@ use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetReques
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
-use crate::LogFormat;
-
 use vl_convert_rs::anyhow;
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum, Default, PartialEq, Eq)]
+pub enum LogFormat {
+    #[default]
+    Text,
+    Json,
+    Datadog,
+}
 use vl_convert_rs::converter::{GoogleFontRequest, VlConverter, VlcConfig};
 
 use types::ErrorResponse;

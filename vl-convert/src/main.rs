@@ -1,8 +1,6 @@
 #![allow(clippy::uninlined_format_args)]
 #![doc = include_str!("../README.md")]
 
-mod serve;
-
 use clap::{Parser, Subcommand};
 use itertools::Itertools;
 use std::io::{self, IsTerminal, Read, Write};
@@ -54,6 +52,7 @@ impl LogLevel {
         }
     }
 
+    #[cfg(feature = "serve")]
     fn to_tracing_filter(self) -> &'static str {
         match self {
             LogLevel::Error => "error",
@@ -62,14 +61,6 @@ impl LogLevel {
             LogLevel::Debug => "debug",
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, clap::ValueEnum, Default, PartialEq, Eq)]
-enum LogFormat {
-    #[default]
-    Text,
-    Json,
-    Datadog,
 }
 
 const DEFAULT_VL_VERSION: &str = "6.4";
@@ -701,6 +692,7 @@ enum Commands {
     /// Print the default vlc-config file path
     ConfigPath,
 
+    #[cfg(feature = "serve")]
     /// Start an HTTP server for chart conversion
     Serve {
         /// Bind address [default: 127.0.0.1]
@@ -754,8 +746,8 @@ enum Commands {
         require_user_agent: bool,
 
         /// Log output format
-        #[arg(long, env = "VLC_LOG_FORMAT", value_enum, default_value_t = LogFormat::Text)]
-        log_format: LogFormat,
+        #[arg(long, env = "VLC_LOG_FORMAT", value_enum, default_value_t = vl_convert_serve::LogFormat::Text)]
+        log_format: vl_convert_serve::LogFormat,
 
         /// Max requests per IP per second (disabled if not set)
         #[arg(long, env = "VLC_RATE_LIMIT_PER_SECOND")]
@@ -771,8 +763,13 @@ enum Commands {
 async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
-    // Serve uses tracing-subscriber (initialized in serve::run); other commands use env_logger
-    if !matches!(cli.command, Commands::Serve { .. }) {
+    // Serve uses tracing-subscriber; other commands use env_logger
+    #[cfg(feature = "serve")]
+    let is_serve = matches!(cli.command, Commands::Serve { .. });
+    #[cfg(not(feature = "serve"))]
+    let is_serve = false;
+
+    if !is_serve {
         env_logger::Builder::new()
             .filter_module("vl_convert", cli.log_level.to_filter())
             .init();
@@ -845,7 +842,12 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     let command = cli.command;
 
-    if !matches!(command, Commands::Serve { .. }) {
+    #[cfg(feature = "serve")]
+    let is_serve_cmd = matches!(command, Commands::Serve { .. });
+    #[cfg(not(feature = "serve"))]
+    let is_serve_cmd = false;
+
+    if !is_serve_cmd {
         base_config.num_workers = 1;
     }
 
@@ -1296,6 +1298,7 @@ async fn main() -> Result<(), anyhow::Error> {
         LsThemes => list_themes(base_config).await?,
         CatTheme { theme } => cat_theme(&theme, base_config).await?,
         ConfigPath => unreachable!("handled before config loading"),
+        #[cfg(feature = "serve")]
         Serve {
             host,
             port,
@@ -1315,7 +1318,7 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             register_font_dir(font_dir)?;
 
-            serve::init_tracing(cli.log_level.to_tracing_filter(), log_format);
+            vl_convert_serve::init_tracing(cli.log_level.to_tracing_filter(), log_format);
 
             // Resolve worker count: CLI flag > vlc-config > CPU count
             let num_workers = workers
@@ -1339,7 +1342,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 }
             }
 
-            let serve_config = serve::ServeConfig {
+            let serve_config = vl_convert_serve::ServeConfig {
                 host,
                 port,
                 api_key,
@@ -1355,7 +1358,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 rate_limit_burst,
             };
 
-            serve::run(base_config, serve_config).await?
+            vl_convert_serve::run(base_config, serve_config).await?
         }
     }
 

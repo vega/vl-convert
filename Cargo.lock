@@ -10429,30 +10429,20 @@ name = "vl-convert"
 version = "2.0.0-rc1"
 dependencies = [
  "assert_cmd",
- "axum",
- "chrono",
  "clap",
  "dssim",
  "env_logger",
- "http 1.4.0",
  "itertools 0.14.0",
  "log",
  "predicates",
  "rstest",
- "serde",
  "serde_json",
  "shellexpand",
- "subtle",
  "tempfile",
  "tokio",
- "tower 0.5.3",
- "tower-http",
- "tower_governor",
- "tracing",
- "tracing-log",
- "tracing-subscriber",
  "vl-convert-google-fonts",
  "vl-convert-rs",
+ "vl-convert-serve",
 ]
 
 [[package]]
@@ -10574,6 +10564,30 @@ dependencies = [
  "vl-convert-canvas2d-deno",
  "vl-convert-google-fonts",
  "winapi",
+]
+
+[[package]]
+name = "vl-convert-serve"
+version = "2.0.0-rc1"
+dependencies = [
+ "axum",
+ "chrono",
+ "clap",
+ "http 1.4.0",
+ "itertools 0.14.0",
+ "log",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tokio",
+ "tower 0.5.3",
+ "tower-http",
+ "tower_governor",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+ "vl-convert-google-fonts",
+ "vl-convert-rs",
 ]
 
 [[package]]
