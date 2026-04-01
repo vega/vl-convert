@@ -35,7 +35,6 @@ pub enum LogFormat {
     #[default]
     Text,
     Json,
-    Datadog,
 }
 use vl_convert_rs::converter::{GoogleFontRequest, LogEntry, VlConverter, VlcConfig};
 
@@ -57,22 +56,15 @@ pub fn init_tracing(level: &str, format: LogFormat) {
     match format {
         LogFormat::Json => {
             tracing_subscriber::fmt()
-                .json()
+                .event_format(datadog_fmt::FlatJsonFormatter)
+                .fmt_fields(tracing_subscriber::fmt::format::JsonFields::new())
                 .with_env_filter(filter)
-                .with_target(true)
                 .init();
         }
         LogFormat::Text => {
             tracing_subscriber::fmt()
                 .with_env_filter(filter)
                 .with_target(true)
-                .init();
-        }
-        LogFormat::Datadog => {
-            tracing_subscriber::fmt()
-                .event_format(datadog_fmt::DatadogFormatter)
-                .fmt_fields(tracing_subscriber::fmt::format::JsonFields::new())
-                .with_env_filter(filter)
                 .init();
         }
     }
@@ -404,30 +396,17 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         .layer(cors)
         .layer(PropagateRequestIdLayer::x_request_id());
 
-    fn make_span(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
-        let ua = req
-            .headers()
-            .get(axum::http::header::USER_AGENT)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let request_id = req
-            .headers()
-            .get("x-request-id")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
+    /// Text format: compact span with method + uri only.
+    fn make_span_text(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
         tracing::info_span!(
             "request",
             method = %req.method(),
             uri = %req.uri(),
-            version = ?req.version(),
-            user_agent = %ua,
-            request_id = %request_id,
         )
     }
 
-    /// Datadog-specific span that also extracts trace context from incoming
-    /// headers (W3C traceparent or Datadog x-datadog-trace-id/x-datadog-parent-id).
-    fn make_span_datadog(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+    /// JSON format: rich span with all HTTP metadata + trace context.
+    fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
         let ua = req
             .headers()
             .get(axum::http::header::USER_AGENT)
@@ -438,8 +417,6 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
             .get("x-request-id")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-
-        // Extract trace context: prefer W3C traceparent, fall back to Datadog headers
         let (trace_id, span_id) = extract_trace_context(req.headers());
 
         tracing::info_span!(
@@ -454,20 +431,19 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         )
     }
 
-    let app = if serve_config.log_format == crate::LogFormat::Datadog {
+    let app = if serve_config.log_format == crate::LogFormat::Json {
         app.layer(
             TraceLayer::new_for_http()
                 .make_span_with(
-                    make_span_datadog
-                        as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
+                    make_span_json as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
                 )
-                .on_response(datadog_fmt::DatadogOnResponse),
+                .on_response(datadog_fmt::FlatJsonOnResponse),
         )
     } else {
         app.layer(
             TraceLayer::new_for_http()
                 .make_span_with(
-                    make_span as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
+                    make_span_text as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
                 )
                 .on_response(
                     tower_http::trace::DefaultOnResponse::new().level(tracing::Level::INFO),
@@ -548,10 +524,7 @@ fn extract_trace_context(headers: &axum::http::HeaderMap) -> (String, String) {
         let parts: Vec<&str> = tp.split('-').collect();
         if parts.len() >= 3 {
             let trace_id = parts[1].to_string();
-            // Convert 16-hex parent_id to decimal for dd.span_id
-            let span_id = u64::from_str_radix(parts[2], 16)
-                .map(|n| n.to_string())
-                .unwrap_or_default();
+            let span_id = parts[2].to_string();
             if !trace_id.is_empty() && !span_id.is_empty() {
                 return (trace_id, span_id);
             }
@@ -559,18 +532,19 @@ fn extract_trace_context(headers: &axum::http::HeaderMap) -> (String, String) {
     }
 
     // Datadog headers: x-datadog-trace-id (decimal), x-datadog-parent-id (decimal)
+    // Convert decimal to hex for consistent output format
     let dd_trace = headers
         .get("x-datadog-trace-id")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
+        .and_then(|s| s.parse::<u64>().ok())
+        .map(|n| format!("{n:016x}"));
     let dd_span = headers
         .get("x-datadog-parent-id")
         .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_string();
-    if !dd_trace.is_empty() && !dd_span.is_empty() {
-        return (dd_trace, dd_span);
+        .and_then(|s| s.parse::<u64>().ok())
+        .map(|n| format!("{n:016x}"));
+    if let (Some(trace_id), Some(span_id)) = (dd_trace, dd_span) {
+        return (trace_id, span_id);
     }
 
     (String::new(), String::new())
