@@ -490,7 +490,7 @@ jobs:
             echo "downloaded=false" >> $GITHUB_OUTPUT
           fi
 
-      - uses: messense/maturin-action@v1.50.0
+      - uses: messense/maturin-action@v1.50.1
         with:
           manylinux: 2_28
           target: aarch64-unknown-linux-gnu
