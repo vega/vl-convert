@@ -10,7 +10,9 @@ use vl_convert_rs::converter::{
 };
 
 use super::types::{UrlResponse, VegaRequest};
-use super::{append_vlc_logs_header, error_response, parse_google_font_args, AppState};
+use super::{
+    append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args, AppState,
+};
 
 fn build_vg_opts(req: &VegaRequest, state: &AppState) -> Result<VgOpts, String> {
     let format_locale = req
@@ -73,14 +75,13 @@ pub async fn vega_to_svg(
     let spec = req.spec;
 
     match state.converter.vega_to_svg(spec, vg_opts, svg_opts).await {
-        Ok(svg) => {
-            let logs = state.converter.drain_logs().await;
+        Ok(output) => {
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &logs);
+            append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
-                svg,
+                output.svg,
             )
                 .into_response()
         }
@@ -107,14 +108,13 @@ pub async fn vega_to_png(
     let spec = req.spec;
 
     match state.converter.vega_to_png(spec, vg_opts, png_opts).await {
-        Ok(data) => {
-            let logs = state.converter.drain_logs().await;
+        Ok(output) => {
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &logs);
+            append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/png")],
-                data,
+                output.data,
             )
                 .into_response()
         }
@@ -141,14 +141,13 @@ pub async fn vega_to_jpeg(
     let spec = req.spec;
 
     match state.converter.vega_to_jpeg(spec, vg_opts, jpeg_opts).await {
-        Ok(data) => {
-            let logs = state.converter.drain_logs().await;
+        Ok(output) => {
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &logs);
+            append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
-                data,
+                output.data,
             )
                 .into_response()
         }
@@ -175,14 +174,13 @@ pub async fn vega_to_pdf(
         .vega_to_pdf(spec, vg_opts, PdfOpts::default())
         .await
     {
-        Ok(data) => {
-            let logs = state.converter.drain_logs().await;
+        Ok(output) => {
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &logs);
+            append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "application/pdf")],
-                data,
+                output.data,
             )
                 .into_response()
         }
@@ -220,14 +218,13 @@ pub async fn vega_to_html(
     let spec = req.spec;
 
     match state.converter.vega_to_html(spec, vg_opts, html_opts).await {
-        Ok(html) => {
-            let logs = state.converter.drain_logs().await;
+        Ok(output) => {
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &logs);
+            append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-                html,
+                output.html,
             )
                 .into_response()
         }
@@ -247,12 +244,7 @@ pub async fn vega_to_url(
     let spec = req.spec;
 
     match converter_vega_to_url(&spec, fullscreen) {
-        Ok(url) => {
-            let logs = state.converter.drain_logs().await;
-            let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &logs);
-            (headers, Json(UrlResponse { url })).into_response()
-        }
+        Ok(url) => Json(UrlResponse { url }).into_response(),
         Err(e) => error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
             &format!("Vega URL generation failed: {e}"),

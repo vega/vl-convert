@@ -27,9 +27,10 @@ extern crate deno_core;
 
 #[allow(deprecated)]
 pub use converter::{
-    vlc_config_path, BaseUrlSetting, GoogleFontRequest, HtmlOpts, JpegOpts, PdfOpts, PngOpts,
-    Renderer, SvgOpts, VgOpts, VlConverter, VlConverterConfig, VlOpts, VlcConfig,
-    WorkerMemoryUsage,
+    vlc_config_path, BaseUrlSetting, GoogleFontRequest, HtmlOpts, HtmlOutput, JpegOpts, JpegOutput,
+    LogEntry, PdfOpts, PdfOutput, PngOpts, PngOutput, Renderer, ScenegraphMsgpackOutput,
+    ScenegraphOutput, SvgOpts, SvgOutput, VegaOutput, VgOpts, VlConverter, VlConverterConfig,
+    VlOpts, VlcConfig, WorkerMemoryUsage,
 };
 pub use deno_core::anyhow;
 pub use extract::{FontInfo, FontSource, FontVariant};

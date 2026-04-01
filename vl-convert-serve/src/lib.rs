@@ -37,9 +37,15 @@ pub enum LogFormat {
     Json,
     Datadog,
 }
-use vl_convert_rs::converter::{GoogleFontRequest, VlConverter, VlcConfig};
+use vl_convert_rs::converter::{GoogleFontRequest, LogEntry, VlConverter, VlcConfig};
 
 use types::ErrorResponse;
+
+pub fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
+    logs.iter()
+        .map(|e| format!("{}: {}", e.level, e.message))
+        .collect()
+}
 
 pub fn init_tracing(level: &str, format: LogFormat) {
     let filter = EnvFilter::try_from_env("RUST_LOG").unwrap_or_else(|_| {

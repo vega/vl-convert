@@ -1020,7 +1020,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
             let converter = VlConverter::with_config(base_config)?;
-            let html = converter
+            let html_output = converter
                 .vegalite_to_html(
                     vl_spec,
                     VlOpts {
@@ -1038,7 +1038,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     },
                 )
                 .await?;
-            write_output_string(output.as_deref(), &html)?;
+            write_output_string(output.as_deref(), &html_output.html)?;
         }
         Vl2fonts {
             input,
@@ -1197,7 +1197,7 @@ async fn main() -> Result<(), anyhow::Error> {
             let renderer = renderer.unwrap_or_else(|| "svg".to_string());
 
             let converter = VlConverter::with_config(base_config)?;
-            let html = converter
+            let html_output = converter
                 .vega_to_html(
                     vg_spec,
                     VgOpts {
@@ -1212,7 +1212,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     },
                 )
                 .await?;
-            write_output_string(output.as_deref(), &html)?;
+            write_output_string(output.as_deref(), &html_output.html)?;
         }
         Vg2fonts {
             input,
@@ -1265,7 +1265,7 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
-            let png_data = converter
+            let png_output = converter
                 .svg_to_png(
                     &svg,
                     PngOpts {
@@ -1274,7 +1274,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     },
                 )
                 .await?;
-            write_output_binary(output.as_deref(), &png_data, "PNG")?;
+            write_output_binary(output.as_deref(), &png_output.data, "PNG")?;
         }
         Svg2jpeg {
             input,
@@ -1286,7 +1286,7 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
-            let jpeg_data = converter
+            let jpeg_output = converter
                 .svg_to_jpeg(
                     &svg,
                     JpegOpts {
@@ -1295,7 +1295,7 @@ async fn main() -> Result<(), anyhow::Error> {
                     },
                 )
                 .await?;
-            write_output_binary(output.as_deref(), &jpeg_data, "JPEG")?;
+            write_output_binary(output.as_deref(), &jpeg_output.data, "JPEG")?;
         }
         Svg2pdf {
             input,
@@ -1305,8 +1305,8 @@ async fn main() -> Result<(), anyhow::Error> {
             register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
-            let pdf_data = converter.svg_to_pdf(&svg, PdfOpts::default()).await?;
-            write_output_binary(output.as_deref(), &pdf_data, "PDF")?;
+            let pdf_output = converter.svg_to_pdf(&svg, PdfOpts::default()).await?;
+            write_output_binary(output.as_deref(), &pdf_output.data, "PDF")?;
         }
         LsThemes => list_themes(base_config).await?,
         CatTheme { theme } => cat_theme(&theme, base_config).await?,
@@ -1754,7 +1754,7 @@ async fn vl_2_vg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let vega_json = match converter
+    let vega_output = match converter
         .vegalite_to_vega(
             vegalite_json,
             VlOpts {
@@ -1766,15 +1766,15 @@ async fn vl_2_vg(
         )
         .await
     {
-        Ok(vega_str) => vega_str,
+        Ok(output) => output,
         Err(err) => {
             bail!("Vega-Lite to Vega conversion failed: {}", err);
         }
     };
     let vega_str_res = if pretty {
-        serde_json::to_string_pretty(&vega_json)
+        serde_json::to_string_pretty(&vega_output.spec)
     } else {
-        serde_json::to_string(&vega_json)
+        serde_json::to_string(&vega_output.spec)
     };
     match vega_str_res {
         Ok(vega_str) => {
@@ -1804,7 +1804,7 @@ async fn vg_2_svg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let svg = match converter
+    let svg_output = match converter
         .vega_to_svg(
             vg_spec,
             VgOpts {
@@ -1816,13 +1816,13 @@ async fn vg_2_svg(
         )
         .await
     {
-        Ok(svg) => svg,
+        Ok(output) => output,
         Err(err) => {
             bail!("Vega to SVG conversion failed: {}", err);
         }
     };
 
-    write_output_string(output, &svg)?;
+    write_output_string(output, &svg_output.svg)?;
 
     Ok(())
 }
@@ -1845,7 +1845,7 @@ async fn vg_2_png(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let png_data = match converter
+    let png_output = match converter
         .vega_to_png(
             vg_spec,
             VgOpts {
@@ -1860,13 +1860,13 @@ async fn vg_2_png(
         )
         .await
     {
-        Ok(png_data) => png_data,
+        Ok(output) => output,
         Err(err) => {
             bail!("Vega to PNG conversion failed: {}", err);
         }
     };
 
-    write_output_binary(output, &png_data, "PNG")?;
+    write_output_binary(output, &png_output.data, "PNG")?;
 
     Ok(())
 }
@@ -1889,7 +1889,7 @@ async fn vg_2_jpeg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let jpeg_data = match converter
+    let jpeg_output = match converter
         .vega_to_jpeg(
             vg_spec,
             VgOpts {
@@ -1904,13 +1904,13 @@ async fn vg_2_jpeg(
         )
         .await
     {
-        Ok(jpeg_data) => jpeg_data,
+        Ok(output) => output,
         Err(err) => {
             bail!("Vega to JPEG conversion failed: {}", err);
         }
     };
 
-    write_output_binary(output, &jpeg_data, "JPEG")?;
+    write_output_binary(output, &jpeg_output.data, "JPEG")?;
 
     Ok(())
 }
@@ -1930,7 +1930,7 @@ async fn vg_2_pdf(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let pdf_data = match converter
+    let pdf_output = match converter
         .vega_to_pdf(
             vg_spec,
             VgOpts {
@@ -1942,13 +1942,13 @@ async fn vg_2_pdf(
         )
         .await
     {
-        Ok(pdf_data) => pdf_data,
+        Ok(output) => output,
         Err(err) => {
             bail!("Vega to PDF conversion failed: {}", err);
         }
     };
 
-    write_output_binary(output, &pdf_data, "PDF")?;
+    write_output_binary(output, &pdf_output.data, "PDF")?;
 
     Ok(())
 }
@@ -1975,7 +1975,7 @@ async fn vl_2_svg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let svg = match converter
+    let svg_output = match converter
         .vegalite_to_svg(
             vl_spec,
             VlOpts {
@@ -1990,13 +1990,13 @@ async fn vl_2_svg(
         )
         .await
     {
-        Ok(svg) => svg,
+        Ok(output) => output,
         Err(err) => {
             bail!("Vega-Lite to SVG conversion failed: {}", err);
         }
     };
 
-    write_output_string(output, &svg)?;
+    write_output_string(output, &svg_output.svg)?;
 
     Ok(())
 }
@@ -2024,7 +2024,7 @@ async fn vl_2_png(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let png_data = match converter
+    let png_output = match converter
         .vegalite_to_png(
             vl_spec,
             VlOpts {
@@ -2042,13 +2042,13 @@ async fn vl_2_png(
         )
         .await
     {
-        Ok(png_data) => png_data,
+        Ok(output) => output,
         Err(err) => {
             bail!("Vega-Lite to PNG conversion failed: {}", err);
         }
     };
 
-    write_output_binary(output, &png_data, "PNG")?;
+    write_output_binary(output, &png_output.data, "PNG")?;
 
     Ok(())
 }
@@ -2076,7 +2076,7 @@ async fn vl_2_jpeg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let jpeg_data = match converter
+    let jpeg_output = match converter
         .vegalite_to_jpeg(
             vl_spec,
             VlOpts {
@@ -2094,13 +2094,13 @@ async fn vl_2_jpeg(
         )
         .await
     {
-        Ok(jpeg_data) => jpeg_data,
+        Ok(output) => output,
         Err(err) => {
             bail!("Vega-Lite to JPEG conversion failed: {}", err);
         }
     };
 
-    write_output_binary(output, &jpeg_data, "JPEG")?;
+    write_output_binary(output, &jpeg_output.data, "JPEG")?;
 
     Ok(())
 }
@@ -2126,7 +2126,7 @@ async fn vl_2_pdf(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let pdf_data = match converter
+    let pdf_output = match converter
         .vegalite_to_pdf(
             vl_spec,
             VlOpts {
@@ -2141,13 +2141,13 @@ async fn vl_2_pdf(
         )
         .await
     {
-        Ok(pdf_data) => pdf_data,
+        Ok(output) => output,
         Err(err) => {
             bail!("Vega-Lite to PDF conversion failed: {}", err);
         }
     };
 
-    write_output_binary(output, &pdf_data, "PDF")?;
+    write_output_binary(output, &pdf_output.data, "PDF")?;
 
     Ok(())
 }

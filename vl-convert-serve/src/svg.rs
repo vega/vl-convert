@@ -7,7 +7,7 @@ use std::sync::Arc;
 use vl_convert_rs::converter::{JpegOpts, PdfOpts, PngOpts};
 
 use super::types::SvgRequest;
-use super::{append_vlc_logs_header, error_response, AppState};
+use super::{append_vlc_logs_header, error_response, format_log_entries, AppState};
 
 pub async fn svg_to_png(
     State(state): State<Arc<AppState>>,
@@ -19,14 +19,13 @@ pub async fn svg_to_png(
     };
 
     match state.converter.svg_to_png(&req.svg, png_opts).await {
-        Ok(data) => {
-            let logs = state.converter.drain_logs().await;
+        Ok(output) => {
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &logs);
+            append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/png")],
-                data,
+                output.data,
             )
                 .into_response()
         }
@@ -48,14 +47,13 @@ pub async fn svg_to_jpeg(
     };
 
     match state.converter.svg_to_jpeg(&req.svg, jpeg_opts).await {
-        Ok(data) => {
-            let logs = state.converter.drain_logs().await;
+        Ok(output) => {
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &logs);
+            append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
-                data,
+                output.data,
             )
                 .into_response()
         }
@@ -76,14 +74,13 @@ pub async fn svg_to_pdf(
         .svg_to_pdf(&req.svg, PdfOpts::default())
         .await
     {
-        Ok(data) => {
-            let logs = state.converter.drain_logs().await;
+        Ok(output) => {
             let mut headers = HeaderMap::new();
-            append_vlc_logs_header(&mut headers, &logs);
+            append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
             (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "application/pdf")],
-                data,
+                output.data,
             )
                 .into_response()
         }

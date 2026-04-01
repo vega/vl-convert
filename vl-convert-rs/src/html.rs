@@ -1,6 +1,6 @@
 use crate::converter::{
     apply_spec_overrides, classify_and_request_fonts, classify_scenegraph_fonts, FontAnalysis,
-    GoogleFontRequest, HtmlOpts, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin,
+    GoogleFontRequest, HtmlOpts, HtmlOutput, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin,
     ValueOrString, VgOpts, VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
@@ -628,7 +628,7 @@ impl VlConverter {
         include_font_face: bool,
         subset_fonts: bool,
     ) -> Result<Vec<FontInfo>, AnyError> {
-        let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?;
+        let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?.spec;
         let vg_opts = VgOpts {
             format_locale: vl_opts.format_locale,
             time_format_locale: vl_opts.time_format_locale,
@@ -726,7 +726,7 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
         html_opts: HtmlOpts,
-    ) -> Result<String, AnyError> {
+    ) -> Result<HtmlOutput, AnyError> {
         let HtmlOpts { bundle, renderer } = html_opts;
         self.apply_vl_defaults(&mut vl_opts);
         let vl_version = vl_opts.vl_version;
@@ -739,7 +739,8 @@ impl VlConverter {
         let font_head_html = if has_font_work {
             let vega_spec = self
                 .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
-                .await?;
+                .await?
+                .spec;
             let vg_opts = VgOpts {
                 format_locale: vl_opts.format_locale.clone(),
                 time_format_locale: vl_opts.time_format_locale.clone(),
@@ -784,8 +785,14 @@ impl VlConverter {
             resolved_plugins,
             bundle,
         )?;
-        self.build_html(&code, vl_version, bundle, &font_head_html, has_plugins)
-            .await
+        let html = self
+            .build_html(&code, vl_version, bundle, &font_head_html, has_plugins)
+            .await?;
+        // TODO: capture logs from worker once HTML methods use run_on_worker directly
+        Ok(HtmlOutput {
+            html,
+            logs: Vec::new(),
+        })
     }
 
     /// Convert a Vega spec to a self-contained HTML page.
@@ -805,7 +812,7 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
         html_opts: HtmlOpts,
-    ) -> Result<String, AnyError> {
+    ) -> Result<HtmlOutput, AnyError> {
         let HtmlOpts { bundle, renderer } = html_opts;
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
@@ -863,14 +870,20 @@ impl VlConverter {
             resolved_plugins,
             bundle,
         )?;
-        self.build_html(
-            &code,
-            Default::default(),
-            bundle,
-            &font_head_html,
-            has_plugins,
-        )
-        .await
+        let html = self
+            .build_html(
+                &code,
+                Default::default(),
+                bundle,
+                &font_head_html,
+                has_plugins,
+            )
+            .await?;
+        // TODO: capture logs from worker once HTML methods use run_on_worker directly
+        Ok(HtmlOutput {
+            html,
+            logs: Vec::new(),
+        })
     }
 }
 

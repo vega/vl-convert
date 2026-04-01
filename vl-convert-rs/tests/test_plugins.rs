@@ -40,7 +40,7 @@ fn test_plugin_custom_scheme_png() {
     .unwrap();
 
     let vg_spec = load_vg_spec("plugin_custom_scheme");
-    let png_data = block_on(converter.vega_to_png(
+    let output = block_on(converter.vega_to_png(
         vg_spec,
         VgOpts::default(),
         PngOpts {
@@ -50,7 +50,7 @@ fn test_plugin_custom_scheme_png() {
     ))
     .unwrap();
 
-    check_vg_png("plugin_custom_scheme", png_data.as_slice());
+    check_vg_png("plugin_custom_scheme", output.data.as_slice());
 }
 
 #[tokio::test]
@@ -64,14 +64,14 @@ async fn test_plugin_registers_expression_function() {
     .unwrap();
 
     let spec = vega_spec_with_expression("double(7)");
-    let svg = converter
+    let output = converter
         .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap();
 
-    assert!(svg.contains("<svg"), "output should be valid SVG");
+    assert!(output.svg.contains("<svg"), "output should be valid SVG");
     assert!(
-        svg.contains("14"),
+        output.svg.contains("14"),
         "SVG should contain the result of double(7) = 14"
     );
 }
@@ -89,22 +89,22 @@ async fn test_multiple_plugins_register_different_functions() {
     .unwrap();
 
     let spec_triple = vega_spec_with_expression("triple(4)");
-    let svg_triple = converter
+    let output_triple = converter
         .vega_to_svg(spec_triple, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap();
     assert!(
-        svg_triple.contains("12"),
+        output_triple.svg.contains("12"),
         "SVG should contain the result of triple(4) = 12"
     );
 
     let spec_add = vega_spec_with_expression("addTen(7)");
-    let svg_add = converter
+    let output_add = converter
         .vega_to_svg(spec_add, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap();
     assert!(
-        svg_add.contains("17"),
+        output_add.svg.contains("17"),
         "SVG should contain the result of addTen(7) = 17"
     );
 }
@@ -220,7 +220,7 @@ async fn test_plugin_html_export_contains_module_script() {
         }]
     });
 
-    let html = converter
+    let output = converter
         .vega_to_html(
             spec,
             VgOpts::default(),
@@ -233,11 +233,11 @@ async fn test_plugin_html_export_contains_module_script() {
         .unwrap();
 
     assert!(
-        html.contains(r#"type="module""#),
+        output.html.contains(r#"type="module""#),
         "HTML should use <script type=\"module\"> when plugins are present"
     );
     assert!(
-        html.contains("__vlcLoadPlugin"),
+        output.html.contains("__vlcLoadPlugin"),
         "HTML should contain the __vlcLoadPlugin helper for inline plugin loading"
     );
 }
@@ -261,15 +261,15 @@ async fn test_file_path_plugin() {
     .unwrap();
 
     let spec = vega_spec_with_expression("fromFile(7)");
-    let svg = converter
+    let output = converter
         .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .unwrap();
 
     assert!(
-        svg.contains("107"),
+        output.svg.contains("107"),
         "SVG should contain fromFile(7) = 107, got: {}",
-        &svg[..svg.len().min(400)]
+        &output.svg[..output.svg.len().min(400)]
     );
 }
 
@@ -296,15 +296,15 @@ export default function(vega) {
     .unwrap();
 
     let spec = vega_spec_with_expression("d3scaled(0.5)");
-    let svg = converter
+    let output = converter
         .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .expect("URL plugin conversion must succeed (requires network)");
 
     assert!(
-        svg.contains("50"),
+        output.svg.contains("50"),
         "d3scaled(0.5) should produce 50 in SVG output. Got: {}",
-        &svg[..svg.len().min(500)]
+        &output.svg[..output.svg.len().min(500)]
     );
 }
 
@@ -329,15 +329,15 @@ export default function(vega) {
     .unwrap();
 
     let spec = vega_spec_with_expression("d3scaled10(5)");
-    let svg = converter
+    let output = converter
         .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
         .await
         .expect("Inline plugin with HTTP import must succeed (requires network)");
 
     assert!(
-        svg.contains("500"),
+        output.svg.contains("500"),
         "d3scaled10(5) should produce 500 in SVG output. Got: {}",
-        &svg[..svg.len().min(500)]
+        &output.svg[..output.svg.len().min(500)]
     );
 }
 
@@ -353,7 +353,7 @@ async fn test_per_request_plugin_works() {
     .unwrap();
 
     let spec = vega_spec_with_expression("perReq(1)");
-    let svg = converter
+    let output = converter
         .vega_to_svg(
             spec,
             VgOpts {
@@ -366,9 +366,9 @@ async fn test_per_request_plugin_works() {
         .unwrap();
 
     assert!(
-        svg.contains("100"),
+        output.svg.contains("100"),
         "SVG should contain perReq(1) = 100. Got: {}",
-        &svg[..svg.len().min(400)]
+        &output.svg[..output.svg.len().min(400)]
     );
 }
 
@@ -386,7 +386,7 @@ async fn test_per_request_plugin_isolation() {
 
     // First conversion with plugin — should succeed
     let spec = vega_spec_with_expression("ephExpr()");
-    let svg = converter
+    let output = converter
         .vega_to_svg(
             spec.clone(),
             VgOpts {
@@ -397,7 +397,7 @@ async fn test_per_request_plugin_isolation() {
         )
         .await
         .unwrap();
-    assert!(svg.contains("777"), "ephExpr() should produce 777");
+    assert!(output.svg.contains("777"), "ephExpr() should produce 777");
 
     // Second conversion WITHOUT plugin — 'ephExpr' should NOT be available
     // (true isolation: the ephemeral worker was dropped)
@@ -406,9 +406,9 @@ async fn test_per_request_plugin_isolation() {
         .await;
     // The conversion should either fail (unknown expression) or produce no "777"
     match result {
-        Ok(svg) => {
+        Ok(output) => {
             assert!(
-                !svg.contains("777"),
+                !output.svg.contains("777"),
                 "ephExpr should NOT be available on the main pool worker"
             );
         }
@@ -459,7 +459,7 @@ async fn test_per_request_plugin_with_config_level_plugins() {
 
     // Use reqFn in the spec — both config and request plugins should be active
     let spec = vega_spec_with_expression("reqFn(configFn(4))");
-    let svg = converter
+    let output = converter
         .vega_to_svg(
             spec,
             VgOpts {
@@ -473,9 +473,9 @@ async fn test_per_request_plugin_with_config_level_plugins() {
 
     // configFn(4) = 12, reqFn(12) = 62
     assert!(
-        svg.contains("62"),
+        output.svg.contains("62"),
         "SVG should contain reqFn(configFn(4)) = 62. Got: {}",
-        &svg[..svg.len().min(400)]
+        &output.svg[..output.svg.len().min(400)]
     );
 }
 
@@ -500,7 +500,7 @@ async fn test_per_request_plugin_html_export() {
         }}}]
     });
 
-    let html = converter
+    let output = converter
         .vega_to_html(
             spec,
             VgOpts {
@@ -516,11 +516,11 @@ async fn test_per_request_plugin_html_export() {
         .unwrap();
 
     assert!(
-        html.contains("htmlReq"),
+        output.html.contains("htmlReq"),
         "HTML should contain the per-request plugin source"
     );
     assert!(
-        html.contains(r#"type="module""#),
+        output.html.contains(r#"type="module""#),
         "HTML should use module script when plugins present"
     );
 }
