@@ -203,7 +203,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.8.2
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           cache-on-failure: True
       - name: Install Protoc
@@ -242,7 +242,7 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.8.2
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -319,7 +319,7 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.8.2
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -356,7 +356,7 @@ jobs:
         with:
           python-version: "3.10"
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.8.2
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -447,7 +447,7 @@ jobs:
         with:
           pixi-version: v0.47.0
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.8.2
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
