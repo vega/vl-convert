@@ -9,7 +9,7 @@ use vl_convert_rs::converter::{
     Renderer, SvgOpts, TimeFormatLocale, UrlOpts, VgOpts,
 };
 
-use super::types::{UrlResponse, VegaRequest};
+use super::types::VegaRequest;
 use super::{
     append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args, AppState,
 };
@@ -244,7 +244,7 @@ pub async fn vega_to_url(
     let spec = req.spec;
 
     match converter_vega_to_url(&spec, UrlOpts { fullscreen }) {
-        Ok(url) => Json(UrlResponse { url }).into_response(),
+        Ok(url) => ([(axum::http::header::CONTENT_TYPE, "text/plain")], url).into_response(),
         Err(e) => error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
             &format!("Vega URL generation failed: {e}"),

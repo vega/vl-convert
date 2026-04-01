@@ -67,11 +67,6 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-#[derive(Debug, Serialize)]
-pub struct UrlResponse {
-    pub url: String,
-}
-
 fn default_vl_version() -> String {
     "6.4".to_string()
 }

@@ -10,7 +10,7 @@ use vl_convert_rs::converter::{
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 
-use super::types::{UrlResponse, VegaliteRequest};
+use super::types::VegaliteRequest;
 use super::{
     append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args, AppState,
 };
@@ -309,7 +309,7 @@ pub async fn vegalite_to_url(
     let spec = req.spec;
 
     match converter_vegalite_to_url(&spec, UrlOpts { fullscreen }) {
-        Ok(url) => Json(UrlResponse { url }).into_response(),
+        Ok(url) => ([(axum::http::header::CONTENT_TYPE, "text/plain")], url).into_response(),
         Err(e) => error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
             &format!("Vega-Lite URL generation failed: {e}"),
