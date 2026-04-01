@@ -1,3 +1,5 @@
+mod admin;
+pub mod budget;
 pub mod datadog_fmt;
 mod health;
 mod svg;
@@ -86,8 +88,10 @@ pub struct ServeConfig {
     pub opaque_errors: bool,
     pub require_user_agent: bool,
     pub log_format: LogFormat,
-    pub rate_limit_per_second: Option<u64>,
-    pub rate_limit_burst: u32,
+    pub per_ip_budget_ms: Option<i64>,
+    pub global_budget_ms: Option<i64>,
+    pub budget_estimate_ms: i64,
+    pub admin_port: Option<u16>,
 }
 
 pub struct AppState {
@@ -221,17 +225,16 @@ fn is_loopback_origin(origin: &str) -> bool {
 
 fn build_router(
     state: Arc<AppState>,
-    rate_limit_per_second: Option<u64>,
-    rate_limit_burst: u32,
+    tracker: Option<Arc<budget::BudgetTracker>>,
     opaque_errors: bool,
 ) -> Router {
-    // Health endpoints bypass rate limiting entirely
+    // Health endpoints bypass budget tracking entirely
     let health_router = Router::new()
         .route("/healthz", get(health::healthz))
         .route("/readyz", get(health::readyz))
         .route("/infoz", get(health::infoz));
 
-    // API routes with optional rate limiting
+    // API routes with optional budget tracking
     let mut api_router = Router::new()
         .route("/themes", get(themes::list_themes))
         .route("/themes/{name}", get(themes::get_theme))
@@ -252,47 +255,14 @@ fn build_router(
         .route("/svg/jpeg", post(svg::svg_to_jpeg))
         .route("/svg/pdf", post(svg::svg_to_pdf));
 
-    // Per-IP rate limiting (optional)
-    if let Some(per_second) = rate_limit_per_second {
-        use tower_governor::governor::GovernorConfigBuilder;
-        use tower_governor::key_extractor::SmartIpKeyExtractor;
-        use tower_governor::GovernorLayer;
-
-        let governor_conf = Arc::new(
-            GovernorConfigBuilder::default()
-                .per_second(per_second)
-                .burst_size(rate_limit_burst)
-                .key_extractor(SmartIpKeyExtractor)
-                .error_handler(move |err| {
-                    if opaque_errors {
-                        StatusCode::TOO_MANY_REQUESTS.into_response()
-                    } else {
-                        (
-                            StatusCode::TOO_MANY_REQUESTS,
-                            Json(ErrorResponse {
-                                error: format!("{err}"),
-                            }),
-                        )
-                            .into_response()
-                    }
-                })
-                .finish()
-                .expect("valid governor config"),
-        );
-
-        // Background cleanup of expired rate limit entries
-        let limiter = governor_conf.limiter().clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            loop {
-                interval.tick().await;
-                limiter.retain_recent();
-            }
-        });
-
-        api_router = api_router.layer(GovernorLayer {
-            config: governor_conf,
-        });
+    // Budget tracking middleware (optional)
+    if let Some(tracker) = tracker {
+        api_router = api_router.layer(axum::middleware::from_fn(
+            move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
+                let tracker = tracker.clone();
+                async move { budget_middleware(tracker, opaque_errors, req, next).await }
+            },
+        ));
     }
 
     health_router.merge(api_router).with_state(state)
@@ -317,12 +287,52 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         require_user_agent: serve_config.require_user_agent,
     });
 
-    let router = build_router(
-        state.clone(),
-        serve_config.rate_limit_per_second,
-        serve_config.rate_limit_burst,
-        serve_config.opaque_errors,
-    );
+    // Create budget tracker if any budget is configured or admin port is set
+    // (admin port allows enabling budgets dynamically from a disabled initial state)
+    let tracker = if serve_config.per_ip_budget_ms.is_some()
+        || serve_config.global_budget_ms.is_some()
+        || serve_config.admin_port.is_some()
+    {
+        let t = budget::BudgetTracker::new(
+            serve_config.per_ip_budget_ms.unwrap_or(0),
+            serve_config.global_budget_ms.unwrap_or(0),
+            serve_config.budget_estimate_ms,
+        );
+
+        // Background refill task
+        let refill_tracker = t.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+                refill_tracker.refill();
+            }
+        });
+
+        Some(t)
+    } else {
+        None
+    };
+
+    // Spawn admin listener if configured
+    if let (Some(admin_port), Some(ref tracker)) = (serve_config.admin_port, &tracker) {
+        let admin_router = admin::admin_router(tracker.clone());
+        let admin_addr = format!("127.0.0.1:{admin_port}");
+        let admin_addr_clone = admin_addr.clone();
+        tokio::spawn(async move {
+            match tokio::net::TcpListener::bind(&admin_addr_clone).await {
+                Ok(listener) => {
+                    log::info!("Admin API listening on http://{admin_addr_clone}");
+                    let _ = axum::serve(listener, admin_router).await;
+                }
+                Err(e) => {
+                    log::error!("Failed to bind admin port {admin_addr_clone}: {e}");
+                }
+            }
+        });
+    }
+
+    let router = build_router(state.clone(), tracker, serve_config.opaque_errors);
 
     let cors = build_cors_layer(&serve_config.cors_origin);
 
@@ -514,4 +524,60 @@ async fn user_agent_middleware(
         }
     }
     next.run(req).await
+}
+
+/// Extract client IP from proxy headers or ConnectInfo.
+/// Checks X-Forwarded-For, then X-Real-IP, then falls back to peer address.
+fn extract_client_ip(req: &axum::http::Request<axum::body::Body>) -> Option<std::net::IpAddr> {
+    // X-Forwarded-For (first entry is the original client)
+    if let Some(xff) = req.headers().get("x-forwarded-for") {
+        if let Ok(xff_str) = xff.to_str() {
+            if let Some(first_ip) = xff_str.split(',').next() {
+                if let Ok(ip) = first_ip.trim().parse::<std::net::IpAddr>() {
+                    return Some(ip);
+                }
+            }
+        }
+    }
+    // X-Real-IP (set by nginx and some other proxies)
+    if let Some(xri) = req.headers().get("x-real-ip") {
+        if let Ok(ip_str) = xri.to_str() {
+            if let Ok(ip) = ip_str.trim().parse::<std::net::IpAddr>() {
+                return Some(ip);
+            }
+        }
+    }
+    req.extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|ci| ci.0.ip())
+}
+
+async fn budget_middleware(
+    tracker: Arc<budget::BudgetTracker>,
+    opaque_errors: bool,
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> Response {
+    if !tracker.is_enabled() {
+        return next.run(req).await;
+    }
+
+    let ip =
+        extract_client_ip(&req).unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+
+    if let Err(e) = tracker.reserve(ip) {
+        return error_response(
+            StatusCode::TOO_MANY_REQUESTS,
+            &format!("{e}"),
+            opaque_errors,
+        );
+    }
+
+    let start = std::time::Instant::now();
+    let response = next.run(req).await;
+    let actual_ms = start.elapsed().as_millis() as i64;
+
+    tracker.adjust(ip, actual_ms);
+
+    response
 }

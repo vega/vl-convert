@@ -26,5 +26,5 @@ http = "1"
 tracing = "0.1"
 tracing-log = "0.2"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
-tower_governor = { version = "0.4", default-features = true }
+dashmap = "6"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

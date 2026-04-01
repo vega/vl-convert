@@ -749,13 +749,21 @@ enum Commands {
         #[arg(long, env = "VLC_LOG_FORMAT", value_enum, default_value_t = vl_convert_serve::LogFormat::Text)]
         log_format: vl_convert_serve::LogFormat,
 
-        /// Max requests per IP per second (disabled if not set)
-        #[arg(long, env = "VLC_RATE_LIMIT_PER_SECOND")]
-        rate_limit_per_second: Option<u64>,
+        /// Conversion time budget per IP in ms/min (disabled if not set)
+        #[arg(long, env = "VLC_PER_IP_BUDGET_MS")]
+        per_ip_budget_ms: Option<i64>,
 
-        /// Burst allowance per IP [default: 5]
-        #[arg(long, env = "VLC_RATE_LIMIT_BURST", default_value_t = 5)]
-        rate_limit_burst: u32,
+        /// Total conversion time budget for the server in ms/min (disabled if not set)
+        #[arg(long, env = "VLC_GLOBAL_BUDGET_MS")]
+        global_budget_ms: Option<i64>,
+
+        /// Pessimistic per-request reservation in ms [default: 2000]
+        #[arg(long, env = "VLC_BUDGET_ESTIMATE_MS", default_value_t = 2000)]
+        budget_estimate_ms: i64,
+
+        /// Enable admin API on 127.0.0.1:<port> for dynamic budget updates
+        #[arg(long, env = "VLC_ADMIN_PORT")]
+        admin_port: Option<u16>,
     },
 }
 
@@ -1313,8 +1321,10 @@ async fn main() -> Result<(), anyhow::Error> {
             opaque_errors,
             require_user_agent,
             log_format,
-            rate_limit_per_second,
-            rate_limit_burst,
+            per_ip_budget_ms,
+            global_budget_ms,
+            budget_estimate_ms,
+            admin_port,
         } => {
             register_font_dir(font_dir)?;
 
@@ -1354,8 +1364,10 @@ async fn main() -> Result<(), anyhow::Error> {
                 opaque_errors,
                 require_user_agent,
                 log_format,
-                rate_limit_per_second,
-                rate_limit_burst,
+                per_ip_budget_ms,
+                global_budget_ms,
+                budget_estimate_ms,
+                admin_port,
             };
 
             vl_convert_serve::run(base_config, serve_config).await?
