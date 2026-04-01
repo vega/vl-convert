@@ -1173,6 +1173,12 @@ pub struct JpegOpts {
 #[derive(Debug, Clone, Default)]
 pub struct PdfOpts {}
 
+/// Options specific to URL output format.
+#[derive(Debug, Clone, Default)]
+pub struct UrlOpts {
+    pub fullscreen: bool,
+}
+
 /// Log level for entries captured during Vega/VL evaluation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LogLevel {
@@ -5340,14 +5346,14 @@ fn parse_svg_with_options(
 
 pub fn vegalite_to_url(
     vl_spec: impl Into<ValueOrString>,
-    fullscreen: bool,
+    url_opts: UrlOpts,
 ) -> Result<String, AnyError> {
     let spec_str = match vl_spec.into() {
         ValueOrString::JsonString(s) => s,
         ValueOrString::Value(v) => serde_json::to_string(&v)?,
     };
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
-    let view = if fullscreen {
+    let view = if url_opts.fullscreen {
         "/view".to_string()
     } else {
         String::new()
@@ -5359,14 +5365,14 @@ pub fn vegalite_to_url(
 
 pub fn vega_to_url(
     vg_spec: impl Into<ValueOrString>,
-    fullscreen: bool,
+    url_opts: UrlOpts,
 ) -> Result<String, AnyError> {
     let spec_str = match vg_spec.into() {
         ValueOrString::JsonString(s) => s,
         ValueOrString::Value(v) => serde_json::to_string(&v)?,
     };
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
-    let view = if fullscreen {
+    let view = if url_opts.fullscreen {
         "/view".to_string()
     } else {
         String::new()

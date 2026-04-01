@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use vl_convert_rs::converter::{
     vega_to_url as converter_vega_to_url, FormatLocale, HtmlOpts, JpegOpts, PdfOpts, PngOpts,
-    Renderer, SvgOpts, TimeFormatLocale, VgOpts,
+    Renderer, SvgOpts, TimeFormatLocale, UrlOpts, VgOpts,
 };
 
 use super::types::{UrlResponse, VegaRequest};
@@ -243,7 +243,7 @@ pub async fn vega_to_url(
     let fullscreen = req.fullscreen;
     let spec = req.spec;
 
-    match converter_vega_to_url(&spec, fullscreen) {
+    match converter_vega_to_url(&spec, UrlOpts { fullscreen }) {
         Ok(url) => Json(UrlResponse { url }).into_response(),
         Err(e) => error_response(
             StatusCode::UNPROCESSABLE_ENTITY,

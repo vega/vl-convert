@@ -25,8 +25,6 @@ pub struct VegaliteRequest {
     pub renderer: Option<String>,
     #[serde(default)]
     pub fullscreen: bool,
-    #[serde(default)]
-    pub pretty: bool,
 }
 
 #[derive(Debug, Deserialize)]

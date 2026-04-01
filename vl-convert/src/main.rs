@@ -8,8 +8,8 @@ use std::str::FromStr;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
     vega_to_url, vegalite_to_url, BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts,
-    JpegOpts, MissingFontsPolicy, PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, VgOpts,
-    VlConverter, VlOpts, VlcConfig,
+    JpegOpts, MissingFontsPolicy, PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, UrlOpts,
+    VgOpts, VlConverter, VlOpts, VlcConfig,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory;
@@ -995,7 +995,7 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             let vl_str = read_input_string(input.as_deref())?;
             let vl_spec = serde_json::from_str(&vl_str)?;
-            let url = vegalite_to_url(&vl_spec, fullscreen)?;
+            let url = vegalite_to_url(&vl_spec, UrlOpts { fullscreen })?;
             write_output_string(output.as_deref(), &url)?
         }
         Vl2html {
@@ -1175,7 +1175,7 @@ async fn main() -> Result<(), anyhow::Error> {
         } => {
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec = serde_json::from_str(&vg_str)?;
-            let url = vega_to_url(&vg_spec, fullscreen)?;
+            let url = vega_to_url(&vg_spec, UrlOpts { fullscreen })?;
             write_output_string(output.as_deref(), &url)?
         }
         Vg2html {

@@ -14,7 +14,7 @@ use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts, JpegOpts, MissingFontsPolicy,
-    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, ValueOrString, VgOpts, VlOpts,
+    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, UrlOpts, ValueOrString, VgOpts, VlOpts,
     VlcConfig, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
@@ -1297,7 +1297,9 @@ fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<Stri
     let vl_spec = parse_json_spec(vl_spec)?;
     Ok(vl_convert_rs::converter::vegalite_to_url(
         &vl_spec,
-        fullscreen.unwrap_or(false),
+        UrlOpts {
+            fullscreen: fullscreen.unwrap_or(false),
+        },
     )?)
 }
 
@@ -1314,7 +1316,9 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
     let vg_spec = parse_json_spec(vg_spec)?;
     Ok(vl_convert_rs::converter::vega_to_url(
         &vg_spec,
-        fullscreen.unwrap_or(false),
+        UrlOpts {
+            fullscreen: fullscreen.unwrap_or(false),
+        },
     )?)
 }
 
@@ -2720,7 +2724,12 @@ fn vegalite_to_url_asyncio<'py>(
     fullscreen: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vl_spec = parse_json_spec(vl_spec)?;
-    let url = vl_convert_rs::converter::vegalite_to_url(&vl_spec, fullscreen.unwrap_or(false))?;
+    let url = vl_convert_rs::converter::vegalite_to_url(
+        &vl_spec,
+        UrlOpts {
+            fullscreen: fullscreen.unwrap_or(false),
+        },
+    )?;
     future_into_py_object(py, async move {
         Python::with_gil(|py| {
             pythonize(py, &url)
@@ -2739,7 +2748,12 @@ fn vega_to_url_asyncio<'py>(
     fullscreen: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
-    let url = vl_convert_rs::converter::vega_to_url(&vg_spec, fullscreen.unwrap_or(false))?;
+    let url = vl_convert_rs::converter::vega_to_url(
+        &vg_spec,
+        UrlOpts {
+            fullscreen: fullscreen.unwrap_or(false),
+        },
+    )?;
     future_into_py_object(py, async move {
         Python::with_gil(|py| {
             pythonize(py, &url)

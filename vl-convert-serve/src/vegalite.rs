@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use vl_convert_rs::converter::{
     vegalite_to_url as converter_vegalite_to_url, FormatLocale, HtmlOpts, JpegOpts, PdfOpts,
-    PngOpts, Renderer, SvgOpts, TimeFormatLocale, VlOpts,
+    PngOpts, Renderer, SvgOpts, TimeFormatLocale, UrlOpts, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 
@@ -87,18 +87,13 @@ pub async fn vegalite_to_vega(
     if vl_opts.time_format_locale.is_none() {
         vl_opts.time_format_locale = state.config.default_time_format_locale.clone();
     }
-    let pretty = req.pretty;
     let spec = req.spec;
 
     match state.converter.vegalite_to_vega(spec, vl_opts).await {
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            let body = if pretty {
-                serde_json::to_string_pretty(&output.spec).unwrap_or_default()
-            } else {
-                serde_json::to_string(&output.spec).unwrap_or_default()
-            };
+            let body = serde_json::to_string(&output.spec).unwrap_or_default();
             (
                 headers,
                 [(
@@ -313,7 +308,7 @@ pub async fn vegalite_to_url(
     let fullscreen = req.fullscreen;
     let spec = req.spec;
 
-    match converter_vegalite_to_url(&spec, fullscreen) {
+    match converter_vegalite_to_url(&spec, UrlOpts { fullscreen }) {
         Ok(url) => Json(UrlResponse { url }).into_response(),
         Err(e) => error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
