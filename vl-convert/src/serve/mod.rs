@@ -12,6 +12,7 @@ use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
 use axum::Router;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use subtle::ConstantTimeEq;
@@ -79,6 +80,8 @@ pub struct ServeConfig {
     pub opaque_errors: bool,
     pub require_user_agent: bool,
     pub log_format: LogFormat,
+    pub rate_limit_per_second: Option<u64>,
+    pub rate_limit_burst: u32,
 }
 
 pub struct AppState {
@@ -211,11 +214,20 @@ fn is_loopback_origin(origin: &str) -> bool {
     false
 }
 
-fn build_router(state: Arc<AppState>) -> Router {
-    Router::new()
+fn build_router(
+    state: Arc<AppState>,
+    rate_limit_per_second: Option<u64>,
+    rate_limit_burst: u32,
+    opaque_errors: bool,
+) -> Router {
+    // Health endpoints bypass rate limiting entirely
+    let health_router = Router::new()
         .route("/healthz", get(health::healthz))
         .route("/readyz", get(health::readyz))
-        .route("/infoz", get(health::infoz))
+        .route("/infoz", get(health::infoz));
+
+    // API routes with optional rate limiting
+    let mut api_router = Router::new()
         .route("/themes", get(themes::list_themes))
         .route("/themes/{name}", get(themes::get_theme))
         .route("/vegalite/vega", post(vegalite::vegalite_to_vega))
@@ -233,8 +245,52 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/vega/url", post(vega::vega_to_url))
         .route("/svg/png", post(svg::svg_to_png))
         .route("/svg/jpeg", post(svg::svg_to_jpeg))
-        .route("/svg/pdf", post(svg::svg_to_pdf))
-        .with_state(state)
+        .route("/svg/pdf", post(svg::svg_to_pdf));
+
+    // Per-IP rate limiting (optional)
+    if let Some(per_second) = rate_limit_per_second {
+        use tower_governor::governor::GovernorConfigBuilder;
+        use tower_governor::key_extractor::SmartIpKeyExtractor;
+        use tower_governor::GovernorLayer;
+
+        let governor_conf = Arc::new(
+            GovernorConfigBuilder::default()
+                .per_second(per_second)
+                .burst_size(rate_limit_burst)
+                .key_extractor(SmartIpKeyExtractor)
+                .error_handler(move |err| {
+                    if opaque_errors {
+                        StatusCode::TOO_MANY_REQUESTS.into_response()
+                    } else {
+                        (
+                            StatusCode::TOO_MANY_REQUESTS,
+                            Json(ErrorResponse {
+                                error: format!("{err}"),
+                            }),
+                        )
+                            .into_response()
+                    }
+                })
+                .finish()
+                .expect("valid governor config"),
+        );
+
+        // Background cleanup of expired rate limit entries
+        let limiter = governor_conf.limiter().clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                limiter.retain_recent();
+            }
+        });
+
+        api_router = api_router.layer(GovernorLayer {
+            config: governor_conf,
+        });
+    }
+
+    health_router.merge(api_router).with_state(state)
 }
 
 pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), anyhow::Error> {
@@ -257,7 +313,12 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         num_workers,
     });
 
-    let router = build_router(state.clone());
+    let router = build_router(
+        state.clone(),
+        serve_config.rate_limit_per_second,
+        serve_config.rate_limit_burst,
+        serve_config.opaque_errors,
+    );
 
     // Build middleware stack (applied bottom-up, so first in list = outermost)
     let cors = build_cors_layer(&serve_config.cors_origin, state.api_key.is_some());
@@ -388,9 +449,12 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     log::info!("Listening on http://{addr}");
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal)
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal)
+    .await?;
 
     Ok(())
 }

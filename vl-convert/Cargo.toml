@@ -24,6 +24,7 @@ axum = { version = "0.7", features = ["json"] }
 tower = { version = "0.5", features = ["timeout", "limit", "load-shed"] }
 tower-http = { version = "0.6", features = ["catch-panic", "compression-full", "cors", "request-id", "timeout", "trace", "propagate-header", "util"] }
 subtle = "2"
+tower_governor = { version = "0.4", default-features = true }
 http = "1"
 tracing = "0.1"
 tracing-log = "0.2"

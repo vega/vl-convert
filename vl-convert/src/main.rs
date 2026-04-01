@@ -756,6 +756,14 @@ enum Commands {
         /// Log output format
         #[arg(long, env = "VLC_LOG_FORMAT", value_enum, default_value_t = LogFormat::Text)]
         log_format: LogFormat,
+
+        /// Max requests per IP per second (disabled if not set)
+        #[arg(long, env = "VLC_RATE_LIMIT_PER_SECOND")]
+        rate_limit_per_second: Option<u64>,
+
+        /// Burst allowance per IP [default: 5]
+        #[arg(long, env = "VLC_RATE_LIMIT_BURST", default_value_t = 5)]
+        rate_limit_burst: u32,
     },
 }
 
@@ -1302,6 +1310,8 @@ async fn main() -> Result<(), anyhow::Error> {
             opaque_errors,
             require_user_agent,
             log_format,
+            rate_limit_per_second,
+            rate_limit_burst,
         } => {
             register_font_dir(font_dir)?;
 
@@ -1341,6 +1351,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 opaque_errors,
                 require_user_agent,
                 log_format,
+                rate_limit_per_second,
+                rate_limit_burst,
             };
 
             serve::run(base_config, serve_config).await?
