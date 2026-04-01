@@ -4156,14 +4156,16 @@ impl VlConverter {
         }
 
         let (svg, logs) = if let Some(plugin_source) = plugin {
-            let svg = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                    let result =
+                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)?;
+                    let logs = inner.drain_log_entries();
+                    Ok((result, logs))
                 })
-            })?;
-            (svg, Vec::new())
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -4368,14 +4370,19 @@ impl VlConverter {
         {
             let vg_spec: ValueOrString = vega_spec.into();
             if let Some(plugin_source) = plugin {
-                let svg = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                        let result = with_font_overlay!(
+                            inner,
+                            gf,
+                            inner.vega_to_svg(vg_spec, vg_opts).await
+                        )?;
+                        let logs = inner.drain_log_entries();
+                        Ok((result, logs))
                     })
-                })?;
-                (svg, Vec::new())
+                })?
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -4393,14 +4400,19 @@ impl VlConverter {
                 .await?
             }
         } else if let Some(plugin_source) = plugin {
-            let svg = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
+                    let result = with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vegalite_to_svg(vl_spec, vl_opts).await
+                    )?;
+                    let logs = inner.drain_log_entries();
+                    Ok((result, logs))
                 })
-            })?;
-            (svg, Vec::new())
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4538,19 +4550,20 @@ impl VlConverter {
         }
 
         let (data, logs) = if let Some(plugin_source) = plugin {
-            let data = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, {
+                    let result = with_font_overlay!(inner, gf, {
                         let spec_value = vg_spec.to_value()?;
                         inner
                             .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
                             .await
-                    })
+                    })?;
+                    let logs = inner.drain_log_entries();
+                    Ok((result, logs))
                 })
-            })?;
-            (data, Vec::new())
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -4590,19 +4603,20 @@ impl VlConverter {
         {
             let vg_spec: ValueOrString = vega_spec.into();
             if let Some(plugin_source) = plugin {
-                let data = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(inner, gf, {
+                        let result = with_font_overlay!(inner, gf, {
                             let spec_value = vg_spec.to_value()?;
                             inner
                                 .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
                                 .await
-                        })
+                        })?;
+                        let logs = inner.drain_log_entries();
+                        Ok((result, logs))
                     })
-                })?;
-                (data, Vec::new())
+                })?
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -4621,19 +4635,20 @@ impl VlConverter {
                 .await?
             }
         } else if let Some(plugin_source) = plugin {
-            let data = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(inner, gf, {
+                    let result = with_font_overlay!(inner, gf, {
                         let spec_value = vl_spec.to_value()?;
                         inner
                             .vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi)
                             .await
-                    })
+                    })?;
+                    let logs = inner.drain_log_entries();
+                    Ok((result, logs))
                 })
-            })?;
-            (data, Vec::new())
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4676,20 +4691,21 @@ impl VlConverter {
         let image_policy = self.image_access_policy();
 
         let (data, logs) = if let Some(plugin_source) = plugin {
-            let data = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner
                             .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                             .await
-                    )
+                    )?;
+                    let logs = inner.drain_log_entries();
+                    Ok((result, logs))
                 })
-            })?;
-            (data, Vec::new())
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -4730,20 +4746,21 @@ impl VlConverter {
         {
             let vg_spec: ValueOrString = vega_spec.into();
             if let Some(plugin_source) = plugin {
-                let data = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(
+                        let result = with_font_overlay!(
                             inner,
                             gf,
                             inner
                                 .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                                 .await
-                        )
+                        )?;
+                        let logs = inner.drain_log_entries();
+                        Ok((result, logs))
                     })
-                })?;
-                (data, Vec::new())
+                })?
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -4763,20 +4780,21 @@ impl VlConverter {
                 .await?
             }
         } else if let Some(plugin_source) = plugin {
-            let data = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner
                             .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
                             .await
-                    )
+                    )?;
+                    let logs = inner.drain_log_entries();
+                    Ok((result, logs))
                 })
-            })?;
-            (data, Vec::new())
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4818,18 +4836,19 @@ impl VlConverter {
         let image_policy = self.image_access_policy();
 
         let (data, logs) = if let Some(plugin_source) = plugin {
-            let data = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
-                    )
+                    )?;
+                    let logs = inner.drain_log_entries();
+                    Ok((result, logs))
                 })
-            })?;
-            (data, Vec::new())
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -4866,18 +4885,19 @@ impl VlConverter {
         {
             let vg_spec: ValueOrString = vega_spec.into();
             if let Some(plugin_source) = plugin {
-                let data = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(
+                        let result = with_font_overlay!(
                             inner,
                             gf,
                             inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
-                        )
+                        )?;
+                        let logs = inner.drain_log_entries();
+                        Ok((result, logs))
                     })
-                })?;
-                (data, Vec::new())
+                })?
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -4895,18 +4915,19 @@ impl VlConverter {
                 .await?
             }
         } else if let Some(plugin_source) = plugin {
-            let data = self.run_on_ephemeral_worker(plugin_source, move |inner| {
+            self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
-                    )
+                    )?;
+                    let logs = inner.drain_log_entries();
+                    Ok((result, logs))
                 })
-            })?;
-            (data, Vec::new())
+            })?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();

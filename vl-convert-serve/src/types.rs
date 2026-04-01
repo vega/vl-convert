@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct VegaliteRequest {
     pub spec: serde_json::Value,
     #[serde(default = "default_vl_version")]
@@ -27,16 +26,10 @@ pub struct VegaliteRequest {
     #[serde(default)]
     pub fullscreen: bool,
     #[serde(default)]
-    pub include_font_face: bool,
-    #[serde(default)]
     pub pretty: bool,
-    #[serde(default)]
-    pub no_subset_fonts: bool,
-    pub missing_fonts: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct VegaRequest {
     pub spec: serde_json::Value,
     pub config: Option<serde_json::Value>,
@@ -58,11 +51,6 @@ pub struct VegaRequest {
     pub renderer: Option<String>,
     #[serde(default)]
     pub fullscreen: bool,
-    #[serde(default)]
-    pub include_font_face: bool,
-    #[serde(default)]
-    pub no_subset_fonts: bool,
-    pub missing_fonts: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
