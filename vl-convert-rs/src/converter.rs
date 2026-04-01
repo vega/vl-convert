@@ -162,15 +162,55 @@ type WorkFn = Box<
 struct QueuedWork {
     work: WorkFn,
     ticket: OutstandingTicket,
+    caller_gone: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl QueuedWork {
-    fn new(work: WorkFn, ticket: OutstandingTicket) -> Self {
-        Self { work, ticket }
+    fn new(
+        work: WorkFn,
+        ticket: OutstandingTicket,
+        caller_gone: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        Self {
+            work,
+            ticket,
+            caller_gone,
+        }
     }
 
-    fn into_parts(self) -> (WorkFn, OutstandingTicket) {
-        (self.work, self.ticket)
+    fn into_parts(
+        self,
+    ) -> (
+        WorkFn,
+        OutstandingTicket,
+        Arc<std::sync::atomic::AtomicBool>,
+    ) {
+        (self.work, self.ticket, self.caller_gone)
+    }
+}
+
+/// Drop guard that signals `caller_gone` when the caller's future is dropped
+/// (e.g. by HTTP timeout). Call `disarm()` on normal completion to prevent
+/// spurious signaling.
+struct CallerGoneGuard {
+    flag: Arc<std::sync::atomic::AtomicBool>,
+    armed: bool,
+}
+
+impl CallerGoneGuard {
+    fn new(flag: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        Self { flag, armed: true }
+    }
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for CallerGoneGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            self.flag.store(true, std::sync::atomic::Ordering::Release);
+        }
     }
 }
 
@@ -374,9 +414,14 @@ fn spawn_worker_pool(
                 while let Some(queued_work) = rx.recv().await {
                     // Keep the ticket alive for the full loop iteration so outstanding
                     // covers the work execution (drop happens at iteration end).
-                    let (work, _ticket) = queued_work.into_parts();
+                    let (work, _ticket, caller_gone) = queued_work.into_parts();
 
-                    let timer = inner.start_conversion_timer();
+                    // Skip work if the caller already timed out or disconnected
+                    if caller_gone.load(std::sync::atomic::Ordering::Acquire) {
+                        continue;
+                    }
+
+                    let timer = inner.start_conversion_timer(caller_gone);
                     (work)(&mut inner).await;
                     inner.cancel_conversion_timer(timer);
 
@@ -1518,20 +1563,26 @@ impl InnerVlConverter {
         }
     }
 
-    /// Start a conversion timeout timer. Returns `None` if the timeout is
-    /// disabled (0). The returned `ConversionTimer` must be cancelled after
-    /// the conversion completes by calling `cancel_conversion_timer()`.
-    fn start_conversion_timer(&mut self) -> Option<ConversionTimer> {
-        self.start_conversion_timer_with_duration(std::time::Duration::from_secs(
-            self.ctx.config.max_v8_execution_time_secs,
-        ))
+    /// Start a conversion timeout timer that also watches for caller disconnect.
+    /// Returns `None` if the timeout is disabled (0). The returned
+    /// `ConversionTimer` must be cancelled after the conversion completes by
+    /// calling `cancel_conversion_timer()`.
+    fn start_conversion_timer(
+        &mut self,
+        caller_gone: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Option<ConversionTimer> {
+        self.start_conversion_timer_with_duration(
+            std::time::Duration::from_secs(self.ctx.config.max_v8_execution_time_secs),
+            caller_gone,
+        )
     }
 
-    /// Start a conversion timeout timer with an explicit duration. Used by
-    /// ephemeral workers that subtract already-elapsed time from the budget.
+    /// Start a conversion timeout timer with an explicit duration. Also monitors
+    /// `caller_gone` so V8 can be terminated early if the caller disconnects.
     fn start_conversion_timer_with_duration(
         &mut self,
         duration: std::time::Duration,
+        caller_gone: Arc<std::sync::atomic::AtomicBool>,
     ) -> Option<ConversionTimer> {
         if duration.is_zero() {
             return None;
@@ -1539,12 +1590,30 @@ impl InnerVlConverter {
         let timeout_hit = self.timeout_hit.clone();
         let handle = self.worker.js_runtime.v8_isolate().thread_safe_handle();
         let (cancel_tx, cancel_rx) = std::sync::mpsc::channel::<()>();
+        let poll_interval = std::time::Duration::from_millis(50);
         let thread = std::thread::spawn(move || {
-            if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
-                cancel_rx.recv_timeout(duration)
-            {
-                timeout_hit.store(true, std::sync::atomic::Ordering::Release);
-                handle.terminate_execution();
+            let deadline = std::time::Instant::now() + duration;
+            loop {
+                // Check if the conversion finished normally (Ok = explicit cancel,
+                // Disconnected = cancel_tx dropped in cancel_conversion_timer)
+                match cancel_rx.try_recv() {
+                    Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+                // Check if the caller disconnected
+                if caller_gone.load(std::sync::atomic::Ordering::Acquire) {
+                    timeout_hit.store(true, std::sync::atomic::Ordering::Release);
+                    handle.terminate_execution();
+                    return;
+                }
+                // Check if the deadline expired
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    timeout_hit.store(true, std::sync::atomic::Ordering::Release);
+                    handle.terminate_execution();
+                    return;
+                }
+                std::thread::sleep(poll_interval.min(remaining));
             }
         });
         Some(ConversionTimer { cancel_tx, thread })
@@ -3657,16 +3726,20 @@ impl VlConverter {
         Ok(sender)
     }
 
-    async fn send_work_with_retry(&self, work: WorkFn) -> Result<(), AnyError> {
+    async fn send_work_with_retry(
+        &self,
+        work: WorkFn,
+        caller_gone: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<(), AnyError> {
         let (sender, ticket) = self.get_or_spawn_sender()?;
-        let queued = QueuedWork::new(work, ticket);
+        let queued = QueuedWork::new(work, ticket, caller_gone.clone());
         match sender.send(queued).await {
             Ok(()) => Ok(()),
             Err(tokio::sync::mpsc::error::SendError(queued)) => {
-                let (work, _old_ticket) = queued.into_parts();
+                let (work, _old_ticket, _) = queued.into_parts();
                 let (sender, ticket) = self.get_or_spawn_sender()?;
                 sender
-                    .send(QueuedWork::new(work, ticket))
+                    .send(QueuedWork::new(work, ticket, caller_gone))
                     .await
                     .map_err(|err| anyhow!("Failed to send request after retry: {err}"))
             }
@@ -3683,6 +3756,7 @@ impl VlConverter {
             + Send
             + 'static,
     ) -> Result<R, AnyError> {
+        let caller_gone = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (resp_tx, resp_rx) = oneshot::channel::<Result<R, AnyError>>();
         let boxed_work: WorkFn = Box::new(move |inner| {
             Box::pin(async move {
@@ -3698,8 +3772,16 @@ impl VlConverter {
             })
         });
 
-        self.send_work_with_retry(boxed_work).await?;
-        resp_rx.await.map_err(|e| anyhow!("Worker dropped: {e}"))?
+        self.send_work_with_retry(boxed_work, caller_gone.clone())
+            .await?;
+
+        // Guard signals caller_gone on drop (HTTP timeout / client disconnect).
+        // Disarmed on normal completion so the timer thread doesn't spuriously
+        // terminate V8.
+        let mut guard = CallerGoneGuard::new(caller_gone);
+        let result = resp_rx.await.map_err(|e| anyhow!("Worker dropped: {e}"));
+        guard.disarm();
+        result?
     }
 
     /// Run a conversion on an ephemeral worker with a per-request plugin.
@@ -3787,7 +3869,10 @@ impl VlConverter {
                 // Arm the V8 watchdog timer with remaining budget
                 let timer = if let Some(deadline) = deadline {
                     let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-                    inner.start_conversion_timer_with_duration(remaining)
+                    inner.start_conversion_timer_with_duration(
+                        remaining,
+                        Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                    )
                 } else {
                     None
                 };
@@ -4824,7 +4909,11 @@ impl VlConverter {
                 })
             });
             sender
-                .send(QueuedWork::new(work, ticket))
+                .send(QueuedWork::new(
+                    work,
+                    ticket,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                ))
                 .await
                 .map_err(|e| anyhow!("Failed to send GetMemoryUsage to worker {idx}: {e}"))?;
             receivers.push(resp_rx);
@@ -6530,7 +6619,11 @@ try {
                 .next_sender()
                 .expect("pool should return the open sender");
             sender
-                .try_send(QueuedWork::new(make_test_work(), ticket))
+                .try_send(QueuedWork::new(
+                    make_test_work(),
+                    ticket,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                ))
                 .expect("dispatch should use open sender, not closed sender");
             let queued = open_receiver
                 .try_recv()
@@ -6551,7 +6644,11 @@ try {
 
         let (sender, ticket) = pool.next_sender().unwrap();
         sender
-            .send(QueuedWork::new(make_test_work(), ticket))
+            .send(QueuedWork::new(
+                make_test_work(),
+                ticket,
+                Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            ))
             .await
             .unwrap();
         assert_eq!(
@@ -6560,10 +6657,15 @@ try {
         );
 
         let (sender, ticket) = pool.next_sender().unwrap();
-        let blocked_send =
-            tokio::spawn(
-                async move { sender.send(QueuedWork::new(make_test_work(), ticket)).await },
-            );
+        let blocked_send = tokio::spawn(async move {
+            sender
+                .send(QueuedWork::new(
+                    make_test_work(),
+                    ticket,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                ))
+                .await
+        });
         tokio::task::yield_now().await;
 
         assert_eq!(
