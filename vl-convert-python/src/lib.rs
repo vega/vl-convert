@@ -621,7 +621,7 @@ fn vegalite_to_vega(
         format_locale: None,
         time_format_locale: None,
         google_fonts: effective_google_fonts(None),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     let vega_spec = match run_converter_future(move |converter| async move {
@@ -670,6 +670,7 @@ fn vega_to_svg(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let svg_opts = SvgOpts {
@@ -712,6 +713,7 @@ fn vega_to_scenegraph(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     match format {
@@ -796,6 +798,7 @@ fn vegalite_to_svg(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let svg_opts = SvgOpts {
@@ -863,6 +866,7 @@ fn vegalite_to_scenegraph(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     match format {
@@ -928,6 +932,7 @@ fn vega_to_png(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let png_opts = PngOpts { scale, ppi };
@@ -997,6 +1002,7 @@ fn vegalite_to_png(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let png_opts = PngOpts { scale, ppi };
@@ -1044,6 +1050,7 @@ fn vega_to_jpeg(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let jpeg_opts = JpegOpts { scale, quality };
@@ -1113,6 +1120,7 @@ fn vegalite_to_jpeg(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let jpeg_opts = JpegOpts { scale, quality };
@@ -1164,6 +1172,7 @@ fn vega_to_pdf(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let pdf_bytes = match run_converter_future(move |converter| async move {
@@ -1227,6 +1236,7 @@ fn vegalite_to_pdf(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let pdf_data = match run_converter_future(move |converter| async move {
@@ -1334,6 +1344,7 @@ fn vegalite_to_html(
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
         vega_plugin,
+        ..Default::default()
     };
 
     let html_opts = HtmlOpts {
@@ -1385,6 +1396,7 @@ fn vega_to_html(
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
         vega_plugin,
+        ..Default::default()
     };
     let html_opts = HtmlOpts {
         bundle: bundle.unwrap_or(false),
@@ -1446,7 +1458,7 @@ fn vegalite_fonts(
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     let result = run_converter_future(move |converter| async move {
@@ -1505,7 +1517,7 @@ fn vega_fonts(
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     let result = run_converter_future(move |converter| async move {
@@ -2138,7 +2150,7 @@ fn vegalite_to_vega_asyncio<'py>(
         format_locale: None,
         time_format_locale: None,
         google_fonts: effective_google_fonts(None),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2172,6 +2184,7 @@ fn vega_to_svg_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
@@ -2212,6 +2225,7 @@ fn vega_to_scenegraph_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     match format {
@@ -2280,6 +2294,7 @@ fn vegalite_to_svg_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
@@ -2336,6 +2351,7 @@ fn vegalite_to_scenegraph_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     match format {
@@ -2393,6 +2409,7 @@ fn vega_to_png_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2443,6 +2460,7 @@ fn vegalite_to_png_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2479,6 +2497,7 @@ fn vega_to_jpeg_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2529,6 +2548,7 @@ fn vegalite_to_jpeg_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2563,6 +2583,7 @@ fn vega_to_pdf_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2611,6 +2632,7 @@ fn vegalite_to_pdf_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2703,6 +2725,7 @@ fn vegalite_to_html_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
         vega_plugin,
+        ..Default::default()
     };
 
     let converter = converter_read_handle()
@@ -2754,6 +2777,7 @@ fn vega_to_html_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
         vega_plugin,
+        ..Default::default()
     };
 
     let converter = converter_read_handle()
@@ -2814,7 +2838,7 @@ fn vegalite_fonts_asyncio<'py>(
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2865,7 +2889,7 @@ fn vega_fonts_asyncio<'py>(
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     run_converter_future_async(

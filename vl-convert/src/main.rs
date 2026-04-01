@@ -1,6 +1,8 @@
 #![allow(clippy::uninlined_format_args)]
 #![doc = include_str!("../README.md")]
 
+mod serve;
+
 use clap::{Parser, Subcommand};
 use itertools::Itertools;
 use std::io::{self, IsTerminal, Read, Write};
@@ -51,6 +53,23 @@ impl LogLevel {
             LogLevel::Debug => log::LevelFilter::Debug,
         }
     }
+
+    fn to_tracing_filter(self) -> &'static str {
+        match self {
+            LogLevel::Error => "error",
+            LogLevel::Warn => "warn",
+            LogLevel::Info => "info",
+            LogLevel::Debug => "debug",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum, Default, PartialEq, Eq)]
+enum LogFormat {
+    #[default]
+    Text,
+    Json,
+    Datadog,
 }
 
 const DEFAULT_VL_VERSION: &str = "6.4";
@@ -681,15 +700,75 @@ enum Commands {
 
     /// Print the default vlc-config file path
     ConfigPath,
+
+    /// Start an HTTP server for chart conversion
+    Serve {
+        /// Bind address [default: 127.0.0.1]
+        #[arg(long, env = "VLC_HOST", default_value = "127.0.0.1")]
+        host: String,
+
+        /// Port [default: 3000]
+        #[arg(long, env = "VLC_PORT", default_value_t = 3000)]
+        port: u16,
+
+        /// Number of converter worker threads [default: CPU count]
+        #[arg(long, env = "VLC_WORKERS")]
+        workers: Option<usize>,
+
+        /// Additional directory to search for fonts
+        #[arg(long, env = "VLC_FONT_DIR")]
+        font_dir: Option<String>,
+
+        /// API key for Bearer token authentication
+        #[arg(long, env = "VLC_API_KEY")]
+        api_key: Option<String>,
+
+        /// Allowed CORS origin(s), comma-separated or "*".
+        /// Default: localhost/127.0.0.1/[::1] on any port.
+        /// Set to "" to disable CORS.
+        #[arg(long, env = "VLC_CORS_ORIGIN")]
+        cors_origin: Option<String>,
+
+        /// Maximum simultaneous in-flight requests [default: unlimited]
+        #[arg(long, env = "VLC_MAX_CONCURRENT_REQUESTS")]
+        max_concurrent_requests: Option<usize>,
+
+        /// HTTP request timeout in seconds [default: 30]
+        #[arg(long, env = "VLC_REQUEST_TIMEOUT_SECS", default_value_t = 30)]
+        request_timeout_secs: u64,
+
+        /// Graceful shutdown drain timeout in seconds [default: 30]
+        #[arg(long, env = "VLC_DRAIN_TIMEOUT_SECS", default_value_t = 30)]
+        drain_timeout_secs: u64,
+
+        /// Maximum request body size in megabytes [default: 50]
+        #[arg(long, env = "VLC_MAX_BODY_SIZE_MB", default_value_t = 50)]
+        max_body_size_mb: usize,
+
+        /// Return only HTTP status codes on error (no error messages)
+        #[arg(long, env = "VLC_OPAQUE_ERRORS")]
+        opaque_errors: bool,
+
+        /// Reject requests without a User-Agent header
+        #[arg(long, env = "VLC_REQUIRE_USER_AGENT")]
+        require_user_agent: bool,
+
+        /// Log output format
+        #[arg(long, env = "VLC_LOG_FORMAT", value_enum, default_value_t = LogFormat::Text)]
+        log_format: LogFormat,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
-    env_logger::Builder::new()
-        .filter_module("vl_convert", cli.log_level.to_filter())
-        .init();
+    // Serve uses tracing-subscriber (initialized in serve::run); other commands use env_logger
+    if !matches!(cli.command, Commands::Serve { .. }) {
+        env_logger::Builder::new()
+            .filter_module("vl_convert", cli.log_level.to_filter())
+            .init();
+    }
 
     // Handle config-path before loading the config so it works even with a broken config file.
     if let Commands::ConfigPath = cli.command {
@@ -756,9 +835,11 @@ async fn main() -> Result<(), anyhow::Error> {
     if google_fonts.is_some() {
         base_config.google_fonts = google_fonts;
     }
-    base_config.num_workers = 1;
-
     let command = cli.command;
+
+    if !matches!(command, Commands::Serve { .. }) {
+        base_config.num_workers = 1;
+    }
 
     use crate::Commands::*;
     match command {
@@ -923,11 +1004,10 @@ async fn main() -> Result<(), anyhow::Error> {
                         config,
                         theme,
                         vl_version,
-
                         format_locale,
                         time_format_locale,
                         google_fonts,
-                        vega_plugin: None,
+                        ..Default::default()
                     },
                     HtmlOpts {
                         bundle,
@@ -968,11 +1048,10 @@ async fn main() -> Result<(), anyhow::Error> {
                         config,
                         theme,
                         vl_version,
-
                         format_locale,
                         time_format_locale,
                         google_fonts,
-                        vega_plugin: None,
+                        ..Default::default()
                     },
                     auto_google_fonts,
                     embed_local_fonts,
@@ -1102,7 +1181,7 @@ async fn main() -> Result<(), anyhow::Error> {
                         format_locale,
                         time_format_locale,
                         google_fonts,
-                        vega_plugin: None,
+                        ..Default::default()
                     },
                     HtmlOpts {
                         bundle,
@@ -1209,6 +1288,63 @@ async fn main() -> Result<(), anyhow::Error> {
         LsThemes => list_themes(base_config).await?,
         CatTheme { theme } => cat_theme(&theme, base_config).await?,
         ConfigPath => unreachable!("handled before config loading"),
+        Serve {
+            host,
+            port,
+            workers,
+            font_dir,
+            api_key,
+            cors_origin,
+            max_concurrent_requests,
+            request_timeout_secs,
+            drain_timeout_secs,
+            max_body_size_mb,
+            opaque_errors,
+            require_user_agent,
+            log_format,
+        } => {
+            register_font_dir(font_dir)?;
+
+            serve::init_tracing(cli.log_level.to_tracing_filter(), log_format);
+
+            // Resolve worker count: CLI flag > vlc-config > CPU count
+            let num_workers = workers
+                .or(if base_config.num_workers > 0 {
+                    Some(base_config.num_workers)
+                } else {
+                    None
+                })
+                .unwrap_or_else(|| {
+                    std::thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or(1)
+                });
+            base_config.num_workers = num_workers;
+
+            // Clamp V8 timeout to HTTP timeout
+            if request_timeout_secs > 0 {
+                let current = base_config.max_v8_execution_time_secs;
+                if current == 0 || current > request_timeout_secs {
+                    base_config.max_v8_execution_time_secs = request_timeout_secs;
+                }
+            }
+
+            let serve_config = serve::ServeConfig {
+                host,
+                port,
+                api_key,
+                cors_origin,
+                max_concurrent_requests,
+                request_timeout_secs,
+                drain_timeout_secs,
+                max_body_size_mb,
+                opaque_errors,
+                require_user_agent,
+                log_format,
+            };
+
+            serve::run(base_config, serve_config).await?
+        }
     }
 
     Ok(())
@@ -1591,10 +1727,7 @@ async fn vl_2_vg(
                 vl_version,
                 theme,
                 config,
-                format_locale: None,
-                time_format_locale: None,
-                google_fonts: None,
-                vega_plugin: None,
+                ..Default::default()
             },
         )
         .await
@@ -1643,8 +1776,7 @@ async fn vg_2_svg(
             VgOpts {
                 format_locale,
                 time_format_locale,
-                google_fonts: None,
-                vega_plugin: None,
+                ..Default::default()
             },
             svg_opts,
         )
@@ -1685,8 +1817,7 @@ async fn vg_2_png(
             VgOpts {
                 format_locale,
                 time_format_locale,
-                google_fonts: None,
-                vega_plugin: None,
+                ..Default::default()
             },
             PngOpts {
                 scale: Some(scale),
@@ -1730,8 +1861,7 @@ async fn vg_2_jpeg(
             VgOpts {
                 format_locale,
                 time_format_locale,
-                google_fonts: None,
-                vega_plugin: None,
+                ..Default::default()
             },
             JpegOpts {
                 scale: Some(scale),
@@ -1772,8 +1902,7 @@ async fn vg_2_pdf(
             VgOpts {
                 format_locale,
                 time_format_locale,
-                google_fonts: None,
-                vega_plugin: None,
+                ..Default::default()
             },
             PdfOpts::default(),
         )
@@ -1821,8 +1950,7 @@ async fn vl_2_svg(
                 theme,
                 format_locale,
                 time_format_locale,
-                google_fonts: None,
-                vega_plugin: None,
+                ..Default::default()
             },
             svg_opts,
         )
@@ -1871,8 +1999,7 @@ async fn vl_2_png(
                 theme,
                 format_locale,
                 time_format_locale,
-                google_fonts: None,
-                vega_plugin: None,
+                ..Default::default()
             },
             PngOpts {
                 scale: Some(scale),
@@ -1924,8 +2051,7 @@ async fn vl_2_jpeg(
                 theme,
                 format_locale,
                 time_format_locale,
-                google_fonts: None,
-                vega_plugin: None,
+                ..Default::default()
             },
             JpegOpts {
                 scale: Some(scale),
@@ -1975,8 +2101,7 @@ async fn vl_2_pdf(
                 theme,
                 format_locale,
                 time_format_locale,
-                google_fonts: None,
-                vega_plugin: None,
+                ..Default::default()
             },
             PdfOpts::default(),
         )

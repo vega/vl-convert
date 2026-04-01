@@ -14,6 +14,7 @@ macos = "12.0"
 dev-py = "maturin develop -m vl-convert-python/Cargo.toml -E test"
 test-py = { cmd = ["pytest", "vl-convert-python/tests"]}
 test-cli = "cargo test -p vl-convert"
+run-server = "cargo run -p vl-convert -- serve"
 test-rs = "cargo test -p vl-convert-rs -- --test-threads=1"
 
 test-html = { cmd = ["pytest", "vl-convert-python/tests/test_html_rendering.py", "-v"] }

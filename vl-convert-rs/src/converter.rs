@@ -585,6 +585,45 @@ impl ValueOrString {
     }
 }
 
+/// Apply background, width, and height overrides to a spec.
+/// Works for both Vega and Vega-Lite specs.
+pub(crate) fn apply_spec_overrides(
+    spec: ValueOrString,
+    background: &Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
+) -> Result<ValueOrString, AnyError> {
+    if background.is_none() && width.is_none() && height.is_none() {
+        return Ok(spec);
+    }
+    let mut val = spec.to_value()?;
+    if let Some(obj) = val.as_object_mut() {
+        if let Some(bg) = background {
+            obj.insert(
+                "background".to_string(),
+                serde_json::Value::String(bg.clone()),
+            );
+        }
+        if let Some(w) = width {
+            obj.insert(
+                "width".to_string(),
+                serde_json::Value::Number(
+                    serde_json::Number::from_f64(w as f64).unwrap_or(serde_json::Number::from(0)),
+                ),
+            );
+        }
+        if let Some(h) = height {
+            obj.insert(
+                "height".to_string(),
+                serde_json::Value::Number(
+                    serde_json::Number::from_f64(h as f64).unwrap_or(serde_json::Number::from(0)),
+                ),
+            );
+        }
+    }
+    Ok(ValueOrString::Value(val))
+}
+
 /// How to handle fonts referenced in a spec but not available on the system.
 ///
 /// Only the **first** non-generic font in each CSS `font-family` string is
@@ -755,6 +794,9 @@ pub struct VlcConfig {
     /// Defaults to false. When enabled, requests can include a `vega_plugin`
     /// field that runs on an ephemeral V8 isolate (50-100ms overhead).
     pub allow_per_request_plugins: bool,
+    /// Whether to allow per-request `google_fonts` / `auto_google_fonts` overrides.
+    /// Defaults to false. When false, requests containing these fields are rejected.
+    pub allow_google_fonts: bool,
     /// Domain allowlist for HTTP imports inside per-request plugins.
     /// Separate from `plugin_import_domains` (which controls config-level
     /// plugins). Defaults to empty (no HTTP imports allowed in per-request plugins).
@@ -807,6 +849,7 @@ impl Default for VlcConfig {
             vega_plugins: None,
             plugin_import_domains: Vec::new(),
             allow_per_request_plugins: false,
+            allow_google_fonts: false,
             per_request_plugin_import_domains: Vec::new(),
             default_theme: None,
             default_format_locale: None,
@@ -908,6 +951,14 @@ pub struct VgOpts {
     /// Per-request overlay plugin (inline ESM or URL). Requires `allow_per_request_plugins`.
     pub vega_plugin: Option<String>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
+    /// Vega config object merged via `vega.mergeConfig(spec.config, config)`.
+    pub config: Option<serde_json::Value>,
+    /// Sets `spec.background` (top-level Vega property).
+    pub background: Option<String>,
+    /// Override the spec's width.
+    pub width: Option<f32>,
+    /// Override the spec's height.
+    pub height: Option<f32>,
 }
 
 impl VgOpts {
@@ -919,6 +970,19 @@ impl VgOpts {
             serde_json::Value::String(renderer.to_string()),
         );
 
+        if let Some(config) = &self.config {
+            opts_map.insert("config".to_string(), config.clone());
+        }
+        if let Some(w) = self.width {
+            if let Some(n) = serde_json::Number::from_f64(w as f64) {
+                opts_map.insert("width".to_string(), serde_json::Value::Number(n));
+            }
+        }
+        if let Some(h) = self.height {
+            if let Some(n) = serde_json::Number::from_f64(h as f64) {
+                opts_map.insert("height".to_string(), serde_json::Value::Number(n));
+            }
+        }
         if let Some(format_locale) = &self.format_locale {
             opts_map.insert("formatLocale".to_string(), format_locale.as_object()?);
         }
@@ -1016,6 +1080,12 @@ pub struct VlOpts {
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
     /// Per-request overlay plugin (inline ESM or URL). Requires `allow_per_request_plugins`.
     pub vega_plugin: Option<String>,
+    /// Sets `spec.background` before Vega-Lite compilation.
+    pub background: Option<String>,
+    /// Override the spec's width.
+    pub width: Option<f32>,
+    /// Override the spec's height.
+    pub height: Option<f32>,
 }
 
 /// Options specific to SVG output format.
@@ -1078,6 +1148,16 @@ impl VlOpts {
             opts_map.insert("config".to_string(), config.clone());
         }
 
+        if let Some(w) = self.width {
+            if let Some(n) = serde_json::Number::from_f64(w as f64) {
+                opts_map.insert("width".to_string(), serde_json::Value::Number(n));
+            }
+        }
+        if let Some(h) = self.height {
+            if let Some(n) = serde_json::Number::from_f64(h as f64) {
+                opts_map.insert("height".to_string(), serde_json::Value::Number(n));
+            }
+        }
         if let Some(format_locale) = &self.format_locale {
             opts_map.insert("formatLocale".to_string(), format_locale.as_object()?);
         }
@@ -1333,7 +1413,9 @@ unsafe extern "C" fn near_heap_limit_callback(
 }
 
 /// Struct that interacts directly with the Deno JavaScript runtime. Not Sendable
-pub(crate) struct InnerVlConverter {
+#[doc(hidden)]
+#[allow(private_interfaces, private_bounds)]
+pub struct InnerVlConverter {
     worker: MainWorker,
     transfer_state: WorkerTransferStateHandle,
     initialized_vl_versions: HashSet<VlVersion>,
@@ -1350,8 +1432,12 @@ pub(crate) struct InnerVlConverter {
     /// Set when a plugin fails during init_vega(). Subsequent commands
     /// return this error immediately (no retry on the tainted isolate).
     plugin_init_error: Option<String>,
+    /// Log entries (WARN/ERROR) captured during the most recent conversion.
+    /// Populated by `emit_js_log_messages()`, drained by `drain_log_entries()`.
+    pub(crate) last_log_entries: Vec<String>,
 }
 
+#[allow(private_interfaces, private_bounds)]
 impl InnerVlConverter {
     /// Returns `true` if the near-heap-limit callback has fired.
     fn heap_limit_was_hit(&self) -> bool {
@@ -1593,6 +1679,7 @@ macro_rules! with_font_overlay {
     }};
 }
 
+#[allow(private_interfaces, private_bounds)]
 impl InnerVlConverter {
     async fn init_vega(&mut self) -> Result<(), AnyError> {
         if let Some(ref err) = self.plugin_init_error {
@@ -1738,20 +1825,20 @@ function buildLoader(errors) {
     return loader;
 }
 
-function vegaToView(vgSpec, errors) {
-    let runtime = vega.parse(vgSpec);
+function vegaToView(vgSpec, config, errors) {
+    let runtime = vega.parse(vgSpec, config || {});
     const loader = buildLoader(errors);
     return new vega.View(runtime, {renderer: 'none', loader, logLevel: vega.Debug, logger: logCollector});
 }
 
-function vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors) {
+function vegaToSvg(vgSpec, formatLocale, timeFormatLocale, config, errors) {
     if (formatLocale != null) {
         vega.formatLocale(formatLocale);
     }
     if (timeFormatLocale != null) {
         vega.timeFormatLocale(timeFormatLocale);
     }
-    let view = vegaToView(vgSpec, errors);
+    let view = vegaToView(vgSpec, config, errors);
     let svgPromise = view.runAsync().then(() => {
         try {
             // Workaround for https://github.com/vega/vega/issues/3481
@@ -1833,14 +1920,14 @@ function cloneScenegraph(obj) {
     return clone;
 }
 
-function vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, errors) {
+function vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, config, errors) {
     if (formatLocale != null) {
         vega.formatLocale(formatLocale);
     }
     if (timeFormatLocale != null) {
         vega.timeFormatLocale(timeFormatLocale);
     }
-    let view = vegaToView(vgSpec, errors);
+    let view = vegaToView(vgSpec, config, errors);
     let scenegraphPromise = view.runAsync().then(() => {
         try {
             // Workaround for https://github.com/vega/vega/issues/3481
@@ -1873,7 +1960,7 @@ function vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, errors) {
     return scenegraphPromise
 }
 
-function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors) {
+function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, config, errors) {
     if (formatLocale != null) {
         vega.formatLocale(formatLocale);
     }
@@ -1881,7 +1968,7 @@ function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors) {
         vega.timeFormatLocale(timeFormatLocale);
     }
 
-    let view = vegaToView(vgSpec, errors);
+    let view = vegaToView(vgSpec, config, errors);
     let canvasPromise = view.runAsync().then(() => {
         try {
             // Workaround for https://github.com/vega/vega/issues/3481
@@ -2070,17 +2157,17 @@ function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
 
 function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, errors) {{
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
-    return vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors)
+    return vegaToSvg(vgSpec, formatLocale, timeFormatLocale, null, errors)
 }}
 
 function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, errors) {{
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
-    return vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, errors)
+    return vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, null, errors)
 }}
 
 function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, scale, errors) {{
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
-    return vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors)
+    return vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, null, errors)
 }}
 "#,
                 ver_name = format!("{:?}", vl_version),
@@ -2222,6 +2309,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
             heap_limit_data,
             timeout_hit: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             plugin_init_error: None,
+            last_log_entries: Vec::new(),
         };
 
         Ok(this)
@@ -2276,6 +2364,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
     }
 
     async fn emit_js_log_messages(&mut self) {
+        self.last_log_entries.clear();
         let json = match self
             .execute_script_to_string("_collapsedLogMessages()")
             .await
@@ -2300,13 +2389,24 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
             let level = entry.get("level").and_then(|v| v.as_str()).unwrap_or("");
             let msg = entry.get("msg").and_then(|v| v.as_str()).unwrap_or("");
             match level {
-                "error" => vl_error!("{}", msg),
-                "warn" => vl_warn!("{}", msg),
+                "error" => {
+                    vl_error!("{}", msg);
+                    self.last_log_entries.push(format!("ERROR: {}", msg));
+                }
+                "warn" => {
+                    vl_warn!("{}", msg);
+                    self.last_log_entries.push(format!("WARN: {}", msg));
+                }
                 "info" => vl_info!("{}", msg),
                 "debug" => vl_debug!("{}", msg),
                 _ => {}
             }
         }
+    }
+
+    #[doc(hidden)]
+    pub fn drain_log_entries(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.last_log_entries)
     }
 
     pub async fn vegalite_to_vega(
@@ -2318,7 +2418,13 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
         self.init_vl_version(&vl_opts.vl_version).await?;
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
 
-        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec.into())?;
+        let vl_spec = apply_spec_overrides(
+            vl_spec.into(),
+            &vl_opts.background,
+            vl_opts.width,
+            vl_opts.height,
+        )?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec)?;
         let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
 
         let theme_arg = match &vl_opts.theme {
@@ -2354,6 +2460,12 @@ compileVegaLite_{ver_name:?}(
         self.init_vega().await?;
         self.init_vl_version(&vl_opts.vl_version).await?;
 
+        let vl_spec = apply_spec_overrides(
+            vl_spec.into(),
+            &vl_opts.background,
+            vl_opts.width,
+            vl_opts.height,
+        )?;
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
 
         let format_locale = match vl_opts.format_locale {
@@ -2366,7 +2478,7 @@ compileVegaLite_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec.into())?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec)?;
         let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
@@ -2428,7 +2540,12 @@ vegaLiteToSvg_{ver_name:?}(
     ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
         self.init_vl_version(&vl_opts.vl_version).await?;
-        let vl_spec = vl_spec.into();
+        let vl_spec = apply_spec_overrides(
+            vl_spec.into(),
+            &vl_opts.background,
+            vl_opts.width,
+            vl_opts.height,
+        )?;
 
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
         let format_locale = match vl_opts.format_locale {
@@ -2516,6 +2633,13 @@ vegaLiteToScenegraph_{ver_name:?}(
     ) -> Result<String, AnyError> {
         self.init_vega().await?;
 
+        let vg_spec = apply_spec_overrides(
+            vg_spec.into(),
+            &vg_opts.background,
+            vg_opts.width,
+            vg_opts.height,
+        )?;
+
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
             Some(fl) => fl.as_object()?,
@@ -2526,10 +2650,13 @@ vegaLiteToScenegraph_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec.into())?;
+        let config_value = vg_opts.config.unwrap_or(serde_json::Value::Null);
+
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec)?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
             JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config_value)?;
 
         let code = format!(
             r#"
@@ -2540,6 +2667,7 @@ vegaToSvg(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
+    JSON.parse(op_get_json_arg({config_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -2551,6 +2679,7 @@ vegaToSvg(
             arg_id = spec_arg.id(),
             format_locale_id = format_locale_arg.id(),
             time_format_locale_id = time_format_locale_arg.id(),
+            config_id = config_arg.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -2577,7 +2706,12 @@ vegaToSvg(
         vg_opts: VgOpts,
     ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
-        let vg_spec = vg_spec.into();
+        let vg_spec = apply_spec_overrides(
+            vg_spec.into(),
+            &vg_opts.background,
+            vg_opts.width,
+            vg_opts.height,
+        )?;
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
             Some(fl) => fl.as_object()?,
@@ -2588,10 +2722,12 @@ vegaToSvg(
             Some(fl) => fl.as_object()?,
         };
 
+        let config_value = vg_opts.config.unwrap_or(serde_json::Value::Null);
         let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec)?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
             JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config_value)?;
         let result = MsgpackResultGuard::new(&self.transfer_state)?;
 
         let code = format!(
@@ -2602,6 +2738,7 @@ vegaToScenegraph(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
+    JSON.parse(op_get_json_arg({config_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -2613,6 +2750,7 @@ vegaToScenegraph(
             arg_id = spec_arg.id(),
             format_locale_id = format_locale_arg.id(),
             time_format_locale_id = time_format_locale_arg.id(),
+            config_id = config_arg.id(),
             result_id = result.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
@@ -2706,6 +2844,15 @@ delete themes.default
         ppi: f32,
     ) -> Result<Vec<u8>, AnyError> {
         self.init_vega().await?;
+
+        let vg_spec = apply_spec_overrides(
+            ValueOrString::Value(vg_spec.clone()),
+            &vg_opts.background,
+            vg_opts.width,
+            vg_opts.height,
+        )?
+        .to_value()?;
+
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
             Some(fl) => fl.as_object()?,
@@ -2716,10 +2863,13 @@ delete themes.default
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_value(&self.transfer_state, vg_spec.clone())?;
+        let config_value = vg_opts.config.unwrap_or(serde_json::Value::Null);
+
+        let spec_arg = JsonArgGuard::from_value(&self.transfer_state, vg_spec)?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
             JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config_value)?;
 
         let code = format!(
             r#"
@@ -2731,6 +2881,7 @@ vegaToCanvas(
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
     {scale},
+    JSON.parse(op_get_json_arg({config_id})),
     errors,
 ).then((canvas) => {{
     if (errors != null && errors.length > 0) {{
@@ -2742,6 +2893,7 @@ vegaToCanvas(
             arg_id = spec_arg.id(),
             format_locale_id = format_locale_arg.id(),
             time_format_locale_id = time_format_locale_arg.id(),
+            config_id = config_arg.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -3521,7 +3673,8 @@ impl VlConverter {
         }
     }
 
-    pub(crate) async fn run_on_worker<R: Send + 'static>(
+    #[doc(hidden)]
+    pub async fn run_on_worker<R: Send + 'static>(
         &self,
         work: impl FnOnce(
                 &mut InnerVlConverter,
@@ -3688,6 +3841,10 @@ impl VlConverter {
             time_format_locale: vl_opts.time_format_locale.clone(),
             google_fonts: vl_opts.google_fonts.clone(),
             vega_plugin: vl_opts.vega_plugin.clone(),
+            config: vl_opts.config.clone(),
+            background: vl_opts.background.clone(),
+            width: vl_opts.width,
+            height: vl_opts.height,
         };
         let vega_spec = self
             .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())

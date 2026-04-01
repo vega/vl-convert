@@ -785,10 +785,7 @@ mod test_png_theme_config {
                     vl_version,
                     theme: Some(theme.to_string()),
                     config: Some(json!({"background": BACKGROUND_COLOR})),
-                    format_locale: None,
-                    time_format_locale: None,
-                    google_fonts: None,
-                    vega_plugin: None,
+                    ..Default::default()
                 },
                 PngOpts { scale: Some(scale), ppi: None },
             )
@@ -808,12 +805,8 @@ mod test_png_theme_config {
                 usermeta_spec,
                 VlOpts {
                     vl_version,
-                    theme: None,
                     config: Some(json!({"background": BACKGROUND_COLOR})),
-                    format_locale: None,
-                    time_format_locale: None,
-                    google_fonts: None,
-                    vega_plugin: None,
+                    ..Default::default()
                 },
                 PngOpts { scale: Some(scale), ppi: None },
             )

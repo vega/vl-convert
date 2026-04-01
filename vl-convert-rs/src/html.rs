@@ -1,7 +1,7 @@
 use crate::converter::{
-    classify_and_request_fonts, classify_scenegraph_fonts, FontAnalysis, GoogleFontRequest,
-    HtmlOpts, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin, ValueOrString, VgOpts,
-    VlConverter, VlOpts,
+    apply_spec_overrides, classify_and_request_fonts, classify_scenegraph_fonts, FontAnalysis,
+    GoogleFontRequest, HtmlOpts, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin,
+    ValueOrString, VgOpts, VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{
@@ -633,7 +633,7 @@ impl VlConverter {
             format_locale: vl_opts.format_locale,
             time_format_locale: vl_opts.time_format_locale,
             google_fonts: vl_opts.google_fonts,
-            vega_plugin: None,
+            ..Default::default()
         };
         self.vega_fonts(
             vega_spec,
@@ -744,7 +744,7 @@ impl VlConverter {
                 format_locale: vl_opts.format_locale.clone(),
                 time_format_locale: vl_opts.time_format_locale.clone(),
                 google_fonts: vl_opts.google_fonts.clone(),
-                vega_plugin: None,
+                ..Default::default()
             };
             self.build_font_head_html(vega_spec, vg_opts, bundle, auto_install, embed_local)
                 .await?
@@ -776,6 +776,8 @@ impl VlConverter {
             Some(&resolved_plugins_owned)
         };
         let has_plugins = resolved_plugins.is_some();
+        let vl_spec =
+            apply_spec_overrides(vl_spec, &vl_opts.background, vl_opts.width, vl_opts.height)?;
         let code = get_vega_or_vegalite_script(
             vl_spec,
             vl_opts.to_embed_opts(renderer)?,
@@ -853,6 +855,8 @@ impl VlConverter {
             Some(&resolved_plugins_owned)
         };
         let has_plugins = resolved_plugins.is_some();
+        let vg_spec =
+            apply_spec_overrides(vg_spec, &vg_opts.background, vg_opts.width, vg_opts.height)?;
         let code = get_vega_or_vegalite_script(
             vg_spec,
             vg_opts.to_embed_opts(renderer)?,
