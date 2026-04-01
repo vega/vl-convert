@@ -764,6 +764,11 @@ enum Commands {
         /// Enable admin API on 127.0.0.1:<port> for dynamic budget updates
         #[arg(long, env = "VLC_ADMIN_PORT")]
         admin_port: Option<u16>,
+
+        /// Trust X-Forwarded-For and X-Real-IP headers for client IP extraction.
+        /// Only enable when behind a reverse proxy that sets these headers.
+        #[arg(long, env = "VLC_TRUST_PROXY")]
+        trust_proxy: bool,
     },
 }
 
@@ -1325,6 +1330,7 @@ async fn main() -> Result<(), anyhow::Error> {
             global_budget_ms,
             budget_estimate_ms,
             admin_port,
+            trust_proxy,
         } => {
             register_font_dir(font_dir)?;
 
@@ -1368,6 +1374,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 global_budget_ms,
                 budget_estimate_ms,
                 admin_port,
+                trust_proxy,
             };
 
             vl_convert_serve::run(base_config, serve_config).await?

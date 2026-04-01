@@ -109,8 +109,13 @@ impl BudgetTracker {
     pub fn update_config(&self, per_ip: Option<i64>, global: Option<i64>) {
         if let Some(new_ip) = per_ip {
             let old = self.per_ip_budget_ms.swap(new_ip, Ordering::AcqRel);
-            // Clamp existing IP balances to new max
-            if new_ip < old {
+            if old == 0 && new_ip > 0 {
+                // Enabling from disabled — reset all IP balances to the new limit
+                for entry in self.ip_entries.iter_mut() {
+                    entry.remaining.store(new_ip, Ordering::Release);
+                }
+            } else if new_ip < old {
+                // Clamp existing IP balances to new max
                 for entry in self.ip_entries.iter_mut() {
                     let current = entry.remaining.load(Ordering::Relaxed);
                     if current > new_ip {

@@ -92,6 +92,7 @@ pub struct ServeConfig {
     pub global_budget_ms: Option<i64>,
     pub budget_estimate_ms: i64,
     pub admin_port: Option<u16>,
+    pub trust_proxy: bool,
 }
 
 pub struct AppState {
@@ -227,6 +228,7 @@ fn build_router(
     state: Arc<AppState>,
     tracker: Option<Arc<budget::BudgetTracker>>,
     opaque_errors: bool,
+    trust_proxy: bool,
 ) -> Router {
     // Health endpoints bypass budget tracking entirely
     let health_router = Router::new()
@@ -257,12 +259,15 @@ fn build_router(
 
     // Budget tracking middleware (optional)
     if let Some(tracker) = tracker {
-        api_router = api_router.layer(axum::middleware::from_fn(
-            move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
-                let tracker = tracker.clone();
-                async move { budget_middleware(tracker, opaque_errors, req, next).await }
-            },
-        ));
+        api_router =
+            api_router.layer(axum::middleware::from_fn(
+                move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
+                    let tracker = tracker.clone();
+                    async move {
+                        budget_middleware(tracker, opaque_errors, trust_proxy, req, next).await
+                    }
+                },
+            ));
     }
 
     health_router.merge(api_router).with_state(state)
@@ -332,7 +337,12 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
         });
     }
 
-    let router = build_router(state.clone(), tracker, serve_config.opaque_errors);
+    let router = build_router(
+        state.clone(),
+        tracker,
+        serve_config.opaque_errors,
+        serve_config.trust_proxy,
+    );
 
     let cors = build_cors_layer(&serve_config.cors_origin);
 
@@ -526,27 +536,34 @@ async fn user_agent_middleware(
     next.run(req).await
 }
 
-/// Extract client IP from proxy headers or ConnectInfo.
-/// Checks X-Forwarded-For, then X-Real-IP, then falls back to peer address.
-fn extract_client_ip(req: &axum::http::Request<axum::body::Body>) -> Option<std::net::IpAddr> {
-    // X-Forwarded-For (first entry is the original client)
-    if let Some(xff) = req.headers().get("x-forwarded-for") {
-        if let Ok(xff_str) = xff.to_str() {
-            if let Some(first_ip) = xff_str.split(',').next() {
-                if let Ok(ip) = first_ip.trim().parse::<std::net::IpAddr>() {
+/// Extract client IP. When `trust_proxy` is true, checks X-Forwarded-For and
+/// X-Real-IP headers (only safe behind a reverse proxy that sets these).
+/// Otherwise, always uses the peer socket address.
+fn extract_client_ip(
+    req: &axum::http::Request<axum::body::Body>,
+    trust_proxy: bool,
+) -> Option<std::net::IpAddr> {
+    if trust_proxy {
+        // X-Forwarded-For (first entry is the original client)
+        if let Some(xff) = req.headers().get("x-forwarded-for") {
+            if let Ok(xff_str) = xff.to_str() {
+                if let Some(first_ip) = xff_str.split(',').next() {
+                    if let Ok(ip) = first_ip.trim().parse::<std::net::IpAddr>() {
+                        return Some(ip);
+                    }
+                }
+            }
+        }
+        // X-Real-IP (set by nginx and some other proxies)
+        if let Some(xri) = req.headers().get("x-real-ip") {
+            if let Ok(ip_str) = xri.to_str() {
+                if let Ok(ip) = ip_str.trim().parse::<std::net::IpAddr>() {
                     return Some(ip);
                 }
             }
         }
     }
-    // X-Real-IP (set by nginx and some other proxies)
-    if let Some(xri) = req.headers().get("x-real-ip") {
-        if let Ok(ip_str) = xri.to_str() {
-            if let Ok(ip) = ip_str.trim().parse::<std::net::IpAddr>() {
-                return Some(ip);
-            }
-        }
-    }
+    // Peer socket address (always available, always trustworthy)
     req.extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
         .map(|ci| ci.0.ip())
@@ -555,6 +572,7 @@ fn extract_client_ip(req: &axum::http::Request<axum::body::Body>) -> Option<std:
 async fn budget_middleware(
     tracker: Arc<budget::BudgetTracker>,
     opaque_errors: bool,
+    trust_proxy: bool,
     req: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
 ) -> Response {
@@ -562,8 +580,8 @@ async fn budget_middleware(
         return next.run(req).await;
     }
 
-    let ip =
-        extract_client_ip(&req).unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    let ip = extract_client_ip(&req, trust_proxy)
+        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
 
     if let Err(e) = tracker.reserve(ip) {
         return error_response(
