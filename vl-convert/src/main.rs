@@ -51,16 +51,6 @@ impl LogLevel {
             LogLevel::Debug => log::LevelFilter::Debug,
         }
     }
-
-    #[cfg(feature = "serve")]
-    fn to_tracing_filter(self) -> &'static str {
-        match self {
-            LogLevel::Error => "error",
-            LogLevel::Warn => "warn",
-            LogLevel::Info => "info",
-            LogLevel::Debug => "debug",
-        }
-    }
 }
 
 const DEFAULT_VL_VERSION: &str = "6.4";
@@ -691,102 +681,15 @@ enum Commands {
 
     /// Print the default vlc-config file path
     ConfigPath,
-
-    #[cfg(feature = "serve")]
-    /// Start an HTTP server for chart conversion
-    Serve {
-        /// Bind address [default: 127.0.0.1]
-        #[arg(long, env = "VLC_HOST", default_value = "127.0.0.1")]
-        host: String,
-
-        /// Port [default: 3000]
-        #[arg(long, env = "VLC_PORT", default_value_t = 3000)]
-        port: u16,
-
-        /// Number of converter worker threads [default: CPU count]
-        #[arg(long, env = "VLC_WORKERS")]
-        workers: Option<usize>,
-
-        /// Additional directory to search for fonts
-        #[arg(long, env = "VLC_FONT_DIR")]
-        font_dir: Option<String>,
-
-        /// API key for Bearer token authentication
-        #[arg(long, env = "VLC_API_KEY")]
-        api_key: Option<String>,
-
-        /// Allowed CORS origin(s), comma-separated or "*".
-        /// Default: localhost/127.0.0.1/[::1] on any port.
-        /// Set to "" to disable CORS.
-        #[arg(long, env = "VLC_CORS_ORIGIN")]
-        cors_origin: Option<String>,
-
-        /// Maximum simultaneous in-flight requests [default: unlimited]
-        #[arg(long, env = "VLC_MAX_CONCURRENT_REQUESTS")]
-        max_concurrent_requests: Option<usize>,
-
-        /// HTTP request timeout in seconds [default: 30]
-        #[arg(long, env = "VLC_REQUEST_TIMEOUT_SECS", default_value_t = 30)]
-        request_timeout_secs: u64,
-
-        /// Graceful shutdown drain timeout in seconds [default: 30]
-        #[arg(long, env = "VLC_DRAIN_TIMEOUT_SECS", default_value_t = 30)]
-        drain_timeout_secs: u64,
-
-        /// Maximum request body size in megabytes [default: 50]
-        #[arg(long, env = "VLC_MAX_BODY_SIZE_MB", default_value_t = 50)]
-        max_body_size_mb: usize,
-
-        /// Return only HTTP status codes on error (no error messages)
-        #[arg(long, env = "VLC_OPAQUE_ERRORS")]
-        opaque_errors: bool,
-
-        /// Reject requests without a User-Agent header
-        #[arg(long, env = "VLC_REQUIRE_USER_AGENT")]
-        require_user_agent: bool,
-
-        /// Log output format
-        #[arg(long, env = "VLC_LOG_FORMAT", value_enum, default_value_t = vl_convert_serve::LogFormat::Text)]
-        log_format: vl_convert_serve::LogFormat,
-
-        /// Conversion time budget per IP in ms/min (disabled if not set)
-        #[arg(long, env = "VLC_PER_IP_BUDGET_MS")]
-        per_ip_budget_ms: Option<i64>,
-
-        /// Total conversion time budget for the server in ms/min (disabled if not set)
-        #[arg(long, env = "VLC_GLOBAL_BUDGET_MS")]
-        global_budget_ms: Option<i64>,
-
-        /// Pessimistic per-request reservation in ms [default: 2000]
-        #[arg(long, env = "VLC_BUDGET_ESTIMATE_MS", default_value_t = 2000)]
-        budget_estimate_ms: i64,
-
-        /// Enable admin API on 127.0.0.1:<port> for dynamic budget updates
-        #[arg(long, env = "VLC_ADMIN_PORT")]
-        admin_port: Option<u16>,
-
-        /// Trust X-Forwarded-For and X-Real-IP headers for client IP extraction.
-        /// Only enable when behind a reverse proxy that sets these headers.
-        #[arg(long, env = "VLC_TRUST_PROXY")]
-        trust_proxy: bool,
-    },
 }
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
-    // Serve uses tracing-subscriber; other commands use env_logger
-    #[cfg(feature = "serve")]
-    let is_serve = matches!(cli.command, Commands::Serve { .. });
-    #[cfg(not(feature = "serve"))]
-    let is_serve = false;
-
-    if !is_serve {
-        env_logger::Builder::new()
-            .filter_module("vl_convert", cli.log_level.to_filter())
-            .init();
-    }
+    env_logger::Builder::new()
+        .filter_module("vl_convert", cli.log_level.to_filter())
+        .init();
 
     // Handle config-path before loading the config so it works even with a broken config file.
     if let Commands::ConfigPath = cli.command {
@@ -855,14 +758,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     let command = cli.command;
 
-    #[cfg(feature = "serve")]
-    let is_serve_cmd = matches!(command, Commands::Serve { .. });
-    #[cfg(not(feature = "serve"))]
-    let is_serve_cmd = false;
-
-    if !is_serve_cmd {
-        base_config.num_workers = 1;
-    }
+    base_config.num_workers = 1;
 
     use crate::Commands::*;
     match command {
@@ -1311,74 +1207,6 @@ async fn main() -> Result<(), anyhow::Error> {
         LsThemes => list_themes(base_config).await?,
         CatTheme { theme } => cat_theme(&theme, base_config).await?,
         ConfigPath => unreachable!("handled before config loading"),
-        #[cfg(feature = "serve")]
-        Serve {
-            host,
-            port,
-            workers,
-            font_dir,
-            api_key,
-            cors_origin,
-            max_concurrent_requests,
-            request_timeout_secs,
-            drain_timeout_secs,
-            max_body_size_mb,
-            opaque_errors,
-            require_user_agent,
-            log_format,
-            per_ip_budget_ms,
-            global_budget_ms,
-            budget_estimate_ms,
-            admin_port,
-            trust_proxy,
-        } => {
-            register_font_dir(font_dir)?;
-
-            vl_convert_serve::init_tracing(cli.log_level.to_tracing_filter(), log_format);
-
-            // Resolve worker count: CLI flag > vlc-config > CPU count
-            let num_workers = workers
-                .or(if base_config.num_workers > 0 {
-                    Some(base_config.num_workers)
-                } else {
-                    None
-                })
-                .unwrap_or_else(|| {
-                    std::thread::available_parallelism()
-                        .map(|n| n.get())
-                        .unwrap_or(1)
-                });
-            base_config.num_workers = num_workers;
-
-            // Clamp V8 timeout to HTTP timeout
-            if request_timeout_secs > 0 {
-                let current = base_config.max_v8_execution_time_secs;
-                if current == 0 || current > request_timeout_secs {
-                    base_config.max_v8_execution_time_secs = request_timeout_secs;
-                }
-            }
-
-            let serve_config = vl_convert_serve::ServeConfig {
-                host,
-                port,
-                api_key,
-                cors_origin,
-                max_concurrent_requests,
-                request_timeout_secs,
-                drain_timeout_secs,
-                max_body_size_mb,
-                opaque_errors,
-                require_user_agent,
-                log_format,
-                per_ip_budget_ms,
-                global_budget_ms,
-                budget_estimate_ms,
-                admin_port,
-                trust_proxy,
-            };
-
-            vl_convert_serve::run(base_config, serve_config).await?
-        }
     }
 
     Ok(())

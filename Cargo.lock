@@ -10450,7 +10450,6 @@ dependencies = [
  "tokio",
  "vl-convert-google-fonts",
  "vl-convert-rs",
- "vl-convert-serve",
 ]
 
 [[package]]
@@ -10575,18 +10574,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "vl-convert-serve"
+name = "vl-convert-server"
 version = "2.0.0-rc1"
 dependencies = [
  "axum",
  "chrono",
  "clap",
  "dashmap 6.1.0",
+ "env_logger",
  "http 1.4.0",
  "itertools 0.14.0",
  "log",
  "serde",
  "serde_json",
+ "shellexpand",
  "subtle",
  "tokio",
  "tower 0.5.3",

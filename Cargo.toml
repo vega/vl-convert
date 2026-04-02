@@ -4,7 +4,7 @@ resolver = "2"  # Needed for proper wgpu compilation
 members = [
     "vl-convert-rs",
     "vl-convert",
-    "vl-convert-serve",
+    "vl-convert-server",
     "vl-convert-python",
     "vl-convert-vendor",
     "vl-convert-canvas2d",

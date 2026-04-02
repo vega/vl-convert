@@ -1,5 +1,5 @@
 [package]
-name = "vl-convert-serve"
+name = "vl-convert-server"
 version = "2.0.0-rc1"
 edition = "2021"
 license = "BSD-3-Clause"
@@ -9,6 +9,14 @@ repository = "https://github.com/jonmmease/vl-convert"
 description = "HTTP server for converting Vega-Lite and Vega specifications to static images"
 keywords = ["Visualization", "Vega", "Vega-Lite", "Server"]
 
+[[bin]]
+name = "vl-convert-server"
+path = "src/main.rs"
+
+[lib]
+name = "vl_convert_server"
+path = "src/lib.rs"
+
 [dependencies]
 vl-convert-rs = { path = "../vl-convert-rs", version = "2.0.0-rc1" }
 vl-convert-google-fonts = { path = "../vl-convert-google-fonts", version = "2.0.0-rc1" }
@@ -17,6 +25,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 clap = { workspace = true }
 log = { workspace = true }
+env_logger = { workspace = true }
+shellexpand = { workspace = true }
 itertools = { workspace = true }
 axum = { version = "0.7", features = ["json"] }
 tower = { version = "0.5", features = ["timeout", "limit", "load-shed"] }

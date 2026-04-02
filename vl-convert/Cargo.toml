@@ -9,14 +9,9 @@ repository = "https://github.com/jonmmease/vl-convert"
 description = "CLI application for converting Vega-Lite visualization specifications to Vega specifications"
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
-[features]
-default = ["serve"]
-serve = ["dep:vl-convert-serve"]
-
 [dependencies]
 vl-convert-rs = { path = "../vl-convert-rs", version = "2.0.0-rc1" }
 vl-convert-google-fonts = { path = "../vl-convert-google-fonts", version = "2.0.0-rc1" }
-vl-convert-serve = { path = "../vl-convert-serve", version = "2.0.0-rc1", optional = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 clap = { workspace = true }
