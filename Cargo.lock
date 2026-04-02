@@ -10585,6 +10585,8 @@ dependencies = [
  "http 1.4.0",
  "itertools 0.14.0",
  "log",
+ "once_cell",
+ "reqwest",
  "serde",
  "serde_json",
  "shellexpand",

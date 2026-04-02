@@ -540,6 +540,169 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
     Ok(())
 }
 
+/// Build the fully-configured app (Router with all middleware) without binding.
+/// Used by tests to bind to port 0 and discover the assigned port.
+pub fn build_app(
+    config: VlcConfig,
+    serve_config: &ServeConfig,
+) -> Result<(Router, VlConverter), anyhow::Error> {
+    let num_workers = config.num_workers;
+    log::info!("Initializing converter with {num_workers} worker(s)...");
+    let converter = VlConverter::with_config(config.clone())?;
+    converter.warm_up()?;
+    log::info!("Workers initialized");
+
+    let api_key = serve_config.api_key.as_ref().map(|k| ApiKey(k.clone()));
+    let state = Arc::new(AppState {
+        converter: converter.clone(),
+        config: config.clone(),
+        api_key,
+        opaque_errors: serve_config.opaque_errors,
+        require_user_agent: serve_config.require_user_agent,
+    });
+
+    let tracker = if serve_config.per_ip_budget_ms.is_some()
+        || serve_config.global_budget_ms.is_some()
+        || serve_config.admin_port.is_some()
+    {
+        let t = budget::BudgetTracker::new(
+            serve_config.per_ip_budget_ms.unwrap_or(0),
+            serve_config.global_budget_ms.unwrap_or(0),
+            serve_config.budget_estimate_ms,
+        );
+        let refill_tracker = t.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+                refill_tracker.refill();
+            }
+        });
+        Some(t)
+    } else {
+        None
+    };
+
+    if let (Some(admin_port), Some(ref tracker)) = (serve_config.admin_port, &tracker) {
+        let admin_router = admin::admin_router(tracker.clone())
+            .layer(PropagateRequestIdLayer::x_request_id())
+            .layer(TraceLayer::new_for_http())
+            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+            .layer(CatchPanicLayer::new());
+        let admin_addr = format!("127.0.0.1:{admin_port}");
+        let admin_addr_clone = admin_addr.clone();
+        tokio::spawn(async move {
+            match tokio::net::TcpListener::bind(&admin_addr_clone).await {
+                Ok(listener) => {
+                    log::info!("Admin API listening on http://{admin_addr_clone}");
+                    let _ = axum::serve(listener, admin_router).await;
+                }
+                Err(e) => {
+                    log::error!("Failed to bind admin port {admin_addr_clone}: {e}");
+                }
+            }
+        });
+    }
+
+    let router = build_router(
+        state.clone(),
+        tracker,
+        serve_config.opaque_errors,
+        serve_config.trust_proxy,
+    );
+
+    let cors = build_cors_layer(&serve_config.cors_origin);
+
+    let mut app = router.layer(CompressionLayer::new());
+
+    let opaque = serve_config.opaque_errors;
+    if let Some(max) = serve_config.max_concurrent_requests {
+        app = app.layer(
+            tower::ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(
+                    move |_: tower::BoxError| async move {
+                        error_response(
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            "too many concurrent requests",
+                            opaque,
+                        )
+                    },
+                ))
+                .layer(LoadShedLayer::new())
+                .layer(ConcurrencyLimitLayer::new(max)),
+        );
+    }
+
+    if serve_config.request_timeout_secs > 0 {
+        app = app.layer(
+            tower::ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(
+                    move |_: tower::BoxError| async move {
+                        error_response(StatusCode::SERVICE_UNAVAILABLE, "request timed out", opaque)
+                    },
+                ))
+                .layer(TimeoutLayer::new(Duration::from_secs(
+                    serve_config.request_timeout_secs,
+                ))),
+        );
+    }
+
+    let app = app
+        .layer(DefaultBodyLimit::max(
+            serve_config.max_body_size_mb * 1024 * 1024,
+        ))
+        .layer(cors)
+        .layer(PropagateRequestIdLayer::x_request_id());
+
+    fn make_span_text(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+        tracing::info_span!("request", method = %req.method(), uri = %req.uri())
+    }
+
+    fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+        let ua = req
+            .headers()
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let request_id = req
+            .headers()
+            .get("x-request-id")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        let (trace_id, span_id) = extract_trace_context(req.headers());
+        tracing::info_span!("request",
+            method = %req.method(), uri = %req.uri(), version = ?req.version(),
+            user_agent = %ua, request_id = %request_id,
+            trace_id = %trace_id, span_id = %span_id)
+    }
+
+    let app = if serve_config.log_format == LogFormat::Json {
+        app.layer(
+            TraceLayer::new_for_http()
+                .make_span_with(
+                    make_span_json as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
+                )
+                .on_response(datadog_fmt::FlatJsonOnResponse),
+        )
+    } else {
+        app.layer(
+            TraceLayer::new_for_http()
+                .make_span_with(
+                    make_span_text as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
+                )
+                .on_response(
+                    tower_http::trace::DefaultOnResponse::new().level(tracing::Level::INFO),
+                ),
+        )
+    };
+
+    let app = app
+        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .layer(CatchPanicLayer::new());
+
+    Ok((app, converter))
+}
+
 /// Extract trace context from W3C traceparent or Datadog headers.
 /// Returns (trace_id, span_id) as strings suitable for dd.trace_id / dd.span_id.
 /// Returns empty strings if no trace context is found.
