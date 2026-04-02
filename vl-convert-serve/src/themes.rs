@@ -7,6 +7,15 @@ use std::sync::Arc;
 
 use super::{append_vlc_logs_header, AppState};
 
+#[utoipa::path(
+    get,
+    path = "/themes",
+    responses(
+        (status = 200, content_type = "application/json", description = "List of theme names"),
+        (status = 500, body = super::types::ErrorResponse, description = "Internal error"),
+    ),
+    tag = "Themes"
+)]
 pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
     let result = state.converter.get_themes().await;
     let mut headers = HeaderMap::new();
@@ -35,6 +44,19 @@ pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/themes/{name}",
+    params(
+        ("name" = String, Path, description = "Theme name"),
+    ),
+    responses(
+        (status = 200, content_type = "application/json", description = "Theme configuration object"),
+        (status = 404, body = super::types::ErrorResponse, description = "Theme not found"),
+        (status = 500, body = super::types::ErrorResponse, description = "Internal error"),
+    ),
+    tag = "Themes"
+)]
 pub async fn get_theme(State(state): State<Arc<AppState>>, Path(name): Path<String>) -> Response {
     let result = state.converter.get_themes().await;
     let mut headers = HeaderMap::new();

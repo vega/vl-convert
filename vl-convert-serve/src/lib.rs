@@ -12,7 +12,7 @@ use axum::error_handling::HandleErrorLayer;
 use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use axum::routing::{get, post};
+use axum::routing::get;
 use axum::Router;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -27,6 +27,9 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
+use utoipa::OpenApi;
+use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_swagger_ui::SwaggerUi;
 
 use vl_convert_rs::anyhow;
 
@@ -39,6 +42,16 @@ pub enum LogFormat {
 use vl_convert_rs::converter::{GoogleFontRequest, LogEntry, VlConverter, VlcConfig};
 
 use types::ErrorResponse;
+
+#[derive(OpenApi)]
+#[openapi(tags(
+    (name = "Health", description = "Health and info endpoints"),
+    (name = "Themes", description = "Vega themes"),
+    (name = "Vega-Lite", description = "Vega-Lite conversions"),
+    (name = "Vega", description = "Vega conversions"),
+    (name = "SVG", description = "SVG conversions"),
+))]
+struct ApiDoc;
 
 pub fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
     logs.iter()
@@ -234,26 +247,31 @@ fn build_router(
         .route("/readyz", get(health::readyz))
         .route("/infoz", get(health::infoz));
 
-    // API routes with optional budget tracking
-    let mut api_router = Router::new()
-        .route("/themes", get(themes::list_themes))
-        .route("/themes/{name}", get(themes::get_theme))
-        .route("/vegalite/vega", post(vegalite::vegalite_to_vega))
-        .route("/vegalite/svg", post(vegalite::vegalite_to_svg))
-        .route("/vegalite/png", post(vegalite::vegalite_to_png))
-        .route("/vegalite/jpeg", post(vegalite::vegalite_to_jpeg))
-        .route("/vegalite/pdf", post(vegalite::vegalite_to_pdf))
-        .route("/vegalite/html", post(vegalite::vegalite_to_html))
-        .route("/vegalite/url", post(vegalite::vegalite_to_url))
-        .route("/vega/svg", post(vega::vega_to_svg))
-        .route("/vega/png", post(vega::vega_to_png))
-        .route("/vega/jpeg", post(vega::vega_to_jpeg))
-        .route("/vega/pdf", post(vega::vega_to_pdf))
-        .route("/vega/html", post(vega::vega_to_html))
-        .route("/vega/url", post(vega::vega_to_url))
-        .route("/svg/png", post(svg::svg_to_png))
-        .route("/svg/jpeg", post(svg::svg_to_jpeg))
-        .route("/svg/pdf", post(svg::svg_to_pdf));
+    // API routes with OpenAPI documentation
+    let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .routes(routes!(themes::list_themes))
+        .routes(routes!(themes::get_theme))
+        .routes(routes!(vegalite::vegalite_to_vega))
+        .routes(routes!(vegalite::vegalite_to_svg))
+        .routes(routes!(vegalite::vegalite_to_png))
+        .routes(routes!(vegalite::vegalite_to_jpeg))
+        .routes(routes!(vegalite::vegalite_to_pdf))
+        .routes(routes!(vegalite::vegalite_to_html))
+        .routes(routes!(vegalite::vegalite_to_url))
+        .routes(routes!(vega::vega_to_svg))
+        .routes(routes!(vega::vega_to_png))
+        .routes(routes!(vega::vega_to_jpeg))
+        .routes(routes!(vega::vega_to_pdf))
+        .routes(routes!(vega::vega_to_html))
+        .routes(routes!(vega::vega_to_url))
+        .routes(routes!(svg::svg_to_png))
+        .routes(routes!(svg::svg_to_jpeg))
+        .routes(routes!(svg::svg_to_pdf))
+        .split_for_parts();
+
+    // Serve Swagger UI and OpenAPI spec
+    let mut api_router =
+        api_router.merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", api));
 
     // Budget tracking middleware (optional)
     if let Some(tracker) = tracker {

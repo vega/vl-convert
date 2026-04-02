@@ -6,12 +6,23 @@ use std::sync::Arc;
 
 use vl_convert_rs::converter::{JpegOpts, PdfOpts, PngOpts};
 
-use super::types::SvgRequest;
+use super::types::{ErrorResponse, SvgJpegRequest, SvgPdfRequest, SvgPngRequest};
 use super::{append_vlc_logs_header, error_response, format_log_entries, AppState};
 
+#[utoipa::path(
+    post,
+    path = "/svg/png",
+    request_body = SvgPngRequest,
+    responses(
+        (status = 200, content_type = "image/png", description = "PNG image"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "SVG"
+)]
 pub async fn svg_to_png(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<SvgRequest>,
+    Json(req): Json<SvgPngRequest>,
 ) -> Response {
     let png_opts = PngOpts {
         scale: req.scale,
@@ -37,9 +48,20 @@ pub async fn svg_to_png(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/svg/jpeg",
+    request_body = SvgJpegRequest,
+    responses(
+        (status = 200, content_type = "image/jpeg", description = "JPEG image"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "SVG"
+)]
 pub async fn svg_to_jpeg(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<SvgRequest>,
+    Json(req): Json<SvgJpegRequest>,
 ) -> Response {
     let jpeg_opts = JpegOpts {
         scale: req.scale,
@@ -65,9 +87,20 @@ pub async fn svg_to_jpeg(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/svg/pdf",
+    request_body = SvgPdfRequest,
+    responses(
+        (status = 200, content_type = "application/pdf", description = "PDF document"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "SVG"
+)]
 pub async fn svg_to_pdf(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<SvgRequest>,
+    Json(req): Json<SvgPdfRequest>,
 ) -> Response {
     match state
         .converter

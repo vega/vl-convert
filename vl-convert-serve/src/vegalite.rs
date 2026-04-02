@@ -10,12 +10,15 @@ use vl_convert_rs::converter::{
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 
-use super::types::VegaliteRequest;
+use super::types::{
+    ErrorResponse, VegaliteCommon, VegaliteHtmlRequest, VegaliteJpegRequest, VegalitePdfRequest,
+    VegalitePngRequest, VegaliteSvgRequest, VegaliteUrlRequest, VegaliteVegaRequest,
+};
 use super::{
     append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args, AppState,
 };
 
-fn build_vl_opts(req: &VegaliteRequest, state: &AppState) -> Result<VlOpts, String> {
+fn build_vl_opts(req: &VegaliteCommon, state: &AppState) -> Result<VlOpts, String> {
     let vl_version = VlVersion::from_str(&req.vl_version)
         .map_err(|_| format!("invalid vl_version: {}", req.vl_version))?;
 
@@ -69,11 +72,22 @@ fn build_vl_opts(req: &VegaliteRequest, state: &AppState) -> Result<VlOpts, Stri
     })
 }
 
+#[utoipa::path(
+    post,
+    path = "/vegalite/vega",
+    request_body = VegaliteVegaRequest,
+    responses(
+        (status = 200, content_type = "application/json", description = "Vega specification"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "Vega-Lite"
+)]
 pub async fn vegalite_to_vega(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<VegaliteRequest>,
+    Json(req): Json<VegaliteVegaRequest>,
 ) -> Response {
-    let mut vl_opts = match build_vl_opts(&req, &state) {
+    let mut vl_opts = match build_vl_opts(&req.common, &state) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -87,7 +101,7 @@ pub async fn vegalite_to_vega(
     if vl_opts.time_format_locale.is_none() {
         vl_opts.time_format_locale = state.config.default_time_format_locale.clone();
     }
-    let spec = req.spec;
+    let spec = req.common.spec;
 
     match state.converter.vegalite_to_vega(spec, vl_opts).await {
         Ok(output) => {
@@ -112,16 +126,27 @@ pub async fn vegalite_to_vega(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/vegalite/svg",
+    request_body = VegaliteSvgRequest,
+    responses(
+        (status = 200, content_type = "image/svg+xml", description = "SVG markup"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "Vega-Lite"
+)]
 pub async fn vegalite_to_svg(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<VegaliteRequest>,
+    Json(req): Json<VegaliteSvgRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req, &state) {
+    let vl_opts = match build_vl_opts(&req.common, &state) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
     let svg_opts = SvgOpts { bundle: req.bundle };
-    let spec = req.spec;
+    let spec = req.common.spec;
 
     match state
         .converter
@@ -146,11 +171,22 @@ pub async fn vegalite_to_svg(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/vegalite/png",
+    request_body = VegalitePngRequest,
+    responses(
+        (status = 200, content_type = "image/png", description = "PNG image"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "Vega-Lite"
+)]
 pub async fn vegalite_to_png(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<VegaliteRequest>,
+    Json(req): Json<VegalitePngRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req, &state) {
+    let vl_opts = match build_vl_opts(&req.common, &state) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -158,7 +194,7 @@ pub async fn vegalite_to_png(
         scale: req.scale,
         ppi: req.ppi,
     };
-    let spec = req.spec;
+    let spec = req.common.spec;
 
     match state
         .converter
@@ -183,11 +219,22 @@ pub async fn vegalite_to_png(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/vegalite/jpeg",
+    request_body = VegaliteJpegRequest,
+    responses(
+        (status = 200, content_type = "image/jpeg", description = "JPEG image"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "Vega-Lite"
+)]
 pub async fn vegalite_to_jpeg(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<VegaliteRequest>,
+    Json(req): Json<VegaliteJpegRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req, &state) {
+    let vl_opts = match build_vl_opts(&req.common, &state) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -195,7 +242,7 @@ pub async fn vegalite_to_jpeg(
         scale: req.scale,
         quality: req.quality,
     };
-    let spec = req.spec;
+    let spec = req.common.spec;
 
     match state
         .converter
@@ -220,15 +267,26 @@ pub async fn vegalite_to_jpeg(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/vegalite/pdf",
+    request_body = VegalitePdfRequest,
+    responses(
+        (status = 200, content_type = "application/pdf", description = "PDF document"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "Vega-Lite"
+)]
 pub async fn vegalite_to_pdf(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<VegaliteRequest>,
+    Json(req): Json<VegalitePdfRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req, &state) {
+    let vl_opts = match build_vl_opts(&req.common, &state) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
-    let spec = req.spec;
+    let spec = req.common.spec;
 
     match state
         .converter
@@ -253,11 +311,22 @@ pub async fn vegalite_to_pdf(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/vegalite/html",
+    request_body = VegaliteHtmlRequest,
+    responses(
+        (status = 200, content_type = "text/html", description = "HTML page"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "Vega-Lite"
+)]
 pub async fn vegalite_to_html(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<VegaliteRequest>,
+    Json(req): Json<VegaliteHtmlRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req, &state) {
+    let vl_opts = match build_vl_opts(&req.common, &state) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -276,7 +345,7 @@ pub async fn vegalite_to_html(
         bundle: req.bundle,
         renderer,
     };
-    let spec = req.spec;
+    let spec = req.common.spec;
 
     match state
         .converter
@@ -301,9 +370,19 @@ pub async fn vegalite_to_html(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/vegalite/url",
+    request_body = VegaliteUrlRequest,
+    responses(
+        (status = 200, content_type = "text/plain", description = "Vega Editor URL"),
+        (status = 422, body = ErrorResponse, description = "URL generation failed"),
+    ),
+    tag = "Vega-Lite"
+)]
 pub async fn vegalite_to_url(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<VegaliteRequest>,
+    Json(req): Json<VegaliteUrlRequest>,
 ) -> Response {
     let fullscreen = req.fullscreen;
     let spec = req.spec;
