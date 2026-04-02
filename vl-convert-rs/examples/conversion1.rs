@@ -3,7 +3,7 @@ use vl_convert_rs::{VlConverter, VlVersion};
 
 #[tokio::main]
 async fn main() {
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     let vl_spec: serde_json::Value = serde_json::from_str(
         r#"
@@ -26,7 +26,7 @@ async fn main() {
     )
     .unwrap();
 
-    let vega_spec = converter
+    let vega_output = converter
         .vegalite_to_vega(
             vl_spec,
             VlOpts {
@@ -37,5 +37,5 @@ async fn main() {
         .await
         .expect("Failed to perform Vega-Lite to Vega conversion");
 
-    println!("{}", vega_spec)
+    println!("{}", vega_output.spec)
 }
