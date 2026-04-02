@@ -6058,7 +6058,7 @@ try {
 }
         "#).unwrap();
 
-        let url = vegalite_to_url(&vl_spec, false).unwrap();
+        let url = vegalite_to_url(&vl_spec, UrlOpts { fullscreen: false }).unwrap();
         let expected = concat!(
             "https://vega.github.io/editor/#/url/vega-lite/",
             "N4IgJghgLhIFygK4CcA28QAspQA4Gc4B6I5CAdwDoBzASyk0QCNF8BTZAYwHsA7KNv0o8AtkQBubahAlSIAWkg",
@@ -6159,7 +6159,7 @@ try {
         )
         .unwrap();
 
-        let url = vega_to_url(&vl_spec, true).unwrap();
+        let url = vega_to_url(&vl_spec, UrlOpts { fullscreen: true }).unwrap();
         println!("{url}");
         let expected = concat!(
             "https://vega.github.io/editor/#/url/vega/",
