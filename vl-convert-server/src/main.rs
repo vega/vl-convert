@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
-use vl_convert_rs::converter::{BaseUrlSetting, GoogleFontRequest, MissingFontsPolicy, VlcConfig};
 use vl_convert_rs::anyhow;
+use vl_convert_rs::converter::{BaseUrlSetting, GoogleFontRequest, MissingFontsPolicy, VlcConfig};
 
 #[derive(Debug, Clone, Copy, ValueEnum, Default)]
 enum MissingFontsArg {

@@ -286,6 +286,17 @@ fn build_router(
             ));
     }
 
+    // Auth and UA middleware only on API routes — health endpoints are exempt
+    let api_router = api_router
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            user_agent_middleware,
+        ));
+
     health_router.merge(api_router).with_state(state)
 }
 
@@ -402,14 +413,6 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
     let app = app
         .layer(DefaultBodyLimit::max(
             serve_config.max_body_size_mb * 1024 * 1024,
-        ))
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            auth_middleware,
-        ))
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            user_agent_middleware,
         ))
         .layer(cors)
         .layer(PropagateRequestIdLayer::x_request_id());

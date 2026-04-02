@@ -4128,9 +4128,9 @@ impl VlConverter {
         let (spec, logs) = self
             .run_on_worker(move |inner| {
                 Box::pin(async move {
-                    let spec = inner.vegalite_to_vega(vl_spec, vl_opts).await?;
+                    let result = inner.vegalite_to_vega(vl_spec, vl_opts).await;
                     let logs = inner.drain_log_entries();
-                    Ok((spec, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?;
@@ -4167,9 +4167,9 @@ impl VlConverter {
                 let inner = &mut *inner;
                 Box::pin(async move {
                     let result =
-                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)?;
+                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await);
                     let logs = inner.drain_log_entries();
-                    Ok((result, logs))
+                    Ok((result?, logs))
                 })
             })?
         } else {
@@ -4177,10 +4177,10 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let svg =
-                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)?;
+                    let result =
+                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await);
                     let logs = inner.drain_log_entries();
-                    Ok((svg, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4309,13 +4309,13 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let sg = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vega_to_scenegraph(vg_spec, vg_opts).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((sg, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?;
@@ -4341,13 +4341,13 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?;
@@ -4384,9 +4384,9 @@ impl VlConverter {
                             inner,
                             gf,
                             inner.vega_to_svg(vg_spec, vg_opts).await
-                        )?;
+                        );
                         let logs = inner.drain_log_entries();
-                        Ok((result, logs))
+                        Ok((result?, logs))
                     })
                 })?
             } else {
@@ -4394,13 +4394,13 @@ impl VlConverter {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        let svg = with_font_overlay!(
+                        let result = with_font_overlay!(
                             inner,
                             gf,
                             inner.vega_to_svg(vg_spec, vg_opts).await
-                        )?;
+                        );
                         let logs = inner.drain_log_entries();
-                        Ok((svg, logs))
+                        Ok((result?, logs))
                     })
                 })
                 .await?
@@ -4414,9 +4414,9 @@ impl VlConverter {
                         inner,
                         gf,
                         inner.vegalite_to_svg(vl_spec, vl_opts).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((result, logs))
+                    Ok((result?, logs))
                 })
             })?
         } else {
@@ -4424,13 +4424,13 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let svg = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vegalite_to_svg(vl_spec, vl_opts).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((svg, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4459,13 +4459,13 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let sg = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vega_to_scenegraph(vg_spec, vg_opts).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((sg, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4474,13 +4474,13 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let sg = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vegalite_to_scenegraph(vl_spec, vl_opts).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((sg, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4505,13 +4505,13 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4520,13 +4520,13 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vegalite_to_scenegraph_msgpack(vl_spec, vl_opts).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4565,9 +4565,9 @@ impl VlConverter {
                         inner
                             .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
                             .await
-                    })?;
+                    });
                     let logs = inner.drain_log_entries();
-                    Ok((result, logs))
+                    Ok((result?, logs))
                 })
             })?
         } else {
@@ -4575,14 +4575,14 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(inner, gf, {
+                    let result = with_font_overlay!(inner, gf, {
                         let spec_value = vg_spec.to_value()?;
                         inner
                             .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
                             .await
-                    })?;
+                    });
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4618,9 +4618,9 @@ impl VlConverter {
                             inner
                                 .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
                                 .await
-                        })?;
+                        });
                         let logs = inner.drain_log_entries();
-                        Ok((result, logs))
+                        Ok((result?, logs))
                     })
                 })?
             } else {
@@ -4628,14 +4628,14 @@ impl VlConverter {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        let data = with_font_overlay!(inner, gf, {
+                        let result = with_font_overlay!(inner, gf, {
                             let spec_value = vg_spec.to_value()?;
                             inner
                                 .vega_to_png(&spec_value, vg_opts, effective_scale, ppi)
                                 .await
-                        })?;
+                        });
                         let logs = inner.drain_log_entries();
-                        Ok((data, logs))
+                        Ok((result?, logs))
                     })
                 })
                 .await?
@@ -4650,9 +4650,9 @@ impl VlConverter {
                         inner
                             .vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi)
                             .await
-                    })?;
+                    });
                     let logs = inner.drain_log_entries();
-                    Ok((result, logs))
+                    Ok((result?, logs))
                 })
             })?
         } else {
@@ -4660,14 +4660,14 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(inner, gf, {
+                    let result = with_font_overlay!(inner, gf, {
                         let spec_value = vl_spec.to_value()?;
                         inner
                             .vegalite_to_png(&spec_value, vl_opts, effective_scale, ppi)
                             .await
-                    })?;
+                    });
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4707,9 +4707,9 @@ impl VlConverter {
                         inner
                             .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                             .await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((result, logs))
+                    Ok((result?, logs))
                 })
             })?
         } else {
@@ -4717,15 +4717,15 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner
                             .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                             .await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4762,9 +4762,9 @@ impl VlConverter {
                             inner
                                 .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                                 .await
-                        )?;
+                        );
                         let logs = inner.drain_log_entries();
-                        Ok((result, logs))
+                        Ok((result?, logs))
                     })
                 })?
             } else {
@@ -4772,15 +4772,15 @@ impl VlConverter {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        let data = with_font_overlay!(
+                        let result = with_font_overlay!(
                             inner,
                             gf,
                             inner
                                 .vega_to_jpeg(vg_spec, vg_opts, scale, quality, image_policy)
                                 .await
-                        )?;
+                        );
                         let logs = inner.drain_log_entries();
-                        Ok((data, logs))
+                        Ok((result?, logs))
                     })
                 })
                 .await?
@@ -4796,9 +4796,9 @@ impl VlConverter {
                         inner
                             .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
                             .await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((result, logs))
+                    Ok((result?, logs))
                 })
             })?
         } else {
@@ -4806,15 +4806,15 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner
                             .vegalite_to_jpeg(vl_spec, vl_opts, scale, quality, image_policy)
                             .await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4850,9 +4850,9 @@ impl VlConverter {
                         inner,
                         gf,
                         inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((result, logs))
+                    Ok((result?, logs))
                 })
             })?
         } else {
@@ -4860,13 +4860,13 @@ impl VlConverter {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4899,9 +4899,9 @@ impl VlConverter {
                             inner,
                             gf,
                             inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
-                        )?;
+                        );
                         let logs = inner.drain_log_entries();
-                        Ok((result, logs))
+                        Ok((result?, logs))
                     })
                 })?
             } else {
@@ -4909,13 +4909,13 @@ impl VlConverter {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        let data = with_font_overlay!(
+                        let result = with_font_overlay!(
                             inner,
                             gf,
                             inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
-                        )?;
+                        );
                         let logs = inner.drain_log_entries();
-                        Ok((data, logs))
+                        Ok((result?, logs))
                     })
                 })
                 .await?
@@ -4929,9 +4929,9 @@ impl VlConverter {
                         inner,
                         gf,
                         inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((result, logs))
+                    Ok((result?, logs))
                 })
             })?
         } else {
@@ -4939,13 +4939,13 @@ impl VlConverter {
                 let gf = vl_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         gf,
                         inner.vegalite_to_pdf(vl_spec, vl_opts, image_policy).await
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?
@@ -4963,13 +4963,13 @@ impl VlConverter {
             .run_on_worker(move |inner| {
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         google_fonts,
                         inner.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?;
@@ -4990,13 +4990,13 @@ impl VlConverter {
             .run_on_worker(move |inner| {
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         google_fonts,
                         inner.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?;
@@ -5011,13 +5011,13 @@ impl VlConverter {
             .run_on_worker(move |inner| {
                 let inner = &mut *inner;
                 Box::pin(async move {
-                    let data = with_font_overlay!(
+                    let result = with_font_overlay!(
                         inner,
                         google_fonts,
                         inner.svg_to_pdf_with_worker_options(&svg, &image_policy)
-                    )?;
+                    );
                     let logs = inner.drain_log_entries();
-                    Ok((data, logs))
+                    Ok((result?, logs))
                 })
             })
             .await?;

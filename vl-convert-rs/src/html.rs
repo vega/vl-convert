@@ -736,18 +736,19 @@ impl VlConverter {
         let embed_local = self.inner.config.embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vl_opts.google_fonts.is_some();
+        let mut logs = Vec::new();
         let font_head_html = if has_font_work {
-            let vega_spec = self
+            let vega_output = self
                 .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
-                .await?
-                .spec;
+                .await?;
+            logs = vega_output.logs;
             let vg_opts = VgOpts {
                 format_locale: vl_opts.format_locale.clone(),
                 time_format_locale: vl_opts.time_format_locale.clone(),
                 google_fonts: vl_opts.google_fonts.clone(),
                 ..Default::default()
             };
-            self.build_font_head_html(vega_spec, vg_opts, bundle, auto_install, embed_local)
+            self.build_font_head_html(vega_output.spec, vg_opts, bundle, auto_install, embed_local)
                 .await?
         } else {
             String::new()
@@ -788,11 +789,7 @@ impl VlConverter {
         let html = self
             .build_html(&code, vl_version, bundle, &font_head_html, has_plugins)
             .await?;
-        // TODO: capture logs from worker once HTML methods use run_on_worker directly
-        Ok(HtmlOutput {
-            html,
-            logs: Vec::new(),
-        })
+        Ok(HtmlOutput { html, logs })
     }
 
     /// Convert a Vega spec to a self-contained HTML page.
@@ -879,7 +876,6 @@ impl VlConverter {
                 has_plugins,
             )
             .await?;
-        // TODO: capture logs from worker once HTML methods use run_on_worker directly
         Ok(HtmlOutput {
             html,
             logs: Vec::new(),
