@@ -551,9 +551,7 @@ fn build_middleware_stack(router: Router, serve_config: &ServeConfig) -> Router 
 }
 
 pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), anyhow::Error> {
-    let InitResult {
-        state, tracker, ..
-    } = init_app_state(config.clone(), &serve_config)?;
+    let InitResult { state, tracker, .. } = init_app_state(config.clone(), &serve_config)?;
 
     let router = build_router(
         state.clone(),
