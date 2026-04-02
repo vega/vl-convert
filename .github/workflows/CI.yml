@@ -288,7 +288,11 @@ jobs:
           RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
         run: |
           cargo test -p vl-convert -- --test-threads=1
-
+      - name: Run server tests
+        env:
+          RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
+        run: |
+          cargo test -p vl-convert-server -- --test-threads=1
 
       - name: Upload test failures
         uses: actions/upload-artifact@v7
@@ -334,6 +338,8 @@ jobs:
         run: cargo test -p vl-convert-rs -- --test-threads=1
       - name: Run CLI tests
         run: cargo test -p vl-convert -- --test-threads=1
+      - name: Run server tests
+        run: cargo test -p vl-convert-server -- --test-threads=1
       - name: Upload test failures
         uses: actions/upload-artifact@v7
         if: always()

@@ -17,13 +17,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install protobuf-compiler
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Move executables to bin directory
         run: |
           mkdir -p bin
           cp target/release/vl-convert bin/
+          cp target/release/vl-convert-server bin/
           cp LICENSE bin/
           cp thirdparty_* bin/
           zip -r vl-convert_linux-64.zip bin/
@@ -44,13 +45,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install protobuf-compiler
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Move executables to bin directory
         run: |
           mkdir -p bin
           cp target/release/vl-convert bin/
+          cp target/release/vl-convert-server bin/
           cp LICENSE bin/
           cp thirdparty_* bin/
           zip -r vl-convert_linux-aarch64.zip bin/
@@ -79,13 +81,14 @@ jobs:
       # pulled in via deno_runtime -> deno_tls -> rustls -> aws-lc-rs
       - name: Install NASM
         uses: ilammy/setup-nasm@v1
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Move executables to bin directory
         run: |
           New-Item -Path "artifacts\bin" -ItemType Directory
           Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
+          Copy-Item "target\release\vl-convert-server.exe" -Destination "artifacts\bin"
           Copy-Item "LICENSE" -Destination "artifacts\bin"
           Copy-Item "thirdparty_*" -Destination "artifacts\bin"
       - name: zip executable
@@ -110,13 +113,14 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Move executables to bin directory
         run: |
           mkdir -p bin
           cp target/release/vl-convert bin/
+          cp target/release/vl-convert-server bin/
           cp LICENSE bin/
           cp thirdparty_* bin/
           zip -r vl-convert_osx-64.zip bin/
@@ -137,13 +141,14 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Move executables to bin directory
         run: |
           mkdir -p bin
           cp target/release/vl-convert bin/
+          cp target/release/vl-convert-server bin/
           cp LICENSE bin/
           cp thirdparty_* bin/
           zip -r vl-convert_osx-arm64.zip bin/
