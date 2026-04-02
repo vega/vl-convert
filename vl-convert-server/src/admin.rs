@@ -21,6 +21,7 @@ async fn get_budget(State(tracker): State<Arc<BudgetTracker>>) -> Json<BudgetSta
 struct BudgetUpdate {
     per_ip_budget_ms: Option<i64>,
     global_budget_ms: Option<i64>,
+    estimate_ms: Option<i64>,
 }
 
 async fn update_budget(
@@ -28,5 +29,8 @@ async fn update_budget(
     Json(update): Json<BudgetUpdate>,
 ) -> Json<BudgetStatus> {
     tracker.update_config(update.per_ip_budget_ms, update.global_budget_ms);
+    if let Some(est) = update.estimate_ms {
+        tracker.update_estimate(est);
+    }
     Json(tracker.status())
 }

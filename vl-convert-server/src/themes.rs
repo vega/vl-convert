@@ -30,12 +30,11 @@ pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
             )
                 .into_response()
         }
-        Ok(_) => (
+        Ok(_) => super::error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            headers,
-            Json(serde_json::json!({"error": "unexpected themes format"})),
-        )
-            .into_response(),
+            "unexpected themes format",
+            state.opaque_errors,
+        ),
         Err(e) => super::error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             &format!("Failed to load themes: {e}"),

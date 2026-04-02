@@ -137,6 +137,11 @@ impl BudgetTracker {
         }
     }
 
+    /// Update the pessimistic per-request reservation.
+    pub fn update_estimate(&self, estimate_ms: i64) {
+        self.estimate_ms.store(estimate_ms, Ordering::Release);
+    }
+
     /// Refill budgets. Called every second by the background task.
     pub fn refill(&self) {
         let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);

@@ -348,7 +348,11 @@ pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), any
 
     // Spawn admin listener if configured
     if let (Some(admin_port), Some(ref tracker)) = (serve_config.admin_port, &tracker) {
-        let admin_router = admin::admin_router(tracker.clone());
+        let admin_router = admin::admin_router(tracker.clone())
+            .layer(PropagateRequestIdLayer::x_request_id())
+            .layer(TraceLayer::new_for_http())
+            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+            .layer(CatchPanicLayer::new());
         let admin_addr = format!("127.0.0.1:{admin_port}");
         let admin_addr_clone = admin_addr.clone();
         tokio::spawn(async move {
