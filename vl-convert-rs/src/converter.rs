@@ -3711,7 +3711,7 @@ pub(crate) struct VlConverterInner {
 ///   }
 /// }"#).unwrap();
 ///
-/// let vega_spec = futures::executor::block_on(
+/// let vega_output = futures::executor::block_on(
 ///     converter.vegalite_to_vega(
 ///         vl_spec,
 ///         VlOpts {
@@ -3721,7 +3721,7 @@ pub(crate) struct VlConverterInner {
 ///     )
 /// ).expect("Failed to perform Vega-Lite to Vega conversion");
 ///
-/// println!("{}", vega_spec);
+/// println!("{}", vega_output.spec);
 /// ```
 #[derive(Clone)]
 pub struct VlConverter {
