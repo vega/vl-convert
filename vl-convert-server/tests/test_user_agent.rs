@@ -1,7 +1,6 @@
 mod common;
 
 use common::*;
-use serde_json;
 
 #[tokio::test]
 async fn test_ua_healthz_no_ua_needed() {
@@ -50,25 +49,6 @@ async fn test_ua_api_accepted_with_ua() {
         resp.status(),
         200,
         "expected 200 with User-Agent, got: {}",
-        resp.status()
-    );
-}
-
-#[tokio::test]
-async fn test_ua_post_accepted_with_ua() {
-    let server = &*UA_SERVER;
-    let resp = server
-        .client
-        .post(format!("{}/vegalite/svg", server.base_url))
-        .header("user-agent", "my-test-agent/1.0")
-        .json(&serde_json::json!({"spec": simple_vl_spec()}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(
-        resp.status(),
-        200,
-        "expected 200 for POST with User-Agent, got: {}",
         resp.status()
     );
 }

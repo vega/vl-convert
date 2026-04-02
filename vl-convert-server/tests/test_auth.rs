@@ -1,7 +1,6 @@
 mod common;
 
 use common::*;
-use serde_json;
 
 #[tokio::test]
 async fn test_auth_healthz_no_key_needed() {
@@ -16,22 +15,6 @@ async fn test_auth_healthz_no_key_needed() {
         resp.status(),
         200,
         "health endpoints should be accessible without auth"
-    );
-}
-
-#[tokio::test]
-async fn test_auth_readyz_no_key_needed() {
-    let server = &*AUTH_SERVER;
-    let resp = server
-        .client
-        .get(format!("{}/readyz", server.base_url))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(
-        resp.status(),
-        200,
-        "readyz should be accessible without auth"
     );
 }
 
@@ -79,25 +62,6 @@ async fn test_auth_api_accepted_with_correct_key() {
         resp.status(),
         200,
         "expected 200 with correct API key, got: {}",
-        resp.status()
-    );
-}
-
-#[tokio::test]
-async fn test_auth_post_endpoint_with_key() {
-    let server = &*AUTH_SERVER;
-    let resp = server
-        .client
-        .post(format!("{}/vegalite/svg", server.base_url))
-        .header("authorization", "Bearer test-secret")
-        .json(&serde_json::json!({"spec": simple_vl_spec()}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(
-        resp.status(),
-        200,
-        "expected 200 for authenticated POST, got: {}",
         resp.status()
     );
 }

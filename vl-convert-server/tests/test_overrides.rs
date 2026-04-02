@@ -19,4 +19,8 @@ async fn test_background_override() {
     assert_eq!(resp.status(), 200);
     let body = resp.text().await.unwrap();
     assert!(body.starts_with("<svg"), "expected SVG output");
+    assert!(
+        body.contains("fill=\"#ff0000\""),
+        "expected background fill color #ff0000 in SVG output"
+    );
 }

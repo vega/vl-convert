@@ -102,16 +102,21 @@ pub static OPAQUE_SERVER: Lazy<TestServer> = Lazy::new(|| {
     start_server_sync(config, serve_config)
 });
 
-pub static BUDGET_SERVER: Lazy<(TestServer, u16)> = Lazy::new(|| {
+pub fn start_budget_server(
+    per_ip_ms: Option<i64>,
+    global_ms: Option<i64>,
+    estimate_ms: i64,
+) -> (TestServer, u16) {
     let config = VlcConfig::default();
     let admin_port = find_free_port();
     let mut serve_config = default_serve_config();
-    serve_config.per_ip_budget_ms = Some(1);
-    serve_config.budget_estimate_ms = 2000;
+    serve_config.per_ip_budget_ms = per_ip_ms;
+    serve_config.global_budget_ms = global_ms;
+    serve_config.budget_estimate_ms = estimate_ms;
     serve_config.admin_port = Some(admin_port);
     let server = start_server_sync(config, serve_config);
     (server, admin_port)
-});
+}
 
 pub fn simple_vl_spec() -> serde_json::Value {
     serde_json::json!({
