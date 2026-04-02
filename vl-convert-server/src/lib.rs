@@ -83,9 +83,12 @@ pub fn init_tracing(level: &str, format: LogFormat) {
     }
 }
 
-pub const VEGALITE_VERSIONS: &[&str] = &[
-    "5.8", "5.14", "5.15", "5.16", "5.17", "5.20", "5.21", "6.1", "6.4",
-];
+pub fn vegalite_versions() -> Vec<&'static str> {
+    vl_convert_rs::module_loader::import_map::VL_VERSIONS
+        .iter()
+        .map(|v| v.to_semver())
+        .collect()
+}
 
 pub struct ServeConfig {
     pub host: String,
@@ -191,6 +194,76 @@ pub fn parse_google_font_args(fonts: &[String]) -> Result<Vec<GoogleFontRequest>
             })
         })
         .collect()
+}
+
+use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale};
+
+pub(crate) struct CommonOpts {
+    pub format_locale: Option<FormatLocale>,
+    pub time_format_locale: Option<TimeFormatLocale>,
+    pub google_fonts: Option<Vec<GoogleFontRequest>>,
+    pub vega_plugin: Option<String>,
+    pub config: Option<serde_json::Value>,
+    pub background: Option<String>,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn validate_common_opts(
+    format_locale: &Option<serde_json::Value>,
+    time_format_locale: &Option<serde_json::Value>,
+    google_fonts: &Option<Vec<String>>,
+    vega_plugin: &Option<String>,
+    config: &Option<serde_json::Value>,
+    background: &Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
+    state: &AppState,
+) -> Result<CommonOpts, String> {
+    let format_locale = format_locale
+        .as_ref()
+        .map(|v| match v {
+            serde_json::Value::String(s) => Ok(FormatLocale::Name(s.clone())),
+            obj @ serde_json::Value::Object(_) => Ok(FormatLocale::Object(obj.clone())),
+            _ => Err("format_locale must be a string or object".to_string()),
+        })
+        .transpose()?;
+
+    let time_format_locale = time_format_locale
+        .as_ref()
+        .map(|v| match v {
+            serde_json::Value::String(s) => Ok(TimeFormatLocale::Name(s.clone())),
+            obj @ serde_json::Value::Object(_) => Ok(TimeFormatLocale::Object(obj.clone())),
+            _ => Err("time_format_locale must be a string or object".to_string()),
+        })
+        .transpose()?;
+
+    let google_fonts = google_fonts
+        .as_ref()
+        .map(|fonts| parse_google_font_args(fonts))
+        .transpose()?;
+
+    if google_fonts.is_some() && !state.config.allow_google_fonts {
+        return Err("google_fonts requires allow_google_fonts: true in server config".to_string());
+    }
+
+    if vega_plugin.is_some() && !state.config.allow_per_request_plugins {
+        return Err(
+            "vega_plugin requires allow_per_request_plugins: true in server config".to_string(),
+        );
+    }
+
+    Ok(CommonOpts {
+        format_locale,
+        time_format_locale,
+        google_fonts,
+        vega_plugin: vega_plugin.clone(),
+        config: config.clone(),
+        background: background.clone(),
+        width,
+        height,
+    })
 }
 
 fn build_cors_layer(cors_origin: &Option<String>) -> CorsLayer {
@@ -300,252 +373,50 @@ fn build_router(
     health_router.merge(api_router).with_state(state)
 }
 
-pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), anyhow::Error> {
-    let num_workers = config.num_workers;
-
-    log::info!("Initializing converter with {num_workers} worker(s)...");
-    let converter = VlConverter::with_config(config.clone())?;
-
-    // Warm up workers so /readyz is meaningful
-    converter.warm_up()?;
-    log::info!("Workers initialized");
-
-    let api_key = serve_config.api_key.map(ApiKey);
-    let state = Arc::new(AppState {
-        converter,
-        config: config.clone(),
-        api_key,
-        opaque_errors: serve_config.opaque_errors,
-        require_user_agent: serve_config.require_user_agent,
-    });
-
-    // Create budget tracker if any budget is configured or admin port is set
-    // (admin port allows enabling budgets dynamically from a disabled initial state)
-    let tracker = if serve_config.per_ip_budget_ms.is_some()
-        || serve_config.global_budget_ms.is_some()
-        || serve_config.admin_port.is_some()
-    {
-        let t = budget::BudgetTracker::new(
-            serve_config.per_ip_budget_ms.unwrap_or(0),
-            serve_config.global_budget_ms.unwrap_or(0),
-            serve_config.budget_estimate_ms,
-        );
-
-        // Background refill task
-        let refill_tracker = t.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(1));
-            loop {
-                interval.tick().await;
-                refill_tracker.refill();
-            }
-        });
-
-        Some(t)
-    } else {
-        None
-    };
-
-    // Spawn admin listener if configured
-    if let (Some(admin_port), Some(ref tracker)) = (serve_config.admin_port, &tracker) {
-        let admin_router = admin::admin_router(tracker.clone())
-            .layer(PropagateRequestIdLayer::x_request_id())
-            .layer(TraceLayer::new_for_http())
-            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
-            .layer(CatchPanicLayer::new());
-        let admin_addr = format!("127.0.0.1:{admin_port}");
-        let admin_addr_clone = admin_addr.clone();
-        tokio::spawn(async move {
-            match tokio::net::TcpListener::bind(&admin_addr_clone).await {
-                Ok(listener) => {
-                    log::info!("Admin API listening on http://{admin_addr_clone}");
-                    let _ = axum::serve(listener, admin_router).await;
-                }
-                Err(e) => {
-                    log::error!("Failed to bind admin port {admin_addr_clone}: {e}");
-                }
-            }
-        });
-    }
-
-    let router = build_router(
-        state.clone(),
-        tracker,
-        serve_config.opaque_errors,
-        serve_config.trust_proxy,
-    );
-
-    let cors = build_cors_layer(&serve_config.cors_origin);
-
-    // Build middleware stack (layers applied bottom-up: first listed = outermost)
-    let mut app = router.layer(CompressionLayer::new());
-
-    // Concurrency limit + load shedding (innermost operational layer)
-    let opaque = serve_config.opaque_errors;
-    if let Some(max) = serve_config.max_concurrent_requests {
-        app = app.layer(
-            tower::ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(
-                    move |_: tower::BoxError| async move {
-                        error_response(
-                            StatusCode::SERVICE_UNAVAILABLE,
-                            "too many concurrent requests",
-                            opaque,
-                        )
-                    },
-                ))
-                .layer(LoadShedLayer::new())
-                .layer(ConcurrencyLimitLayer::new(max)),
-        );
-    }
-
-    // Request timeout
-    if serve_config.request_timeout_secs > 0 {
-        app = app.layer(
-            tower::ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(
-                    move |_: tower::BoxError| async move {
-                        error_response(StatusCode::SERVICE_UNAVAILABLE, "request timed out", opaque)
-                    },
-                ))
-                .layer(TimeoutLayer::new(Duration::from_secs(
-                    serve_config.request_timeout_secs,
-                ))),
-        );
-    }
-
-    let app = app
-        .layer(DefaultBodyLimit::max(
-            serve_config.max_body_size_mb * 1024 * 1024,
-        ))
-        .layer(cors)
-        .layer(PropagateRequestIdLayer::x_request_id());
-
-    /// Text format: compact span with method + uri only.
-    fn make_span_text(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
-        tracing::info_span!(
-            "request",
-            method = %req.method(),
-            uri = %req.uri(),
-        )
-    }
-
-    /// JSON format: rich span with all HTTP metadata + trace context.
-    fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
-        let ua = req
-            .headers()
-            .get(axum::http::header::USER_AGENT)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let request_id = req
-            .headers()
-            .get("x-request-id")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let (trace_id, span_id) = extract_trace_context(req.headers());
-
-        tracing::info_span!(
-            "request",
-            method = %req.method(),
-            uri = %req.uri(),
-            version = ?req.version(),
-            user_agent = %ua,
-            request_id = %request_id,
-            trace_id = %trace_id,
-            span_id = %span_id,
-        )
-    }
-
-    let app = if serve_config.log_format == crate::LogFormat::Json {
-        app.layer(
-            TraceLayer::new_for_http()
-                .make_span_with(
-                    make_span_json as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
-                )
-                .on_response(datadog_fmt::FlatJsonOnResponse),
-        )
-    } else {
-        app.layer(
-            TraceLayer::new_for_http()
-                .make_span_with(
-                    make_span_text as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
-                )
-                .on_response(
-                    tower_http::trace::DefaultOnResponse::new().level(tracing::Level::INFO),
-                ),
-        )
-    };
-
-    let app = app
-        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
-        .layer(CatchPanicLayer::new());
-
-    // Graceful shutdown signal
-    let drain_secs = serve_config.drain_timeout_secs;
-    let shutdown_signal = async move {
-        let ctrl_c = tokio::signal::ctrl_c();
-
-        #[cfg(unix)]
-        {
-            let mut sigterm =
-                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                    .expect("failed to install SIGTERM handler");
-            tokio::select! {
-                _ = ctrl_c => log::info!("Received SIGINT, shutting down..."),
-                _ = sigterm.recv() => log::info!("Received SIGTERM, shutting down..."),
-            }
-        }
-
-        #[cfg(not(unix))]
-        {
-            ctrl_c.await.expect("failed to install Ctrl-C handler");
-            log::info!("Received Ctrl-C, shutting down...");
-        }
-
-        log::info!("Starting graceful drain ({drain_secs}s deadline)...");
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(drain_secs)).await;
-            log::warn!("Drain timeout ({drain_secs}s) exceeded, forcing exit");
-            std::process::exit(1);
-        });
-    };
-
-    // Bind and serve (TCP only; Unix socket support planned for future release)
-    let addr = if serve_config.host.contains(':') {
-        // IPv6 addresses must be bracketed in socket addresses
-        format!("[{}]:{}", serve_config.host, serve_config.port)
-    } else {
-        format!("{}:{}", serve_config.host, serve_config.port)
-    };
-
-    // Warn if non-loopback without API key
-    let host = &serve_config.host;
-    if host != "127.0.0.1" && host != "localhost" && host != "::1" && state.api_key.is_none() {
-        log::warn!(
-            "Server binding to {addr} with no API key — accessible to any network client. \
-             Set --api-key or VLC_API_KEY to restrict access."
-        );
-    }
-
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    log::info!("Listening on http://{addr}");
-
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
+fn make_span_text(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+    tracing::info_span!(
+        "request",
+        method = %req.method(),
+        uri = %req.uri(),
     )
-    .with_graceful_shutdown(shutdown_signal)
-    .await?;
-
-    Ok(())
 }
 
-/// Build the fully-configured app (Router with all middleware) without binding.
-/// Used by tests to bind to port 0 and discover the assigned port.
-pub fn build_app(
+fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+    let ua = req
+        .headers()
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let request_id = req
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    let (trace_id, span_id) = extract_trace_context(req.headers());
+
+    tracing::info_span!(
+        "request",
+        method = %req.method(),
+        uri = %req.uri(),
+        version = ?req.version(),
+        user_agent = %ua,
+        request_id = %request_id,
+        trace_id = %trace_id,
+        span_id = %span_id,
+    )
+}
+
+struct InitResult {
+    state: Arc<AppState>,
+    tracker: Option<Arc<budget::BudgetTracker>>,
+    converter: VlConverter,
+}
+
+/// Initialize converter, app state, budget tracker, and admin listener.
+fn init_app_state(
     config: VlcConfig,
     serve_config: &ServeConfig,
-) -> Result<(Router, VlConverter), anyhow::Error> {
+) -> Result<InitResult, anyhow::Error> {
     let num_workers = config.num_workers;
     log::info!("Initializing converter with {num_workers} worker(s)...");
     let converter = VlConverter::with_config(config.clone())?;
@@ -604,15 +475,16 @@ pub fn build_app(
         });
     }
 
-    let router = build_router(
-        state.clone(),
+    Ok(InitResult {
+        state,
         tracker,
-        serve_config.opaque_errors,
-        serve_config.trust_proxy,
-    );
+        converter,
+    })
+}
 
+/// Build the middleware stack that wraps the API router.
+fn build_middleware_stack(router: Router, serve_config: &ServeConfig) -> Router {
     let cors = build_cors_layer(&serve_config.cors_origin);
-
     let mut app = router.layer(CompressionLayer::new());
 
     let opaque = serve_config.opaque_errors;
@@ -654,28 +526,6 @@ pub fn build_app(
         .layer(cors)
         .layer(PropagateRequestIdLayer::x_request_id());
 
-    fn make_span_text(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
-        tracing::info_span!("request", method = %req.method(), uri = %req.uri())
-    }
-
-    fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
-        let ua = req
-            .headers()
-            .get(axum::http::header::USER_AGENT)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let request_id = req
-            .headers()
-            .get("x-request-id")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let (trace_id, span_id) = extract_trace_context(req.headers());
-        tracing::info_span!("request",
-            method = %req.method(), uri = %req.uri(), version = ?req.version(),
-            user_agent = %ua, request_id = %request_id,
-            trace_id = %trace_id, span_id = %span_id)
-    }
-
     let app = if serve_config.log_format == LogFormat::Json {
         app.layer(
             TraceLayer::new_for_http()
@@ -696,9 +546,100 @@ pub fn build_app(
         )
     };
 
-    let app = app
-        .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
-        .layer(CatchPanicLayer::new());
+    app.layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+        .layer(CatchPanicLayer::new())
+}
+
+pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), anyhow::Error> {
+    let InitResult {
+        state, tracker, ..
+    } = init_app_state(config.clone(), &serve_config)?;
+
+    let router = build_router(
+        state.clone(),
+        tracker,
+        serve_config.opaque_errors,
+        serve_config.trust_proxy,
+    );
+    let app = build_middleware_stack(router, &serve_config);
+
+    // Graceful shutdown signal
+    let drain_secs = serve_config.drain_timeout_secs;
+    let shutdown_signal = async move {
+        let ctrl_c = tokio::signal::ctrl_c();
+
+        #[cfg(unix)]
+        {
+            let mut sigterm =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    .expect("failed to install SIGTERM handler");
+            tokio::select! {
+                _ = ctrl_c => log::info!("Received SIGINT, shutting down..."),
+                _ = sigterm.recv() => log::info!("Received SIGTERM, shutting down..."),
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            ctrl_c.await.expect("failed to install Ctrl-C handler");
+            log::info!("Received Ctrl-C, shutting down...");
+        }
+
+        log::info!("Starting graceful drain ({drain_secs}s deadline)...");
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(drain_secs)).await;
+            log::warn!("Drain timeout ({drain_secs}s) exceeded, forcing exit");
+            std::process::exit(1);
+        });
+    };
+
+    // Bind and serve
+    let addr = if serve_config.host.contains(':') {
+        format!("[{}]:{}", serve_config.host, serve_config.port)
+    } else {
+        format!("{}:{}", serve_config.host, serve_config.port)
+    };
+
+    let host = &serve_config.host;
+    if host != "127.0.0.1" && host != "localhost" && host != "::1" && state.api_key.is_none() {
+        log::warn!(
+            "Server binding to {addr} with no API key — accessible to any network client. \
+             Set --api-key or VLC_API_KEY to restrict access."
+        );
+    }
+
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    log::info!("Listening on http://{addr}");
+
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal)
+    .await?;
+
+    Ok(())
+}
+
+/// Build the fully-configured app (Router with all middleware) without binding.
+/// Used by tests to bind to port 0 and discover the assigned port.
+pub fn build_app(
+    config: VlcConfig,
+    serve_config: &ServeConfig,
+) -> Result<(Router, VlConverter), anyhow::Error> {
+    let InitResult {
+        state,
+        tracker,
+        converter,
+    } = init_app_state(config, serve_config)?;
+
+    let router = build_router(
+        state,
+        tracker,
+        serve_config.opaque_errors,
+        serve_config.trust_proxy,
+    );
+    let app = build_middleware_stack(router, serve_config);
 
     Ok((app, converter))
 }
@@ -750,8 +691,12 @@ async fn auth_middleware(
             .and_then(|v| v.to_str().ok());
 
         let authorized = match auth_header {
-            Some(val) if val.starts_with("Bearer ") => {
-                key.matches(&val.as_bytes()["Bearer ".len()..])
+            Some(val)
+                if val
+                    .get(..7)
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("bearer ")) =>
+            {
+                key.matches(&val.as_bytes()[7..])
             }
             _ => false,
         };

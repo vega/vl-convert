@@ -5,8 +5,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use vl_convert_rs::converter::{
-    vega_to_url as converter_vega_to_url, FormatLocale, HtmlOpts, JpegOpts, PdfOpts, PngOpts,
-    Renderer, SvgOpts, TimeFormatLocale, UrlOpts, VgOpts,
+    vega_to_url as converter_vega_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts,
+    UrlOpts, VgOpts,
 };
 
 use super::types::{
@@ -14,55 +14,31 @@ use super::types::{
     VegaSvgRequest, VegaUrlRequest,
 };
 use super::{
-    append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args, AppState,
+    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts, AppState,
 };
 
 fn build_vg_opts(req: &VegaCommon, state: &AppState) -> Result<VgOpts, String> {
-    let format_locale = req
-        .format_locale
-        .as_ref()
-        .map(|v| match v {
-            serde_json::Value::String(s) => Ok(FormatLocale::Name(s.clone())),
-            obj @ serde_json::Value::Object(_) => Ok(FormatLocale::Object(obj.clone())),
-            _ => Err("format_locale must be a string or object".to_string()),
-        })
-        .transpose()?;
-
-    let time_format_locale = req
-        .time_format_locale
-        .as_ref()
-        .map(|v| match v {
-            serde_json::Value::String(s) => Ok(TimeFormatLocale::Name(s.clone())),
-            obj @ serde_json::Value::Object(_) => Ok(TimeFormatLocale::Object(obj.clone())),
-            _ => Err("time_format_locale must be a string or object".to_string()),
-        })
-        .transpose()?;
-
-    let google_fonts = req
-        .google_fonts
-        .as_ref()
-        .map(|fonts| parse_google_font_args(fonts))
-        .transpose()?;
-
-    if google_fonts.is_some() && !state.config.allow_google_fonts {
-        return Err("google_fonts requires allow_google_fonts: true in server config".to_string());
-    }
-
-    if req.vega_plugin.is_some() && !state.config.allow_per_request_plugins {
-        return Err(
-            "vega_plugin requires allow_per_request_plugins: true in server config".to_string(),
-        );
-    }
+    let common = validate_common_opts(
+        &req.format_locale,
+        &req.time_format_locale,
+        &req.google_fonts,
+        &req.vega_plugin,
+        &req.config,
+        &req.background,
+        req.width,
+        req.height,
+        state,
+    )?;
 
     Ok(VgOpts {
-        format_locale,
-        time_format_locale,
-        google_fonts,
-        vega_plugin: req.vega_plugin.clone(),
-        config: req.config.clone(),
-        background: req.background.clone(),
-        width: req.width,
-        height: req.height,
+        format_locale: common.format_locale,
+        time_format_locale: common.time_format_locale,
+        google_fonts: common.google_fonts,
+        vega_plugin: common.vega_plugin,
+        config: common.config,
+        background: common.background,
+        width: common.width,
+        height: common.height,
     })
 }
 

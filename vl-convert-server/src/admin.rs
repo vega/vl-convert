@@ -1,10 +1,12 @@
 use axum::extract::State;
-use axum::response::Json;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{get, post};
 use axum::Router;
 use std::sync::Arc;
 
 use crate::budget::{BudgetStatus, BudgetTracker};
+use crate::types::ErrorResponse;
 
 pub fn admin_router(tracker: Arc<BudgetTracker>) -> Router {
     Router::new()
@@ -27,10 +29,44 @@ struct BudgetUpdate {
 async fn update_budget(
     State(tracker): State<Arc<BudgetTracker>>,
     Json(update): Json<BudgetUpdate>,
-) -> Json<BudgetStatus> {
+) -> Response {
+    if let Some(est) = update.estimate_ms {
+        if est <= 0 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "estimate_ms must be positive".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    }
+    if let Some(per_ip) = update.per_ip_budget_ms {
+        if per_ip < 0 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "per_ip_budget_ms must be non-negative".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    }
+    if let Some(global) = update.global_budget_ms {
+        if global < 0 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "global_budget_ms must be non-negative".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    }
+
     tracker.update_config(update.per_ip_budget_ms, update.global_budget_ms);
     if let Some(est) = update.estimate_ms {
         tracker.update_estimate(est);
     }
-    Json(tracker.status())
+    Json(tracker.status()).into_response()
 }

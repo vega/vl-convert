@@ -39,6 +39,12 @@ impl BudgetTracker {
 
     /// Atomically reserve budget for a request. Returns Err if either the
     /// per-IP or global budget is exhausted.
+    ///
+    /// Note: there is a small race window between `fetch_sub` and the
+    /// conditional `fetch_add` rollback. During this window, a concurrent
+    /// request may observe a temporarily over-decremented budget and be
+    /// rejected even though budget will be restored momentarily. This is
+    /// acceptable for rate-limiting — it errs on the side of caution.
     pub fn reserve(&self, ip: IpAddr) -> Result<(), BudgetExhausted> {
         let estimate = self.estimate_ms.load(Ordering::Relaxed);
 

@@ -22,6 +22,8 @@ pub async fn healthz() -> Json<Value> {
     ),
     tag = "Health"
 )]
+// TODO: Check actual worker health (e.g., try a lightweight operation
+// on the worker pool) instead of always returning 200.
 pub async fn readyz() -> Json<Value> {
     Json(json!({ "status": "ready" }))
 }
@@ -40,6 +42,6 @@ pub async fn infoz() -> Json<Value> {
         "vega_version": import_map::VEGA_VERSION,
         "vega_themes_version": import_map::VEGA_THEMES_VERSION,
         "vega_embed_version": import_map::VEGA_EMBED_VERSION,
-        "vegalite_versions": super::VEGALITE_VERSIONS,
+        "vegalite_versions": super::vegalite_versions(),
     }))
 }

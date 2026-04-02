@@ -2518,6 +2518,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
     }
 
     async fn emit_js_log_messages(&mut self) {
+        self.last_log_entries.clear();
         let json = match self
             .execute_script_to_string("_collapsedLogMessages()")
             .await
@@ -4007,7 +4008,7 @@ impl VlConverter {
         &self,
         vl_spec: &ValueOrString,
         vl_opts: &VlOpts,
-    ) -> Result<Option<(serde_json::Value, VgOpts)>, AnyError> {
+    ) -> Result<Option<(serde_json::Value, VgOpts, Vec<LogEntry>)>, AnyError> {
         if !self.should_preprocess_fonts() {
             return Ok(None);
         }
@@ -4025,6 +4026,7 @@ impl VlConverter {
             .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
             .await?;
         let vega_spec = vega_output.spec;
+        let compile_logs = vega_output.logs;
         let auto_requests = preprocess_fonts(
             &vega_spec,
             self.inner.config.auto_google_fonts,
@@ -4037,7 +4039,7 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        Ok(Some((vega_spec, vg_opts)))
+        Ok(Some((vega_spec, vg_opts, compile_logs)))
     }
 
     /// If font preprocessing is enabled, parse the Vega spec and process missing fonts.
@@ -4370,7 +4372,7 @@ impl VlConverter {
             .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
             .unwrap_or_default();
 
-        let (svg, logs) = if let Some((vega_spec, mut vg_opts)) = self
+        let (svg, logs) = if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -4386,7 +4388,9 @@ impl VlConverter {
                             inner.vega_to_svg(vg_spec, vg_opts).await
                         );
                         let logs = inner.drain_log_entries();
-                        Ok((result?, logs))
+                        let mut all_logs = compile_logs;
+                        all_logs.extend(logs);
+                        Ok((result?, all_logs))
                     })
                 })?
             } else {
@@ -4400,7 +4404,9 @@ impl VlConverter {
                             inner.vega_to_svg(vg_spec, vg_opts).await
                         );
                         let logs = inner.drain_log_entries();
-                        Ok((result?, logs))
+                        let mut all_logs = compile_logs;
+                        all_logs.extend(logs);
+                        Ok((result?, all_logs))
                     })
                 })
                 .await?
@@ -4450,7 +4456,7 @@ impl VlConverter {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
-        let (scenegraph, logs) = if let Some((vega_spec, mut vg_opts)) = self
+        let (scenegraph, logs) = if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -4465,7 +4471,9 @@ impl VlConverter {
                         inner.vega_to_scenegraph(vg_spec, vg_opts).await
                     );
                     let logs = inner.drain_log_entries();
-                    Ok((result?, logs))
+                    let mut all_logs = compile_logs;
+                    all_logs.extend(logs);
+                    Ok((result?, all_logs))
                 })
             })
             .await?
@@ -4496,7 +4504,7 @@ impl VlConverter {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
-        let (data, logs) = if let Some((vega_spec, mut vg_opts)) = self
+        let (data, logs) = if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -4511,7 +4519,9 @@ impl VlConverter {
                         inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
                     );
                     let logs = inner.drain_log_entries();
-                    Ok((result?, logs))
+                    let mut all_logs = compile_logs;
+                    all_logs.extend(logs);
+                    Ok((result?, all_logs))
                 })
             })
             .await?
@@ -4603,7 +4613,7 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
         let plugin = vl_opts.vega_plugin.take();
 
-        let (data, logs) = if let Some((vega_spec, mut vg_opts)) = self
+        let (data, logs) = if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -4620,7 +4630,9 @@ impl VlConverter {
                                 .await
                         });
                         let logs = inner.drain_log_entries();
-                        Ok((result?, logs))
+                        let mut all_logs = compile_logs;
+                        all_logs.extend(logs);
+                        Ok((result?, all_logs))
                     })
                 })?
             } else {
@@ -4635,7 +4647,9 @@ impl VlConverter {
                                 .await
                         });
                         let logs = inner.drain_log_entries();
-                        Ok((result?, logs))
+                        let mut all_logs = compile_logs;
+                        all_logs.extend(logs);
+                        Ok((result?, all_logs))
                     })
                 })
                 .await?
@@ -4746,7 +4760,7 @@ impl VlConverter {
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        let (data, logs) = if let Some((vega_spec, mut vg_opts)) = self
+        let (data, logs) = if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -4764,7 +4778,9 @@ impl VlConverter {
                                 .await
                         );
                         let logs = inner.drain_log_entries();
-                        Ok((result?, logs))
+                        let mut all_logs = compile_logs;
+                        all_logs.extend(logs);
+                        Ok((result?, all_logs))
                     })
                 })?
             } else {
@@ -4780,7 +4796,9 @@ impl VlConverter {
                                 .await
                         );
                         let logs = inner.drain_log_entries();
-                        Ok((result?, logs))
+                        let mut all_logs = compile_logs;
+                        all_logs.extend(logs);
+                        Ok((result?, all_logs))
                     })
                 })
                 .await?
@@ -4885,7 +4903,7 @@ impl VlConverter {
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        let (data, logs) = if let Some((vega_spec, mut vg_opts)) = self
+        let (data, logs) = if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -4901,7 +4919,9 @@ impl VlConverter {
                             inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
                         );
                         let logs = inner.drain_log_entries();
-                        Ok((result?, logs))
+                        let mut all_logs = compile_logs;
+                        all_logs.extend(logs);
+                        Ok((result?, all_logs))
                     })
                 })?
             } else {
@@ -4915,7 +4935,9 @@ impl VlConverter {
                             inner.vega_to_pdf(vg_spec, vg_opts, image_policy).await
                         );
                         let logs = inner.drain_log_entries();
-                        Ok((result?, logs))
+                        let mut all_logs = compile_logs;
+                        all_logs.extend(logs);
+                        Ok((result?, all_logs))
                     })
                 })
                 .await?

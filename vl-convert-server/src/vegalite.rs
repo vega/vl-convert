@@ -5,8 +5,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use vl_convert_rs::converter::{
-    vegalite_to_url as converter_vegalite_to_url, FormatLocale, HtmlOpts, JpegOpts, PdfOpts,
-    PngOpts, Renderer, SvgOpts, TimeFormatLocale, UrlOpts, VlOpts,
+    vegalite_to_url as converter_vegalite_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer,
+    SvgOpts, UrlOpts, VlOpts,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 
@@ -15,60 +15,36 @@ use super::types::{
     VegalitePngRequest, VegaliteSvgRequest, VegaliteUrlRequest, VegaliteVegaRequest,
 };
 use super::{
-    append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args, AppState,
+    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts, AppState,
 };
 
 fn build_vl_opts(req: &VegaliteCommon, state: &AppState) -> Result<VlOpts, String> {
     let vl_version = VlVersion::from_str(&req.vl_version)
         .map_err(|_| format!("invalid vl_version: {}", req.vl_version))?;
 
-    let format_locale = req
-        .format_locale
-        .as_ref()
-        .map(|v| match v {
-            serde_json::Value::String(s) => Ok(FormatLocale::Name(s.clone())),
-            obj @ serde_json::Value::Object(_) => Ok(FormatLocale::Object(obj.clone())),
-            _ => Err("format_locale must be a string or object".to_string()),
-        })
-        .transpose()?;
-
-    let time_format_locale = req
-        .time_format_locale
-        .as_ref()
-        .map(|v| match v {
-            serde_json::Value::String(s) => Ok(TimeFormatLocale::Name(s.clone())),
-            obj @ serde_json::Value::Object(_) => Ok(TimeFormatLocale::Object(obj.clone())),
-            _ => Err("time_format_locale must be a string or object".to_string()),
-        })
-        .transpose()?;
-
-    let google_fonts = req
-        .google_fonts
-        .as_ref()
-        .map(|fonts| parse_google_font_args(fonts))
-        .transpose()?;
-
-    if google_fonts.is_some() && !state.config.allow_google_fonts {
-        return Err("google_fonts requires allow_google_fonts: true in server config".to_string());
-    }
-
-    if req.vega_plugin.is_some() && !state.config.allow_per_request_plugins {
-        return Err(
-            "vega_plugin requires allow_per_request_plugins: true in server config".to_string(),
-        );
-    }
+    let common = validate_common_opts(
+        &req.format_locale,
+        &req.time_format_locale,
+        &req.google_fonts,
+        &req.vega_plugin,
+        &req.config,
+        &req.background,
+        req.width,
+        req.height,
+        state,
+    )?;
 
     Ok(VlOpts {
-        config: req.config.clone(),
+        config: common.config,
         theme: req.theme.clone(),
         vl_version,
-        format_locale,
-        time_format_locale,
-        google_fonts,
-        vega_plugin: req.vega_plugin.clone(),
-        background: req.background.clone(),
-        width: req.width,
-        height: req.height,
+        format_locale: common.format_locale,
+        time_format_locale: common.time_format_locale,
+        google_fonts: common.google_fonts,
+        vega_plugin: common.vega_plugin,
+        background: common.background,
+        width: common.width,
+        height: common.height,
     })
 }
 
@@ -87,27 +63,26 @@ pub async fn vegalite_to_vega(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaliteVegaRequest>,
 ) -> Response {
-    let mut vl_opts = match build_vl_opts(&req.common, &state) {
+    let vl_opts = match build_vl_opts(&req.common, &state) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
-    // Apply server-level defaults (theme, locale) that apply_vl_defaults normally handles
-    if vl_opts.theme.is_none() {
-        vl_opts.theme = state.config.default_theme.clone();
-    }
-    if vl_opts.format_locale.is_none() {
-        vl_opts.format_locale = state.config.default_format_locale.clone();
-    }
-    if vl_opts.time_format_locale.is_none() {
-        vl_opts.time_format_locale = state.config.default_time_format_locale.clone();
-    }
     let spec = req.common.spec;
 
     match state.converter.vegalite_to_vega(spec, vl_opts).await {
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            let body = serde_json::to_string(&output.spec).unwrap_or_default();
+            let body = match serde_json::to_string(&output.spec) {
+                Ok(json) => json,
+                Err(e) => {
+                    return error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        &format!("failed to serialize Vega spec: {e}"),
+                        state.opaque_errors,
+                    );
+                }
+            };
             (
                 headers,
                 [(
