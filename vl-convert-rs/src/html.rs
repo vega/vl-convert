@@ -1,7 +1,7 @@
 use crate::converter::{
-    classify_and_request_fonts, classify_scenegraph_fonts, FontAnalysis, GoogleFontRequest,
-    HtmlOpts, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin, ValueOrString, VgOpts,
-    VlConverter, VlOpts,
+    apply_spec_overrides, classify_and_request_fonts, classify_scenegraph_fonts, FontAnalysis,
+    GoogleFontRequest, HtmlOpts, HtmlOutput, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin,
+    ValueOrString, VgOpts, VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{
@@ -349,7 +349,7 @@ impl VlConverter {
         }
 
         let vg_spec: ValueOrString = vega_spec.into();
-        let msgpack_bytes: Vec<u8> = self
+        let sg_output = self
             .run_on_worker(move |inner: &mut InnerVlConverter| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
@@ -362,7 +362,7 @@ impl VlConverter {
                 })
             })
             .await?;
-        let sg: serde_json::Value = rmp_serde::from_slice(&msgpack_bytes)?;
+        let sg: serde_json::Value = rmp_serde::from_slice(&sg_output.data)?;
         Ok(sg)
     }
 
@@ -628,12 +628,12 @@ impl VlConverter {
         include_font_face: bool,
         subset_fonts: bool,
     ) -> Result<Vec<FontInfo>, AnyError> {
-        let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?;
+        let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?.spec;
         let vg_opts = VgOpts {
             format_locale: vl_opts.format_locale,
             time_format_locale: vl_opts.time_format_locale,
             google_fonts: vl_opts.google_fonts,
-            vega_plugin: None,
+            ..Default::default()
         };
         self.vega_fonts(
             vega_spec,
@@ -726,7 +726,7 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
         html_opts: HtmlOpts,
-    ) -> Result<String, AnyError> {
+    ) -> Result<HtmlOutput, AnyError> {
         let HtmlOpts { bundle, renderer } = html_opts;
         self.apply_vl_defaults(&mut vl_opts);
         let vl_version = vl_opts.vl_version;
@@ -736,17 +736,19 @@ impl VlConverter {
         let embed_local = self.inner.config.embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vl_opts.google_fonts.is_some();
+        let mut logs = Vec::new();
         let font_head_html = if has_font_work {
-            let vega_spec = self
+            let vega_output = self
                 .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
                 .await?;
+            logs = vega_output.logs;
             let vg_opts = VgOpts {
                 format_locale: vl_opts.format_locale.clone(),
                 time_format_locale: vl_opts.time_format_locale.clone(),
                 google_fonts: vl_opts.google_fonts.clone(),
-                vega_plugin: None,
+                ..Default::default()
             };
-            self.build_font_head_html(vega_spec, vg_opts, bundle, auto_install, embed_local)
+            self.build_font_head_html(vega_output.spec, vg_opts, bundle, auto_install, embed_local)
                 .await?
         } else {
             String::new()
@@ -776,14 +778,18 @@ impl VlConverter {
             Some(&resolved_plugins_owned)
         };
         let has_plugins = resolved_plugins.is_some();
+        let vl_spec =
+            apply_spec_overrides(vl_spec, &vl_opts.background, vl_opts.width, vl_opts.height)?;
         let code = get_vega_or_vegalite_script(
             vl_spec,
             vl_opts.to_embed_opts(renderer)?,
             resolved_plugins,
             bundle,
         )?;
-        self.build_html(&code, vl_version, bundle, &font_head_html, has_plugins)
-            .await
+        let html = self
+            .build_html(&code, vl_version, bundle, &font_head_html, has_plugins)
+            .await?;
+        Ok(HtmlOutput { html, logs })
     }
 
     /// Convert a Vega spec to a self-contained HTML page.
@@ -803,7 +809,7 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
         html_opts: HtmlOpts,
-    ) -> Result<String, AnyError> {
+    ) -> Result<HtmlOutput, AnyError> {
         let HtmlOpts { bundle, renderer } = html_opts;
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
@@ -853,20 +859,27 @@ impl VlConverter {
             Some(&resolved_plugins_owned)
         };
         let has_plugins = resolved_plugins.is_some();
+        let vg_spec =
+            apply_spec_overrides(vg_spec, &vg_opts.background, vg_opts.width, vg_opts.height)?;
         let code = get_vega_or_vegalite_script(
             vg_spec,
             vg_opts.to_embed_opts(renderer)?,
             resolved_plugins,
             bundle,
         )?;
-        self.build_html(
-            &code,
-            Default::default(),
-            bundle,
-            &font_head_html,
-            has_plugins,
-        )
-        .await
+        let html = self
+            .build_html(
+                &code,
+                Default::default(),
+                bundle,
+                &font_head_html,
+                has_plugins,
+            )
+            .await?;
+        Ok(HtmlOutput {
+            html,
+            logs: Vec::new(),
+        })
     }
 }
 
