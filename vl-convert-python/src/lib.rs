@@ -14,7 +14,7 @@ use std::sync::{Arc, RwLock};
 use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, HtmlOpts, JpegOpts, MissingFontsPolicy,
-    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, ValueOrString, VgOpts, VlOpts,
+    PdfOpts, PngOpts, Renderer, SvgOpts, TimeFormatLocale, UrlOpts, ValueOrString, VgOpts, VlOpts,
     VlcConfig, ACCESS_DENIED_MARKER,
 };
 use vl_convert_rs::module_loader::import_map::{
@@ -621,11 +621,14 @@ fn vegalite_to_vega(
         format_locale: None,
         time_format_locale: None,
         google_fonts: effective_google_fonts(None),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     let vega_spec = match run_converter_future(move |converter| async move {
-        converter.vegalite_to_vega(vl_spec, vl_opts).await
+        converter
+            .vegalite_to_vega(vl_spec, vl_opts)
+            .await
+            .map(|o| o.spec)
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
@@ -670,6 +673,7 @@ fn vega_to_svg(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let svg_opts = SvgOpts {
@@ -677,7 +681,10 @@ fn vega_to_svg(
     };
 
     let svg = match run_converter_future(move |converter| async move {
-        converter.vega_to_svg(vg_spec, vg_opts, svg_opts).await
+        converter
+            .vega_to_svg(vg_spec, vg_opts, svg_opts)
+            .await
+            .map(|o| o.svg)
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega to SVG conversion failed", err)),
@@ -712,13 +719,17 @@ fn vega_to_scenegraph(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     match format {
         "dict" => {
             let vg_spec = parse_json_spec(vg_spec)?;
             let sg = run_converter_future(move |converter| async move {
-                converter.vega_to_scenegraph(vg_spec, vg_opts).await
+                converter
+                    .vega_to_scenegraph(vg_spec, vg_opts)
+                    .await
+                    .map(|o| o.scenegraph)
             })
             .map_err(|err| prefixed_py_error("Vega to Scenegraph conversion failed", err))?;
             Python::with_gil(|py| -> PyResult<PyObject> {
@@ -730,7 +741,10 @@ fn vega_to_scenegraph(
         "msgpack" => {
             let vg_spec = parse_spec_to_value_or_string(vg_spec)?;
             let sg_bytes = run_converter_future(move |converter| async move {
-                converter.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                converter
+                    .vega_to_scenegraph_msgpack(vg_spec, vg_opts)
+                    .await
+                    .map(|o| o.data)
             })
             .map_err(|err| prefixed_py_error("Vega to Scenegraph conversion failed", err))?;
             Ok(Python::with_gil(|py| -> PyObject {
@@ -796,6 +810,7 @@ fn vegalite_to_svg(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let svg_opts = SvgOpts {
@@ -803,7 +818,10 @@ fn vegalite_to_svg(
     };
 
     let svg = match run_converter_future(move |converter| async move {
-        converter.vegalite_to_svg(vl_spec, vl_opts, svg_opts).await
+        converter
+            .vegalite_to_svg(vl_spec, vl_opts, svg_opts)
+            .await
+            .map(|o| o.svg)
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega-Lite to SVG conversion failed", err)),
@@ -863,13 +881,17 @@ fn vegalite_to_scenegraph(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     match format {
         "dict" => {
             let vl_spec = parse_json_spec(vl_spec)?;
             let sg = run_converter_future(move |converter| async move {
-                converter.vegalite_to_scenegraph(vl_spec, vl_opts).await
+                converter
+                    .vegalite_to_scenegraph(vl_spec, vl_opts)
+                    .await
+                    .map(|o| o.scenegraph)
             })
             .map_err(|err| prefixed_py_error("Vega-Lite to Scenegraph conversion failed", err))?;
             Python::with_gil(|py| -> PyResult<PyObject> {
@@ -884,6 +906,7 @@ fn vegalite_to_scenegraph(
                 converter
                     .vegalite_to_scenegraph_msgpack(vl_spec, vl_opts)
                     .await
+                    .map(|o| o.data)
             })
             .map_err(|err| prefixed_py_error("Vega-Lite to Scenegraph conversion failed", err))?;
             Ok(Python::with_gil(|py| -> PyObject {
@@ -928,11 +951,15 @@ fn vega_to_png(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let png_opts = PngOpts { scale, ppi };
     let png_data = match run_converter_future(move |converter| async move {
-        converter.vega_to_png(vg_spec, vg_opts, png_opts).await
+        converter
+            .vega_to_png(vg_spec, vg_opts, png_opts)
+            .await
+            .map(|o| o.data)
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega to PNG conversion failed", err)),
@@ -997,11 +1024,15 @@ fn vegalite_to_png(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let png_opts = PngOpts { scale, ppi };
     let png_data = match run_converter_future(move |converter| async move {
-        converter.vegalite_to_png(vl_spec, vl_opts, png_opts).await
+        converter
+            .vegalite_to_png(vl_spec, vl_opts, png_opts)
+            .await
+            .map(|o| o.data)
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega-Lite to PNG conversion failed", err)),
@@ -1044,11 +1075,15 @@ fn vega_to_jpeg(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let jpeg_opts = JpegOpts { scale, quality };
     let jpeg_data = match run_converter_future(move |converter| async move {
-        converter.vega_to_jpeg(vg_spec, vg_opts, jpeg_opts).await
+        converter
+            .vega_to_jpeg(vg_spec, vg_opts, jpeg_opts)
+            .await
+            .map(|o| o.data)
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega to JPEG conversion failed", err)),
@@ -1113,6 +1148,7 @@ fn vegalite_to_jpeg(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let jpeg_opts = JpegOpts { scale, quality };
@@ -1120,6 +1156,7 @@ fn vegalite_to_jpeg(
         converter
             .vegalite_to_jpeg(vl_spec, vl_opts, jpeg_opts)
             .await
+            .map(|o| o.data)
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => {
@@ -1164,12 +1201,14 @@ fn vega_to_pdf(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let pdf_bytes = match run_converter_future(move |converter| async move {
         converter
             .vega_to_pdf(vg_spec, vg_opts, PdfOpts::default())
             .await
+            .map(|o| o.data)
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega to PDF conversion failed", err)),
@@ -1227,12 +1266,14 @@ fn vegalite_to_pdf(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     let pdf_data = match run_converter_future(move |converter| async move {
         converter
             .vegalite_to_pdf(vl_spec, vl_opts, PdfOpts::default())
             .await
+            .map(|o| o.data)
     }) {
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega-Lite to PDF conversion failed", err)),
@@ -1256,7 +1297,9 @@ fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<Stri
     let vl_spec = parse_json_spec(vl_spec)?;
     Ok(vl_convert_rs::converter::vegalite_to_url(
         &vl_spec,
-        fullscreen.unwrap_or(false),
+        UrlOpts {
+            fullscreen: fullscreen.unwrap_or(false),
+        },
     )?)
 }
 
@@ -1273,7 +1316,9 @@ fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> 
     let vg_spec = parse_json_spec(vg_spec)?;
     Ok(vl_convert_rs::converter::vega_to_url(
         &vg_spec,
-        fullscreen.unwrap_or(false),
+        UrlOpts {
+            fullscreen: fullscreen.unwrap_or(false),
+        },
     )?)
 }
 
@@ -1334,6 +1379,7 @@ fn vegalite_to_html(
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
         vega_plugin,
+        ..Default::default()
     };
 
     let html_opts = HtmlOpts {
@@ -1344,6 +1390,7 @@ fn vegalite_to_html(
         converter
             .vegalite_to_html(vl_spec, vl_opts, html_opts)
             .await
+            .map(|o| o.html)
     })
     .map_err(|err| prefixed_py_error("Vega-Lite to HTML conversion failed", err))
 }
@@ -1385,13 +1432,17 @@ fn vega_to_html(
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
         vega_plugin,
+        ..Default::default()
     };
     let html_opts = HtmlOpts {
         bundle: bundle.unwrap_or(false),
         renderer,
     };
     run_converter_future(move |converter| async move {
-        converter.vega_to_html(vg_spec, vg_opts, html_opts).await
+        converter
+            .vega_to_html(vg_spec, vg_opts, html_opts)
+            .await
+            .map(|o| o.html)
     })
     .map_err(|err| prefixed_py_error("Vega to HTML conversion failed", err))
 }
@@ -1446,7 +1497,7 @@ fn vegalite_fonts(
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     let result = run_converter_future(move |converter| async move {
@@ -1505,7 +1556,7 @@ fn vega_fonts(
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     let result = run_converter_future(move |converter| async move {
@@ -1544,11 +1595,10 @@ fn vega_fonts(
 fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
     let svg = svg.to_string();
     let png_opts = PngOpts { scale, ppi };
-    let png_data =
-        run_converter_future(
-            move |converter| async move { converter.svg_to_png(&svg, png_opts).await },
-        )
-        .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
+    let png_data = run_converter_future(move |converter| async move {
+        converter.svg_to_png(&svg, png_opts).await.map(|o| o.data)
+    })
+    .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
         PyBytes::new(py, png_data.as_slice()).into()
     }))
@@ -1568,7 +1618,7 @@ fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<P
     let svg = svg.to_string();
     let jpeg_opts = JpegOpts { scale, quality };
     let jpeg_data = run_converter_future(move |converter| async move {
-        converter.svg_to_jpeg(&svg, jpeg_opts).await
+        converter.svg_to_jpeg(&svg, jpeg_opts).await.map(|o| o.data)
     })
     .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
@@ -1589,7 +1639,10 @@ fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let svg = svg.to_string();
     let pdf_data = run_converter_future(move |converter| async move {
-        converter.svg_to_pdf(&svg, PdfOpts::default()).await
+        converter
+            .svg_to_pdf(&svg, PdfOpts::default())
+            .await
+            .map(|o| o.data)
     })
     .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
     Ok(Python::with_gil(|py| -> PyObject {
@@ -2138,12 +2191,17 @@ fn vegalite_to_vega_asyncio<'py>(
         format_locale: None,
         time_format_locale: None,
         google_fonts: effective_google_fonts(None),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     run_converter_future_async(
         py,
-        move |converter| async move { converter.vegalite_to_vega(vl_spec, vl_opts).await },
+        move |converter| async move {
+            converter
+                .vegalite_to_vega(vl_spec, vl_opts)
+                .await
+                .map(|o| o.spec)
+        },
         "Vega-Lite to Vega conversion failed",
         |py, value| {
             pythonize(py, &value)
@@ -2172,6 +2230,7 @@ fn vega_to_svg_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
@@ -2185,6 +2244,7 @@ fn vega_to_svg_asyncio<'py>(
         let value = converter
             .vega_to_svg(vg_spec, vg_opts, svg_opts)
             .await
+            .map(|o| o.svg)
             .map_err(|err| prefixed_py_error(error_prefix, err))?;
         Python::with_gil(|py| {
             pythonize(py, &value)
@@ -2212,6 +2272,7 @@ fn vega_to_scenegraph_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     match format {
@@ -2219,7 +2280,12 @@ fn vega_to_scenegraph_asyncio<'py>(
             let vg_spec = parse_json_spec(vg_spec)?;
             run_converter_future_async(
                 py,
-                move |converter| async move { converter.vega_to_scenegraph(vg_spec, vg_opts).await },
+                move |converter| async move {
+                    converter
+                        .vega_to_scenegraph(vg_spec, vg_opts)
+                        .await
+                        .map(|o| o.scenegraph)
+                },
                 "Vega to Scenegraph conversion failed",
                 |py, value| {
                     pythonize(py, &value)
@@ -2233,7 +2299,10 @@ fn vega_to_scenegraph_asyncio<'py>(
             run_converter_future_async(
                 py,
                 move |converter| async move {
-                    converter.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                    converter
+                        .vega_to_scenegraph_msgpack(vg_spec, vg_opts)
+                        .await
+                        .map(|o| o.data)
                 },
                 "Vega to Scenegraph conversion failed",
                 |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
@@ -2280,6 +2349,7 @@ fn vegalite_to_svg_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
@@ -2293,6 +2363,7 @@ fn vegalite_to_svg_asyncio<'py>(
         let value = converter
             .vegalite_to_svg(vl_spec, vl_opts, svg_opts)
             .await
+            .map(|o| o.svg)
             .map_err(|err| prefixed_py_error(error_prefix, err))?;
         Python::with_gil(|py| {
             pythonize(py, &value)
@@ -2336,6 +2407,7 @@ fn vegalite_to_scenegraph_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     match format {
@@ -2343,7 +2415,12 @@ fn vegalite_to_scenegraph_asyncio<'py>(
             let vl_spec = parse_json_spec(vl_spec)?;
             run_converter_future_async(
                 py,
-                move |converter| async move { converter.vegalite_to_scenegraph(vl_spec, vl_opts).await },
+                move |converter| async move {
+                    converter
+                        .vegalite_to_scenegraph(vl_spec, vl_opts)
+                        .await
+                        .map(|o| o.scenegraph)
+                },
                 "Vega-Lite to Scenegraph conversion failed",
                 |py, value| {
                     pythonize(py, &value)
@@ -2360,6 +2437,7 @@ fn vegalite_to_scenegraph_asyncio<'py>(
                     converter
                         .vegalite_to_scenegraph_msgpack(vl_spec, vl_opts)
                         .await
+                        .map(|o| o.data)
                 },
                 "Vega-Lite to Scenegraph conversion failed",
                 |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
@@ -2393,6 +2471,7 @@ fn vega_to_png_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2401,6 +2480,7 @@ fn vega_to_png_asyncio<'py>(
             converter
                 .vega_to_png(vg_spec, vg_opts, PngOpts { scale, ppi })
                 .await
+                .map(|o| o.data)
         },
         "Vega to PNG conversion failed",
         |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
@@ -2443,6 +2523,7 @@ fn vegalite_to_png_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2451,6 +2532,7 @@ fn vegalite_to_png_asyncio<'py>(
             converter
                 .vegalite_to_png(vl_spec, vl_opts, PngOpts { scale, ppi })
                 .await
+                .map(|o| o.data)
         },
         "Vega-Lite to PNG conversion failed",
         |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
@@ -2479,6 +2561,7 @@ fn vega_to_jpeg_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2487,6 +2570,7 @@ fn vega_to_jpeg_asyncio<'py>(
             converter
                 .vega_to_jpeg(vg_spec, vg_opts, JpegOpts { scale, quality })
                 .await
+                .map(|o| o.data)
         },
         "Vega to JPEG conversion failed",
         |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
@@ -2529,6 +2613,7 @@ fn vegalite_to_jpeg_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2537,6 +2622,7 @@ fn vegalite_to_jpeg_asyncio<'py>(
             converter
                 .vegalite_to_jpeg(vl_spec, vl_opts, JpegOpts { scale, quality })
                 .await
+                .map(|o| o.data)
         },
         "Vega-Lite to JPEG conversion failed",
         |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
@@ -2563,6 +2649,7 @@ fn vega_to_pdf_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2571,6 +2658,7 @@ fn vega_to_pdf_asyncio<'py>(
             converter
                 .vega_to_pdf(vg_spec, vg_opts, PdfOpts::default())
                 .await
+                .map(|o| o.data)
         },
         "Vega to PDF conversion failed",
         |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
@@ -2611,6 +2699,7 @@ fn vegalite_to_pdf_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(None),
         vega_plugin,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2619,6 +2708,7 @@ fn vegalite_to_pdf_asyncio<'py>(
             converter
                 .vegalite_to_pdf(vl_spec, vl_opts, PdfOpts::default())
                 .await
+                .map(|o| o.data)
         },
         "Vega-Lite to PDF conversion failed",
         |py, value| Ok(PyBytes::new(py, value.as_slice()).into()),
@@ -2634,7 +2724,12 @@ fn vegalite_to_url_asyncio<'py>(
     fullscreen: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vl_spec = parse_json_spec(vl_spec)?;
-    let url = vl_convert_rs::converter::vegalite_to_url(&vl_spec, fullscreen.unwrap_or(false))?;
+    let url = vl_convert_rs::converter::vegalite_to_url(
+        &vl_spec,
+        UrlOpts {
+            fullscreen: fullscreen.unwrap_or(false),
+        },
+    )?;
     future_into_py_object(py, async move {
         Python::with_gil(|py| {
             pythonize(py, &url)
@@ -2653,7 +2748,12 @@ fn vega_to_url_asyncio<'py>(
     fullscreen: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
-    let url = vl_convert_rs::converter::vega_to_url(&vg_spec, fullscreen.unwrap_or(false))?;
+    let url = vl_convert_rs::converter::vega_to_url(
+        &vg_spec,
+        UrlOpts {
+            fullscreen: fullscreen.unwrap_or(false),
+        },
+    )?;
     future_into_py_object(py, async move {
         Python::with_gil(|py| {
             pythonize(py, &url)
@@ -2703,6 +2803,7 @@ fn vegalite_to_html_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
         vega_plugin,
+        ..Default::default()
     };
 
     let converter = converter_read_handle()
@@ -2720,6 +2821,7 @@ fn vegalite_to_html_asyncio<'py>(
                 },
             )
             .await
+            .map(|o| o.html)
             .map_err(|err| prefixed_py_error(error_prefix, err))?;
         Python::with_gil(|py| {
             pythonize(py, &value)
@@ -2754,6 +2856,7 @@ fn vega_to_html_asyncio<'py>(
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
         vega_plugin,
+        ..Default::default()
     };
 
     let converter = converter_read_handle()
@@ -2771,6 +2874,7 @@ fn vega_to_html_asyncio<'py>(
                 },
             )
             .await
+            .map(|o| o.html)
             .map_err(|err| prefixed_py_error(error_prefix, err))?;
         Python::with_gil(|py| {
             pythonize(py, &value)
@@ -2814,7 +2918,7 @@ fn vegalite_fonts_asyncio<'py>(
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2865,7 +2969,7 @@ fn vega_fonts_asyncio<'py>(
         format_locale,
         time_format_locale,
         google_fonts: effective_google_fonts(google_fonts),
-        vega_plugin: None,
+        ..Default::default()
     };
 
     run_converter_future_async(
@@ -2907,7 +3011,12 @@ fn svg_to_png_asyncio<'py>(
     let svg = svg.to_string();
     run_converter_future_async(
         py,
-        move |converter| async move { converter.svg_to_png(&svg, PngOpts { scale, ppi }).await },
+        move |converter| async move {
+            converter
+                .svg_to_png(&svg, PngOpts { scale, ppi })
+                .await
+                .map(|o| o.data)
+        },
         "SVG to PNG conversion failed",
         |py, data| Ok(PyBytes::new(py, data.as_slice()).into()),
     )
@@ -2929,6 +3038,7 @@ fn svg_to_jpeg_asyncio<'py>(
             converter
                 .svg_to_jpeg(&svg, JpegOpts { scale, quality })
                 .await
+                .map(|o| o.data)
         },
         "SVG to JPEG conversion failed",
         |py, data| Ok(PyBytes::new(py, data.as_slice()).into()),
@@ -2947,7 +3057,12 @@ fn svg_to_pdf_asyncio<'py>(
     let svg = svg.to_string();
     run_converter_future_async(
         py,
-        move |converter| async move { converter.svg_to_pdf(&svg, PdfOpts::default()).await },
+        move |converter| async move {
+            converter
+                .svg_to_pdf(&svg, PdfOpts::default())
+                .await
+                .map(|o| o.data)
+        },
         "SVG to PDF conversion failed",
         |py, data| Ok(PyBytes::new(py, data.as_slice()).into()),
     )

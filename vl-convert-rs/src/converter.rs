@@ -162,15 +162,55 @@ type WorkFn = Box<
 struct QueuedWork {
     work: WorkFn,
     ticket: OutstandingTicket,
+    caller_gone: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl QueuedWork {
-    fn new(work: WorkFn, ticket: OutstandingTicket) -> Self {
-        Self { work, ticket }
+    fn new(
+        work: WorkFn,
+        ticket: OutstandingTicket,
+        caller_gone: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        Self {
+            work,
+            ticket,
+            caller_gone,
+        }
     }
 
-    fn into_parts(self) -> (WorkFn, OutstandingTicket) {
-        (self.work, self.ticket)
+    fn into_parts(
+        self,
+    ) -> (
+        WorkFn,
+        OutstandingTicket,
+        Arc<std::sync::atomic::AtomicBool>,
+    ) {
+        (self.work, self.ticket, self.caller_gone)
+    }
+}
+
+/// Drop guard that signals `caller_gone` when the caller's future is dropped
+/// (e.g. by HTTP timeout). Call `disarm()` on normal completion to prevent
+/// spurious signaling.
+struct CallerGoneGuard {
+    flag: Arc<std::sync::atomic::AtomicBool>,
+    armed: bool,
+}
+
+impl CallerGoneGuard {
+    fn new(flag: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        Self { flag, armed: true }
+    }
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for CallerGoneGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            self.flag.store(true, std::sync::atomic::Ordering::Release);
+        }
     }
 }
 
@@ -374,9 +414,14 @@ fn spawn_worker_pool(
                 while let Some(queued_work) = rx.recv().await {
                     // Keep the ticket alive for the full loop iteration so outstanding
                     // covers the work execution (drop happens at iteration end).
-                    let (work, _ticket) = queued_work.into_parts();
+                    let (work, _ticket, caller_gone) = queued_work.into_parts();
 
-                    let timer = inner.start_conversion_timer();
+                    // Skip work if the caller already timed out or disconnected
+                    if caller_gone.load(std::sync::atomic::Ordering::Acquire) {
+                        continue;
+                    }
+
+                    let timer = inner.start_conversion_timer(caller_gone);
                     (work)(&mut inner).await;
                     inner.cancel_conversion_timer(timer);
 
@@ -585,6 +630,45 @@ impl ValueOrString {
     }
 }
 
+/// Apply background, width, and height overrides to a spec.
+/// Works for both Vega and Vega-Lite specs.
+pub(crate) fn apply_spec_overrides(
+    spec: ValueOrString,
+    background: &Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
+) -> Result<ValueOrString, AnyError> {
+    if background.is_none() && width.is_none() && height.is_none() {
+        return Ok(spec);
+    }
+    let mut val = spec.to_value()?;
+    if let Some(obj) = val.as_object_mut() {
+        if let Some(bg) = background {
+            obj.insert(
+                "background".to_string(),
+                serde_json::Value::String(bg.clone()),
+            );
+        }
+        if let Some(w) = width {
+            obj.insert(
+                "width".to_string(),
+                serde_json::Value::Number(
+                    serde_json::Number::from_f64(w as f64).unwrap_or(serde_json::Number::from(0)),
+                ),
+            );
+        }
+        if let Some(h) = height {
+            obj.insert(
+                "height".to_string(),
+                serde_json::Value::Number(
+                    serde_json::Number::from_f64(h as f64).unwrap_or(serde_json::Number::from(0)),
+                ),
+            );
+        }
+    }
+    Ok(ValueOrString::Value(val))
+}
+
 /// How to handle fonts referenced in a spec but not available on the system.
 ///
 /// Only the **first** non-generic font in each CSS `font-family` string is
@@ -755,6 +839,9 @@ pub struct VlcConfig {
     /// Defaults to false. When enabled, requests can include a `vega_plugin`
     /// field that runs on an ephemeral V8 isolate (50-100ms overhead).
     pub allow_per_request_plugins: bool,
+    /// Whether to allow per-request `google_fonts` / `auto_google_fonts` overrides.
+    /// Defaults to false. When false, requests containing these fields are rejected.
+    pub allow_google_fonts: bool,
     /// Domain allowlist for HTTP imports inside per-request plugins.
     /// Separate from `plugin_import_domains` (which controls config-level
     /// plugins). Defaults to empty (no HTTP imports allowed in per-request plugins).
@@ -807,6 +894,7 @@ impl Default for VlcConfig {
             vega_plugins: None,
             plugin_import_domains: Vec::new(),
             allow_per_request_plugins: false,
+            allow_google_fonts: false,
             per_request_plugin_import_domains: Vec::new(),
             default_theme: None,
             default_format_locale: None,
@@ -908,6 +996,14 @@ pub struct VgOpts {
     /// Per-request overlay plugin (inline ESM or URL). Requires `allow_per_request_plugins`.
     pub vega_plugin: Option<String>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
+    /// Vega config object merged via `vega.mergeConfig(spec.config, config)`.
+    pub config: Option<serde_json::Value>,
+    /// Sets `spec.background` (top-level Vega property).
+    pub background: Option<String>,
+    /// Override the spec's width.
+    pub width: Option<f32>,
+    /// Override the spec's height.
+    pub height: Option<f32>,
 }
 
 impl VgOpts {
@@ -919,6 +1015,19 @@ impl VgOpts {
             serde_json::Value::String(renderer.to_string()),
         );
 
+        if let Some(config) = &self.config {
+            opts_map.insert("config".to_string(), config.clone());
+        }
+        if let Some(w) = self.width {
+            if let Some(n) = serde_json::Number::from_f64(w as f64) {
+                opts_map.insert("width".to_string(), serde_json::Value::Number(n));
+            }
+        }
+        if let Some(h) = self.height {
+            if let Some(n) = serde_json::Number::from_f64(h as f64) {
+                opts_map.insert("height".to_string(), serde_json::Value::Number(n));
+            }
+        }
         if let Some(format_locale) = &self.format_locale {
             opts_map.insert("formatLocale".to_string(), format_locale.as_object()?);
         }
@@ -1016,6 +1125,12 @@ pub struct VlOpts {
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
     /// Per-request overlay plugin (inline ESM or URL). Requires `allow_per_request_plugins`.
     pub vega_plugin: Option<String>,
+    /// Sets `spec.background` before Vega-Lite compilation.
+    pub background: Option<String>,
+    /// Override the spec's width.
+    pub width: Option<f32>,
+    /// Override the spec's height.
+    pub height: Option<f32>,
 }
 
 /// Options specific to SVG output format.
@@ -1058,6 +1173,95 @@ pub struct JpegOpts {
 #[derive(Debug, Clone, Default)]
 pub struct PdfOpts {}
 
+/// Options specific to URL output format.
+#[derive(Debug, Clone, Default)]
+pub struct UrlOpts {
+    pub fullscreen: bool,
+}
+
+/// Log level for entries captured during Vega/VL evaluation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+}
+
+impl std::fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogLevel::Error => write!(f, "ERROR"),
+            LogLevel::Warn => write!(f, "WARN"),
+            LogLevel::Info => write!(f, "INFO"),
+            LogLevel::Debug => write!(f, "DEBUG"),
+        }
+    }
+}
+
+/// A log entry captured during Vega/VL evaluation.
+#[derive(Debug, Clone)]
+pub struct LogEntry {
+    pub level: LogLevel,
+    pub message: String,
+}
+
+/// Output from a Vega-Lite → Vega compilation.
+#[derive(Debug)]
+pub struct VegaOutput {
+    pub spec: serde_json::Value,
+    pub logs: Vec<LogEntry>,
+}
+
+/// Output from an SVG conversion.
+#[derive(Debug)]
+pub struct SvgOutput {
+    pub svg: String,
+    pub logs: Vec<LogEntry>,
+}
+
+/// Output from a PNG conversion.
+#[derive(Debug)]
+pub struct PngOutput {
+    pub data: Vec<u8>,
+    pub logs: Vec<LogEntry>,
+}
+
+/// Output from a JPEG conversion.
+#[derive(Debug)]
+pub struct JpegOutput {
+    pub data: Vec<u8>,
+    pub logs: Vec<LogEntry>,
+}
+
+/// Output from a PDF conversion.
+#[derive(Debug)]
+pub struct PdfOutput {
+    pub data: Vec<u8>,
+    pub logs: Vec<LogEntry>,
+}
+
+/// Output from an HTML conversion.
+#[derive(Debug)]
+pub struct HtmlOutput {
+    pub html: String,
+    pub logs: Vec<LogEntry>,
+}
+
+/// Output from a scenegraph extraction.
+#[derive(Debug)]
+pub struct ScenegraphOutput {
+    pub scenegraph: serde_json::Value,
+    pub logs: Vec<LogEntry>,
+}
+
+/// Output from a scenegraph msgpack extraction.
+#[derive(Debug)]
+pub struct ScenegraphMsgpackOutput {
+    pub data: Vec<u8>,
+    pub logs: Vec<LogEntry>,
+}
+
 impl VlOpts {
     pub fn to_embed_opts(&self, renderer: Renderer) -> Result<serde_json::Value, AnyError> {
         let mut opts_map = serde_json::Map::new();
@@ -1078,6 +1282,16 @@ impl VlOpts {
             opts_map.insert("config".to_string(), config.clone());
         }
 
+        if let Some(w) = self.width {
+            if let Some(n) = serde_json::Number::from_f64(w as f64) {
+                opts_map.insert("width".to_string(), serde_json::Value::Number(n));
+            }
+        }
+        if let Some(h) = self.height {
+            if let Some(n) = serde_json::Number::from_f64(h as f64) {
+                opts_map.insert("height".to_string(), serde_json::Value::Number(n));
+            }
+        }
         if let Some(format_locale) = &self.format_locale {
             opts_map.insert("formatLocale".to_string(), format_locale.as_object()?);
         }
@@ -1350,6 +1564,10 @@ pub(crate) struct InnerVlConverter {
     /// Set when a plugin fails during init_vega(). Subsequent commands
     /// return this error immediately (no retry on the tainted isolate).
     plugin_init_error: Option<String>,
+    /// Log entries captured during the most recent conversion.
+    /// Populated by `emit_js_log_messages()`, taken by `std::mem::take` before
+    /// returning typed output structs.
+    pub(crate) last_log_entries: Vec<LogEntry>,
 }
 
 impl InnerVlConverter {
@@ -1432,20 +1650,26 @@ impl InnerVlConverter {
         }
     }
 
-    /// Start a conversion timeout timer. Returns `None` if the timeout is
-    /// disabled (0). The returned `ConversionTimer` must be cancelled after
-    /// the conversion completes by calling `cancel_conversion_timer()`.
-    fn start_conversion_timer(&mut self) -> Option<ConversionTimer> {
-        self.start_conversion_timer_with_duration(std::time::Duration::from_secs(
-            self.ctx.config.max_v8_execution_time_secs,
-        ))
+    /// Start a conversion timeout timer that also watches for caller disconnect.
+    /// Returns `None` if the timeout is disabled (0). The returned
+    /// `ConversionTimer` must be cancelled after the conversion completes by
+    /// calling `cancel_conversion_timer()`.
+    fn start_conversion_timer(
+        &mut self,
+        caller_gone: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Option<ConversionTimer> {
+        self.start_conversion_timer_with_duration(
+            std::time::Duration::from_secs(self.ctx.config.max_v8_execution_time_secs),
+            caller_gone,
+        )
     }
 
-    /// Start a conversion timeout timer with an explicit duration. Used by
-    /// ephemeral workers that subtract already-elapsed time from the budget.
+    /// Start a conversion timeout timer with an explicit duration. Also monitors
+    /// `caller_gone` so V8 can be terminated early if the caller disconnects.
     fn start_conversion_timer_with_duration(
         &mut self,
         duration: std::time::Duration,
+        caller_gone: Arc<std::sync::atomic::AtomicBool>,
     ) -> Option<ConversionTimer> {
         if duration.is_zero() {
             return None;
@@ -1453,12 +1677,30 @@ impl InnerVlConverter {
         let timeout_hit = self.timeout_hit.clone();
         let handle = self.worker.js_runtime.v8_isolate().thread_safe_handle();
         let (cancel_tx, cancel_rx) = std::sync::mpsc::channel::<()>();
+        let poll_interval = std::time::Duration::from_millis(50);
         let thread = std::thread::spawn(move || {
-            if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
-                cancel_rx.recv_timeout(duration)
-            {
-                timeout_hit.store(true, std::sync::atomic::Ordering::Release);
-                handle.terminate_execution();
+            let deadline = std::time::Instant::now() + duration;
+            loop {
+                // Check if the conversion finished normally (Ok = explicit cancel,
+                // Disconnected = cancel_tx dropped in cancel_conversion_timer)
+                match cancel_rx.try_recv() {
+                    Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                }
+                // Check if the caller disconnected
+                if caller_gone.load(std::sync::atomic::Ordering::Acquire) {
+                    timeout_hit.store(true, std::sync::atomic::Ordering::Release);
+                    handle.terminate_execution();
+                    return;
+                }
+                // Check if the deadline expired
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    timeout_hit.store(true, std::sync::atomic::Ordering::Release);
+                    handle.terminate_execution();
+                    return;
+                }
+                std::thread::sleep(poll_interval.min(remaining));
             }
         });
         Some(ConversionTimer { cancel_tx, thread })
@@ -1738,20 +1980,20 @@ function buildLoader(errors) {
     return loader;
 }
 
-function vegaToView(vgSpec, errors) {
-    let runtime = vega.parse(vgSpec);
+function vegaToView(vgSpec, config, errors) {
+    let runtime = vega.parse(vgSpec, config || {});
     const loader = buildLoader(errors);
     return new vega.View(runtime, {renderer: 'none', loader, logLevel: vega.Debug, logger: logCollector});
 }
 
-function vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors) {
+function vegaToSvg(vgSpec, formatLocale, timeFormatLocale, config, errors) {
     if (formatLocale != null) {
         vega.formatLocale(formatLocale);
     }
     if (timeFormatLocale != null) {
         vega.timeFormatLocale(timeFormatLocale);
     }
-    let view = vegaToView(vgSpec, errors);
+    let view = vegaToView(vgSpec, config, errors);
     let svgPromise = view.runAsync().then(() => {
         try {
             // Workaround for https://github.com/vega/vega/issues/3481
@@ -1833,14 +2075,14 @@ function cloneScenegraph(obj) {
     return clone;
 }
 
-function vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, errors) {
+function vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, config, errors) {
     if (formatLocale != null) {
         vega.formatLocale(formatLocale);
     }
     if (timeFormatLocale != null) {
         vega.timeFormatLocale(timeFormatLocale);
     }
-    let view = vegaToView(vgSpec, errors);
+    let view = vegaToView(vgSpec, config, errors);
     let scenegraphPromise = view.runAsync().then(() => {
         try {
             // Workaround for https://github.com/vega/vega/issues/3481
@@ -1873,7 +2115,7 @@ function vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, errors) {
     return scenegraphPromise
 }
 
-function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors) {
+function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, config, errors) {
     if (formatLocale != null) {
         vega.formatLocale(formatLocale);
     }
@@ -1881,7 +2123,7 @@ function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors) {
         vega.timeFormatLocale(timeFormatLocale);
     }
 
-    let view = vegaToView(vgSpec, errors);
+    let view = vegaToView(vgSpec, config, errors);
     let canvasPromise = view.runAsync().then(() => {
         try {
             // Workaround for https://github.com/vega/vega/issues/3481
@@ -2070,17 +2312,17 @@ function compileVegaLite_{ver_name}(vlSpec, config, theme) {{
 
 function vegaLiteToSvg_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, errors) {{
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
-    return vegaToSvg(vgSpec, formatLocale, timeFormatLocale, errors)
+    return vegaToSvg(vgSpec, formatLocale, timeFormatLocale, null, errors)
 }}
 
 function vegaLiteToScenegraph_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, errors) {{
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
-    return vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, errors)
+    return vegaToScenegraph(vgSpec, formatLocale, timeFormatLocale, null, errors)
 }}
 
 function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFormatLocale, scale, errors) {{
     let vgSpec = compileVegaLite_{ver_name}(vlSpec, config, theme);
-    return vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, errors)
+    return vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, null, errors)
 }}
 "#,
                 ver_name = format!("{:?}", vl_version),
@@ -2222,6 +2464,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
             heap_limit_data,
             timeout_hit: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             plugin_init_error: None,
+            last_log_entries: Vec::new(),
         };
 
         Ok(this)
@@ -2276,6 +2519,7 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
     }
 
     async fn emit_js_log_messages(&mut self) {
+        self.last_log_entries.clear();
         let json = match self
             .execute_script_to_string("_collapsedLogMessages()")
             .await
@@ -2300,10 +2544,34 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
             let level = entry.get("level").and_then(|v| v.as_str()).unwrap_or("");
             let msg = entry.get("msg").and_then(|v| v.as_str()).unwrap_or("");
             match level {
-                "error" => vl_error!("{}", msg),
-                "warn" => vl_warn!("{}", msg),
-                "info" => vl_info!("{}", msg),
-                "debug" => vl_debug!("{}", msg),
+                "error" => {
+                    vl_error!("{}", msg);
+                    self.last_log_entries.push(LogEntry {
+                        level: LogLevel::Error,
+                        message: msg.to_string(),
+                    });
+                }
+                "warn" => {
+                    vl_warn!("{}", msg);
+                    self.last_log_entries.push(LogEntry {
+                        level: LogLevel::Warn,
+                        message: msg.to_string(),
+                    });
+                }
+                "info" => {
+                    vl_info!("{}", msg);
+                    self.last_log_entries.push(LogEntry {
+                        level: LogLevel::Info,
+                        message: msg.to_string(),
+                    });
+                }
+                "debug" => {
+                    vl_debug!("{}", msg);
+                    self.last_log_entries.push(LogEntry {
+                        level: LogLevel::Debug,
+                        message: msg.to_string(),
+                    });
+                }
                 _ => {}
             }
         }
@@ -2313,12 +2581,18 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
         &mut self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
-    ) -> Result<serde_json::Value, AnyError> {
+    ) -> Result<VegaOutput, AnyError> {
         self.init_vega().await?;
         self.init_vl_version(&vl_opts.vl_version).await?;
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
 
-        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec.into())?;
+        let vl_spec = apply_spec_overrides(
+            vl_spec.into(),
+            &vl_opts.background,
+            vl_opts.width,
+            vl_opts.height,
+        )?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec)?;
         let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
 
         let theme_arg = match &vl_opts.theme {
@@ -2341,19 +2615,26 @@ compileVegaLite_{ver_name:?}(
             theme_arg = theme_arg,
         );
 
-        let value = self.execute_script_to_json(&code).await?;
+        let spec = self.execute_script_to_json(&code).await?;
         self.emit_js_log_messages().await;
-        Ok(value)
+        let logs = std::mem::take(&mut self.last_log_entries);
+        Ok(VegaOutput { spec, logs })
     }
 
     pub async fn vegalite_to_svg(
         &mut self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
-    ) -> Result<String, AnyError> {
+    ) -> Result<SvgOutput, AnyError> {
         self.init_vega().await?;
         self.init_vl_version(&vl_opts.vl_version).await?;
 
+        let vl_spec = apply_spec_overrides(
+            vl_spec.into(),
+            &vl_opts.background,
+            vl_opts.width,
+            vl_opts.height,
+        )?;
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
 
         let format_locale = match vl_opts.format_locale {
@@ -2366,7 +2647,7 @@ compileVegaLite_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec.into())?;
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vl_spec)?;
         let config_arg = JsonArgGuard::from_value(&self.transfer_state, config)?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
@@ -2417,18 +2698,24 @@ vegaLiteToSvg_{ver_name:?}(
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-        let value = self.execute_script_to_string("svg").await?;
-        Ok(value)
+        let svg = self.execute_script_to_string("svg").await?;
+        let logs = std::mem::take(&mut self.last_log_entries);
+        Ok(SvgOutput { svg, logs })
     }
 
     pub async fn vegalite_to_scenegraph_msgpack(
         &mut self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<ScenegraphMsgpackOutput, AnyError> {
         self.init_vega().await?;
         self.init_vl_version(&vl_opts.vl_version).await?;
-        let vl_spec = vl_spec.into();
+        let vl_spec = apply_spec_overrides(
+            vl_spec.into(),
+            &vl_opts.background,
+            vl_opts.width,
+            vl_opts.height,
+        )?;
 
         let config = vl_opts.config.clone().unwrap_or(serde_json::Value::Null);
         let format_locale = match vl_opts.format_locale {
@@ -2493,28 +2780,40 @@ vegaLiteToScenegraph_{ver_name:?}(
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-        result.take_result()
+        let data = result.take_result()?;
+        let logs = std::mem::take(&mut self.last_log_entries);
+        Ok(ScenegraphMsgpackOutput { data, logs })
     }
 
     pub async fn vegalite_to_scenegraph(
         &mut self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
-    ) -> Result<serde_json::Value, AnyError> {
-        let sg_msgpack = self
+    ) -> Result<ScenegraphOutput, AnyError> {
+        let sg_output = self
             .vegalite_to_scenegraph_msgpack(vl_spec, vl_opts)
             .await?;
-        let value: serde_json::Value = rmp_serde::from_slice(&sg_msgpack)
+        let scenegraph: serde_json::Value = rmp_serde::from_slice(&sg_output.data)
             .map_err(|err| anyhow!("Failed to decode MessagePack scenegraph: {err}"))?;
-        Ok(value)
+        Ok(ScenegraphOutput {
+            scenegraph,
+            logs: sg_output.logs,
+        })
     }
 
     pub async fn vega_to_svg(
         &mut self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
-    ) -> Result<String, AnyError> {
+    ) -> Result<SvgOutput, AnyError> {
         self.init_vega().await?;
+
+        let vg_spec = apply_spec_overrides(
+            vg_spec.into(),
+            &vg_opts.background,
+            vg_opts.width,
+            vg_opts.height,
+        )?;
 
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
@@ -2526,10 +2825,13 @@ vegaLiteToScenegraph_{ver_name:?}(
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec.into())?;
+        let config_value = vg_opts.config.unwrap_or(serde_json::Value::Null);
+
+        let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec)?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
             JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config_value)?;
 
         let code = format!(
             r#"
@@ -2540,6 +2842,7 @@ vegaToSvg(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
+    JSON.parse(op_get_json_arg({config_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -2551,6 +2854,7 @@ vegaToSvg(
             arg_id = spec_arg.id(),
             format_locale_id = format_locale_arg.id(),
             time_format_locale_id = time_format_locale_arg.id(),
+            config_id = config_arg.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -2567,17 +2871,23 @@ vegaToSvg(
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-        let value = self.execute_script_to_string("svg").await?;
-        Ok(value)
+        let svg = self.execute_script_to_string("svg").await?;
+        let logs = std::mem::take(&mut self.last_log_entries);
+        Ok(SvgOutput { svg, logs })
     }
 
     pub async fn vega_to_scenegraph_msgpack(
         &mut self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<ScenegraphMsgpackOutput, AnyError> {
         self.init_vega().await?;
-        let vg_spec = vg_spec.into();
+        let vg_spec = apply_spec_overrides(
+            vg_spec.into(),
+            &vg_opts.background,
+            vg_opts.width,
+            vg_opts.height,
+        )?;
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
             Some(fl) => fl.as_object()?,
@@ -2588,10 +2898,12 @@ vegaToSvg(
             Some(fl) => fl.as_object()?,
         };
 
+        let config_value = vg_opts.config.unwrap_or(serde_json::Value::Null);
         let spec_arg = JsonArgGuard::from_spec(&self.transfer_state, vg_spec)?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
             JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config_value)?;
         let result = MsgpackResultGuard::new(&self.transfer_state)?;
 
         let code = format!(
@@ -2602,6 +2914,7 @@ vegaToScenegraph(
     JSON.parse(op_get_json_arg({arg_id})),
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
+    JSON.parse(op_get_json_arg({config_id})),
     errors,
 ).then((result) => {{
     if (errors != null && errors.length > 0) {{
@@ -2613,6 +2926,7 @@ vegaToScenegraph(
             arg_id = spec_arg.id(),
             format_locale_id = format_locale_arg.id(),
             time_format_locale_id = time_format_locale_arg.id(),
+            config_id = config_arg.id(),
             result_id = result.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
@@ -2630,18 +2944,23 @@ vegaToScenegraph(
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-        result.take_result()
+        let data = result.take_result()?;
+        let logs = std::mem::take(&mut self.last_log_entries);
+        Ok(ScenegraphMsgpackOutput { data, logs })
     }
 
     pub async fn vega_to_scenegraph(
         &mut self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
-    ) -> Result<serde_json::Value, AnyError> {
-        let sg_msgpack = self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await?;
-        let value: serde_json::Value = rmp_serde::from_slice(&sg_msgpack)
+    ) -> Result<ScenegraphOutput, AnyError> {
+        let sg_output = self.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await?;
+        let scenegraph: serde_json::Value = rmp_serde::from_slice(&sg_output.data)
             .map_err(|err| anyhow!("Failed to decode MessagePack scenegraph: {err}"))?;
-        Ok(value)
+        Ok(ScenegraphOutput {
+            scenegraph,
+            logs: sg_output.logs,
+        })
     }
 
     pub async fn get_local_tz(&mut self) -> Result<Option<String>, AnyError> {
@@ -2704,8 +3023,17 @@ delete themes.default
         vg_opts: VgOpts,
         scale: f32,
         ppi: f32,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<PngOutput, AnyError> {
         self.init_vega().await?;
+
+        let vg_spec = apply_spec_overrides(
+            ValueOrString::Value(vg_spec.clone()),
+            &vg_opts.background,
+            vg_opts.width,
+            vg_opts.height,
+        )?
+        .to_value()?;
+
         let format_locale = match vg_opts.format_locale {
             None => serde_json::Value::Null,
             Some(fl) => fl.as_object()?,
@@ -2716,10 +3044,13 @@ delete themes.default
             Some(fl) => fl.as_object()?,
         };
 
-        let spec_arg = JsonArgGuard::from_value(&self.transfer_state, vg_spec.clone())?;
+        let config_value = vg_opts.config.unwrap_or(serde_json::Value::Null);
+
+        let spec_arg = JsonArgGuard::from_value(&self.transfer_state, vg_spec)?;
         let format_locale_arg = JsonArgGuard::from_value(&self.transfer_state, format_locale)?;
         let time_format_locale_arg =
             JsonArgGuard::from_value(&self.transfer_state, time_format_locale)?;
+        let config_arg = JsonArgGuard::from_value(&self.transfer_state, config_value)?;
 
         let code = format!(
             r#"
@@ -2731,6 +3062,7 @@ vegaToCanvas(
     JSON.parse(op_get_json_arg({format_locale_id})),
     JSON.parse(op_get_json_arg({time_format_locale_id})),
     {scale},
+    JSON.parse(op_get_json_arg({config_id})),
     errors,
 ).then((canvas) => {{
     if (errors != null && errors.length > 0) {{
@@ -2742,6 +3074,7 @@ vegaToCanvas(
             arg_id = spec_arg.id(),
             format_locale_id = format_locale_arg.id(),
             time_format_locale_id = time_format_locale_arg.id(),
+            config_id = config_arg.id(),
         );
         self.worker.js_runtime.execute_script("ext:<anon>", code)?;
         self.worker
@@ -2758,8 +3091,9 @@ vegaToCanvas(
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-        let png_data = self.execute_script_to_bytes("canvasPngData").await?;
-        Ok(png_data)
+        let data = self.execute_script_to_bytes("canvasPngData").await?;
+        let logs = std::mem::take(&mut self.last_log_entries);
+        Ok(PngOutput { data, logs })
     }
 
     pub async fn vegalite_to_png(
@@ -2768,7 +3102,7 @@ vegaToCanvas(
         vl_opts: VlOpts,
         scale: f32,
         ppi: f32,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<PngOutput, AnyError> {
         self.init_vega().await?;
         self.init_vl_version(&vl_opts.vl_version).await?;
 
@@ -2836,8 +3170,9 @@ vegaLiteToCanvas_{ver_name:?}(
         if !access_errors.is_empty() {
             bail!("{access_errors}");
         }
-        let png_data = self.execute_script_to_bytes("canvasPngData").await?;
-        Ok(png_data)
+        let data = self.execute_script_to_bytes("canvasPngData").await?;
+        let logs = std::mem::take(&mut self.last_log_entries);
+        Ok(PngOutput { data, logs })
     }
 
     fn parse_svg_with_worker_options(
@@ -2912,9 +3247,14 @@ vegaLiteToCanvas_{ver_name:?}(
         scale: f32,
         quality: Option<u8>,
         policy: ImageAccessPolicy,
-    ) -> Result<Vec<u8>, AnyError> {
-        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &policy)
+    ) -> Result<JpegOutput, AnyError> {
+        let svg_output = self.vega_to_svg(vg_spec, vg_opts).await?;
+        let data =
+            self.svg_to_jpeg_with_worker_options(&svg_output.svg, scale, quality, &policy)?;
+        Ok(JpegOutput {
+            data,
+            logs: svg_output.logs,
+        })
     }
 
     pub async fn vegalite_to_jpeg(
@@ -2924,9 +3264,14 @@ vegaLiteToCanvas_{ver_name:?}(
         scale: f32,
         quality: Option<u8>,
         policy: ImageAccessPolicy,
-    ) -> Result<Vec<u8>, AnyError> {
-        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        self.svg_to_jpeg_with_worker_options(&svg, scale, quality, &policy)
+    ) -> Result<JpegOutput, AnyError> {
+        let svg_output = self.vegalite_to_svg(vl_spec, vl_opts).await?;
+        let data =
+            self.svg_to_jpeg_with_worker_options(&svg_output.svg, scale, quality, &policy)?;
+        Ok(JpegOutput {
+            data,
+            logs: svg_output.logs,
+        })
     }
 
     pub async fn vega_to_pdf(
@@ -2934,9 +3279,13 @@ vegaLiteToCanvas_{ver_name:?}(
         vg_spec: ValueOrString,
         vg_opts: VgOpts,
         policy: ImageAccessPolicy,
-    ) -> Result<Vec<u8>, AnyError> {
-        let svg = self.vega_to_svg(vg_spec, vg_opts).await?;
-        self.svg_to_pdf_with_worker_options(&svg, &policy)
+    ) -> Result<PdfOutput, AnyError> {
+        let svg_output = self.vega_to_svg(vg_spec, vg_opts).await?;
+        let data = self.svg_to_pdf_with_worker_options(&svg_output.svg, &policy)?;
+        Ok(PdfOutput {
+            data,
+            logs: svg_output.logs,
+        })
     }
 
     pub async fn vegalite_to_pdf(
@@ -2944,9 +3293,13 @@ vegaLiteToCanvas_{ver_name:?}(
         vl_spec: ValueOrString,
         vl_opts: VlOpts,
         policy: ImageAccessPolicy,
-    ) -> Result<Vec<u8>, AnyError> {
-        let svg = self.vegalite_to_svg(vl_spec, vl_opts).await?;
-        self.svg_to_pdf_with_worker_options(&svg, &policy)
+    ) -> Result<PdfOutput, AnyError> {
+        let svg_output = self.vegalite_to_svg(vl_spec, vl_opts).await?;
+        let data = self.svg_to_pdf_with_worker_options(&svg_output.svg, &policy)?;
+        Ok(PdfOutput {
+            data,
+            logs: svg_output.logs,
+        })
     }
 
     /// Resolve Google Fonts requests on the worker thread using the async API.
@@ -3399,7 +3752,7 @@ pub(crate) struct VlConverterInner {
 ///   }
 /// }"#).unwrap();
 ///
-/// let vega_spec = futures::executor::block_on(
+/// let vega_output = futures::executor::block_on(
 ///     converter.vegalite_to_vega(
 ///         vl_spec,
 ///         VlOpts {
@@ -3409,7 +3762,7 @@ pub(crate) struct VlConverterInner {
 ///     )
 /// ).expect("Failed to perform Vega-Lite to Vega conversion");
 ///
-/// println!("{}", vega_spec);
+/// println!("{}", vega_output.spec);
 /// ```
 #[derive(Clone)]
 pub struct VlConverter {
@@ -3505,16 +3858,20 @@ impl VlConverter {
         Ok(sender)
     }
 
-    async fn send_work_with_retry(&self, work: WorkFn) -> Result<(), AnyError> {
+    async fn send_work_with_retry(
+        &self,
+        work: WorkFn,
+        caller_gone: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<(), AnyError> {
         let (sender, ticket) = self.get_or_spawn_sender()?;
-        let queued = QueuedWork::new(work, ticket);
+        let queued = QueuedWork::new(work, ticket, caller_gone.clone());
         match sender.send(queued).await {
             Ok(()) => Ok(()),
             Err(tokio::sync::mpsc::error::SendError(queued)) => {
-                let (work, _old_ticket) = queued.into_parts();
+                let (work, _old_ticket, _) = queued.into_parts();
                 let (sender, ticket) = self.get_or_spawn_sender()?;
                 sender
-                    .send(QueuedWork::new(work, ticket))
+                    .send(QueuedWork::new(work, ticket, caller_gone))
                     .await
                     .map_err(|err| anyhow!("Failed to send request after retry: {err}"))
             }
@@ -3530,6 +3887,7 @@ impl VlConverter {
             + Send
             + 'static,
     ) -> Result<R, AnyError> {
+        let caller_gone = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let (resp_tx, resp_rx) = oneshot::channel::<Result<R, AnyError>>();
         let boxed_work: WorkFn = Box::new(move |inner| {
             Box::pin(async move {
@@ -3545,12 +3903,24 @@ impl VlConverter {
             })
         });
 
-        self.send_work_with_retry(boxed_work).await?;
-        resp_rx.await.map_err(|e| anyhow!("Worker dropped: {e}"))?
+        self.send_work_with_retry(boxed_work, caller_gone.clone())
+            .await?;
+
+        // Guard signals caller_gone on drop (HTTP timeout / client disconnect).
+        // Disarmed on normal completion so the timer thread doesn't spuriously
+        // terminate V8.
+        let mut guard = CallerGoneGuard::new(caller_gone);
+        let result = resp_rx.await.map_err(|e| anyhow!("Worker dropped: {e}"));
+        guard.disarm();
+        result?
     }
 
     /// Run a conversion on an ephemeral worker with a per-request plugin.
-    fn run_on_ephemeral_worker<R: Send + 'static>(
+    ///
+    /// Uses a oneshot channel (like `run_on_worker`) so the caller awaits a
+    /// future. If that future is dropped (e.g. HTTP disconnect), the
+    /// `CallerGoneGuard` signals the timer thread to terminate V8.
+    async fn run_on_ephemeral_worker<R: Send + 'static>(
         &self,
         plugin_source: String,
         work: impl FnOnce(
@@ -3585,14 +3955,24 @@ impl VlConverter {
         });
 
         let font_baseline = get_font_baseline_snapshot()?;
+        let caller_gone = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let caller_gone_inner = caller_gone.clone();
+        let (resp_tx, resp_rx) = oneshot::channel::<Result<R, AnyError>>();
 
         std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
-                .map_err(|e| anyhow!("Failed to build ephemeral worker runtime: {e}"))?;
+                .map_err(|e| anyhow!("Failed to build ephemeral worker runtime: {e}"));
+            let rt = match rt {
+                Ok(rt) => rt,
+                Err(e) => {
+                    let _ = resp_tx.send(Err(e));
+                    return;
+                }
+            };
             let local = tokio::task::LocalSet::new();
-            local.block_on(&rt, async move {
+            let result = local.block_on(&rt, async move {
                 let timeout_secs = ctx.config.max_v8_execution_time_secs;
                 let deadline = if timeout_secs > 0 {
                     Some(std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs))
@@ -3634,13 +4014,12 @@ impl VlConverter {
                 // Arm the V8 watchdog timer with remaining budget
                 let timer = if let Some(deadline) = deadline {
                     let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-                    inner.start_conversion_timer_with_duration(remaining)
+                    inner.start_conversion_timer_with_duration(remaining, caller_gone_inner)
                 } else {
                     None
                 };
 
                 // Run init, plugin load, and conversion under the timer.
-                // Use a closure so we always clean up the timer on all paths.
                 let result = async {
                     inner.init_vega().await?;
                     let plugin_index = inner.ctx.resolved_plugins.as_ref().map_or(0, |p| p.len());
@@ -3660,10 +4039,16 @@ impl VlConverter {
                 let result = inner.annotate_timeout_error(result);
                 inner.reset_timeout_if_needed();
                 result
-            })
-        })
-        .join()
-        .map_err(|_| anyhow!("Ephemeral worker thread panicked"))?
+            });
+            let _ = resp_tx.send(result);
+        });
+
+        let mut guard = CallerGoneGuard::new(caller_gone);
+        let result = resp_rx
+            .await
+            .map_err(|_| anyhow!("Ephemeral worker thread panicked"));
+        guard.disarm();
+        result?
     }
 
     fn should_preprocess_fonts(&self) -> bool {
@@ -3679,7 +4064,7 @@ impl VlConverter {
         &self,
         vl_spec: &ValueOrString,
         vl_opts: &VlOpts,
-    ) -> Result<Option<(serde_json::Value, VgOpts)>, AnyError> {
+    ) -> Result<Option<(serde_json::Value, VgOpts, Vec<LogEntry>)>, AnyError> {
         if !self.should_preprocess_fonts() {
             return Ok(None);
         }
@@ -3688,10 +4073,16 @@ impl VlConverter {
             time_format_locale: vl_opts.time_format_locale.clone(),
             google_fonts: vl_opts.google_fonts.clone(),
             vega_plugin: vl_opts.vega_plugin.clone(),
+            config: vl_opts.config.clone(),
+            background: vl_opts.background.clone(),
+            width: vl_opts.width,
+            height: vl_opts.height,
         };
-        let vega_spec = self
+        let vega_output = self
             .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
             .await?;
+        let vega_spec = vega_output.spec;
+        let compile_logs = vega_output.logs;
         let auto_requests = preprocess_fonts(
             &vega_spec,
             self.inner.config.auto_google_fonts,
@@ -3704,7 +4095,7 @@ impl VlConverter {
                 .get_or_insert_with(Vec::new)
                 .extend(auto_requests);
         }
-        Ok(Some((vega_spec, vg_opts)))
+        Ok(Some((vega_spec, vg_opts, compile_logs)))
     }
 
     /// If font preprocessing is enabled, parse the Vega spec and process missing fonts.
@@ -3789,7 +4180,7 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
-    ) -> Result<serde_json::Value, AnyError> {
+    ) -> Result<VegaOutput, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
         self.run_on_worker(move |inner| Box::pin(inner.vegalite_to_vega(vl_spec, vl_opts)))
@@ -3801,13 +4192,11 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
         svg_opts: SvgOpts,
-    ) -> Result<String, AnyError> {
+    ) -> Result<SvgOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
-        // Extract user-specified Google font families BEFORE auto-detection
-        // merges in, so classify_scenegraph_fonts treats them as explicit.
         let explicit_google_families: HashSet<String> = vg_opts
             .google_fonts
             .as_ref()
@@ -3822,14 +4211,15 @@ impl VlConverter {
                 .extend(auto_requests);
         }
 
-        let svg = if let Some(plugin_source) = plugin {
+        let mut output = if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
                 Box::pin(async move {
                     with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
                 })
-            })?
+            })
+            .await?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -3841,8 +4231,10 @@ impl VlConverter {
             .await?
         };
 
-        self.postprocess_svg(svg, &svg_opts, explicit_google_families)
-            .await
+        output.svg = self
+            .postprocess_svg(output.svg, &svg_opts, explicit_google_families)
+            .await?;
+        Ok(output)
     }
 
     /// Post-process a rendered SVG to embed fonts and/or inline images
@@ -3947,7 +4339,7 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
-    ) -> Result<serde_json::Value, AnyError> {
+    ) -> Result<ScenegraphOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
@@ -3971,7 +4363,7 @@ impl VlConverter {
         &self,
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<ScenegraphMsgpackOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
@@ -4000,31 +4392,31 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
         svg_opts: SvgOpts,
-    ) -> Result<String, AnyError> {
+    ) -> Result<SvgOutput, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
 
-        // Extract user-specified Google font families before they're consumed
         let explicit_google_families: HashSet<String> = vl_opts
             .google_fonts
             .as_ref()
             .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
             .unwrap_or_default();
 
-        let svg = if let Some((vega_spec, mut vg_opts)) = self
+        let mut output = if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            if let Some(plugin_source) = plugin {
+            let mut output = if let Some(plugin_source) = plugin {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
                         with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
                     })
-                })?
+                })
+                .await?
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -4034,7 +4426,11 @@ impl VlConverter {
                     })
                 })
                 .await?
-            }
+            };
+            let mut all_logs = compile_logs;
+            all_logs.extend(output.logs);
+            output.logs = all_logs;
+            output
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4042,7 +4438,8 @@ impl VlConverter {
                 Box::pin(async move {
                     with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
                 })
-            })?
+            })
+            .await?
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4054,31 +4451,42 @@ impl VlConverter {
             .await?
         };
 
-        self.postprocess_svg(svg, &svg_opts, explicit_google_families)
-            .await
+        output.svg = self
+            .postprocess_svg(output.svg, &svg_opts, explicit_google_families)
+            .await?;
+        Ok(output)
     }
 
     pub async fn vegalite_to_scenegraph(
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
-    ) -> Result<serde_json::Value, AnyError> {
+    ) -> Result<ScenegraphOutput, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            self.run_on_worker(move |inner| {
-                let gf = vg_opts.google_fonts.take();
-                let inner = &mut *inner;
-                Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vega_to_scenegraph(vg_spec, vg_opts).await)
+            let mut output = self
+                .run_on_worker(move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move {
+                        with_font_overlay!(
+                            inner,
+                            gf,
+                            inner.vega_to_scenegraph(vg_spec, vg_opts).await
+                        )
+                    })
                 })
-            })
-            .await
+                .await?;
+            let mut all_logs = compile_logs;
+            all_logs.extend(output.logs);
+            output.logs = all_logs;
+            Ok(output)
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4099,27 +4507,32 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<ScenegraphMsgpackOutput, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            self.run_on_worker(move |inner| {
-                let gf = vg_opts.google_fonts.take();
-                let inner = &mut *inner;
-                Box::pin(async move {
-                    with_font_overlay!(
-                        inner,
-                        gf,
-                        inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
-                    )
+            let mut output = self
+                .run_on_worker(move |inner| {
+                    let gf = vg_opts.google_fonts.take();
+                    let inner = &mut *inner;
+                    Box::pin(async move {
+                        with_font_overlay!(
+                            inner,
+                            gf,
+                            inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                        )
+                    })
                 })
-            })
-            .await
+                .await?;
+            let mut all_logs = compile_logs;
+            all_logs.extend(output.logs);
+            output.logs = all_logs;
+            Ok(output)
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4141,7 +4554,7 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
         png_opts: PngOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<PngOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let scale = png_opts.scale.unwrap_or(1.0);
@@ -4170,6 +4583,7 @@ impl VlConverter {
                     })
                 })
             })
+            .await
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -4192,7 +4606,7 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
         png_opts: PngOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<PngOutput, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
         let scale = png_opts.scale.unwrap_or(1.0);
@@ -4200,12 +4614,12 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
         let plugin = vl_opts.vega_plugin.take();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            if let Some(plugin_source) = plugin {
+            let mut output = if let Some(plugin_source) = plugin {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
@@ -4218,6 +4632,7 @@ impl VlConverter {
                         })
                     })
                 })
+                .await?
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -4231,8 +4646,12 @@ impl VlConverter {
                         })
                     })
                 })
-                .await
-            }
+                .await?
+            };
+            let mut all_logs = compile_logs;
+            all_logs.extend(output.logs);
+            output.logs = all_logs;
+            Ok(output)
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4246,6 +4665,7 @@ impl VlConverter {
                     })
                 })
             })
+            .await
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4268,7 +4688,7 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
         jpeg_opts: JpegOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<JpegOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let scale = jpeg_opts.scale.unwrap_or(1.0);
         let quality = jpeg_opts.quality;
@@ -4298,6 +4718,7 @@ impl VlConverter {
                     )
                 })
             })
+            .await
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -4321,7 +4742,7 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
         jpeg_opts: JpegOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<JpegOutput, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let scale = jpeg_opts.scale.unwrap_or(1.0);
         let quality = jpeg_opts.quality;
@@ -4329,12 +4750,12 @@ impl VlConverter {
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            if let Some(plugin_source) = plugin {
+            let mut output = if let Some(plugin_source) = plugin {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
@@ -4348,6 +4769,7 @@ impl VlConverter {
                         )
                     })
                 })
+                .await?
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -4362,8 +4784,12 @@ impl VlConverter {
                         )
                     })
                 })
-                .await
-            }
+                .await?
+            };
+            let mut all_logs = compile_logs;
+            all_logs.extend(output.logs);
+            output.logs = all_logs;
+            Ok(output)
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4378,6 +4804,7 @@ impl VlConverter {
                     )
                 })
             })
+            .await
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4401,7 +4828,7 @@ impl VlConverter {
         vg_spec: impl Into<ValueOrString>,
         mut vg_opts: VgOpts,
         _pdf_opts: PdfOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<PdfOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
@@ -4427,6 +4854,7 @@ impl VlConverter {
                     )
                 })
             })
+            .await
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -4448,18 +4876,18 @@ impl VlConverter {
         vl_spec: impl Into<ValueOrString>,
         mut vl_opts: VlOpts,
         _pdf_opts: PdfOpts,
-    ) -> Result<Vec<u8>, AnyError> {
+    ) -> Result<PdfOutput, AnyError> {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        if let Some((vega_spec, mut vg_opts)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            if let Some(plugin_source) = plugin {
+            let mut output = if let Some(plugin_source) = plugin {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
@@ -4471,6 +4899,7 @@ impl VlConverter {
                         )
                     })
                 })
+                .await?
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -4483,8 +4912,12 @@ impl VlConverter {
                         )
                     })
                 })
-                .await
-            }
+                .await?
+            };
+            let mut all_logs = compile_logs;
+            all_logs.extend(output.logs);
+            output.logs = all_logs;
+            Ok(output)
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4497,6 +4930,7 @@ impl VlConverter {
                     )
                 })
             })
+            .await
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vl_opts.google_fonts.take();
@@ -4513,59 +4947,78 @@ impl VlConverter {
         }
     }
 
-    pub async fn svg_to_png(&self, svg: &str, png_opts: PngOpts) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_png(&self, svg: &str, png_opts: PngOpts) -> Result<PngOutput, AnyError> {
         let scale = png_opts.scale.unwrap_or(1.0);
         let ppi = png_opts.ppi;
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
-        self.run_on_worker(move |inner| {
-            let inner = &mut *inner;
-            Box::pin(async move {
-                with_font_overlay!(
-                    inner,
-                    google_fonts,
-                    inner.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
-                )
+        let data = self
+            .run_on_worker(move |inner| {
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(
+                        inner,
+                        google_fonts,
+                        inner.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
+                    )
+                })
             })
+            .await?;
+        Ok(PngOutput {
+            data,
+            logs: Vec::new(),
         })
-        .await
     }
 
-    pub async fn svg_to_jpeg(&self, svg: &str, jpeg_opts: JpegOpts) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_jpeg(
+        &self,
+        svg: &str,
+        jpeg_opts: JpegOpts,
+    ) -> Result<JpegOutput, AnyError> {
         let scale = jpeg_opts.scale.unwrap_or(1.0);
         let quality = jpeg_opts.quality;
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
-        self.run_on_worker(move |inner| {
-            let inner = &mut *inner;
-            Box::pin(async move {
-                with_font_overlay!(
-                    inner,
-                    google_fonts,
-                    inner.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
-                )
+        let data = self
+            .run_on_worker(move |inner| {
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(
+                        inner,
+                        google_fonts,
+                        inner.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
+                    )
+                })
             })
+            .await?;
+        Ok(JpegOutput {
+            data,
+            logs: Vec::new(),
         })
-        .await
     }
 
-    pub async fn svg_to_pdf(&self, svg: &str, _pdf_opts: PdfOpts) -> Result<Vec<u8>, AnyError> {
+    pub async fn svg_to_pdf(&self, svg: &str, _pdf_opts: PdfOpts) -> Result<PdfOutput, AnyError> {
         let image_policy = self.image_access_policy();
         let google_fonts = self.preprocess_svg_font_requests(svg).await?;
         let svg = svg.to_string();
-        self.run_on_worker(move |inner| {
-            let inner = &mut *inner;
-            Box::pin(async move {
-                with_font_overlay!(
-                    inner,
-                    google_fonts,
-                    inner.svg_to_pdf_with_worker_options(&svg, &image_policy)
-                )
+        let data = self
+            .run_on_worker(move |inner| {
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(
+                        inner,
+                        google_fonts,
+                        inner.svg_to_pdf_with_worker_options(&svg, &image_policy)
+                    )
+                })
             })
+            .await?;
+        Ok(PdfOutput {
+            data,
+            logs: Vec::new(),
         })
-        .await
     }
 
     pub async fn get_vegaembed_bundle(&self, vl_version: VlVersion) -> Result<String, AnyError> {
@@ -4667,7 +5120,11 @@ impl VlConverter {
                 })
             });
             sender
-                .send(QueuedWork::new(work, ticket))
+                .send(QueuedWork::new(
+                    work,
+                    ticket,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                ))
                 .await
                 .map_err(|e| anyhow!("Failed to send GetMemoryUsage to worker {idx}: {e}"))?;
             receivers.push(resp_rx);
@@ -4886,14 +5343,14 @@ fn parse_svg_with_options(
 
 pub fn vegalite_to_url(
     vl_spec: impl Into<ValueOrString>,
-    fullscreen: bool,
+    url_opts: UrlOpts,
 ) -> Result<String, AnyError> {
     let spec_str = match vl_spec.into() {
         ValueOrString::JsonString(s) => s,
         ValueOrString::Value(v) => serde_json::to_string(&v)?,
     };
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
-    let view = if fullscreen {
+    let view = if url_opts.fullscreen {
         "/view".to_string()
     } else {
         String::new()
@@ -4905,14 +5362,14 @@ pub fn vegalite_to_url(
 
 pub fn vega_to_url(
     vg_spec: impl Into<ValueOrString>,
-    fullscreen: bool,
+    url_opts: UrlOpts,
 ) -> Result<String, AnyError> {
     let spec_str = match vg_spec.into() {
         ValueOrString::JsonString(s) => s,
         ValueOrString::Value(v) => serde_json::to_string(&v)?,
     };
     let compressed_data = lz_str::compress_to_encoded_uri_component(&spec_str);
-    let view = if fullscreen {
+    let view = if url_opts.fullscreen {
         "/view".to_string()
     } else {
         String::new()
@@ -5163,7 +5620,7 @@ mod tests {
 }
         "#).unwrap();
 
-        let vg_spec = ctx
+        let vg_output = ctx
             .vegalite_to_vega(
                 vl_spec,
                 VlOpts {
@@ -5173,7 +5630,7 @@ mod tests {
             )
             .await
             .unwrap();
-        println!("vg_spec: {}", vg_spec)
+        println!("vg_spec: {}", vg_output.spec)
     }
 
     #[tokio::test]
@@ -5190,7 +5647,7 @@ mod tests {
         "#).unwrap();
 
         let ctx1 = VlConverter::new();
-        let vg_spec1 = ctx1
+        let vg_output1 = ctx1
             .vegalite_to_vega(
                 vl_spec.clone(),
                 VlOpts {
@@ -5200,10 +5657,10 @@ mod tests {
             )
             .await
             .unwrap();
-        println!("vg_spec1: {}", vg_spec1);
+        println!("vg_spec1: {}", vg_output1.spec);
 
         let ctx1 = VlConverter::new();
-        let vg_spec2 = ctx1
+        let vg_output2 = ctx1
             .vegalite_to_vega(
                 vl_spec,
                 VlOpts {
@@ -5213,7 +5670,7 @@ mod tests {
             )
             .await
             .unwrap();
-        println!("vg_spec2: {}", vg_spec2);
+        println!("vg_spec2: {}", vg_output2.spec);
     }
 
     #[tokio::test]
@@ -5576,7 +6033,7 @@ try {
 }
         "#).unwrap();
 
-        let url = vegalite_to_url(&vl_spec, false).unwrap();
+        let url = vegalite_to_url(&vl_spec, UrlOpts { fullscreen: false }).unwrap();
         let expected = concat!(
             "https://vega.github.io/editor/#/url/vega-lite/",
             "N4IgJghgLhIFygK4CcA28QAspQA4Gc4B6I5CAdwDoBzASyk0QCNF8BTZAYwHsA7KNv0o8AtkQBubahAlSIAWkg",
@@ -5677,7 +6134,7 @@ try {
         )
         .unwrap();
 
-        let url = vega_to_url(&vl_spec, true).unwrap();
+        let url = vega_to_url(&vl_spec, UrlOpts { fullscreen: true }).unwrap();
         println!("{url}");
         let expected = concat!(
             "https://vega.github.io/editor/#/url/vega/",
@@ -5997,7 +6454,7 @@ try {
         let svg = svg_with_href(
             "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAgMBgLP4r9kAAAAASUVORK5CYII=",
         );
-        let png = converter
+        let output = converter
             .svg_to_png(
                 &svg,
                 PngOpts {
@@ -6007,7 +6464,7 @@ try {
             )
             .await
             .unwrap();
-        assert!(png.starts_with(&[137, 80, 78, 71]));
+        assert!(output.data.starts_with(&[137, 80, 78, 71]));
     }
 
     #[tokio::test]
@@ -6042,11 +6499,11 @@ try {
         .unwrap();
         let spec = vega_spec_with_data_url("data:text/csv,a,b%0A1,2");
 
-        let svg = converter
+        let output = converter
             .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
             .await
             .unwrap();
-        assert!(svg.contains("<svg"));
+        assert!(output.svg.contains("<svg"));
     }
 
     #[tokio::test]
@@ -6212,7 +6669,7 @@ try {
         })
         .unwrap();
 
-        let pdf = converter
+        let output = converter
             .vegalite_to_pdf(
                 vegalite_spec_with_image_url(&server.url("/image.svg")),
                 VlOpts {
@@ -6223,7 +6680,7 @@ try {
             )
             .await
             .unwrap();
-        assert!(pdf.starts_with(b"%PDF"));
+        assert!(output.data.starts_with(b"%PDF"));
     }
 
     #[test]
@@ -6373,7 +6830,11 @@ try {
                 .next_sender()
                 .expect("pool should return the open sender");
             sender
-                .try_send(QueuedWork::new(make_test_work(), ticket))
+                .try_send(QueuedWork::new(
+                    make_test_work(),
+                    ticket,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                ))
                 .expect("dispatch should use open sender, not closed sender");
             let queued = open_receiver
                 .try_recv()
@@ -6394,7 +6855,11 @@ try {
 
         let (sender, ticket) = pool.next_sender().unwrap();
         sender
-            .send(QueuedWork::new(make_test_work(), ticket))
+            .send(QueuedWork::new(
+                make_test_work(),
+                ticket,
+                Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            ))
             .await
             .unwrap();
         assert_eq!(
@@ -6403,10 +6868,15 @@ try {
         );
 
         let (sender, ticket) = pool.next_sender().unwrap();
-        let blocked_send =
-            tokio::spawn(
-                async move { sender.send(QueuedWork::new(make_test_work(), ticket)).await },
-            );
+        let blocked_send = tokio::spawn(async move {
+            sender
+                .send(QueuedWork::new(
+                    make_test_work(),
+                    ticket,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                ))
+                .await
+        });
         tokio::task::yield_now().await;
 
         assert_eq!(
@@ -6527,7 +6997,7 @@ try {
             }
         });
 
-        let svg = converter
+        let output = converter
             .vegalite_to_svg(
                 vl_spec,
                 VlOpts {
@@ -6538,7 +7008,7 @@ try {
             )
             .await
             .unwrap();
-        assert!(svg.trim_start().starts_with("<svg"));
+        assert!(output.svg.trim_start().starts_with("<svg"));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -6576,8 +7046,8 @@ try {
         }
 
         for task in tasks {
-            let svg = task.await.unwrap().unwrap();
-            assert!(svg.trim_start().starts_with("<svg"));
+            let output = task.await.unwrap().unwrap();
+            assert!(output.svg.trim_start().starts_with("<svg"));
         }
     }
 

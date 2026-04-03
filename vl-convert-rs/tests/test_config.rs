@@ -27,15 +27,15 @@ async fn test_custom_theme_applied() {
     })
     .unwrap();
 
-    let svg = converter
+    let output = converter
         .vegalite_to_svg(simple_vl_bar_spec(), VlOpts::default(), SvgOpts::default())
         .await
         .unwrap();
 
     assert!(
-        svg.contains("#abcdef"),
+        output.svg.contains("#abcdef"),
         "SVG should contain the custom theme background color. Got: {}",
-        &svg[..svg.len().min(500)]
+        &output.svg[..output.svg.len().min(500)]
     );
 }
 
@@ -52,7 +52,7 @@ async fn test_per_request_theme_overrides_default() {
     .unwrap();
 
     // Per-request "dark" theme should override the default "mytest"
-    let svg = converter
+    let output = converter
         .vegalite_to_svg(
             simple_vl_bar_spec(),
             VlOpts {
@@ -66,12 +66,12 @@ async fn test_per_request_theme_overrides_default() {
 
     // Should NOT have the custom background
     assert!(
-        !svg.contains("#abcdef"),
+        !output.svg.contains("#abcdef"),
         "Per-request theme should override the default custom theme"
     );
     // Should have the dark theme's background
     assert!(
-        svg.contains("#333"),
+        output.svg.contains("#333"),
         "SVG should contain the dark theme background"
     );
 }
@@ -116,13 +116,13 @@ async fn test_default_theme_without_custom_themes() {
     })
     .unwrap();
 
-    let svg = converter
+    let output = converter
         .vegalite_to_svg(simple_vl_bar_spec(), VlOpts::default(), SvgOpts::default())
         .await
         .unwrap();
 
     assert!(
-        svg.contains("#333"),
+        output.svg.contains("#333"),
         "SVG should contain the dark theme background"
     );
 }
@@ -147,7 +147,7 @@ async fn test_default_locale_applied() {
         }
     });
 
-    let svg = converter
+    let output = converter
         .vegalite_to_svg(spec, VlOpts::default(), SvgOpts::default())
         .await
         .unwrap();
@@ -155,9 +155,9 @@ async fn test_default_locale_applied() {
     // French locale uses non-breaking space as thousands separator and comma as decimal
     // The exact rendering depends on Vega's formatting, but it should differ from "1,234.5"
     assert!(
-        !svg.contains("1,234.5"),
+        !output.svg.contains("1,234.5"),
         "With fr-FR locale, should not use English number formatting. Got: {}",
-        &svg[..svg.len().min(500)]
+        &output.svg[..output.svg.len().min(500)]
     );
 }
 
@@ -181,7 +181,7 @@ async fn test_per_request_locale_overrides_default() {
     });
 
     // Per-request en-US should override the default fr-FR
-    let svg = converter
+    let output = converter
         .vegalite_to_svg(
             spec,
             VlOpts {
@@ -196,8 +196,8 @@ async fn test_per_request_locale_overrides_default() {
         .unwrap();
 
     assert!(
-        svg.contains("1,234.5"),
+        output.svg.contains("1,234.5"),
         "Per-request en-US locale should produce English formatting. Got: {}",
-        &svg[..svg.len().min(500)]
+        &output.svg[..output.svg.len().min(500)]
     );
 }
