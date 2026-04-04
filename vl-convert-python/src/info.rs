@@ -7,10 +7,9 @@ use vl_convert_rs::module_loader::import_map::{
 };
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 
-use crate::config::converter_read_handle;
 use crate::utils::{
-    async_variant_doc, future_into_py_object, parse_embedded_locale_json, prefixed_py_error,
-    run_converter_future, run_converter_future_async,
+    async_variant_doc, parse_embedded_locale_json, prefixed_py_error, run_converter_future,
+    run_converter_future_async,
 };
 
 /// Get the bundled version of Vega
@@ -54,18 +53,6 @@ pub fn get_vegalite_versions() -> Vec<String> {
         .iter()
         .map(|v| v.to_semver().to_string())
         .collect()
-}
-
-/// Eagerly start converter workers for the current converter configuration
-#[pyfunction]
-#[pyo3(signature = ())]
-pub fn warm_up_workers() -> PyResult<()> {
-    let converter = converter_read_handle()
-        .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
-
-    Python::with_gil(|py| py.allow_threads(move || converter.warm_up()))
-        .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
-    Ok(())
 }
 
 /// Get the named local timezone that Vega uses to perform timezone calculations
@@ -215,22 +202,6 @@ pub fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> P
         })
         .map_err(|err| prefixed_py_error("javascript_bundle request failed", err))
     }
-}
-
-#[doc = async_variant_doc!("warm_up_workers")]
-#[pyfunction(name = "warm_up_workers")]
-#[pyo3(signature = ())]
-pub fn warm_up_workers_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let converter = converter_read_handle()
-        .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
-
-    future_into_py_object(py, async move {
-        tokio::task::spawn_blocking(move || converter.warm_up())
-            .await
-            .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?
-            .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
-        Python::with_gil(|py| Ok(py.None().into()))
-    })
 }
 
 #[doc = async_variant_doc!("get_local_tz")]

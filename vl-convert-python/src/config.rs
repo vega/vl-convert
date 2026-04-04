@@ -587,3 +587,31 @@ pub fn get_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         })
     })
 }
+
+/// Eagerly start converter workers for the current converter configuration
+#[pyfunction]
+#[pyo3(signature = ())]
+pub fn warm_up_workers() -> PyResult<()> {
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
+
+    Python::with_gil(|py| py.allow_threads(move || converter.warm_up()))
+        .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
+    Ok(())
+}
+
+#[doc = async_variant_doc!("warm_up_workers")]
+#[pyfunction(name = "warm_up_workers")]
+#[pyo3(signature = ())]
+pub fn warm_up_workers_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let converter = converter_read_handle()
+        .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
+
+    future_into_py_object(py, async move {
+        tokio::task::spawn_blocking(move || converter.warm_up())
+            .await
+            .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?
+            .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}

@@ -8,13 +8,13 @@ extern crate lazy_static;
 mod config;
 mod conversions;
 mod fonts;
-mod metadata;
+mod info;
 mod utils;
 
 pub use config::*;
 pub use conversions::*;
 pub use fonts::*;
-pub use metadata::*;
+pub use info::*;
 
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
