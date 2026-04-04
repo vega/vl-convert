@@ -246,15 +246,15 @@ mod tests {
     #[test]
     fn test_convert_vegalite_to_url() {
         let vl_spec: serde_json::Value = serde_json::from_str(r#"
-    {
-    "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
-    "mark": "bar",
-    "encoding": {
-        "x": {"timeUnit": "month", "field": "date", "type": "ordinal"},
-        "y": {"aggregate": "mean", "field": "precipitation"}
-    }
-    }
-        "#).unwrap();
+{
+"data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
+"mark": "bar",
+"encoding": {
+    "x": {"timeUnit": "month", "field": "date", "type": "ordinal"},
+    "y": {"aggregate": "mean", "field": "precipitation"}
+}
+}
+    "#).unwrap();
 
         let url = vegalite_to_url(&vl_spec, UrlOpts { fullscreen: false }).unwrap();
         let expected = concat!(
@@ -271,89 +271,89 @@ mod tests {
     fn test_convert_vega_to_url() {
         let vl_spec: serde_json::Value = serde_json::from_str(
             r#"
-    {
-      "$schema": "https://vega.github.io/schema/vega/v5.json",
-      "description": "A basic stacked bar chart example.",
-      "width": 500,
-      "height": 200,
-      "padding": 5,
+{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "description": "A basic stacked bar chart example.",
+  "width": 500,
+  "height": 200,
+  "padding": 5,
 
-      "data": [
+  "data": [
+{
+  "name": "table",
+  "values": [
+    {"x": 0, "y": 28, "c": 0}, {"x": 0, "y": 55, "c": 1},
+    {"x": 1, "y": 43, "c": 0}, {"x": 1, "y": 91, "c": 1},
+    {"x": 2, "y": 81, "c": 0}, {"x": 2, "y": 53, "c": 1},
+    {"x": 3, "y": 19, "c": 0}, {"x": 3, "y": 87, "c": 1},
+    {"x": 4, "y": 52, "c": 0}, {"x": 4, "y": 48, "c": 1},
+    {"x": 5, "y": 24, "c": 0}, {"x": 5, "y": 49, "c": 1},
+    {"x": 6, "y": 87, "c": 0}, {"x": 6, "y": 66, "c": 1},
+    {"x": 7, "y": 17, "c": 0}, {"x": 7, "y": 27, "c": 1},
+    {"x": 8, "y": 68, "c": 0}, {"x": 8, "y": 16, "c": 1},
+    {"x": 9, "y": 49, "c": 0}, {"x": 9, "y": 15, "c": 1}
+  ],
+  "transform": [
     {
-      "name": "table",
-      "values": [
-        {"x": 0, "y": 28, "c": 0}, {"x": 0, "y": 55, "c": 1},
-        {"x": 1, "y": 43, "c": 0}, {"x": 1, "y": 91, "c": 1},
-        {"x": 2, "y": 81, "c": 0}, {"x": 2, "y": 53, "c": 1},
-        {"x": 3, "y": 19, "c": 0}, {"x": 3, "y": 87, "c": 1},
-        {"x": 4, "y": 52, "c": 0}, {"x": 4, "y": 48, "c": 1},
-        {"x": 5, "y": 24, "c": 0}, {"x": 5, "y": 49, "c": 1},
-        {"x": 6, "y": 87, "c": 0}, {"x": 6, "y": 66, "c": 1},
-        {"x": 7, "y": 17, "c": 0}, {"x": 7, "y": 27, "c": 1},
-        {"x": 8, "y": 68, "c": 0}, {"x": 8, "y": 16, "c": 1},
-        {"x": 9, "y": 49, "c": 0}, {"x": 9, "y": 15, "c": 1}
-      ],
-      "transform": [
-        {
-          "type": "stack",
-          "groupby": ["x"],
-          "sort": {"field": "c"},
-          "field": "y"
-        }
-      ]
+      "type": "stack",
+      "groupby": ["x"],
+      "sort": {"field": "c"},
+      "field": "y"
     }
-      ],
+  ]
+}
+  ],
 
-      "scales": [
-    {
-      "name": "x",
-      "type": "band",
-      "range": "width",
-      "domain": {"data": "table", "field": "x"}
+  "scales": [
+{
+  "name": "x",
+  "type": "band",
+  "range": "width",
+  "domain": {"data": "table", "field": "x"}
+},
+{
+  "name": "y",
+  "type": "linear",
+  "range": "height",
+  "nice": true, "zero": true,
+  "domain": {"data": "table", "field": "y1"}
+},
+{
+  "name": "color",
+  "type": "ordinal",
+  "range": "category",
+  "domain": {"data": "table", "field": "c"}
+}
+  ],
+
+  "axes": [
+{"orient": "bottom", "scale": "x", "zindex": 1},
+{"orient": "left", "scale": "y", "zindex": 1}
+  ],
+
+  "marks": [
+{
+  "type": "rect",
+  "from": {"data": "table"},
+  "encode": {
+    "enter": {
+      "x": {"scale": "x", "field": "x"},
+      "width": {"scale": "x", "band": 1, "offset": -1},
+      "y": {"scale": "y", "field": "y0"},
+      "y2": {"scale": "y", "field": "y1"},
+      "fill": {"scale": "color", "field": "c"}
     },
-    {
-      "name": "y",
-      "type": "linear",
-      "range": "height",
-      "nice": true, "zero": true,
-      "domain": {"data": "table", "field": "y1"}
+    "update": {
+      "fillOpacity": {"value": 1}
     },
-    {
-      "name": "color",
-      "type": "ordinal",
-      "range": "category",
-      "domain": {"data": "table", "field": "c"}
+    "hover": {
+      "fillOpacity": {"value": 0.5}
     }
-      ],
-
-      "axes": [
-    {"orient": "bottom", "scale": "x", "zindex": 1},
-    {"orient": "left", "scale": "y", "zindex": 1}
-      ],
-
-      "marks": [
-    {
-      "type": "rect",
-      "from": {"data": "table"},
-      "encode": {
-        "enter": {
-          "x": {"scale": "x", "field": "x"},
-          "width": {"scale": "x", "band": 1, "offset": -1},
-          "y": {"scale": "y", "field": "y0"},
-          "y2": {"scale": "y", "field": "y1"},
-          "fill": {"scale": "color", "field": "c"}
-        },
-        "update": {
-          "fillOpacity": {"value": 1}
-        },
-        "hover": {
-          "fillOpacity": {"value": 0.5}
-        }
-      }
-    }
-      ]
-    }
-        "#,
+  }
+}
+  ]
+}
+    "#,
         )
         .unwrap();
 
@@ -368,7 +368,7 @@ mod tests {
             "CwfNJojUPEEbc4eixssfii4QA2K4gmF-B6oUkY4k006oqnkr7knHgtDMhKst7s1DIsbE5Fs+b8mb0nnzQn4wn",
             "CqlSmbohn9AC6MkwiiQ4ggADM2IoEE0Ku0cGV0CYzOY-GRFGwGDgmGMCg9VSAxIpMGhQNqaHBPLJyn1BiBvb7",
             "-ehOiqVTJoHVGqgiiASghTQ81caU3pxP6ZBrMinAsEYH5ZGxkBlPXI8ih0JVqjIQ37yi1+tskynOmmTeVPBk4L",
-            "Y-LmyCnorEPTJxIZTeqGjIAF5wG1oadwHKlpDl1CgXL5GtIKeles+xvh6YgFv3NsBtiePV+TDp8p69IlTwDzVD",
+            "Y-LmyCnorEPTJxIZTeqGjIAF5wG1oadwHKlpDl1CgXL5GtIKples+xvh6YgFv3NsBtiePV+TDp8p69IlTwDzVD",
             "gN5ch6jtyNcbrcq3KWsD2DI8w1eFsXSQFw4wTPUfXED10CYNhsFLPwY2qdAWjnDJ5F2RkELgJDuzgbUx1dKBY3",
             "KX9Z3w1w3hdZBFHMCBDXvLt0EUOAoEo7UbQNTdKx3Co92qIMSKgNh5ArEjMAXCtdlALCU1wsDQybM8ZALEJhNU",
             "rSZEzMNjjYbVtQgOBkIAWjBDEVOo7DEUPTTwzCbSOniCsDPDPwGwg9pTyDb1PFffTHJTaSb0UPzwIDM8gztbdT",
