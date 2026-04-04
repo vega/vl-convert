@@ -1893,3 +1893,632 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(batches)
     }
 }
+
+#[cfg(test)]
+pub(super) mod tests {
+    use super::*;
+    use serde_json::json;
+
+    pub(in crate::converter) const PNG_1X1_BYTES: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 4,
+        0, 0, 0, 181, 28, 12, 2, 0, 0, 0, 11, 73, 68, 65, 84, 120, 218, 99, 252, 255, 15, 0, 2, 3,
+        1, 128, 179, 248, 175, 217, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+    pub(in crate::converter) const SVG_2X3_BASE64: &str =
+        "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyIiBoZWlnaHQ9IjMiPjxyZWN0IHdpZHRoPSIyIiBoZWlnaHQ9IjMiIGZpbGw9InJlZCIvPjwvc3ZnPg==";
+    pub(in crate::converter) const SVG_2X3_DATA_URL: &str = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyIiBoZWlnaHQ9IjMiPjxyZWN0IHdpZHRoPSIyIiBoZWlnaHQ9IjMiIGZpbGw9InJlZCIvPjwvc3ZnPg==";
+
+    #[derive(Clone)]
+    pub(in crate::converter) struct TestHttpResponse {
+        pub(in crate::converter) status: u16,
+        pub(in crate::converter) headers: Vec<(String, String)>,
+        pub(in crate::converter) body: Vec<u8>,
+    }
+
+    impl TestHttpResponse {
+        pub(in crate::converter) fn ok_text(body: &str) -> Self {
+            Self {
+                status: 200,
+                headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
+                body: body.as_bytes().to_vec(),
+            }
+        }
+
+        pub(in crate::converter) fn ok_png(body: &[u8]) -> Self {
+            Self {
+                status: 200,
+                headers: vec![("Content-Type".to_string(), "image/png".to_string())],
+                body: body.to_vec(),
+            }
+        }
+
+        pub(in crate::converter) fn ok_svg(body: &str) -> Self {
+            Self {
+                status: 200,
+                headers: vec![("Content-Type".to_string(), "image/svg+xml".to_string())],
+                body: body.as_bytes().to_vec(),
+            }
+        }
+
+        pub(in crate::converter) fn redirect(location: &str) -> Self {
+            Self {
+                status: 302,
+                headers: vec![("Location".to_string(), location.to_string())],
+                body: Vec::new(),
+            }
+        }
+    }
+
+    pub(in crate::converter) struct TestHttpServer {
+        addr: std::net::SocketAddr,
+        running: Arc<std::sync::atomic::AtomicBool>,
+        handle: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl TestHttpServer {
+        pub(in crate::converter) fn new(routes: Vec<(&str, TestHttpResponse)>) -> Self {
+            use std::io::{BufRead, BufReader, Write};
+
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let addr = listener.local_addr().unwrap();
+
+            let routes = Arc::new(
+                routes
+                    .into_iter()
+                    .map(|(path, response)| (path.to_string(), response))
+                    .collect::<std::collections::HashMap<_, _>>(),
+            );
+            let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+            let running_clone = running.clone();
+            let routes_clone = routes.clone();
+
+            let handle = std::thread::spawn(move || {
+                while running_clone.load(std::sync::atomic::Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            handle_test_http_connection(stream, &routes_clone);
+                        }
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(std::time::Duration::from_millis(5));
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+
+            Self {
+                addr,
+                running,
+                handle: Some(handle),
+            }
+        }
+
+        pub(in crate::converter) fn url(&self, path: &str) -> String {
+            format!("http://{}{}", self.addr, path)
+        }
+
+        pub(in crate::converter) fn origin(&self) -> String {
+            format!("http://{}", self.addr)
+        }
+
+        #[allow(dead_code)]
+        pub(in crate::converter) fn base_url(&self) -> String {
+            format!("http://{}/", self.addr)
+        }
+    }
+
+    impl Drop for TestHttpServer {
+        fn drop(&mut self) {
+            self.running
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            let _ = std::net::TcpStream::connect(self.addr);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    fn handle_test_http_connection(
+        mut stream: std::net::TcpStream,
+        routes: &std::collections::HashMap<String, TestHttpResponse>,
+    ) {
+        use std::io::{BufRead, BufReader, Write};
+
+        let Ok(reader_stream) = stream.try_clone() else {
+            return;
+        };
+        let mut reader = BufReader::new(reader_stream);
+
+        let mut request_line = String::new();
+        if reader.read_line(&mut request_line).is_err() {
+            return;
+        }
+        let request_target = request_line.split_whitespace().nth(1).unwrap_or("/");
+        let request_path = request_target.split('?').next().unwrap_or(request_target);
+
+        loop {
+            let mut header_line = String::new();
+            if reader.read_line(&mut header_line).is_err() {
+                return;
+            }
+            if header_line == "\r\n" || header_line == "\n" || header_line.is_empty() {
+                break;
+            }
+        }
+
+        let response = routes
+            .get(request_path)
+            .cloned()
+            .unwrap_or_else(|| TestHttpResponse {
+                status: 404,
+                headers: vec![("Content-Type".to_string(), "text/plain".to_string())],
+                body: b"not found".to_vec(),
+            });
+
+        let mut headers = response.headers;
+        if !headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        {
+            headers.push((
+                "Content-Length".to_string(),
+                response.body.len().to_string(),
+            ));
+        }
+        if !headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("connection"))
+        {
+            headers.push(("Connection".to_string(), "close".to_string()));
+        }
+
+        let mut response_head = format!(
+            "HTTP/1.1 {} {}\r\n",
+            response.status,
+            http_reason_phrase(response.status)
+        );
+        for (name, value) in headers {
+            response_head.push_str(&format!("{name}: {value}\r\n"));
+        }
+        response_head.push_str("\r\n");
+
+        let _ = stream.write_all(response_head.as_bytes());
+        let _ = stream.write_all(&response.body);
+        let _ = stream.flush();
+    }
+
+    fn http_reason_phrase(status: u16) -> &'static str {
+        match status {
+            200 => "OK",
+            301 => "Moved Permanently",
+            302 => "Found",
+            303 => "See Other",
+            307 => "Temporary Redirect",
+            308 => "Permanent Redirect",
+            404 => "Not Found",
+            _ => "Status",
+        }
+    }
+
+    #[tokio::test]
+    async fn test_convert_context() {
+        let ctx = crate::converter::VlConverter::new();
+        let vl_spec: serde_json::Value = serde_json::from_str(
+            r#"
+    {
+    "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
+    "mark": "bar",
+    "encoding": {
+        "x": {"timeUnit": "month", "field": "date", "type": "ordinal"},
+        "y": {"aggregate": "mean", "field": "precipitation"}
+    }
+    }
+        "#,
+        )
+        .unwrap();
+
+        let vg_output = ctx
+            .vegalite_to_vega(
+                vl_spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        println!("vg_spec: {}", vg_output.spec)
+    }
+
+    #[tokio::test]
+    async fn test_multi_convert_context() {
+        let vl_spec: serde_json::Value = serde_json::from_str(
+            r#"
+    {
+    "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/master/data/seattle-weather.csv"},
+    "mark": "bar",
+    "encoding": {
+        "x": {"timeUnit": "month", "field": "date", "type": "ordinal"},
+        "y": {"aggregate": "mean", "field": "precipitation"}
+    }
+    }
+        "#,
+        )
+        .unwrap();
+
+        let ctx1 = crate::converter::VlConverter::new();
+        let vg_output1 = ctx1
+            .vegalite_to_vega(
+                vl_spec.clone(),
+                VlOpts {
+                    vl_version: VlVersion::v5_16,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        println!("vg_spec1: {}", vg_output1.spec);
+
+        let ctx1 = crate::converter::VlConverter::new();
+        let vg_output2 = ctx1
+            .vegalite_to_vega(
+                vl_spec,
+                VlOpts {
+                    vl_version: VlVersion::v5_8,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        println!("vg_spec2: {}", vg_output2.spec);
+    }
+
+    #[tokio::test]
+    async fn test_execute_script_to_bytes_typed_array() {
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(ConverterContext {
+                config: VlcConfig::default(),
+                parsed_allowed_base_urls: None,
+                resolved_plugins: None,
+            }),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
+        let bytes = ctx
+            .execute_script_to_bytes("new Uint8Array([1, 2, 3])")
+            .await
+            .unwrap();
+        assert_eq!(bytes, vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_canvas_png_and_image_data_are_typed_arrays() {
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(ConverterContext {
+                config: VlcConfig::default(),
+                parsed_allowed_base_urls: None,
+                resolved_plugins: None,
+            }),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
+        let code = r#"
+    const canvas = new HTMLCanvasElement(8, 8);
+    const ctx2d = canvas.getContext('2d');
+    ctx2d.fillStyle = '#ff0000';
+    ctx2d.fillRect(0, 0, 8, 8);
+
+    var __pngBytes = canvas._toPngWithPpi(72);
+    var __pngIsUint8Array = __pngBytes instanceof Uint8Array;
+
+    const imageData = ctx2d.getImageData(0, 0, 1, 1);
+    var __imageDataChecks = [
+      imageData.data instanceof Uint8ClampedArray,
+      imageData.data[0], imageData.data[1], imageData.data[2], imageData.data[3]
+    ];
+    "#
+        .to_string();
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let png_is_typed = ctx
+            .execute_script_to_json("__pngIsUint8Array")
+            .await
+            .unwrap();
+        assert_eq!(png_is_typed, json!(true));
+
+        let png_bytes = ctx.execute_script_to_bytes("__pngBytes").await.unwrap();
+        assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+        let image_data_checks = ctx
+            .execute_script_to_json("__imageDataChecks")
+            .await
+            .unwrap();
+        assert_eq!(image_data_checks, json!([true, 255, 0, 0, 255]));
+    }
+
+    #[tokio::test]
+    async fn test_image_decode_and_load_events() {
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(ConverterContext {
+                config: VlcConfig::default(),
+                parsed_allowed_base_urls: None,
+                resolved_plugins: None,
+            }),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
+        let image_url = serde_json::to_string(SVG_2X3_DATA_URL).unwrap();
+        let code = format!(
+            r#"
+    var __imageDecodeLoadResult = null;
+    (async () => {{
+      const img = new Image();
+      let onloadCount = 0;
+      let listenerCount = 0;
+      img.onload = () => {{ onloadCount += 1; }};
+      img.addEventListener("load", () => {{ listenerCount += 1; }});
+      img.src = {image_url};
+      await img.decode();
+      __imageDecodeLoadResult = {{
+    complete: img.complete,
+    naturalWidth: img.naturalWidth,
+    naturalHeight: img.naturalHeight,
+    onloadCount,
+    listenerCount
+      }};
+    }})();
+    "#
+        );
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let result = ctx
+            .execute_script_to_json("__imageDecodeLoadResult")
+            .await
+            .unwrap();
+        assert_eq!(result["complete"], json!(true));
+        assert_eq!(result["naturalWidth"], json!(2));
+        assert_eq!(result["naturalHeight"], json!(3));
+        assert_eq!(result["onloadCount"], json!(1));
+        assert_eq!(result["listenerCount"], json!(1));
+    }
+
+    #[tokio::test]
+    async fn test_image_decode_rejects_and_error_events_fire() {
+        use super::super::ACCESS_DENIED_MARKER;
+        // Use allowed_base_urls: Some(vec![]) to deny all HTTP access via ops
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(ConverterContext {
+                config: VlcConfig {
+                    allowed_base_urls: Some(vec![]),
+                    ..Default::default()
+                },
+                parsed_allowed_base_urls: Some(vec![]),
+                resolved_plugins: None,
+            }),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
+        let code = r#"
+    var __imageDecodeErrorResult = null;
+    (async () => {
+      const img = new Image();
+      let onerrorCount = 0;
+      let listenerCount = 0;
+      img.onerror = () => { onerrorCount += 1; };
+      img.addEventListener("error", () => { listenerCount += 1; });
+      img.src = "https://example.com/image.png";
+
+      let decodeMessage = "";
+      try {
+    await img.decode();
+    decodeMessage = "resolved";
+      } catch (err) {
+    decodeMessage = String(err && err.message ? err.message : err);
+      }
+
+      __imageDecodeErrorResult = {
+    complete: img.complete,
+    naturalWidth: img.naturalWidth,
+    naturalHeight: img.naturalHeight,
+    onerrorCount,
+    listenerCount,
+    decodeMessage,
+      };
+    })();
+    "#;
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let result = ctx
+            .execute_script_to_json("__imageDecodeErrorResult")
+            .await
+            .unwrap();
+        assert_eq!(result["complete"], json!(true));
+        assert_eq!(result["naturalWidth"], json!(0));
+        assert_eq!(result["naturalHeight"], json!(0));
+        assert_eq!(result["onerrorCount"], json!(1));
+        assert_eq!(result["listenerCount"], json!(1));
+        let decode_msg = result["decodeMessage"].as_str().unwrap_or_default();
+        assert!(
+            decode_msg.contains(ACCESS_DENIED_MARKER) || decode_msg.contains("permission"),
+            "decode should fail with access denied, got: {decode_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_image_decode_ignores_stale_src_results() {
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(ConverterContext {
+                config: VlcConfig::default(),
+                parsed_allowed_base_urls: None,
+                resolved_plugins: None,
+            }),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
+        // Test that setting img.src twice results in only the last assignment's
+        // image being loaded. Uses data: URIs to avoid needing HTTP.
+        let code = format!(
+            r#"
+    var __imageRaceResult = null;
+    (async () => {{
+      const img = new Image();
+      let onloadCount = 0;
+      let onerrorCount = 0;
+      img.onload = () => {{ onloadCount += 1; }};
+      img.onerror = () => {{ onerrorCount += 1; }};
+
+      // Set src to an invalid data URI first, then immediately to a valid one.
+      // The valid one should win.
+      img.src = "data:image/png;base64,INVALIDDATA";
+      img.src = "data:image/svg+xml;base64,{SVG_2X3_BASE64}";
+      await img.decode();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      __imageRaceResult = {{
+    src: img.src,
+    complete: img.complete,
+    naturalWidth: img.naturalWidth,
+    naturalHeight: img.naturalHeight,
+    onloadCount,
+    onerrorCount,
+      }};
+    }})();
+    "#
+        );
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let result = ctx
+            .execute_script_to_json("__imageRaceResult")
+            .await
+            .unwrap();
+        let src = result["src"].as_str().unwrap_or_default();
+        assert!(
+            src.starts_with("data:image/svg+xml"),
+            "src should be the second (valid) data URI, got: {src}"
+        );
+        assert_eq!(result["complete"], json!(true));
+        assert_eq!(result["naturalWidth"], json!(2));
+        assert_eq!(result["naturalHeight"], json!(3));
+        // onload should fire once for the valid image
+        assert_eq!(result["onloadCount"], json!(1));
+        assert_eq!(result["onerrorCount"], json!(0));
+    }
+
+    #[tokio::test]
+    async fn test_polyfill_unsupported_methods_throw() {
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(ConverterContext {
+                config: VlcConfig::default(),
+                parsed_allowed_base_urls: None,
+                resolved_plugins: None,
+            }),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
+        let code = r#"
+    var __unsupportedMessages = [];
+
+    // Path2D.addPath is now implemented and should NOT throw
+    var addPathSucceeded = false;
+    try {
+      new Path2D().addPath(new Path2D());
+      addPathSucceeded = true;
+    } catch (err) {
+      addPathSucceeded = false;
+    }
+
+    const canvas = new HTMLCanvasElement(16, 16);
+    const ctx2d = canvas.getContext('2d');
+    try {
+      ctx2d.isPointInPath(0, 0);
+    } catch (err) {
+      __unsupportedMessages.push(String(err && err.message ? err.message : err));
+    }
+    try {
+      ctx2d.isPointInStroke(0, 0);
+    } catch (err) {
+      __unsupportedMessages.push(String(err && err.message ? err.message : err));
+    }
+    "#
+        .to_string();
+
+        ctx.worker
+            .js_runtime
+            .execute_script("ext:<anon>", code)
+            .unwrap();
+        ctx.worker
+            .js_runtime
+            .run_event_loop(Default::default())
+            .await
+            .unwrap();
+
+        let messages = ctx
+            .execute_script_to_json("__unsupportedMessages")
+            .await
+            .unwrap()
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+
+        // Path2D.addPath should now succeed (no longer unsupported)
+        let add_path_succeeded = ctx
+            .execute_script_to_json("addPathSucceeded")
+            .await
+            .unwrap();
+        assert_eq!(add_path_succeeded, serde_json::json!(true));
+
+        // isPointInPath and isPointInStroke remain unsupported
+        assert_eq!(messages.len(), 2);
+        assert!(messages[0]
+            .as_str()
+            .unwrap_or_default()
+            .contains("CanvasRenderingContext2D.isPointInPath"));
+        assert!(messages[1]
+            .as_str()
+            .unwrap_or_default()
+            .contains("CanvasRenderingContext2D.isPointInStroke"));
+    }
+}

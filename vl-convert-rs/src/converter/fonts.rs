@@ -399,3 +399,61 @@ pub(crate) struct FontAnalysis {
     /// (weight, style) variants per family -- for CDN URLs.
     pub(crate) family_variants: HashMap<String, BTreeSet<(String, String)>>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scenegraph_google_probe_candidates_skip_explicit() {
+        let families = BTreeSet::from([
+            "Alpha".to_string(),
+            "Bravo".to_string(),
+            "Charlie".to_string(),
+        ]);
+        let explicit = HashSet::from(["Bravo".to_string()]);
+
+        let candidates = scenegraph_google_probe_candidates(&families, &explicit);
+
+        assert_eq!(
+            candidates,
+            BTreeSet::from(["Alpha".to_string(), "Charlie".to_string()])
+        );
+    }
+
+    #[tokio::test]
+    async fn test_classify_scenegraph_fonts_uses_case_insensitive_local_match() {
+        let available = available_font_families().unwrap();
+        let family = available
+            .iter()
+            .find(|name| name.chars().any(|c| c.is_ascii_alphabetic()))
+            .cloned()
+            .expect("expected at least one alphabetic font family in fontdb");
+        let alt_family = if family.to_ascii_uppercase() != family {
+            family.to_ascii_uppercase()
+        } else {
+            family.to_ascii_lowercase()
+        };
+
+        assert_ne!(
+            family, alt_family,
+            "test requires a case-changed family name"
+        );
+        assert!(is_available(&alt_family, &available));
+
+        let families = BTreeSet::from([alt_family.clone()]);
+        let result = classify_scenegraph_fonts(
+            &families,
+            false,
+            true,
+            MissingFontsPolicy::Fallback,
+            &HashSet::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].family, alt_family);
+        assert!(matches!(result[0].source, FontSource::Local));
+    }
+}

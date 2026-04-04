@@ -413,3 +413,153 @@ pub(crate) fn spawn_worker_pool(
         ctx,
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_test_work() -> WorkFn {
+        Box::new(|_inner| Box::pin(async {}))
+    }
+
+    #[test]
+    fn test_worker_pool_next_sender_balances_outstanding_reservations() {
+        let mut senders = Vec::new();
+        let mut _receivers = Vec::new();
+        for _ in 0..3 {
+            let (tx, rx) = tokio::sync::mpsc::channel::<QueuedWork>(1);
+            senders.push(tx);
+            _receivers.push(rx);
+        }
+
+        let pool = WorkerPool {
+            senders,
+            outstanding: (0..3)
+                .map(|_| std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)))
+                .collect(),
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        let mut tickets = Vec::new();
+        for _ in 0..30 {
+            let (_, ticket) = pool
+                .next_sender()
+                .expect("pool with open senders should produce a sender");
+            tickets.push(ticket);
+
+            let loads: Vec<usize> = pool
+                .outstanding
+                .iter()
+                .map(|outstanding| outstanding.load(std::sync::atomic::Ordering::Relaxed))
+                .collect();
+            let min = *loads.iter().min().expect("loads should not be empty");
+            let max = *loads.iter().max().expect("loads should not be empty");
+            assert!(
+                max - min <= 1,
+                "expected balanced outstanding counts, got {loads:?}"
+            );
+        }
+
+        drop(tickets);
+        for outstanding in &pool.outstanding {
+            assert_eq!(outstanding.load(std::sync::atomic::Ordering::Relaxed), 0);
+        }
+    }
+
+    #[test]
+    fn test_worker_pool_next_sender_skips_closed_senders() {
+        let (closed_sender, closed_receiver) = tokio::sync::mpsc::channel::<QueuedWork>(1);
+        drop(closed_receiver);
+
+        let (open_sender, mut open_receiver) = tokio::sync::mpsc::channel::<QueuedWork>(1);
+
+        let pool = WorkerPool {
+            senders: vec![closed_sender, open_sender],
+            outstanding: (0..2)
+                .map(|_| std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)))
+                .collect(),
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        for _ in 0..4 {
+            let (sender, ticket) = pool
+                .next_sender()
+                .expect("pool should return the open sender");
+            sender
+                .try_send(QueuedWork::new(
+                    make_test_work(),
+                    ticket,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                ))
+                .expect("dispatch should use open sender, not closed sender");
+            let queued = open_receiver
+                .try_recv()
+                .expect("open receiver should receive dispatched command");
+            drop(queued);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_worker_pool_cancellation_releases_outstanding_ticket() {
+        let (sender, mut receiver) = tokio::sync::mpsc::channel::<QueuedWork>(1);
+        let pool = WorkerPool {
+            senders: vec![sender],
+            outstanding: vec![std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0))],
+            dispatch_cursor: std::sync::atomic::AtomicUsize::new(0),
+            _handles: Vec::new(),
+        };
+
+        let (sender, ticket) = pool.next_sender().unwrap();
+        sender
+            .send(QueuedWork::new(
+                make_test_work(),
+                ticket,
+                Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+
+        let (sender, ticket) = pool.next_sender().unwrap();
+        let blocked_send = tokio::spawn(async move {
+            sender
+                .send(QueuedWork::new(
+                    make_test_work(),
+                    ticket,
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                ))
+                .await
+        });
+        tokio::task::yield_now().await;
+
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            2
+        );
+
+        blocked_send.abort();
+        let _ = blocked_send.await;
+        tokio::task::yield_now().await;
+
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            1
+        );
+
+        let queued = receiver
+            .recv()
+            .await
+            .expect("first queued command should still be in the channel");
+        drop(queued);
+
+        assert_eq!(
+            pool.outstanding[0].load(std::sync::atomic::Ordering::Relaxed),
+            0
+        );
+    }
+}
