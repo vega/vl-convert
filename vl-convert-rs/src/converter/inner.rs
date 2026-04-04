@@ -1897,6 +1897,7 @@ vegaLiteToCanvas_{ver_name:?}(
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+    use crate::converter::config::VlcConfig;
     use serde_json::json;
 
     pub(in crate::converter) const PNG_1X1_BYTES: &[u8] = &[
@@ -1915,6 +1916,7 @@ pub(super) mod tests {
         pub(in crate::converter) body: Vec<u8>,
     }
 
+    #[allow(dead_code)]
     impl TestHttpResponse {
         pub(in crate::converter) fn ok_text(body: &str) -> Self {
             Self {
@@ -1957,8 +1959,6 @@ pub(super) mod tests {
 
     impl TestHttpServer {
         pub(in crate::converter) fn new(routes: Vec<(&str, TestHttpResponse)>) -> Self {
-            use std::io::{BufRead, BufReader, Write};
-
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             listener.set_nonblocking(true).unwrap();
             let addr = listener.local_addr().unwrap();

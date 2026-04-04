@@ -1521,9 +1521,7 @@ impl Default for VlConverter {
 mod tests {
     use super::*;
     use crate::text::get_font_baseline_snapshot;
-    use inner::tests::{
-        TestHttpResponse, TestHttpServer, PNG_1X1_BYTES, SVG_2X3_BASE64, SVG_2X3_DATA_URL,
-    };
+    use inner::tests::{TestHttpResponse, TestHttpServer, PNG_1X1_BYTES};
     use serde_json::json;
     use std::future::Future;
 
