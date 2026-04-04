@@ -157,6 +157,10 @@ deno_core::extension!(
     esm_entry_point = "ext:vl_convert_canvas2d/canvas_polyfill.js",
     esm = [
         dir "src/js",
+        "image_polyfill.js",
+        "path2d_polyfill.js",
+        "context_polyfill.js",
+        "canvas_element_polyfill.js",
         "canvas_polyfill.js",
     ],
 );
