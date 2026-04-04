@@ -1,24 +1,33 @@
 mod config;
 mod fonts;
 mod inner;
+mod permissions;
+mod plugin;
 mod rendering;
 mod transfer;
 mod types;
+mod value_or_string;
 mod worker_pool;
 
 pub use config::*;
+pub use fonts::GoogleFontRequest;
 pub(crate) use fonts::*;
 pub(crate) use inner::InnerVlConverter;
+pub(crate) use inner::VlConverterInner;
+pub(crate) use permissions::*;
+pub use permissions::{domain_matches_patterns, vlc_config_path};
+pub(crate) use plugin::resolve_plugin;
 pub use rendering::*;
 pub use types::*;
-pub(crate) use worker_pool::{CallerGoneGuard, OutstandingTicket, QueuedWork, WorkFn, WorkerPool};
+pub use value_or_string::*;
+pub(crate) use worker_pool::{CallerGoneGuard, OutstandingTicket, QueuedWork, WorkFn};
 
 // Re-export the #[op2] functions so the deno_core::extension! macro can find them
 pub(crate) use transfer::op_get_json_arg;
 pub(crate) use transfer::op_set_msgpack_result;
 // JsonArgGuard, MsgpackResultGuard, WorkerTransferState, WorkerTransferStateHandle
 // are imported directly by inner.rs from the transfer module.
-pub(crate) use worker_pool::{resolve_plugin, spawn_worker_pool};
+pub(crate) use worker_pool::spawn_worker_pool;
 
 use crate::image_loading::ImageAccessPolicy;
 use crate::module_loader::import_map::VlVersion;
@@ -28,7 +37,7 @@ use deno_core::anyhow::bail;
 use deno_core::error::AnyError;
 use deno_core::url::Url;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use deno_core::anyhow::anyhow;
@@ -74,16 +83,6 @@ pub(crate) fn portable_canonicalize(
         }
     }
     Ok(canonical)
-}
-
-pub(crate) struct VlConverterInner {
-    vegaembed_bundles: Mutex<HashMap<VlVersion, String>>,
-    pool: Mutex<Option<WorkerPool>>,
-    pub(crate) config: Arc<VlcConfig>,
-    /// Resolved plugins populated when the worker pool is first spawned.
-    /// Separate from config because spawn_worker_pool() creates a new Arc
-    /// but VlConverterInner.config is set at with_config() time.
-    pub(crate) resolved_plugins: Mutex<Option<Vec<ResolvedPlugin>>>,
 }
 
 /// Struct for performing Vega-Lite to Vega conversions using the Deno v8 runtime.
@@ -1524,6 +1523,7 @@ mod tests {
     use inner::tests::{TestHttpResponse, TestHttpServer, PNG_1X1_BYTES};
     use serde_json::json;
     use std::future::Future;
+    use worker_pool::WorkerPool;
 
     fn assert_send_future<F: Future + Send>(_: F) {}
 

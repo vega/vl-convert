@@ -8,7 +8,14 @@ use deno_core::error::AnyError;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use vl_convert_google_fonts::{family_to_id, RegisteredFontBatch};
 
-use super::config::{GoogleFontRequest, MissingFontsPolicy};
+use super::config::MissingFontsPolicy;
+use vl_convert_google_fonts::VariantRequest;
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct GoogleFontRequest {
+    pub family: String,
+    pub variants: Option<Vec<VariantRequest>>,
+}
 
 pub(crate) struct WorkerFontState {
     pub(crate) db: fontdb::Database,

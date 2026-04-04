@@ -1,6 +1,5 @@
 use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
-use std::path::Path;
 use std::sync::Arc;
 use std::sync::Once;
 use std::thread;
@@ -8,9 +7,9 @@ use std::thread::JoinHandle;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use super::config::{
-    parse_allowed_base_urls_from_config, ConverterContext, ResolvedPlugin, VlcConfig,
-};
+use super::config::{ConverterContext, VlcConfig};
+use super::permissions::parse_allowed_base_urls_from_config;
+use super::plugin::resolve_and_bundle_plugins;
 use super::InnerVlConverter;
 use crate::text::get_font_baseline_snapshot;
 
@@ -162,111 +161,6 @@ pub(crate) fn worker_queue_capacity(num_workers: usize) -> usize {
 /// Minimum `max_v8_heap_size_mb` in MB. Values below this cause V8 to
 /// abort during isolate creation (unrecoverable).
 pub(crate) const MIN_V8_HEAP_SIZE_MB: usize = 64;
-
-/// Bundle a URL plugin using the URL as the deno_emit entry specifier.
-pub(crate) async fn bundle_url_plugin(
-    url: &str,
-    allowed_domains: &[String],
-) -> Result<String, AnyError> {
-    use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
-    use crate::module_loader::PluginBundleLoader;
-
-    let entry = deno_core::url::Url::parse(url)?;
-    let mut loader = PluginBundleLoader {
-        entry_source: String::new(),
-        entry_specifier: String::new(),
-        allowed_domains: allowed_domains.to_vec(),
-    };
-    let bundled = bundle(
-        entry,
-        &mut loader,
-        BundleOptions {
-            bundle_type: BundleType::Module,
-            transpile_options: Default::default(),
-            emit_options: EmitOptions {
-                source_map: SourceMapOption::None,
-                ..Default::default()
-            },
-            emit_ignore_directives: false,
-            minify: false,
-        },
-    )
-    .await?;
-    Ok(bundled.code)
-}
-
-/// Bundle a file/inline plugin into a self-contained ESM string.
-pub(crate) async fn bundle_source_plugin(
-    source: &str,
-    allowed_domains: &[String],
-) -> Result<String, AnyError> {
-    use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
-    use crate::module_loader::PluginBundleLoader;
-
-    let entry =
-        deno_core::resolve_path("vl-plugin-entry.js", Path::new(env!("CARGO_MANIFEST_DIR")))?;
-    let entry_str = entry.to_string();
-    let mut loader = PluginBundleLoader {
-        entry_source: source.to_string(),
-        entry_specifier: entry_str,
-        allowed_domains: allowed_domains.to_vec(),
-    };
-    let bundled = bundle(
-        entry,
-        &mut loader,
-        BundleOptions {
-            bundle_type: BundleType::Module,
-            transpile_options: Default::default(),
-            emit_options: EmitOptions {
-                source_map: SourceMapOption::None,
-                ..Default::default()
-            },
-            emit_ignore_directives: false,
-            minify: false,
-        },
-    )
-    .await?;
-    Ok(bundled.code)
-}
-
-/// Resolve and bundle all plugins. Runs async on a dedicated thread.
-/// Returns the resolved plugins (or None if no plugins configured).
-/// Bundle a single plugin entry (URL or source) into a ResolvedPlugin.
-pub(crate) async fn resolve_plugin(
-    entry: &str,
-    allowed_domains: &[String],
-) -> Result<ResolvedPlugin, AnyError> {
-    let is_url = entry.starts_with("http://") || entry.starts_with("https://");
-    if is_url {
-        let bundled = bundle_url_plugin(entry, allowed_domains).await?;
-        Ok(ResolvedPlugin {
-            original_url: Some(entry.to_string()),
-            bundled_source: bundled,
-        })
-    } else {
-        let bundled = bundle_source_plugin(entry, allowed_domains).await?;
-        Ok(ResolvedPlugin {
-            original_url: None,
-            bundled_source: bundled,
-        })
-    }
-}
-
-pub(crate) async fn resolve_and_bundle_plugins(
-    config: &VlcConfig,
-) -> Result<Option<Vec<ResolvedPlugin>>, AnyError> {
-    let Some(ref plugins) = config.vega_plugins else {
-        return Ok(None);
-    };
-    let mut resolved = Vec::new();
-    for (i, entry) in plugins.iter().enumerate() {
-        let plugin = resolve_plugin(entry, &config.plugin_import_domains)
-            .await
-            .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
-        resolved.push(plugin);
-    }
-    Ok(Some(resolved))
-}
 
 pub(crate) fn spawn_worker_pool(
     config: Arc<VlcConfig>,

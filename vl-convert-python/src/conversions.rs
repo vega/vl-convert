@@ -1,9 +1,10 @@
-use crate::helpers::{
-    async_variant_doc, converter_read_handle, effective_google_fonts, future_into_py_object,
-    handle_show_warnings, parse_google_fonts_arg, parse_json_spec, parse_option_format_locale,
-    parse_option_time_format_locale, parse_optional_config, parse_spec_to_value_or_string,
-    prefixed_py_error, run_converter_future, run_converter_future_async,
-    warn_if_scale_not_one_for_pdf,
+use crate::config::converter_read_handle;
+use crate::fonts::{effective_google_fonts, parse_google_fonts_arg};
+use crate::utils::{
+    async_variant_doc, future_into_py_object, handle_show_warnings, parse_json_spec,
+    parse_option_format_locale, parse_option_time_format_locale, parse_optional_config,
+    parse_spec_to_value_or_string, prefixed_py_error, run_converter_future,
+    run_converter_future_async, warn_if_scale_not_one_for_pdf,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

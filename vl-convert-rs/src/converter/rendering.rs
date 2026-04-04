@@ -11,8 +11,8 @@ use std::panic;
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-use super::config::ValueOrString;
 use super::types::UrlOpts;
+use super::value_or_string::ValueOrString;
 
 // Modified from tiny-skia-0.10.0/src/pixmap.rs to include DPI
 pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {

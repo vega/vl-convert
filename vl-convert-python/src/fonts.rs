@@ -1,16 +1,103 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use pythonize::pythonize;
 use std::str::FromStr;
-use vl_convert_rs::converter::{VgOpts, VlOpts};
+use vl_convert_rs::converter::{GoogleFontRequest, VgOpts, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
+use vl_convert_rs::{FontStyle, VariantRequest};
 
-use crate::helpers::{
-    async_variant_doc, effective_google_fonts, future_into_py_object, parse_google_fonts_arg,
-    parse_json_spec, parse_option_format_locale, parse_option_time_format_locale,
-    parse_optional_config, prefixed_py_error, run_converter_future, run_converter_future_async,
+use crate::utils::{
+    async_variant_doc, future_into_py_object, parse_json_spec, parse_option_format_locale,
+    parse_option_time_format_locale, parse_optional_config, prefixed_py_error,
+    run_converter_future, run_converter_future_async,
 };
+use crate::CONFIGURED_GOOGLE_FONTS;
+
+pub fn effective_google_fonts(
+    per_call: Option<Vec<GoogleFontRequest>>,
+) -> Option<Vec<GoogleFontRequest>> {
+    let configured = CONFIGURED_GOOGLE_FONTS
+        .read()
+        .ok()
+        .and_then(|guard| guard.clone());
+    match (configured, per_call) {
+        (None, None) => None,
+        (Some(c), None) => Some(c),
+        (None, Some(p)) => Some(p),
+        (Some(mut c), Some(p)) => {
+            c.extend(p);
+            Some(c)
+        }
+    }
+}
+
+pub fn parse_variant_args(
+    variants: Option<Vec<(u16, String)>>,
+) -> PyResult<Option<Vec<VariantRequest>>> {
+    match variants {
+        None => Ok(None),
+        Some(tuples) => {
+            let mut requests = Vec::with_capacity(tuples.len());
+            for (weight, style_str) in tuples {
+                let style = match style_str.as_str() {
+                    "normal" => FontStyle::Normal,
+                    "italic" => FontStyle::Italic,
+                    other => {
+                        return Err(PyValueError::new_err(format!(
+                            "Invalid font style '{}'. Must be 'normal' or 'italic'",
+                            other
+                        )))
+                    }
+                };
+                requests.push(VariantRequest { weight, style });
+            }
+            Ok(Some(requests))
+        }
+    }
+}
+
+pub fn parse_google_fonts_arg(
+    fonts: Option<Vec<PyObject>>,
+) -> PyResult<Option<Vec<GoogleFontRequest>>> {
+    let Some(fonts) = fonts else {
+        return Ok(None);
+    };
+    if fonts.is_empty() {
+        return Ok(None);
+    }
+    Python::with_gil(|py| {
+        let mut requests = Vec::with_capacity(fonts.len());
+        for obj in &fonts {
+            let bound = obj.bind(py);
+            if let Ok(family) = bound.extract::<String>() {
+                requests.push(GoogleFontRequest {
+                    family,
+                    variants: None,
+                });
+            } else if let Ok(dict) = bound.downcast::<PyDict>() {
+                let family: String = dict
+                    .get_item("family")?
+                    .ok_or_else(|| {
+                        PyValueError::new_err("google_fonts dict entry missing 'family' key")
+                    })?
+                    .extract()?;
+                let variants: Option<Vec<(u16, String)>> = dict
+                    .get_item("variants")?
+                    .map(|v| v.extract())
+                    .transpose()?;
+                let variants = parse_variant_args(variants)?;
+                requests.push(GoogleFontRequest { family, variants });
+            } else {
+                return Err(PyValueError::new_err(
+                    "Each google_fonts entry must be a str or dict with 'family' key",
+                ));
+            }
+        }
+        Ok(Some(requests))
+    })
+}
 
 /// Return font information for a rendered Vega-Lite spec
 ///

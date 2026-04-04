@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use super::config::ValueOrString;
+use super::value_or_string::ValueOrString;
 
 #[derive(Default)]
 pub(crate) struct WorkerTransferState {

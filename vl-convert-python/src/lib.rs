@@ -8,8 +8,8 @@ extern crate lazy_static;
 mod config;
 mod conversions;
 mod fonts;
-mod helpers;
 mod metadata;
+mod utils;
 
 pub use config::*;
 pub use conversions::*;

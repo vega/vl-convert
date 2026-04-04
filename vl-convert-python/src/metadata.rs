@@ -7,9 +7,10 @@ use vl_convert_rs::module_loader::import_map::{
 };
 use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 
-use crate::helpers::{
-    async_variant_doc, converter_read_handle, future_into_py_object, parse_embedded_locale_json,
-    prefixed_py_error, run_converter_future, run_converter_future_async,
+use crate::config::converter_read_handle;
+use crate::utils::{
+    async_variant_doc, future_into_py_object, parse_embedded_locale_json, prefixed_py_error,
+    run_converter_future, run_converter_future_async,
 };
 
 /// Get the bundled version of Vega

@@ -4,7 +4,7 @@
 mod cli_types;
 mod commands;
 mod handlers;
-mod io_helpers;
+mod io_utils;
 
 use clap::Parser;
 use std::str::FromStr;
@@ -20,7 +20,7 @@ use handlers::{
     cat_theme, list_themes, vg_2_jpeg, vg_2_pdf, vg_2_png, vg_2_svg, vl_2_jpeg, vl_2_pdf, vl_2_png,
     vl_2_svg, vl_2_vg,
 };
-use io_helpers::{
+use io_utils::{
     flatten_plugin_domains, parse_format_locale_option, parse_google_font_requests,
     parse_time_format_locale_option, parse_vl_version, read_config_json, read_input_string,
     register_font_dir, resolve_vlc_config, write_output_binary, write_output_string,
