@@ -184,7 +184,7 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v6
-      - uses: prefix-dev/setup-pixi@v0.9.5
+      - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.47.0
       - name: Check cargo fmt compliance
@@ -203,7 +203,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           cache-on-failure: True
       - name: Install Protoc
@@ -222,7 +222,7 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v6
-      - uses: prefix-dev/setup-pixi@v0.9.5
+      - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.47.0
       - name: Check that license is up to date
@@ -242,7 +242,7 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -288,7 +288,11 @@ jobs:
           RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
         run: |
           cargo test -p vl-convert -- --test-threads=1
-
+      - name: Run server tests
+        env:
+          RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
+        run: |
+          cargo test -p vl-convert-server -- --test-threads=1
 
       - name: Upload test failures
         uses: actions/upload-artifact@v7
@@ -319,7 +323,7 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -334,6 +338,8 @@ jobs:
         run: cargo test -p vl-convert-rs -- --test-threads=1
       - name: Run CLI tests
         run: cargo test -p vl-convert -- --test-threads=1
+      - name: Run server tests
+        run: cargo test -p vl-convert-server -- --test-threads=1
       - name: Upload test failures
         uses: actions/upload-artifact@v7
         if: always()
@@ -356,7 +362,7 @@ jobs:
         with:
           python-version: "3.10"
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -443,11 +449,11 @@ jobs:
         run: git config --system core.longpaths true
       - name: Check out repository code
         uses: actions/checkout@v6
-      - uses: prefix-dev/setup-pixi@v0.9.5
+      - uses: prefix-dev/setup-pixi@v0.9.4
         with:
           pixi-version: v0.47.0
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.8.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -490,7 +496,7 @@ jobs:
             echo "downloaded=false" >> $GITHUB_OUTPUT
           fi
 
-      - uses: messense/maturin-action@v1.50.1
+      - uses: messense/maturin-action@v1.50.0
         with:
           manylinux: 2_28
           target: aarch64-unknown-linux-gnu
