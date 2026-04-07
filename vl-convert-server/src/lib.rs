@@ -13,7 +13,6 @@ use axum::error_handling::HandleErrorLayer;
 use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use axum::routing::get;
 use axum::Router;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -326,14 +325,15 @@ fn build_router(
     opaque_errors: bool,
     trust_proxy: bool,
 ) -> Router {
-    // Health endpoints bypass budget tracking entirely
-    let health_router = Router::new()
-        .route("/healthz", get(health::healthz))
-        .route("/readyz", get(health::readyz))
-        .route("/infoz", get(health::infoz));
+    // Health endpoints: registered via OpenApiRouter for docs, but bypass auth/budget middleware
+    let (health_router, health_api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+        .routes(routes!(health::healthz))
+        .routes(routes!(health::readyz))
+        .routes(routes!(health::infoz))
+        .split_for_parts();
 
     // API routes with OpenAPI documentation
-    let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+    let (api_router, mut api) = OpenApiRouter::new()
         .routes(routes!(themes::list_themes))
         .routes(routes!(themes::get_theme))
         .routes(routes!(vegalite::vegalite_to_vega))
@@ -359,6 +359,11 @@ fn build_router(
         .routes(routes!(bundling::bundle))
         .routes(routes!(bundling::bundle_snippet))
         .split_for_parts();
+
+    // Merge health endpoint paths into the API OpenAPI spec
+    for (path, item) in health_api.paths.paths {
+        api.paths.paths.insert(path, item);
+    }
 
     // Serve Swagger UI and OpenAPI spec
     let mut api_router =
