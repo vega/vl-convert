@@ -386,9 +386,11 @@ impl VlVersion {{
     }}
 }}
 
+pub const DEFAULT_VL_VERSION: &str = "{LATEST_VEGALITE}";
+
 impl Default for VlVersion {{
     fn default() -> Self {{
-        VlVersion::from_str("{LATEST_VEGALITE}").unwrap()
+        VlVersion::from_str(DEFAULT_VL_VERSION).unwrap()
     }}
 }}
 

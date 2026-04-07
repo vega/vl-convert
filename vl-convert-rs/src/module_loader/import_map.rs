@@ -84,9 +84,11 @@ impl VlVersion {
     }
 }
 
+pub const DEFAULT_VL_VERSION: &str = "6.4";
+
 impl Default for VlVersion {
     fn default() -> Self {
-        VlVersion::from_str("6.4").unwrap()
+        VlVersion::from_str(DEFAULT_VL_VERSION).unwrap()
     }
 }
 
@@ -368,11 +370,6 @@ pub fn build_import_map() -> HashMap<String, String> {
     m.insert(
         "/npm/vega-lite@6.1.0/+esm".to_string(),
         include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-lite@6.1.0/#+esm_3b53f.js")
-            .to_string(),
-    );
-    m.insert(
-        "/npm/vega-lite@6.4.1/+esm".to_string(),
-        include_str!("../../vendor/cdn.jsdelivr.net/npm/vega-lite@6.4.1/#+esm_3b53f.js")
             .to_string(),
     );
     m.insert(

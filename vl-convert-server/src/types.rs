@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use vl_convert_rs::DEFAULT_VL_VERSION;
 
 fn default_vl_version() -> String {
-    "6.4".to_string()
+    DEFAULT_VL_VERSION.to_string()
 }
 
 // --- Shared sub-structs ---
@@ -246,7 +247,7 @@ pub struct VegaFontsRequest {
 // --- Bundling endpoint types ---
 
 fn default_vl_version_bundle() -> String {
-    "6.4".to_string()
+    DEFAULT_VL_VERSION.to_string()
 }
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]

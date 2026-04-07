@@ -1,9 +1,8 @@
 use clap::Parser;
 use vl_convert_rs::converter::MissingFontsPolicy;
+pub(crate) use vl_convert_rs::DEFAULT_VL_VERSION;
 
 use crate::commands::Commands;
-
-pub(crate) const DEFAULT_VL_VERSION: &str = "6.4";
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default)]
 pub(crate) enum MissingFontsArg {
