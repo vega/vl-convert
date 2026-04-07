@@ -12,11 +12,12 @@ use vl_convert_rs::module_loader::import_map::VlVersion;
 
 use super::types::{
     ErrorResponse, VegaliteCommon, VegaliteFontsRequest, VegaliteHtmlRequest, VegaliteJpegRequest,
-    VegalitePdfRequest, VegalitePngRequest, VegaliteSvgRequest, VegaliteUrlRequest,
-    VegaliteVegaRequest,
+    VegalitePdfRequest, VegalitePngRequest, VegaliteScenegraphRequest, VegaliteSvgRequest,
+    VegaliteUrlRequest, VegaliteVegaRequest,
 };
 use super::{
-    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts, AppState,
+    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts,
+    wants_msgpack, AppState,
 };
 
 fn build_vl_opts(req: &VegaliteCommon, state: &AppState) -> Result<VlOpts, String> {
@@ -370,6 +371,86 @@ pub async fn vegalite_to_url(
             &format!("Vega-Lite URL generation failed: {e}"),
             state.opaque_errors,
         ),
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/vegalite/scenegraph",
+    request_body = VegaliteScenegraphRequest,
+    responses(
+        (status = 200, content_type = "application/json", description = "Scenegraph (JSON or MessagePack based on Accept header)"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 406, body = ErrorResponse, description = "Not Acceptable — use application/json or application/msgpack"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "Vega-Lite"
+)]
+pub async fn vegalite_scenegraph(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<VegaliteScenegraphRequest>,
+) -> Response {
+    let vl_opts = match build_vl_opts(&req.common, &state) {
+        Ok(opts) => opts,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
+    };
+    let spec = req.common.spec;
+    let wants_msgpack = wants_msgpack(&headers);
+
+    if wants_msgpack {
+        match state
+            .converter
+            .vegalite_to_scenegraph_msgpack(spec, vl_opts)
+            .await
+        {
+            Ok(output) => {
+                let mut resp_headers = HeaderMap::new();
+                append_vlc_logs_header(&mut resp_headers, &format_log_entries(&output.logs));
+                (
+                    resp_headers,
+                    [(axum::http::header::CONTENT_TYPE, "application/msgpack")],
+                    output.data,
+                )
+                    .into_response()
+            }
+            Err(e) => error_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                &format!("Vega-Lite scenegraph extraction failed: {e}"),
+                state.opaque_errors,
+            ),
+        }
+    } else {
+        match state.converter.vegalite_to_scenegraph(spec, vl_opts).await {
+            Ok(output) => {
+                let mut resp_headers = HeaderMap::new();
+                append_vlc_logs_header(&mut resp_headers, &format_log_entries(&output.logs));
+                let body = match serde_json::to_string(&output.scenegraph) {
+                    Ok(json) => json,
+                    Err(e) => {
+                        return error_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            &format!("Failed to serialize scenegraph: {e}"),
+                            state.opaque_errors,
+                        )
+                    }
+                };
+                (
+                    resp_headers,
+                    [(
+                        axum::http::header::CONTENT_TYPE,
+                        "application/json; charset=utf-8",
+                    )],
+                    body,
+                )
+                    .into_response()
+            }
+            Err(e) => error_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                &format!("Vega-Lite scenegraph extraction failed: {e}"),
+                state.opaque_errors,
+            ),
+        }
     }
 }
 

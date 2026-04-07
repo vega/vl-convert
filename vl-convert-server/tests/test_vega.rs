@@ -103,3 +103,50 @@ async fn test_vg_to_url() {
         &body[..body.len().min(80)]
     );
 }
+
+#[tokio::test]
+async fn test_vg_to_scenegraph_json() {
+    let server = &*DEFAULT_SERVER;
+    let resp = server
+        .client
+        .post(format!("{}/vega/scenegraph", server.base_url))
+        .header("Accept", "application/json")
+        .json(&serde_json::json!({"spec": simple_vg_spec()}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert!(resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .contains("application/json"));
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body.is_object(), "expected JSON scenegraph object");
+}
+
+#[tokio::test]
+async fn test_vg_to_scenegraph_msgpack() {
+    let server = &*DEFAULT_SERVER;
+    let resp = server
+        .client
+        .post(format!("{}/vega/scenegraph", server.base_url))
+        .header("Accept", "application/msgpack")
+        .json(&serde_json::json!({"spec": simple_vg_spec()}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "application/msgpack"
+    );
+    let body = resp.bytes().await.unwrap();
+    assert!(!body.is_empty(), "expected non-empty msgpack bytes");
+}

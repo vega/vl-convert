@@ -11,10 +11,11 @@ use vl_convert_rs::converter::{
 
 use super::types::{
     ErrorResponse, VegaCommon, VegaFontsRequest, VegaHtmlRequest, VegaJpegRequest, VegaPdfRequest,
-    VegaPngRequest, VegaSvgRequest, VegaUrlRequest,
+    VegaPngRequest, VegaScenegraphRequest, VegaSvgRequest, VegaUrlRequest,
 };
 use super::{
-    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts, AppState,
+    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts,
+    wants_msgpack, AppState,
 };
 
 fn build_vg_opts(req: &VegaCommon, state: &AppState) -> Result<VgOpts, String> {
@@ -294,6 +295,86 @@ pub async fn vega_to_url(
             &format!("Vega URL generation failed: {e}"),
             state.opaque_errors,
         ),
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/vega/scenegraph",
+    request_body = VegaScenegraphRequest,
+    responses(
+        (status = 200, content_type = "application/json", description = "Scenegraph (JSON or MessagePack based on Accept header)"),
+        (status = 400, body = ErrorResponse, description = "Invalid request"),
+        (status = 406, body = ErrorResponse, description = "Not Acceptable — use application/json or application/msgpack"),
+        (status = 422, body = ErrorResponse, description = "Conversion failed"),
+    ),
+    tag = "Vega"
+)]
+pub async fn vega_scenegraph(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<VegaScenegraphRequest>,
+) -> Response {
+    let vg_opts = match build_vg_opts(&req.common, &state) {
+        Ok(opts) => opts,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
+    };
+    let spec = req.common.spec;
+    let wants_msgpack = wants_msgpack(&headers);
+
+    if wants_msgpack {
+        match state
+            .converter
+            .vega_to_scenegraph_msgpack(spec, vg_opts)
+            .await
+        {
+            Ok(output) => {
+                let mut resp_headers = HeaderMap::new();
+                append_vlc_logs_header(&mut resp_headers, &format_log_entries(&output.logs));
+                (
+                    resp_headers,
+                    [(axum::http::header::CONTENT_TYPE, "application/msgpack")],
+                    output.data,
+                )
+                    .into_response()
+            }
+            Err(e) => error_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                &format!("Vega scenegraph extraction failed: {e}"),
+                state.opaque_errors,
+            ),
+        }
+    } else {
+        match state.converter.vega_to_scenegraph(spec, vg_opts).await {
+            Ok(output) => {
+                let mut resp_headers = HeaderMap::new();
+                append_vlc_logs_header(&mut resp_headers, &format_log_entries(&output.logs));
+                let body = match serde_json::to_string(&output.scenegraph) {
+                    Ok(json) => json,
+                    Err(e) => {
+                        return error_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            &format!("Failed to serialize scenegraph: {e}"),
+                            state.opaque_errors,
+                        )
+                    }
+                };
+                (
+                    resp_headers,
+                    [(
+                        axum::http::header::CONTENT_TYPE,
+                        "application/json; charset=utf-8",
+                    )],
+                    body,
+                )
+                    .into_response()
+            }
+            Err(e) => error_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                &format!("Vega scenegraph extraction failed: {e}"),
+                state.opaque_errors,
+            ),
+        }
     }
 }
 

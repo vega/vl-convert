@@ -55,6 +55,16 @@ use types::ErrorResponse;
 ))]
 struct ApiDoc;
 
+pub fn wants_msgpack(headers: &axum::http::HeaderMap) -> bool {
+    headers
+        .get(axum::http::header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .map(|accept| {
+            accept.contains("application/msgpack") || accept.contains("application/x-msgpack")
+        })
+        .unwrap_or(false)
+}
+
 pub fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
     logs.iter()
         .map(|e| format!("{}: {}", e.level, e.message))
@@ -333,6 +343,7 @@ fn build_router(
         .routes(routes!(vegalite::vegalite_to_pdf))
         .routes(routes!(vegalite::vegalite_to_html))
         .routes(routes!(vegalite::vegalite_to_url))
+        .routes(routes!(vegalite::vegalite_scenegraph))
         .routes(routes!(vegalite::vegalite_fonts))
         .routes(routes!(vega::vega_to_svg))
         .routes(routes!(vega::vega_to_png))
@@ -340,6 +351,7 @@ fn build_router(
         .routes(routes!(vega::vega_to_pdf))
         .routes(routes!(vega::vega_to_html))
         .routes(routes!(vega::vega_to_url))
+        .routes(routes!(vega::vega_scenegraph))
         .routes(routes!(vega::vega_fonts))
         .routes(routes!(svg::svg_to_png))
         .routes(routes!(svg::svg_to_jpeg))

@@ -120,6 +120,13 @@ pub struct VegaliteHtmlRequest {
 
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
+pub struct VegaliteScenegraphRequest {
+    #[serde(flatten)]
+    pub common: VegaliteCommon,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct VegaliteUrlRequest {
     /// Vega-Lite specification as a JSON object.
     pub spec: serde_json::Value,
@@ -172,6 +179,13 @@ pub struct VegaHtmlRequest {
     #[serde(default)]
     pub bundle: bool,
     pub renderer: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VegaScenegraphRequest {
+    #[serde(flatten)]
+    pub common: VegaCommon,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
