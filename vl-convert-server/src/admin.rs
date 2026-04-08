@@ -23,19 +23,19 @@ async fn get_budget(State(tracker): State<Arc<BudgetTracker>>) -> Json<BudgetSta
 struct BudgetUpdate {
     per_ip_budget_ms: Option<i64>,
     global_budget_ms: Option<i64>,
-    estimate_ms: Option<i64>,
+    hold_ms: Option<i64>,
 }
 
 async fn update_budget(
     State(tracker): State<Arc<BudgetTracker>>,
     Json(update): Json<BudgetUpdate>,
 ) -> Response {
-    if let Some(est) = update.estimate_ms {
+    if let Some(est) = update.hold_ms {
         if est <= 0 {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: "estimate_ms must be positive".to_string(),
+                    error: "hold_ms must be positive".to_string(),
                 }),
             )
                 .into_response();
@@ -65,7 +65,7 @@ async fn update_budget(
     }
 
     tracker.update_config(update.per_ip_budget_ms, update.global_budget_ms);
-    if let Some(est) = update.estimate_ms {
+    if let Some(est) = update.hold_ms {
         tracker.update_estimate(est);
     }
     Json(tracker.status()).into_response()

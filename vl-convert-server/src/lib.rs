@@ -115,7 +115,7 @@ pub struct ServeConfig {
     pub log_format: LogFormat,
     pub per_ip_budget_ms: Option<i64>,
     pub global_budget_ms: Option<i64>,
-    pub budget_estimate_ms: i64,
+    pub budget_hold_ms: i64,
     pub admin_port: Option<u16>,
     pub trust_proxy: bool,
 }
@@ -462,7 +462,7 @@ fn init_app_state(
         let t = budget::BudgetTracker::new(
             serve_config.per_ip_budget_ms.unwrap_or(0),
             serve_config.global_budget_ms.unwrap_or(0),
-            serve_config.budget_estimate_ms,
+            serve_config.budget_hold_ms,
         );
         let refill_tracker = t.clone();
         tokio::spawn(async move {

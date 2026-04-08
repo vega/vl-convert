@@ -24,7 +24,7 @@ pub fn default_serve_config() -> ServeConfig {
         log_format: LogFormat::Text,
         per_ip_budget_ms: None,
         global_budget_ms: None,
-        budget_estimate_ms: 2000,
+        budget_hold_ms: 2000,
         admin_port: None,
         trust_proxy: false,
     }
@@ -112,7 +112,7 @@ pub fn start_budget_server(
     let mut serve_config = default_serve_config();
     serve_config.per_ip_budget_ms = per_ip_ms;
     serve_config.global_budget_ms = global_ms;
-    serve_config.budget_estimate_ms = estimate_ms;
+    serve_config.budget_hold_ms = estimate_ms;
     serve_config.admin_port = Some(admin_port);
     let server = start_server_sync(config, serve_config);
     (server, admin_port)

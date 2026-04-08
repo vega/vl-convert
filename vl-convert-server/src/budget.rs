@@ -8,7 +8,7 @@ pub struct BudgetTracker {
     per_ip_budget_ms: AtomicI64,
     global_budget_ms: AtomicI64,
     global_remaining: AtomicI64,
-    estimate_ms: AtomicI64,
+    hold_ms: AtomicI64,
     ip_entries: DashMap<IpAddr, IpBudgetEntry>,
 }
 
@@ -18,18 +18,18 @@ struct IpBudgetEntry {
 }
 
 impl BudgetTracker {
-    pub fn new(per_ip_budget_ms: i64, global_budget_ms: i64, estimate_ms: i64) -> Arc<Self> {
+    pub fn new(per_ip_budget_ms: i64, global_budget_ms: i64, hold_ms: i64) -> Arc<Self> {
         Arc::new(Self {
             per_ip_budget_ms: AtomicI64::new(per_ip_budget_ms),
             global_budget_ms: AtomicI64::new(global_budget_ms),
             global_remaining: AtomicI64::new(global_budget_ms),
-            estimate_ms: AtomicI64::new(estimate_ms),
+            hold_ms: AtomicI64::new(hold_ms),
             ip_entries: DashMap::new(),
         })
     }
 
-    pub fn estimate_ms(&self) -> i64 {
-        self.estimate_ms.load(Ordering::Relaxed)
+    pub fn hold_ms(&self) -> i64 {
+        self.hold_ms.load(Ordering::Relaxed)
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -46,7 +46,7 @@ impl BudgetTracker {
     /// rejected even though budget will be restored momentarily. This is
     /// acceptable for rate-limiting — it errs on the side of caution.
     pub fn reserve(&self, ip: IpAddr) -> Result<(), BudgetExhausted> {
-        let estimate = self.estimate_ms.load(Ordering::Relaxed);
+        let estimate = self.hold_ms.load(Ordering::Relaxed);
 
         // Check global budget
         let global_limit = self.global_budget_ms.load(Ordering::Relaxed);
@@ -86,7 +86,7 @@ impl BudgetTracker {
     /// Adjust the reservation after conversion completes. Returns the
     /// difference (estimate - actual) back to the budgets.
     pub fn adjust(&self, ip: IpAddr, actual_ms: i64) {
-        let estimate = self.estimate_ms.load(Ordering::Relaxed);
+        let estimate = self.hold_ms.load(Ordering::Relaxed);
         let diff = estimate - actual_ms;
 
         let global_limit = self.global_budget_ms.load(Ordering::Relaxed);
@@ -144,8 +144,8 @@ impl BudgetTracker {
     }
 
     /// Update the pessimistic per-request reservation.
-    pub fn update_estimate(&self, estimate_ms: i64) {
-        self.estimate_ms.store(estimate_ms, Ordering::Release);
+    pub fn update_estimate(&self, hold_ms: i64) {
+        self.hold_ms.store(hold_ms, Ordering::Release);
     }
 
     /// Refill budgets. Called every second by the background task.
@@ -199,7 +199,7 @@ impl BudgetTracker {
             per_ip_budget_ms: self.per_ip_budget_ms.load(Ordering::Relaxed),
             global_budget_ms: self.global_budget_ms.load(Ordering::Relaxed),
             global_remaining_ms: self.global_remaining.load(Ordering::Relaxed),
-            estimate_ms: self.estimate_ms.load(Ordering::Relaxed),
+            hold_ms: self.hold_ms.load(Ordering::Relaxed),
             active_ips: self.ip_entries.len(),
         }
     }
@@ -225,6 +225,6 @@ pub struct BudgetStatus {
     pub per_ip_budget_ms: i64,
     pub global_budget_ms: i64,
     pub global_remaining_ms: i64,
-    pub estimate_ms: i64,
+    pub hold_ms: i64,
     pub active_ips: usize,
 }

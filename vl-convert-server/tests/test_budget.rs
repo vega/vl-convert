@@ -10,7 +10,7 @@ static PER_IP_BUDGET_SERVER: Lazy<(TestServer, u16)> =
 #[tokio::test]
 async fn test_budget_rate_limit_triggered() {
     let (server, _admin_port) = &*PER_IP_BUDGET_SERVER;
-    // With per_ip_budget_ms=1 and budget_estimate_ms=2000, the very first request
+    // With per_ip_budget_ms=1 and budget_hold_ms=2000, the very first request
     // should exhaust the budget. Send a request to trigger reservation.
     let resp = server
         .client
@@ -64,7 +64,7 @@ async fn test_budget_admin_get() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["per_ip_budget_ms"], 1);
-    assert_eq!(body["estimate_ms"], 2000);
+    assert_eq!(body["hold_ms"], 2000);
 }
 
 #[tokio::test]
@@ -73,13 +73,13 @@ async fn test_budget_admin_update() {
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("http://127.0.0.1:{admin_port}/admin/budget"))
-        .json(&serde_json::json!({"estimate_ms": 500}))
+        .json(&serde_json::json!({"hold_ms": 500}))
         .send()
         .await
         .unwrap();
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(body["estimate_ms"], 500);
+    assert_eq!(body["hold_ms"], 500);
 }
 
 static GLOBAL_BUDGET_SERVER: Lazy<(TestServer, u16)> =
@@ -88,7 +88,7 @@ static GLOBAL_BUDGET_SERVER: Lazy<(TestServer, u16)> =
 #[tokio::test]
 async fn test_budget_global_depletion() {
     let (server, _admin_port) = &*GLOBAL_BUDGET_SERVER;
-    // With global_budget_ms=1 and budget_estimate_ms=2000, the first request
+    // With global_budget_ms=1 and budget_hold_ms=2000, the first request
     // should immediately deplete the global budget.
     let resp = server
         .client
@@ -167,10 +167,10 @@ async fn test_budget_admin_estimate_update() {
     let (_server, admin_port) = &*ESTIMATE_UPDATE_SERVER;
     let client = reqwest::Client::new();
 
-    // Update estimate_ms via POST
+    // Update hold_ms via POST
     let resp = client
         .post(format!("http://127.0.0.1:{admin_port}/admin/budget"))
-        .json(&serde_json::json!({"estimate_ms": 750}))
+        .json(&serde_json::json!({"hold_ms": 750}))
         .send()
         .await
         .unwrap();
@@ -185,8 +185,8 @@ async fn test_budget_admin_estimate_update() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(
-        body["estimate_ms"], 750,
-        "expected estimate_ms to be updated to 750, got: {}",
-        body["estimate_ms"]
+        body["hold_ms"], 750,
+        "expected hold_ms to be updated to 750, got: {}",
+        body["hold_ms"]
     );
 }

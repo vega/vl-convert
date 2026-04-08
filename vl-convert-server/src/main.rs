@@ -110,6 +110,10 @@ struct Cli {
     #[arg(long = "plugin-import-domains")]
     plugin_import_domains: Vec<String>,
 
+    /// Additional directory to search for fonts
+    #[arg(long, env = "VLC_FONT_DIR")]
+    font_dir: Option<String>,
+
     /// Log level for Vega/Vega-Lite messages
     #[arg(long, value_enum, default_value_t = LogLevel::Warn)]
     log_level: LogLevel,
@@ -123,13 +127,9 @@ struct Cli {
     #[arg(long, env = "VLC_PORT", default_value_t = 3000)]
     port: u16,
 
-    /// Number of converter worker threads [default: CPU count]
+    /// Number of converter worker threads [default: min(CPU count, 4)]
     #[arg(long, env = "VLC_WORKERS")]
     workers: Option<usize>,
-
-    /// Additional directory to search for fonts
-    #[arg(long, env = "VLC_FONT_DIR")]
-    font_dir: Option<String>,
 
     /// API key for Bearer token authentication
     #[arg(long, env = "VLC_API_KEY")]
@@ -175,9 +175,10 @@ struct Cli {
     #[arg(long, env = "VLC_GLOBAL_BUDGET_MS")]
     global_budget_ms: Option<i64>,
 
-    /// Pessimistic per-request reservation in ms
-    #[arg(long, env = "VLC_BUDGET_ESTIMATE_MS", default_value_t = 2000)]
-    budget_estimate_ms: i64,
+    /// Per-request budget hold in ms (reserved upfront, adjusted to actual
+    /// conversion time after completion)
+    #[arg(long, env = "VLC_BUDGET_HOLD_MS", default_value_t = 1000)]
+    budget_hold_ms: i64,
 
     /// Enable admin API on 127.0.0.1:<port> for dynamic budget updates
     #[arg(long, env = "VLC_ADMIN_PORT")]
@@ -261,7 +262,7 @@ async fn main() -> Result<(), anyhow::Error> {
         })
         .unwrap_or_else(|| {
             std::thread::available_parallelism()
-                .map(|n| n.get())
+                .map(|n| n.get().min(4))
                 .unwrap_or(1)
         });
     config.num_workers = num_workers;
@@ -288,7 +289,7 @@ async fn main() -> Result<(), anyhow::Error> {
         log_format: cli.log_format,
         per_ip_budget_ms: cli.per_ip_budget_ms,
         global_budget_ms: cli.global_budget_ms,
-        budget_estimate_ms: cli.budget_estimate_ms,
+        budget_hold_ms: cli.budget_hold_ms,
         admin_port: cli.admin_port,
         trust_proxy: cli.trust_proxy,
     };
