@@ -469,7 +469,7 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
         None => {
             let standard = vl_convert_rs::vlc_config_path();
             if !standard.exists() {
-                VlcConfig::default()
+                crate::default_python_config()
             } else {
                 VlcConfig::from_file(&standard)?
             }

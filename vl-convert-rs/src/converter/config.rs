@@ -165,6 +165,11 @@ pub struct VlcConfig {
     /// Defaults to false. When enabled, requests can include a `vega_plugin`
     /// field that runs on an ephemeral V8 isolate (50-100ms overhead).
     pub allow_per_request_plugins: bool,
+    /// Maximum number of concurrent ephemeral workers for per-request plugins.
+    /// 0 = no limit. When positive, a semaphore limits how many ephemeral
+    /// V8 isolates can exist simultaneously.
+    #[serde(default)]
+    pub max_ephemeral_workers: usize,
     /// Whether to allow per-request `google_fonts` / `auto_google_fonts` overrides.
     /// Defaults to false. When false, requests containing these fields are rejected.
     pub allow_google_fonts: bool,
@@ -220,6 +225,7 @@ impl Default for VlcConfig {
             vega_plugins: None,
             plugin_import_domains: Vec::new(),
             allow_per_request_plugins: false,
+            max_ephemeral_workers: 0,
             allow_google_fonts: false,
             per_request_plugin_import_domains: Vec::new(),
             default_theme: None,

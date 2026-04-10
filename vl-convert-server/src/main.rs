@@ -131,6 +131,11 @@ struct Cli {
     #[arg(long, env = "VLC_WORKERS")]
     workers: Option<usize>,
 
+    /// Maximum concurrent ephemeral workers for per-request plugins
+    /// [default: same as --workers when plugins are enabled]
+    #[arg(long, env = "VLC_MAX_EPHEMERAL_WORKERS")]
+    max_ephemeral_workers: Option<usize>,
+
     /// API key for Bearer token authentication
     #[arg(long, env = "VLC_API_KEY")]
     api_key: Option<String>,
@@ -234,6 +239,9 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     if cli.gc_after_conversion {
         config.gc_after_conversion = true;
+    }
+    if let Some(max_eph) = cli.max_ephemeral_workers {
+        config.max_ephemeral_workers = max_eph;
     }
     if !cli.vega_plugin.is_empty() {
         config.vega_plugins = Some(cli.vega_plugin.clone());

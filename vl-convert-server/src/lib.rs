@@ -435,11 +435,41 @@ struct InitResult {
     converter: VlConverter,
 }
 
+/// Apply server-safe defaults to a VlcConfig. This ensures every server
+/// entry point (run, build_app) gets hardened defaults regardless of
+/// whether the caller remembered to set them.
+pub fn apply_server_defaults(config: &mut VlcConfig) {
+    if config.allowed_base_urls.is_none() {
+        config.allowed_base_urls = Some(vec![]);
+        log::info!(
+            "Data access disabled by default in server mode. \
+             Use --allowed-base-url to allow specific URLs or file paths."
+        );
+    }
+    if config.max_v8_heap_size_mb == 0 {
+        config.max_v8_heap_size_mb = 512;
+        log::info!(
+            "Defaulting to 512MB V8 heap limit per worker \
+             (override with --max-v8-heap-size-mb)"
+        );
+    }
+    if config.allow_per_request_plugins && config.max_ephemeral_workers == 0 {
+        config.max_ephemeral_workers = 2;
+        log::info!(
+            "Limiting ephemeral plugin workers to 2 \
+             (override with --max-ephemeral-workers)"
+        );
+    }
+}
+
 /// Initialize converter, app state, budget tracker, and admin listener.
 fn init_app_state(
     config: VlcConfig,
     serve_config: &ServeConfig,
 ) -> Result<InitResult, anyhow::Error> {
+    let mut config = config;
+    apply_server_defaults(&mut config);
+
     let num_workers = config.num_workers;
     log::info!("Initializing converter with {num_workers} worker(s)...");
     let converter = VlConverter::with_config(config.clone())?;

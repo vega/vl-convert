@@ -253,6 +253,9 @@ pub(crate) struct VlConverterInner {
     /// Separate from config because spawn_worker_pool() creates a new Arc
     /// but VlConverterInner.config is set at with_config() time.
     pub(crate) resolved_plugins: Mutex<Option<Vec<ResolvedPlugin>>>,
+    /// Semaphore limiting concurrent ephemeral workers for per-request plugins.
+    /// None when max_ephemeral_workers is 0 (no limit).
+    pub(super) ephemeral_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 #[cfg(test)]

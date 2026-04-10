@@ -21,10 +21,20 @@ use pyo3::types::PyModule;
 use std::sync::{Arc, RwLock};
 use vl_convert_rs::converter::GoogleFontRequest;
 use vl_convert_rs::VlConverter as VlConverterRs;
+use vl_convert_rs::VlcConfig;
+
+fn default_python_config() -> VlcConfig {
+    VlcConfig {
+        allowed_base_urls: Some(vec!["https:".to_string(), "http:".to_string()]),
+        ..Default::default()
+    }
+}
 
 lazy_static! {
-    static ref VL_CONVERTER: RwLock<Arc<VlConverterRs>> =
-        RwLock::new(Arc::new(VlConverterRs::new()));
+    static ref VL_CONVERTER: RwLock<Arc<VlConverterRs>> = RwLock::new(Arc::new(
+        VlConverterRs::with_config(default_python_config())
+            .expect("default Python converter config is valid")
+    ));
     static ref PYTHON_RUNTIME: tokio::runtime::Runtime =
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()

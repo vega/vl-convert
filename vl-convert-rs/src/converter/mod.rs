@@ -144,12 +144,22 @@ impl VlConverter {
             .try_init()
             .ok();
 
+        let ephemeral_semaphore =
+            if config.allow_per_request_plugins && config.max_ephemeral_workers > 0 {
+                Some(Arc::new(tokio::sync::Semaphore::new(
+                    config.max_ephemeral_workers,
+                )))
+            } else {
+                None
+            };
+
         Ok(Self {
             inner: Arc::new(VlConverterInner {
                 vegaembed_bundles: Default::default(),
                 pool: Default::default(),
                 config,
                 resolved_plugins: Mutex::new(None),
+                ephemeral_semaphore,
             }),
         })
     }
@@ -296,6 +306,18 @@ impl VlConverter {
             );
         }
 
+        // Acquire ephemeral worker permit if a semaphore is configured.
+        // The permit is moved into the spawned thread and released when it completes.
+        let _ephemeral_permit = match &self.inner.ephemeral_semaphore {
+            Some(sem) => Some(
+                sem.clone()
+                    .acquire_owned()
+                    .await
+                    .map_err(|_| anyhow!("Ephemeral worker semaphore closed unexpectedly"))?,
+            ),
+            None => None,
+        };
+
         // Resolve config-level plugins if needed
         if self.inner.config.vega_plugins.is_some() {
             self.warm_up()?;
@@ -319,6 +341,7 @@ impl VlConverter {
         let (resp_tx, resp_rx) = oneshot::channel::<Result<R, AnyError>>();
 
         std::thread::spawn(move || {
+            let _permit = _ephemeral_permit;
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
