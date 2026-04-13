@@ -126,6 +126,7 @@ pub struct AppState {
     pub api_key: Option<ApiKey>,
     pub opaque_errors: bool,
     pub require_user_agent: bool,
+    pub readiness: health::ReadinessState,
 }
 
 pub struct ApiKey(String);
@@ -483,6 +484,7 @@ fn init_app_state(
         api_key,
         opaque_errors: serve_config.opaque_errors,
         require_user_agent: serve_config.require_user_agent,
+        readiness: health::ReadinessState::default(),
     });
 
     let tracker = if serve_config.per_ip_budget_ms.is_some()

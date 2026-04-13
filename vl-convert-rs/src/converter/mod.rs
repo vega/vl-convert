@@ -198,6 +198,16 @@ impl VlConverter {
         Ok(())
     }
 
+    pub async fn health_check(&self) -> Result<(), AnyError> {
+        self.run_on_worker(|inner| {
+            Box::pin(async move {
+                inner.execute_script_to_json("1+1").await?;
+                Ok(())
+            })
+        })
+        .await
+    }
+
     fn get_or_spawn_sender(
         &self,
     ) -> Result<(tokio::sync::mpsc::Sender<QueuedWork>, OutstandingTicket), AnyError> {
