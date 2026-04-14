@@ -13,19 +13,37 @@ static SMALL_BODY_SERVER: Lazy<TestServer> = Lazy::new(|| {
 #[tokio::test]
 async fn test_body_too_large() {
     let server = &*SMALL_BODY_SERVER;
-    // Create a body > 1MB
-    let big_data: String = "x".repeat(1_100_000);
+
+    let big_values: Vec<serde_json::Value> = (0..50_000)
+        .map(|i| serde_json::json!({"a": i, "b": format!("padding_{:0>20}", i)}))
+        .collect();
+    let payload = serde_json::json!({
+        "spec": {
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "data": {"values": big_values},
+            "mark": "bar",
+            "encoding": {"x": {"field": "a"}, "y": {"field": "b"}}
+        }
+    });
+
+    let serialized = serde_json::to_string(&payload).unwrap();
+    assert!(
+        serialized.len() > 1_048_576,
+        "payload must exceed 1MB limit"
+    );
+
     let resp = server
         .client
         .post(format!("{}/vegalite/svg", server.base_url))
         .header("content-type", "application/json")
-        .body(format!(r#"{{"spec": {{"data": "{big_data}"}}}}"#))
+        .body(serialized)
         .send()
         .await
         .unwrap();
-    assert!(
-        resp.status().is_client_error(),
-        "expected client error for oversized body, got: {}",
+    assert_eq!(
+        resp.status(),
+        413,
+        "expected 413 Payload Too Large, got: {}",
         resp.status()
     );
 }

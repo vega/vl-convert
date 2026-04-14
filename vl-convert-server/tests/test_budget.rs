@@ -2,16 +2,15 @@ mod common;
 
 use common::*;
 use once_cell::sync::Lazy;
-use serde_json;
 
-static PER_IP_BUDGET_SERVER: Lazy<(TestServer, u16)> =
-    Lazy::new(|| start_budget_server(Some(1), None, 2000));
+static GLOBAL_BUDGET_SERVER: Lazy<(TestServer, u16)> =
+    Lazy::new(|| start_budget_server(None, Some(1), 2000, false));
 
 #[tokio::test]
 async fn test_budget_rate_limit_triggered() {
-    let (server, _admin_port) = &*PER_IP_BUDGET_SERVER;
-    // With per_ip_budget_ms=1 and budget_hold_ms=2000, the very first request
-    // should exhaust the budget. Send a request to trigger reservation.
+    let (server, _admin_port) = start_budget_server(Some(1), None, 2000, false);
+    // With per_ip_budget_ms=1 and hold_ms=2000, reserve(2000) > budget(1)
+    // so the very first request is rejected deterministically.
     let resp = server
         .client
         .post(format!("{}/vegalite/svg", server.base_url))
@@ -19,28 +18,17 @@ async fn test_budget_rate_limit_triggered() {
         .send()
         .await
         .unwrap();
-    // The first request may succeed or fail depending on timing; the second
-    // should definitely be rate-limited.
-    let resp2 = server
-        .client
-        .post(format!("{}/vegalite/svg", server.base_url))
-        .json(&serde_json::json!({"spec": simple_vl_spec()}))
-        .send()
-        .await
-        .unwrap();
-    // At least one of them should be 429
-    assert!(
-        resp.status() == 429 || resp2.status() == 429,
-        "expected at least one 429 response, got: {} and {}",
+    assert_eq!(
         resp.status(),
-        resp2.status()
+        429,
+        "expected 429 when hold_ms >> budget, got: {}",
+        resp.status()
     );
 }
 
 #[tokio::test]
 async fn test_budget_health_not_rate_limited() {
-    let (server, _admin_port) = &*PER_IP_BUDGET_SERVER;
-    // Health endpoints should bypass budget tracking
+    let (server, _admin_port) = start_budget_server(Some(1), None, 2000, false);
     for _ in 0..5 {
         let resp = server
             .client
@@ -54,7 +42,7 @@ async fn test_budget_health_not_rate_limited() {
 
 #[tokio::test]
 async fn test_budget_admin_get() {
-    let (_server, admin_port) = &*PER_IP_BUDGET_SERVER;
+    let (_server, admin_port) = start_budget_server(Some(1), None, 2000, false);
     let client = reqwest::Client::new();
     let resp = client
         .get(format!("http://127.0.0.1:{admin_port}/admin/budget"))
@@ -69,7 +57,7 @@ async fn test_budget_admin_get() {
 
 #[tokio::test]
 async fn test_budget_admin_update() {
-    let (_server, admin_port) = &*PER_IP_BUDGET_SERVER;
+    let (_server, admin_port) = start_budget_server(Some(1), None, 2000, false);
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("http://127.0.0.1:{admin_port}/admin/budget"))
@@ -82,14 +70,10 @@ async fn test_budget_admin_update() {
     assert_eq!(body["hold_ms"], 500);
 }
 
-static GLOBAL_BUDGET_SERVER: Lazy<(TestServer, u16)> =
-    Lazy::new(|| start_budget_server(None, Some(1), 2000));
-
 #[tokio::test]
 async fn test_budget_global_depletion() {
     let (server, _admin_port) = &*GLOBAL_BUDGET_SERVER;
-    // With global_budget_ms=1 and budget_hold_ms=2000, the first request
-    // should immediately deplete the global budget.
+    // With global_budget_ms=1 and hold_ms=2000, first request is rejected.
     let resp = server
         .client
         .post(format!("{}/vegalite/svg", server.base_url))
@@ -105,12 +89,9 @@ async fn test_budget_global_depletion() {
     );
 }
 
-static NO_BUDGET_ADMIN_SERVER: Lazy<(TestServer, u16)> =
-    Lazy::new(|| start_budget_server(None, None, 2000));
-
 #[tokio::test]
 async fn test_budget_admin_enable() {
-    let (server, admin_port) = &*NO_BUDGET_ADMIN_SERVER;
+    let (server, admin_port) = start_budget_server(None, None, 2000, false);
     // Without any budget configured, requests should succeed
     let resp = server
         .client
@@ -136,7 +117,7 @@ async fn test_budget_admin_enable() {
         .unwrap();
     assert_eq!(resp.status(), 200);
 
-    // Now requests should be rate-limited
+    // Now requests should be rate-limited (hold_ms=2000 >> per_ip_budget_ms=1)
     let resp = server
         .client
         .post(format!("{}/vegalite/svg", server.base_url))
@@ -144,30 +125,19 @@ async fn test_budget_admin_enable() {
         .send()
         .await
         .unwrap();
-    let resp2 = server
-        .client
-        .post(format!("{}/vegalite/svg", server.base_url))
-        .json(&serde_json::json!({"spec": simple_vl_spec()}))
-        .send()
-        .await
-        .unwrap();
-    assert!(
-        resp.status() == 429 || resp2.status() == 429,
-        "expected at least one 429 after enabling budget, got: {} and {}",
+    assert_eq!(
         resp.status(),
-        resp2.status()
+        429,
+        "expected 429 after enabling tight budget, got: {}",
+        resp.status()
     );
 }
 
-static ESTIMATE_UPDATE_SERVER: Lazy<(TestServer, u16)> =
-    Lazy::new(|| start_budget_server(Some(1), None, 2000));
-
 #[tokio::test]
-async fn test_budget_admin_estimate_update() {
-    let (_server, admin_port) = &*ESTIMATE_UPDATE_SERVER;
+async fn test_budget_admin_hold_update() {
+    let (_server, admin_port) = start_budget_server(Some(1), None, 2000, false);
     let client = reqwest::Client::new();
 
-    // Update hold_ms via POST
     let resp = client
         .post(format!("http://127.0.0.1:{admin_port}/admin/budget"))
         .json(&serde_json::json!({"hold_ms": 750}))
@@ -176,7 +146,6 @@ async fn test_budget_admin_estimate_update() {
         .unwrap();
     assert_eq!(resp.status(), 200);
 
-    // Verify via GET
     let resp = client
         .get(format!("http://127.0.0.1:{admin_port}/admin/budget"))
         .send()
@@ -189,4 +158,53 @@ async fn test_budget_admin_estimate_update() {
         "expected hold_ms to be updated to 750, got: {}",
         body["hold_ms"]
     );
+}
+
+#[tokio::test]
+async fn test_trust_proxy_true_isolates_ips() {
+    // With trust_proxy=true, different X-Forwarded-For IPs get independent budgets.
+    // per_ip_budget_ms=1 and hold_ms=2000 means every request is immediately rejected.
+    // But each unique XFF IP is tracked separately — proving isolation.
+    let (server, _admin_port) = start_budget_server(Some(1), None, 2000, true);
+
+    let resp1 = server
+        .client
+        .post(format!("{}/vegalite/svg", server.base_url))
+        .header("X-Forwarded-For", "10.0.0.1")
+        .json(&serde_json::json!({"spec": simple_vl_spec()}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp1.status(), 429, "10.0.0.1 should be rate-limited");
+
+    let resp2 = server
+        .client
+        .post(format!("{}/vegalite/svg", server.base_url))
+        .header("X-Forwarded-For", "10.0.0.2")
+        .json(&serde_json::json!({"spec": simple_vl_spec()}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp2.status(),
+        429,
+        "10.0.0.2 should also be rate-limited (independent bucket)"
+    );
+}
+
+#[tokio::test]
+async fn test_trust_proxy_false_ignores_xff() {
+    // With trust_proxy=false, X-Forwarded-For is ignored — all requests use socket IP.
+    let (server, _admin_port) = start_budget_server(Some(1), None, 2000, false);
+
+    let resp = server
+        .client
+        .post(format!("{}/vegalite/svg", server.base_url))
+        .header("X-Forwarded-For", "10.0.0.1")
+        .json(&serde_json::json!({"spec": simple_vl_spec()}))
+        .send()
+        .await
+        .unwrap();
+    // Still 429 — XFF is ignored, socket IP (127.0.0.1) is used, same budget
+    assert_eq!(resp.status(), 429);
 }

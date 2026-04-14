@@ -854,3 +854,113 @@ async fn budget_middleware(
 
     response
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_request(headers: &[(&str, &str)]) -> axum::http::Request<axum::body::Body> {
+        let mut builder = axum::http::Request::builder().method("GET").uri("/test");
+        for &(key, val) in headers {
+            builder = builder.header(key, val);
+        }
+        builder.body(axum::body::Body::empty()).unwrap()
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_false_ignores_xff() {
+        let req = make_request(&[("x-forwarded-for", "10.0.0.1")]);
+        let ip = extract_client_ip(&req, false);
+        assert_eq!(
+            ip, None,
+            "trust_proxy=false should ignore XFF and return None (no ConnectInfo)"
+        );
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_false_ignores_x_real_ip() {
+        let req = make_request(&[("x-real-ip", "10.0.0.1")]);
+        let ip = extract_client_ip(&req, false);
+        assert_eq!(ip, None);
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_true_xff() {
+        let req = make_request(&[("x-forwarded-for", "10.0.0.1")]);
+        let ip = extract_client_ip(&req, true);
+        assert_eq!(ip, Some("10.0.0.1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_true_xff_multi_hop() {
+        let req = make_request(&[("x-forwarded-for", "10.0.0.1, 10.0.0.99, 10.0.0.100")]);
+        let ip = extract_client_ip(&req, true);
+        assert_eq!(
+            ip,
+            Some("10.0.0.1".parse().unwrap()),
+            "should use first IP only"
+        );
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_true_x_real_ip() {
+        let req = make_request(&[("x-real-ip", "192.168.1.1")]);
+        let ip = extract_client_ip(&req, true);
+        assert_eq!(ip, Some("192.168.1.1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_true_xff_preferred_over_x_real_ip() {
+        let req = make_request(&[
+            ("x-forwarded-for", "10.0.0.1"),
+            ("x-real-ip", "192.168.1.1"),
+        ]);
+        let ip = extract_client_ip(&req, true);
+        assert_eq!(
+            ip,
+            Some("10.0.0.1".parse().unwrap()),
+            "XFF should take precedence"
+        );
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_true_invalid_xff_falls_back_to_x_real_ip() {
+        let req = make_request(&[
+            ("x-forwarded-for", "not-an-ip"),
+            ("x-real-ip", "192.168.1.1"),
+        ]);
+        let ip = extract_client_ip(&req, true);
+        assert_eq!(
+            ip,
+            Some("192.168.1.1".parse().unwrap()),
+            "invalid XFF should fall back to X-Real-IP"
+        );
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_true_empty_xff() {
+        let req = make_request(&[("x-forwarded-for", "")]);
+        let ip = extract_client_ip(&req, true);
+        assert_eq!(
+            ip, None,
+            "empty XFF with no X-Real-IP and no ConnectInfo should return None"
+        );
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_true_ipv6() {
+        let req = make_request(&[("x-forwarded-for", "2001:db8::1")]);
+        let ip = extract_client_ip(&req, true);
+        assert_eq!(ip, Some("2001:db8::1".parse().unwrap()));
+    }
+
+    #[test]
+    fn test_extract_ip_trust_proxy_true_no_headers() {
+        let req = make_request(&[]);
+        let ip = extract_client_ip(&req, true);
+        assert_eq!(
+            ip, None,
+            "no proxy headers and no ConnectInfo should return None"
+        );
+    }
+}

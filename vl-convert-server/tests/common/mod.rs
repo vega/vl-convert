@@ -105,16 +105,26 @@ pub static OPAQUE_SERVER: Lazy<TestServer> = Lazy::new(|| {
 pub fn start_budget_server(
     per_ip_ms: Option<i64>,
     global_ms: Option<i64>,
-    estimate_ms: i64,
+    hold_ms: i64,
+    trust_proxy: bool,
 ) -> (TestServer, u16) {
     let config = VlcConfig::default();
     let admin_port = find_free_port();
     let mut serve_config = default_serve_config();
     serve_config.per_ip_budget_ms = per_ip_ms;
     serve_config.global_budget_ms = global_ms;
-    serve_config.budget_hold_ms = estimate_ms;
+    serve_config.budget_hold_ms = hold_ms;
     serve_config.admin_port = Some(admin_port);
+    serve_config.trust_proxy = trust_proxy;
     let server = start_server_sync(config, serve_config);
+
+    for _ in 0..150 {
+        if std::net::TcpStream::connect(format!("127.0.0.1:{admin_port}")).is_ok() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
     (server, admin_port)
 }
 

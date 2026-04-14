@@ -379,3 +379,136 @@ fn flatten_plugin_domains(raw: &[String]) -> Vec<String> {
         .filter(|s| !s.is_empty())
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    const ALL_VLC_VARS: &[&str] = &[
+        "VLC_HOST",
+        "VLC_PORT",
+        "VLC_API_KEY",
+        "VLC_CORS_ORIGIN",
+        "VLC_WORKERS",
+        "VLC_MAX_EPHEMERAL_WORKERS",
+        "VLC_MAX_CONCURRENT_REQUESTS",
+        "VLC_REQUEST_TIMEOUT_SECS",
+        "VLC_DRAIN_TIMEOUT_SECS",
+        "VLC_MAX_BODY_SIZE_MB",
+        "VLC_OPAQUE_ERRORS",
+        "VLC_REQUIRE_USER_AGENT",
+        "VLC_LOG_FORMAT",
+        "VLC_PER_IP_BUDGET_MS",
+        "VLC_GLOBAL_BUDGET_MS",
+        "VLC_BUDGET_HOLD_MS",
+        "VLC_ADMIN_PORT",
+        "VLC_TRUST_PROXY",
+        "VLC_FONT_DIR",
+    ];
+
+    struct EnvGuard {
+        saved: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl EnvGuard {
+        fn new(vars: &[&'static str]) -> Self {
+            let saved = vars
+                .iter()
+                .map(|&name| (name, std::env::var(name).ok()))
+                .collect();
+            Self { saved }
+        }
+
+        fn set(&self, key: &str, value: &str) {
+            std::env::set_var(key, value);
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (name, original) in &self.saved {
+                match original {
+                    Some(val) => std::env::set_var(name, val),
+                    None => std::env::remove_var(name),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_cli_defaults() {
+        let guard = EnvGuard::new(ALL_VLC_VARS);
+        for &var in ALL_VLC_VARS {
+            std::env::remove_var(var);
+        }
+
+        let cli = Cli::try_parse_from(["vl-convert-server"]).unwrap();
+
+        assert_eq!(cli.host, "127.0.0.1");
+        assert_eq!(cli.port, 3000);
+        assert_eq!(cli.request_timeout_secs, 30);
+        assert_eq!(cli.max_body_size_mb, 50);
+        assert_eq!(cli.budget_hold_ms, 1000);
+        assert!(!cli.trust_proxy);
+        assert!(!cli.opaque_errors);
+        assert!(cli.api_key.is_none());
+
+        drop(guard);
+    }
+
+    #[test]
+    fn test_cli_env_var_parsing() {
+        let guard = EnvGuard::new(ALL_VLC_VARS);
+        for &var in ALL_VLC_VARS {
+            std::env::remove_var(var);
+        }
+
+        guard.set("VLC_PORT", "8080");
+        guard.set("VLC_API_KEY", "my-secret");
+        guard.set("VLC_TRUST_PROXY", "true");
+
+        let cli = Cli::try_parse_from(["vl-convert-server"]).unwrap();
+
+        assert_eq!(cli.port, 8080);
+        assert_eq!(cli.api_key, Some("my-secret".to_string()));
+        assert!(cli.trust_proxy);
+
+        drop(guard);
+    }
+
+    #[test]
+    fn test_cli_flag_overrides_env() {
+        let guard = EnvGuard::new(ALL_VLC_VARS);
+        for &var in ALL_VLC_VARS {
+            std::env::remove_var(var);
+        }
+
+        guard.set("VLC_PORT", "8080");
+
+        let cli = Cli::try_parse_from(["vl-convert-server", "--port", "9090"]).unwrap();
+
+        assert_eq!(cli.port, 9090);
+
+        drop(guard);
+    }
+
+    #[test]
+    fn test_cli_conflicts() {
+        let guard = EnvGuard::new(ALL_VLC_VARS);
+        for &var in ALL_VLC_VARS {
+            std::env::remove_var(var);
+        }
+
+        let result = Cli::try_parse_from([
+            "vl-convert-server",
+            "--vlc-config",
+            "foo.json",
+            "--no-vlc-config",
+        ]);
+
+        assert!(result.is_err());
+
+        drop(guard);
+    }
+}
