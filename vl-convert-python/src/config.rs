@@ -60,6 +60,8 @@ pub fn converter_config_json(config: &VlcConfig) -> serde_json::Value {
         "vega_plugins": config.vega_plugins,
         "plugin_import_domains": config.plugin_import_domains,
         "allow_per_request_plugins": config.allow_per_request_plugins,
+        "max_ephemeral_workers": config.max_ephemeral_workers,
+        "allow_google_fonts": config.allow_google_fonts,
         "per_request_plugin_import_domains": config.per_request_plugin_import_domains,
         "default_theme": config.default_theme,
         "default_format_locale": config.default_format_locale.as_ref().map(|l| match l {
@@ -91,6 +93,8 @@ pub struct ConverterConfigOverrides {
     pub vega_plugins: Option<Option<Vec<String>>>,
     pub plugin_import_domains: Option<Vec<String>>,
     pub allow_per_request_plugins: Option<bool>,
+    pub max_ephemeral_workers: Option<usize>,
+    pub allow_google_fonts: Option<bool>,
     pub per_request_plugin_import_domains: Option<Vec<String>>,
     pub default_theme: Option<Option<String>>,
     pub default_format_locale: Option<Option<FormatLocale>>,
@@ -288,6 +292,26 @@ pub fn parse_config_overrides(
                         })?);
                 }
             }
+            "max_ephemeral_workers" => {
+                if !value.is_none() {
+                    overrides.max_ephemeral_workers =
+                        Some(value.extract::<usize>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid max_ephemeral_workers value for configure: {err}"
+                            )
+                        })?);
+                }
+            }
+            "allow_google_fonts" => {
+                if !value.is_none() {
+                    overrides.allow_google_fonts =
+                        Some(value.extract::<bool>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid allow_google_fonts value for configure: {err}"
+                            )
+                        })?);
+                }
+            }
             "per_request_plugin_import_domains" => {
                 if value.is_none() {
                     overrides.per_request_plugin_import_domains = Some(vec![]);
@@ -430,6 +454,12 @@ pub fn apply_config_overrides(
     }
     if let Some(allow_per_request_plugins) = overrides.allow_per_request_plugins {
         config.allow_per_request_plugins = allow_per_request_plugins;
+    }
+    if let Some(max_ephemeral_workers) = overrides.max_ephemeral_workers {
+        config.max_ephemeral_workers = max_ephemeral_workers;
+    }
+    if let Some(allow_google_fonts) = overrides.allow_google_fonts {
+        config.allow_google_fonts = allow_google_fonts;
     }
     if let Some(per_request_plugin_import_domains) = overrides.per_request_plugin_import_domains {
         config.per_request_plugin_import_domains = per_request_plugin_import_domains;
