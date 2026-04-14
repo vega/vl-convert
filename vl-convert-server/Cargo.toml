@@ -23,7 +23,7 @@ vl-convert-google-fonts = { path = "../vl-convert-google-fonts", version = "2.0.
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-clap = { workspace = true }
+clap = { workspace = true, features = ["env"] }
 log = { workspace = true }
 env_logger = { workspace = true }
 shellexpand = { workspace = true }
