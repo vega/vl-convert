@@ -6,8 +6,6 @@ fn default_vl_version() -> String {
     DEFAULT_VL_VERSION.to_string()
 }
 
-// --- Shared sub-structs ---
-
 /// Fields common to all Vega-Lite conversion requests.
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct VegaliteCommon {
@@ -58,8 +56,6 @@ pub struct VegaCommon {
     /// Per-request Vega plugin (inline ESM or URL).
     pub vega_plugin: Option<String>,
 }
-
-// --- Vega-Lite per-endpoint types ---
 
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -136,8 +132,6 @@ pub struct VegaliteUrlRequest {
     pub fullscreen: bool,
 }
 
-// --- Vega per-endpoint types ---
-
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct VegaSvgRequest {
@@ -197,8 +191,6 @@ pub struct VegaUrlRequest {
     pub fullscreen: bool,
 }
 
-// --- SVG input per-endpoint types ---
-
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SvgPngRequest {
@@ -222,8 +214,6 @@ pub struct SvgPdfRequest {
     pub svg: String,
 }
 
-// --- Font endpoint types ---
-
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct VegaliteFontsRequest {
@@ -244,8 +234,6 @@ pub struct VegaFontsRequest {
     pub include_font_face: bool,
 }
 
-// --- Bundling endpoint types ---
-
 fn default_vl_version_bundle() -> String {
     DEFAULT_VL_VERSION.to_string()
 }
@@ -265,8 +253,6 @@ pub struct BundleSnippetRequest {
     #[serde(default = "default_vl_version_bundle")]
     pub vl_version: String,
 }
-
-// --- Response types ---
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ErrorResponse {

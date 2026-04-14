@@ -303,9 +303,11 @@ pub async fn vega_to_url(
     path = "/vega/scenegraph",
     request_body = VegaScenegraphRequest,
     responses(
-        (status = 200, content_type = "application/json", description = "Scenegraph (JSON or MessagePack based on Accept header)"),
+        (status = 200, description = "Scenegraph (set Accept: application/msgpack for binary format)", content(
+            (serde_json::Value = "application/json"),
+            (Vec<u8> = "application/msgpack")
+        )),
         (status = 400, body = ErrorResponse, description = "Invalid request"),
-        (status = 406, body = ErrorResponse, description = "Not Acceptable — use application/json or application/msgpack"),
         (status = 422, body = ErrorResponse, description = "Conversion failed"),
     ),
     tag = "Vega"

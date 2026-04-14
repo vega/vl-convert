@@ -45,7 +45,6 @@ impl LogLevel {
 #[command(version, name = "vl-convert-server")]
 #[command(about = "HTTP server for converting Vega-Lite and Vega specifications to static images")]
 struct Cli {
-    // --- Global converter options ---
     /// Path to JSONC converter config file
     #[arg(long)]
     vlc_config: Option<String>,
@@ -118,7 +117,6 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = LogLevel::Warn)]
     log_level: LogLevel,
 
-    // --- Server-specific options ---
     /// Bind address
     #[arg(long, env = "VLC_HOST", default_value = "127.0.0.1")]
     host: String,
