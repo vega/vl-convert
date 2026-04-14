@@ -1,8 +1,8 @@
 mod admin;
 pub mod budget;
 mod bundling;
-pub mod datadog_fmt;
 mod health;
+pub mod json_fmt;
 mod svg;
 mod themes;
 pub mod types;
@@ -80,7 +80,7 @@ pub fn init_tracing(level: &str, format: LogFormat) {
     match format {
         LogFormat::Json => {
             tracing_subscriber::fmt()
-                .event_format(datadog_fmt::FlatJsonFormatter)
+                .event_format(json_fmt::FlatJsonFormatter)
                 .fmt_fields(tracing_subscriber::fmt::format::JsonFields::new())
                 .with_env_filter(filter)
                 .init();
@@ -587,7 +587,7 @@ fn build_middleware_stack(router: Router, serve_config: &ServeConfig) -> Router 
                 .make_span_with(
                     make_span_json as fn(&axum::http::Request<axum::body::Body>) -> tracing::Span,
                 )
-                .on_response(datadog_fmt::FlatJsonOnResponse),
+                .on_response(json_fmt::FlatJsonOnResponse),
         )
     } else {
         app.layer(

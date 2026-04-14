@@ -201,7 +201,10 @@ impl VlConverter {
     pub async fn health_check(&self) -> Result<(), AnyError> {
         self.run_on_worker(|inner| {
             Box::pin(async move {
-                inner.execute_script_to_json("1+1").await?;
+                let result = inner.execute_script_to_json("1+1").await?;
+                if result != serde_json::json!(2) {
+                    bail!("worker health check failed");
+                }
                 Ok(())
             })
         })
