@@ -9,13 +9,14 @@ use vl_convert_rs::converter::{
     UrlOpts, VgOpts,
 };
 
-use super::types::{
+use crate::accept::{preferred_scenegraph_format, ScenegraphFormat};
+use crate::config::AppState;
+use crate::types::{
     ErrorResponse, VegaCommon, VegaFontsRequest, VegaHtmlRequest, VegaJpegRequest, VegaPdfRequest,
     VegaPngRequest, VegaScenegraphRequest, VegaSvgRequest, VegaUrlRequest,
 };
-use super::{
-    append_vlc_logs_header, error_response, format_log_entries, preferred_scenegraph_format,
-    validate_common_opts, AppState, ScenegraphFormat,
+use crate::util::{
+    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts,
 };
 
 fn build_vg_opts(req: &VegaCommon, state: &AppState) -> Result<VgOpts, String> {

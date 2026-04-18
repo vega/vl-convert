@@ -17,11 +17,9 @@ mod vegalite;
 #[cfg(test)]
 mod test_support;
 
-pub(crate) use accept::{preferred_scenegraph_format, ScenegraphFormat};
 pub(crate) use config::{apply_server_defaults, validate_serve_config, AdminConfig};
 pub use config::{init_tracing, ApiKey, AppState, BuiltApp, LogFormat, ServeConfig};
 pub(crate) use router::{build_middleware_stack, build_router};
-pub(crate) use util::validate_common_opts;
 pub use util::{
     append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args,
     vegalite_versions,

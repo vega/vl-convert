@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use vl_convert_rs::module_loader::import_map;
 
-use super::AppState;
+use crate::config::AppState;
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(1);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -92,6 +92,6 @@ pub async fn infoz() -> Json<Value> {
         "vega_version": import_map::VEGA_VERSION,
         "vega_themes_version": import_map::VEGA_THEMES_VERSION,
         "vega_embed_version": import_map::VEGA_EMBED_VERSION,
-        "vegalite_versions": super::vegalite_versions(),
+        "vegalite_versions": crate::util::vegalite_versions(),
     }))
 }

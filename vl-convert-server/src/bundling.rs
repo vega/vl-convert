@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use vl_convert_rs::module_loader::import_map::VlVersion;
 
-use super::types::{BundleQuery, BundleSnippetRequest, ErrorResponse};
-use super::{error_response, AppState};
+use crate::config::AppState;
+use crate::types::{BundleQuery, BundleSnippetRequest, ErrorResponse};
+use crate::util::error_response;
 
 #[utoipa::path(
     get,

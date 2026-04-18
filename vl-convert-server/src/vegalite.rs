@@ -10,14 +10,15 @@ use vl_convert_rs::converter::{
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 
-use super::types::{
+use crate::accept::{preferred_scenegraph_format, ScenegraphFormat};
+use crate::config::AppState;
+use crate::types::{
     ErrorResponse, VegaliteCommon, VegaliteFontsRequest, VegaliteHtmlRequest, VegaliteJpegRequest,
     VegalitePdfRequest, VegalitePngRequest, VegaliteScenegraphRequest, VegaliteSvgRequest,
     VegaliteUrlRequest, VegaliteVegaRequest,
 };
-use super::{
-    append_vlc_logs_header, error_response, format_log_entries, preferred_scenegraph_format,
-    validate_common_opts, AppState, ScenegraphFormat,
+use crate::util::{
+    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts,
 };
 
 fn build_vl_opts(req: &VegaliteCommon, state: &AppState) -> Result<VlOpts, String> {

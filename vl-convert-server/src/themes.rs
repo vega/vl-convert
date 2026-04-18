@@ -5,14 +5,15 @@ use itertools::Itertools;
 use serde_json::Value;
 use std::sync::Arc;
 
-use super::{append_vlc_logs_header, AppState};
+use crate::config::AppState;
+use crate::util::{append_vlc_logs_header, error_response};
 
 #[utoipa::path(
     get,
     path = "/themes",
     responses(
         (status = 200, content_type = "application/json", description = "List of theme names"),
-        (status = 500, body = super::types::ErrorResponse, description = "Internal error"),
+        (status = 500, body = crate::types::ErrorResponse, description = "Internal error"),
     ),
     tag = "Themes"
 )]
@@ -30,12 +31,12 @@ pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
             )
                 .into_response()
         }
-        Ok(_) => super::error_response(
+        Ok(_) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "unexpected themes format",
             state.opaque_errors,
         ),
-        Err(e) => super::error_response(
+        Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             &format!("Failed to load themes: {e}"),
             state.opaque_errors,
@@ -51,8 +52,8 @@ pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
     ),
     responses(
         (status = 200, content_type = "application/json", description = "Theme configuration object"),
-        (status = 404, body = super::types::ErrorResponse, description = "Theme not found"),
-        (status = 500, body = super::types::ErrorResponse, description = "Internal error"),
+        (status = 404, body = crate::types::ErrorResponse, description = "Theme not found"),
+        (status = 500, body = crate::types::ErrorResponse, description = "Internal error"),
     ),
     tag = "Themes"
 )]
@@ -66,19 +67,19 @@ pub async fn get_theme(State(state): State<Arc<AppState>>, Path(name): Path<Stri
             if let Some(theme_config) = themes.get(&name) {
                 (headers, Json(theme_config.clone())).into_response()
             } else {
-                super::error_response(
+                error_response(
                     StatusCode::NOT_FOUND,
                     &format!("unknown theme: {name}"),
                     state.opaque_errors,
                 )
             }
         }
-        Ok(_) => super::error_response(
+        Ok(_) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "unexpected themes format",
             state.opaque_errors,
         ),
-        Err(e) => super::error_response(
+        Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             &format!("Failed to load themes: {e}"),
             state.opaque_errors,

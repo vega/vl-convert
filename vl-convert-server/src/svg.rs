@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use vl_convert_rs::converter::{JpegOpts, PdfOpts, PngOpts};
 
-use super::types::{ErrorResponse, SvgJpegRequest, SvgPdfRequest, SvgPngRequest};
-use super::{append_vlc_logs_header, error_response, format_log_entries, AppState};
+use crate::config::AppState;
+use crate::types::{ErrorResponse, SvgJpegRequest, SvgPdfRequest, SvgPngRequest};
+use crate::util::{append_vlc_logs_header, error_response, format_log_entries};
 
 #[utoipa::path(
     post,
