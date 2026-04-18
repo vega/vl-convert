@@ -3,7 +3,7 @@ mod common;
 use common::*;
 use once_cell::sync::Lazy;
 
-static GLOBAL_BUDGET_SERVER: Lazy<(TestServer, u16)> =
+static GLOBAL_BUDGET_SERVER: Lazy<(ServerHandle, u16)> =
     Lazy::new(|| start_budget_server(None, Some(1), 2000, false));
 
 #[tokio::test]

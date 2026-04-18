@@ -14,6 +14,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use axum::Router;
+use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -166,7 +167,6 @@ pub struct ServeConfig {
     pub cors_origin: Option<String>,
     pub max_concurrent_requests: Option<usize>,
     pub request_timeout_secs: u64,
-    pub drain_timeout_secs: u64,
     pub max_body_size_mb: usize,
     pub opaque_errors: bool,
     pub require_user_agent: bool,
@@ -176,6 +176,28 @@ pub struct ServeConfig {
     pub budget_hold_ms: i64,
     pub admin_port: Option<u16>,
     pub trust_proxy: bool,
+}
+
+impl Default for ServeConfig {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".to_string(),
+            port: 3000,
+            api_key: None,
+            cors_origin: None,
+            max_concurrent_requests: None,
+            request_timeout_secs: 30,
+            max_body_size_mb: 50,
+            opaque_errors: false,
+            require_user_agent: false,
+            log_format: LogFormat::Text,
+            per_ip_budget_ms: None,
+            global_budget_ms: None,
+            budget_hold_ms: 1000,
+            admin_port: None,
+            trust_proxy: false,
+        }
+    }
 }
 
 pub struct AppState {
@@ -435,7 +457,7 @@ fn build_router(
                 move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
                     let tracker = tracker.clone();
                     async move {
-                        budget_middleware(tracker, opaque_errors, trust_proxy, req, next).await
+                        budget::middleware(tracker, opaque_errors, trust_proxy, req, next).await
                     }
                 },
             ));
@@ -498,16 +520,30 @@ fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span 
     )
 }
 
-struct InitResult {
-    state: Arc<AppState>,
+/// A fully-constructed server returned from [`build_app`]. Pass to
+/// [`serve`] to run it, or call `router.oneshot(req)` directly for
+/// `tower::ServiceExt`-style tests.
+pub struct BuiltApp {
+    /// The main app router with all middleware applied.
+    pub router: Router,
+    /// The underlying converter handle, for callers that want to drive
+    /// conversions programmatically in addition to serving HTTP.
+    pub converter: VlConverter,
+    /// Budget tracker. Consumed by [`serve`] to drive the refill loop.
     tracker: Option<Arc<budget::BudgetTracker>>,
-    converter: VlConverter,
+    /// Admin listener setup. Consumed by [`serve`] to bind and serve.
+    admin: Option<AdminConfig>,
 }
 
-/// Apply server-safe defaults to a VlcConfig. This ensures every server
-/// entry point (run, build_app) gets hardened defaults regardless of
+struct AdminConfig {
+    addr: String,
+    router: Router,
+}
+
+/// Apply server-safe defaults to a VlcConfig. Called from [`build_app`]
+/// so every entry into the server gets hardened defaults regardless of
 /// whether the caller remembered to set them.
-pub fn apply_server_defaults(config: &mut VlcConfig) {
+fn apply_server_defaults(config: &mut VlcConfig) {
     if config.allowed_base_urls.is_none() {
         config.allowed_base_urls = Some(vec![]);
         log::info!(
@@ -530,82 +566,6 @@ pub fn apply_server_defaults(config: &mut VlcConfig) {
              (override with --max-ephemeral-workers)"
         );
     }
-}
-
-/// Initialize converter, app state, budget tracker, and admin listener.
-fn init_app_state(
-    config: VlcConfig,
-    serve_config: &ServeConfig,
-) -> Result<InitResult, anyhow::Error> {
-    validate_serve_config(serve_config)?;
-
-    let mut config = config;
-    apply_server_defaults(&mut config);
-
-    let num_workers = config.num_workers;
-    log::info!("Initializing converter with {num_workers} worker(s)...");
-    let converter = VlConverter::with_config(config.clone())?;
-    converter.warm_up()?;
-    log::info!("Workers initialized");
-
-    let api_key = serve_config.api_key.as_ref().map(|k| ApiKey(k.clone()));
-    let state = Arc::new(AppState {
-        converter: converter.clone(),
-        config: config.clone(),
-        api_key,
-        opaque_errors: serve_config.opaque_errors,
-        require_user_agent: serve_config.require_user_agent,
-        readiness: health::ReadinessState::default(),
-    });
-
-    let tracker = if serve_config.per_ip_budget_ms.is_some()
-        || serve_config.global_budget_ms.is_some()
-        || serve_config.admin_port.is_some()
-    {
-        let t = budget::BudgetTracker::new(
-            serve_config.per_ip_budget_ms.unwrap_or(0),
-            serve_config.global_budget_ms.unwrap_or(0),
-            serve_config.budget_hold_ms,
-        );
-        let refill_tracker = t.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(1));
-            loop {
-                interval.tick().await;
-                refill_tracker.refill();
-            }
-        });
-        Some(t)
-    } else {
-        None
-    };
-
-    if let (Some(admin_port), Some(ref tracker)) = (serve_config.admin_port, &tracker) {
-        let admin_router = admin::admin_router(tracker.clone())
-            .layer(PropagateRequestIdLayer::x_request_id())
-            .layer(TraceLayer::new_for_http())
-            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
-            .layer(CatchPanicLayer::new());
-        let admin_addr = format!("127.0.0.1:{admin_port}");
-        let admin_addr_clone = admin_addr.clone();
-        tokio::spawn(async move {
-            match tokio::net::TcpListener::bind(&admin_addr_clone).await {
-                Ok(listener) => {
-                    log::info!("Admin API listening on http://{admin_addr_clone}");
-                    let _ = axum::serve(listener, admin_router).await;
-                }
-                Err(e) => {
-                    log::error!("Failed to bind admin port {admin_addr_clone}: {e}");
-                }
-            }
-        });
-    }
-
-    Ok(InitResult {
-        state,
-        tracker,
-        converter,
-    })
 }
 
 fn validate_serve_config(serve_config: &ServeConfig) -> Result<(), anyhow::Error> {
@@ -684,97 +644,117 @@ fn build_middleware_stack(router: Router, serve_config: &ServeConfig) -> Router 
         .layer(CatchPanicLayer::new())
 }
 
-pub async fn run(config: VlcConfig, serve_config: ServeConfig) -> Result<(), anyhow::Error> {
-    let InitResult { state, tracker, .. } = init_app_state(config.clone(), &serve_config)?;
-
-    let router = build_router(
-        state.clone(),
-        tracker,
-        serve_config.opaque_errors,
-        serve_config.trust_proxy,
-    );
-    let app = build_middleware_stack(router, &serve_config);
-
-    // Graceful shutdown signal
-    let drain_secs = serve_config.drain_timeout_secs;
-    let shutdown_signal = async move {
-        let ctrl_c = tokio::signal::ctrl_c();
-
-        #[cfg(unix)]
-        {
-            let mut sigterm =
-                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                    .expect("failed to install SIGTERM handler");
-            tokio::select! {
-                _ = ctrl_c => log::info!("Received SIGINT, shutting down..."),
-                _ = sigterm.recv() => log::info!("Received SIGTERM, shutting down..."),
-            }
-        }
-
-        #[cfg(not(unix))]
-        {
-            ctrl_c.await.expect("failed to install Ctrl-C handler");
-            log::info!("Received Ctrl-C, shutting down...");
-        }
-
-        log::info!("Starting graceful drain ({drain_secs}s deadline)...");
+/// Serve a [`BuiltApp`] on a pre-bound listener, spawning its background
+/// tasks (budget refill, admin listener) on the current runtime and
+/// draining when `shutdown` resolves. Signal handling and drain-timeout
+/// escalation are the caller's responsibility — this function only
+/// reacts to the injected shutdown future.
+pub async fn serve(
+    listener: tokio::net::TcpListener,
+    built: BuiltApp,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> Result<(), anyhow::Error> {
+    if let Some(tracker) = built.tracker {
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(drain_secs)).await;
-            log::warn!("Drain timeout ({drain_secs}s) exceeded, forcing exit");
-            std::process::exit(1);
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+                tracker.refill();
+            }
         });
-    };
-
-    // Bind and serve
-    let addr = if serve_config.host.contains(':') {
-        format!("[{}]:{}", serve_config.host, serve_config.port)
-    } else {
-        format!("{}:{}", serve_config.host, serve_config.port)
-    };
-
-    let host = &serve_config.host;
-    if host != "127.0.0.1" && host != "localhost" && host != "::1" && state.api_key.is_none() {
-        log::warn!(
-            "Server binding to {addr} with no API key — accessible to any network client. \
-             Set --api-key or VLC_API_KEY to restrict access."
-        );
     }
-
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    eprintln!("Listening on http://{addr}");
-    log::info!("Listening on http://{addr}");
+    if let Some(admin) = built.admin {
+        tokio::spawn(async move {
+            match tokio::net::TcpListener::bind(&admin.addr).await {
+                Ok(listener) => {
+                    log::info!("Admin API listening on http://{}", admin.addr);
+                    let _ = axum::serve(listener, admin.router).await;
+                }
+                Err(e) => {
+                    log::error!("Failed to bind admin port {}: {e}", admin.addr);
+                }
+            }
+        });
+    }
 
     axum::serve(
         listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
+        built
+            .router
+            .into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal)
+    .with_graceful_shutdown(shutdown)
     .await?;
-
     Ok(())
 }
 
-/// Build the fully-configured app (Router with all middleware) without binding.
-/// Used by tests to bind to port 0 and discover the assigned port.
-pub fn build_app(
-    config: VlcConfig,
-    serve_config: &ServeConfig,
-) -> Result<(Router, VlConverter), anyhow::Error> {
-    let InitResult {
-        state,
-        tracker,
-        converter,
-    } = init_app_state(config, serve_config)?;
+/// Build a [`BuiltApp`] from the given configuration. Runtime-free:
+/// `serve` spawns the background tasks carried on the returned value.
+/// Tests that exercise the router via `tower::ServiceExt::oneshot` can
+/// use `built.router` directly without ever calling [`serve`].
+pub fn build_app(config: VlcConfig, serve_config: &ServeConfig) -> Result<BuiltApp, anyhow::Error> {
+    validate_serve_config(serve_config)?;
+
+    let mut config = config;
+    apply_server_defaults(&mut config);
+
+    let num_workers = config.num_workers;
+    log::info!("Initializing converter with {num_workers} worker(s)...");
+    let converter = VlConverter::with_config(config.clone())?;
+    converter.warm_up()?;
+    log::info!("Workers initialized");
+
+    let api_key = serve_config.api_key.as_ref().map(|k| ApiKey(k.clone()));
+    let state = Arc::new(AppState {
+        converter: converter.clone(),
+        config: config.clone(),
+        api_key,
+        opaque_errors: serve_config.opaque_errors,
+        require_user_agent: serve_config.require_user_agent,
+        readiness: health::ReadinessState::default(),
+    });
+
+    let tracker = if serve_config.per_ip_budget_ms.is_some()
+        || serve_config.global_budget_ms.is_some()
+        || serve_config.admin_port.is_some()
+    {
+        Some(budget::BudgetTracker::new(
+            serve_config.per_ip_budget_ms.unwrap_or(0),
+            serve_config.global_budget_ms.unwrap_or(0),
+            serve_config.budget_hold_ms,
+        ))
+    } else {
+        None
+    };
+
+    let admin = if let (Some(admin_port), Some(t)) = (serve_config.admin_port, &tracker) {
+        let admin_router = admin::admin_router(t.clone())
+            .layer(PropagateRequestIdLayer::x_request_id())
+            .layer(TraceLayer::new_for_http())
+            .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
+            .layer(CatchPanicLayer::new());
+        Some(AdminConfig {
+            addr: format!("127.0.0.1:{admin_port}"),
+            router: admin_router,
+        })
+    } else {
+        None
+    };
 
     let router = build_router(
         state,
-        tracker,
+        tracker.clone(),
         serve_config.opaque_errors,
         serve_config.trust_proxy,
     );
     let app = build_middleware_stack(router, serve_config);
 
-    Ok((app, converter))
+    Ok(BuiltApp {
+        router: app,
+        converter,
+        tracker,
+        admin,
+    })
 }
 
 /// Extract trace context from W3C traceparent or Datadog headers.
@@ -873,7 +853,7 @@ async fn user_agent_middleware(
 /// Returns true if `ip` is a loopback, private-range, link-local,
 /// unspecified, or CGNAT address. Used to skip internal hops when
 /// walking `X-Forwarded-For` right-to-left.
-fn is_private_or_loopback(ip: &std::net::IpAddr) -> bool {
+pub(crate) fn is_private_or_loopback(ip: &std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => {
             let [a, b, _, _] = v4.octets();
@@ -915,7 +895,7 @@ fn is_private_or_loopback(ip: &std::net::IpAddr) -> bool {
 /// (Railway, nginx, envoy, ALB): an attacker can spoof the client hop
 /// by sending their own `X-Forwarded-For`. This implementation walks
 /// right-to-left to land on the first trusted hop.
-fn extract_client_ip(
+pub(crate) fn extract_client_ip(
     req: &axum::http::Request<axum::body::Body>,
     trust_proxy: bool,
 ) -> Option<std::net::IpAddr> {
@@ -961,73 +941,6 @@ fn extract_client_ip(
         .map(|ci| ci.0.ip())
 }
 
-async fn budget_middleware(
-    tracker: Arc<budget::BudgetTracker>,
-    opaque_errors: bool,
-    trust_proxy: bool,
-    req: axum::http::Request<axum::body::Body>,
-    next: axum::middleware::Next,
-) -> Response {
-    if !tracker.is_enabled() {
-        return next.run(req).await;
-    }
-
-    let ip = extract_client_ip(&req, trust_proxy)
-        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
-
-    let span = tracing::Span::current();
-    span.record("budget_client_ip", tracing::field::display(&ip));
-
-    let reservation = match tracker.reserve(ip) {
-        Ok(reservation) => reservation,
-        Err(e) => {
-            let outcome = match e {
-                budget::BudgetExhausted::PerIp => "rejected_per_ip",
-                budget::BudgetExhausted::Global => "rejected_global",
-            };
-            span.record("budget_outcome", outcome);
-            span.record("budget_charged_ms", 0_i64);
-            let status = tracker.status();
-            if status.global_budget_ms > 0 {
-                span.record("budget_global_remaining_ms", status.global_remaining_ms);
-            }
-            if let Some(ip_rem) = tracker.ip_remaining_ms(ip) {
-                span.record("budget_ip_remaining_ms", ip_rem);
-            }
-            return error_response(
-                StatusCode::TOO_MANY_REQUESTS,
-                &format!("{e}"),
-                opaque_errors,
-            );
-        }
-    };
-
-    // Optimistic pre-record: if the inner future is cancelled (request
-    // timeout, handler panic, client disconnect) we never reach the
-    // post-await overwrite, and `reservation`'s Drop refunds the full
-    // reservation. These values stay on the span and appear on the
-    // TraceLayer response log line as the signal of abnormal termination.
-    let hold_ms = tracker.hold_ms();
-    span.record("budget_outcome", "refunded_on_drop");
-    span.record("budget_charged_ms", hold_ms);
-
-    let start = std::time::Instant::now();
-    let response = next.run(req).await;
-    let actual_ms = start.elapsed().as_millis() as i64;
-
-    let settlement = reservation.complete(actual_ms);
-    span.record("budget_outcome", "accepted");
-    span.record("budget_charged_ms", settlement.charged_ms);
-    if let Some(g) = settlement.global_remaining_ms {
-        span.record("budget_global_remaining_ms", g);
-    }
-    if let Some(p) = settlement.ip_remaining_ms {
-        span.record("budget_ip_remaining_ms", p);
-    }
-
-    response
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1036,22 +949,8 @@ mod tests {
 
     fn default_serve_config() -> ServeConfig {
         ServeConfig {
-            host: "127.0.0.1".to_string(),
             port: 0,
-            api_key: None,
-            cors_origin: None,
-            max_concurrent_requests: None,
-            request_timeout_secs: 30,
-            drain_timeout_secs: 30,
-            max_body_size_mb: 50,
-            opaque_errors: false,
-            require_user_agent: false,
-            log_format: LogFormat::Text,
-            per_ip_budget_ms: None,
-            global_budget_ms: None,
-            budget_hold_ms: 1000,
-            admin_port: None,
-            trust_proxy: false,
+            ..ServeConfig::default()
         }
     }
 
@@ -1331,7 +1230,7 @@ mod tests {
             .layer(axum::middleware::from_fn(
                 move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
                     let tracker = tracker.clone();
-                    async move { budget_middleware(tracker, false, false, req, next).await }
+                    async move { budget::middleware(tracker, false, false, req, next).await }
                 },
             ));
 
@@ -1429,7 +1328,7 @@ mod tests {
             .layer(axum::middleware::from_fn(
                 move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
                     let tracker = tracker.clone();
-                    async move { budget_middleware(tracker, false, false, req, next).await }
+                    async move { budget::middleware(tracker, false, false, req, next).await }
                 },
             ));
 

@@ -286,6 +286,10 @@ pub(crate) struct Cli {
 pub(crate) struct ResolvedSettings {
     pub(crate) converter_config: VlcConfig,
     pub(crate) serve_config: ServeConfig,
+    /// CLI-only: post-signal drain deadline before the binary forces
+    /// exit. The library doesn't consume this — it's consumed by the
+    /// drain watchdog in `main.rs`.
+    pub(crate) drain_timeout_secs: u64,
     pub(crate) font_dir: Option<String>,
     pub(crate) log_filter: String,
 }
@@ -546,6 +550,7 @@ struct Overrides {
 struct WorkingSettings {
     converter_config: VlcConfig,
     serve_config: ServeConfig,
+    drain_timeout_secs: u64,
     font_dir: Option<String>,
     log_level: LogLevel,
     log_filter: Option<String>,
@@ -570,7 +575,8 @@ impl WorkingSettings {
             derive_data_access_state(converter_config.allowed_base_urls.take());
         Self {
             converter_config,
-            serve_config: default_serve_config(),
+            serve_config: ServeConfig::default(),
+            drain_timeout_secs: 30,
             font_dir: None,
             log_level: LogLevel::Warn,
             log_filter: None,
@@ -616,7 +622,7 @@ impl WorkingSettings {
             self.serve_config.request_timeout_secs = value;
         }
         if let Some(value) = overrides.drain_timeout_secs {
-            self.serve_config.drain_timeout_secs = value;
+            self.drain_timeout_secs = value;
         }
         if let Some(value) = overrides.max_body_size_mb {
             self.serve_config.max_body_size_mb = value;
@@ -741,6 +747,7 @@ impl WorkingSettings {
         Ok(ResolvedSettings {
             converter_config: self.converter_config,
             serve_config: self.serve_config,
+            drain_timeout_secs: self.drain_timeout_secs,
             font_dir: self.font_dir,
             log_filter,
         })
@@ -749,27 +756,6 @@ impl WorkingSettings {
 
 fn env_var(name: &str) -> Option<String> {
     std::env::var(name).ok()
-}
-
-fn default_serve_config() -> ServeConfig {
-    ServeConfig {
-        host: "127.0.0.1".to_string(),
-        port: 3000,
-        api_key: None,
-        cors_origin: None,
-        max_concurrent_requests: None,
-        request_timeout_secs: 30,
-        drain_timeout_secs: 30,
-        max_body_size_mb: 50,
-        opaque_errors: false,
-        require_user_agent: false,
-        log_format: LogFormat::Text,
-        per_ip_budget_ms: None,
-        global_budget_ms: None,
-        budget_hold_ms: 1000,
-        admin_port: None,
-        trust_proxy: false,
-    }
 }
 
 fn parse_env_overrides(raw: EnvValues) -> Result<Overrides, anyhow::Error> {

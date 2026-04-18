@@ -1,34 +1,18 @@
 #![allow(dead_code)]
 
-use std::net::SocketAddr;
-
 use once_cell::sync::Lazy;
 use vl_convert_rs::converter::VlcConfig;
-use vl_convert_server::{LogFormat, ServeConfig};
+use vl_convert_server::ServeConfig;
 
-pub struct TestServer {
+pub struct ServerHandle {
     pub base_url: String,
     pub client: reqwest::Client,
 }
 
 pub fn default_serve_config() -> ServeConfig {
     ServeConfig {
-        host: "127.0.0.1".to_string(),
-        port: 0,
-        api_key: None,
-        cors_origin: None,
-        max_concurrent_requests: None,
-        request_timeout_secs: 30,
-        drain_timeout_secs: 30,
-        max_body_size_mb: 50,
-        opaque_errors: false,
-        require_user_agent: false,
-        log_format: LogFormat::Text,
-        per_ip_budget_ms: None,
-        global_budget_ms: None,
         budget_hold_ms: 2000,
-        admin_port: None,
-        trust_proxy: false,
+        ..ServeConfig::default()
     }
 }
 
@@ -37,67 +21,60 @@ pub fn find_free_port() -> u16 {
     listener.local_addr().unwrap().port()
 }
 
-pub fn start_server_sync(config: VlcConfig, serve_config: ServeConfig) -> TestServer {
-    let (tx, rx) = std::sync::mpsc::channel();
+pub fn start_server_sync(config: VlcConfig, serve_config: ServeConfig) -> ServerHandle {
+    // Bind the listener synchronously on the test thread. Port 0 → kernel
+    // picks a free port; holding the listener across the move into the
+    // background thread keeps the port reserved (no TOCTOU). The kernel
+    // starts queueing incoming SYNs into the listen backlog immediately,
+    // so no readiness probe is needed.
+    let std_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    std_listener.set_nonblocking(true).unwrap();
+    let addr = std_listener.local_addr().unwrap();
+
+    let built = vl_convert_server::build_app(config, &serve_config).unwrap();
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
-        rt.block_on(async {
-            let (app, _converter) = vl_convert_server::build_app(config, &serve_config).unwrap();
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let port = listener.local_addr().unwrap().port();
-            tx.send(port).unwrap();
-            axum::serve(
-                listener,
-                app.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .await
-            .ok();
+        rt.block_on(async move {
+            let listener = tokio::net::TcpListener::from_std(std_listener).unwrap();
+            // Tests don't trigger graceful shutdown; the server runs
+            // until the background thread's runtime is dropped.
+            vl_convert_server::serve(listener, built, std::future::pending())
+                .await
+                .ok();
         });
     });
 
-    let port = rx.recv_timeout(std::time::Duration::from_secs(60)).unwrap();
-    let base_url = format!("http://127.0.0.1:{port}");
-
-    // Poll for readiness using raw TCP connect (avoids reqwest::blocking inside
-    // an async context, which panics due to nested runtimes).
-    for _ in 0..150 {
-        if std::net::TcpStream::connect(format!("127.0.0.1:{port}")).is_ok() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-
-    TestServer {
-        base_url,
+    ServerHandle {
+        base_url: format!("http://{addr}"),
         client: reqwest::Client::new(),
     }
 }
 
-pub static DEFAULT_SERVER: Lazy<TestServer> = Lazy::new(|| {
+pub static DEFAULT_SERVER: Lazy<ServerHandle> = Lazy::new(|| {
     let config = VlcConfig::default();
     let serve_config = default_serve_config();
     start_server_sync(config, serve_config)
 });
 
-pub static AUTH_SERVER: Lazy<TestServer> = Lazy::new(|| {
+pub static AUTH_SERVER: Lazy<ServerHandle> = Lazy::new(|| {
     let config = VlcConfig::default();
     let mut serve_config = default_serve_config();
     serve_config.api_key = Some("test-secret".to_string());
     start_server_sync(config, serve_config)
 });
 
-pub static UA_SERVER: Lazy<TestServer> = Lazy::new(|| {
+pub static UA_SERVER: Lazy<ServerHandle> = Lazy::new(|| {
     let config = VlcConfig::default();
     let mut serve_config = default_serve_config();
     serve_config.require_user_agent = true;
     start_server_sync(config, serve_config)
 });
 
-pub static OPAQUE_SERVER: Lazy<TestServer> = Lazy::new(|| {
+pub static OPAQUE_SERVER: Lazy<ServerHandle> = Lazy::new(|| {
     let config = VlcConfig::default();
     let mut serve_config = default_serve_config();
     serve_config.opaque_errors = true;
@@ -109,7 +86,7 @@ pub fn start_budget_server(
     global_ms: Option<i64>,
     hold_ms: i64,
     trust_proxy: bool,
-) -> (TestServer, u16) {
+) -> (ServerHandle, u16) {
     let config = VlcConfig::default();
     let admin_port = find_free_port();
     let mut serve_config = default_serve_config();

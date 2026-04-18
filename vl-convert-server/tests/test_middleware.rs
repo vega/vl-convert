@@ -3,7 +3,7 @@ mod common;
 use common::*;
 use once_cell::sync::Lazy;
 
-static SMALL_BODY_SERVER: Lazy<TestServer> = Lazy::new(|| {
+static SMALL_BODY_SERVER: Lazy<ServerHandle> = Lazy::new(|| {
     let config = vl_convert_rs::converter::VlcConfig::default();
     let mut serve_config = default_serve_config();
     serve_config.max_body_size_mb = 1; // 1MB limit

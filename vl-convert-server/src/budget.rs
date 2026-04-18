@@ -344,6 +344,78 @@ pub struct BudgetStatus {
     pub active_ips: usize,
 }
 
+/// Axum middleware that reserves budget for each request, refunds the
+/// difference between reservation and actual handler time, and records
+/// the outcome (`budget.*` fields) on the current tracing span.
+pub(crate) async fn middleware(
+    tracker: Arc<BudgetTracker>,
+    opaque_errors: bool,
+    trust_proxy: bool,
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::StatusCode;
+
+    if !tracker.is_enabled() {
+        return next.run(req).await;
+    }
+
+    let ip = crate::extract_client_ip(&req, trust_proxy)
+        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+
+    let span = tracing::Span::current();
+    span.record("budget_client_ip", tracing::field::display(&ip));
+
+    let reservation = match tracker.reserve(ip) {
+        Ok(reservation) => reservation,
+        Err(e) => {
+            let outcome = match e {
+                BudgetExhausted::PerIp => "rejected_per_ip",
+                BudgetExhausted::Global => "rejected_global",
+            };
+            span.record("budget_outcome", outcome);
+            span.record("budget_charged_ms", 0_i64);
+            let status = tracker.status();
+            if status.global_budget_ms > 0 {
+                span.record("budget_global_remaining_ms", status.global_remaining_ms);
+            }
+            if let Some(ip_rem) = tracker.ip_remaining_ms(ip) {
+                span.record("budget_ip_remaining_ms", ip_rem);
+            }
+            return crate::error_response(
+                StatusCode::TOO_MANY_REQUESTS,
+                &format!("{e}"),
+                opaque_errors,
+            );
+        }
+    };
+
+    // Optimistic pre-record: if the inner future is cancelled (request
+    // timeout, handler panic, client disconnect) we never reach the
+    // post-await overwrite, and `reservation`'s Drop refunds the full
+    // reservation. These values stay on the span and appear on the
+    // TraceLayer response log line as the signal of abnormal termination.
+    let hold_ms = tracker.hold_ms();
+    span.record("budget_outcome", "refunded_on_drop");
+    span.record("budget_charged_ms", hold_ms);
+
+    let start = Instant::now();
+    let response = next.run(req).await;
+    let actual_ms = start.elapsed().as_millis() as i64;
+
+    let settlement = reservation.complete(actual_ms);
+    span.record("budget_outcome", "accepted");
+    span.record("budget_charged_ms", settlement.charged_ms);
+    if let Some(g) = settlement.global_remaining_ms {
+        span.record("budget_global_remaining_ms", g);
+    }
+    if let Some(p) = settlement.ip_remaining_ms {
+        span.record("budget_ip_remaining_ms", p);
+    }
+
+    response
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
