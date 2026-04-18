@@ -26,11 +26,34 @@ pub struct BudgetReservation {
     released: bool,
 }
 
+/// Summary of how a reservation was settled. Returned from
+/// [`BudgetReservation::complete`] so callers (e.g. the request-logging
+/// middleware) can record post-settlement state without re-querying the
+/// tracker.
+#[derive(Debug, Clone, Copy)]
+pub struct BudgetSettlement {
+    /// Budget actually consumed in ms. Matches `actual_ms` passed to
+    /// `complete`.
+    pub charged_ms: i64,
+    /// Global remaining ms after settlement, or `None` if the global
+    /// dimension is disabled.
+    pub global_remaining_ms: Option<i64>,
+    /// Per-IP remaining ms after settlement, or `None` if the per-IP
+    /// dimension is disabled.
+    pub ip_remaining_ms: Option<i64>,
+}
+
 impl BudgetReservation {
-    pub fn complete(mut self, actual_ms: i64) {
-        self.tracker
-            .apply_adjustment(self.ip, self.reserved_ms - actual_ms);
+    pub fn complete(mut self, actual_ms: i64) -> BudgetSettlement {
+        let (global_remaining_ms, ip_remaining_ms) = self
+            .tracker
+            .apply_adjustment_and_read(self.ip, self.reserved_ms - actual_ms);
         self.released = true;
+        BudgetSettlement {
+            charged_ms: actual_ms,
+            global_remaining_ms,
+            ip_remaining_ms,
+        }
     }
 }
 
@@ -140,6 +163,49 @@ impl BudgetTracker {
                 }
             }
         }
+    }
+
+    fn apply_adjustment_and_read(&self, ip: IpAddr, diff: i64) -> (Option<i64>, Option<i64>) {
+        let global_limit = self.global_budget_ms.load(Ordering::Relaxed);
+        let global_remaining = if global_limit > 0 {
+            if diff != 0 {
+                let prev = self.global_remaining.fetch_add(diff, Ordering::AcqRel);
+                if prev + diff > global_limit {
+                    self.global_remaining.store(global_limit, Ordering::Release);
+                }
+            }
+            Some(self.global_remaining.load(Ordering::Relaxed))
+        } else {
+            None
+        };
+
+        let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);
+        let ip_remaining = if ip_limit > 0 {
+            self.ip_entries.get(&ip).map(|entry| {
+                if diff != 0 {
+                    let prev = entry.remaining.fetch_add(diff, Ordering::AcqRel);
+                    if prev + diff > ip_limit {
+                        entry.remaining.store(ip_limit, Ordering::Release);
+                    }
+                }
+                entry.remaining.load(Ordering::Relaxed)
+            })
+        } else {
+            None
+        };
+
+        (global_remaining, ip_remaining)
+    }
+
+    /// Current per-IP remaining budget in ms, or `None` if the per-IP
+    /// dimension is disabled or no entry exists for `ip` yet.
+    pub fn ip_remaining_ms(&self, ip: IpAddr) -> Option<i64> {
+        if self.per_ip_budget_ms.load(Ordering::Relaxed) == 0 {
+            return None;
+        }
+        self.ip_entries
+            .get(&ip)
+            .map(|entry| entry.remaining.load(Ordering::Relaxed))
     }
 
     /// Update budget configuration dynamically. Existing balances are clamped
@@ -325,8 +391,11 @@ mod tests {
 
         let reservation = tracker.reserve(ip).unwrap();
         tracker.update_estimate(10);
-        reservation.complete(30);
+        let settlement = reservation.complete(30);
 
+        assert_eq!(settlement.charged_ms, 30);
+        assert_eq!(settlement.global_remaining_ms, Some(70));
+        assert_eq!(settlement.ip_remaining_ms, Some(70));
         assert_eq!(tracker.global_remaining.load(Ordering::Relaxed), 70);
         assert_eq!(
             tracker

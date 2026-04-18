@@ -463,6 +463,11 @@ fn make_span_text(req: &axum::http::Request<axum::body::Body>) -> tracing::Span 
         "request",
         method = %req.method(),
         uri = %req.uri(),
+        budget_outcome = tracing::field::Empty,
+        budget_charged_ms = tracing::field::Empty,
+        budget_global_remaining_ms = tracing::field::Empty,
+        budget_ip_remaining_ms = tracing::field::Empty,
+        budget_client_ip = tracing::field::Empty,
     )
 }
 
@@ -488,6 +493,11 @@ fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span 
         request_id = %request_id,
         trace_id = %trace_id,
         span_id = %span_id,
+        budget_outcome = tracing::field::Empty,
+        budget_charged_ms = tracing::field::Empty,
+        budget_global_remaining_ms = tracing::field::Empty,
+        budget_ip_remaining_ms = tracing::field::Empty,
+        budget_client_ip = tracing::field::Empty,
     )
 }
 
@@ -909,9 +919,25 @@ async fn budget_middleware(
     let ip = extract_client_ip(&req, trust_proxy)
         .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
 
+    let span = tracing::Span::current();
+    span.record("budget_client_ip", tracing::field::display(&ip));
+
     let reservation = match tracker.reserve(ip) {
         Ok(reservation) => reservation,
         Err(e) => {
+            let outcome = match e {
+                budget::BudgetExhausted::PerIp => "rejected_per_ip",
+                budget::BudgetExhausted::Global => "rejected_global",
+            };
+            span.record("budget_outcome", outcome);
+            span.record("budget_charged_ms", 0_i64);
+            let status = tracker.status();
+            if status.global_budget_ms > 0 {
+                span.record("budget_global_remaining_ms", status.global_remaining_ms);
+            }
+            if let Some(ip_rem) = tracker.ip_remaining_ms(ip) {
+                span.record("budget_ip_remaining_ms", ip_rem);
+            }
             return error_response(
                 StatusCode::TOO_MANY_REQUESTS,
                 &format!("{e}"),
@@ -920,11 +946,28 @@ async fn budget_middleware(
         }
     };
 
+    // Optimistic pre-record: if the inner future is cancelled (request
+    // timeout, handler panic, client disconnect) we never reach the
+    // post-await overwrite, and `reservation`'s Drop refunds the full
+    // reservation. These values stay on the span and appear on the
+    // TraceLayer response log line as the signal of abnormal termination.
+    let hold_ms = tracker.hold_ms();
+    span.record("budget_outcome", "refunded_on_drop");
+    span.record("budget_charged_ms", hold_ms);
+
     let start = std::time::Instant::now();
     let response = next.run(req).await;
     let actual_ms = start.elapsed().as_millis() as i64;
 
-    reservation.complete(actual_ms);
+    let settlement = reservation.complete(actual_ms);
+    span.record("budget_outcome", "accepted");
+    span.record("budget_charged_ms", settlement.charged_ms);
+    if let Some(g) = settlement.global_remaining_ms {
+        span.record("budget_global_remaining_ms", g);
+    }
+    if let Some(p) = settlement.ip_remaining_ms {
+        span.record("budget_ip_remaining_ms", p);
+    }
 
     response
 }
@@ -1143,5 +1186,209 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(fast_response.status(), StatusCode::OK);
+    }
+
+    #[derive(Clone, Default)]
+    struct BufferWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl BufferWriter {
+        fn snapshot(&self) -> String {
+            String::from_utf8_lossy(&self.0.lock().unwrap()).to_string()
+        }
+    }
+
+    impl std::io::Write for BufferWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for BufferWriter {
+        type Writer = BufferWriter;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    fn capture_json_subscriber(
+        buf: BufferWriter,
+    ) -> impl tracing::Subscriber + Send + Sync + 'static {
+        tracing_subscriber::fmt()
+            .event_format(json_fmt::FlatJsonFormatter)
+            .fmt_fields(tracing_subscriber::fmt::format::JsonFields::new())
+            .with_writer(buf)
+            .with_max_level(tracing::Level::INFO)
+            .finish()
+    }
+
+    fn find_response_event(buf: &BufferWriter) -> serde_json::Value {
+        let output = buf.snapshot();
+        let events: Vec<serde_json::Value> = output
+            .lines()
+            .filter_map(|l| serde_json::from_str(l).ok())
+            .collect();
+        events
+            .into_iter()
+            .find(|e| e.get("message").and_then(|m| m.as_str()) == Some("response"))
+            .expect("no response event captured")
+    }
+
+    fn run_budget_request(
+        tracker: std::sync::Arc<budget::BudgetTracker>,
+        serve_config_mutator: impl FnOnce(&mut ServeConfig),
+        uri: &str,
+    ) -> (BufferWriter, axum::http::Response<axum::body::Body>) {
+        async fn ok_handler() -> &'static str {
+            "ok"
+        }
+
+        let router = Router::new()
+            .route("/t", get(ok_handler))
+            .layer(axum::middleware::from_fn(
+                move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
+                    let tracker = tracker.clone();
+                    async move { budget_middleware(tracker, false, false, req, next).await }
+                },
+            ));
+
+        let mut serve_config = default_serve_config();
+        serve_config.log_format = LogFormat::Json;
+        serve_config_mutator(&mut serve_config);
+
+        let mut app = build_middleware_stack(router, &serve_config);
+
+        let buf = BufferWriter::default();
+        let subscriber = capture_json_subscriber(buf.clone());
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let response = tracing::subscriber::with_default(subscriber, || {
+            rt.block_on(async move {
+                Service::call(
+                    &mut app,
+                    axum::http::Request::builder()
+                        .method("GET")
+                        .uri(uri)
+                        .body(axum::body::Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+            })
+        });
+
+        (buf, response)
+    }
+
+    #[test]
+    fn test_budget_logging_accepted() {
+        let tracker = budget::BudgetTracker::new(1_000, 10_000, 50);
+        let (buf, response) = run_budget_request(
+            tracker,
+            |cfg| {
+                cfg.budget_hold_ms = 50;
+            },
+            "/t",
+        );
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = find_response_event(&buf);
+        assert_eq!(event["budget.outcome"], "accepted");
+        let charged = event["budget.charged_ms"]
+            .as_i64()
+            .expect("budget.charged_ms is i64");
+        assert!(
+            (0..=50).contains(&charged),
+            "charged_ms out of range: {charged} captured: {}",
+            buf.snapshot()
+        );
+        assert!(event["budget.global_remaining_ms"].as_i64().is_some());
+        assert!(event["budget.ip_remaining_ms"].as_i64().is_some());
+        assert!(event["budget.client_ip"].as_str().is_some());
+    }
+
+    #[test]
+    fn test_budget_logging_rejected_per_ip() {
+        // Tiny per-IP budget, global disabled, huge hold → reserve() fails on per-IP.
+        let tracker = budget::BudgetTracker::new(1, 0, 10_000);
+        let (buf, response) = run_budget_request(
+            tracker,
+            |cfg| {
+                cfg.budget_hold_ms = 10_000;
+            },
+            "/t",
+        );
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let event = find_response_event(&buf);
+        assert_eq!(event["budget.outcome"], "rejected_per_ip");
+        assert_eq!(event["budget.charged_ms"].as_i64(), Some(0));
+        assert!(
+            event.get("budget.global_remaining_ms").is_none(),
+            "global field should be absent when dimension disabled"
+        );
+        assert!(event["budget.ip_remaining_ms"].as_i64().is_some());
+        assert!(event["budget.client_ip"].as_str().is_some());
+    }
+
+    #[test]
+    fn test_budget_logging_rejected_global() {
+        // Global tiny, per-IP disabled → reserve() fails on global.
+        let tracker = budget::BudgetTracker::new(0, 1, 10_000);
+        let (buf, response) = run_budget_request(
+            tracker,
+            |cfg| {
+                cfg.budget_hold_ms = 10_000;
+            },
+            "/t",
+        );
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let event = find_response_event(&buf);
+        assert_eq!(event["budget.outcome"], "rejected_global");
+        assert_eq!(event["budget.charged_ms"].as_i64(), Some(0));
+        assert!(event["budget.global_remaining_ms"].as_i64().is_some());
+        assert!(
+            event.get("budget.ip_remaining_ms").is_none(),
+            "ip field should be absent when dimension disabled"
+        );
+        assert!(event["budget.client_ip"].as_str().is_some());
+    }
+
+    #[test]
+    fn test_budget_logging_override_semantics() {
+        // Guards the optimistic pre-record pattern: the middleware records
+        // "refunded_on_drop" before .await, then overwrites with "accepted"
+        // after. This test proves the last Span::record wins in the final
+        // formatted JSON. If tracing or JsonFields ever flips to first-wins
+        // (or emit-both), this test fails immediately.
+        let buf = BufferWriter::default();
+        let subscriber = capture_json_subscriber(buf.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            let span = tracing::info_span!(
+                "request",
+                budget_outcome = tracing::field::Empty,
+                budget_charged_ms = tracing::field::Empty,
+            );
+            let _entered = span.enter();
+            tracing::Span::current().record("budget_outcome", "refunded_on_drop");
+            tracing::Span::current().record("budget_charged_ms", 100_i64);
+            tracing::Span::current().record("budget_outcome", "accepted");
+            tracing::Span::current().record("budget_charged_ms", 42_i64);
+            tracing::info!("response");
+        });
+
+        let event = find_response_event(&buf);
+        assert_eq!(
+            event["budget.outcome"], "accepted",
+            "last-recorded outcome should win"
+        );
+        assert_eq!(event["budget.charged_ms"].as_i64(), Some(42));
     }
 }

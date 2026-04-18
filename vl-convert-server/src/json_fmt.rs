@@ -22,6 +22,11 @@ fn remap_span_key(key: &str) -> Option<&'static str> {
         "request_id" => Some("http.request_id"),
         "trace_id" => Some("trace_id"),
         "span_id" => Some("span_id"),
+        "budget_outcome" => Some("budget.outcome"),
+        "budget_charged_ms" => Some("budget.charged_ms"),
+        "budget_global_remaining_ms" => Some("budget.global_remaining_ms"),
+        "budget_ip_remaining_ms" => Some("budget.ip_remaining_ms"),
+        "budget_client_ip" => Some("budget.client_ip"),
         _ => None,
     }
 }
