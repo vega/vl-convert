@@ -184,3 +184,27 @@ impl<B> tower_http::trace::OnResponse<B> for FlatJsonOnResponse {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_support::{capture_json_subscriber, BufferWriter};
+
+    #[test]
+    fn test_json_level_is_lowercase() {
+        let buf = BufferWriter::default();
+        let subscriber = capture_json_subscriber(buf.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!("hi");
+        });
+
+        let output = buf.snapshot();
+        let event: serde_json::Value = output
+            .lines()
+            .find_map(|l| serde_json::from_str(l).ok())
+            .expect("one event captured");
+        assert_eq!(
+            event["level"], "info",
+            "level should be lowercase (Railway convention). captured: {output}"
+        );
+    }
+}

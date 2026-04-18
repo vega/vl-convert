@@ -2,6 +2,7 @@ mod accept;
 mod admin;
 pub mod budget;
 mod bundling;
+mod config;
 mod health;
 pub mod json_fmt;
 mod svg;
@@ -11,7 +12,12 @@ mod util;
 mod vega;
 mod vegalite;
 
+#[cfg(test)]
+mod test_support;
+
 pub(crate) use accept::{preferred_scenegraph_format, ScenegraphFormat};
+pub(crate) use config::{apply_server_defaults, validate_serve_config, AdminConfig};
+pub use config::{init_tracing, ApiKey, AppState, BuiltApp, LogFormat, ServeConfig};
 pub(crate) use util::validate_common_opts;
 pub use util::{
     append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args,
@@ -27,7 +33,6 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use subtle::ConstantTimeEq;
 use tower::limit::ConcurrencyLimitLayer;
 use tower::load_shed::LoadShedLayer;
 use tower::timeout::TimeoutLayer;
@@ -36,19 +41,11 @@ use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::EnvFilter;
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
 use vl_convert_rs::anyhow;
-
-#[derive(Debug, Clone, Copy, clap::ValueEnum, Default, PartialEq, Eq)]
-pub enum LogFormat {
-    #[default]
-    Text,
-    Json,
-}
 use vl_convert_rs::converter::{VlConverter, VlcConfig};
 
 #[derive(OpenApi)]
@@ -61,85 +58,6 @@ use vl_convert_rs::converter::{VlConverter, VlcConfig};
     (name = "Bundling", description = "JavaScript bundling"),
 ))]
 struct ApiDoc;
-
-pub fn init_tracing(filter: &str, format: LogFormat) {
-    let filter: EnvFilter = filter.parse().expect("valid tracing filter directives");
-
-    match format {
-        LogFormat::Json => {
-            tracing_subscriber::fmt()
-                .event_format(json_fmt::FlatJsonFormatter)
-                .fmt_fields(tracing_subscriber::fmt::format::JsonFields::new())
-                .with_env_filter(filter)
-                .init();
-        }
-        LogFormat::Text => {
-            tracing_subscriber::fmt()
-                .with_env_filter(filter)
-                .with_target(true)
-                .init();
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ServeConfig {
-    pub host: String,
-    pub port: u16,
-    pub api_key: Option<String>,
-    pub cors_origin: Option<String>,
-    pub max_concurrent_requests: Option<usize>,
-    pub request_timeout_secs: u64,
-    pub max_body_size_mb: usize,
-    pub opaque_errors: bool,
-    pub require_user_agent: bool,
-    pub log_format: LogFormat,
-    pub per_ip_budget_ms: Option<i64>,
-    pub global_budget_ms: Option<i64>,
-    pub budget_hold_ms: i64,
-    pub admin_port: Option<u16>,
-    pub trust_proxy: bool,
-}
-
-impl Default for ServeConfig {
-    fn default() -> Self {
-        Self {
-            host: "127.0.0.1".to_string(),
-            port: 3000,
-            api_key: None,
-            cors_origin: None,
-            max_concurrent_requests: None,
-            request_timeout_secs: 30,
-            max_body_size_mb: 50,
-            opaque_errors: false,
-            require_user_agent: false,
-            log_format: LogFormat::Text,
-            per_ip_budget_ms: None,
-            global_budget_ms: None,
-            budget_hold_ms: 1000,
-            admin_port: None,
-            trust_proxy: false,
-        }
-    }
-}
-
-pub struct AppState {
-    pub converter: VlConverter,
-    pub config: VlcConfig,
-    pub api_key: Option<ApiKey>,
-    pub opaque_errors: bool,
-    pub require_user_agent: bool,
-    pub readiness: health::ReadinessState,
-}
-
-pub struct ApiKey(String);
-
-impl ApiKey {
-    pub fn matches(&self, other: &[u8]) -> bool {
-        let key_bytes = self.0.as_bytes();
-        key_bytes.ct_eq(other).into()
-    }
-}
 
 fn build_cors_layer(cors_origin: &Option<String>) -> CorsLayer {
     let base = CorsLayer::new()
@@ -303,62 +221,6 @@ fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span 
     )
 }
 
-/// A fully-constructed server returned from [`build_app`]. Pass to
-/// [`serve`] to run it, or call `router.oneshot(req)` directly for
-/// `tower::ServiceExt`-style tests.
-pub struct BuiltApp {
-    /// The main app router with all middleware applied.
-    pub router: Router,
-    /// The underlying converter handle, for callers that want to drive
-    /// conversions programmatically in addition to serving HTTP.
-    pub converter: VlConverter,
-    /// Budget tracker. Consumed by [`serve`] to drive the refill loop.
-    tracker: Option<Arc<budget::BudgetTracker>>,
-    /// Admin listener setup. Consumed by [`serve`] to bind and serve.
-    admin: Option<AdminConfig>,
-}
-
-struct AdminConfig {
-    addr: String,
-    router: Router,
-}
-
-/// Apply server-safe defaults to a VlcConfig. Called from [`build_app`]
-/// so every entry into the server gets hardened defaults regardless of
-/// whether the caller remembered to set them.
-fn apply_server_defaults(config: &mut VlcConfig) {
-    if config.allowed_base_urls.is_none() {
-        config.allowed_base_urls = Some(vec![]);
-        log::info!(
-            "Data access disabled by default in server mode. \
-             Use --data-access=allowlist with --allowed-base-urls to allow \
-             specific URLs or file paths."
-        );
-    }
-    if config.max_v8_heap_size_mb == 0 {
-        config.max_v8_heap_size_mb = 512;
-        log::info!(
-            "Defaulting to 512MB V8 heap limit per worker \
-             (override with --max-v8-heap-size-mb)"
-        );
-    }
-    if config.allow_per_request_plugins && config.max_ephemeral_workers == 0 {
-        config.max_ephemeral_workers = 2;
-        log::info!(
-            "Limiting ephemeral plugin workers to 2 \
-             (override with --max-ephemeral-workers)"
-        );
-    }
-}
-
-fn validate_serve_config(serve_config: &ServeConfig) -> Result<(), anyhow::Error> {
-    if serve_config.budget_hold_ms <= 0 {
-        anyhow::bail!("budget_hold_ms must be positive");
-    }
-
-    Ok(())
-}
-
 /// Build the middleware stack that wraps the API router.
 fn build_middleware_stack(router: Router, serve_config: &ServeConfig) -> Router {
     let cors = build_cors_layer(&serve_config.cors_origin);
@@ -487,7 +349,10 @@ pub fn build_app(config: VlcConfig, serve_config: &ServeConfig) -> Result<BuiltA
     converter.warm_up()?;
     log::info!("Workers initialized");
 
-    let api_key = serve_config.api_key.as_ref().map(|k| ApiKey(k.clone()));
+    let api_key = serve_config
+        .api_key
+        .as_ref()
+        .map(|k| ApiKey::new(k.clone()));
     let state = Arc::new(AppState {
         converter: converter.clone(),
         config: config.clone(),
@@ -727,15 +592,9 @@ pub(crate) fn extract_client_ip(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::*;
     use axum::routing::get;
     use tower::Service;
-
-    fn default_serve_config() -> ServeConfig {
-        ServeConfig {
-            port: 0,
-            ..ServeConfig::default()
-        }
-    }
 
     fn make_request(headers: &[(&str, &str)]) -> axum::http::Request<axum::body::Body> {
         let mut builder = axum::http::Request::builder().method("GET").uri("/test");
@@ -1030,104 +889,6 @@ mod tests {
         assert_eq!(fast_response.status(), StatusCode::OK);
     }
 
-    #[derive(Clone, Default)]
-    struct BufferWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
-
-    impl BufferWriter {
-        fn snapshot(&self) -> String {
-            String::from_utf8_lossy(&self.0.lock().unwrap()).to_string()
-        }
-    }
-
-    impl std::io::Write for BufferWriter {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
-            Ok(buf.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for BufferWriter {
-        type Writer = BufferWriter;
-        fn make_writer(&'a self) -> Self::Writer {
-            self.clone()
-        }
-    }
-
-    fn capture_json_subscriber(
-        buf: BufferWriter,
-    ) -> impl tracing::Subscriber + Send + Sync + 'static {
-        tracing_subscriber::fmt()
-            .event_format(json_fmt::FlatJsonFormatter)
-            .fmt_fields(tracing_subscriber::fmt::format::JsonFields::new())
-            .with_writer(buf)
-            .with_max_level(tracing::Level::INFO)
-            .finish()
-    }
-
-    fn find_response_event(buf: &BufferWriter) -> serde_json::Value {
-        let output = buf.snapshot();
-        let events: Vec<serde_json::Value> = output
-            .lines()
-            .filter_map(|l| serde_json::from_str(l).ok())
-            .collect();
-        events
-            .into_iter()
-            .find(|e| e.get("message").and_then(|m| m.as_str()) == Some("response"))
-            .expect("no response event captured")
-    }
-
-    fn run_budget_request(
-        tracker: std::sync::Arc<budget::BudgetTracker>,
-        serve_config_mutator: impl FnOnce(&mut ServeConfig),
-        uri: &str,
-    ) -> (BufferWriter, axum::http::Response<axum::body::Body>) {
-        async fn ok_handler() -> &'static str {
-            "ok"
-        }
-
-        let router = Router::new()
-            .route("/t", get(ok_handler))
-            .layer(axum::middleware::from_fn(
-                move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
-                    let tracker = tracker.clone();
-                    async move { budget::middleware(tracker, false, false, req, next).await }
-                },
-            ));
-
-        let mut serve_config = default_serve_config();
-        serve_config.log_format = LogFormat::Json;
-        serve_config_mutator(&mut serve_config);
-
-        let mut app = build_middleware_stack(router, &serve_config);
-
-        let buf = BufferWriter::default();
-        let subscriber = capture_json_subscriber(buf.clone());
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-
-        let response = tracing::subscriber::with_default(subscriber, || {
-            rt.block_on(async move {
-                Service::call(
-                    &mut app,
-                    axum::http::Request::builder()
-                        .method("GET")
-                        .uri(uri)
-                        .body(axum::body::Body::empty())
-                        .unwrap(),
-                )
-                .await
-                .unwrap()
-            })
-        });
-
-        (buf, response)
-    }
-
     #[test]
     fn test_budget_logging_accepted() {
         let tracker = budget::BudgetTracker::new(1_000, 10_000, 50);
@@ -1232,25 +993,6 @@ mod tests {
             "last-recorded outcome should win"
         );
         assert_eq!(event["budget.charged_ms"].as_i64(), Some(42));
-    }
-
-    #[test]
-    fn test_json_level_is_lowercase() {
-        let buf = BufferWriter::default();
-        let subscriber = capture_json_subscriber(buf.clone());
-        tracing::subscriber::with_default(subscriber, || {
-            tracing::info!("hi");
-        });
-
-        let output = buf.snapshot();
-        let event: serde_json::Value = output
-            .lines()
-            .find_map(|l| serde_json::from_str(l).ok())
-            .expect("one event captured");
-        assert_eq!(
-            event["level"], "info",
-            "level should be lowercase (Railway convention). captured: {output}"
-        );
     }
 
     #[test]
