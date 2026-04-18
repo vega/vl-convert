@@ -1,8 +1,6 @@
 mod common;
 
 use common::*;
-use serde_json;
-
 #[tokio::test]
 async fn test_background_override() {
     let server = &*DEFAULT_SERVER;

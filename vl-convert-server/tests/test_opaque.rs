@@ -1,8 +1,6 @@
 mod common;
 
 use common::*;
-use serde_json;
-
 #[tokio::test]
 async fn test_opaque_errors_hide_details() {
     let server = &*OPAQUE_SERVER;

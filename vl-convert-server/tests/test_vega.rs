@@ -1,8 +1,6 @@
 mod common;
 
 use common::*;
-use serde_json;
-
 #[tokio::test]
 async fn test_vg_to_svg() {
     let server = &*DEFAULT_SERVER;

@@ -131,12 +131,8 @@ pub fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
         .collect()
 }
 
-pub fn init_tracing(level: &str, format: LogFormat) {
-    let filter = EnvFilter::try_from_env("RUST_LOG").unwrap_or_else(|_| {
-        format!("vl_convert={level},tower_http={level}")
-            .parse()
-            .expect("valid default filter directives")
-    });
+pub fn init_tracing(filter: &str, format: LogFormat) {
+    let filter: EnvFilter = filter.parse().expect("valid tracing filter directives");
 
     match format {
         LogFormat::Json => {
@@ -162,6 +158,7 @@ pub fn vegalite_versions() -> Vec<&'static str> {
         .collect()
 }
 
+#[derive(Debug, Clone)]
 pub struct ServeConfig {
     pub host: String,
     pub port: u16,
@@ -515,7 +512,8 @@ pub fn apply_server_defaults(config: &mut VlcConfig) {
         config.allowed_base_urls = Some(vec![]);
         log::info!(
             "Data access disabled by default in server mode. \
-             Use --allowed-base-url to allow specific URLs or file paths."
+             Use --data-access=allowlist with --allowed-base-urls to allow \
+             specific URLs or file paths."
         );
     }
     if config.max_v8_heap_size_mb == 0 {

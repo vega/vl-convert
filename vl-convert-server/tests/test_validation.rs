@@ -1,8 +1,6 @@
 mod common;
 
 use common::*;
-use serde_json;
-
 #[tokio::test]
 async fn test_invalid_vl_version() {
     let server = &*DEFAULT_SERVER;

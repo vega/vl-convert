@@ -1,8 +1,6 @@
 mod common;
 
 use common::*;
-use serde_json;
-
 #[tokio::test]
 async fn test_vlc_logs_header_on_conversion() {
     let server = &*DEFAULT_SERVER;
