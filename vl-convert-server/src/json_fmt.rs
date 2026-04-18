@@ -52,7 +52,7 @@ where
 
             map.serialize_entry("timestamp", &chrono::Utc::now().to_rfc3339())
                 .map_err(|_| fmt::Error)?;
-            map.serialize_entry("level", &format!("{}", meta.level()))
+            map.serialize_entry("level", &meta.level().as_str().to_ascii_lowercase())
                 .map_err(|_| fmt::Error)?;
             map.serialize_entry("target", meta.target())
                 .map_err(|_| fmt::Error)?;
@@ -175,9 +175,11 @@ impl<B> tower_http::trace::OnResponse<B> for FlatJsonOnResponse {
     fn on_response(self, response: &http::Response<B>, latency: Duration, _span: &tracing::Span) {
         let status = response.status().as_u16();
         let duration_ns = latency.as_nanos() as i64;
+        let response_time_ms = latency.as_secs_f64() * 1000.0;
         tracing::info!(
             http.status_code = status,
             duration = duration_ns,
+            response_time_ms = response_time_ms,
             "response"
         );
     }

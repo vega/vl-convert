@@ -221,7 +221,7 @@ pub(crate) struct Cli {
     #[arg(long)]
     pub(crate) host: Option<String>,
 
-    /// Port
+    /// Port (defaults to $PORT env var if set, else 3000)
     #[arg(long)]
     pub(crate) port: Option<u16>,
 
@@ -466,7 +466,12 @@ impl EnvValues {
             log_filter: env_var(ENV_LOG_FILTER),
             log_format: env_var(ENV_LOG_FORMAT),
             host: env_var(ENV_HOST),
-            port: env_var(ENV_PORT),
+            port: env_var(ENV_PORT).or_else(|| {
+                // PaaS convention: Railway/Heroku/Fly/Render/Cloud Run
+                // all inject PORT. Silently ignore a non-numeric value
+                // rather than failing startup on an unrelated collision.
+                env_var("PORT").filter(|v| v.parse::<u16>().is_ok())
+            }),
             workers: env_var(ENV_WORKERS),
             api_key: env_var(ENV_API_KEY),
             cors_origin: env_var(ENV_CORS_ORIGIN),
@@ -1755,9 +1760,15 @@ mod tests {
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    /// Env vars that mirror a CLI flag; tracked by SETTING_PAIRS.
     fn all_env_vars() -> Vec<&'static str> {
         SETTING_PAIRS.iter().map(|(_, env)| *env).collect()
     }
+
+    /// Extra env vars the guard must save/restore/clear but that are
+    /// intentionally absent from SETTING_PAIRS (they have no matching
+    /// CLI flag). `PORT` is read as a PaaS fallback for `VLC_PORT`.
+    const GUARD_EXTRA_ENV_VARS: &[&str] = &["PORT"];
 
     struct EnvGuard {
         saved: Vec<(&'static str, Option<String>)>,
@@ -1767,6 +1778,7 @@ mod tests {
         fn new() -> Self {
             let saved = all_env_vars()
                 .into_iter()
+                .chain(GUARD_EXTRA_ENV_VARS.iter().copied())
                 .map(|name| (name, std::env::var(name).ok()))
                 .collect();
             Self { saved }
@@ -2151,5 +2163,69 @@ mod tests {
         ]))
         .unwrap_err();
         assert!(err.to_string().contains("No built-in format locale named"));
+    }
+
+    #[test]
+    fn test_resolve_settings_port_default_3000() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+
+        let resolved = resolve_settings(parse_cli(&[])).unwrap();
+        assert_eq!(resolved.serve_config.port, 3000);
+    }
+
+    #[test]
+    fn test_resolve_settings_port_fallback_to_paas_port() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+        guard.set("PORT", "7777");
+
+        let resolved = resolve_settings(parse_cli(&[])).unwrap();
+        assert_eq!(resolved.serve_config.port, 7777);
+    }
+
+    #[test]
+    fn test_resolve_settings_port_vlc_env_beats_paas_port() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+        guard.set(ENV_PORT, "8888");
+        guard.set("PORT", "7777");
+
+        let resolved = resolve_settings(parse_cli(&[])).unwrap();
+        assert_eq!(resolved.serve_config.port, 8888);
+    }
+
+    #[test]
+    fn test_resolve_settings_port_flag_beats_both_env_vars() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+        guard.set(ENV_PORT, "8888");
+        guard.set("PORT", "7777");
+
+        let resolved = resolve_settings(parse_cli(&["--port", "9999"])).unwrap();
+        assert_eq!(resolved.serve_config.port, 9999);
+    }
+
+    #[test]
+    fn test_resolve_settings_port_invalid_paas_port_falls_through() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+        guard.set("PORT", "not-a-number");
+
+        let resolved = resolve_settings(parse_cli(&[])).unwrap();
+        assert_eq!(
+            resolved.serve_config.port, 3000,
+            "invalid PORT should be silently ignored"
+        );
     }
 }
