@@ -29,6 +29,8 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
 use tower_http::trace::TraceLayer;
@@ -37,36 +39,52 @@ use vl_convert_rs::converter::VlcConfig;
 
 /// Serve a [`BuiltApp`] on a pre-bound listener, spawning its background
 /// tasks (budget refill, admin listener) on the current runtime and
-/// draining when `shutdown` resolves. Signal handling and drain-timeout
-/// escalation are the caller's responsibility — this function only
-/// reacts to the injected shutdown future.
+/// draining when `shutdown` resolves. All three (main serve, admin
+/// serve, refill loop) receive the shutdown signal in parallel, and
+/// `serve` only returns after every spawned task has exited — callers
+/// get a deterministic "fully done" signal. Signal handling and
+/// drain-timeout escalation are the caller's responsibility.
 pub async fn serve(
     listener: tokio::net::TcpListener,
     built: BuiltApp,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), anyhow::Error> {
+    let token = CancellationToken::new();
+    let mut tasks: JoinSet<()> = JoinSet::new();
+
     if let Some(tracker) = built.tracker {
-        tokio::spawn(async move {
+        let cancel = token.clone();
+        tasks.spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(1));
             loop {
-                interval.tick().await;
-                tracker.refill();
+                tokio::select! {
+                    _ = interval.tick() => tracker.refill(),
+                    _ = cancel.cancelled() => break,
+                }
             }
         });
     }
+
     if let Some(admin) = built.admin {
-        tokio::spawn(async move {
+        let cancel = token.clone();
+        tasks.spawn(async move {
             match tokio::net::TcpListener::bind(&admin.addr).await {
                 Ok(listener) => {
                     log::info!("Admin API listening on http://{}", admin.addr);
-                    let _ = axum::serve(listener, admin.router).await;
+                    let _ = axum::serve(listener, admin.router)
+                        .with_graceful_shutdown(async move { cancel.cancelled().await })
+                        .await;
                 }
-                Err(e) => {
-                    log::error!("Failed to bind admin port {}: {e}", admin.addr);
-                }
+                Err(e) => log::error!("Failed to bind admin port {}: {e}", admin.addr),
             }
         });
     }
+
+    let shutdown_token = token;
+    let shutdown = async move {
+        shutdown.await;
+        shutdown_token.cancel();
+    };
 
     axum::serve(
         listener,
@@ -76,6 +94,8 @@ pub async fn serve(
     )
     .with_graceful_shutdown(shutdown)
     .await?;
+
+    while tasks.join_next().await.is_some() {}
     Ok(())
 }
 
