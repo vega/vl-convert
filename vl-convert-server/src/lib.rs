@@ -1,3 +1,4 @@
+mod accept;
 mod admin;
 pub mod budget;
 mod bundling;
@@ -6,13 +7,21 @@ pub mod json_fmt;
 mod svg;
 mod themes;
 pub mod types;
+mod util;
 mod vega;
 mod vegalite;
 
+pub(crate) use accept::{preferred_scenegraph_format, ScenegraphFormat};
+pub(crate) use util::validate_common_opts;
+pub use util::{
+    append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args,
+    vegalite_versions,
+};
+
 use axum::error_handling::HandleErrorLayer;
 use axum::extract::DefaultBodyLimit;
-use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
-use axum::response::{IntoResponse, Json, Response};
+use axum::http::{header, HeaderValue, Method, StatusCode};
+use axum::response::Response;
 use axum::Router;
 use std::future::Future;
 use std::net::SocketAddr;
@@ -40,9 +49,7 @@ pub enum LogFormat {
     Text,
     Json,
 }
-use vl_convert_rs::converter::{GoogleFontRequest, LogEntry, VlConverter, VlcConfig};
-
-use types::ErrorResponse;
+use vl_convert_rs::converter::{VlConverter, VlcConfig};
 
 #[derive(OpenApi)]
 #[openapi(tags(
@@ -54,83 +61,6 @@ use types::ErrorResponse;
     (name = "Bundling", description = "JavaScript bundling"),
 ))]
 struct ApiDoc;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ScenegraphFormat {
-    Json,
-    Msgpack,
-}
-
-fn preferred_scenegraph_format(headers: &axum::http::HeaderMap) -> ScenegraphFormat {
-    let Some(accept) = headers
-        .get(axum::http::header::ACCEPT)
-        .and_then(|v| v.to_str().ok())
-    else {
-        return ScenegraphFormat::Json;
-    };
-
-    let mut json_quality: Option<i32> = None;
-    let mut msgpack_quality: Option<i32> = None;
-
-    for item in accept.split(',') {
-        let Some((media_type, quality)) = parse_accept_item(item) else {
-            return ScenegraphFormat::Json;
-        };
-
-        match media_type.as_str() {
-            "application/json" => {
-                json_quality = Some(json_quality.map_or(quality, |current| current.max(quality)));
-            }
-            "application/msgpack" | "application/x-msgpack" => {
-                msgpack_quality =
-                    Some(msgpack_quality.map_or(quality, |current| current.max(quality)));
-            }
-            _ => {}
-        }
-    }
-
-    match (msgpack_quality, json_quality) {
-        (Some(msgpack), Some(json)) if msgpack > json => ScenegraphFormat::Msgpack,
-        (Some(msgpack), None) if msgpack > 0 => ScenegraphFormat::Msgpack,
-        _ => ScenegraphFormat::Json,
-    }
-}
-
-fn parse_accept_item(item: &str) -> Option<(String, i32)> {
-    let mut parts = item.split(';');
-    let media_type = parts.next()?.trim().to_ascii_lowercase();
-    if media_type.is_empty() {
-        return None;
-    }
-
-    let mut quality = 1000;
-    for param in parts {
-        let param = param.trim();
-        if param.is_empty() {
-            continue;
-        }
-        let (name, value) = param.split_once('=')?;
-        if name.trim().eq_ignore_ascii_case("q") {
-            quality = parse_quality(value.trim())?;
-        }
-    }
-
-    Some((media_type, quality))
-}
-
-fn parse_quality(value: &str) -> Option<i32> {
-    let parsed: f32 = value.parse().ok()?;
-    if !(0.0..=1.0).contains(&parsed) {
-        return None;
-    }
-    Some((parsed * 1000.0).round() as i32)
-}
-
-pub fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
-    logs.iter()
-        .map(|e| format!("{}: {}", e.level, e.message))
-        .collect()
-}
 
 pub fn init_tracing(filter: &str, format: LogFormat) {
     let filter: EnvFilter = filter.parse().expect("valid tracing filter directives");
@@ -150,13 +80,6 @@ pub fn init_tracing(filter: &str, format: LogFormat) {
                 .init();
         }
     }
-}
-
-pub fn vegalite_versions() -> Vec<&'static str> {
-    vl_convert_rs::module_loader::import_map::VL_VERSIONS
-        .iter()
-        .map(|v| v.to_semver())
-        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -216,146 +139,6 @@ impl ApiKey {
         let key_bytes = self.0.as_bytes();
         key_bytes.ct_eq(other).into()
     }
-}
-
-pub fn error_response(status: StatusCode, message: &str, opaque: bool) -> Response {
-    if opaque {
-        status.into_response()
-    } else {
-        (
-            status,
-            Json(ErrorResponse {
-                error: message.to_string(),
-            }),
-        )
-            .into_response()
-    }
-}
-
-pub fn append_vlc_logs_header(headers: &mut HeaderMap, logs: &[String]) {
-    let truncated: Vec<&str> = logs.iter().take(50).map(|s| s.as_str()).collect();
-    let json = serde_json::to_string(&truncated).unwrap_or_else(|_| "[]".to_string());
-    if let Ok(val) = HeaderValue::from_str(&json) {
-        headers.insert("x-vlc-logs", val);
-    } else {
-        let safe: String = json
-            .chars()
-            .filter(|c| c.is_ascii_graphic() || *c == ' ')
-            .collect();
-        if let Ok(val) = HeaderValue::from_str(&safe) {
-            headers.insert("x-vlc-logs", val);
-        } else {
-            headers.insert("x-vlc-logs", HeaderValue::from_static("[]"));
-        }
-    }
-}
-
-pub fn parse_google_font_args(fonts: &[String]) -> Result<Vec<GoogleFontRequest>, String> {
-    fonts
-        .iter()
-        .map(|s| {
-            let Some((family, variants_str)) = s.split_once(':') else {
-                return Ok(GoogleFontRequest {
-                    family: s.to_string(),
-                    variants: None,
-                });
-            };
-            let mut variants = Vec::new();
-            for token in variants_str.split(',') {
-                let token = token.trim();
-                if token.is_empty() {
-                    continue;
-                }
-                let (weight_str, style) = if let Some(w) = token.strip_suffix("italic") {
-                    (w, vl_convert_google_fonts::FontStyle::Italic)
-                } else {
-                    (token, vl_convert_google_fonts::FontStyle::Normal)
-                };
-                let weight: u16 = weight_str
-                    .parse()
-                    .map_err(|_| format!("invalid font variant '{token}' in '{s}'"))?;
-                variants.push(vl_convert_google_fonts::VariantRequest { weight, style });
-            }
-            Ok(GoogleFontRequest {
-                family: family.to_string(),
-                variants: if variants.is_empty() {
-                    None
-                } else {
-                    Some(variants)
-                },
-            })
-        })
-        .collect()
-}
-
-use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale};
-
-pub(crate) struct CommonOpts {
-    pub format_locale: Option<FormatLocale>,
-    pub time_format_locale: Option<TimeFormatLocale>,
-    pub google_fonts: Option<Vec<GoogleFontRequest>>,
-    pub vega_plugin: Option<String>,
-    pub config: Option<serde_json::Value>,
-    pub background: Option<String>,
-    pub width: Option<f32>,
-    pub height: Option<f32>,
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn validate_common_opts(
-    format_locale: &Option<serde_json::Value>,
-    time_format_locale: &Option<serde_json::Value>,
-    google_fonts: &Option<Vec<String>>,
-    vega_plugin: &Option<String>,
-    config: &Option<serde_json::Value>,
-    background: &Option<String>,
-    width: Option<f32>,
-    height: Option<f32>,
-    state: &AppState,
-) -> Result<CommonOpts, String> {
-    let format_locale = format_locale
-        .as_ref()
-        .map(|v| match v {
-            serde_json::Value::String(s) => Ok(FormatLocale::Name(s.clone())),
-            obj @ serde_json::Value::Object(_) => Ok(FormatLocale::Object(obj.clone())),
-            _ => Err("format_locale must be a string or object".to_string()),
-        })
-        .transpose()?;
-
-    let time_format_locale = time_format_locale
-        .as_ref()
-        .map(|v| match v {
-            serde_json::Value::String(s) => Ok(TimeFormatLocale::Name(s.clone())),
-            obj @ serde_json::Value::Object(_) => Ok(TimeFormatLocale::Object(obj.clone())),
-            _ => Err("time_format_locale must be a string or object".to_string()),
-        })
-        .transpose()?;
-
-    let google_fonts = google_fonts
-        .as_ref()
-        .map(|fonts| parse_google_font_args(fonts))
-        .transpose()?;
-
-    if google_fonts.is_some() && !state.config.allow_google_fonts {
-        return Err("google_fonts requires allow_google_fonts: true in server config".to_string());
-    }
-
-    if vega_plugin.is_some() && !state.config.allow_per_request_plugins {
-        return Err(
-            "vega_plugin requires allow_per_request_plugins: true in server config".to_string(),
-        );
-    }
-
-    Ok(CommonOpts {
-        format_locale,
-        time_format_locale,
-        google_fonts,
-        vega_plugin: vega_plugin.clone(),
-        config: config.clone(),
-        background: background.clone(),
-        width,
-        height,
-    })
 }
 
 fn build_cors_layer(cors_origin: &Option<String>) -> CorsLayer {
@@ -1179,24 +962,6 @@ mod tests {
             let ip: std::net::IpAddr = s.parse().unwrap();
             assert!(!is_private_or_loopback(&ip), "{s} should be public");
         }
-    }
-
-    #[test]
-    fn test_preferred_scenegraph_format_json_preferred_when_msgpack_has_lower_quality() {
-        let req = make_request(&[("accept", "application/json, application/msgpack;q=0.1")]);
-        assert_eq!(
-            preferred_scenegraph_format(req.headers()),
-            ScenegraphFormat::Json
-        );
-    }
-
-    #[test]
-    fn test_preferred_scenegraph_format_defaults_to_json_on_malformed_accept() {
-        let req = make_request(&[("accept", "application/json;q=bogus")]);
-        assert_eq!(
-            preferred_scenegraph_format(req.headers()),
-            ScenegraphFormat::Json
-        );
     }
 
     #[test]
