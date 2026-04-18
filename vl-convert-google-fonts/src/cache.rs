@@ -224,7 +224,7 @@ pub(crate) fn evict_font_lru_until_size(
         }
 
         // Sort oldest first for LRU eviction.
-        entries.sort_by(|a, b| a.3.cmp(&b.3));
+        entries.sort_by_key(|e| e.3);
 
         for (key, path, size, _) in entries {
             if total_size <= target_bytes {
