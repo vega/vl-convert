@@ -360,7 +360,7 @@ pub(crate) async fn middleware(
         return next.run(req).await;
     }
 
-    let ip = crate::extract_client_ip(&req, trust_proxy)
+    let ip = crate::middleware::extract_client_ip(&req, trust_proxy)
         .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
 
     let span = tracing::Span::current();
@@ -382,7 +382,7 @@ pub(crate) async fn middleware(
             if let Some(ip_rem) = tracker.ip_remaining_ms(ip) {
                 span.record("budget_ip_remaining_ms", ip_rem);
             }
-            return crate::error_response(
+            return crate::util::error_response(
                 StatusCode::TOO_MANY_REQUESTS,
                 &format!("{e}"),
                 opaque_errors,
@@ -419,7 +419,17 @@ pub(crate) async fn middleware(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::build_middleware_stack;
+    use crate::test_support::{
+        capture_json_subscriber, default_serve_config, find_response_event, run_budget_request,
+        BufferWriter,
+    };
+    use axum::http::StatusCode;
+    use axum::routing::get;
+    use axum::Router;
     use std::net::{IpAddr, Ipv4Addr};
+    use std::time::Duration;
+    use tower::Service;
 
     fn test_ip() -> IpAddr {
         IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
@@ -518,6 +528,189 @@ mod tests {
                 .remaining
                 .load(Ordering::Relaxed),
             90
+        );
+    }
+
+    #[tokio::test]
+    async fn test_budget_timeout_refunds_reservation() {
+        async fn slow_handler() -> &'static str {
+            tokio::time::sleep(Duration::from_millis(1100)).await;
+            "slow"
+        }
+
+        async fn fast_handler() -> &'static str {
+            "fast"
+        }
+
+        let tracker = BudgetTracker::new(100, 0, 100);
+        let router = Router::new()
+            .route("/slow", get(slow_handler))
+            .route("/fast", get(fast_handler))
+            .layer(axum::middleware::from_fn(
+                move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
+                    let tracker = tracker.clone();
+                    async move { super::middleware(tracker, false, false, req, next).await }
+                },
+            ));
+
+        let mut serve_config = default_serve_config();
+        serve_config.request_timeout_secs = 1;
+        serve_config.budget_hold_ms = 100;
+
+        let mut app = build_middleware_stack(router, &serve_config);
+
+        let slow_response = Service::call(
+            &mut app,
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/slow")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(slow_response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let fast_response = Service::call(
+            &mut app,
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/fast")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(fast_response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn test_budget_logging_accepted() {
+        let tracker = BudgetTracker::new(1_000, 10_000, 50);
+        let (buf, response) = run_budget_request(
+            tracker,
+            |cfg| {
+                cfg.budget_hold_ms = 50;
+            },
+            "/t",
+        );
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = find_response_event(&buf);
+        assert_eq!(event["budget.outcome"], "accepted");
+        let charged = event["budget.charged_ms"]
+            .as_i64()
+            .expect("budget.charged_ms is i64");
+        assert!(
+            (0..=50).contains(&charged),
+            "charged_ms out of range: {charged} captured: {}",
+            buf.snapshot()
+        );
+        assert!(event["budget.global_remaining_ms"].as_i64().is_some());
+        assert!(event["budget.ip_remaining_ms"].as_i64().is_some());
+        assert!(event["budget.client_ip"].as_str().is_some());
+    }
+
+    #[test]
+    fn test_budget_logging_rejected_per_ip() {
+        // Tiny per-IP budget, global disabled, huge hold → reserve() fails on per-IP.
+        let tracker = BudgetTracker::new(1, 0, 10_000);
+        let (buf, response) = run_budget_request(
+            tracker,
+            |cfg| {
+                cfg.budget_hold_ms = 10_000;
+            },
+            "/t",
+        );
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let event = find_response_event(&buf);
+        assert_eq!(event["budget.outcome"], "rejected_per_ip");
+        assert_eq!(event["budget.charged_ms"].as_i64(), Some(0));
+        assert!(
+            event.get("budget.global_remaining_ms").is_none(),
+            "global field should be absent when dimension disabled"
+        );
+        assert!(event["budget.ip_remaining_ms"].as_i64().is_some());
+        assert!(event["budget.client_ip"].as_str().is_some());
+    }
+
+    #[test]
+    fn test_budget_logging_rejected_global() {
+        // Global tiny, per-IP disabled → reserve() fails on global.
+        let tracker = BudgetTracker::new(0, 1, 10_000);
+        let (buf, response) = run_budget_request(
+            tracker,
+            |cfg| {
+                cfg.budget_hold_ms = 10_000;
+            },
+            "/t",
+        );
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let event = find_response_event(&buf);
+        assert_eq!(event["budget.outcome"], "rejected_global");
+        assert_eq!(event["budget.charged_ms"].as_i64(), Some(0));
+        assert!(event["budget.global_remaining_ms"].as_i64().is_some());
+        assert!(
+            event.get("budget.ip_remaining_ms").is_none(),
+            "ip field should be absent when dimension disabled"
+        );
+        assert!(event["budget.client_ip"].as_str().is_some());
+    }
+
+    #[test]
+    fn test_budget_logging_override_semantics() {
+        // Guards the optimistic pre-record pattern: the middleware records
+        // "refunded_on_drop" before .await, then overwrites with "accepted"
+        // after. This test proves the last Span::record wins in the final
+        // formatted JSON. If tracing or JsonFields ever flips to first-wins
+        // (or emit-both), this test fails immediately.
+        let buf = BufferWriter::default();
+        let subscriber = capture_json_subscriber(buf.clone());
+        tracing::subscriber::with_default(subscriber, || {
+            let span = tracing::info_span!(
+                "request",
+                budget_outcome = tracing::field::Empty,
+                budget_charged_ms = tracing::field::Empty,
+            );
+            let _entered = span.enter();
+            tracing::Span::current().record("budget_outcome", "refunded_on_drop");
+            tracing::Span::current().record("budget_charged_ms", 100_i64);
+            tracing::Span::current().record("budget_outcome", "accepted");
+            tracing::Span::current().record("budget_charged_ms", 42_i64);
+            tracing::info!("response");
+        });
+
+        let event = find_response_event(&buf);
+        assert_eq!(
+            event["budget.outcome"], "accepted",
+            "last-recorded outcome should win"
+        );
+        assert_eq!(event["budget.charged_ms"].as_i64(), Some(42));
+    }
+
+    #[test]
+    fn test_json_response_event_has_response_time_ms() {
+        let tracker = BudgetTracker::new(1_000, 10_000, 50);
+        let (buf, response) = run_budget_request(
+            tracker,
+            |cfg| {
+                cfg.budget_hold_ms = 50;
+            },
+            "/t",
+        );
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = find_response_event(&buf);
+        assert!(
+            event["response_time_ms"].as_f64().is_some_and(|v| v >= 0.0),
+            "response_time_ms should be present as f64 >= 0. captured: {}",
+            buf.snapshot()
+        );
+        assert!(
+            event["duration"].as_i64().is_some_and(|v| v >= 0),
+            "duration (ns) should still be present for back-compat"
         );
     }
 }
