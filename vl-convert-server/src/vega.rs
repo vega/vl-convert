@@ -20,17 +20,7 @@ use crate::util::{
 };
 
 fn build_vg_opts(req: &VegaCommon, state: &AppState) -> Result<VgOpts, String> {
-    let common = validate_common_opts(
-        &req.format_locale,
-        &req.time_format_locale,
-        &req.google_fonts,
-        &req.vega_plugin,
-        &req.config,
-        &req.background,
-        req.width,
-        req.height,
-        state,
-    )?;
+    let common = validate_common_opts(req, state)?;
 
     Ok(VgOpts {
         format_locale: common.format_locale,

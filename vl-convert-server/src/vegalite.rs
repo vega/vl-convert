@@ -25,17 +25,7 @@ fn build_vl_opts(req: &VegaliteCommon, state: &AppState) -> Result<VlOpts, Strin
     let vl_version = VlVersion::from_str(&req.vl_version)
         .map_err(|_| format!("invalid vl_version: {}", req.vl_version))?;
 
-    let common = validate_common_opts(
-        &req.format_locale,
-        &req.time_format_locale,
-        &req.google_fonts,
-        &req.vega_plugin,
-        &req.config,
-        &req.background,
-        req.width,
-        req.height,
-        state,
-    )?;
+    let common = validate_common_opts(req, state)?;
 
     Ok(VlOpts {
         config: common.config,

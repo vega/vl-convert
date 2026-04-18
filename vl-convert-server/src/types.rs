@@ -2,9 +2,45 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use vl_convert_rs::DEFAULT_VL_VERSION;
 
+use crate::util::CommonOptsInput;
+
 fn default_vl_version() -> String {
     DEFAULT_VL_VERSION.to_string()
 }
+
+macro_rules! impl_common_opts_input {
+    ($ty:ty) => {
+        impl CommonOptsInput for $ty {
+            fn format_locale(&self) -> &Option<serde_json::Value> {
+                &self.format_locale
+            }
+            fn time_format_locale(&self) -> &Option<serde_json::Value> {
+                &self.time_format_locale
+            }
+            fn google_fonts(&self) -> &Option<Vec<String>> {
+                &self.google_fonts
+            }
+            fn vega_plugin(&self) -> &Option<String> {
+                &self.vega_plugin
+            }
+            fn config(&self) -> &Option<serde_json::Value> {
+                &self.config
+            }
+            fn background(&self) -> &Option<String> {
+                &self.background
+            }
+            fn width(&self) -> Option<f32> {
+                self.width
+            }
+            fn height(&self) -> Option<f32> {
+                self.height
+            }
+        }
+    };
+}
+
+impl_common_opts_input!(VegaliteCommon);
+impl_common_opts_input!(VegaCommon);
 
 /// Fields common to all Vega-Lite conversion requests.
 #[derive(Debug, Deserialize, ToSchema)]

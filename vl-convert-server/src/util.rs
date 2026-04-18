@@ -99,19 +99,26 @@ pub(crate) struct CommonOpts {
     pub height: Option<f32>,
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Accessor trait implemented by [`crate::types::VegaCommon`] and
+/// [`crate::types::VegaliteCommon`]. Lets [`validate_common_opts`] take a
+/// single borrowed argument regardless of which request flavor it came from.
+pub(crate) trait CommonOptsInput {
+    fn format_locale(&self) -> &Option<serde_json::Value>;
+    fn time_format_locale(&self) -> &Option<serde_json::Value>;
+    fn google_fonts(&self) -> &Option<Vec<String>>;
+    fn vega_plugin(&self) -> &Option<String>;
+    fn config(&self) -> &Option<serde_json::Value>;
+    fn background(&self) -> &Option<String>;
+    fn width(&self) -> Option<f32>;
+    fn height(&self) -> Option<f32>;
+}
+
 pub(crate) fn validate_common_opts(
-    format_locale: &Option<serde_json::Value>,
-    time_format_locale: &Option<serde_json::Value>,
-    google_fonts: &Option<Vec<String>>,
-    vega_plugin: &Option<String>,
-    config: &Option<serde_json::Value>,
-    background: &Option<String>,
-    width: Option<f32>,
-    height: Option<f32>,
+    req: &impl CommonOptsInput,
     state: &AppState,
 ) -> Result<CommonOpts, String> {
-    let format_locale = format_locale
+    let format_locale = req
+        .format_locale()
         .as_ref()
         .map(|v| match v {
             serde_json::Value::String(s) => Ok(FormatLocale::Name(s.clone())),
@@ -120,7 +127,8 @@ pub(crate) fn validate_common_opts(
         })
         .transpose()?;
 
-    let time_format_locale = time_format_locale
+    let time_format_locale = req
+        .time_format_locale()
         .as_ref()
         .map(|v| match v {
             serde_json::Value::String(s) => Ok(TimeFormatLocale::Name(s.clone())),
@@ -129,7 +137,8 @@ pub(crate) fn validate_common_opts(
         })
         .transpose()?;
 
-    let google_fonts = google_fonts
+    let google_fonts = req
+        .google_fonts()
         .as_ref()
         .map(|fonts| parse_google_font_args(fonts))
         .transpose()?;
@@ -138,7 +147,7 @@ pub(crate) fn validate_common_opts(
         return Err("google_fonts requires allow_google_fonts: true in server config".to_string());
     }
 
-    if vega_plugin.is_some() && !state.config.allow_per_request_plugins {
+    if req.vega_plugin().is_some() && !state.config.allow_per_request_plugins {
         return Err(
             "vega_plugin requires allow_per_request_plugins: true in server config".to_string(),
         );
@@ -148,10 +157,10 @@ pub(crate) fn validate_common_opts(
         format_locale,
         time_format_locale,
         google_fonts,
-        vega_plugin: vega_plugin.clone(),
-        config: config.clone(),
-        background: background.clone(),
-        width,
-        height,
+        vega_plugin: req.vega_plugin().clone(),
+        config: req.config().clone(),
+        background: req.background().clone(),
+        width: req.width(),
+        height: req.height(),
     })
 }
