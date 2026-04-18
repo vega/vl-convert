@@ -197,6 +197,71 @@ async fn test_vl_to_scenegraph_msgpack() {
 }
 
 #[tokio::test]
+async fn test_vl_to_scenegraph_prefers_json_when_msgpack_has_lower_quality() {
+    let server = &*DEFAULT_SERVER;
+    let resp = server
+        .client
+        .post(format!("{}/vegalite/scenegraph", server.base_url))
+        .header("Accept", "application/json, application/msgpack;q=0.1")
+        .json(&serde_json::json!({"spec": simple_vl_spec()}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert!(resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .contains("application/json"));
+}
+
+#[tokio::test]
+async fn test_vl_to_scenegraph_prefers_msgpack_when_json_has_lower_quality() {
+    let server = &*DEFAULT_SERVER;
+    let resp = server
+        .client
+        .post(format!("{}/vegalite/scenegraph", server.base_url))
+        .header("Accept", "application/json;q=0.1, application/msgpack")
+        .json(&serde_json::json!({"spec": simple_vl_spec()}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "application/msgpack"
+    );
+}
+
+#[tokio::test]
+async fn test_vl_to_scenegraph_x_msgpack_accept() {
+    let server = &*DEFAULT_SERVER;
+    let resp = server
+        .client
+        .post(format!("{}/vegalite/scenegraph", server.base_url))
+        .header("Accept", "application/x-msgpack")
+        .json(&serde_json::json!({"spec": simple_vl_spec()}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "application/msgpack"
+    );
+}
+
+#[tokio::test]
 async fn test_vl_to_scenegraph_default_is_json() {
     let server = &*DEFAULT_SERVER;
     let resp = server

@@ -41,6 +41,16 @@ impl LogLevel {
     }
 }
 
+fn parse_positive_i64(value: &str) -> Result<i64, String> {
+    let parsed: i64 = value
+        .parse()
+        .map_err(|err| format!("invalid integer '{value}': {err}"))?;
+    if parsed <= 0 {
+        return Err("value must be positive".to_string());
+    }
+    Ok(parsed)
+}
+
 #[derive(Debug, Parser)]
 #[command(version, name = "vl-convert-server")]
 #[command(about = "HTTP server for converting Vega-Lite and Vega specifications to static images")]
@@ -180,7 +190,7 @@ struct Cli {
 
     /// Per-request budget hold in ms (reserved upfront, adjusted to actual
     /// conversion time after completion)
-    #[arg(long, env = "VLC_BUDGET_HOLD_MS", default_value_t = 1000)]
+    #[arg(long, env = "VLC_BUDGET_HOLD_MS", default_value_t = 1000, value_parser = parse_positive_i64)]
     budget_hold_ms: i64,
 
     /// Enable admin API on 127.0.0.1:<port> for dynamic budget updates
@@ -382,6 +392,9 @@ fn flatten_plugin_domains(raw: &[String]) -> Vec<String> {
 mod tests {
     use super::*;
     use clap::Parser;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     const ALL_VLC_VARS: &[&str] = &[
         "VLC_HOST",
@@ -436,6 +449,7 @@ mod tests {
 
     #[test]
     fn test_cli_defaults() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let guard = EnvGuard::new(ALL_VLC_VARS);
         for &var in ALL_VLC_VARS {
             std::env::remove_var(var);
@@ -457,6 +471,7 @@ mod tests {
 
     #[test]
     fn test_cli_env_var_parsing() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let guard = EnvGuard::new(ALL_VLC_VARS);
         for &var in ALL_VLC_VARS {
             std::env::remove_var(var);
@@ -477,6 +492,7 @@ mod tests {
 
     #[test]
     fn test_cli_flag_overrides_env() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let guard = EnvGuard::new(ALL_VLC_VARS);
         for &var in ALL_VLC_VARS {
             std::env::remove_var(var);
@@ -493,6 +509,7 @@ mod tests {
 
     #[test]
     fn test_cli_conflicts() {
+        let _lock = ENV_LOCK.lock().unwrap();
         let guard = EnvGuard::new(ALL_VLC_VARS);
         for &var in ALL_VLC_VARS {
             std::env::remove_var(var);
@@ -505,6 +522,34 @@ mod tests {
             "--no-vlc-config",
         ]);
 
+        assert!(result.is_err());
+
+        drop(guard);
+    }
+
+    #[test]
+    fn test_cli_rejects_zero_budget_hold_ms() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new(ALL_VLC_VARS);
+        for &var in ALL_VLC_VARS {
+            std::env::remove_var(var);
+        }
+
+        let result = Cli::try_parse_from(["vl-convert-server", "--budget-hold-ms", "0"]);
+        assert!(result.is_err());
+
+        drop(guard);
+    }
+
+    #[test]
+    fn test_cli_rejects_negative_budget_hold_ms() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new(ALL_VLC_VARS);
+        for &var in ALL_VLC_VARS {
+            std::env::remove_var(var);
+        }
+
+        let result = Cli::try_parse_from(["vl-convert-server", "--budget-hold-ms", "-1"]);
         assert!(result.is_err());
 
         drop(guard);

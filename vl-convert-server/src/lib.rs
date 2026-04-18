@@ -54,14 +54,75 @@ use types::ErrorResponse;
 ))]
 struct ApiDoc;
 
-pub fn wants_msgpack(headers: &axum::http::HeaderMap) -> bool {
-    headers
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScenegraphFormat {
+    Json,
+    Msgpack,
+}
+
+fn preferred_scenegraph_format(headers: &axum::http::HeaderMap) -> ScenegraphFormat {
+    let Some(accept) = headers
         .get(axum::http::header::ACCEPT)
         .and_then(|v| v.to_str().ok())
-        .map(|accept| {
-            accept.contains("application/msgpack") || accept.contains("application/x-msgpack")
-        })
-        .unwrap_or(false)
+    else {
+        return ScenegraphFormat::Json;
+    };
+
+    let mut json_quality: Option<i32> = None;
+    let mut msgpack_quality: Option<i32> = None;
+
+    for item in accept.split(',') {
+        let Some((media_type, quality)) = parse_accept_item(item) else {
+            return ScenegraphFormat::Json;
+        };
+
+        match media_type.as_str() {
+            "application/json" => {
+                json_quality = Some(json_quality.map_or(quality, |current| current.max(quality)));
+            }
+            "application/msgpack" | "application/x-msgpack" => {
+                msgpack_quality =
+                    Some(msgpack_quality.map_or(quality, |current| current.max(quality)));
+            }
+            _ => {}
+        }
+    }
+
+    match (msgpack_quality, json_quality) {
+        (Some(msgpack), Some(json)) if msgpack > json => ScenegraphFormat::Msgpack,
+        (Some(msgpack), None) if msgpack > 0 => ScenegraphFormat::Msgpack,
+        _ => ScenegraphFormat::Json,
+    }
+}
+
+fn parse_accept_item(item: &str) -> Option<(String, i32)> {
+    let mut parts = item.split(';');
+    let media_type = parts.next()?.trim().to_ascii_lowercase();
+    if media_type.is_empty() {
+        return None;
+    }
+
+    let mut quality = 1000;
+    for param in parts {
+        let param = param.trim();
+        if param.is_empty() {
+            continue;
+        }
+        let (name, value) = param.split_once('=')?;
+        if name.trim().eq_ignore_ascii_case("q") {
+            quality = parse_quality(value.trim())?;
+        }
+    }
+
+    Some((media_type, quality))
+}
+
+fn parse_quality(value: &str) -> Option<i32> {
+    let parsed: f32 = value.parse().ok()?;
+    if !(0.0..=1.0).contains(&parsed) {
+        return None;
+    }
+    Some((parsed * 1000.0).round() as i32)
 }
 
 pub fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
@@ -468,6 +529,8 @@ fn init_app_state(
     config: VlcConfig,
     serve_config: &ServeConfig,
 ) -> Result<InitResult, anyhow::Error> {
+    validate_serve_config(serve_config)?;
+
     let mut config = config;
     apply_server_defaults(&mut config);
 
@@ -535,6 +598,14 @@ fn init_app_state(
         tracker,
         converter,
     })
+}
+
+fn validate_serve_config(serve_config: &ServeConfig) -> Result<(), anyhow::Error> {
+    if serve_config.budget_hold_ms <= 0 {
+        anyhow::bail!("budget_hold_ms must be positive");
+    }
+
+    Ok(())
 }
 
 /// Build the middleware stack that wraps the API router.
@@ -838,19 +909,22 @@ async fn budget_middleware(
     let ip = extract_client_ip(&req, trust_proxy)
         .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
 
-    if let Err(e) = tracker.reserve(ip) {
-        return error_response(
-            StatusCode::TOO_MANY_REQUESTS,
-            &format!("{e}"),
-            opaque_errors,
-        );
-    }
+    let reservation = match tracker.reserve(ip) {
+        Ok(reservation) => reservation,
+        Err(e) => {
+            return error_response(
+                StatusCode::TOO_MANY_REQUESTS,
+                &format!("{e}"),
+                opaque_errors,
+            );
+        }
+    };
 
     let start = std::time::Instant::now();
     let response = next.run(req).await;
     let actual_ms = start.elapsed().as_millis() as i64;
 
-    tracker.adjust(ip, actual_ms);
+    reservation.complete(actual_ms);
 
     response
 }
@@ -858,6 +932,29 @@ async fn budget_middleware(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::routing::get;
+    use tower::Service;
+
+    fn default_serve_config() -> ServeConfig {
+        ServeConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            api_key: None,
+            cors_origin: None,
+            max_concurrent_requests: None,
+            request_timeout_secs: 30,
+            drain_timeout_secs: 30,
+            max_body_size_mb: 50,
+            opaque_errors: false,
+            require_user_agent: false,
+            log_format: LogFormat::Text,
+            per_ip_budget_ms: None,
+            global_budget_ms: None,
+            budget_hold_ms: 1000,
+            admin_port: None,
+            trust_proxy: false,
+        }
+    }
 
     fn make_request(headers: &[(&str, &str)]) -> axum::http::Request<axum::body::Body> {
         let mut builder = axum::http::Request::builder().method("GET").uri("/test");
@@ -962,5 +1059,89 @@ mod tests {
             ip, None,
             "no proxy headers and no ConnectInfo should return None"
         );
+    }
+
+    #[test]
+    fn test_preferred_scenegraph_format_json_preferred_when_msgpack_has_lower_quality() {
+        let req = make_request(&[("accept", "application/json, application/msgpack;q=0.1")]);
+        assert_eq!(
+            preferred_scenegraph_format(req.headers()),
+            ScenegraphFormat::Json
+        );
+    }
+
+    #[test]
+    fn test_preferred_scenegraph_format_defaults_to_json_on_malformed_accept() {
+        let req = make_request(&[("accept", "application/json;q=bogus")]);
+        assert_eq!(
+            preferred_scenegraph_format(req.headers()),
+            ScenegraphFormat::Json
+        );
+    }
+
+    #[test]
+    fn test_build_app_rejects_non_positive_budget_hold_ms() {
+        let config = VlcConfig::default();
+        let mut serve_config = default_serve_config();
+        serve_config.budget_hold_ms = 0;
+
+        let err = build_app(config, &serve_config).err().unwrap();
+        assert!(
+            err.to_string().contains("budget_hold_ms must be positive"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_budget_timeout_refunds_reservation() {
+        async fn slow_handler() -> &'static str {
+            tokio::time::sleep(Duration::from_millis(1100)).await;
+            "slow"
+        }
+
+        async fn fast_handler() -> &'static str {
+            "fast"
+        }
+
+        let tracker = budget::BudgetTracker::new(100, 0, 100);
+        let router = Router::new()
+            .route("/slow", get(slow_handler))
+            .route("/fast", get(fast_handler))
+            .layer(axum::middleware::from_fn(
+                move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
+                    let tracker = tracker.clone();
+                    async move { budget_middleware(tracker, false, false, req, next).await }
+                },
+            ));
+
+        let mut serve_config = default_serve_config();
+        serve_config.request_timeout_secs = 1;
+        serve_config.budget_hold_ms = 100;
+
+        let mut app = build_middleware_stack(router, &serve_config);
+
+        let slow_response = Service::call(
+            &mut app,
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/slow")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(slow_response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let fast_response = Service::call(
+            &mut app,
+            axum::http::Request::builder()
+                .method("GET")
+                .uri("/fast")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(fast_response.status(), StatusCode::OK);
     }
 }

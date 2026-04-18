@@ -14,8 +14,8 @@ use super::types::{
     VegaPngRequest, VegaScenegraphRequest, VegaSvgRequest, VegaUrlRequest,
 };
 use super::{
-    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts,
-    wants_msgpack, AppState,
+    append_vlc_logs_header, error_response, format_log_entries, preferred_scenegraph_format,
+    validate_common_opts, AppState, ScenegraphFormat,
 };
 
 fn build_vg_opts(req: &VegaCommon, state: &AppState) -> Result<VgOpts, String> {
@@ -322,7 +322,7 @@ pub async fn vega_scenegraph(
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
     let spec = req.common.spec;
-    let wants_msgpack = wants_msgpack(&headers);
+    let wants_msgpack = preferred_scenegraph_format(&headers) == ScenegraphFormat::Msgpack;
 
     if wants_msgpack {
         match state

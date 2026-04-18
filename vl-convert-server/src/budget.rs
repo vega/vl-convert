@@ -10,11 +10,37 @@ pub struct BudgetTracker {
     global_remaining: AtomicI64,
     hold_ms: AtomicI64,
     ip_entries: DashMap<IpAddr, IpBudgetEntry>,
+    global_refill_remainder: std::sync::Mutex<i64>,
+    per_ip_refill_remainder: std::sync::Mutex<i64>,
 }
 
 struct IpBudgetEntry {
     remaining: AtomicI64,
     last_seen: std::sync::Mutex<Instant>,
+}
+
+pub struct BudgetReservation {
+    tracker: Arc<BudgetTracker>,
+    ip: IpAddr,
+    reserved_ms: i64,
+    released: bool,
+}
+
+impl BudgetReservation {
+    pub fn complete(mut self, actual_ms: i64) {
+        self.tracker
+            .apply_adjustment(self.ip, self.reserved_ms - actual_ms);
+        self.released = true;
+    }
+}
+
+impl Drop for BudgetReservation {
+    fn drop(&mut self) {
+        if !self.released {
+            self.tracker.apply_adjustment(self.ip, self.reserved_ms);
+            self.released = true;
+        }
+    }
 }
 
 impl BudgetTracker {
@@ -25,6 +51,8 @@ impl BudgetTracker {
             global_remaining: AtomicI64::new(global_budget_ms),
             hold_ms: AtomicI64::new(hold_ms),
             ip_entries: DashMap::new(),
+            global_refill_remainder: std::sync::Mutex::new(0),
+            per_ip_refill_remainder: std::sync::Mutex::new(0),
         })
     }
 
@@ -45,7 +73,7 @@ impl BudgetTracker {
     /// request may observe a temporarily over-decremented budget and be
     /// rejected even though budget will be restored momentarily. This is
     /// acceptable for rate-limiting — it errs on the side of caution.
-    pub fn reserve(&self, ip: IpAddr) -> Result<(), BudgetExhausted> {
+    pub fn reserve(self: &Arc<Self>, ip: IpAddr) -> Result<BudgetReservation, BudgetExhausted> {
         let estimate = self.hold_ms.load(Ordering::Relaxed);
 
         // Check global budget
@@ -80,14 +108,18 @@ impl BudgetTracker {
             }
         }
 
-        Ok(())
+        Ok(BudgetReservation {
+            tracker: Arc::clone(self),
+            ip,
+            reserved_ms: estimate,
+            released: false,
+        })
     }
 
-    /// Adjust the reservation after conversion completes. Returns the
-    /// difference (estimate - actual) back to the budgets.
-    pub fn adjust(&self, ip: IpAddr, actual_ms: i64) {
-        let estimate = self.hold_ms.load(Ordering::Relaxed);
-        let diff = estimate - actual_ms;
+    fn apply_adjustment(&self, ip: IpAddr, diff: i64) {
+        if diff == 0 {
+            return;
+        }
 
         let global_limit = self.global_budget_ms.load(Ordering::Relaxed);
         if global_limit > 0 {
@@ -115,6 +147,10 @@ impl BudgetTracker {
     pub fn update_config(&self, per_ip: Option<i64>, global: Option<i64>) {
         if let Some(new_ip) = per_ip {
             let old = self.per_ip_budget_ms.swap(new_ip, Ordering::AcqRel);
+            *self
+                .per_ip_refill_remainder
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner()) = 0;
             if old == 0 && new_ip > 0 {
                 // Enabling from disabled — reset all IP balances to the new limit
                 for entry in self.ip_entries.iter_mut() {
@@ -132,6 +168,10 @@ impl BudgetTracker {
         }
         if let Some(new_global) = global {
             let old = self.global_budget_ms.swap(new_global, Ordering::AcqRel);
+            *self
+                .global_refill_remainder
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner()) = 0;
             let current = self.global_remaining.load(Ordering::Relaxed);
             if current > new_global {
                 // Clamp down
@@ -152,14 +192,13 @@ impl BudgetTracker {
     pub fn refill(&self) {
         let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);
         let global_limit = self.global_budget_ms.load(Ordering::Relaxed);
-        // Round refill to avoid truncation; guarantee at least 1ms/sec when budget > 0
         let ip_refill = if ip_limit > 0 {
-            (ip_limit as f64 / 60.0).round().max(1.0) as i64
+            Self::compute_refill_amount(ip_limit, &self.per_ip_refill_remainder)
         } else {
             0
         };
         let global_refill = if global_limit > 0 {
-            (global_limit as f64 / 60.0).round().max(1.0) as i64
+            Self::compute_refill_amount(global_limit, &self.global_refill_remainder)
         } else {
             0
         };
@@ -191,6 +230,16 @@ impl BudgetTracker {
             }
             true
         });
+    }
+
+    fn compute_refill_amount(limit: i64, remainder: &std::sync::Mutex<i64>) -> i64 {
+        let mut remainder = remainder
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        *remainder += limit;
+        let refill = *remainder / 60;
+        *remainder %= 60;
+        refill
     }
 
     /// Get current status for the admin API.
@@ -227,4 +276,107 @@ pub struct BudgetStatus {
     pub global_remaining_ms: i64,
     pub hold_ms: i64,
     pub active_ips: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    fn test_ip() -> IpAddr {
+        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+    }
+
+    #[test]
+    fn test_budget_reservation_drop_refunds_reserved_budget() {
+        let tracker = BudgetTracker::new(100, 100, 25);
+        let ip = test_ip();
+
+        let reservation = tracker.reserve(ip).unwrap();
+        assert_eq!(tracker.global_remaining.load(Ordering::Relaxed), 75);
+        assert_eq!(
+            tracker
+                .ip_entries
+                .get(&ip)
+                .unwrap()
+                .remaining
+                .load(Ordering::Relaxed),
+            75
+        );
+
+        drop(reservation);
+
+        assert_eq!(tracker.global_remaining.load(Ordering::Relaxed), 100);
+        assert_eq!(
+            tracker
+                .ip_entries
+                .get(&ip)
+                .unwrap()
+                .remaining
+                .load(Ordering::Relaxed),
+            100
+        );
+    }
+
+    #[test]
+    fn test_budget_reservation_complete_charges_actual_elapsed_time() {
+        let tracker = BudgetTracker::new(100, 100, 40);
+        let ip = test_ip();
+
+        let reservation = tracker.reserve(ip).unwrap();
+        tracker.update_estimate(10);
+        reservation.complete(30);
+
+        assert_eq!(tracker.global_remaining.load(Ordering::Relaxed), 70);
+        assert_eq!(
+            tracker
+                .ip_entries
+                .get(&ip)
+                .unwrap()
+                .remaining
+                .load(Ordering::Relaxed),
+            70
+        );
+    }
+
+    #[test]
+    fn test_global_refill_exact_for_low_budget() {
+        let tracker = BudgetTracker::new(0, 1, 1);
+        tracker.global_remaining.store(0, Ordering::Release);
+
+        for _ in 0..59 {
+            tracker.refill();
+        }
+        assert_eq!(tracker.global_remaining.load(Ordering::Relaxed), 0);
+
+        tracker.refill();
+        assert_eq!(tracker.global_remaining.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_per_ip_refill_exact_for_non_divisible_budget() {
+        let tracker = BudgetTracker::new(90, 0, 1);
+        let ip = test_ip();
+        tracker.ip_entries.insert(
+            ip,
+            IpBudgetEntry {
+                remaining: AtomicI64::new(0),
+                last_seen: std::sync::Mutex::new(Instant::now()),
+            },
+        );
+
+        for _ in 0..60 {
+            tracker.refill();
+        }
+
+        assert_eq!(
+            tracker
+                .ip_entries
+                .get(&ip)
+                .unwrap()
+                .remaining
+                .load(Ordering::Relaxed),
+            90
+        );
+    }
 }
