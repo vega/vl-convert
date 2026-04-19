@@ -68,15 +68,10 @@ pub async fn serve(
     if let Some(admin) = built.admin {
         let cancel = token.clone();
         tasks.spawn(async move {
-            match tokio::net::TcpListener::bind(&admin.addr).await {
-                Ok(listener) => {
-                    log::info!("Admin API listening on http://{}", admin.addr);
-                    let _ = axum::serve(listener, admin.router)
-                        .with_graceful_shutdown(async move { cancel.cancelled().await })
-                        .await;
-                }
-                Err(e) => log::error!("Failed to bind admin port {}: {e}", admin.addr),
-            }
+            log::info!("Admin API listening on http://{}", admin.addr);
+            let _ = axum::serve(admin.listener, admin.router)
+                .with_graceful_shutdown(async move { cancel.cancelled().await })
+                .await;
         });
     }
 
@@ -99,11 +94,14 @@ pub async fn serve(
     Ok(())
 }
 
-/// Build a [`BuiltApp`] from the given configuration. Runtime-free:
-/// `serve` spawns the background tasks carried on the returned value.
-/// Tests that exercise the router via `tower::ServiceExt::oneshot` can
-/// use `built.router` directly without ever calling [`serve`].
-pub fn build_app(config: VlcConfig, serve_config: &ServeConfig) -> Result<BuiltApp, anyhow::Error> {
+/// Build a [`BuiltApp`] from the given configuration: warms up
+/// converter workers and binds the admin listener when configured.
+/// For `tower::ServiceExt::oneshot`-style tests, `built.router` can
+/// be exercised directly without calling [`serve`].
+pub async fn build_app(
+    config: VlcConfig,
+    serve_config: &ServeConfig,
+) -> Result<BuiltApp, anyhow::Error> {
     validate_serve_config(serve_config)?;
 
     let mut config = config;
@@ -142,13 +140,18 @@ pub fn build_app(config: VlcConfig, serve_config: &ServeConfig) -> Result<BuiltA
     };
 
     let admin = if let (Some(admin_port), Some(t)) = (serve_config.admin_port, &tracker) {
+        let addr = format!("127.0.0.1:{admin_port}");
+        let listener = tokio::net::TcpListener::bind(&addr)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to bind admin port {addr}: {e}"))?;
         let admin_router = admin::admin_router(t.clone())
             .layer(PropagateRequestIdLayer::x_request_id())
             .layer(TraceLayer::new_for_http())
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
             .layer(CatchPanicLayer::new());
         Some(AdminConfig {
-            addr: format!("127.0.0.1:{admin_port}"),
+            listener,
+            addr,
             router: admin_router,
         })
     } else {
@@ -176,13 +179,13 @@ mod tests {
     use super::*;
     use crate::test_support::default_serve_config;
 
-    #[test]
-    fn test_build_app_rejects_non_positive_budget_hold_ms() {
+    #[tokio::test]
+    async fn test_build_app_rejects_non_positive_budget_hold_ms() {
         let config = VlcConfig::default();
         let mut serve_config = default_serve_config();
         serve_config.budget_hold_ms = 0;
 
-        let err = build_app(config, &serve_config).err().unwrap();
+        let err = build_app(config, &serve_config).await.err().unwrap();
         assert!(
             err.to_string().contains("budget_hold_ms must be positive"),
             "unexpected error: {err}"

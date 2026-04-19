@@ -16,7 +16,8 @@ async fn main() -> Result<(), anyhow::Error> {
         vl_convert_rs::text::register_font_directory(dir)?;
     }
 
-    let built = vl_convert_server::build_app(resolved.converter_config, &resolved.serve_config)?;
+    let built =
+        vl_convert_server::build_app(resolved.converter_config, &resolved.serve_config).await?;
 
     let addr = if resolved.serve_config.host.contains(':') {
         format!(

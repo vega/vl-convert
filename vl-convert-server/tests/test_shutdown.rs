@@ -25,7 +25,9 @@ async fn test_serve_drains_background_tasks_on_shutdown() {
         admin_port: Some(admin_port),
         ..ServeConfig::default()
     };
-    let built = vl_convert_server::build_app(VlcConfig::default(), &serve_config).unwrap();
+    let built = vl_convert_server::build_app(VlcConfig::default(), &serve_config)
+        .await
+        .unwrap();
     let listener = tokio::net::TcpListener::from_std(std_listener).unwrap();
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();

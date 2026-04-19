@@ -114,6 +114,7 @@ pub struct BuiltApp {
 }
 
 pub(crate) struct AdminConfig {
+    pub listener: tokio::net::TcpListener,
     pub addr: String,
     pub router: Router,
 }

@@ -22,16 +22,21 @@ pub fn find_free_port() -> u16 {
 }
 
 pub fn start_server_sync(config: VlcConfig, serve_config: ServeConfig) -> ServerHandle {
-    // Bind the listener synchronously on the test thread. Port 0 → kernel
-    // picks a free port; holding the listener across the move into the
-    // background thread keeps the port reserved (no TOCTOU). The kernel
-    // starts queueing incoming SYNs into the listen backlog immediately,
-    // so no readiness probe is needed.
+    // Bind the main listener synchronously on the test thread. Port 0
+    // → kernel picks a free port; holding the listener across the
+    // move into the background thread keeps the port reserved (no
+    // TOCTOU). The kernel starts queueing incoming SYNs into the
+    // listen backlog immediately, so a main-port readiness probe
+    // isn't needed.
     let std_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     std_listener.set_nonblocking(true).unwrap();
     let addr = std_listener.local_addr().unwrap();
 
-    let built = vl_convert_server::build_app(config, &serve_config).unwrap();
+    // Ready signal: admin listener (when enabled) is bound inside
+    // build_app, which runs on the spawned thread's runtime. The test
+    // thread blocks on this signal so ServerHandle is only published
+    // after both listeners are accepting.
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<()>();
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -39,7 +44,11 @@ pub fn start_server_sync(config: VlcConfig, serve_config: ServeConfig) -> Server
             .build()
             .unwrap();
         rt.block_on(async move {
+            let built = vl_convert_server::build_app(config, &serve_config)
+                .await
+                .expect("build_app failed");
             let listener = tokio::net::TcpListener::from_std(std_listener).unwrap();
+            ready_tx.send(()).ok();
             // Tests don't trigger graceful shutdown; the server runs
             // until the background thread's runtime is dropped.
             vl_convert_server::serve(listener, built, std::future::pending())
@@ -47,6 +56,10 @@ pub fn start_server_sync(config: VlcConfig, serve_config: ServeConfig) -> Server
                 .ok();
         });
     });
+
+    ready_rx
+        .recv()
+        .expect("server thread exited before signaling ready");
 
     ServerHandle {
         base_url: format!("http://{addr}"),
@@ -95,16 +108,7 @@ pub fn start_budget_server(
     serve_config.budget_hold_ms = hold_ms;
     serve_config.admin_port = Some(admin_port);
     serve_config.trust_proxy = trust_proxy;
-    let server = start_server_sync(config, serve_config);
-
-    for _ in 0..150 {
-        if std::net::TcpStream::connect(format!("127.0.0.1:{admin_port}")).is_ok() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-
-    (server, admin_port)
+    (start_server_sync(config, serve_config), admin_port)
 }
 
 pub fn simple_vl_spec() -> serde_json::Value {
