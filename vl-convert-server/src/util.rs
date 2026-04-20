@@ -5,20 +5,20 @@ use vl_convert_rs::converter::{FormatLocale, GoogleFontRequest, LogEntry, TimeFo
 use crate::types::ErrorResponse;
 use crate::AppState;
 
-pub fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
+pub(crate) fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
     logs.iter()
         .map(|e| format!("{}: {}", e.level, e.message))
         .collect()
 }
 
-pub fn vegalite_versions() -> Vec<&'static str> {
+pub(crate) fn vegalite_versions() -> Vec<&'static str> {
     vl_convert_rs::module_loader::import_map::VL_VERSIONS
         .iter()
         .map(|v| v.to_semver())
         .collect()
 }
 
-pub fn error_response(status: StatusCode, message: &str, opaque: bool) -> Response {
+pub(crate) fn error_response(status: StatusCode, message: &str, opaque: bool) -> Response {
     if opaque {
         status.into_response()
     } else {
@@ -32,7 +32,7 @@ pub fn error_response(status: StatusCode, message: &str, opaque: bool) -> Respon
     }
 }
 
-pub fn append_vlc_logs_header(headers: &mut HeaderMap, logs: &[String]) {
+pub(crate) fn append_vlc_logs_header(headers: &mut HeaderMap, logs: &[String]) {
     let truncated: Vec<&str> = logs.iter().take(50).map(|s| s.as_str()).collect();
     let json = serde_json::to_string(&truncated).unwrap_or_else(|_| "[]".to_string());
     if let Ok(val) = HeaderValue::from_str(&json) {
@@ -50,7 +50,7 @@ pub fn append_vlc_logs_header(headers: &mut HeaderMap, logs: &[String]) {
     }
 }
 
-pub fn parse_google_font_args(fonts: &[String]) -> Result<Vec<GoogleFontRequest>, String> {
+pub(crate) fn parse_google_font_args(fonts: &[String]) -> Result<Vec<GoogleFontRequest>, String> {
     fonts
         .iter()
         .map(|s| {

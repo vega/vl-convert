@@ -1,14 +1,19 @@
-use clap::{Parser, ValueEnum};
+use clap::{ArgGroup, Parser, ValueEnum};
 use std::path::PathBuf;
 use vl_convert_rs::anyhow::{self, bail};
 use vl_convert_rs::converter::MissingFontsPolicy;
 use vl_convert_server::LogFormat;
 
-use super::parsers::{parse_boolish_arg, parse_path_arg, parse_positive_i64_arg};
+use super::parsers::{
+    parse_boolish_arg, parse_path_arg, parse_positive_i64_arg, parse_socket_mode_arg,
+    parse_socket_path_arg,
+};
 
 #[derive(Debug, Parser, Clone)]
 #[command(version, name = "vl-convert-server")]
 #[command(about = "HTTP server for converting Vega-Lite and Vega specifications to static images")]
+#[command(group(ArgGroup::new("main_listener").multiple(true).required(false)))]
+#[command(group(ArgGroup::new("admin_listener").multiple(true).required(false)))]
 pub(crate) struct Cli {
     /// Path to JSONC converter config file
     #[arg(long, value_parser = parse_path_arg)]
@@ -119,11 +124,11 @@ pub(crate) struct Cli {
     pub(crate) log_format: Option<LogFormatArg>,
 
     /// Bind address
-    #[arg(long)]
+    #[arg(long, group = "main_listener")]
     pub(crate) host: Option<String>,
 
     /// Port (defaults to $PORT env var if set, else 3000)
-    #[arg(long)]
+    #[arg(long, group = "main_listener")]
     pub(crate) port: Option<u16>,
 
     /// Number of converter worker threads
@@ -175,12 +180,44 @@ pub(crate) struct Cli {
     pub(crate) budget_hold_ms: Option<i64>,
 
     /// Enable admin API on 127.0.0.1:<port> for dynamic budget updates
-    #[arg(long)]
+    #[arg(long, group = "admin_listener")]
     pub(crate) admin_port: Option<String>,
 
     /// Trust X-Forwarded-For and X-Real-IP headers for client IP extraction
     #[arg(long, value_name = "BOOL", num_args = 0..=1, require_equals = true, default_missing_value = "true", value_parser = parse_boolish_arg)]
     pub(crate) trust_proxy: Option<bool>,
+
+    /// Bind the main HTTP listener on a UDS path instead of TCP (Unix only)
+    #[arg(
+        long,
+        value_name = "PATH",
+        value_parser = parse_socket_path_arg,
+        group = "main_listener",
+        conflicts_with_all = ["host", "port"],
+    )]
+    pub(crate) unix_socket: Option<PathBuf>,
+
+    /// Bind the admin HTTP listener on a UDS path instead of TCP (Unix only)
+    #[arg(
+        long,
+        value_name = "PATH",
+        value_parser = parse_socket_path_arg,
+        group = "admin_listener",
+        conflicts_with = "admin_port",
+    )]
+    pub(crate) admin_unix_socket: Option<PathBuf>,
+
+    /// Unix permission mode for UDS listeners (octal, e.g. 0600)
+    #[arg(long, value_name = "OCTAL", value_parser = parse_socket_mode_arg)]
+    pub(crate) socket_mode: Option<u32>,
+
+    /// Emit one JSON readiness line on stdout after all listeners bind
+    #[arg(long, value_name = "BOOL", num_args = 0..=1, require_equals = true, default_missing_value = "true", value_parser = parse_boolish_arg)]
+    pub(crate) ready_json: Option<bool>,
+
+    /// Exit when the parent process closes stdin (auto-enabled for UDS)
+    #[arg(long, value_name = "BOOL", num_args = 0..=1, require_equals = true, default_missing_value = "true", value_parser = parse_boolish_arg)]
+    pub(crate) exit_on_parent_close: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tower::Service;
 
 use crate::budget::{self, BudgetTracker};
-use crate::{build_middleware_stack, json_fmt, LogFormat, ServeConfig};
+use crate::{build_middleware_stack, json_fmt, ListenAddr, LogFormat, ServeConfig};
 
 #[derive(Clone, Default)]
 pub(crate) struct BufferWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
@@ -57,7 +57,10 @@ pub(crate) fn find_response_event(buf: &BufferWriter) -> serde_json::Value {
 
 pub(crate) fn default_serve_config() -> ServeConfig {
     ServeConfig {
-        port: 0,
+        main: ListenAddr::Tcp {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+        },
         ..ServeConfig::default()
     }
 }
@@ -95,16 +98,23 @@ pub(crate) fn run_budget_request(
 
     let response = tracing::subscriber::with_default(subscriber, || {
         rt.block_on(async move {
-            Service::call(
-                &mut app,
-                axum::http::Request::builder()
-                    .method("GET")
-                    .uri(uri)
-                    .body(axum::body::Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap()
+            let mut req = axum::http::Request::builder()
+                .method("GET")
+                .uri(uri)
+                .body(axum::body::Body::empty())
+                .unwrap();
+            // Inject ConnectInfo<SocketAddr> so the budget middleware's
+            // extract_client_ip sees a real peer address, matching TCP
+            // production behavior. Without this injection the middleware
+            // gets None and skips per-IP accounting — which would make
+            // budget tests stop exercising the per-IP code path. Use a
+            // sentinel loopback port so tests are deterministic across
+            // runs.
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo::<std::net::SocketAddr>(
+                    "127.0.0.1:12345".parse().unwrap(),
+                ));
+            Service::call(&mut app, req).await.unwrap()
         })
     });
 

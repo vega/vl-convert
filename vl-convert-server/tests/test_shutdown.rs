@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 use vl_convert_rs::converter::VlcConfig;
-use vl_convert_server::ServeConfig;
+use vl_convert_server::{BoundListener, ListenAddr, ServeConfig};
 
 #[tokio::test]
 async fn test_serve_drains_background_tasks_on_shutdown() {
@@ -22,13 +22,16 @@ async fn test_serve_drains_background_tasks_on_shutdown() {
         per_ip_budget_ms: Some(1000),
         global_budget_ms: Some(10_000),
         budget_hold_ms: 100,
-        admin_port: Some(admin_port),
+        admin: Some(ListenAddr::Tcp {
+            host: "127.0.0.1".to_string(),
+            port: admin_port,
+        }),
         ..ServeConfig::default()
     };
     let built = vl_convert_server::build_app(VlcConfig::default(), &serve_config)
         .await
         .unwrap();
-    let listener = tokio::net::TcpListener::from_std(std_listener).unwrap();
+    let listener = BoundListener::Tcp(tokio::net::TcpListener::from_std(std_listener).unwrap());
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let shutdown = async move {

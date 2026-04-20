@@ -5,7 +5,7 @@ use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, MissingFontsPolicy, TimeFormatLocale,
     VlcConfig,
 };
-use vl_convert_server::{LogFormat, ServeConfig};
+use vl_convert_server::{ListenAddr, LogFormat, ServeConfig};
 
 use super::cli::{Cli, DataAccessMode, LogFormatArg, LogLevel, MissingFontsArg};
 use super::env::EnvValues;
@@ -17,16 +17,56 @@ use super::parsers::{
     parse_usize, parse_vega_plugins, InputKind,
 };
 
+/// Fully-resolved configuration handed from the CLI/env resolution
+/// layer to `main()`. Everything in `main.rs` reads from here.
+///
+/// Two groups of fields:
+/// - `converter_config` and `serve_config` are consumed by the
+///   library (`VlConverter::with_config`, `build_app`, `serve`).
+/// - The rest are CLI-only — they configure behavior that lives in
+///   the binary (logging, drain watchdog, readiness signaling,
+///   parent-death watcher).
 #[derive(Debug)]
 pub(crate) struct ResolvedSettings {
+    /// Converter configuration passed to `VlConverter::with_config`.
+    /// Governs conversion-time behavior: font handling, allowed base
+    /// URLs, worker count, etc.
     pub(crate) converter_config: VlcConfig,
+    /// HTTP-server configuration passed to `build_app` / `serve`.
+    /// Governs listener binding (TCP or UDS), auth, rate limiting,
+    /// CORS, logging format, and related wire-level concerns.
     pub(crate) serve_config: ServeConfig,
-    /// CLI-only: post-signal drain deadline before the binary forces
-    /// exit. The library doesn't consume this — it's consumed by the
-    /// drain watchdog in `main.rs`.
+    /// Seconds the binary waits for in-flight requests to drain after
+    /// a shutdown signal (SIGINT / SIGTERM / stdin-EOF) before force-
+    /// exiting via `std::process::exit(1)`. The library never calls
+    /// exit itself — the drain watchdog in `main.rs` owns that path.
     pub(crate) drain_timeout_secs: u64,
+    /// Optional extra directory to register with
+    /// `vl_convert_rs::text::register_font_directory` at startup.
+    /// Lets operators ship custom fonts without modifying the crate.
+    /// `None` leaves the default font search path intact.
     pub(crate) font_dir: Option<String>,
+    /// Tracing filter string handed to `init_tracing` (same shape as
+    /// `RUST_LOG`, e.g. `"vl_convert=info,tower_http=info"`).
+    /// Synthesized from either an explicit filter directive or a
+    /// log-level shorthand; resolved once at startup and never
+    /// re-read.
     pub(crate) log_filter: String,
+    /// When true, the binary emits one `--ready-json` line on stdout
+    /// after all listeners have bound. Opt-in; intended for
+    /// subprocess parents that block on `read_line()` for a
+    /// deterministic readiness signal.
+    pub(crate) ready_json: bool,
+    /// Parent-death watcher configuration. Tri-state:
+    /// - `Some(true)` — watcher always spawned.
+    /// - `Some(false)` — watcher never spawned, even on UDS.
+    /// - `None` — auto: watcher spawns iff either listener is UDS.
+    ///
+    /// The watcher reads stdin and triggers graceful shutdown on EOF.
+    /// UDS defaults it on because the subprocess-IPC use case
+    /// typically has the parent holding the child's stdin; the
+    /// parent dying closes stdin, which the child observes as EOF.
+    pub(crate) exit_on_parent_close: Option<bool>,
 }
 
 #[derive(Debug, Default)]
@@ -44,6 +84,17 @@ struct Overrides {
     log_format: Option<LogFormat>,
     host: Option<String>,
     port: Option<u16>,
+    /// `#[cfg(unix)]`-only in practice; on Windows the flag/env parsers
+    /// reject `--unix-socket`/`VLC_UNIX_SOCKET` before reaching here, so
+    /// this field stays `None`.
+    unix_socket: Option<PathBuf>,
+    /// Outer `Option` = "was this override set?"; inner `Option` = the
+    /// value it was set to (`None` sentinel = explicit disable). Mirrors
+    /// the `admin_port` / `admin_listen` `null` convention.
+    admin_unix_socket: Option<Option<PathBuf>>,
+    socket_mode: Option<u32>,
+    ready_json: Option<bool>,
+    exit_on_parent_close: Option<Option<bool>>,
     workers: Option<usize>,
     api_key: Option<Option<String>>,
     cors_origin: Option<Option<String>>,
@@ -87,6 +138,8 @@ struct WorkingSettings {
     serve_config: ServeConfig,
     drain_timeout_secs: u64,
     font_dir: Option<String>,
+    ready_json: bool,
+    exit_on_parent_close: Option<bool>,
     log_level: LogLevel,
     log_filter: Option<String>,
     data_access: DataAccessMode,
@@ -113,6 +166,8 @@ impl WorkingSettings {
             serve_config: ServeConfig::default(),
             drain_timeout_secs: 30,
             font_dir: None,
+            ready_json: false,
+            exit_on_parent_close: None,
             log_level: LogLevel::Warn,
             log_filter: None,
             data_access,
@@ -120,6 +175,9 @@ impl WorkingSettings {
         }
     }
 
+    /// Apply overrides to `self`. Last writer wins: within a pass,
+    /// later fields override earlier ones; across passes, the caller
+    /// controls precedence by ordering the calls (env first, CLI last).
     fn apply(&mut self, overrides: Overrides) {
         let data_access_explicit = overrides.data_access.is_some();
 
@@ -135,11 +193,38 @@ impl WorkingSettings {
         if let Some(value) = overrides.log_format {
             self.serve_config.log_format = value;
         }
+        // A host or port override produces a Tcp variant, replacing any
+        // Uds set by a previous pass. The fallback 3000 below only fires
+        // on that cross-pass promotion (e.g. env set VLC_UNIX_SOCKET,
+        // CLI passed --host but not --port).
         if let Some(value) = overrides.host {
-            self.serve_config.host = value;
+            let port = match &self.serve_config.main {
+                ListenAddr::Tcp { port, .. } => *port,
+                #[cfg(unix)]
+                ListenAddr::Uds { .. } => 3000,
+            };
+            self.serve_config.main = ListenAddr::Tcp { host: value, port };
         }
         if let Some(value) = overrides.port {
-            self.serve_config.port = value;
+            let host = match &self.serve_config.main {
+                ListenAddr::Tcp { host, .. } => host.clone(),
+                #[cfg(unix)]
+                ListenAddr::Uds { .. } => "127.0.0.1".to_string(),
+            };
+            self.serve_config.main = ListenAddr::Tcp { host, port: value };
+        }
+        #[cfg(unix)]
+        if let Some(path) = overrides.unix_socket {
+            self.serve_config.main = ListenAddr::Uds { path };
+        }
+        if let Some(value) = overrides.socket_mode {
+            self.serve_config.socket_mode = value;
+        }
+        if let Some(value) = overrides.ready_json {
+            self.ready_json = value;
+        }
+        if let Some(value) = overrides.exit_on_parent_close {
+            self.exit_on_parent_close = value;
         }
         if let Some(value) = overrides.workers {
             self.converter_config.num_workers = value;
@@ -178,7 +263,11 @@ impl WorkingSettings {
             self.serve_config.budget_hold_ms = value;
         }
         if let Some(value) = overrides.admin_port {
-            self.serve_config.admin_port = value;
+            self.serve_config.admin = value.map(ListenAddr::loopback_tcp);
+        }
+        #[cfg(unix)]
+        if let Some(value) = overrides.admin_unix_socket {
+            self.serve_config.admin = value.map(|path| ListenAddr::Uds { path });
         }
         if let Some(value) = overrides.trust_proxy {
             self.serve_config.trust_proxy = value;
@@ -285,6 +374,8 @@ impl WorkingSettings {
             drain_timeout_secs: self.drain_timeout_secs,
             font_dir: self.font_dir,
             log_filter,
+            ready_json: self.ready_json,
+            exit_on_parent_close: self.exit_on_parent_close,
         })
     }
 }
@@ -471,6 +562,60 @@ fn parse_env_overrides(raw: EnvValues) -> Result<Overrides, anyhow::Error> {
         .as_deref()
         .map(|raw| parse_u16(raw, field_name(input, "port")))
         .transpose()?;
+    #[cfg(unix)]
+    {
+        overrides.unix_socket = raw
+            .unix_socket
+            .as_deref()
+            .map(|raw| super::parsers::parse_socket_path_arg(raw).map_err(anyhow::Error::msg))
+            .transpose()?;
+        overrides.admin_unix_socket = raw
+            .admin_unix_socket
+            .as_deref()
+            .map(|raw| -> Result<Option<PathBuf>, anyhow::Error> {
+                if raw.eq_ignore_ascii_case("null") {
+                    Ok(None)
+                } else {
+                    super::parsers::parse_socket_path_arg(raw)
+                        .map(Some)
+                        .map_err(anyhow::Error::msg)
+                }
+            })
+            .transpose()?;
+        // Mutual-exclusion: VLC_UNIX_SOCKET alongside VLC_HOST or VLC_PORT is a
+        // user misconfiguration (clap's ArgGroup catches this for CLI; env
+        // needs an explicit check).
+        if overrides.unix_socket.is_some() && (overrides.host.is_some() || overrides.port.is_some())
+        {
+            bail!(
+                "VLC_UNIX_SOCKET conflicts with VLC_HOST/VLC_PORT; set one transport or the other"
+            );
+        }
+        // Admin-port conflict check lives below — `overrides.admin_port`
+        // isn't populated until several blocks further down, so the
+        // check must run after that assignment.
+    }
+    overrides.socket_mode = raw
+        .socket_mode
+        .as_deref()
+        .map(|raw| super::parsers::parse_socket_mode_arg(raw).map_err(anyhow::Error::msg))
+        .transpose()?;
+    overrides.ready_json = raw
+        .ready_json
+        .as_deref()
+        .map(|raw| parse_bool(raw, field_name(input, "ready_json")))
+        .transpose()?;
+    overrides.exit_on_parent_close = raw
+        .exit_on_parent_close
+        .as_deref()
+        .map(|raw| {
+            if raw.eq_ignore_ascii_case("null") || raw.eq_ignore_ascii_case("auto") {
+                Ok(None)
+            } else {
+                parse_bool(raw, field_name(input, "exit_on_parent_close")).map(Some)
+            }
+        })
+        .transpose()?;
     overrides.workers = raw
         .workers
         .as_deref()
@@ -536,6 +681,15 @@ fn parse_env_overrides(raw: EnvValues) -> Result<Overrides, anyhow::Error> {
         .as_deref()
         .map(|raw| parse_nullable_u16(raw, field_name(input, "admin_port")))
         .transpose()?;
+    // Env-layer mutual-exclusion for admin. Clap ArgGroup handles this
+    // at CLI parse time; env needs an explicit check. Must run AFTER
+    // admin_port is populated above.
+    #[cfg(unix)]
+    if matches!(overrides.admin_unix_socket, Some(Some(_)))
+        && matches!(overrides.admin_port, Some(Some(_)))
+    {
+        bail!("VLC_ADMIN_UNIX_SOCKET conflicts with VLC_ADMIN_PORT; set one or the other");
+    }
     overrides.trust_proxy = raw
         .trust_proxy
         .as_deref()
@@ -667,6 +821,22 @@ fn parse_cli_overrides(cli: &Cli) -> Result<Overrides, anyhow::Error> {
     overrides.log_format = cli.log_format.map(LogFormatArg::into_log_format);
     overrides.host = cli.host.clone();
     overrides.port = cli.port;
+    #[cfg(unix)]
+    {
+        overrides.unix_socket = cli.unix_socket.clone();
+        overrides.admin_unix_socket = cli.admin_unix_socket.clone().map(Some);
+        // Clap ArgGroup/conflicts_with catches main-listener conflicts at parse time;
+        // this check is a belt-and-suspenders guard in case future refactors loosen clap.
+        if overrides.unix_socket.is_some() && (overrides.host.is_some() || overrides.port.is_some())
+        {
+            bail!(
+                "--unix-socket cannot be combined with --host/--port (clap ArgGroup should have caught this)"
+            );
+        }
+    }
+    overrides.socket_mode = cli.socket_mode;
+    overrides.ready_json = cli.ready_json;
+    overrides.exit_on_parent_close = cli.exit_on_parent_close.map(Some);
     overrides.workers = cli.workers;
     overrides.api_key = cli
         .api_key
@@ -808,8 +978,9 @@ fn finalize_allowed_base_urls(
 #[cfg(test)]
 mod tests {
     use super::super::env::{
-        ENV_API_KEY, ENV_AUTO_GOOGLE_FONTS, ENV_CONFIG, ENV_DEFAULT_THEME, ENV_LOAD_CONFIG,
-        ENV_LOG_FILTER, ENV_PORT, SETTING_PAIRS,
+        ENV_ADMIN_PORT, ENV_ADMIN_UNIX_SOCKET, ENV_API_KEY, ENV_AUTO_GOOGLE_FONTS, ENV_CONFIG,
+        ENV_DEFAULT_THEME, ENV_LOAD_CONFIG, ENV_LOG_FILTER, ENV_PORT, ENV_UNIX_SOCKET,
+        SETTING_PAIRS,
     };
     use super::*;
     use std::io::Write;
@@ -1062,6 +1233,49 @@ mod tests {
         assert!(err.to_string().contains("No built-in format locale named"));
     }
 
+    /// Setting both `VLC_ADMIN_UNIX_SOCKET` and `VLC_ADMIN_PORT` must
+    /// be rejected at resolve time. Clap's `ArgGroup` covers the CLI
+    /// path; the env path needs an explicit check, which must run
+    /// after `overrides.admin_port` is populated.
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_settings_env_rejects_admin_uds_with_admin_port() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+        guard.set(ENV_ADMIN_UNIX_SOCKET, "/tmp/admin.sock");
+        guard.set(ENV_ADMIN_PORT, "9000");
+
+        let err = resolve_settings(parse_cli(&[])).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("VLC_ADMIN_UNIX_SOCKET") && msg.contains("VLC_ADMIN_PORT"),
+            "error message should name both conflicting vars; got: {msg}"
+        );
+    }
+
+    /// Mirrors the admin check for the main listener: setting
+    /// `VLC_UNIX_SOCKET` alongside `VLC_PORT` (or `VLC_HOST`) must be
+    /// rejected at resolve time.
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_settings_env_rejects_unix_socket_with_port() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+        guard.set(ENV_UNIX_SOCKET, "/tmp/main.sock");
+        guard.set(ENV_PORT, "3000");
+
+        let err = resolve_settings(parse_cli(&[])).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("VLC_UNIX_SOCKET"),
+            "error message should name VLC_UNIX_SOCKET; got: {msg}"
+        );
+    }
+
     #[test]
     fn test_resolve_settings_port_default_3000() {
         let _lock = ENV_LOCK.lock().unwrap();
@@ -1070,7 +1284,14 @@ mod tests {
         guard.set(ENV_LOAD_CONFIG, "false");
 
         let resolved = resolve_settings(parse_cli(&[])).unwrap();
-        assert_eq!(resolved.serve_config.port, 3000);
+        assert!(
+            matches!(
+                resolved.serve_config.main,
+                ListenAddr::Tcp { port: 3000, .. }
+            ),
+            "default main should be TCP port 3000; got {:?}",
+            resolved.serve_config.main
+        );
     }
 
     #[test]
@@ -1082,7 +1303,10 @@ mod tests {
         guard.set("PORT", "7777");
 
         let resolved = resolve_settings(parse_cli(&[])).unwrap();
-        assert_eq!(resolved.serve_config.port, 7777);
+        assert!(matches!(
+            resolved.serve_config.main,
+            ListenAddr::Tcp { port: 7777, .. }
+        ));
     }
 
     #[test]
@@ -1095,7 +1319,10 @@ mod tests {
         guard.set("PORT", "7777");
 
         let resolved = resolve_settings(parse_cli(&[])).unwrap();
-        assert_eq!(resolved.serve_config.port, 8888);
+        assert!(matches!(
+            resolved.serve_config.main,
+            ListenAddr::Tcp { port: 8888, .. }
+        ));
     }
 
     #[test]
@@ -1108,7 +1335,10 @@ mod tests {
         guard.set("PORT", "7777");
 
         let resolved = resolve_settings(parse_cli(&["--port", "9999"])).unwrap();
-        assert_eq!(resolved.serve_config.port, 9999);
+        assert!(matches!(
+            resolved.serve_config.main,
+            ListenAddr::Tcp { port: 9999, .. }
+        ));
     }
 
     #[test]
@@ -1119,9 +1349,13 @@ mod tests {
         guard.set("PORT", "not-a-number");
 
         let resolved = resolve_settings(parse_cli(&[])).unwrap();
-        assert_eq!(
-            resolved.serve_config.port, 3000,
-            "invalid PORT should be silently ignored"
+        assert!(
+            matches!(
+                resolved.serve_config.main,
+                ListenAddr::Tcp { port: 3000, .. }
+            ),
+            "invalid PORT should be silently ignored; got {:?}",
+            resolved.serve_config.main
         );
     }
 }

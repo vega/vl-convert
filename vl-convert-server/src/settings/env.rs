@@ -42,6 +42,11 @@ pub(super) const ENV_GLOBAL_BUDGET_MS: &str = "VLC_GLOBAL_BUDGET_MS";
 pub(super) const ENV_BUDGET_HOLD_MS: &str = "VLC_BUDGET_HOLD_MS";
 pub(super) const ENV_ADMIN_PORT: &str = "VLC_ADMIN_PORT";
 pub(super) const ENV_TRUST_PROXY: &str = "VLC_TRUST_PROXY";
+pub(super) const ENV_UNIX_SOCKET: &str = "VLC_UNIX_SOCKET";
+pub(super) const ENV_ADMIN_UNIX_SOCKET: &str = "VLC_ADMIN_UNIX_SOCKET";
+pub(super) const ENV_SOCKET_MODE: &str = "VLC_SOCKET_MODE";
+pub(super) const ENV_READY_JSON: &str = "VLC_READY_JSON";
+pub(super) const ENV_EXIT_ON_PARENT_CLOSE: &str = "VLC_EXIT_ON_PARENT_CLOSE";
 
 #[cfg(test)]
 pub(super) const SETTING_PAIRS: &[(&str, &str)] = &[
@@ -91,6 +96,11 @@ pub(super) const SETTING_PAIRS: &[(&str, &str)] = &[
     ("budget-hold-ms", ENV_BUDGET_HOLD_MS),
     ("admin-port", ENV_ADMIN_PORT),
     ("trust-proxy", ENV_TRUST_PROXY),
+    ("unix-socket", ENV_UNIX_SOCKET),
+    ("admin-unix-socket", ENV_ADMIN_UNIX_SOCKET),
+    ("socket-mode", ENV_SOCKET_MODE),
+    ("ready-json", ENV_READY_JSON),
+    ("exit-on-parent-close", ENV_EXIT_ON_PARENT_CLOSE),
 ];
 
 #[derive(Debug, Default, Clone)]
@@ -138,6 +148,11 @@ pub(super) struct EnvValues {
     pub(super) budget_hold_ms: Option<String>,
     pub(super) admin_port: Option<String>,
     pub(super) trust_proxy: Option<String>,
+    pub(super) unix_socket: Option<String>,
+    pub(super) admin_unix_socket: Option<String>,
+    pub(super) socket_mode: Option<String>,
+    pub(super) ready_json: Option<String>,
+    pub(super) exit_on_parent_close: Option<String>,
 }
 
 impl EnvValues {
@@ -191,6 +206,11 @@ impl EnvValues {
             budget_hold_ms: env_var(ENV_BUDGET_HOLD_MS),
             admin_port: env_var(ENV_ADMIN_PORT),
             trust_proxy: env_var(ENV_TRUST_PROXY),
+            unix_socket: env_var(ENV_UNIX_SOCKET),
+            admin_unix_socket: env_var(ENV_ADMIN_UNIX_SOCKET),
+            socket_mode: env_var(ENV_SOCKET_MODE),
+            ready_json: env_var(ENV_READY_JSON),
+            exit_on_parent_close: env_var(ENV_EXIT_ON_PARENT_CLOSE),
         }
     }
 }

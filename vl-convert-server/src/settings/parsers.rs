@@ -35,6 +35,78 @@ pub(super) fn parse_path_arg(raw: &str) -> Result<PathBuf, String> {
     Ok(expand_path(raw))
 }
 
+/// Value parser for `--unix-socket` / `--admin-unix-socket`.
+///
+/// Grammar:
+/// * Absolute filesystem path after tilde expansion.
+/// * `~` prefix expanded via the same `shellexpand::tilde` helper as
+///   the other path flags (consistent with `settings/parsers.rs:240-242`).
+/// * Relative paths rejected at parse time with an actionable message.
+/// * On `cfg(windows)`, every invocation is rejected with a fixed
+///   message pointing the user at `--port`.
+pub(super) fn parse_socket_path_arg(raw: &str) -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        let _ = raw;
+        return Err(crate::listen::WINDOWS_UDS_REJECTION.to_string());
+    }
+
+    #[cfg(not(windows))]
+    {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            return Err("socket path must not be empty".to_string());
+        }
+        let expanded = expand_path(trimmed);
+        if !expanded.is_absolute() {
+            return Err(format!(
+                "socket path '{raw}' must be absolute (use /abs/path or ~/path)"
+            ));
+        }
+        Ok(expanded)
+    }
+}
+
+/// Value parser for `--socket-mode`.
+///
+/// Accepts a 3-or-4 digit octal literal (`600`, `0660`, `0770`), parses
+/// via `u32::from_str_radix(_, 8)`, and rejects:
+///   * Any value with `other` bits set (`mode & 0o007 != 0`).
+///   * The all-zero mode (`0o000`).
+///
+/// Values with group bits set (`mode & 0o070 != 0`) are *accepted* —
+/// the loopback-style warning in §2.9 is emitted at bind time, not
+/// here.
+pub(super) fn parse_socket_mode_arg(raw: &str) -> Result<u32, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("socket mode must not be empty".to_string());
+    }
+    // Strip an optional leading "0" or "0o" so users can write either
+    // `600` (shell-friendly) or `0600`/`0o600` (Rust/chmod-friendly).
+    let body = trimmed
+        .strip_prefix("0o")
+        .or_else(|| trimmed.strip_prefix("0O"))
+        .unwrap_or(trimmed);
+    let mode = u32::from_str_radix(body, 8)
+        .map_err(|err| format!("invalid octal socket mode '{raw}': {err}"))?;
+    if mode == 0 {
+        return Err("socket mode must not be 0o000 (unusable permissions)".to_string());
+    }
+    if mode & 0o007 != 0 {
+        return Err(format!(
+            "socket mode {raw} grants access to 'other' users; \
+             drop the last octal digit's lower three bits (e.g. 0600, 0660, 0770)"
+        ));
+    }
+    if mode & !0o777 != 0 {
+        return Err(format!(
+            "socket mode {raw} sets bits outside the 0o777 permission range"
+        ));
+    }
+    Ok(mode)
+}
+
 pub(super) fn parse_boolish_arg(raw: &str) -> Result<bool, String> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "true" | "1" | "yes" | "on" => Ok(true),
@@ -601,6 +673,73 @@ mod tests {
         .unwrap()
         .unwrap();
         assert!(matches!(from_file, FormatLocale::Object(_)));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn test_parse_socket_path_accepts_absolute_path() {
+        let parsed = parse_socket_path_arg("/tmp/vlc.sock").unwrap();
+        assert_eq!(parsed, PathBuf::from("/tmp/vlc.sock"));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn test_parse_socket_path_rejects_relative() {
+        let err = parse_socket_path_arg("rel/path").unwrap_err();
+        assert!(err.contains("must be absolute"), "got: {err}");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn test_parse_socket_path_rejects_empty() {
+        let err = parse_socket_path_arg("").unwrap_err();
+        assert!(err.contains("must not be empty"), "got: {err}");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn test_parse_socket_path_expands_tilde() {
+        // When $HOME is set, tilde expansion should produce an
+        // absolute path rooted at $HOME. We don't assert the exact
+        // expansion (which depends on the test-runner env), just that
+        // the result is absolute.
+        let parsed = parse_socket_path_arg("~/vlc.sock").unwrap();
+        assert!(parsed.is_absolute(), "got: {}", parsed.display());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_parse_socket_path_rejected_on_windows() {
+        let err = parse_socket_path_arg("/tmp/x.sock").unwrap_err();
+        assert!(err.contains("not supported on Windows"), "got: {err}");
+        assert!(err.contains("--port"), "got: {err}");
+    }
+
+    #[test]
+    fn test_parse_socket_mode_accepts_common_values() {
+        assert_eq!(parse_socket_mode_arg("600").unwrap(), 0o600);
+        assert_eq!(parse_socket_mode_arg("0600").unwrap(), 0o600);
+        assert_eq!(parse_socket_mode_arg("0o660").unwrap(), 0o660);
+        assert_eq!(parse_socket_mode_arg("0770").unwrap(), 0o770);
+    }
+
+    #[test]
+    fn test_parse_socket_mode_rejects_other_bits() {
+        let err = parse_socket_mode_arg("666").unwrap_err();
+        assert!(err.contains("other"), "got: {err}");
+    }
+
+    #[test]
+    fn test_parse_socket_mode_rejects_zero() {
+        let err = parse_socket_mode_arg("0").unwrap_err();
+        assert!(err.contains("0o000"), "got: {err}");
+    }
+
+    #[test]
+    fn test_parse_socket_mode_rejects_non_octal() {
+        assert!(parse_socket_mode_arg("9").is_err());
+        assert!(parse_socket_mode_arg("garbage").is_err());
+        assert!(parse_socket_mode_arg("").is_err());
     }
 
     #[test]

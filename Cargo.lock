@@ -10577,12 +10577,17 @@ dependencies = [
 name = "vl-convert-server"
 version = "2.0.0-rc1"
 dependencies = [
+ "assert_cmd",
  "axum",
+ "bytes",
  "chrono",
  "clap",
  "dashmap 6.1.0",
  "env_logger",
  "http 1.4.0",
+ "http-body-util",
+ "hyper 1.8.1",
+ "hyper-util",
  "itertools 0.14.0",
  "log",
  "once_cell",

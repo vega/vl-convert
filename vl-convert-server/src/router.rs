@@ -111,8 +111,44 @@ pub(crate) fn build_router(
     health_router.merge(api_router).with_state(state)
 }
 
+/// Record UDS peer credentials onto `span` when the request originated
+/// from a UDS listener and the `peer_cred()` syscall succeeded. No-op
+/// for TCP requests (no `UdsConnectInfo` in extensions) and for UDS
+/// requests on sandboxed kernels where `peer_cred()` failed —
+/// credentials are observability-only, so their absence degrades the
+/// span rather than dropping the request.
+///
+/// Spans declare `peer_uid` / `peer_gid` / `peer_pid` as
+/// `tracing::field::Empty` up front; this function fills them in only
+/// when real values exist, so TCP logs don't carry `null` noise for
+/// every request.
+fn record_peer_cred(
+    #[cfg_attr(not(unix), allow(unused_variables))] req: &axum::http::Request<axum::body::Body>,
+    #[cfg_attr(not(unix), allow(unused_variables))] span: &tracing::Span,
+) {
+    #[cfg(unix)]
+    {
+        use crate::listener::UdsConnectInfo;
+        use axum::extract::ConnectInfo;
+        if let Some(ci) = req.extensions().get::<ConnectInfo<UdsConnectInfo>>() {
+            if let Some(cred) = ci.0.peer_cred.as_ref() {
+                span.record("peer_uid", cred.uid());
+                span.record("peer_gid", cred.gid());
+                if let Some(pid) = cred.pid() {
+                    span.record("peer_pid", pid as i64);
+                }
+                return;
+            }
+            tracing::debug!(
+                peer_addr = ?ci.0.peer_addr,
+                "UDS peer credentials unavailable; span will omit peer.uid/gid/pid"
+            );
+        }
+    }
+}
+
 fn make_span_text(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
-    tracing::info_span!(
+    let span = tracing::info_span!(
         "request",
         method = %req.method(),
         uri = %req.uri(),
@@ -121,7 +157,12 @@ fn make_span_text(req: &axum::http::Request<axum::body::Body>) -> tracing::Span 
         budget_global_remaining_ms = tracing::field::Empty,
         budget_ip_remaining_ms = tracing::field::Empty,
         budget_client_ip = tracing::field::Empty,
-    )
+        peer_uid = tracing::field::Empty,
+        peer_gid = tracing::field::Empty,
+        peer_pid = tracing::field::Empty,
+    );
+    record_peer_cred(req, &span);
+    span
 }
 
 fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
@@ -137,7 +178,7 @@ fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span 
         .unwrap_or("");
     let (trace_id, span_id) = extract_trace_context(req.headers());
 
-    tracing::info_span!(
+    let span = tracing::info_span!(
         "request",
         method = %req.method(),
         uri = %req.uri(),
@@ -151,7 +192,12 @@ fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span 
         budget_global_remaining_ms = tracing::field::Empty,
         budget_ip_remaining_ms = tracing::field::Empty,
         budget_client_ip = tracing::field::Empty,
-    )
+        peer_uid = tracing::field::Empty,
+        peer_gid = tracing::field::Empty,
+        peer_pid = tracing::field::Empty,
+    );
+    record_peer_cred(req, &span);
+    span
 }
 
 /// Build the middleware stack that wraps the API router.

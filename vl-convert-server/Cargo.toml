@@ -43,9 +43,22 @@ utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-axum = "0.1.3"
 utoipa-swagger-ui = { version = "8", features = ["axum"] }
 
+[target.'cfg(unix)'.dependencies]
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["server-auto", "tokio"] }
+
 [dev-dependencies]
 reqwest = { workspace = true, features = ["blocking", "json"] }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 once_cell = "1"
 tempfile = { workspace = true }
+# UDS integration tests use a raw hyper client over tokio UnixStream
+# — reqwest 0.11.x has no UDS transport feature, so we drive the
+# connection directly. http-body-util provides `Full<Bytes>` for the
+# request body.
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client", "tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+assert_cmd = { workspace = true }

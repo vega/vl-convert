@@ -1,15 +1,17 @@
 mod accept;
 mod admin;
-pub mod budget;
+mod budget;
 mod bundling;
 mod config;
 mod health;
-pub mod json_fmt;
+mod json_fmt;
+mod listen;
+mod listener;
 mod middleware;
 mod router;
 mod svg;
 mod themes;
-pub mod types;
+mod types;
 mod util;
 mod vega;
 mod vegalite;
@@ -17,13 +19,15 @@ mod vegalite;
 #[cfg(test)]
 mod test_support;
 
-pub(crate) use config::{apply_server_defaults, validate_serve_config, AdminConfig};
-pub use config::{init_tracing, ApiKey, AppState, BuiltApp, LogFormat, ServeConfig};
-pub(crate) use router::{build_middleware_stack, build_router};
-pub use util::{
-    append_vlc_logs_header, error_response, format_log_entries, parse_google_font_args,
-    vegalite_versions,
+pub(crate) use config::{
+    apply_server_defaults, validate_serve_config, AdminConfig, ApiKey, AppState,
 };
+pub use config::{init_tracing, BuiltApp, LogFormat, ServeConfig};
+pub use listen::ListenAddr;
+#[cfg(unix)]
+pub use listener::UdsCleanup;
+pub use listener::{bind_listener, BoundListener, EndpointInfo};
+pub(crate) use router::{build_middleware_stack, build_router};
 
 use std::future::Future;
 use std::net::SocketAddr;
@@ -45,7 +49,7 @@ use vl_convert_rs::converter::VlcConfig;
 /// get a deterministic "fully done" signal. Signal handling and
 /// drain-timeout escalation are the caller's responsibility.
 pub async fn serve(
-    listener: tokio::net::TcpListener,
+    listener: BoundListener,
     built: BuiltApp,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), anyhow::Error> {
@@ -68,10 +72,20 @@ pub async fn serve(
     if let Some(admin) = built.admin {
         let cancel = token.clone();
         tasks.spawn(async move {
-            log::info!("Admin API listening on http://{}", admin.addr);
-            let _ = axum::serve(admin.listener, admin.router)
-                .with_graceful_shutdown(async move { cancel.cancelled().await })
-                .await;
+            log::info!("Admin API listening on {}", admin.addr);
+            let admin_shutdown = async move { cancel.cancelled().await };
+            match admin.listener {
+                BoundListener::Tcp(l) => {
+                    let _ = axum::serve(l, admin.router)
+                        .with_graceful_shutdown(admin_shutdown)
+                        .await;
+                }
+                #[cfg(unix)]
+                BoundListener::Uds(l, _cleanup) => {
+                    let _ = listener::serve_uds(l, admin.router, admin_shutdown).await;
+                    // `_cleanup` drops here, unlinking the admin socket.
+                }
+            }
         });
     }
 
@@ -81,14 +95,23 @@ pub async fn serve(
         shutdown_token.cancel();
     };
 
-    axum::serve(
-        listener,
-        built
-            .router
-            .into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown)
-    .await?;
+    match listener {
+        BoundListener::Tcp(l) => {
+            axum::serve(
+                l,
+                built
+                    .router
+                    .into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(shutdown)
+            .await?;
+        }
+        #[cfg(unix)]
+        BoundListener::Uds(l, _cleanup) => {
+            listener::serve_uds(l, built.router, shutdown).await?;
+            // `_cleanup` drops here, unlinking the main socket.
+        }
+    }
 
     while tasks.join_next().await.is_some() {}
     Ok(())
@@ -128,7 +151,7 @@ pub async fn build_app(
 
     let tracker = if serve_config.per_ip_budget_ms.is_some()
         || serve_config.global_budget_ms.is_some()
-        || serve_config.admin_port.is_some()
+        || serve_config.admin.is_some()
     {
         Some(budget::BudgetTracker::new(
             serve_config.per_ip_budget_ms.unwrap_or(0),
@@ -139,18 +162,19 @@ pub async fn build_app(
         None
     };
 
-    let admin = if let (Some(admin_port), Some(t)) = (serve_config.admin_port, &tracker) {
-        let addr = format!("127.0.0.1:{admin_port}");
-        let listener = tokio::net::TcpListener::bind(&addr)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to bind admin port {addr}: {e}"))?;
+    let admin = if let (Some(admin_addr), Some(t)) = (&serve_config.admin, &tracker) {
+        // `socket_mode` applies only to UDS listeners. Admin and main
+        // share the same --socket-mode; a future --admin-socket-mode
+        // flag could be added if asymmetric permissions are ever needed.
+        let bound: BoundListener = bind_listener(admin_addr, serve_config.socket_mode).await?;
+        let addr = bound.endpoint_label();
         let admin_router = admin::admin_router(t.clone())
             .layer(PropagateRequestIdLayer::x_request_id())
             .layer(TraceLayer::new_for_http())
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
             .layer(CatchPanicLayer::new());
         Some(AdminConfig {
-            listener,
+            listener: bound,
             addr,
             router: admin_router,
         })

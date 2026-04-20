@@ -3,12 +3,12 @@ mod common;
 use common::*;
 use once_cell::sync::Lazy;
 
-static GLOBAL_BUDGET_SERVER: Lazy<(ServerHandle, u16)> =
+static GLOBAL_BUDGET_SERVER: Lazy<BudgetServer> =
     Lazy::new(|| start_budget_server(None, Some(1), 2000, false));
 
 #[tokio::test]
 async fn test_budget_rate_limit_triggered() {
-    let (server, _admin_port) = start_budget_server(Some(1), None, 2000, false);
+    let BudgetServer { handle: server, .. } = start_budget_server(Some(1), None, 2000, false);
     // With per_ip_budget_ms=1 and hold_ms=2000, reserve(2000) > budget(1)
     // so the very first request is rejected deterministically.
     let resp = server
@@ -28,7 +28,7 @@ async fn test_budget_rate_limit_triggered() {
 
 #[tokio::test]
 async fn test_budget_health_not_rate_limited() {
-    let (server, _admin_port) = start_budget_server(Some(1), None, 2000, false);
+    let BudgetServer { handle: server, .. } = start_budget_server(Some(1), None, 2000, false);
     for _ in 0..5 {
         let resp = server
             .client
@@ -42,10 +42,10 @@ async fn test_budget_health_not_rate_limited() {
 
 #[tokio::test]
 async fn test_budget_admin_get() {
-    let (_server, admin_port) = start_budget_server(Some(1), None, 2000, false);
+    let BudgetServer { admin_base_url, .. } = start_budget_server(Some(1), None, 2000, false);
     let client = reqwest::Client::new();
     let resp = client
-        .get(format!("http://127.0.0.1:{admin_port}/admin/budget"))
+        .get(format!("{admin_base_url}/admin/budget"))
         .send()
         .await
         .unwrap();
@@ -57,10 +57,10 @@ async fn test_budget_admin_get() {
 
 #[tokio::test]
 async fn test_budget_admin_update() {
-    let (_server, admin_port) = start_budget_server(Some(1), None, 2000, false);
+    let BudgetServer { admin_base_url, .. } = start_budget_server(Some(1), None, 2000, false);
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("http://127.0.0.1:{admin_port}/admin/budget"))
+        .post(format!("{admin_base_url}/admin/budget"))
         .json(&serde_json::json!({"hold_ms": 500}))
         .send()
         .await
@@ -72,7 +72,7 @@ async fn test_budget_admin_update() {
 
 #[tokio::test]
 async fn test_budget_global_depletion() {
-    let (server, _admin_port) = &*GLOBAL_BUDGET_SERVER;
+    let BudgetServer { handle: server, .. } = &*GLOBAL_BUDGET_SERVER;
     // With global_budget_ms=1 and hold_ms=2000, first request is rejected.
     let resp = server
         .client
@@ -91,7 +91,11 @@ async fn test_budget_global_depletion() {
 
 #[tokio::test]
 async fn test_budget_admin_enable() {
-    let (server, admin_port) = start_budget_server(None, None, 2000, false);
+    let BudgetServer {
+        handle: server,
+        admin_base_url,
+        ..
+    } = start_budget_server(None, None, 2000, false);
     // Without any budget configured, requests should succeed
     let resp = server
         .client
@@ -110,7 +114,7 @@ async fn test_budget_admin_enable() {
     // Enable a very tight per-IP budget via admin API
     let client = reqwest::Client::new();
     let resp = client
-        .post(format!("http://127.0.0.1:{admin_port}/admin/budget"))
+        .post(format!("{admin_base_url}/admin/budget"))
         .json(&serde_json::json!({"per_ip_budget_ms": 1}))
         .send()
         .await
@@ -135,11 +139,11 @@ async fn test_budget_admin_enable() {
 
 #[tokio::test]
 async fn test_budget_admin_hold_update() {
-    let (_server, admin_port) = start_budget_server(Some(1), None, 2000, false);
+    let BudgetServer { admin_base_url, .. } = start_budget_server(Some(1), None, 2000, false);
     let client = reqwest::Client::new();
 
     let resp = client
-        .post(format!("http://127.0.0.1:{admin_port}/admin/budget"))
+        .post(format!("{admin_base_url}/admin/budget"))
         .json(&serde_json::json!({"hold_ms": 750}))
         .send()
         .await
@@ -147,7 +151,7 @@ async fn test_budget_admin_hold_update() {
     assert_eq!(resp.status(), 200);
 
     let resp = client
-        .get(format!("http://127.0.0.1:{admin_port}/admin/budget"))
+        .get(format!("{admin_base_url}/admin/budget"))
         .send()
         .await
         .unwrap();
@@ -165,7 +169,7 @@ async fn test_trust_proxy_true_isolates_ips() {
     // With trust_proxy=true, different X-Forwarded-For IPs get independent budgets.
     // per_ip_budget_ms=1 and hold_ms=2000 means every request is immediately rejected.
     // But each unique XFF IP is tracked separately — proving isolation.
-    let (server, _admin_port) = start_budget_server(Some(1), None, 2000, true);
+    let BudgetServer { handle: server, .. } = start_budget_server(Some(1), None, 2000, true);
 
     let resp1 = server
         .client
@@ -195,7 +199,7 @@ async fn test_trust_proxy_true_isolates_ips() {
 #[tokio::test]
 async fn test_trust_proxy_false_ignores_xff() {
     // With trust_proxy=false, X-Forwarded-For is ignored — all requests use socket IP.
-    let (server, _admin_port) = start_budget_server(Some(1), None, 2000, false);
+    let BudgetServer { handle: server, .. } = start_budget_server(Some(1), None, 2000, false);
 
     let resp = server
         .client

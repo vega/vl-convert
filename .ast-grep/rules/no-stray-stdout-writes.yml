@@ -1,0 +1,38 @@
+id: no-stray-stdout-writes
+message: >
+  println!/print! outside the allowlisted `--ready-json` emitter.
+
+  `vl-convert-server`'s binary reserves stdout for the one-shot
+  readiness-JSON line emitted by `emit_ready_json_if_enabled`.
+  Any additional stdout writer contaminates the channel that
+  subprocess parents parse via `read_line()`, breaking the
+  readiness contract.
+
+  If this call is intentional, add the comment
+  `// allow-ready-json-emitter` on the line above it. Otherwise,
+  route the output to stderr (`eprintln!`) or to the tracing
+  subscriber (`tracing::info!` / `warn!` / etc.) — the subscriber
+  is pinned to stderr by `init_tracing`.
+severity: error
+language: Rust
+files:
+  - vl-convert-server/src/**/*.rs
+rule:
+  # Match the full expression-statement so `follows` compares against
+  # sibling nodes in the enclosing block (where line comments live),
+  # not against siblings of the bare macro_invocation node.
+  any:
+    - pattern: println!($$$A);
+    - pattern: print!($$$A);
+  # Walk the contiguous block of `line_comment` siblings immediately
+  # preceding this statement. If any of them contain the allowlist
+  # marker, the call is intentional and the rule is suppressed.
+  # `stopBy` bounds the search to the contiguous comment block —
+  # a stray call can't borrow an annotation from somewhere up-file.
+  not:
+    follows:
+      kind: line_comment
+      regex: allow-ready-json-emitter
+      stopBy:
+        not:
+          kind: line_comment

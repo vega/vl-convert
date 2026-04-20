@@ -108,6 +108,17 @@ pub(crate) fn is_private_or_loopback(ip: &std::net::IpAddr) -> bool {
 /// (Railway, nginx, envoy, ALB): an attacker can spoof the client hop
 /// by sending their own `X-Forwarded-For`. This implementation walks
 /// right-to-left to land on the first trusted hop.
+///
+/// Returning `None` is legitimate in two cases: (1) the request came in
+/// over a UDS listener (no peer IP exists at the socket layer); (2) the
+/// request was built directly via `Request::builder()` in a test
+/// harness that didn't inject `ConnectInfo<SocketAddr>`. Callers
+/// MUST NOT fall back to `Ipv4Addr::UNSPECIFIED` / `0.0.0.0` on
+/// `None` — doing so would collapse every non-IP caller into a single
+/// shared per-IP bucket. The budget middleware threads
+/// `Option<IpAddr>` through `reserve` / `apply_adjustment`; `None`
+/// correctly skips the per-IP dimension while the global dimension
+/// still applies.
 pub(crate) fn extract_client_ip(
     req: &axum::http::Request<axum::body::Body>,
     trust_proxy: bool,

@@ -216,6 +216,15 @@ jobs:
         run: cargo check --all
       - name: Check for clippy warnings
         run: cargo clippy --all -- -D warnings
+      - name: Install ast-grep
+        uses: taiki-e/install-action@v2
+        with:
+          tool: ast-grep
+      - name: Run ast-grep lint
+        # Scans the workspace with rules from `.ast-grep/rules/` (listed
+        # in `sgconfig.yml`). Every rule is source-structural — see the
+        # rule files for rationale. Exits non-zero if any rule fires.
+        run: ast-grep scan
 
   cargo-bundle-license:
     runs-on: ubuntu-latest

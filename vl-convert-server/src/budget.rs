@@ -19,10 +19,32 @@ struct IpBudgetEntry {
     last_seen: std::sync::Mutex<Instant>,
 }
 
+/// A pending charge against one or both budget dimensions. Created
+/// by [`BudgetTracker::reserve`] at request admission; settled by
+/// [`BudgetReservation::complete`] against the actual elapsed time,
+/// or refunded in full by `Drop` on abnormal exit paths (handler
+/// panic, request timeout, client disconnect).
 pub struct BudgetReservation {
+    /// Back-reference used to apply settlement / refund on `complete`
+    /// and `Drop`. `Arc` because reservations outlive the request
+    /// handler — the tracker is shared across all concurrent
+    /// reservations and the background refill task.
     tracker: Arc<BudgetTracker>,
-    ip: IpAddr,
+    /// Peer IP the reservation is keyed by. `None` on UDS and in
+    /// test harnesses that don't inject `ConnectInfo<SocketAddr>`:
+    /// the reservation bypasses the per-IP bucket entirely and only
+    /// touches the global compute-budget dimension. TCP requests
+    /// with a known peer IP pass `Some(addr)`.
+    ip: Option<IpAddr>,
+    /// Tentative charge in milliseconds — the amount deducted from
+    /// both dimensions at reservation time. Settlement refunds the
+    /// difference between this and the actual elapsed time; `Drop`
+    /// on an unreleased reservation refunds the full amount.
     reserved_ms: i64,
+    /// Flips to `true` inside `complete` so `Drop` knows a normal
+    /// settlement ran and must not double-refund. Stays `false` on
+    /// abnormal exits (panic, cancellation) and `Drop` performs the
+    /// full refund.
     released: bool,
 }
 
@@ -91,12 +113,24 @@ impl BudgetTracker {
     /// Atomically reserve budget for a request. Returns Err if either the
     /// per-IP or global budget is exhausted.
     ///
+    /// `ip` is `Option<IpAddr>`: `Some(addr)` for TCP requests with a
+    /// known peer; `None` for UDS requests (no peer IP exists at the
+    /// socket layer) and for test harnesses that don't inject
+    /// `ConnectInfo`. The `None` path skips the per-IP bucket entirely
+    /// — only the global compute-budget dimension applies. Callers
+    /// must never substitute a placeholder like `Ipv4Addr::UNSPECIFIED`
+    /// for the missing case, as that would collapse every non-IP
+    /// caller into a single shared bucket.
+    ///
     /// Note: there is a small race window between `fetch_sub` and the
     /// conditional `fetch_add` rollback. During this window, a concurrent
     /// request may observe a temporarily over-decremented budget and be
     /// rejected even though budget will be restored momentarily. This is
     /// acceptable for rate-limiting — it errs on the side of caution.
-    pub fn reserve(self: &Arc<Self>, ip: IpAddr) -> Result<BudgetReservation, BudgetExhausted> {
+    pub fn reserve(
+        self: &Arc<Self>,
+        ip: Option<IpAddr>,
+    ) -> Result<BudgetReservation, BudgetExhausted> {
         let estimate = self.hold_ms.load(Ordering::Relaxed);
 
         // Check global budget
@@ -109,25 +143,28 @@ impl BudgetTracker {
             }
         }
 
-        // Check per-IP budget
+        // Check per-IP budget only when we have an IP. `None` bypasses
+        // the per-IP dimension; only the global bucket above applies.
         let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);
-        if ip_limit > 0 {
-            let entry = self.ip_entries.entry(ip).or_insert_with(|| IpBudgetEntry {
-                remaining: AtomicI64::new(ip_limit),
-                last_seen: std::sync::Mutex::new(Instant::now()),
-            });
-            // Refresh activity timestamp
-            if let Ok(mut last) = entry.last_seen.lock() {
-                *last = Instant::now();
-            }
-            let prev = entry.remaining.fetch_sub(estimate, Ordering::AcqRel);
-            if prev - estimate < 0 {
-                entry.remaining.fetch_add(estimate, Ordering::AcqRel);
-                // Roll back global reservation too
-                if global_limit > 0 {
-                    self.global_remaining.fetch_add(estimate, Ordering::AcqRel);
+        if let Some(ip) = ip {
+            if ip_limit > 0 {
+                let entry = self.ip_entries.entry(ip).or_insert_with(|| IpBudgetEntry {
+                    remaining: AtomicI64::new(ip_limit),
+                    last_seen: std::sync::Mutex::new(Instant::now()),
+                });
+                // Refresh activity timestamp
+                if let Ok(mut last) = entry.last_seen.lock() {
+                    *last = Instant::now();
                 }
-                return Err(BudgetExhausted::PerIp);
+                let prev = entry.remaining.fetch_sub(estimate, Ordering::AcqRel);
+                if prev - estimate < 0 {
+                    entry.remaining.fetch_add(estimate, Ordering::AcqRel);
+                    // Roll back global reservation too
+                    if global_limit > 0 {
+                        self.global_remaining.fetch_add(estimate, Ordering::AcqRel);
+                    }
+                    return Err(BudgetExhausted::PerIp);
+                }
             }
         }
 
@@ -139,7 +176,7 @@ impl BudgetTracker {
         })
     }
 
-    fn apply_adjustment(&self, ip: IpAddr, diff: i64) {
+    fn apply_adjustment(&self, ip: Option<IpAddr>, diff: i64) {
         if diff == 0 {
             return;
         }
@@ -154,18 +191,26 @@ impl BudgetTracker {
             }
         }
 
-        let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);
-        if ip_limit > 0 {
-            if let Some(entry) = self.ip_entries.get(&ip) {
-                let prev = entry.remaining.fetch_add(diff, Ordering::AcqRel);
-                if prev + diff > ip_limit {
-                    entry.remaining.store(ip_limit, Ordering::Release);
+        // Skip per-IP refund on the `None` path — the reservation never
+        // touched ip_entries so there's nothing to refund.
+        if let Some(ip) = ip {
+            let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);
+            if ip_limit > 0 {
+                if let Some(entry) = self.ip_entries.get(&ip) {
+                    let prev = entry.remaining.fetch_add(diff, Ordering::AcqRel);
+                    if prev + diff > ip_limit {
+                        entry.remaining.store(ip_limit, Ordering::Release);
+                    }
                 }
             }
         }
     }
 
-    fn apply_adjustment_and_read(&self, ip: IpAddr, diff: i64) -> (Option<i64>, Option<i64>) {
+    fn apply_adjustment_and_read(
+        &self,
+        ip: Option<IpAddr>,
+        diff: i64,
+    ) -> (Option<i64>, Option<i64>) {
         let global_limit = self.global_budget_ms.load(Ordering::Relaxed);
         let global_remaining = if global_limit > 0 {
             if diff != 0 {
@@ -179,19 +224,24 @@ impl BudgetTracker {
             None
         };
 
-        let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);
-        let ip_remaining = if ip_limit > 0 {
-            self.ip_entries.get(&ip).map(|entry| {
-                if diff != 0 {
-                    let prev = entry.remaining.fetch_add(diff, Ordering::AcqRel);
-                    if prev + diff > ip_limit {
-                        entry.remaining.store(ip_limit, Ordering::Release);
-                    }
+        let ip_remaining = match ip {
+            None => None, // UDS / no ConnectInfo: skip per-IP dimension entirely.
+            Some(ip) => {
+                let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);
+                if ip_limit > 0 {
+                    self.ip_entries.get(&ip).map(|entry| {
+                        if diff != 0 {
+                            let prev = entry.remaining.fetch_add(diff, Ordering::AcqRel);
+                            if prev + diff > ip_limit {
+                                entry.remaining.store(ip_limit, Ordering::Release);
+                            }
+                        }
+                        entry.remaining.load(Ordering::Relaxed)
+                    })
+                } else {
+                    None
                 }
-                entry.remaining.load(Ordering::Relaxed)
-            })
-        } else {
-            None
+            }
         };
 
         (global_remaining, ip_remaining)
@@ -320,7 +370,7 @@ impl BudgetTracker {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BudgetExhausted {
     PerIp,
     Global,
@@ -360,11 +410,17 @@ pub(crate) async fn middleware(
         return next.run(req).await;
     }
 
-    let ip = crate::middleware::extract_client_ip(&req, trust_proxy)
-        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    let ip: Option<IpAddr> = crate::middleware::extract_client_ip(&req, trust_proxy);
 
     let span = tracing::Span::current();
-    span.record("budget_client_ip", tracing::field::display(&ip));
+    if let Some(addr) = ip {
+        span.record("budget_client_ip", tracing::field::display(&addr));
+    } else {
+        // UDS or test harness: no peer IP. Mark the span explicitly
+        // so log consumers see this is a transport without an IP,
+        // not a lookup failure.
+        span.record("budget_client_ip", "<none>");
+    }
 
     let reservation = match tracker.reserve(ip) {
         Ok(reservation) => reservation,
@@ -379,8 +435,10 @@ pub(crate) async fn middleware(
             if status.global_budget_ms > 0 {
                 span.record("budget_global_remaining_ms", status.global_remaining_ms);
             }
-            if let Some(ip_rem) = tracker.ip_remaining_ms(ip) {
-                span.record("budget_ip_remaining_ms", ip_rem);
+            if let Some(addr) = ip {
+                if let Some(ip_rem) = tracker.ip_remaining_ms(addr) {
+                    span.record("budget_ip_remaining_ms", ip_rem);
+                }
             }
             return crate::util::error_response(
                 StatusCode::TOO_MANY_REQUESTS,
@@ -440,7 +498,7 @@ mod tests {
         let tracker = BudgetTracker::new(100, 100, 25);
         let ip = test_ip();
 
-        let reservation = tracker.reserve(ip).unwrap();
+        let reservation = tracker.reserve(Some(ip)).unwrap();
         assert_eq!(tracker.global_remaining.load(Ordering::Relaxed), 75);
         assert_eq!(
             tracker
@@ -471,7 +529,7 @@ mod tests {
         let tracker = BudgetTracker::new(100, 100, 40);
         let ip = test_ip();
 
-        let reservation = tracker.reserve(ip).unwrap();
+        let reservation = tracker.reserve(Some(ip)).unwrap();
         tracker.update_estimate(10);
         let settlement = reservation.complete(30);
 
@@ -712,5 +770,75 @@ mod tests {
             event["duration"].as_i64().is_some_and(|v| v >= 0),
             "duration (ns) should still be present for back-compat"
         );
+    }
+
+    /// `reserve(None)` is the UDS / no-ConnectInfo path. It must:
+    /// - decrement the global budget if enabled,
+    /// - leave `ip_entries` completely untouched (no bucket created,
+    ///   no existing bucket mutated),
+    /// - still return `Err(Global)` when the global budget is
+    ///   exhausted.
+    #[test]
+    fn test_budget_skips_per_ip_on_none() {
+        let tracker = BudgetTracker::new(100, 100, 30);
+        assert_eq!(tracker.ip_entries.len(), 0);
+
+        // First reservation on the None path: global deducts, per-IP untouched.
+        let r1 = tracker.reserve(None).unwrap();
+        assert_eq!(tracker.global_remaining.load(Ordering::Relaxed), 70);
+        assert_eq!(
+            tracker.ip_entries.len(),
+            0,
+            "None-IP reserve must not create a per-IP bucket"
+        );
+
+        // Second None reservation: another global deduction, still no per-IP bucket.
+        let r2 = tracker.reserve(None).unwrap();
+        assert_eq!(tracker.global_remaining.load(Ordering::Relaxed), 40);
+        assert_eq!(tracker.ip_entries.len(), 0);
+
+        // A Some(addr) reservation creates exactly one per-IP entry;
+        // the None reservations before it did not pollute the map.
+        let ip = test_ip();
+        let r3 = tracker.reserve(Some(ip)).unwrap();
+        assert_eq!(tracker.ip_entries.len(), 1);
+        assert!(tracker.ip_entries.contains_key(&ip));
+
+        // Dropping the None reservations must not touch per-IP state.
+        drop(r1);
+        drop(r2);
+        assert_eq!(tracker.ip_entries.len(), 1);
+        assert_eq!(
+            tracker
+                .ip_entries
+                .get(&ip)
+                .unwrap()
+                .remaining
+                .load(Ordering::Relaxed),
+            70,
+            "dropping None reservations must not refund into the Some(ip) bucket"
+        );
+
+        drop(r3);
+    }
+
+    #[test]
+    fn test_budget_reserve_none_still_rejects_on_global_exhaustion() {
+        // Small global, no per-IP dimension. First reserve succeeds;
+        // second drains the global bucket and must be rejected on the
+        // None-IP path (which bypasses per-IP but still participates
+        // in the global bucket).
+        let tracker = BudgetTracker::new(0, 30, 20);
+        let r1 = tracker.reserve(None).unwrap();
+        match tracker.reserve(None) {
+            Err(BudgetExhausted::Global) => {}
+            Err(other) => panic!(
+                "expected Err(Global) on None-IP reservation with exhausted global; got Err({other:?})"
+            ),
+            Ok(_) => panic!(
+                "expected Err(Global) on None-IP reservation with exhausted global; got Ok"
+            ),
+        }
+        drop(r1);
     }
 }
