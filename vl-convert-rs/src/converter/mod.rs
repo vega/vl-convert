@@ -1794,14 +1794,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_font_version_propagation() {
-        use crate::text::{register_font_directory, FONT_CONFIG_VERSION};
+        use crate::text::{current_font_directories, set_font_directories, FONT_CONFIG_VERSION};
+        use std::path::PathBuf;
         use std::sync::atomic::Ordering;
 
         // Do an initial conversion to ensure the worker is running.
-        // Note: `VlConverter::new()` now calls `set_font_directories` on
-        // construction (Task 0), which also bumps FONT_CONFIG_VERSION;
-        // snapshot the version *after* construction so we're measuring
-        // only the `register_font_directory` bump.
+        // `VlConverter::new()` calls `set_font_directories` on construction,
+        // which also bumps FONT_CONFIG_VERSION; snapshot the version *after*
+        // construction so we're measuring only the explicit
+        // `set_font_directories` bump below.
         let ctx = VlConverter::new();
         let vl_spec: serde_json::Value = serde_json::from_str(
             r#"{
@@ -1823,15 +1824,20 @@ mod tests {
 
         let version_before = FONT_CONFIG_VERSION.load(Ordering::Acquire);
 
-        // Register a font directory (re-registers the built-in fonts, which is harmless)
-        let font_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fonts/liberation-sans");
-        register_font_directory(font_dir).unwrap();
+        // Append a font directory via `set_font_directories` (re-registers
+        // the built-in fonts plus liberation-sans, which is harmless).
+        let mut paths = current_font_directories();
+        paths.push(PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/fonts/liberation-sans"
+        )));
+        set_font_directories(&paths).unwrap();
 
         let version_after = FONT_CONFIG_VERSION.load(Ordering::Acquire);
         assert_eq!(
             version_after,
             version_before + 1,
-            "FONT_CONFIG_VERSION should increment after register_font_directory"
+            "FONT_CONFIG_VERSION should increment after set_font_directories"
         );
 
         // A subsequent conversion should still succeed, confirming the worker

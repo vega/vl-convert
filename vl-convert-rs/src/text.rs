@@ -312,17 +312,6 @@ pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
     })
 }
 
-pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
-    {
-        let mut font_config = FONT_CONFIG
-            .lock()
-            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
-        font_config.font_dirs.push(PathBuf::from(dir));
-    }
-
-    refresh_font_baseline_after_config_update()
-}
-
 /// Replace the process-global registered-font-directory list.
 ///
 /// Acquires `FONT_CONFIG`, sets `font_dirs = paths.to_vec()`, rebuilds the
@@ -330,10 +319,10 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
 /// bumps `FONT_CONFIG_VERSION`. Workers pick up the new state on their next
 /// work item via `InnerVlConverter::refresh_font_config_if_needed`.
 ///
-/// Unlike [`register_font_directory`], this function can remove entries:
-/// paths that were previously registered but are absent from `paths` are
-/// dropped from the global registry, and the fontdb no longer resolves
-/// their fonts on future conversions.
+/// This is the single authoritative way to mutate the font-directory
+/// registry. Direct callers should prefer threading paths through
+/// `VlcConfig::font_directories` and constructing a `VlConverter` via
+/// `with_config`, which calls this function internally.
 pub fn set_font_directories(paths: &[PathBuf]) -> Result<(), anyhow::Error> {
     {
         let mut font_config = FONT_CONFIG
@@ -444,27 +433,6 @@ mod tests {
         assert!(after_b.iter().any(|p| p == &dir_b));
 
         // Restore
-        set_font_directories(&prior).unwrap();
-    }
-
-    #[test]
-    fn register_font_directory_still_appends() {
-        let prior = current_font_directories();
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path().join("append");
-        fs::create_dir_all(&dir).unwrap();
-
-        // Seed with one directory, then use register_font_directory — must
-        // append, not replace.
-        let seed = tmp.path().join("seed");
-        fs::create_dir_all(&seed).unwrap();
-        set_font_directories(std::slice::from_ref(&seed)).unwrap();
-
-        register_font_directory(dir.to_string_lossy().as_ref()).unwrap();
-        let after = current_font_directories();
-        assert!(after.iter().any(|p| p == &seed), "seed still present");
-        assert!(after.iter().any(|p| p == &dir), "new dir appended");
-
         set_font_directories(&prior).unwrap();
     }
 

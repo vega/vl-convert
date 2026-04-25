@@ -37,7 +37,9 @@
 
 Empty container is the natural "unset" state. `None` and `Some(vec![])` are no longer distinguishable at the type level.
 
-**`VlConverter::with_config` now replaces global font-dir state authoritatively.** On construction the converter calls `set_font_directories(&config.font_directories)`, which replaces the process-global `FONT_CONFIG.font_dirs` wholesale — paths previously registered but absent from `config.font_directories` are deregistered from the fontdb. Callers that relied on "sticky" font directories across multiple `with_config` calls must thread the paths through `VlcConfig.font_directories` explicitly, or call `register_font_directory` after construction.
+**Authoritative font-directory model.** `VlcConfig.font_directories` is the single source of truth for the process-global font registry. `VlConverter::with_config` calls `set_font_directories(&config.font_directories)` on construction, replacing the registry wholesale — paths previously registered but absent from `config.font_directories` are deregistered. Direct Rust callers must thread font paths through `VlcConfig.font_directories`.
+
+**Removed `register_font_directory`.** The append-only library helper is gone; use `VlcConfig.font_directories` (set on the config and pass to `with_config`) or `set_font_directories(&paths)` for hot-apply mutation of the global registry. The Python binding's `vlc.register_font_directory(path)` is unchanged; it now appends to the tracked converter's `VlcConfig.font_directories` and rebuilds.
 
 ### New fields
 
@@ -46,9 +48,9 @@ Empty container is the natural "unset" state. `None` and `Some(vec![])` are no l
 
 ### New public APIs in `vl_convert_rs::text`
 
-- `set_font_directories(paths: &[PathBuf])` — replace the global font-directory list; rebuilds the fontdb and bumps `FONT_CONFIG_VERSION`. Unlike `register_font_directory`, this function can remove entries.
+- `set_font_directories(paths: &[PathBuf])` — replace the global font-directory list; rebuilds the fontdb and bumps `FONT_CONFIG_VERSION`.
 - `apply_hot_font_cache(size: Option<NonZeroU64>)` — set the Google Fonts LRU capacity. **`None` actively resets the LRU to the library default** (not a no-op like the older `configure_font_cache(None)`).
 - `current_font_directories() -> Vec<PathBuf>` — read the current global font-directory list.
 - `current_cache_size() -> Option<NonZeroU64>` — read the current global Google-Fonts LRU capacity.
 
-`register_font_directory(path)` remains as the append-convenience API; its behavior is unchanged. All four new APIs are safe to call concurrently with live `VlConverter`s — workers pick up changes on their next work item via `FONT_CONFIG_VERSION` refresh.
+All four APIs are safe to call concurrently with live `VlConverter`s — workers pick up changes on their next work item via `FONT_CONFIG_VERSION` refresh.

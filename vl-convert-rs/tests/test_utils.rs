@@ -9,8 +9,7 @@ use vl_convert_rs::converter::{VlConverter, VlcConfig};
 /// reference fonts like `Caveat` from that tree, and the library's
 /// `VlConverter::with_config` treats `VlcConfig.font_directories` as
 /// authoritative (replaces the global store on construction), so every
-/// test converter has to include this path in its config — a prior
-/// `register_font_directory` call gets wiped when the converter is built.
+/// test converter has to include this path in its config.
 pub fn test_font_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -44,9 +43,8 @@ static INIT: Once = Once::new();
 pub fn initialize() {
     INIT.call_once(|| {
         // Intentionally empty: every `test_converter*()` call seeds the
-        // test font directory via `VlcConfig.font_directories`, so the
-        // old `register_font_directory(fonts_dir)` side effect is
-        // redundant (and would get wiped by the next `with_config` anyway).
+        // test font directory via `VlcConfig.font_directories`, which is
+        // the authoritative source for the global font registry.
     });
 }
 

@@ -226,19 +226,13 @@ pub fn vega_fonts(
 ///
 /// Returns:
 ///     None
-/// Append `font_dir` to the current converter's `font_directories` and
-/// rebuild so the library-global font store reflects the new list.
-///
-/// `register_font_directory_rs` alone would mutate the global store, but
-/// the next `configure()` / `load_config()` call reconstructs the
-/// converter from the tracked `VlcConfig.font_directories` — which
-/// wouldn't know about the imperatively-registered path — and wipe the
-/// global store via `set_font_directories`. Writing through the
-/// converter's config makes the registration durable across rebuilds.
+/// Append `font_dir` to the current converter's `VlcConfig.font_directories`
+/// and rebuild so the library-global font store reflects the new list.
+/// The path persists across subsequent `configure()` / `load_config()`
+/// rebuilds because it lives on the tracked config.
 ///
 /// Dedup: calling `register_font_directory(path)` twice is a no-op after
-/// the first call (matches the admin `POST /admin/config/fonts/directories`
-/// semantics in the server).
+/// the first call.
 fn register_font_directory_inner(font_dir: &str) -> Result<(), vl_convert_rs::anyhow::Error> {
     let path = PathBuf::from(font_dir);
     let mut guard = VL_CONVERTER.write().map_err(|e| {

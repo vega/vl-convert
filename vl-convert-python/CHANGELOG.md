@@ -47,6 +47,24 @@ Per-request `google_fonts=` on conversion calls is merged with
 `max_ephemeral_workers`, `google_fonts_cache_size_mb` reject `0` with
 `ValueError`. Pass `None` to reset.
 
+### `register_font_directory(path)` semantics
+
+`vlc.register_font_directory(path)` now appends the path to the tracked
+converter's `VlcConfig.font_directories` and rebuilds the converter so
+the registration survives subsequent `vlc.configure(...)` /
+`vlc.load_config(...)` calls. Previously, a later `configure()` would
+silently wipe the registration.
+
+Cost trade-off: each call rebuilds the V8 worker pool, which is
+significantly more expensive than the prior append-only mutation. To
+batch-register many directories cheaply, prefer:
+
+```python
+vlc.configure(font_directories=[d1, d2, d3, ...])
+```
+
+which performs a single rebuild with replace-style semantics.
+
 ### `configure()` keyword arguments
 
 - `font_directories: list[str] | None` — replace the process-global
