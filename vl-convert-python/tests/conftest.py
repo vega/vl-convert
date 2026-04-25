@@ -40,10 +40,12 @@ def reset_config_to_test_baseline():
     would change the SVG output of any downstream spec that references a
     Google font, drifting it off the golden baseline.
 
-    The baseline enables `allowed_base_urls=["http:", "https:"]` (most
-    vendored specs reference `vega.github.io` / `raw.githubusercontent.com`
-    URLs and the secure default blocks all network data), and clears
-    every other `configure()`-settable field back to `VlcConfig::default()`.
+    The baseline matches the Python binding's startup default
+    (`allowed_base_urls=["http:", "https:"]`, all other fields at
+    `VlcConfig::default()`). Most tests use it implicitly; tests that
+    intentionally set narrower allowlists (e.g. `test_access_policy`)
+    do their own per-test configure and rely on this fixture to undo
+    the effect on the next test.
 
     `font_directories` is NOT reset — the `pytest_configure` hook already
     wired the test fonts directory into the tracked config, and our

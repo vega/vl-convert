@@ -25,19 +25,10 @@ pub fn initialize() {
     });
 }
 
-/// Build an `assert_cmd::Command` for the vl-convert binary with the
-/// test-wide permissive allowlist already wired in via `--allowed-base-url`.
-/// Library-default `VlcConfig::default()` blocks all network data, but
-/// many vendored test specs reference `https://raw.githubusercontent.com/vega/...`
-/// and `https://vega.github.io/...` URLs — individual tests shouldn't
-/// need to know that.
+/// Build an `assert_cmd::Command` for the vl-convert binary. Centralized
+/// so future test-wide CLI flags can be added in one place.
 pub fn vl_convert_cmd() -> Result<Command, Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("vl-convert")?;
-    cmd.arg("--allowed-base-url")
-        .arg("http:")
-        .arg("--allowed-base-url")
-        .arg("https:");
-    Ok(cmd)
+    Command::cargo_bin("vl-convert").map_err(Into::into)
 }
 
 pub fn vg_spec_path(name: &str) -> String {

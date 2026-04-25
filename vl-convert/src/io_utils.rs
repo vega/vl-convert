@@ -330,12 +330,22 @@ fn write_stdout_bytes(data: &[u8]) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+/// Default `VlcConfig` for the CLI: `VlcConfig::default()` plus
+/// `allowed_base_urls = ["http:", "https:"]` so existing scripts that
+/// reference public dataset URLs work without `--allowed-base-url`.
+fn default_cli_config() -> VlcConfig {
+    VlcConfig {
+        allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
+        ..VlcConfig::default()
+    }
+}
+
 pub(crate) fn resolve_vlc_config(
     vlc_config: Option<&str>,
     no_vlc_config: bool,
 ) -> Result<VlcConfig, anyhow::Error> {
     if no_vlc_config {
-        return Ok(VlcConfig::default());
+        return Ok(default_cli_config());
     }
     let path = match vlc_config {
         Some(p) => {
@@ -345,7 +355,7 @@ pub(crate) fn resolve_vlc_config(
         None => {
             let default = vl_convert_rs::vlc_config_path();
             if !default.exists() {
-                return Ok(VlcConfig::default());
+                return Ok(default_cli_config());
             }
             default
         }

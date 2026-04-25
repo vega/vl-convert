@@ -177,12 +177,9 @@ pub fn parse_config_overrides(
         return Ok(overrides);
     };
 
-    // Uniform `None` semantics: passing `None` for any kwarg resets that field
-    // to its `VlcConfig::default()` value. `default` here is a fresh copy used
-    // to pull the library-default value for fields whose default is non-trivial
-    // (e.g. `max_v8_heap_size_mb: Some(NZ(512))`,
-    // `max_ephemeral_workers: Some(NZ(2))`).
-    let default = VlcConfig::default();
+    // Uniform `None` semantics: passing `None` for any kwarg resets that
+    // field to `default_python_config()`.
+    let default = crate::default_python_config();
 
     for (key, value) in kwargs.iter() {
         let key_str: String = key.extract().map_err(|err| {
@@ -583,7 +580,7 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
         None => {
             let standard = vl_convert_rs::vlc_config_path();
             if !standard.exists() {
-                VlcConfig::default()
+                crate::default_python_config()
             } else {
                 VlcConfig::from_file(&standard)?
             }
