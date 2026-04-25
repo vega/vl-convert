@@ -89,15 +89,10 @@ impl InnerVlConverter {
         &self,
         request_fonts: Option<Vec<GoogleFontRequest>>,
     ) -> Result<Vec<LoadedFontBatch>, AnyError> {
-        let merged = match (self.ctx.config.google_fonts.clone(), request_fonts) {
-            (None, None) => return Ok(Vec::new()),
-            (Some(c), None) => c,
-            (None, Some(r)) => r,
-            (Some(mut c), Some(r)) => {
-                c.extend(r);
-                c
-            }
-        };
+        let mut merged = self.ctx.config.google_fonts.clone();
+        if let Some(request) = request_fonts {
+            merged.extend(request);
+        }
         if merged.is_empty() {
             return Ok(Vec::new());
         }

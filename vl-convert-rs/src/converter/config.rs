@@ -3,7 +3,8 @@ use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use deno_core::url::Url;
 use std::collections::HashMap;
-use std::path::Path;
+use std::num::{NonZeroU64, NonZeroUsize};
+use std::path::{Path, PathBuf};
 
 use super::fonts::GoogleFontRequest;
 use super::permissions::{domain_matches_patterns, is_filesystem_path};
@@ -111,14 +112,15 @@ impl BaseUrlSetting {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(default)]
 pub struct VlcConfig {
-    pub num_workers: usize,
+    /// Number of persistent worker V8 isolates. Must be at least 1.
+    pub num_workers: NonZeroUsize,
     /// Base URL for resolving relative data paths in Vega specs.
     pub base_url: BaseUrlSetting,
     /// Allowlist for data access (HTTP URLs, filesystem paths).
     /// Uses CSP-style patterns: "https:" (scheme), "https://example.com/" (prefix),
-    /// "/data/" (filesystem). None = any HTTP/HTTPS, no filesystem (default).
-    /// Some(vec![]) = no access. Some(vec!["*"]) = everything.
-    pub allowed_base_urls: Option<Vec<String>>,
+    /// "/data/" (filesystem). Empty list = block all network data (default).
+    /// `["*"]` = allow everything.
+    pub allowed_base_urls: Vec<String>,
     /// Whether to auto-download missing fonts from Google Fonts.
     pub auto_google_fonts: bool,
     /// Whether to embed locally-available fonts as base64 `@font-face` blocks
@@ -133,17 +135,18 @@ pub struct VlcConfig {
     pub missing_fonts: MissingFontsPolicy,
     /// Google Fonts to register for all conversions. Each request specifies a
     /// family and optionally specific variants. Fonts are downloaded and
-    /// registered per-request via the overlay mechanism.
-    pub google_fonts: Option<Vec<GoogleFontRequest>>,
-    /// Maximum V8 heap size in megabytes per worker. Defaults to 0 (no limit).
-    /// Set to a positive value to cap V8 heap usage per worker.
-    pub max_v8_heap_size_mb: usize,
-    /// Maximum V8 execution time in seconds. Defaults to 0 (no limit).
-    /// When exceeded, V8 execution is terminated and an error is returned.
-    /// Only applies to the V8/JavaScript portion of the conversion (Vega
-    /// evaluation, plugin loading); Rust-side post-processing is not subject
-    /// to this limit.
-    pub max_v8_execution_time_secs: u64,
+    /// registered per-request via the overlay mechanism. Empty = no
+    /// configured fonts (the natural "unset" state).
+    pub google_fonts: Vec<GoogleFontRequest>,
+    /// Maximum V8 heap size in megabytes per worker. `None` = no cap;
+    /// `Some(n)` = explicit cap.
+    pub max_v8_heap_size_mb: Option<NonZeroUsize>,
+    /// Maximum V8 execution time in seconds. `None` = no cap; `Some(n)` =
+    /// explicit cap. When exceeded, V8 execution is terminated and an error is
+    /// returned. Only applies to the V8/JavaScript portion of the conversion
+    /// (Vega evaluation, plugin loading); Rust-side post-processing is not
+    /// subject to this limit.
+    pub max_v8_execution_time_secs: Option<NonZeroU64>,
     /// Whether to run V8 garbage collection after each conversion to release
     /// memory back to the OS. Defaults to false. Enabling this reduces peak
     /// memory between conversions at the cost of slower throughput.
@@ -154,8 +157,8 @@ pub struct VlcConfig {
     /// - Raw ESM source code (used directly)
     ///
     /// Plugins must be single-entry ESM modules with a default export function
-    /// that accepts a vega object.
-    pub vega_plugins: Option<Vec<String>>,
+    /// that accepts a vega object. Empty = no plugins configured.
+    pub vega_plugins: Vec<String>,
     /// Domain allowlist for HTTP/HTTPS imports inside plugins.
     /// Empty = disabled, `["*"]` = any domain, `["esm.sh"]` = specific domains.
     /// Domains from URL plugins are auto-added during normalization.
@@ -165,6 +168,9 @@ pub struct VlcConfig {
     /// Defaults to false. When enabled, requests can include a `vega_plugin`
     /// field that runs on an ephemeral V8 isolate (50-100ms overhead).
     pub allow_per_request_plugins: bool,
+    /// Maximum number of concurrent ephemeral workers for per-request plugins.
+    /// `None` = no limit. `Some(n)` = cap concurrent ephemeral V8 isolates.
+    pub max_ephemeral_workers: Option<NonZeroUsize>,
     /// Whether to allow per-request `google_fonts` / `auto_google_fonts` overrides.
     /// Defaults to false. When false, requests containing these fields are rejected.
     pub allow_google_fonts: bool,
@@ -183,8 +189,21 @@ pub struct VlcConfig {
     /// Per-request `time_format_locale` on VgOpts/VlOpts overrides this if set.
     pub default_time_format_locale: Option<TimeFormatLocale>,
     /// Custom named themes (Vega config objects) registered alongside built-in
-    /// vega-themes. Custom themes take priority if names collide.
-    pub themes: Option<HashMap<String, serde_json::Value>>,
+    /// vega-themes. Custom themes take priority if names collide. Empty =
+    /// no custom themes.
+    pub themes: HashMap<String, serde_json::Value>,
+    /// Capacity (MB) of the on-disk Google Fonts LRU cache. `None` → library
+    /// default. Backed by the process-global `GOOGLE_FONTS_CLIENT` via
+    /// `apply_hot_font_cache`. Hot-applyable: `VlConverter::with_config`
+    /// calls through on construction.
+    pub google_fonts_cache_size_mb: Option<NonZeroU64>,
+    /// Font directories registered with the process-global `FONT_CONFIG`
+    /// store. `VlConverter::with_config` calls
+    /// `set_font_directories(&config.font_directories)` on construction, so
+    /// the global store reflects the config list exactly. Replacement
+    /// semantics: directories not in the list are deregistered from the
+    /// global fontdb.
+    pub font_directories: Vec<PathBuf>,
 }
 
 /// Shared context passed to all workers.
@@ -193,10 +212,11 @@ pub(crate) struct ConverterContext {
     pub config: VlcConfig,
     /// Parsed allowlist patterns derived from `config.allowed_base_urls`.
     /// Computed once at construction to avoid re-parsing on every request.
-    pub parsed_allowed_base_urls: Option<Vec<AllowedBaseUrlPattern>>,
+    /// Empty = block everything.
+    pub parsed_allowed_base_urls: Vec<AllowedBaseUrlPattern>,
     /// Resolved plugins after fetching URLs and bundling HTTP imports.
-    /// None if `vega_plugins` is None.
-    pub resolved_plugins: Option<Vec<ResolvedPlugin>>,
+    /// Empty if no plugins configured.
+    pub resolved_plugins: Vec<ResolvedPlugin>,
 }
 
 /// Backward-compatible alias for [`VlcConfig`].
@@ -205,27 +225,40 @@ pub type VlConverterConfig = VlcConfig;
 
 impl Default for VlcConfig {
     fn default() -> Self {
+        // Secure/sane profile for both library and server callers.
+        //
+        // - `allowed_base_urls = vec![]` — blocks all network data (empty list
+        //   is the new "unset" state; to restore permissive behavior pass an
+        //   explicit scheme allowlist like `["http:", "https:"]`).
+        // - `max_v8_heap_size_mb = Some(NZ(512))` — bounds per-worker V8 heap.
+        // - `max_ephemeral_workers = Some(NZ(2))` — bounds ephemeral-worker
+        //   concurrency (harmless when per-request plugins are disabled).
+        // - Absorbs the server's former `apply_server_defaults` coercions
+        //   into the library itself.
         Self {
-            num_workers: 1,
+            num_workers: NonZeroUsize::new(1).expect("1 is non-zero"),
             base_url: BaseUrlSetting::Default,
-            allowed_base_urls: None,
+            allowed_base_urls: Vec::new(),
             auto_google_fonts: false,
             embed_local_fonts: false,
             subset_fonts: true,
             missing_fonts: MissingFontsPolicy::Fallback,
-            google_fonts: None,
-            max_v8_heap_size_mb: 0,
-            max_v8_execution_time_secs: 0,
+            google_fonts: Vec::new(),
+            max_v8_heap_size_mb: NonZeroUsize::new(512),
+            max_v8_execution_time_secs: None,
             gc_after_conversion: false,
-            vega_plugins: None,
+            vega_plugins: Vec::new(),
             plugin_import_domains: Vec::new(),
             allow_per_request_plugins: false,
+            max_ephemeral_workers: NonZeroUsize::new(2),
             allow_google_fonts: false,
             per_request_plugin_import_domains: Vec::new(),
             default_theme: None,
             default_format_locale: None,
             default_time_format_locale: None,
-            themes: None,
+            themes: HashMap::new(),
+            google_fonts_cache_size_mb: None,
+            font_directories: Vec::new(),
         }
     }
 }
@@ -265,19 +298,17 @@ impl VlcConfig {
         // URL strings (containing "://") and inline ESM source (containing
         // newlines or starting with "export"/"import") are left untouched.
         if let Some(config_dir) = path.parent() {
-            if let Some(ref mut plugins) = config.vega_plugins {
-                for plugin in plugins.iter_mut() {
-                    if plugin.contains("://")
-                        || plugin.contains('\n')
-                        || plugin.starts_with("export")
-                        || plugin.starts_with("import")
-                    {
-                        continue;
-                    }
-                    let p = std::path::Path::new(plugin.as_str());
-                    if p.is_relative() {
-                        *plugin = config_dir.join(p).to_string_lossy().to_string();
-                    }
+            for plugin in config.vega_plugins.iter_mut() {
+                if plugin.contains("://")
+                    || plugin.contains('\n')
+                    || plugin.starts_with("export")
+                    || plugin.starts_with("import")
+                {
+                    continue;
+                }
+                let p = std::path::Path::new(plugin.as_str());
+                if p.is_relative() {
+                    *plugin = config_dir.join(p).to_string_lossy().to_string();
                 }
             }
             if let BaseUrlSetting::Custom(ref mut url) = config.base_url {
@@ -294,58 +325,56 @@ impl VlcConfig {
     }
 }
 
-pub(crate) fn normalize_converter_config(mut config: VlcConfig) -> Result<VlcConfig, AnyError> {
-    if config.num_workers < 1 {
-        bail!("num_workers must be >= 1");
-    }
+pub fn normalize_converter_config(mut config: VlcConfig) -> Result<VlcConfig, AnyError> {
+    // `num_workers` is `NonZeroUsize` (type-level guarantee); no runtime check needed.
 
     // Validate allowed_base_urls by parsing them (the parsed patterns are
     // stored on ConverterContext, not on the config itself)
-    if let Some(ref urls) = config.allowed_base_urls {
-        for url in urls {
-            normalize_allowed_base_url(url)?;
-        }
+    for url in &config.allowed_base_urls {
+        normalize_allowed_base_url(url)?;
     }
 
-    if config.max_v8_heap_size_mb > 0 && config.max_v8_heap_size_mb < MIN_V8_HEAP_SIZE_MB {
-        bail!(
-            "max_v8_heap_size_mb is {} MB, which is too small for V8 to \
-             initialize. Set to {} or higher, or use 0 for no limit.",
-            config.max_v8_heap_size_mb,
-            MIN_V8_HEAP_SIZE_MB,
-        );
+    if let Some(max_mb) = config.max_v8_heap_size_mb {
+        if max_mb.get() < MIN_V8_HEAP_SIZE_MB {
+            bail!(
+                "max_v8_heap_size_mb is {} MB, which is too small for V8 to \
+                 initialize. Set to {} or higher, or omit to use no limit.",
+                max_mb.get(),
+                MIN_V8_HEAP_SIZE_MB,
+            );
+        }
     }
 
     // Classify and resolve vega plugins (sync: file reads and URL validation only)
-    if let Some(ref mut plugins) = config.vega_plugins {
-        for (i, entry) in plugins.iter_mut().enumerate() {
-            if entry.starts_with("http://") || entry.starts_with("https://") {
-                // URL plugin: validate URL, auto-allow the domain
-                let url = Url::parse(entry)
-                    .map_err(|e| anyhow!("Invalid Vega plugin {i} URL: {entry}: {e}"))?;
-                if let Some(domain) = url.host_str() {
-                    if !domain_matches_patterns(domain, &config.plugin_import_domains) {
-                        config.plugin_import_domains.push(domain.to_string());
-                    }
+    let mut plugin_entries = std::mem::take(&mut config.vega_plugins);
+    for (i, entry) in plugin_entries.iter_mut().enumerate() {
+        if entry.starts_with("http://") || entry.starts_with("https://") {
+            // URL plugin: validate URL, auto-allow the domain
+            let url = Url::parse(entry)
+                .map_err(|e| anyhow!("Invalid Vega plugin {i} URL: {entry}: {e}"))?;
+            if let Some(domain) = url.host_str() {
+                if !domain_matches_patterns(domain, &config.plugin_import_domains) {
+                    config.plugin_import_domains.push(domain.to_string());
                 }
-                // Leave the URL string in place; fetched at startup in spawn_worker_pool()
-            } else {
-                let path = Path::new(entry.as_str());
-                if entry.ends_with(".js") || entry.ends_with(".mjs") {
-                    // File plugin: read source, replace entry
-                    if !path.is_file() {
-                        bail!(
-                            "Vega plugin {i} path '{}' does not exist or is not a file",
-                            path.display()
-                        );
-                    }
-                    *entry = std::fs::read_to_string(path).map_err(|e| {
-                        anyhow!("Failed to read Vega plugin {i} at {}: {e}", path.display())
-                    })?;
+            }
+            // Leave the URL string in place; fetched at startup in spawn_worker_pool()
+        } else {
+            let path = Path::new(entry.as_str());
+            if entry.ends_with(".js") || entry.ends_with(".mjs") {
+                // File plugin: read source, replace entry
+                if !path.is_file() {
+                    bail!(
+                        "Vega plugin {i} path '{}' does not exist or is not a file",
+                        path.display()
+                    );
                 }
+                *entry = std::fs::read_to_string(path).map_err(|e| {
+                    anyhow!("Failed to read Vega plugin {i} at {}: {e}", path.display())
+                })?;
             }
         }
     }
+    config.vega_plugins = plugin_entries;
 
     Ok(config)
 }
@@ -428,12 +457,12 @@ mod tests {
             }
         }"##;
         let config: VlcConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.num_workers, 2);
+        assert_eq!(config.num_workers.get(), 2);
         assert!(config.auto_google_fonts);
         assert_eq!(config.missing_fonts, MissingFontsPolicy::Warn);
-        assert_eq!(config.max_v8_heap_size_mb, 512);
+        assert_eq!(config.max_v8_heap_size_mb, NonZeroUsize::new(512));
         assert_eq!(config.default_theme, Some("dark".to_string()));
-        assert!(config.themes.is_some());
+        assert!(!config.themes.is_empty());
     }
 
     #[test]
@@ -494,8 +523,8 @@ mod tests {
         .unwrap();
         let config = VlcConfig::from_file(config_file.path()).unwrap();
         assert_eq!(
-            config.vega_plugins.as_deref(),
-            Some(&["https://esm.sh/my-plugin@1.0".to_string()][..])
+            config.vega_plugins,
+            vec!["https://esm.sh/my-plugin@1.0".to_string()]
         );
     }
 
@@ -505,10 +534,7 @@ mod tests {
         let mut config_file = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
         writeln!(config_file, r#"{{"vega_plugins": ["{inline}"]}}"#).unwrap();
         let config = VlcConfig::from_file(config_file.path()).unwrap();
-        assert_eq!(
-            config.vega_plugins.as_deref(),
-            Some(&[inline.to_string()][..])
-        );
+        assert_eq!(config.vega_plugins, vec![inline.to_string()]);
     }
 
     #[test]
@@ -523,6 +549,58 @@ mod tests {
             .join("./my-plugin.js")
             .to_string_lossy()
             .to_string();
-        assert_eq!(config.vega_plugins.as_deref(), Some(&[expected][..]));
+        assert_eq!(config.vega_plugins, vec![expected]);
+    }
+
+    #[test]
+    fn default_config_is_secure() {
+        let cfg = VlcConfig::default();
+        assert_eq!(cfg.num_workers.get(), 1, "num_workers default is 1");
+        assert!(
+            cfg.allowed_base_urls.is_empty(),
+            "allowed_base_urls default is empty (blocks all network data)"
+        );
+        assert_eq!(
+            cfg.max_v8_heap_size_mb,
+            NonZeroUsize::new(512),
+            "max_v8_heap_size_mb default is Some(NZ(512))"
+        );
+        assert_eq!(
+            cfg.max_ephemeral_workers,
+            NonZeroUsize::new(2),
+            "max_ephemeral_workers default is Some(NZ(2))"
+        );
+        assert_eq!(cfg.max_v8_execution_time_secs, None);
+        assert!(cfg.google_fonts.is_empty());
+        assert!(cfg.vega_plugins.is_empty());
+        assert!(cfg.themes.is_empty());
+        assert!(cfg.font_directories.is_empty());
+        assert_eq!(cfg.google_fonts_cache_size_mb, None);
+    }
+
+    #[test]
+    fn num_workers_zero_is_deserialize_error() {
+        let err = serde_json::from_str::<VlcConfig>(r#"{"num_workers": 0}"#).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("zero") || msg.contains("non-zero"),
+            "expected NonZero error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn max_v8_heap_size_mb_below_minimum_rejected() {
+        // Some(NZ(1)) is below MIN_V8_HEAP_SIZE_MB
+        let err = normalize_converter_config(VlcConfig {
+            max_v8_heap_size_mb: NonZeroUsize::new(1),
+            ..Default::default()
+        })
+        .err()
+        .unwrap();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("max_v8_heap_size_mb"),
+            "expected max_v8_heap_size_mb error, got: {msg}"
+        );
     }
 }

@@ -2,36 +2,21 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pythonize::pythonize;
+use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 use vl_convert_rs::converter::{GoogleFontRequest, VgOpts, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
-use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
+use vl_convert_rs::VlConverter as VlConverterRs;
 use vl_convert_rs::{FontStyle, VariantRequest};
+
+use crate::VL_CONVERTER;
 
 use crate::utils::{
     async_variant_doc, future_into_py_object, parse_json_spec, parse_option_format_locale,
     parse_option_time_format_locale, parse_optional_config, prefixed_py_error,
     run_converter_future, run_converter_future_async,
 };
-use crate::CONFIGURED_GOOGLE_FONTS;
-
-pub fn effective_google_fonts(
-    per_call: Option<Vec<GoogleFontRequest>>,
-) -> Option<Vec<GoogleFontRequest>> {
-    let configured = CONFIGURED_GOOGLE_FONTS
-        .read()
-        .ok()
-        .and_then(|guard| guard.clone());
-    match (configured, per_call) {
-        (None, None) => None,
-        (Some(c), None) => Some(c),
-        (None, Some(p)) => Some(p),
-        (Some(mut c), Some(p)) => {
-            c.extend(p);
-            Some(c)
-        }
-    }
-}
 
 pub fn parse_variant_args(
     variants: Option<Vec<(u16, String)>>,
@@ -148,7 +133,7 @@ pub fn vegalite_fonts(
 
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         ..Default::default()
     };
 
@@ -207,7 +192,7 @@ pub fn vega_fonts(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         ..Default::default()
     };
 
@@ -241,13 +226,42 @@ pub fn vega_fonts(
 ///
 /// Returns:
 ///     None
+/// Append `font_dir` to the current converter's `font_directories` and
+/// rebuild so the library-global font store reflects the new list.
+///
+/// `register_font_directory_rs` alone would mutate the global store, but
+/// the next `configure()` / `load_config()` call reconstructs the
+/// converter from the tracked `VlcConfig.font_directories` — which
+/// wouldn't know about the imperatively-registered path — and wipe the
+/// global store via `set_font_directories`. Writing through the
+/// converter's config makes the registration durable across rebuilds.
+///
+/// Dedup: calling `register_font_directory(path)` twice is a no-op after
+/// the first call (matches the admin `POST /admin/config/fonts/directories`
+/// semantics in the server).
+fn register_font_directory_inner(font_dir: &str) -> Result<(), vl_convert_rs::anyhow::Error> {
+    let path = PathBuf::from(font_dir);
+    let mut guard = VL_CONVERTER.write().map_err(|e| {
+        vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
+    })?;
+
+    let mut config = guard.config();
+    if config.font_directories.iter().any(|existing| existing == &path) {
+        return Ok(());
+    }
+    config.font_directories.push(path);
+
+    let converter = VlConverterRs::with_config(config)?;
+    *guard = Arc::new(converter);
+    Ok(())
+}
+
 #[pyfunction]
 #[pyo3(signature = (font_dir))]
 pub fn register_font_directory(font_dir: &str) -> PyResult<()> {
-    register_font_directory_rs(font_dir).map_err(|err| {
+    register_font_directory_inner(font_dir).map_err(|err| {
         PyValueError::new_err(format!("Failed to register font directory: {}", err))
-    })?;
-    Ok(())
+    })
 }
 
 #[doc = async_variant_doc!("vegalite_fonts")]
@@ -283,7 +297,7 @@ pub fn vegalite_fonts_asyncio<'py>(
 
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         ..Default::default()
     };
 
@@ -334,7 +348,7 @@ pub fn vega_fonts_asyncio<'py>(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         ..Default::default()
     };
 
@@ -374,7 +388,7 @@ pub fn register_font_directory_asyncio<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let font_dir = font_dir.to_string();
     future_into_py_object(py, async move {
-        tokio::task::spawn_blocking(move || register_font_directory_rs(&font_dir))
+        tokio::task::spawn_blocking(move || register_font_directory_inner(&font_dir))
             .await
             .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
             .map_err(|err| {

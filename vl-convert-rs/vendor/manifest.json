@@ -514,11 +514,6 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-lite@6.4.1/+esm": {
-      "headers": {
-        "content-type": "application/javascript; charset=utf-8"
-      }
-    },
     "https://cdn.jsdelivr.net/npm/vega-lite@6.4.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"

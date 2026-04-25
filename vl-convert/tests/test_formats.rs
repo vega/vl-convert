@@ -8,7 +8,7 @@ use common::*;
 fn check_no_command() -> Result<(), Box<dyn std::error::Error>> {
     initialize();
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
 
     cmd.assert()
         .failure()
@@ -19,7 +19,6 @@ fn check_no_command() -> Result<(), Box<dyn std::error::Error>> {
 #[rustfmt::skip]
 mod test_vl2vg {
     use std::fs;
-    use std::process::Command;
     use crate::common::*;
 
     #[rstest]
@@ -54,7 +53,7 @@ mod test_vl2vg {
         let vl_path = vl_spec_path(name);
         let output = output_path(&output_filename);
 
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let mut cmd = cmd.arg("vl2vg")
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
@@ -86,7 +85,6 @@ mod test_vl2vg {
 #[rustfmt::skip]
 mod test_vl2html_no_bundle {
     use std::fs;
-    use std::process::Command;
     use crate::common::*;
 
     #[rstest]
@@ -114,7 +112,7 @@ mod test_vl2html_no_bundle {
         let vl_path = vl_spec_path(name);
         let output = output_path(&output_filename);
 
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let cmd = cmd.arg("vl2html")
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
@@ -137,7 +135,6 @@ mod test_vl2html_no_bundle {
 #[rustfmt::skip]
 mod test_vl2html_bundle {
     use std::fs;
-    use std::process::Command;
     use crate::common::*;
 
     #[rstest]
@@ -165,7 +162,7 @@ mod test_vl2html_bundle {
         let vl_path = vl_spec_path(name);
         let output = output_path(&output_filename);
 
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let cmd = cmd.arg("vl2html")
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
@@ -188,7 +185,6 @@ mod test_vl2html_bundle {
 #[rustfmt::skip]
 mod test_vl2svg {
     use std::fs;
-    use std::process::Command;
     use crate::common::*;
 
     #[rstest]
@@ -208,7 +204,7 @@ mod test_vl2svg {
         let vl_path = vl_spec_path(name);
         let output = output_path(&output_filename);
 
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let cmd = cmd.arg("vl2svg")
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
@@ -229,7 +225,6 @@ mod test_vl2svg {
 
 #[rustfmt::skip]
 mod test_vl2png {
-    use std::process::Command;
     use crate::common::*;
 
     #[rstest(name, scale,
@@ -248,7 +243,7 @@ mod test_vl2png {
         let vl_path = vl_spec_path(name);
         let output = output_path(&output_filename);
 
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let cmd = cmd.arg("vl2png")
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
@@ -281,7 +276,6 @@ mod test_vl2png {
 
 #[rustfmt::skip]
 mod test_vl2png_google_fonts {
-    use std::process::Command;
     use crate::common::*;
 
     #[test]
@@ -294,7 +288,7 @@ mod test_vl2png_google_fonts {
         let vl_path = vl_spec_path("google_fonts");
         let output = output_path(&output_filename);
 
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let cmd = cmd.arg("vl2png")
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
@@ -324,7 +318,6 @@ mod test_vl2png_google_fonts {
 
 #[rustfmt::skip]
 mod test_vl2png_theme_config {
-    use std::process::Command;
     use crate::common::*;
 
     #[rstest(name, scale, theme,
@@ -349,7 +342,7 @@ mod test_vl2png_theme_config {
         writeln!(config_file, r#"{{"background": "{}"}}"#, BACKGROUND_COLOR).unwrap();
         let config_path = config_file.path().to_str().unwrap();
 
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let cmd = cmd.arg("vl2png")
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
@@ -383,7 +376,6 @@ mod test_vl2png_theme_config {
 
 #[rustfmt::skip]
 mod test_vl2png_locale {
-    use std::process::Command;
     use crate::common::*;
 
     #[rstest(name, scale,
@@ -402,7 +394,7 @@ mod test_vl2png_locale {
         let output = output_path(&output_filename);
 
         // Test with locale path
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let cmd = cmd.arg("vl2png")
             .arg("-i").arg(vl_path.clone())
             .arg("-o").arg(&output)
@@ -431,7 +423,7 @@ mod test_vl2png_locale {
         }
 
         // Test with locale name
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let cmd = cmd.arg("vl2png")
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
@@ -465,7 +457,6 @@ mod test_vl2png_locale {
 
 #[rustfmt::skip]
 mod test_vl2jpeg {
-    use std::process::Command;
     use crate::common::*;
 
     #[rstest(name, scale,
@@ -484,7 +475,7 @@ mod test_vl2jpeg {
         let vl_path = vl_spec_path(name);
         let output = output_path(&output_filename);
 
-        let mut cmd = Command::cargo_bin("vl-convert")?;
+        let mut cmd = vl_convert_cmd()?;
         let cmd = cmd.arg("vl2jpeg")
             .arg("-i").arg(vl_path)
             .arg("-o").arg(&output)
@@ -505,7 +496,7 @@ mod test_vl2jpeg {
 
 #[test]
 fn test_ls_themes() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let cmd = cmd.arg("ls-themes");
     cmd.assert().success();
 
@@ -534,7 +525,7 @@ fn test_ls_themes_with_vlc_config_custom_theme() -> Result<(), Box<dyn std::erro
     )?;
     let config_path = config_file.path().to_str().unwrap();
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let output = cmd
         .arg("--vlc-config")
         .arg(config_path)
@@ -560,7 +551,7 @@ fn test_ls_themes_with_vlc_config_custom_theme() -> Result<(), Box<dyn std::erro
 
 #[test]
 fn test_cat_theme() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let cmd = cmd.arg("cat-theme").arg("dark");
     cmd.assert().success();
 
