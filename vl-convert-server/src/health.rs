@@ -2,6 +2,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -15,6 +16,11 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct ReadinessState {
     last_check: Mutex<Option<Instant>>,
     last_result: Mutex<bool>,
+    /// Set `true` by the admin reconfig handler while a drain-then-rebuild is
+    /// in flight; cleared on commit / rollback / abort. `/readyz` returns 503
+    /// while this is set so orchestrator probes see the pod as temporarily
+    /// unready and shed traffic. Cleared by `ReconfigScopeGuard` on drop.
+    pub reconfig_in_progress: AtomicBool,
 }
 
 impl Default for ReadinessState {
@@ -22,6 +28,7 @@ impl Default for ReadinessState {
         Self {
             last_check: Mutex::new(None),
             last_result: Mutex::new(true),
+            reconfig_in_progress: AtomicBool::new(false),
         }
     }
 }
@@ -48,6 +55,17 @@ pub async fn healthz() -> Json<Value> {
     tag = "Health"
 )]
 pub async fn readyz(State(state): State<Arc<AppState>>) -> Response {
+    // Admin-driven reconfig drain is in progress — return 503 so
+    // orchestrators shed traffic while the drain + rebuild runs. Cleared
+    // on any exit path by `ReconfigScopeGuard::drop`.
+    if state.readiness.reconfig_in_progress.load(Ordering::Acquire) {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "status": "reconfig in progress" })),
+        )
+            .into_response();
+    }
+
     let should_probe = {
         let last = state.readiness.last_check.lock().await;
         match *last {
@@ -57,8 +75,12 @@ pub async fn readyz(State(state): State<Arc<AppState>>) -> Response {
     };
 
     if should_probe {
+        // `load_full()` returns an owned `Arc<RuntimeSnapshot>` safe to hold
+        // across the `.await`. Do NOT use `load()` — its `Guard` binds to
+        // the `ArcSwap` and is not Send-across-await-points.
+        let snap = state.runtime.load_full();
         let ready = matches!(
-            tokio::time::timeout(PROBE_TIMEOUT, state.converter.health_check()).await,
+            tokio::time::timeout(PROBE_TIMEOUT, snap.converter.health_check()).await,
             Ok(Ok(()))
         );
 

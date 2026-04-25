@@ -2,8 +2,53 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;
 use std::sync::Arc;
 
+use crate::admin::AdminState;
 use crate::util::error_response;
 use crate::AppState;
+
+/// Bearer-token authenticator for the admin router.
+///
+/// Mirrors `auth_middleware` but reads `admin_api_key` from `AdminState`,
+/// which carries `opaque_errors` for response shape. When the admin key
+/// is `None` the middleware is a no-op — admin is still gated by the
+/// listener's placement (UDS `0o600` or TCP loopback; main.rs's
+/// `advise_listener_security` enforces the non-loopback-TCP case at
+/// startup).
+pub(crate) async fn admin_auth_middleware(
+    axum::extract::State(state): axum::extract::State<Arc<AdminState>>,
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> Response {
+    if let Some(ref key) = state.admin_api_key {
+        let auth_header = req
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok());
+
+        let authorized = match auth_header {
+            Some(val)
+                if val
+                    .get(..7)
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("bearer ")) =>
+            {
+                key.matches(&val.as_bytes()[7..])
+            }
+            _ => false,
+        };
+
+        if !authorized {
+            let mut resp = error_response(
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+                state.opaque_errors,
+            );
+            resp.headers_mut()
+                .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
+            return resp;
+        }
+    }
+    next.run(req).await
+}
 
 pub(crate) async fn auth_middleware(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
@@ -38,6 +83,41 @@ pub(crate) async fn auth_middleware(
             return resp;
         }
     }
+    next.run(req).await
+}
+
+/// Admission gate for the main API router. When an admin reconfig has
+/// closed the gate, new requests are rejected with 503 + `Retry-After: 5`.
+///
+/// Uses the increment-first-recheck-after handshake: we bump `inflight`
+/// before checking `gate_closed` so the drain loop and the middleware
+/// cannot race into a "gate seen open, then counter read as zero" window.
+/// On rejection we decrement and wake drain waiters so the drain loop
+/// re-evaluates. On admission we carry an `InflightGuard` through the
+/// response future so every exit path (normal return, panic caught by
+/// `CatchPanicLayer`, client disconnect, `TimeoutLayer` cancellation)
+/// decrements.
+///
+/// Installed on the API router **only** — health endpoints
+/// (`/healthz`, `/readyz`, `/infoz`) bypass the gate per design §2.2.
+pub(crate) async fn reconfig_gate_middleware(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> Response {
+    let _guard = match state.coordinator.try_admit() {
+        Ok(guard) => guard,
+        Err(()) => {
+            let mut resp = error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "server reconfiguring; retry shortly",
+                state.opaque_errors,
+            );
+            resp.headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from_static("5"));
+            return resp;
+        }
+    };
     next.run(req).await
 }
 
@@ -394,5 +474,108 @@ mod tests {
             let ip: std::net::IpAddr = s.parse().unwrap();
             assert!(!is_private_or_loopback(&ip), "{s} should be public");
         }
+    }
+
+    // --- reconfig_gate_middleware tests ---
+    //
+    // These exercise the admit-handshake end-to-end through a minimal
+    // axum router so we cover: (a) gate-closed returns 503 + Retry-After,
+    // (b) gate-open increments and decrements inflight via the drop-guard,
+    // (c) the `state.opaque_errors` flag is honored in the 503 body shape.
+    // Full-router integration (gate-closed-bypasses-budget, health-
+    // endpoints-bypass-gate) lives in the Task 13 integration test suite.
+
+    use crate::reconfig::ReconfigCoordinator;
+    use crate::RuntimeSnapshot;
+    use arc_swap::ArcSwap;
+    use axum::body::Body;
+    use axum::http::Request;
+    use axum::routing::get;
+    use axum::Router;
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio_util::sync::CancellationToken;
+    use tower::ServiceExt;
+
+    fn gate_test_router(coord: Arc<ReconfigCoordinator>, opaque_errors: bool) -> Router {
+        // Build a tiny AppState with just the fields reconfig_gate_middleware
+        // touches. The runtime ArcSwap is a throwaway; we never dereference
+        // it in the test path (middleware doesn't touch it).
+        let runtime: Arc<ArcSwap<RuntimeSnapshot>> = Arc::new(ArcSwap::from_pointee(
+            RuntimeSnapshot {
+                converter: vl_convert_rs::converter::VlConverter::new(),
+                config: Arc::new(vl_convert_rs::converter::VlcConfig::default()),
+                generation: 0,
+                config_version: 0,
+            },
+        ));
+        let state = Arc::new(crate::config::AppState {
+            runtime,
+            api_key: None,
+            opaque_errors,
+            require_user_agent: false,
+            readiness: Arc::new(crate::health::ReadinessState::default()),
+            coordinator: coord,
+        });
+
+        Router::new()
+            .route("/api", get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                reconfig_gate_middleware,
+            ))
+            .with_state(state)
+    }
+
+    #[tokio::test]
+    async fn test_gate_open_passes_through() {
+        let coord = ReconfigCoordinator::new(CancellationToken::new(), Duration::from_secs(5));
+        let app = gate_test_router(coord.clone(), false);
+
+        let resp = app
+            .oneshot(Request::builder().uri("/api").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        // InflightGuard dropped with response; counter back to 0.
+        assert_eq!(coord.inflight(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_gate_closed_returns_503_with_retry_after() {
+        let coord = ReconfigCoordinator::new(CancellationToken::new(), Duration::from_secs(5));
+        coord.close_gate();
+        let app = gate_test_router(coord.clone(), false);
+
+        let resp = app
+            .oneshot(Request::builder().uri("/api").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            resp.headers().get(header::RETRY_AFTER).and_then(|v| v.to_str().ok()),
+            Some("5"),
+        );
+        // Admit bumped then decremented; must be 0 after rejection.
+        assert_eq!(coord.inflight(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_gate_closed_opaque_errors_honors_flag() {
+        // With opaque_errors=true the body is empty JSON-less — only the
+        // status carries signal. Retry-After must still be set.
+        let coord = ReconfigCoordinator::new(CancellationToken::new(), Duration::from_secs(5));
+        coord.close_gate();
+        let app = gate_test_router(coord.clone(), /* opaque_errors */ true);
+
+        let resp = app
+            .oneshot(Request::builder().uri("/api").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            resp.headers().get(header::RETRY_AFTER).and_then(|v| v.to_str().ok()),
+            Some("5"),
+        );
     }
 }

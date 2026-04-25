@@ -144,11 +144,17 @@ impl VlConverter {
             .try_init()
             .ok();
 
+        // Apply process-global font state from the config. These calls mutate
+        // shared state; the admin server's `ReconfigScopeGuard` snapshots and
+        // restores these before/after calling `with_config`.
+        crate::text::apply_hot_font_cache(config.google_fonts_cache_size_mb)?;
+        crate::text::set_font_directories(&config.font_directories)?;
+
         let ephemeral_semaphore =
-            if config.allow_per_request_plugins && config.max_ephemeral_workers > 0 {
-                Some(Arc::new(tokio::sync::Semaphore::new(
-                    config.max_ephemeral_workers,
-                )))
+            if config.allow_per_request_plugins {
+                config.max_ephemeral_workers.map(|n| {
+                    Arc::new(tokio::sync::Semaphore::new(n.get()))
+                })
             } else {
                 None
             };
@@ -158,7 +164,7 @@ impl VlConverter {
                 vegaembed_bundles: Default::default(),
                 pool: Default::default(),
                 config,
-                resolved_plugins: Mutex::new(None),
+                resolved_plugins: Mutex::new(Vec::new()),
                 ephemeral_semaphore,
             }),
         })
@@ -185,7 +191,10 @@ impl VlConverter {
             None
         };
         ImageAccessPolicy {
-            allowed_base_urls: parsed,
+            // Always engage the allowlist enforcer — secure-by-default means
+            // an empty list blocks everything rather than falling back to
+            // "allow any http/https".
+            allowed_base_urls: Some(parsed),
             filesystem_root,
         }
     }
@@ -230,8 +239,8 @@ impl VlConverter {
         }
 
         let (pool, ctx) = spawn_worker_pool(self.inner.config.clone())?;
-        if let Some(plugins) = ctx.resolved_plugins.clone() {
-            *self.inner.resolved_plugins.lock().unwrap() = Some(plugins);
+        if !ctx.resolved_plugins.is_empty() {
+            *self.inner.resolved_plugins.lock().unwrap() = ctx.resolved_plugins.clone();
         }
         let sender = pool
             .next_sender()
@@ -332,7 +341,7 @@ impl VlConverter {
         };
 
         // Resolve config-level plugins if needed
-        if self.inner.config.vega_plugins.is_some() {
+        if !self.inner.config.vega_plugins.is_empty() {
             self.warm_up()?;
         }
         let resolved_plugins = self
@@ -369,16 +378,15 @@ impl VlConverter {
             let local = tokio::task::LocalSet::new();
             let result = local.block_on(&rt, async move {
                 let timeout_secs = ctx.config.max_v8_execution_time_secs;
-                let deadline = if timeout_secs > 0 {
-                    Some(std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs))
-                } else {
-                    None
-                };
+                let deadline = timeout_secs.map(|n| {
+                    std::time::Instant::now() + std::time::Duration::from_secs(n.get())
+                });
 
                 // Wrap plugin resolution in tokio::time::timeout if a deadline is set,
                 // since terminate_execution() can't help before V8 exists.
                 let resolved = if let Some(deadline) = deadline {
                     let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                    let configured_secs = timeout_secs.map(|n| n.get()).unwrap_or(0);
                     tokio::time::timeout(
                         remaining,
                         resolve_plugin(
@@ -390,8 +398,8 @@ impl VlConverter {
                     .map_err(|_| {
                         anyhow!(
                             "Conversion timed out during plugin resolution \
-                             (configured: {timeout_secs} seconds). \
-                             Increase max_v8_execution_time_secs or set to 0 for no limit."
+                             (configured: {configured_secs} seconds). \
+                             Increase max_v8_execution_time_secs or omit for no limit."
                         )
                     })?
                     .map_err(|e| anyhow!("Per-request plugin bundling failed: {e}"))?
@@ -417,7 +425,7 @@ impl VlConverter {
                 // Run init, plugin load, and conversion under the timer.
                 let result = async {
                     inner.init_vega().await?;
-                    let plugin_index = inner.ctx.resolved_plugins.as_ref().map_or(0, |p| p.len());
+                    let plugin_index = inner.ctx.resolved_plugins.len();
                     inner
                         .load_plugin(plugin_index, &resolved.bundled_source, false)
                         .await?;
@@ -1626,31 +1634,22 @@ mod tests {
     }
 
     #[test]
-    fn test_with_config_rejects_zero_num_workers() {
-        let err = VlConverter::with_config(VlcConfig {
-            num_workers: 0,
-            ..Default::default()
-        })
-        .err()
-        .unwrap();
-        assert!(err.to_string().contains("num_workers must be >= 1"));
-    }
-
-    #[test]
     fn test_config_reports_configured_num_workers() {
+        use std::num::NonZeroUsize;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: 4,
+            num_workers: NonZeroUsize::new(4).unwrap(),
             ..Default::default()
         })
         .unwrap();
-        assert_eq!(converter.config().num_workers, 4);
+        assert_eq!(converter.config().num_workers.get(), 4);
     }
 
     #[test]
     fn test_get_or_spawn_sender_respawns_closed_pool_without_explicit_reset() {
+        use std::num::NonZeroUsize;
         let num_workers = 2;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers,
+            num_workers: NonZeroUsize::new(num_workers).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1688,8 +1687,9 @@ mod tests {
 
     #[test]
     fn test_get_or_spawn_sender_spawns_pool_without_request() {
+        use std::num::NonZeroUsize;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: 2,
+            num_workers: NonZeroUsize::new(2).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1721,8 +1721,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_or_spawn_sender_is_idempotent() {
+        use std::num::NonZeroUsize;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: 2,
+            num_workers: NonZeroUsize::new(2).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1754,8 +1755,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_parallel_conversions_with_shared_converter() {
+        use std::num::NonZeroUsize;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: 4,
+            num_workers: NonZeroUsize::new(4).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1797,9 +1799,11 @@ mod tests {
         use crate::text::{register_font_directory, FONT_CONFIG_VERSION};
         use std::sync::atomic::Ordering;
 
-        let version_before = FONT_CONFIG_VERSION.load(Ordering::Acquire);
-
-        // Do an initial conversion to ensure the worker is running
+        // Do an initial conversion to ensure the worker is running.
+        // Note: `VlConverter::new()` now calls `set_font_directories` on
+        // construction (Task 0), which also bumps FONT_CONFIG_VERSION;
+        // snapshot the version *after* construction so we're measuring
+        // only the `register_font_directory` bump.
         let ctx = VlConverter::new();
         let vl_spec: serde_json::Value = serde_json::from_str(
             r#"{
@@ -1818,6 +1822,8 @@ mod tests {
         )
         .await
         .unwrap();
+
+        let version_before = FONT_CONFIG_VERSION.load(Ordering::Acquire);
 
         // Register a font directory (re-registers the built-in fonts, which is harmless)
         let font_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/fonts/liberation-sans");
@@ -1885,8 +1891,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_vegaembed_bundle_caches_result() {
+        use std::num::NonZeroUsize;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: 1,
+            num_workers: NonZeroUsize::new(1).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1910,8 +1917,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_bundle_vega_snippet_custom_snippet() {
+        use std::num::NonZeroUsize;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: 1,
+            num_workers: NonZeroUsize::new(1).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1928,7 +1936,7 @@ mod tests {
     #[tokio::test]
     async fn test_svg_helper_denies_subdomain_and_userinfo_url_confusion() {
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec!["https://example.com".to_string()]),
+            allowed_base_urls: vec!["https://example.com".to_string()],
             ..Default::default()
         })
         .unwrap();
@@ -1970,7 +1978,7 @@ mod tests {
         let href = Url::from_file_path(&local_image_path).unwrap().to_string();
 
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![]),
+            allowed_base_urls: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2001,7 +2009,7 @@ mod tests {
 
         let converter = VlConverter::with_config(VlcConfig {
             base_url: BaseUrlSetting::Custom(root.to_string_lossy().to_string()),
-            allowed_base_urls: Some(vec![root.to_string_lossy().to_string()]),
+            allowed_base_urls: vec![root.to_string_lossy().to_string()],
             ..Default::default()
         })
         .unwrap();
@@ -2049,7 +2057,7 @@ mod tests {
         let remote_svg = svg_with_href("https://example.com/image.png");
 
         let no_http_converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![]),
+            allowed_base_urls: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2072,7 +2080,7 @@ mod tests {
         );
 
         let allowlisted_converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec!["https://allowed.example/".to_string()]),
+            allowed_base_urls: vec!["https://allowed.example/".to_string()],
             ..Default::default()
         })
         .unwrap();
@@ -2092,7 +2100,7 @@ mod tests {
     #[tokio::test]
     async fn test_svg_helper_allows_data_uri_when_http_disabled() {
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![]),
+            allowed_base_urls: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2115,7 +2123,7 @@ mod tests {
     #[tokio::test]
     async fn test_vega_to_pdf_denies_http_access() {
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![]),
+            allowed_base_urls: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2138,7 +2146,7 @@ mod tests {
     #[tokio::test]
     async fn test_vega_loader_allows_data_uri_when_http_disabled() {
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![]),
+            allowed_base_urls: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2154,7 +2162,7 @@ mod tests {
     #[tokio::test]
     async fn test_vegalite_to_png_canvas_image_denies_http_access() {
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![]),
+            allowed_base_urls: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2185,7 +2193,7 @@ mod tests {
     #[tokio::test]
     async fn test_vegalite_to_png_canvas_image_enforces_allowed_base_urls() {
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec!["https://allowed.example/".to_string()]),
+            allowed_base_urls: vec!["https://allowed.example/".to_string()],
             ..Default::default()
         })
         .unwrap();
@@ -2215,7 +2223,7 @@ mod tests {
     #[tokio::test]
     async fn test_vega_to_pdf_denies_disallowed_base_url() {
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec!["https://allowed.example/".to_string()]),
+            allowed_base_urls: vec!["https://allowed.example/".to_string()],
             ..Default::default()
         })
         .unwrap();
@@ -2238,7 +2246,7 @@ mod tests {
         let outside_file_url = Url::from_file_path(&outside_csv).unwrap().to_string();
 
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![root.to_string_lossy().to_string()]),
+            allowed_base_urls: vec![root.to_string_lossy().to_string()],
             ..Default::default()
         })
         .unwrap();
@@ -2273,7 +2281,7 @@ mod tests {
 
         let converter = VlConverter::with_config(VlcConfig {
             base_url: BaseUrlSetting::Custom(root.to_string_lossy().to_string()),
-            allowed_base_urls: Some(vec![root.to_string_lossy().to_string()]),
+            allowed_base_urls: vec![root.to_string_lossy().to_string()],
             ..Default::default()
         })
         .unwrap();
@@ -2309,7 +2317,7 @@ mod tests {
             ),
         )]);
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![server.origin()]),
+            allowed_base_urls: vec![server.origin()],
             ..Default::default()
         })
         .unwrap();
@@ -2362,8 +2370,8 @@ mod tests {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
                 config: VlcConfig::default(),
-                parsed_allowed_base_urls: None,
-                resolved_plugins: None,
+                parsed_allowed_base_urls: Vec::new(),
+                resolved_plugins: Vec::new(),
             }),
             get_font_baseline_snapshot().unwrap(),
         )
@@ -2397,5 +2405,88 @@ mod tests {
             msg.contains("permission") || msg.contains("denied") || msg.contains("requires net"),
             "fetch() should be blocked by Deno permissions, got: {msg}"
         );
+    }
+
+    /// The new default `allowed_base_urls = vec![]` must block all network
+    /// data — callers can no longer rely on an implicit "any http/https"
+    /// default.
+    #[tokio::test]
+    async fn allowed_base_urls_empty_blocks_all() {
+        let converter = VlConverter::with_config(VlcConfig {
+            allowed_base_urls: vec![],
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vega_spec_with_data_url("https://example.com/data.csv");
+        let err = converter
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
+            .await
+            .unwrap_err();
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("denied")
+                || msg.contains("not allowed")
+                || msg.contains("requires net"),
+            "empty allowlist should block network data, got: {msg}"
+        );
+    }
+
+    /// Callers restore the pre-Task-0 "any http/https" default by passing a
+    /// scheme allowlist.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn allowed_base_urls_scheme_allowlist_works() {
+        let server = TestHttpServer::new(vec![(
+            "/data.csv",
+            TestHttpResponse::ok_text("a,b\n1,2\n"),
+        )]);
+        let converter = VlConverter::with_config(VlcConfig {
+            allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vega_spec_with_data_url(&server.url("/data.csv"));
+        let output = converter
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
+            .await
+            .unwrap();
+        assert!(output.svg.contains("<svg"));
+    }
+
+    /// `VlConverter::with_config` must call `set_font_directories` so that
+    /// rebuilding with a different font list is truly authoritative.
+    #[tokio::test]
+    async fn with_config_font_directories_is_authoritative() {
+        use crate::text::current_font_directories;
+        let prior = current_font_directories();
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dir_a = tmp.path().join("with_cfg_a");
+        let dir_b = tmp.path().join("with_cfg_b");
+        std::fs::create_dir_all(&dir_a).unwrap();
+        std::fs::create_dir_all(&dir_b).unwrap();
+
+        let _ = VlConverter::with_config(VlcConfig {
+            font_directories: vec![dir_a.clone()],
+            ..Default::default()
+        })
+        .unwrap();
+        let after_a = current_font_directories();
+        assert!(after_a.iter().any(|p| p == &dir_a));
+        assert!(!after_a.iter().any(|p| p == &dir_b));
+
+        let _ = VlConverter::with_config(VlcConfig {
+            font_directories: vec![dir_b.clone()],
+            ..Default::default()
+        })
+        .unwrap();
+        let after_b = current_font_directories();
+        assert!(
+            !after_b.iter().any(|p| p == &dir_a),
+            "dir_a must be deregistered when the new config omits it"
+        );
+        assert!(after_b.iter().any(|p| p == &dir_b));
+
+        // Restore prior state so neighbouring tests are unaffected.
+        crate::text::set_font_directories(&prior).unwrap();
     }
 }

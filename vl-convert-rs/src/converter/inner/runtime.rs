@@ -39,11 +39,14 @@ impl InnerVlConverter {
                 return;
             }
 
+            // `max_v8_heap_size_mb` is `Some(..)` when `heap_limit_data` is
+            // set (both initialized together in `try_new`).
             let max_bytes = self
                 .ctx
                 .config
                 .max_v8_heap_size_mb
-                .saturating_mul(1024 * 1024);
+                .map(|n| n.get().saturating_mul(1024 * 1024))
+                .unwrap_or(0);
             let isolate = self.worker.js_runtime.v8_isolate();
 
             // Remove the (already consumed) callback and restore the
@@ -79,12 +82,17 @@ impl InnerVlConverter {
                 let used_mb = stats.used_heap_size() as f64 / (1024.0 * 1024.0);
                 let total_mb = stats.total_heap_size() as f64 / (1024.0 * 1024.0);
                 let external_mb = stats.external_memory() as f64 / (1024.0 * 1024.0);
+                let configured_mb = self
+                    .ctx
+                    .config
+                    .max_v8_heap_size_mb
+                    .map(|n| n.get())
+                    .unwrap_or(0);
                 Err(original.context(format!(
-                    "V8 heap limit exceeded (configured: {} MB). \
+                    "V8 heap limit exceeded (configured: {configured_mb} MB). \
                      Worker memory: {used_mb:.1} MB used, {total_mb:.1} MB total, \
                      {external_mb:.1} MB external. \
-                     Increase max_v8_heap_size_mb or set to 0 for no limit.",
-                    self.ctx.config.max_v8_heap_size_mb,
+                     Increase max_v8_heap_size_mb or omit for no limit.",
                 )))
             }
             other => other,
@@ -99,10 +107,13 @@ impl InnerVlConverter {
         &mut self,
         caller_gone: Arc<std::sync::atomic::AtomicBool>,
     ) -> Option<ConversionTimer> {
-        self.start_conversion_timer_with_duration(
-            std::time::Duration::from_secs(self.ctx.config.max_v8_execution_time_secs),
-            caller_gone,
-        )
+        let duration = self
+            .ctx
+            .config
+            .max_v8_execution_time_secs
+            .map(|n| std::time::Duration::from_secs(n.get()))
+            .unwrap_or_else(|| std::time::Duration::from_secs(0));
+        self.start_conversion_timer_with_duration(duration, caller_gone)
     }
 
     /// Start a conversion timeout timer with an explicit duration. Also monitors
@@ -181,11 +192,18 @@ impl InnerVlConverter {
         result: Result<T, AnyError>,
     ) -> Result<T, AnyError> {
         match result {
-            Err(original) if self.timeout_was_hit() => Err(original.context(format!(
-                "Conversion timed out (configured: {} seconds). \
-                 Increase max_v8_execution_time_secs or set to 0 for no limit.",
-                self.ctx.config.max_v8_execution_time_secs,
-            ))),
+            Err(original) if self.timeout_was_hit() => {
+                let configured = self
+                    .ctx
+                    .config
+                    .max_v8_execution_time_secs
+                    .map(|n| n.get())
+                    .unwrap_or(0);
+                Err(original.context(format!(
+                    "Conversion timed out (configured: {configured} seconds). \
+                     Increase max_v8_execution_time_secs or omit for no limit.",
+                )))
+            }
             other => other,
         }
     }

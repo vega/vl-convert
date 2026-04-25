@@ -1,9 +1,10 @@
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use vl_convert_rs::converter::{FormatLocale, GoogleFontRequest, LogEntry, TimeFormatLocale};
+use vl_convert_rs::converter::{
+    FormatLocale, GoogleFontRequest, LogEntry, TimeFormatLocale, VlcConfig,
+};
 
 use crate::types::ErrorResponse;
-use crate::AppState;
 
 pub(crate) fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
     logs.iter()
@@ -115,7 +116,7 @@ pub(crate) trait CommonOptsInput {
 
 pub(crate) fn validate_common_opts(
     req: &impl CommonOptsInput,
-    state: &AppState,
+    config: &VlcConfig,
 ) -> Result<CommonOpts, String> {
     let format_locale = req
         .format_locale()
@@ -143,11 +144,11 @@ pub(crate) fn validate_common_opts(
         .map(|fonts| parse_google_font_args(fonts))
         .transpose()?;
 
-    if google_fonts.is_some() && !state.config.allow_google_fonts {
+    if google_fonts.is_some() && !config.allow_google_fonts {
         return Err("google_fonts requires allow_google_fonts: true in server config".to_string());
     }
 
-    if req.vega_plugin().is_some() && !state.config.allow_per_request_plugins {
+    if req.vega_plugin().is_some() && !config.allow_per_request_plugins {
         return Err(
             "vega_plugin requires allow_per_request_plugins: true in server config".to_string(),
         );

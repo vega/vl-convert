@@ -1,12 +1,15 @@
+use arc_swap::ArcSwap;
 use axum::Router;
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
+use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 use vl_convert_rs::anyhow;
 use vl_convert_rs::converter::{VlConverter, VlcConfig};
 
 use crate::budget::BudgetTracker;
 use crate::listen::ListenAddr;
+use crate::reconfig::ReconfigCoordinator;
 use crate::{health, json_fmt};
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default, PartialEq, Eq)]
@@ -55,6 +58,12 @@ pub struct ServeConfig {
     /// disables auth on the main listener; on UDS this is the intended
     /// default because filesystem permissions are the trust boundary.
     pub api_key: Option<String>,
+    /// Optional bearer token for the admin listener. Independent of
+    /// `api_key`. When `Some`, `admin_auth_middleware` rejects every
+    /// admin request lacking the correct Bearer. When `None`, the admin
+    /// surface is listener-gated only (UDS `0o600` or TCP loopback).
+    /// Non-loopback TCP admin with no key bails at startup.
+    pub admin_api_key: Option<String>,
     /// CORS `Access-Control-Allow-Origin` override. When `None`, the
     /// default predicate accepts only loopback origins (safe for local
     /// development). Ignored on UDS where browsers can't connect.
@@ -108,6 +117,11 @@ pub struct ServeConfig {
     /// immediately after bind. Ignored on TCP-only listeners and on
     /// Windows (where UDS is absent). Default `0o600`.
     pub socket_mode: u32,
+    /// Per-reconfig drain timeout in seconds. Defaults to match the binary
+    /// `--drain-timeout-secs` at resolve time. Distinct from the binary's
+    /// shutdown drain because reconfig is admin-initiated and typically
+    /// tolerates a longer wait than pod-eviction grace.
+    pub reconfig_drain_timeout_secs: u64,
 }
 
 impl Default for ServeConfig {
@@ -119,6 +133,7 @@ impl Default for ServeConfig {
             },
             admin: None,
             api_key: None,
+            admin_api_key: None,
             cors_origin: None,
             max_concurrent_requests: None,
             request_timeout_secs: 30,
@@ -131,17 +146,49 @@ impl Default for ServeConfig {
             budget_hold_ms: 1000,
             trust_proxy: false,
             socket_mode: 0o600,
+            reconfig_drain_timeout_secs: 30,
         }
     }
 }
 
-pub(crate) struct AppState {
+/// Immutable point-in-time view of the converter + effective config.
+///
+/// Handlers call `state.runtime.load_full()` exactly once at entry and use the
+/// returned `Arc<RuntimeSnapshot>` for the rest of the request. This gives each
+/// request a stable view that cannot be swapped out from under it mid-flight,
+/// which is important for multi-step conversions that might otherwise observe
+/// two different `VlcConfig` values. The admin reconfig path replaces the
+/// snapshot atomically via `ArcSwap::store`; in-flight requests keep their
+/// old `Arc` alive until the next yield point.
+pub(crate) struct RuntimeSnapshot {
     pub converter: VlConverter,
-    pub config: VlcConfig,
+    pub config: Arc<VlcConfig>,
+    /// Bumps on every rebuild-commit (drain+rebuild path). Exposed through
+    /// admin endpoints; not used on the conversion hot path.
+    //
+    // Task 6 (admin.rs rewrite) and Task 8 (/admin/config surface) will read
+    // this. Suppress the dead-code lint until then.
+    #[allow(dead_code)]
+    pub generation: u64,
+    /// Bumps on every successful commit (including hot-apply paths that don't
+    /// rebuild the converter). `generation <= config_version` always.
+    #[allow(dead_code)]
+    pub config_version: u64,
+}
+
+pub(crate) struct AppState {
+    pub runtime: Arc<ArcSwap<RuntimeSnapshot>>,
     pub api_key: Option<ApiKey>,
     pub opaque_errors: bool,
     pub require_user_agent: bool,
-    pub readiness: health::ReadinessState,
+    pub readiness: Arc<health::ReadinessState>,
+    /// Shared with the gate middleware (main router) and admin handlers so
+    /// every drain-participating actor works against the same coordinator.
+    //
+    // Task 4 (install gate middleware) and Task 6 (admin.rs rewrite) will be
+    // the first consumers. Suppress the dead-code lint until they land.
+    #[allow(dead_code)]
+    pub coordinator: Arc<ReconfigCoordinator>,
 }
 
 pub(crate) struct ApiKey(String);
@@ -163,9 +210,16 @@ impl ApiKey {
 pub struct BuiltApp {
     /// The main app router with all middleware applied.
     pub router: Router,
-    /// The underlying converter handle, for callers that want to drive
-    /// conversions programmatically in addition to serving HTTP.
-    pub converter: VlConverter,
+    /// Atomic holder for the current converter + config. Cloned into
+    /// `AppState` for the router; exposed through
+    /// [`Self::current_converter`] / [`Self::current_config`] for callers
+    /// that want to drive conversions programmatically alongside serving HTTP.
+    pub(crate) runtime: Arc<ArcSwap<RuntimeSnapshot>>,
+    /// Shared shutdown signal used by [`crate::serve`] and by the admin
+    /// reconfig path (via `coordinator.shutdown_token()`). Populated in
+    /// `build_app`; `serve()` clones it so cancellations observed by the
+    /// coordinator also abort the main / admin listeners.
+    pub(crate) shutdown_token: CancellationToken,
     /// Budget tracker. Consumed by [`crate::serve`] to drive the refill loop.
     pub(crate) tracker: Option<Arc<BudgetTracker>>,
     /// Admin listener setup. Consumed by [`crate::serve`] to bind and serve.
@@ -186,6 +240,19 @@ impl BuiltApp {
     pub fn admin_endpoint_info(&self) -> Option<crate::EndpointInfo> {
         self.admin.as_ref().map(|a| a.listener.endpoint_info())
     }
+
+    /// The converter handle currently backing the server. Freshly loaded
+    /// from the runtime snapshot on every call — callers that expect a
+    /// stable view across multiple reads should retain the returned clone.
+    pub fn current_converter(&self) -> VlConverter {
+        self.runtime.load_full().converter.clone()
+    }
+
+    /// The `VlcConfig` currently backing the server. Returned as `Arc`
+    /// because the runtime snapshot owns it; callers must not mutate.
+    pub fn current_config(&self) -> Arc<VlcConfig> {
+        self.runtime.load_full().config.clone()
+    }
 }
 
 pub(crate) struct AdminConfig {
@@ -195,34 +262,6 @@ pub(crate) struct AdminConfig {
     /// log lines don't re-query `local_addr()` on every spawn.
     pub addr: String,
     pub router: Router,
-}
-
-/// Apply server-safe defaults to a VlcConfig. Called from [`crate::build_app`]
-/// so every entry into the server gets hardened defaults regardless of
-/// whether the caller remembered to set them.
-pub(crate) fn apply_server_defaults(config: &mut VlcConfig) {
-    if config.allowed_base_urls.is_none() {
-        config.allowed_base_urls = Some(vec![]);
-        log::info!(
-            "Data access disabled by default in server mode. \
-             Use --data-access=allowlist with --allowed-base-urls to allow \
-             specific URLs or file paths."
-        );
-    }
-    if config.max_v8_heap_size_mb == 0 {
-        config.max_v8_heap_size_mb = 512;
-        log::info!(
-            "Defaulting to 512MB V8 heap limit per worker \
-             (override with --max-v8-heap-size-mb)"
-        );
-    }
-    if config.allow_per_request_plugins && config.max_ephemeral_workers == 0 {
-        config.max_ephemeral_workers = 2;
-        log::info!(
-            "Limiting ephemeral plugin workers to 2 \
-             (override with --max-ephemeral-workers)"
-        );
-    }
 }
 
 pub(crate) fn validate_serve_config(serve_config: &ServeConfig) -> Result<(), anyhow::Error> {

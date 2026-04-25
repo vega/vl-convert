@@ -10577,6 +10577,7 @@ dependencies = [
 name = "vl-convert-server"
 version = "2.0.0-rc1"
 dependencies = [
+ "arc-swap",
  "assert_cmd",
  "axum",
  "bytes",

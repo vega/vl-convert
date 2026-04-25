@@ -195,3 +195,171 @@ class of silent rate-limit bypass bugs.
 
 `None` correctly skips the per-IP dimension; the global
 compute-budget dimension still applies.
+
+## Admin reconfig & drain
+
+Runtime reconfiguration of the server lives under the admin listener:
+`GET/PATCH/PUT/DELETE /admin/config` + `POST /admin/config/fonts/directories`.
+Every `VlcConfig` field is mutable via the bulk `PATCH` surface; `PUT`
+full-replaces; `DELETE` resets to the startup baseline (see below).
+
+### Baseline = normalized-at-startup
+
+`build_app` calls `VlConverter::with_config(cli_config)`, which normalizes
+the input (inlines file-backed `vega_plugins` source, auto-populates
+`plugin_import_domains` from URL plugins, resolves locale aliases, etc.)
+before the workers see it. The admin **baseline** — the target that
+`DELETE /admin/config` resets to — is captured via `converter.config()`
+**after** normalization, so `baseline == initial effective == what the
+workers actually run`. Seeding baseline from the pre-normalized CLI
+input would let `GET /admin/config` report a stale `effective` view
+and let an identity `PUT`/`DELETE` unintentionally replay the
+unresolved values. The "CLI/env-resolved config" *is* the baseline,
+but only after the library's own normalization pass has run on it.
+
+### Runtime snapshot via `ArcSwap`
+
+`AppState.runtime` and `AdminState.runtime` are the **same** `Arc<ArcSwap<RuntimeSnapshot>>`
+(shared by `Arc` identity; guarded by `test_admin_state_composition`). A
+`RuntimeSnapshot` is `{ converter, config: Arc<VlcConfig>, generation, config_version }`.
+Request handlers call `state.runtime.load_full()` **once** at function entry
+and use `snap.converter` + `&snap.config` for the remainder — never
+`state.runtime.load()` which returns a `Guard<'_>` unsafe across `.await`.
+
+A reconfig commit is one `ArcSwap::store(new_snapshot)` call, observed
+atomically by every handler's next `load_full()` and by `/readyz`'s
+health check. No partial-view window exists.
+
+### Drain-then-rebuild semantics
+
+Because `vl-convert-rs` has no hot-apply setters (every field except
+`google_fonts_cache_size_mb` and `font_directories`), a committed
+admin mutation that touches *any* other field goes through a
+**drain-then-rebuild-then-swap** pipeline:
+
+1. Close the gate (`AtomicBool::store(true, SeqCst)`).
+2. Drain: wait for `inflight` counter to reach zero, bounded by
+   `reconfig_drain_timeout_secs` (default mirrors `drain_timeout_secs`).
+3. Snapshot prior process-globals (`font_directories`, cache size) so
+   they can be rolled back on failure.
+4. Build the new `VlConverter` (which mutates globals via
+   `set_font_directories` + `apply_hot_font_cache`).
+5. `warm_up()` — on failure, roll back globals via the `ReconfigScopeGuard`'s
+   armed closure.
+6. On success: swap snapshot, `generation + 1`, `config_version + 1`,
+   disarm rollback, reopen gate.
+
+### Race-free admission handshake
+
+Every admitted request uses **increment-first, recheck-after**:
+
+```rust
+self.inflight.fetch_add(1, SeqCst);
+if self.gate_closed.load(SeqCst) {
+    self.inflight.fetch_sub(1, SeqCst);
+    self.drained.notify_waiters();
+    return Err(());
+}
+```
+
+Without this sequence, a request observing "gate open" could be
+preempted and increment *after* the drain loop decided `inflight == 0`.
+All three atomics (gate flag, counter, guard-drop decrement) use SeqCst
+so they share a single total order.
+
+The drain loop registers `Notify::notified()` **before** reading the
+counter and uses a single absolute `sleep_until(deadline)` for the
+whole drain window — **not** a recomputed sleep per iteration.
+
+### Hot-apply short-circuit
+
+`requires_rebuild(cur, new)` returns `false` only when the only
+fields that differ are `google_fonts_cache_size_mb` or
+`font_directories`. The hot-apply path calls
+`apply_hot_font_cache` / `set_font_directories` directly and swaps a
+new snapshot with the **same** converter, `generation` unchanged,
+`config_version + 1`. No drain.
+
+### Gate middleware ordering
+
+`reconfig_gate_middleware` is the *last* `.layer()` call on `api_router`
+→ axum applies layers bottom-up → runs *outermost*. Gate-closed 503
+responses skip budget / auth / UA entirely; the gate is a
+server-availability signal, not a per-client concern. Health routes
+(`/healthz`, `/readyz`, `/infoz`) bypass the gate (they're merged into
+the top-level router separately, after the api_router's layer stack).
+
+### `ReconfigScopeGuard` for drop-safe abort
+
+The admin handler installs a scope guard after acquiring
+`coordinator.lock()`. On any exit path (`return`, `?`, panic caught by
+`CatchPanicLayer`, client disconnect drop), the guard's `Drop`:
+
+1. **Fires any armed rollback closure first** (restores globals to
+   pre-rebuild state).
+2. Reopens the gate if the handler had closed it.
+3. Clears `readiness.reconfig_in_progress`.
+
+**Ordering is load-bearing**: the rollback MUST run before the gate
+reopens, otherwise a request admitted in the window between
+`open_gate` and the rollback closure firing would observe the
+pre-rollback process-globals (a failed `with_config` that mutated
+`FONT_CONFIG` / Google Fonts cache) combined with the still-old
+`RuntimeSnapshot` — effectively serving traffic against a config that
+was never committed. Running rollback first guarantees: when the gate
+reopens, globals are either committed (success path, rollback
+disarmed) or restored (failure path, rollback fired).
+
+The rollback closure is armed only after globals are mutated (Step 3
+of the rebuild pipeline) and disarmed only after the commit succeeds
+(Step 6). A failed `warm_up`, a timeout, a panic, or a dropped admin
+client all trigger the rollback. See `src/reconfig.rs` + design §2.6.1.
+
+### `generation` is admin-only, `config_version` tracks all commits
+
+- `generation` — bumps on every **rebuild commit**. Exposed on
+  `GET /admin/config` only. NOT on `/infoz` (public surface stays
+  stable; `test_infoz_surface_unchanged` guards against regression).
+- `config_version` — bumps on every **successful commit** including
+  hot-apply. Also admin-only.
+
+Wrappers that care about "did my mutation take effect" use
+`config_version`; operators who care about "did the worker pool
+rebuild" use `generation`.
+
+### Admin auth
+
+Separate from main's `--api-key`. `--admin-api-key` /
+`VLC_ADMIN_API_KEY` is optional (listener placement is the default
+trust boundary), with a hard bail at startup for the
+non-loopback-TCP-admin-without-key case (via `advise_admin_security`
+in `main.rs`).
+
+### SIGTERM wins over in-progress reconfig
+
+The `ReconfigCoordinator.shutdown_token` is the **same** token
+`serve()` watches. `drain()` `select!`s against its `cancelled()`
+future with `biased;` so shutdown fires before any `Notify` wakeup
+or deadline. A SIGTERM mid-rebuild returns 503 `"server shutting down"`
+to the admin caller and lets the outer drain watchdog proceed;
+globals roll back via the scope guard.
+
+### `null` = natural JSON ↔ Option
+
+`PATCH /admin/config {"max_v8_heap_size_mb": null}` sets the field to
+`None` (unbounded — the *only* way to express "no cap" after the
+sentinel-zero removal). `PATCH {"allowed_base_urls": null}` is a **400**
+because `allowed_base_urls: Vec<String>` isn't nullable. "Reset to
+library default" has no field-level PATCH primitive; use `DELETE` or
+pass the explicit default value.
+
+### Single source of truth for font directories
+
+Library state (`FONT_CONFIG.font_dirs`) is authoritative. The
+`VlcConfig.font_directories` field on the current snapshot mirrors it
+exactly after Task 0's `set_font_directories` API was added.
+`PATCH/PUT` with a `font_directories` list calls `set_font_directories`
+which replaces the global wholesale (including deregistering dropped
+entries); `POST /admin/config/fonts/directories` appends a single path
+via `register_font_directory`. Both paths hot-apply — no rebuild, no
+drain.

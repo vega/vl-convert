@@ -23,7 +23,7 @@ fn test_log_level_warn_shows_warnings() -> Result<(), Box<dyn std::error::Error>
     initialize();
     let spec = log_scale_spec();
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("--log-level")
         .arg("warn")
@@ -54,7 +54,7 @@ fn test_log_level_error_hides_warnings() -> Result<(), Box<dyn std::error::Error
     initialize();
     let spec = log_scale_spec();
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("--log-level")
         .arg("error")

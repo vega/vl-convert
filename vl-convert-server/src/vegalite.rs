@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use vl_convert_rs::converter::{
     vegalite_to_url as converter_vegalite_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer,
-    SvgOpts, UrlOpts, VlOpts,
+    SvgOpts, UrlOpts, VlOpts, VlcConfig,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 
@@ -21,11 +21,11 @@ use crate::util::{
     append_vlc_logs_header, error_response, format_log_entries, validate_common_opts,
 };
 
-fn build_vl_opts(req: &VegaliteCommon, state: &AppState) -> Result<VlOpts, String> {
+fn build_vl_opts(req: &VegaliteCommon, config: &VlcConfig) -> Result<VlOpts, String> {
     let vl_version = VlVersion::from_str(&req.vl_version)
         .map_err(|_| format!("invalid vl_version: {}", req.vl_version))?;
 
-    let common = validate_common_opts(req, state)?;
+    let common = validate_common_opts(req, config)?;
 
     Ok(VlOpts {
         config: common.config,
@@ -56,13 +56,14 @@ pub async fn vegalite_to_vega(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaliteVegaRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vl_opts = match build_vl_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
     let spec = req.common.spec;
 
-    match state.converter.vegalite_to_vega(spec, vl_opts).await {
+    match snap.converter.vegalite_to_vega(spec, vl_opts).await {
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
@@ -109,14 +110,15 @@ pub async fn vegalite_to_svg(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaliteSvgRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vl_opts = match build_vl_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
     let svg_opts = SvgOpts { bundle: req.bundle };
     let spec = req.common.spec;
 
-    match state
+    match snap
         .converter
         .vegalite_to_svg(spec, vl_opts, svg_opts)
         .await
@@ -154,7 +156,8 @@ pub async fn vegalite_to_png(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegalitePngRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vl_opts = match build_vl_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -164,7 +167,7 @@ pub async fn vegalite_to_png(
     };
     let spec = req.common.spec;
 
-    match state
+    match snap
         .converter
         .vegalite_to_png(spec, vl_opts, png_opts)
         .await
@@ -202,7 +205,8 @@ pub async fn vegalite_to_jpeg(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaliteJpegRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vl_opts = match build_vl_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -212,7 +216,7 @@ pub async fn vegalite_to_jpeg(
     };
     let spec = req.common.spec;
 
-    match state
+    match snap
         .converter
         .vegalite_to_jpeg(spec, vl_opts, jpeg_opts)
         .await
@@ -250,13 +254,14 @@ pub async fn vegalite_to_pdf(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegalitePdfRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vl_opts = match build_vl_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
     let spec = req.common.spec;
 
-    match state
+    match snap
         .converter
         .vegalite_to_pdf(spec, vl_opts, PdfOpts::default())
         .await
@@ -294,7 +299,8 @@ pub async fn vegalite_to_html(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaliteHtmlRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vl_opts = match build_vl_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -315,7 +321,7 @@ pub async fn vegalite_to_html(
     };
     let spec = req.common.spec;
 
-    match state
+    match snap
         .converter
         .vegalite_to_html(spec, vl_opts, html_opts)
         .await
@@ -384,7 +390,8 @@ pub async fn vegalite_scenegraph(
     headers: HeaderMap,
     Json(req): Json<VegaliteScenegraphRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vl_opts = match build_vl_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -392,7 +399,7 @@ pub async fn vegalite_scenegraph(
     let wants_msgpack = preferred_scenegraph_format(&headers) == ScenegraphFormat::Msgpack;
 
     if wants_msgpack {
-        match state
+        match snap
             .converter
             .vegalite_to_scenegraph_msgpack(spec, vl_opts)
             .await
@@ -414,7 +421,7 @@ pub async fn vegalite_scenegraph(
             ),
         }
     } else {
-        match state.converter.vegalite_to_scenegraph(spec, vl_opts).await {
+        match snap.converter.vegalite_to_scenegraph(spec, vl_opts).await {
             Ok(output) => {
                 let mut resp_headers = HeaderMap::new();
                 append_vlc_logs_header(&mut resp_headers, &format_log_entries(&output.logs));
@@ -462,21 +469,22 @@ pub async fn vegalite_fonts(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaliteFontsRequest>,
 ) -> Response {
-    let vl_opts = match build_vl_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vl_opts = match build_vl_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
     let spec = req.common.spec;
 
-    match state
+    match snap
         .converter
         .vegalite_fonts(
             spec,
             vl_opts,
-            state.config.auto_google_fonts,
-            state.config.embed_local_fonts,
+            snap.config.auto_google_fonts,
+            snap.config.embed_local_fonts,
             req.include_font_face,
-            state.config.subset_fonts,
+            snap.config.subset_fonts,
         )
         .await
     {

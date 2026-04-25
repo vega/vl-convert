@@ -18,7 +18,8 @@ use crate::util::{append_vlc_logs_header, error_response};
     tag = "Themes"
 )]
 pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
-    let result = state.converter.get_themes().await;
+    let snap = state.runtime.load_full();
+    let result = snap.converter.get_themes().await;
     let mut headers = HeaderMap::new();
     append_vlc_logs_header(&mut headers, &[]);
 
@@ -58,7 +59,8 @@ pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
     tag = "Themes"
 )]
 pub async fn get_theme(State(state): State<Arc<AppState>>, Path(name): Path<String>) -> Response {
-    let result = state.converter.get_themes().await;
+    let snap = state.runtime.load_full();
+    let result = snap.converter.get_themes().await;
     let mut headers = HeaderMap::new();
     append_vlc_logs_header(&mut headers, &[]);
 

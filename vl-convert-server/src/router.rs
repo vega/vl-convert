@@ -16,7 +16,7 @@ use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::middleware::{auth_middleware, user_agent_middleware};
+use crate::middleware::{auth_middleware, reconfig_gate_middleware, user_agent_middleware};
 use crate::util::error_response;
 use crate::{
     budget, bundling, health, json_fmt, svg, themes, vega, vegalite, AppState, LogFormat,
@@ -97,7 +97,11 @@ pub(crate) fn build_router(
             ));
     }
 
-    // Auth and UA middleware only on API routes — health endpoints are exempt
+    // Auth and UA middleware only on API routes — health endpoints are exempt.
+    // The reconfig gate is installed *last* so it runs *outermost* on the
+    // API router (axum `.layer()` is applied bottom-up → last call wraps
+    // first). A gate-closed 503 skips budget / auth / UA; the gate is a
+    // server-availability signal, not a per-client concern.
     let api_router = api_router
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -106,6 +110,10 @@ pub(crate) fn build_router(
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             user_agent_middleware,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            reconfig_gate_middleware,
         ));
 
     health_router.merge(api_router).with_state(state)
@@ -228,7 +236,11 @@ pub(crate) fn build_middleware_stack(router: Router, serve_config: &ServeConfig)
             tower::ServiceBuilder::new()
                 .layer(HandleErrorLayer::new(
                     move |_: tower::BoxError| async move {
-                        error_response(StatusCode::SERVICE_UNAVAILABLE, "request timed out", opaque)
+                        // 504 Gateway Timeout distinguishes execution-time
+                        // overrun from 503 (overload / reconfig gate / load
+                        // shed). Callers can apply different retry/backoff
+                        // behaviour depending on the status code.
+                        error_response(StatusCode::GATEWAY_TIMEOUT, "request timed out", opaque)
                     },
                 ))
                 .layer(TimeoutLayer::new(Duration::from_secs(

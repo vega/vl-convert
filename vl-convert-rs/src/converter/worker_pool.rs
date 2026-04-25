@@ -165,16 +165,14 @@ pub(crate) const MIN_V8_HEAP_SIZE_MB: usize = 64;
 pub(crate) fn spawn_worker_pool(
     config: Arc<VlcConfig>,
 ) -> Result<(WorkerPool, Arc<ConverterContext>), AnyError> {
-    let num_workers = config.num_workers;
-    if num_workers < 1 {
-        bail!("num_workers must be >= 1");
-    }
+    // `num_workers` is `NonZeroUsize`; type-enforced ≥ 1.
+    let num_workers = config.num_workers.get();
     ensure_v8_platform_initialized();
 
     // Resolve plugins before spawning workers (needs async for HTTP + deno_emit).
     // Runs on a dedicated thread with its own tokio runtime to avoid
     // "nested runtime" panics when called from Python's async path.
-    let resolved_plugins = if config.vega_plugins.is_some() {
+    let resolved_plugins = if !config.vega_plugins.is_empty() {
         let config_ref = config.clone();
         std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -186,7 +184,7 @@ pub(crate) fn spawn_worker_pool(
         .join()
         .map_err(|_| anyhow!("Plugin resolver thread panicked"))??
     } else {
-        None
+        Vec::new()
     };
 
     let parsed_allowed_base_urls = parse_allowed_base_urls_from_config(&config)?;

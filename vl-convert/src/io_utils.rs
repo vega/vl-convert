@@ -1,16 +1,26 @@
 use std::io::{self, IsTerminal, Read, Write};
+use std::path::PathBuf;
 use std::str::FromStr;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{FormatLocale, GoogleFontRequest, TimeFormatLocale, VlcConfig};
 use vl_convert_rs::module_loader::import_map::VlVersion;
-use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
-pub(crate) fn register_font_dir(dir: Option<String>) -> Result<(), anyhow::Error> {
+/// Merge a `--font-dir` value into the base config's `font_directories`.
+///
+/// The library's `VlConverter::with_config` treats `VlcConfig.font_directories`
+/// as the authoritative replace target (via `set_font_directories`), so the
+/// CLI has to write the flag into the config *before* the converter is
+/// constructed. Previously this function called `register_font_directory`
+/// directly on the process-global store, which `with_config` then wiped on
+/// the next replace.
+pub(crate) fn merge_font_dir(config: &mut VlcConfig, dir: Option<String>) {
     if let Some(dir) = dir {
-        register_font_directory(&dir)?
+        let path = PathBuf::from(dir);
+        if !config.font_directories.contains(&path) {
+            config.font_directories.push(path);
+        }
     }
-    Ok(())
 }
 
 /// Parse a `--google-font` value like `"Roboto"` or `"Roboto:400,700italic"`

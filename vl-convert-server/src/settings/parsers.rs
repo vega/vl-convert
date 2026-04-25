@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::Read;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::{Path, PathBuf};
 use tracing_subscriber::EnvFilter;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
@@ -241,6 +242,78 @@ pub(super) fn parse_nullable_i64(raw: &str, what: String) -> Result<Option<i64>,
     } else {
         parse_i64(raw, what).map(Some)
     }
+}
+
+/// Clap `value_parser` for `--num-workers`: positive-integer → `NonZeroUsize`.
+/// Rejects `0` at parse time (clap surfaces the error message inline with the flag).
+pub(super) fn parse_non_zero_usize_arg(raw: &str) -> Result<NonZeroUsize, String> {
+    let parsed: usize = raw
+        .trim()
+        .parse()
+        .map_err(|err| format!("invalid unsigned integer '{raw}': {err}"))?;
+    NonZeroUsize::new(parsed)
+        .ok_or_else(|| "must be a positive integer (>= 1)".to_string())
+}
+
+/// CLI-friendly `usize` cap: `0` is accepted as a shorthand for "no cap"
+/// (→ `None`), positive values parse to `Some(NonZeroUsize)`. The `0`
+/// shorthand preserves backward ergonomics; the library field itself
+/// rejects a literal `NonZeroUsize(0)` (can't construct it).
+pub(super) fn parse_optional_non_zero_usize(
+    raw: &str,
+    what: String,
+) -> Result<Option<NonZeroUsize>, anyhow::Error> {
+    if is_null_literal(raw) {
+        return Ok(None);
+    }
+    let value: usize = raw
+        .trim()
+        .parse()
+        .map_err(|err| anyhow!("Invalid {what} '{raw}': {err}"))?;
+    Ok(NonZeroUsize::new(value))
+}
+
+/// Same shape as `parse_optional_non_zero_usize` but for `NonZeroU64`.
+pub(super) fn parse_optional_non_zero_u64(
+    raw: &str,
+    what: String,
+) -> Result<Option<NonZeroU64>, anyhow::Error> {
+    if is_null_literal(raw) {
+        return Ok(None);
+    }
+    let value: u64 = raw
+        .trim()
+        .parse()
+        .map_err(|err| anyhow!("Invalid {what} '{raw}': {err}"))?;
+    Ok(NonZeroU64::new(value))
+}
+
+/// Env-side parser for `VLC_GOOGLE_FONTS_CACHE_SIZE_MB`: accepts `null`
+/// → `None`, `0` → `None` (library default), positive → `Some(NZ(n))`.
+/// Keeps symmetry with the CLI flag (clap Option<u64> with `0` shorthand).
+pub(super) fn parse_cache_size_mb(
+    raw: &str,
+    what: String,
+) -> Result<Option<NonZeroU64>, anyhow::Error> {
+    parse_optional_non_zero_u64(raw, what)
+}
+
+/// Env-side parser for `VLC_FONT_DIR`. Linux/macOS: colon-separated
+/// list (mirrors PATH). Windows: semicolon-separated. Empty entries
+/// (from leading/trailing/duplicate separators) are skipped so
+/// `VLC_FONT_DIR=:/a:` produces `[/a]` rather than `["", "/a", ""]`.
+/// Each entry is trimmed and tilde-expanded.
+pub(super) fn parse_font_dir_list(raw: &str) -> Vec<PathBuf> {
+    #[cfg(windows)]
+    const SEP: char = ';';
+    #[cfg(not(windows))]
+    const SEP: char = ':';
+
+    raw.split(SEP)
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(expand_path)
+        .collect()
 }
 
 fn is_null_literal(raw: &str) -> bool {
@@ -740,6 +813,79 @@ mod tests {
         assert!(parse_socket_mode_arg("9").is_err());
         assert!(parse_socket_mode_arg("garbage").is_err());
         assert!(parse_socket_mode_arg("").is_err());
+    }
+
+    #[test]
+    fn test_parse_non_zero_usize_arg_accepts_positive() {
+        assert_eq!(parse_non_zero_usize_arg("1").unwrap(), NonZeroUsize::new(1).unwrap());
+        assert_eq!(parse_non_zero_usize_arg("42").unwrap(), NonZeroUsize::new(42).unwrap());
+    }
+
+    #[test]
+    fn test_parse_non_zero_usize_arg_rejects_zero() {
+        let err = parse_non_zero_usize_arg("0").unwrap_err();
+        assert!(err.contains("positive"), "got: {err}");
+    }
+
+    #[test]
+    fn test_parse_non_zero_usize_arg_rejects_non_numeric() {
+        assert!(parse_non_zero_usize_arg("abc").is_err());
+        assert!(parse_non_zero_usize_arg("").is_err());
+    }
+
+    #[test]
+    fn test_parse_optional_non_zero_usize_zero_shorthand_is_none() {
+        assert_eq!(
+            parse_optional_non_zero_usize("0", "what".to_string()).unwrap(),
+            None,
+        );
+        assert_eq!(
+            parse_optional_non_zero_usize("null", "what".to_string()).unwrap(),
+            None,
+        );
+        assert_eq!(
+            parse_optional_non_zero_usize("512", "what".to_string()).unwrap(),
+            NonZeroUsize::new(512),
+        );
+    }
+
+    #[test]
+    fn test_parse_optional_non_zero_u64_zero_shorthand_is_none() {
+        assert_eq!(
+            parse_optional_non_zero_u64("0", "what".to_string()).unwrap(),
+            None,
+        );
+        assert_eq!(
+            parse_optional_non_zero_u64("100", "what".to_string()).unwrap(),
+            NonZeroU64::new(100),
+        );
+    }
+
+    #[test]
+    fn test_parse_font_dir_list_splits_on_separator() {
+        #[cfg(not(windows))]
+        {
+            assert_eq!(
+                parse_font_dir_list("/a:/b:/c"),
+                vec![
+                    PathBuf::from("/a"),
+                    PathBuf::from("/b"),
+                    PathBuf::from("/c"),
+                ],
+            );
+            assert_eq!(
+                parse_font_dir_list(":/a::/b:"),
+                vec![PathBuf::from("/a"), PathBuf::from("/b")],
+            );
+            assert_eq!(parse_font_dir_list(""), Vec::<PathBuf>::new());
+        }
+        #[cfg(windows)]
+        {
+            assert_eq!(
+                parse_font_dir_list("C:/a;C:/b"),
+                vec![PathBuf::from("C:/a"), PathBuf::from("C:/b")],
+            );
+        }
     }
 
     #[test]

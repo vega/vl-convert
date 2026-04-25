@@ -627,7 +627,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(slow_response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(slow_response.status(), StatusCode::GATEWAY_TIMEOUT);
 
         let fast_response = Service::call(
             &mut app,

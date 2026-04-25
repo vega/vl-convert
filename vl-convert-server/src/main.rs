@@ -14,9 +14,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     vl_convert_server::init_tracing(&resolved.log_filter, resolved.serve_config.log_format);
 
-    if let Some(ref dir) = resolved.font_dir {
-        vl_convert_rs::text::register_font_directory(dir)?;
-    }
+    // `--font-dir` / `VLC_FONT_DIR` entries now live on
+    // `VlcConfig.font_directories`. `VlConverter::with_config` calls
+    // `set_font_directories(&config.font_directories)` during
+    // construction inside `build_app`, so the pre-startup
+    // `register_font_directory` side-effect that used to live here is
+    // no longer needed (and would be redundant / non-authoritative).
 
     // Build the app (admin listener is bound inside build_app via the
     // shared `bind_listener` helper, applying the same probe-then-unlink
@@ -35,6 +38,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let endpoint = listener.endpoint_label();
     advise_listener_security(&listener, &resolved.serve_config);
+    advise_admin_security(built.admin_endpoint_info().as_ref(), &resolved.serve_config)?;
     eprintln!("Listening on {endpoint}");
     log::info!("Listening on {endpoint}");
 
@@ -167,6 +171,53 @@ fn advise_listener_security(main: &BoundListener, serve_config: &ServeConfig) {
                      Consider tightening --socket-mode or setting --api-key.",
                     serve_config.socket_mode
                 );
+            }
+        }
+    }
+}
+
+/// Security advisory for the admin listener:
+///
+/// - No admin listener configured → no-op.
+/// - UDS admin without `--admin-api-key` → silent (filesystem 0o600 is the
+///   trust boundary; matches the "UDS default is safe" rule from
+///   [`advise_listener_security`]).
+/// - TCP loopback admin without `--admin-api-key` → warn advisory (same
+///   treatment as loopback main-listener without `--api-key`).
+/// - Non-loopback TCP admin without `--admin-api-key` → **hard bail**.
+///   Mutation-capable admin reachable from arbitrary network clients with no
+///   auth is a dangerous misconfiguration; refuse to start.
+fn advise_admin_security(
+    admin: Option<&EndpointInfo>,
+    serve_config: &ServeConfig,
+) -> Result<(), anyhow::Error> {
+    let Some(info) = admin else {
+        return Ok(());
+    };
+    if serve_config.admin_api_key.is_some() {
+        return Ok(());
+    }
+    match info {
+        #[cfg(unix)]
+        EndpointInfo::Unix { .. } => Ok(()),
+        EndpointInfo::Tcp { host, url, .. } => {
+            let parsed_ip = host.parse::<std::net::IpAddr>().ok();
+            let is_loopback = matches!(host.as_str(), "localhost")
+                || parsed_ip.is_some_and(|ip| ip.is_loopback());
+            if is_loopback {
+                log::warn!(
+                    "Admin listener binding to {url} with no admin API key — \
+                     loopback is still the trust boundary. Set --admin-api-key \
+                     or VLC_ADMIN_API_KEY for defense-in-depth."
+                );
+                Ok(())
+            } else {
+                anyhow::bail!(
+                    "Admin listener at {url} is non-loopback and has no \
+                     --admin-api-key / VLC_ADMIN_API_KEY set. Refusing to \
+                     start: an unauthenticated mutation-capable admin reachable \
+                     from the network is a misconfiguration."
+                )
             }
         }
     }

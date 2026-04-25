@@ -8,6 +8,16 @@ mod json_fmt;
 mod listen;
 mod listener;
 mod middleware;
+// The coordinator's gate middleware + scope-guard consumers land in
+// subsequent tasks (Task 4 wires the gate middleware into the main router,
+// Task 6 rewrites `admin.rs` to drive drain/rebuild/commit). Until those
+// tasks run, several coordinator methods and the `ScopeGuard`/`InflightGuard`
+// types exist only for the (already-landed) unit tests in `reconfig.rs`.
+// Suppress dead-code lints on the whole module rather than sprinkle
+// `#[allow(dead_code)]` inside it — Task 2's module is explicitly off-limits
+// to this task, and the warnings will clear as each follower task lands.
+#[allow(dead_code)]
+mod reconfig;
 mod router;
 mod svg;
 mod themes;
@@ -20,7 +30,7 @@ mod vegalite;
 mod test_support;
 
 pub(crate) use config::{
-    apply_server_defaults, validate_serve_config, AdminConfig, ApiKey, AppState,
+    validate_serve_config, AdminConfig, ApiKey, AppState, RuntimeSnapshot,
 };
 pub use config::{init_tracing, BuiltApp, LogFormat, ServeConfig};
 pub use listen::ListenAddr;
@@ -53,7 +63,10 @@ pub async fn serve(
     built: BuiltApp,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> Result<(), anyhow::Error> {
-    let token = CancellationToken::new();
+    // The shutdown token is constructed in `build_app` and shared with
+    // the reconfig coordinator so mid-reconfig cancellations abort cleanly.
+    // `serve` just fires the same token when its shutdown future resolves.
+    let token = built.shutdown_token.clone();
     let mut tasks: JoinSet<()> = JoinSet::new();
 
     if let Some(tracker) = built.tracker {
@@ -125,28 +138,58 @@ pub async fn build_app(
     config: VlcConfig,
     serve_config: &ServeConfig,
 ) -> Result<BuiltApp, anyhow::Error> {
+    use arc_swap::ArcSwap;
+
     validate_serve_config(serve_config)?;
 
-    let mut config = config;
-    apply_server_defaults(&mut config);
+    // Build the shared shutdown token first. The reconfig coordinator needs
+    // it so a mid-drain cancellation unwinds through the scope guard. The
+    // same token is clone-stashed on `BuiltApp` for `serve()` to drive.
+    let shutdown_token = CancellationToken::new();
+
+    let reconfig_drain_timeout = Duration::from_secs(serve_config.reconfig_drain_timeout_secs);
+    let coordinator =
+        reconfig::ReconfigCoordinator::new(shutdown_token.clone(), reconfig_drain_timeout);
 
     let num_workers = config.num_workers;
     log::info!("Initializing converter with {num_workers} worker(s)...");
-    let converter = vl_convert_rs::converter::VlConverter::with_config(config.clone())?;
+    let converter = vl_convert_rs::converter::VlConverter::with_config(config)?;
     converter.warm_up()?;
     log::info!("Workers initialized");
+
+    // Seed the admin baseline and initial `RuntimeSnapshot.config` from the
+    // **normalized** view of the startup config — i.e. what the workers
+    // actually run. `VlConverter::with_config` rewrites the input before
+    // the workers see it (inlines file-backed `vega_plugins` source,
+    // auto-populates `plugin_import_domains` from URL plugins, resolves
+    // locale aliases, etc.). Seeding from the pre-normalized input would
+    // make `GET /admin/config` report a stale `effective` view and let a
+    // later identity PUT/DELETE unintentionally replay the unresolved
+    // values. By taking `converter.config()` here we guarantee baseline ==
+    // initial effective == what the workers are running, which is the
+    // contract CLAUDE.md §"Admin reconfig & drain" documents for DELETE.
+    let normalized = converter.config();
+    let baseline = Arc::new(normalized.clone());
+
+    let runtime = Arc::new(ArcSwap::from_pointee(RuntimeSnapshot {
+        converter,
+        config: Arc::new(normalized),
+        generation: 0,
+        config_version: 0,
+    }));
 
     let api_key = serve_config
         .api_key
         .as_ref()
         .map(|k| ApiKey::new(k.clone()));
+    let readiness = Arc::new(health::ReadinessState::default());
     let state = Arc::new(AppState {
-        converter: converter.clone(),
-        config: config.clone(),
+        runtime: runtime.clone(),
         api_key,
         opaque_errors: serve_config.opaque_errors,
         require_user_agent: serve_config.require_user_agent,
-        readiness: health::ReadinessState::default(),
+        readiness: readiness.clone(),
+        coordinator: coordinator.clone(),
     });
 
     let tracker = if serve_config.per_ip_budget_ms.is_some()
@@ -168,7 +211,24 @@ pub async fn build_app(
         // flag could be added if asymmetric permissions are ever needed.
         let bound: BoundListener = bind_listener(admin_addr, serve_config.socket_mode).await?;
         let addr = bound.endpoint_label();
-        let admin_router = admin::admin_router(t.clone())
+        // Assemble AdminState from the shared Arc'd handles. `runtime`,
+        // `coordinator`, and `readiness` are intentionally the SAME Arcs
+        // as on `AppState`, so admin-side reconfig commits are observed
+        // by the main listener atomically. Task 9 will plumb
+        // `admin_api_key` from ServeConfig; for now the field is `None`.
+        let admin_state = Arc::new(admin::AdminState {
+            runtime: runtime.clone(),
+            baseline: baseline.clone(),
+            coordinator: coordinator.clone(),
+            readiness: readiness.clone(),
+            admin_api_key: serve_config
+                .admin_api_key
+                .as_ref()
+                .map(|k| ApiKey::new(k.clone())),
+            tracker: t.clone(),
+            opaque_errors: serve_config.opaque_errors,
+        });
+        let admin_router = admin::admin_router(admin_state)
             .layer(PropagateRequestIdLayer::x_request_id())
             .layer(TraceLayer::new_for_http())
             .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
@@ -192,7 +252,8 @@ pub async fn build_app(
 
     Ok(BuiltApp {
         router: app,
-        converter,
+        runtime,
+        shutdown_token,
         tracker,
         admin,
     })

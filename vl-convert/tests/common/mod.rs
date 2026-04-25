@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
 pub use assert_cmd::prelude::*;
 pub use dssim::{Dssim, DssimImage};
@@ -23,6 +23,21 @@ pub fn initialize() {
         fs::remove_dir_all(&outdir).ok();
         fs::create_dir_all(&outdir).unwrap();
     });
+}
+
+/// Build an `assert_cmd::Command` for the vl-convert binary with the
+/// test-wide permissive allowlist already wired in via `--allowed-base-url`.
+/// Library-default `VlcConfig::default()` blocks all network data, but
+/// many vendored test specs reference `https://raw.githubusercontent.com/vega/...`
+/// and `https://vega.github.io/...` URLs — individual tests shouldn't
+/// need to know that.
+pub fn vl_convert_cmd() -> Result<Command, Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("vl-convert")?;
+    cmd.arg("--allowed-base-url")
+        .arg("http:")
+        .arg("--allowed-base-url")
+        .arg("https:");
+    Ok(cmd)
 }
 
 pub fn vg_spec_path(name: &str) -> String {

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use vl_convert_rs::converter::{
     vega_to_url as converter_vega_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts,
-    UrlOpts, VgOpts,
+    UrlOpts, VgOpts, VlcConfig,
 };
 
 use crate::accept::{preferred_scenegraph_format, ScenegraphFormat};
@@ -19,8 +19,8 @@ use crate::util::{
     append_vlc_logs_header, error_response, format_log_entries, validate_common_opts,
 };
 
-fn build_vg_opts(req: &VegaCommon, state: &AppState) -> Result<VgOpts, String> {
-    let common = validate_common_opts(req, state)?;
+fn build_vg_opts(req: &VegaCommon, config: &VlcConfig) -> Result<VgOpts, String> {
+    let common = validate_common_opts(req, config)?;
 
     Ok(VgOpts {
         format_locale: common.format_locale,
@@ -49,14 +49,15 @@ pub async fn vega_to_svg(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaSvgRequest>,
 ) -> Response {
-    let vg_opts = match build_vg_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vg_opts = match build_vg_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
     let svg_opts = SvgOpts { bundle: req.bundle };
     let spec = req.common.spec;
 
-    match state.converter.vega_to_svg(spec, vg_opts, svg_opts).await {
+    match snap.converter.vega_to_svg(spec, vg_opts, svg_opts).await {
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
@@ -90,7 +91,8 @@ pub async fn vega_to_png(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaPngRequest>,
 ) -> Response {
-    let vg_opts = match build_vg_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vg_opts = match build_vg_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -100,7 +102,7 @@ pub async fn vega_to_png(
     };
     let spec = req.common.spec;
 
-    match state.converter.vega_to_png(spec, vg_opts, png_opts).await {
+    match snap.converter.vega_to_png(spec, vg_opts, png_opts).await {
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
@@ -134,7 +136,8 @@ pub async fn vega_to_jpeg(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaJpegRequest>,
 ) -> Response {
-    let vg_opts = match build_vg_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vg_opts = match build_vg_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -144,7 +147,7 @@ pub async fn vega_to_jpeg(
     };
     let spec = req.common.spec;
 
-    match state.converter.vega_to_jpeg(spec, vg_opts, jpeg_opts).await {
+    match snap.converter.vega_to_jpeg(spec, vg_opts, jpeg_opts).await {
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
@@ -178,13 +181,14 @@ pub async fn vega_to_pdf(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaPdfRequest>,
 ) -> Response {
-    let vg_opts = match build_vg_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vg_opts = match build_vg_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
     let spec = req.common.spec;
 
-    match state
+    match snap
         .converter
         .vega_to_pdf(spec, vg_opts, PdfOpts::default())
         .await
@@ -222,7 +226,8 @@ pub async fn vega_to_html(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaHtmlRequest>,
 ) -> Response {
-    let vg_opts = match build_vg_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vg_opts = match build_vg_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -243,7 +248,7 @@ pub async fn vega_to_html(
     };
     let spec = req.common.spec;
 
-    match state.converter.vega_to_html(spec, vg_opts, html_opts).await {
+    match snap.converter.vega_to_html(spec, vg_opts, html_opts).await {
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
@@ -308,7 +313,8 @@ pub async fn vega_scenegraph(
     headers: HeaderMap,
     Json(req): Json<VegaScenegraphRequest>,
 ) -> Response {
-    let vg_opts = match build_vg_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vg_opts = match build_vg_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
@@ -316,7 +322,7 @@ pub async fn vega_scenegraph(
     let wants_msgpack = preferred_scenegraph_format(&headers) == ScenegraphFormat::Msgpack;
 
     if wants_msgpack {
-        match state
+        match snap
             .converter
             .vega_to_scenegraph_msgpack(spec, vg_opts)
             .await
@@ -338,7 +344,7 @@ pub async fn vega_scenegraph(
             ),
         }
     } else {
-        match state.converter.vega_to_scenegraph(spec, vg_opts).await {
+        match snap.converter.vega_to_scenegraph(spec, vg_opts).await {
             Ok(output) => {
                 let mut resp_headers = HeaderMap::new();
                 append_vlc_logs_header(&mut resp_headers, &format_log_entries(&output.logs));
@@ -386,21 +392,22 @@ pub async fn vega_fonts(
     State(state): State<Arc<AppState>>,
     Json(req): Json<VegaFontsRequest>,
 ) -> Response {
-    let vg_opts = match build_vg_opts(&req.common, &state) {
+    let snap = state.runtime.load_full();
+    let vg_opts = match build_vg_opts(&req.common, &snap.config) {
         Ok(opts) => opts,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &e, state.opaque_errors),
     };
     let spec = req.common.spec;
 
-    match state
+    match snap
         .converter
         .vega_fonts(
             spec,
             vg_opts,
-            state.config.auto_google_fonts,
-            state.config.embed_local_fonts,
+            snap.config.auto_google_fonts,
+            snap.config.embed_local_fonts,
             req.include_font_face,
-            state.config.subset_fonts,
+            snap.config.subset_fonts,
         )
         .await
     {

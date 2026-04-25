@@ -1,12 +1,13 @@
 use clap::{ArgGroup, Parser, ValueEnum};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use vl_convert_rs::anyhow::{self, bail};
 use vl_convert_rs::converter::MissingFontsPolicy;
 use vl_convert_server::LogFormat;
 
 use super::parsers::{
-    parse_boolish_arg, parse_path_arg, parse_positive_i64_arg, parse_socket_mode_arg,
-    parse_socket_path_arg,
+    parse_boolish_arg, parse_non_zero_usize_arg, parse_path_arg, parse_positive_i64_arg,
+    parse_socket_mode_arg, parse_socket_path_arg,
 };
 
 #[derive(Debug, Parser, Clone)]
@@ -59,11 +60,13 @@ pub(crate) struct Cli {
     #[arg(long, value_enum, value_name = "POLICY")]
     pub(crate) missing_fonts: Option<MissingFontsArg>,
 
-    /// Maximum V8 heap size per worker in megabytes
+    /// Maximum V8 heap size per worker in megabytes. `0` → unbounded
+    /// (library field is `Option<NonZeroUsize>`; `0` resolves to `None`).
     #[arg(long)]
     pub(crate) max_v8_heap_size_mb: Option<usize>,
 
-    /// Maximum V8 execution time in seconds
+    /// Maximum V8 execution time in seconds. `0` → unbounded (library
+    /// field is `Option<NonZeroU64>`; `0` resolves to `None`).
     #[arg(long)]
     pub(crate) max_v8_execution_time_secs: Option<u64>,
 
@@ -83,7 +86,9 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "BOOL", num_args = 0..=1, require_equals = true, default_missing_value = "true", value_parser = parse_boolish_arg)]
     pub(crate) allow_per_request_plugins: Option<bool>,
 
-    /// Maximum concurrent ephemeral workers for per-request plugins
+    /// Maximum concurrent ephemeral workers for per-request plugins.
+    /// `0` → unbounded (library field is `Option<NonZeroUsize>`; `0`
+    /// resolves to `None`).
     #[arg(long)]
     pub(crate) max_ephemeral_workers: Option<usize>,
 
@@ -107,9 +112,19 @@ pub(crate) struct Cli {
     #[arg(long, value_name = "JSON|@FILE")]
     pub(crate) themes: Option<String>,
 
-    /// Additional directory to search for fonts
+    /// Additional directory to search for fonts. May be repeated to
+    /// register multiple directories (`--font-dir /a --font-dir /b`).
+    /// Seeds `VlcConfig.font_directories`; on startup the library's
+    /// `set_font_directories` runs inside `VlConverter::with_config` so
+    /// the global font store matches this list authoritatively.
+    #[arg(long, value_name = "PATH", value_parser = parse_path_arg, num_args = 1)]
+    pub(crate) font_dir: Vec<PathBuf>,
+
+    /// Capacity (MB) of the on-disk Google Fonts LRU cache. `0` →
+    /// library default (the library field is `Option<NonZeroU64>`;
+    /// `0` resolves to `None`). Seeds `VlcConfig.google_fonts_cache_size_mb`.
     #[arg(long)]
-    pub(crate) font_dir: Option<String>,
+    pub(crate) google_fonts_cache_size_mb: Option<u64>,
 
     /// Log level for vl_convert and tower_http output
     #[arg(long, value_enum, value_name = "LEVEL", ignore_case = true)]
@@ -131,13 +146,20 @@ pub(crate) struct Cli {
     #[arg(long, group = "main_listener")]
     pub(crate) port: Option<u16>,
 
-    /// Number of converter worker threads
-    #[arg(long)]
-    pub(crate) workers: Option<usize>,
+    /// Number of converter worker threads (must be >= 1).
+    #[arg(long, value_parser = parse_non_zero_usize_arg)]
+    pub(crate) workers: Option<NonZeroUsize>,
 
     /// API key for Bearer token authentication
     #[arg(long)]
     pub(crate) api_key: Option<String>,
+
+    /// API key for Bearer token authentication on the admin listener.
+    /// Independent of `--api-key`. When unset, the admin surface is
+    /// listener-gated only (UDS filesystem permissions, or TCP loopback).
+    /// Non-loopback TCP admin without a key fails startup.
+    #[arg(long)]
+    pub(crate) admin_api_key: Option<String>,
 
     /// Allowed CORS origin(s), comma-separated or "*"
     #[arg(long)]
@@ -154,6 +176,13 @@ pub(crate) struct Cli {
     /// Graceful shutdown drain timeout in seconds
     #[arg(long)]
     pub(crate) drain_timeout_secs: Option<u64>,
+
+    /// Per-reconfig drain timeout in seconds. Defaults to the same value as
+    /// `--drain-timeout-secs`. The reconfig drain is admin-initiated and
+    /// typically tolerates a longer wait than process-shutdown drain; expose
+    /// both knobs so operators can tune them independently.
+    #[arg(long)]
+    pub(crate) reconfig_drain_timeout_secs: Option<u64>,
 
     /// Maximum request body size in megabytes
     #[arg(long)]
@@ -353,5 +382,52 @@ mod tests {
         assert!(Cli::try_parse_from(["vl-convert-server", "--no-vlc-config"]).is_err());
         assert!(Cli::try_parse_from(["vl-convert-server", "--no-subset-fonts"]).is_err());
         assert!(Cli::try_parse_from(["vl-convert-server", "--google-font", "Roboto"]).is_err());
+    }
+
+    #[test]
+    fn test_cli_num_workers_zero_rejected() {
+        let err = Cli::try_parse_from(["vl-convert-server", "--workers", "0"]).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("positive") || msg.contains(">= 1"),
+            "clap should reject --workers=0 with a positive-integer message; got: {msg}",
+        );
+    }
+
+    #[test]
+    fn test_cli_num_workers_accepts_positive() {
+        let cli = parse_cli(&["--workers", "4"]);
+        assert_eq!(cli.workers, NonZeroUsize::new(4));
+    }
+
+    #[test]
+    fn test_cli_font_dir_accepts_multiple_values() {
+        let cli = parse_cli(&["--font-dir", "/a", "--font-dir", "/b", "--font-dir", "/c"]);
+        assert_eq!(
+            cli.font_dir,
+            vec![
+                PathBuf::from("/a"),
+                PathBuf::from("/b"),
+                PathBuf::from("/c"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_cli_font_dir_empty_when_absent() {
+        let cli = parse_cli(&[]);
+        assert!(cli.font_dir.is_empty());
+    }
+
+    #[test]
+    fn test_cli_google_fonts_cache_size_mb_plumbing() {
+        let cli = parse_cli(&["--google-fonts-cache-size-mb", "100"]);
+        assert_eq!(cli.google_fonts_cache_size_mb, Some(100));
+
+        let cli_zero = parse_cli(&["--google-fonts-cache-size-mb", "0"]);
+        assert_eq!(cli_zero.google_fonts_cache_size_mb, Some(0));
+
+        let cli_absent = parse_cli(&[]);
+        assert_eq!(cli_absent.google_fonts_cache_size_mb, None);
     }
 }

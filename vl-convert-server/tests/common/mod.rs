@@ -136,6 +136,27 @@ pub fn start_budget_server(
     }
 }
 
+/// Start a server suitable for admin-config integration tests. Picks a free
+/// TCP port for the admin listener, clones `serve_config`, and wires the
+/// admin listener at `127.0.0.1:<port>`. Reuses the `BudgetServer` struct
+/// because the shape (main handle + admin URL) is identical — admin-config
+/// tests aren't budget-specific.
+pub fn start_admin_config_server(
+    config: VlcConfig,
+    mut serve_config: ServeConfig,
+) -> BudgetServer {
+    let admin_port = find_free_port();
+    serve_config.admin = Some(ListenAddr::Tcp {
+        host: "127.0.0.1".to_string(),
+        port: admin_port,
+    });
+    BudgetServer {
+        handle: start_server_sync(config, serve_config),
+        admin_base_url: format!("http://127.0.0.1:{admin_port}"),
+        _admin_tempdir: None,
+    }
+}
+
 pub fn simple_vl_spec() -> serde_json::Value {
     serde_json::json!({
         "$schema": "https://vega.github.io/schema/vega-lite/v5.json",

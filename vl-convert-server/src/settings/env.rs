@@ -22,6 +22,7 @@ pub(super) const ENV_DEFAULT_THEME: &str = "VLC_DEFAULT_THEME";
 pub(super) const ENV_DEFAULT_FORMAT_LOCALE: &str = "VLC_DEFAULT_FORMAT_LOCALE";
 pub(super) const ENV_DEFAULT_TIME_FORMAT_LOCALE: &str = "VLC_DEFAULT_TIME_FORMAT_LOCALE";
 pub(super) const ENV_THEMES: &str = "VLC_THEMES";
+pub(super) const ENV_GOOGLE_FONTS_CACHE_SIZE_MB: &str = "VLC_GOOGLE_FONTS_CACHE_SIZE_MB";
 pub(super) const ENV_FONT_DIR: &str = "VLC_FONT_DIR";
 pub(super) const ENV_LOG_LEVEL: &str = "VLC_LOG_LEVEL";
 pub(super) const ENV_LOG_FILTER: &str = "VLC_LOG_FILTER";
@@ -30,10 +31,12 @@ pub(super) const ENV_HOST: &str = "VLC_HOST";
 pub(super) const ENV_PORT: &str = "VLC_PORT";
 pub(super) const ENV_WORKERS: &str = "VLC_WORKERS";
 pub(super) const ENV_API_KEY: &str = "VLC_API_KEY";
+pub(super) const ENV_ADMIN_API_KEY: &str = "VLC_ADMIN_API_KEY";
 pub(super) const ENV_CORS_ORIGIN: &str = "VLC_CORS_ORIGIN";
 pub(super) const ENV_MAX_CONCURRENT_REQUESTS: &str = "VLC_MAX_CONCURRENT_REQUESTS";
 pub(super) const ENV_REQUEST_TIMEOUT_SECS: &str = "VLC_REQUEST_TIMEOUT_SECS";
 pub(super) const ENV_DRAIN_TIMEOUT_SECS: &str = "VLC_DRAIN_TIMEOUT_SECS";
+pub(super) const ENV_RECONFIG_DRAIN_TIMEOUT_SECS: &str = "VLC_RECONFIG_DRAIN_TIMEOUT_SECS";
 pub(super) const ENV_MAX_BODY_SIZE_MB: &str = "VLC_MAX_BODY_SIZE_MB";
 pub(super) const ENV_OPAQUE_ERRORS: &str = "VLC_OPAQUE_ERRORS";
 pub(super) const ENV_REQUIRE_USER_AGENT: &str = "VLC_REQUIRE_USER_AGENT";
@@ -76,6 +79,7 @@ pub(super) const SETTING_PAIRS: &[(&str, &str)] = &[
     ("default-format-locale", ENV_DEFAULT_FORMAT_LOCALE),
     ("default-time-format-locale", ENV_DEFAULT_TIME_FORMAT_LOCALE),
     ("themes", ENV_THEMES),
+    ("google-fonts-cache-size-mb", ENV_GOOGLE_FONTS_CACHE_SIZE_MB),
     ("font-dir", ENV_FONT_DIR),
     ("log-level", ENV_LOG_LEVEL),
     ("log-filter", ENV_LOG_FILTER),
@@ -84,10 +88,15 @@ pub(super) const SETTING_PAIRS: &[(&str, &str)] = &[
     ("port", ENV_PORT),
     ("workers", ENV_WORKERS),
     ("api-key", ENV_API_KEY),
+    ("admin-api-key", ENV_ADMIN_API_KEY),
     ("cors-origin", ENV_CORS_ORIGIN),
     ("max-concurrent-requests", ENV_MAX_CONCURRENT_REQUESTS),
     ("request-timeout-secs", ENV_REQUEST_TIMEOUT_SECS),
     ("drain-timeout-secs", ENV_DRAIN_TIMEOUT_SECS),
+    (
+        "reconfig-drain-timeout-secs",
+        ENV_RECONFIG_DRAIN_TIMEOUT_SECS,
+    ),
     ("max-body-size-mb", ENV_MAX_BODY_SIZE_MB),
     ("opaque-errors", ENV_OPAQUE_ERRORS),
     ("require-user-agent", ENV_REQUIRE_USER_AGENT),
@@ -128,6 +137,7 @@ pub(super) struct EnvValues {
     pub(super) default_format_locale: Option<String>,
     pub(super) default_time_format_locale: Option<String>,
     pub(super) themes: Option<String>,
+    pub(super) google_fonts_cache_size_mb: Option<String>,
     pub(super) font_dir: Option<String>,
     pub(super) log_level: Option<String>,
     pub(super) log_filter: Option<String>,
@@ -136,10 +146,12 @@ pub(super) struct EnvValues {
     pub(super) port: Option<String>,
     pub(super) workers: Option<String>,
     pub(super) api_key: Option<String>,
+    pub(super) admin_api_key: Option<String>,
     pub(super) cors_origin: Option<String>,
     pub(super) max_concurrent_requests: Option<String>,
     pub(super) request_timeout_secs: Option<String>,
     pub(super) drain_timeout_secs: Option<String>,
+    pub(super) reconfig_drain_timeout_secs: Option<String>,
     pub(super) max_body_size_mb: Option<String>,
     pub(super) opaque_errors: Option<String>,
     pub(super) require_user_agent: Option<String>,
@@ -181,6 +193,7 @@ impl EnvValues {
             default_format_locale: env_var(ENV_DEFAULT_FORMAT_LOCALE),
             default_time_format_locale: env_var(ENV_DEFAULT_TIME_FORMAT_LOCALE),
             themes: env_var(ENV_THEMES),
+            google_fonts_cache_size_mb: env_var(ENV_GOOGLE_FONTS_CACHE_SIZE_MB),
             font_dir: env_var(ENV_FONT_DIR),
             log_level: env_var(ENV_LOG_LEVEL),
             log_filter: env_var(ENV_LOG_FILTER),
@@ -194,10 +207,12 @@ impl EnvValues {
             }),
             workers: env_var(ENV_WORKERS),
             api_key: env_var(ENV_API_KEY),
+            admin_api_key: env_var(ENV_ADMIN_API_KEY),
             cors_origin: env_var(ENV_CORS_ORIGIN),
             max_concurrent_requests: env_var(ENV_MAX_CONCURRENT_REQUESTS),
             request_timeout_secs: env_var(ENV_REQUEST_TIMEOUT_SECS),
             drain_timeout_secs: env_var(ENV_DRAIN_TIMEOUT_SECS),
+            reconfig_drain_timeout_secs: env_var(ENV_RECONFIG_DRAIN_TIMEOUT_SECS),
             max_body_size_mb: env_var(ENV_MAX_BODY_SIZE_MB),
             opaque_errors: env_var(ENV_OPAQUE_ERRORS),
             require_user_agent: env_var(ENV_REQUIRE_USER_AGENT),

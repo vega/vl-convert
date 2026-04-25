@@ -330,16 +330,15 @@ function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, config, err
                 .await?;
 
             // Clone to release the borrow on self.ctx before calling load_plugin.
-            if let Some(plugins) = self.ctx.resolved_plugins.clone() {
-                for (i, plugin) in plugins.iter().enumerate() {
-                    self.load_plugin(i, &plugin.bundled_source, true).await?;
-                }
+            let plugins = self.ctx.resolved_plugins.clone();
+            for (i, plugin) in plugins.iter().enumerate() {
+                self.load_plugin(i, &plugin.bundled_source, true).await?;
             }
 
             // Register custom themes: replace the frozen vegaThemes module namespace
             // with a mutable copy that includes the custom themes.
-            if let Some(ref themes) = self.ctx.config.themes {
-                let themes_json = serde_json::to_string(themes)?;
+            if !self.ctx.config.themes.is_empty() {
+                let themes_json = serde_json::to_string(&self.ctx.config.themes)?;
                 self.worker.js_runtime.execute_script(
                     "ext:<anon>",
                     format!("vegaThemes = Object.assign({{}}, vegaThemes, {themes_json});"),

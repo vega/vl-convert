@@ -25,6 +25,7 @@ pub async fn bundle(
     State(state): State<Arc<AppState>>,
     Query(query): Query<BundleQuery>,
 ) -> Response {
+    let snap = state.runtime.load_full();
     let vl_version_str = query.vl_version.as_deref().unwrap_or("6.4");
     let vl_version = match VlVersion::from_str(vl_version_str) {
         Ok(v) => v,
@@ -37,7 +38,7 @@ pub async fn bundle(
         }
     };
 
-    match state.converter.get_vegaembed_bundle(vl_version).await {
+    match snap.converter.get_vegaembed_bundle(vl_version).await {
         Ok(js) => (
             [
                 (
@@ -75,6 +76,7 @@ pub async fn bundle_snippet(
     State(state): State<Arc<AppState>>,
     Json(req): Json<BundleSnippetRequest>,
 ) -> Response {
+    let snap = state.runtime.load_full();
     let vl_version = match VlVersion::from_str(&req.vl_version) {
         Ok(v) => v,
         Err(_) => {
@@ -86,7 +88,7 @@ pub async fn bundle_snippet(
         }
     };
 
-    match state
+    match snap
         .converter
         .bundle_vega_snippet(req.snippet, vl_version)
         .await

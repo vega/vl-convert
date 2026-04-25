@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::PathBuf;
 use vl_convert_rs::anyhow::{self, anyhow, bail};
 use vl_convert_rs::converter::{
@@ -10,11 +11,12 @@ use vl_convert_server::{ListenAddr, LogFormat, ServeConfig};
 use super::cli::{Cli, DataAccessMode, LogFormatArg, LogLevel, MissingFontsArg};
 use super::env::EnvValues;
 use super::parsers::{
-    expand_path, field_name, parse_base_url, parse_bool, parse_format_locale, parse_google_fonts,
-    parse_json_map, parse_log_filter_value, parse_log_format, parse_missing_fonts,
-    parse_nullable_i64, parse_nullable_string, parse_nullable_u16, parse_nullable_usize,
-    parse_positive_i64, parse_string_vec, parse_time_format_locale, parse_u16, parse_u64,
-    parse_usize, parse_vega_plugins, InputKind,
+    expand_path, field_name, parse_base_url, parse_bool, parse_cache_size_mb, parse_font_dir_list,
+    parse_format_locale, parse_google_fonts, parse_json_map, parse_log_filter_value,
+    parse_log_format, parse_missing_fonts, parse_nullable_i64, parse_nullable_string,
+    parse_nullable_u16, parse_nullable_usize, parse_optional_non_zero_u64,
+    parse_optional_non_zero_usize, parse_positive_i64, parse_string_vec, parse_time_format_locale,
+    parse_u16, parse_u64, parse_usize, parse_vega_plugins, InputKind,
 };
 
 /// Fully-resolved configuration handed from the CLI/env resolution
@@ -41,11 +43,6 @@ pub(crate) struct ResolvedSettings {
     /// exiting via `std::process::exit(1)`. The library never calls
     /// exit itself — the drain watchdog in `main.rs` owns that path.
     pub(crate) drain_timeout_secs: u64,
-    /// Optional extra directory to register with
-    /// `vl_convert_rs::text::register_font_directory` at startup.
-    /// Lets operators ship custom fonts without modifying the crate.
-    /// `None` leaves the default font search path intact.
-    pub(crate) font_dir: Option<String>,
     /// Tracing filter string handed to `init_tracing` (same shape as
     /// `RUST_LOG`, e.g. `"vl_convert=info,tower_http=info"`).
     /// Synthesized from either an explicit filter directive or a
@@ -78,7 +75,10 @@ struct BootstrapOverrides {
 #[derive(Debug, Default)]
 struct Overrides {
     bootstrap: BootstrapOverrides,
-    font_dir: Option<Option<String>>,
+    /// Multi-value: each CLI `--font-dir` or env `VLC_FONT_DIR` entry
+    /// appends to this list. Empty list = unset at this layer (do not
+    /// clear). Seeds `VlcConfig.font_directories` at finalize time.
+    font_dir: Vec<PathBuf>,
     log_level: Option<LogLevel>,
     log_filter: Option<Option<String>>,
     log_format: Option<LogFormat>,
@@ -95,12 +95,17 @@ struct Overrides {
     socket_mode: Option<u32>,
     ready_json: Option<bool>,
     exit_on_parent_close: Option<Option<bool>>,
-    workers: Option<usize>,
+    /// `num_workers` is `NonZeroUsize` on the library side; a CLI `0`
+    /// is rejected at parse time, so this is a plain Option (no
+    /// `0` → `None` shorthand).
+    workers: Option<NonZeroUsize>,
     api_key: Option<Option<String>>,
+    admin_api_key: Option<Option<String>>,
     cors_origin: Option<Option<String>>,
     max_concurrent_requests: Option<Option<usize>>,
     request_timeout_secs: Option<u64>,
     drain_timeout_secs: Option<u64>,
+    reconfig_drain_timeout_secs: Option<u64>,
     max_body_size_mb: Option<usize>,
     opaque_errors: Option<bool>,
     require_user_agent: Option<bool>,
@@ -118,18 +123,25 @@ struct Overrides {
     embed_local_fonts: Option<bool>,
     subset_fonts: Option<bool>,
     missing_fonts: Option<MissingFontsPolicy>,
-    max_v8_heap_size_mb: Option<usize>,
-    max_v8_execution_time_secs: Option<u64>,
+    /// Outer Option = was this override set?; inner Option = the
+    /// resolved library value (`None` = unbounded, `Some(NZ)` = cap).
+    /// The CLI keeps `0` as a shorthand for "unbounded" which collapses
+    /// to inner `None` in the parser.
+    max_v8_heap_size_mb: Option<Option<NonZeroUsize>>,
+    max_v8_execution_time_secs: Option<Option<NonZeroU64>>,
     gc_after_conversion: Option<bool>,
     vega_plugins: Option<Option<Vec<String>>>,
     plugin_import_domains: Option<Option<Vec<String>>>,
     allow_per_request_plugins: Option<bool>,
-    max_ephemeral_workers: Option<usize>,
+    max_ephemeral_workers: Option<Option<NonZeroUsize>>,
     per_request_plugin_import_domains: Option<Option<Vec<String>>>,
     default_theme: Option<Option<String>>,
     default_format_locale: Option<Option<FormatLocale>>,
     default_time_format_locale: Option<Option<TimeFormatLocale>>,
     themes: Option<Option<HashMap<String, serde_json::Value>>>,
+    /// Outer Option = override set?; inner Option = the library value.
+    /// CLI `0` and env `0` collapse to inner `None` (library default).
+    google_fonts_cache_size_mb: Option<Option<NonZeroU64>>,
 }
 
 #[derive(Debug)]
@@ -137,13 +149,23 @@ struct WorkingSettings {
     converter_config: VlcConfig,
     serve_config: ServeConfig,
     drain_timeout_secs: u64,
-    font_dir: Option<String>,
     ready_json: bool,
     exit_on_parent_close: Option<bool>,
     log_level: LogLevel,
     log_filter: Option<String>,
     data_access: DataAccessMode,
+    /// Working cache for allowed-base-urls during apply; `None` = unset,
+    /// `Some(v)` = explicit list. The library field is a plain
+    /// `Vec<String>` (no Option), but the resolve layer needs the
+    /// tri-state to distinguish "CLI null cleared it" vs "no override."
+    /// Seeded from the initial `VlcConfig` and finalized via
+    /// `finalize_allowed_base_urls`.
     allowed_base_urls: Option<Vec<String>>,
+    /// Whether the user explicitly set `reconfig_drain_timeout_secs` via
+    /// CLI or env. If not, `finalize()` mirrors `drain_timeout_secs` so
+    /// operators who care only about the shutdown-drain knob inherit a
+    /// sensible default for reconfig-drain without a second knob to tune.
+    reconfig_drain_explicit: bool,
 }
 
 pub(crate) fn resolve_settings(cli: Cli) -> Result<ResolvedSettings, anyhow::Error> {
@@ -159,19 +181,32 @@ pub(crate) fn resolve_settings(cli: Cli) -> Result<ResolvedSettings, anyhow::Err
 
 impl WorkingSettings {
     fn new(mut converter_config: VlcConfig) -> Self {
-        let (data_access, allowed_base_urls) =
-            derive_data_access_state(converter_config.allowed_base_urls.take());
+        // `allowed_base_urls` is `Vec<String>` on the library side; the
+        // resolve layer lifts it into `Option<Vec<String>>` to retain
+        // the "unset vs explicit empty" distinction that the data-access
+        // machinery needs. The initial state is `None` (no explicit
+        // list) iff the loaded config's list is empty — an empty list
+        // is the library's default ("block all"), which we map to the
+        // `DataAccessMode::Default` / `None` working state so that a
+        // startup CLI can promote it back to an explicit allowlist.
+        let initial_list = std::mem::take(&mut converter_config.allowed_base_urls);
+        let initial_opt = if initial_list.is_empty() {
+            None
+        } else {
+            Some(initial_list)
+        };
+        let (data_access, allowed_base_urls) = derive_data_access_state(initial_opt);
         Self {
             converter_config,
             serve_config: ServeConfig::default(),
             drain_timeout_secs: 30,
-            font_dir: None,
             ready_json: false,
             exit_on_parent_close: None,
             log_level: LogLevel::Warn,
             log_filter: None,
             data_access,
             allowed_base_urls,
+            reconfig_drain_explicit: false,
         }
     }
 
@@ -181,8 +216,15 @@ impl WorkingSettings {
     fn apply(&mut self, overrides: Overrides) {
         let data_access_explicit = overrides.data_access.is_some();
 
-        if let Some(value) = overrides.font_dir {
-            self.font_dir = value;
+        // `font_dir` is multi-value (both CLI and env). Each pass
+        // *appends* its values to the working converter config's
+        // `font_directories` list rather than replacing — env entries
+        // are followed by CLI entries so both are preserved. An empty
+        // `overrides.font_dir` means this pass did not touch the list.
+        if !overrides.font_dir.is_empty() {
+            self.converter_config
+                .font_directories
+                .extend(overrides.font_dir);
         }
         if let Some(value) = overrides.log_level {
             self.log_level = value;
@@ -227,10 +269,15 @@ impl WorkingSettings {
             self.exit_on_parent_close = value;
         }
         if let Some(value) = overrides.workers {
+            // `num_workers: NonZeroUsize` post-Task-0; CLI parser
+            // rejects 0 with a clap-level error, so this is infallible.
             self.converter_config.num_workers = value;
         }
         if let Some(value) = overrides.api_key {
             self.serve_config.api_key = value;
+        }
+        if let Some(value) = overrides.admin_api_key {
+            self.serve_config.admin_api_key = value;
         }
         if let Some(value) = overrides.cors_origin {
             self.serve_config.cors_origin = value;
@@ -243,6 +290,10 @@ impl WorkingSettings {
         }
         if let Some(value) = overrides.drain_timeout_secs {
             self.drain_timeout_secs = value;
+        }
+        if let Some(value) = overrides.reconfig_drain_timeout_secs {
+            self.serve_config.reconfig_drain_timeout_secs = value;
+            self.reconfig_drain_explicit = true;
         }
         if let Some(value) = overrides.max_body_size_mb {
             self.serve_config.max_body_size_mb = value;
@@ -289,7 +340,10 @@ impl WorkingSettings {
             }
         }
         if let Some(value) = overrides.google_fonts {
-            self.converter_config.google_fonts = value;
+            // Post-Task-0 the library field is `Vec<GoogleFontRequest>`
+            // (not Option). An inner `None` (CLI `null`) now resets to
+            // library default, i.e. empty list.
+            self.converter_config.google_fonts = value.unwrap_or_default();
         }
         if let Some(value) = overrides.auto_google_fonts {
             self.converter_config.auto_google_fonts = value;
@@ -307,6 +361,9 @@ impl WorkingSettings {
             self.converter_config.missing_fonts = value;
         }
         if let Some(value) = overrides.max_v8_heap_size_mb {
+            // Library field is `Option<NonZeroUsize>`; the override
+            // already carries the resolved inner value (including `0` →
+            // None from the CLI shorthand).
             self.converter_config.max_v8_heap_size_mb = value;
         }
         if let Some(value) = overrides.max_v8_execution_time_secs {
@@ -316,7 +373,8 @@ impl WorkingSettings {
             self.converter_config.gc_after_conversion = value;
         }
         if let Some(value) = overrides.vega_plugins {
-            self.converter_config.vega_plugins = value;
+            // Post-Task-0 `vega_plugins: Vec<String>` (not Option).
+            self.converter_config.vega_plugins = value.unwrap_or_default();
         }
         if let Some(value) = overrides.plugin_import_domains {
             self.converter_config.plugin_import_domains = value.unwrap_or_default();
@@ -326,6 +384,9 @@ impl WorkingSettings {
         }
         if let Some(value) = overrides.max_ephemeral_workers {
             self.converter_config.max_ephemeral_workers = value;
+        }
+        if let Some(value) = overrides.google_fonts_cache_size_mb {
+            self.converter_config.google_fonts_cache_size_mb = value;
         }
         if let Some(value) = overrides.per_request_plugin_import_domains {
             self.converter_config.per_request_plugin_import_domains = value.unwrap_or_default();
@@ -340,11 +401,16 @@ impl WorkingSettings {
             self.converter_config.default_time_format_locale = value;
         }
         if let Some(value) = overrides.themes {
-            self.converter_config.themes = value;
+            // Post-Task-0 `themes: HashMap<_,_>` (not Option).
+            self.converter_config.themes = value.unwrap_or_default();
         }
     }
 
     fn finalize(mut self) -> Result<ResolvedSettings, anyhow::Error> {
+        // `allowed_base_urls` is now `Vec<String>` on the library
+        // (empty = block all); preserve that semantic here. The
+        // data-access helper continues to gate between "default",
+        // "none", "all", and explicit "allowlist" states.
         self.converter_config.allowed_base_urls =
             finalize_allowed_base_urls(self.data_access, self.allowed_base_urls)?;
 
@@ -355,12 +421,37 @@ impl WorkingSettings {
             locale.as_object()?;
         }
 
+        // Clamp `max_v8_execution_time_secs` to the HTTP
+        // `request_timeout_secs` when the latter is tighter. With the
+        // Task-0 type change (`Option<NonZeroU64>`), `None` means
+        // "unbounded" — under a positive HTTP timeout we clamp to that
+        // timeout. A pre-existing positive cap is only lowered, never
+        // raised.
         if self.serve_config.request_timeout_secs > 0 {
-            let current = self.converter_config.max_v8_execution_time_secs;
-            if current == 0 || current > self.serve_config.request_timeout_secs {
-                self.converter_config.max_v8_execution_time_secs =
-                    self.serve_config.request_timeout_secs;
+            let http_cap = self.serve_config.request_timeout_secs;
+            let should_clamp = match self.converter_config.max_v8_execution_time_secs {
+                None => true,
+                Some(current) => current.get() > http_cap,
+            };
+            if should_clamp {
+                self.converter_config.max_v8_execution_time_secs = NonZeroU64::new(http_cap);
             }
+        }
+
+        // Dedupe font directories in order (Task 2.5: seed is additive
+        // across config-file + env + CLI; two identical entries would
+        // otherwise hit `set_font_directories` with a duplicate).
+        let mut seen = std::collections::HashSet::new();
+        self.converter_config
+            .font_directories
+            .retain(|path| seen.insert(path.clone()));
+
+        // If the user didn't explicitly set `reconfig_drain_timeout_secs`,
+        // mirror the shutdown-drain value. Operators who care only about the
+        // binary-level drain shouldn't need a second knob to get a sensible
+        // reconfig-drain window.
+        if !self.reconfig_drain_explicit {
+            self.serve_config.reconfig_drain_timeout_secs = self.drain_timeout_secs;
         }
 
         let log_filter = self.log_filter.unwrap_or_else(|| {
@@ -372,7 +463,6 @@ impl WorkingSettings {
             converter_config: self.converter_config,
             serve_config: self.serve_config,
             drain_timeout_secs: self.drain_timeout_secs,
-            font_dir: self.font_dir,
             log_filter,
             ready_json: self.ready_json,
             exit_on_parent_close: self.exit_on_parent_close,
@@ -470,12 +560,14 @@ fn parse_env_overrides(raw: EnvValues) -> Result<Overrides, anyhow::Error> {
     overrides.max_v8_heap_size_mb = raw
         .max_v8_heap_size_mb
         .as_deref()
-        .map(|raw| parse_usize(raw, field_name(input, "max_v8_heap_size_mb")))
+        .map(|raw| parse_optional_non_zero_usize(raw, field_name(input, "max_v8_heap_size_mb")))
         .transpose()?;
     overrides.max_v8_execution_time_secs = raw
         .max_v8_execution_time_secs
         .as_deref()
-        .map(|raw| parse_u64(raw, field_name(input, "max_v8_execution_time_secs")))
+        .map(|raw| {
+            parse_optional_non_zero_u64(raw, field_name(input, "max_v8_execution_time_secs"))
+        })
         .transpose()?;
     overrides.gc_after_conversion = raw
         .gc_after_conversion
@@ -500,7 +592,7 @@ fn parse_env_overrides(raw: EnvValues) -> Result<Overrides, anyhow::Error> {
     overrides.max_ephemeral_workers = raw
         .max_ephemeral_workers
         .as_deref()
-        .map(|raw| parse_usize(raw, field_name(input, "max_ephemeral_workers")))
+        .map(|raw| parse_optional_non_zero_usize(raw, field_name(input, "max_ephemeral_workers")))
         .transpose()?;
     overrides.per_request_plugin_import_domains = raw
         .per_request_plugin_import_domains
@@ -536,10 +628,19 @@ fn parse_env_overrides(raw: EnvValues) -> Result<Overrides, anyhow::Error> {
         .map(|raw| parse_json_map(raw, input, field_name(input, "themes")))
         .transpose()?;
 
+    // VLC_FONT_DIR is a colon-separated (Linux/macOS) or
+    // semicolon-separated (Windows) list of directories. Empty or all-
+    // separator values produce an empty list (== "no override" at this
+    // layer). Entries are tilde-expanded.
     overrides.font_dir = raw
         .font_dir
         .as_deref()
-        .map(parse_nullable_string)
+        .map(parse_font_dir_list)
+        .unwrap_or_default();
+    overrides.google_fonts_cache_size_mb = raw
+        .google_fonts_cache_size_mb
+        .as_deref()
+        .map(|raw| parse_cache_size_mb(raw, field_name(input, "google_fonts_cache_size_mb")))
         .transpose()?;
     overrides.log_level = raw
         .log_level
@@ -616,13 +717,34 @@ fn parse_env_overrides(raw: EnvValues) -> Result<Overrides, anyhow::Error> {
             }
         })
         .transpose()?;
+    // VLC_WORKERS is a positive integer; `0` is rejected (library
+    // field is `NonZeroUsize`).
     overrides.workers = raw
         .workers
         .as_deref()
-        .map(|raw| parse_usize(raw, field_name(input, "workers")))
+        .map(|raw| -> Result<NonZeroUsize, anyhow::Error> {
+            let value = parse_u64(raw, field_name(input, "workers"))?;
+            let as_usize = usize::try_from(value).map_err(|_| {
+                anyhow!(
+                    "{} '{raw}': value exceeds platform usize",
+                    field_name(input, "workers")
+                )
+            })?;
+            NonZeroUsize::new(as_usize).ok_or_else(|| {
+                anyhow!(
+                    "{} must be a positive integer (>= 1); got '{raw}'",
+                    field_name(input, "workers")
+                )
+            })
+        })
         .transpose()?;
     overrides.api_key = raw
         .api_key
+        .as_deref()
+        .map(parse_nullable_string)
+        .transpose()?;
+    overrides.admin_api_key = raw
+        .admin_api_key
         .as_deref()
         .map(parse_nullable_string)
         .transpose()?;
@@ -645,6 +767,11 @@ fn parse_env_overrides(raw: EnvValues) -> Result<Overrides, anyhow::Error> {
         .drain_timeout_secs
         .as_deref()
         .map(|raw| parse_u64(raw, field_name(input, "drain_timeout_secs")))
+        .transpose()?;
+    overrides.reconfig_drain_timeout_secs = raw
+        .reconfig_drain_timeout_secs
+        .as_deref()
+        .map(|raw| parse_u64(raw, field_name(input, "reconfig_drain_timeout_secs")))
         .transpose()?;
     overrides.max_body_size_mb = raw
         .max_body_size_mb
@@ -758,8 +885,11 @@ fn parse_cli_overrides(cli: &Cli) -> Result<Overrides, anyhow::Error> {
     overrides.embed_local_fonts = cli.embed_local_fonts;
     overrides.subset_fonts = cli.subset_fonts;
     overrides.missing_fonts = cli.missing_fonts.map(MissingFontsArg::into_policy);
-    overrides.max_v8_heap_size_mb = cli.max_v8_heap_size_mb;
-    overrides.max_v8_execution_time_secs = cli.max_v8_execution_time_secs;
+    // CLI ergonomics: `0` → unbounded (inner `None`); positive → `Some(NZ)`.
+    // The library field rejects a literal `NonZeroUsize::new(0)`, so
+    // the shorthand lives only at the resolve layer.
+    overrides.max_v8_heap_size_mb = cli.max_v8_heap_size_mb.map(NonZeroUsize::new);
+    overrides.max_v8_execution_time_secs = cli.max_v8_execution_time_secs.map(NonZeroU64::new);
     overrides.gc_after_conversion = cli.gc_after_conversion;
     overrides.vega_plugins = cli
         .vega_plugins
@@ -772,7 +902,7 @@ fn parse_cli_overrides(cli: &Cli) -> Result<Overrides, anyhow::Error> {
         .map(|raw| parse_string_vec(raw, input, field_name(input, "plugin_import_domains")))
         .transpose()?;
     overrides.allow_per_request_plugins = cli.allow_per_request_plugins;
-    overrides.max_ephemeral_workers = cli.max_ephemeral_workers;
+    overrides.max_ephemeral_workers = cli.max_ephemeral_workers.map(NonZeroUsize::new);
     overrides.per_request_plugin_import_domains = cli
         .per_request_plugin_import_domains
         .as_deref()
@@ -807,11 +937,14 @@ fn parse_cli_overrides(cli: &Cli) -> Result<Overrides, anyhow::Error> {
         .map(|raw| parse_json_map(raw, input, field_name(input, "themes")))
         .transpose()?;
 
-    overrides.font_dir = cli
-        .font_dir
-        .as_deref()
-        .map(parse_nullable_string)
-        .transpose()?;
+    // `--font-dir` is a repeated flag → `Vec<PathBuf>`. Empty =
+    // no CLI override at this layer; non-empty values are appended
+    // to the working converter config's `font_directories` during
+    // `apply()`.
+    overrides.font_dir = cli.font_dir.clone();
+    // `--google-fonts-cache-size-mb` carries the CLI `0`-shorthand:
+    // `0` → `None` (library default), positive → `Some(NZ)`.
+    overrides.google_fonts_cache_size_mb = cli.google_fonts_cache_size_mb.map(NonZeroU64::new);
     overrides.log_level = cli.log_level;
     overrides.log_filter = cli
         .log_filter
@@ -837,9 +970,16 @@ fn parse_cli_overrides(cli: &Cli) -> Result<Overrides, anyhow::Error> {
     overrides.socket_mode = cli.socket_mode;
     overrides.ready_json = cli.ready_json;
     overrides.exit_on_parent_close = cli.exit_on_parent_close.map(Some);
+    // CLI `--workers` is already `Option<NonZeroUsize>` — clap's
+    // value-parser rejected `0` with an inline error.
     overrides.workers = cli.workers;
     overrides.api_key = cli
         .api_key
+        .as_deref()
+        .map(parse_nullable_string)
+        .transpose()?;
+    overrides.admin_api_key = cli
+        .admin_api_key
         .as_deref()
         .map(parse_nullable_string)
         .transpose()?;
@@ -855,6 +995,7 @@ fn parse_cli_overrides(cli: &Cli) -> Result<Overrides, anyhow::Error> {
         .transpose()?;
     overrides.request_timeout_secs = cli.request_timeout_secs;
     overrides.drain_timeout_secs = cli.drain_timeout_secs;
+    overrides.reconfig_drain_timeout_secs = cli.reconfig_drain_timeout_secs;
     overrides.max_body_size_mb = cli.max_body_size_mb;
     overrides.opaque_errors = cli.opaque_errors;
     overrides.require_user_agent = cli.require_user_agent;
@@ -941,25 +1082,29 @@ fn derive_data_access_state(
 fn finalize_allowed_base_urls(
     data_access: DataAccessMode,
     allowed_base_urls: Option<Vec<String>>,
-) -> Result<Option<Vec<String>>, anyhow::Error> {
+) -> Result<Vec<String>, anyhow::Error> {
+    // Library field is `Vec<String>` (post-Task-0); empty list = "block
+    // all network data" (secure-by-default). The data-access machinery
+    // stays as a resolver-layer DSL that writes into that single field.
     match data_access {
         DataAccessMode::Default => {
             if allowed_base_urls.is_some() {
                 bail!("allowed_base_urls may only be set when data_access=allowlist");
             }
-            Ok(None)
+            // Library default: empty list = block all.
+            Ok(Vec::new())
         }
         DataAccessMode::None => {
             if allowed_base_urls.is_some() {
                 bail!("allowed_base_urls may only be set when data_access=allowlist");
             }
-            Ok(Some(vec![]))
+            Ok(Vec::new())
         }
         DataAccessMode::All => {
             if allowed_base_urls.is_some() {
                 bail!("allowed_base_urls may only be set when data_access=allowlist");
             }
-            Ok(Some(vec!["*".to_string()]))
+            Ok(vec!["*".to_string()])
         }
         DataAccessMode::Allowlist => {
             let urls = allowed_base_urls
@@ -970,7 +1115,7 @@ fn finalize_allowed_base_urls(
             if urls.len() == 1 && urls[0] == "*" {
                 bail!("Use data_access=all instead of allowed_base_urls=[\"*\"]");
             }
-            Ok(Some(urls))
+            Ok(urls)
         }
     }
 }
@@ -1113,7 +1258,7 @@ mod tests {
         assert!(resolved.converter_config.auto_google_fonts);
         assert_eq!(
             resolved.converter_config.allowed_base_urls,
-            Some(vec!["https://config.example/".to_string()])
+            vec!["https://config.example/".to_string()]
         );
     }
 
@@ -1140,7 +1285,10 @@ mod tests {
         ]);
         let resolved = resolve_settings(cli).unwrap();
 
-        assert_eq!(resolved.converter_config.allowed_base_urls, None);
+        // Post-Task-0 `allowed_base_urls: Vec<String>` (no Option);
+        // `--allowed-base-urls null` clears the inherited allowlist to
+        // the library default (empty list = block all network data).
+        assert!(resolved.converter_config.allowed_base_urls.is_empty());
     }
 
     #[test]
@@ -1187,7 +1335,7 @@ mod tests {
             resolve_settings(parse_cli(&["--load-config=false", "--data-access", "all"])).unwrap();
         assert_eq!(
             resolved.converter_config.allowed_base_urls,
-            Some(vec!["*".to_string()])
+            vec!["*".to_string()]
         );
     }
 
@@ -1356,6 +1504,198 @@ mod tests {
             ),
             "invalid PORT should be silently ignored; got {:?}",
             resolved.serve_config.main
+        );
+    }
+
+    #[test]
+    fn test_font_dir_cli_seeds_vlc_config_font_directories() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+
+        let resolved = resolve_settings(parse_cli(&[
+            "--font-dir",
+            "/tmp/fonts-a",
+            "--font-dir",
+            "/tmp/fonts-b",
+        ]))
+        .unwrap();
+        assert_eq!(
+            resolved.converter_config.font_directories,
+            vec![
+                PathBuf::from("/tmp/fonts-a"),
+                PathBuf::from("/tmp/fonts-b"),
+            ],
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn test_font_dir_env_parses_colon_separated_list() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+        guard.set(super::super::env::ENV_FONT_DIR, "/tmp/fonts-a:/tmp/fonts-b");
+
+        let resolved = resolve_settings(parse_cli(&[])).unwrap();
+        assert_eq!(
+            resolved.converter_config.font_directories,
+            vec![
+                PathBuf::from("/tmp/fonts-a"),
+                PathBuf::from("/tmp/fonts-b"),
+            ],
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn test_font_dir_env_and_cli_compose_in_order() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+        guard.set(super::super::env::ENV_FONT_DIR, "/env-a:/env-b");
+
+        // Env entries are applied first, then CLI entries. Resolver
+        // dedupes in finalize.
+        let resolved =
+            resolve_settings(parse_cli(&["--font-dir", "/cli-a", "--font-dir", "/env-a"]))
+                .unwrap();
+        assert_eq!(
+            resolved.converter_config.font_directories,
+            vec![
+                PathBuf::from("/env-a"),
+                PathBuf::from("/env-b"),
+                PathBuf::from("/cli-a"),
+                // `/env-a` appears twice across passes; dedupe removes
+                // the second hit so `set_font_directories` sees a
+                // unique list.
+            ],
+        );
+    }
+
+    #[test]
+    fn test_google_fonts_cache_size_mb_cli_plumbing() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+
+        let resolved =
+            resolve_settings(parse_cli(&["--google-fonts-cache-size-mb", "256"])).unwrap();
+        assert_eq!(
+            resolved.converter_config.google_fonts_cache_size_mb,
+            NonZeroU64::new(256),
+        );
+
+        let resolved_zero =
+            resolve_settings(parse_cli(&["--google-fonts-cache-size-mb", "0"])).unwrap();
+        assert_eq!(
+            resolved_zero.converter_config.google_fonts_cache_size_mb,
+            None,
+            "CLI `0` should collapse to `None` (library default)",
+        );
+
+        let resolved_absent = resolve_settings(parse_cli(&[])).unwrap();
+        assert_eq!(
+            resolved_absent.converter_config.google_fonts_cache_size_mb,
+            None,
+        );
+    }
+
+    #[test]
+    fn test_google_fonts_cache_size_mb_env_plumbing() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+        guard.set(
+            super::super::env::ENV_GOOGLE_FONTS_CACHE_SIZE_MB,
+            "128",
+        );
+
+        let resolved = resolve_settings(parse_cli(&[])).unwrap();
+        assert_eq!(
+            resolved.converter_config.google_fonts_cache_size_mb,
+            NonZeroU64::new(128),
+        );
+    }
+
+    #[test]
+    fn test_num_workers_zero_cli_rejected() {
+        // `--workers 0` is rejected at clap parse time (value_parser);
+        // `resolve_settings` therefore never observes it. Mirrors the
+        // library-side `NonZeroUsize` invariant.
+        use clap::Parser;
+        let err = Cli::try_parse_from(["vl-convert-server", "--workers", "0"]).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("positive") || msg.contains(">= 1"),
+            "expected positive-integer message; got: {msg}",
+        );
+    }
+
+    #[test]
+    fn test_numeric_caps_zero_shorthand_is_none() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+
+        let resolved = resolve_settings(parse_cli(&[
+            "--max-v8-heap-size-mb",
+            "0",
+            "--max-v8-execution-time-secs",
+            "0",
+            "--max-ephemeral-workers",
+            "0",
+        ]))
+        .unwrap();
+        assert_eq!(resolved.converter_config.max_v8_heap_size_mb, None);
+        assert_eq!(resolved.converter_config.max_ephemeral_workers, None);
+        // `max_v8_execution_time_secs` gets clamped by
+        // `request_timeout_secs` in finalize (default 30s). Before the
+        // clamp the value is `None`; after the clamp it's
+        // `Some(NZ(30))` because `None` < any positive HTTP timeout.
+        assert_eq!(
+            resolved.converter_config.max_v8_execution_time_secs,
+            NonZeroU64::new(30),
+            "finalize clamps None to the HTTP request_timeout_secs",
+        );
+    }
+
+    #[test]
+    fn test_numeric_caps_positive_round_trip() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        let guard = EnvGuard::new();
+        guard.clear_all();
+        guard.set(ENV_LOAD_CONFIG, "false");
+
+        let resolved = resolve_settings(parse_cli(&[
+            "--max-v8-heap-size-mb",
+            "1024",
+            "--max-ephemeral-workers",
+            "4",
+            "--request-timeout-secs",
+            "120",
+            "--max-v8-execution-time-secs",
+            "60",
+        ]))
+        .unwrap();
+        assert_eq!(
+            resolved.converter_config.max_v8_heap_size_mb,
+            NonZeroUsize::new(1024),
+        );
+        assert_eq!(
+            resolved.converter_config.max_ephemeral_workers,
+            NonZeroUsize::new(4),
+        );
+        // 60s < 120s HTTP cap; finalize leaves it alone.
+        assert_eq!(
+            resolved.converter_config.max_v8_execution_time_secs,
+            NonZeroU64::new(60),
         );
     }
 }

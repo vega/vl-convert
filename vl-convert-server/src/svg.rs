@@ -25,12 +25,13 @@ pub async fn svg_to_png(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SvgPngRequest>,
 ) -> Response {
+    let snap = state.runtime.load_full();
     let png_opts = PngOpts {
         scale: req.scale,
         ppi: req.ppi,
     };
 
-    match state.converter.svg_to_png(&req.svg, png_opts).await {
+    match snap.converter.svg_to_png(&req.svg, png_opts).await {
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
@@ -64,12 +65,13 @@ pub async fn svg_to_jpeg(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SvgJpegRequest>,
 ) -> Response {
+    let snap = state.runtime.load_full();
     let jpeg_opts = JpegOpts {
         scale: req.scale,
         quality: req.quality,
     };
 
-    match state.converter.svg_to_jpeg(&req.svg, jpeg_opts).await {
+    match snap.converter.svg_to_jpeg(&req.svg, jpeg_opts).await {
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
@@ -103,7 +105,8 @@ pub async fn svg_to_pdf(
     State(state): State<Arc<AppState>>,
     Json(req): Json<SvgPdfRequest>,
 ) -> Response {
-    match state
+    let snap = state.runtime.load_full();
+    match snap
         .converter
         .svg_to_pdf(&req.svg, PdfOpts::default())
         .await

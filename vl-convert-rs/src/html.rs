@@ -755,16 +755,11 @@ impl VlConverter {
         };
 
         // Ensure plugins are resolved (triggers pool spawn if not yet started)
-        if self.inner.config.vega_plugins.is_some() {
+        if !self.inner.config.vega_plugins.is_empty() {
             self.warm_up()?;
         }
-        let mut resolved_plugins_owned = self
-            .inner
-            .resolved_plugins
-            .lock()
-            .unwrap()
-            .clone()
-            .unwrap_or_default();
+        let mut resolved_plugins_owned =
+            self.inner.resolved_plugins.lock().unwrap().clone();
         // Append per-request plugin overlay if present
         if let Some(ref plugin_source) = vl_opts.vega_plugin {
             resolved_plugins_owned.push(ResolvedPlugin {
@@ -836,16 +831,11 @@ impl VlConverter {
         };
 
         // Ensure plugins are resolved (triggers pool spawn if not yet started)
-        if self.inner.config.vega_plugins.is_some() {
+        if !self.inner.config.vega_plugins.is_empty() {
             self.warm_up()?;
         }
-        let mut resolved_plugins_owned = self
-            .inner
-            .resolved_plugins
-            .lock()
-            .unwrap()
-            .clone()
-            .unwrap_or_default();
+        let mut resolved_plugins_owned =
+            self.inner.resolved_plugins.lock().unwrap().clone();
         // Append per-request plugin overlay if present
         if let Some(ref plugin_source) = vg_opts.vega_plugin {
             resolved_plugins_owned.push(ResolvedPlugin {

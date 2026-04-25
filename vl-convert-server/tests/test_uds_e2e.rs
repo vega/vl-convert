@@ -255,6 +255,113 @@ fn test_bind_failure_emits_no_ready() {
     );
 }
 
+/// Subprocess-level round-trip: spawn the binary with UDS main + UDS
+/// admin, read ready-JSON, PATCH via the admin socket, then GET via the
+/// admin socket and confirm `generation` bumped. Also verifies the public
+/// `/infoz` surface (on the main socket) does NOT expose generation.
+///
+/// Uses raw hyper + UnixStream (reqwest has no UDS transport at our
+/// pinned version). The UDS helpers in `common::` aren't used because
+/// this test file doesn't import `common` — it's a subprocess e2e test.
+#[cfg(unix)]
+#[test]
+fn test_admin_config_roundtrip_via_uds() {
+    use std::os::unix::net::UnixStream;
+    use std::io::{Read, Write};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let main_sock = tmp.path().join("main.sock");
+    let admin_sock = tmp.path().join("admin.sock");
+
+    let mut child = spawn_server_piped(&[
+        "--unix-socket",
+        main_sock.to_str().unwrap(),
+        "--admin-unix-socket",
+        admin_sock.to_str().unwrap(),
+        "--ready-json",
+        "--drain-timeout-secs",
+        "5",
+    ]);
+
+    let ready = read_ready_json(&mut child);
+    assert_eq!(ready["ready"], serde_json::Value::Bool(true));
+
+    // Helper: blocking HTTP/1.1 over a UDS socket. Keeps things simple —
+    // no hyper client runtime needed.
+    fn uds_request(
+        sock_path: &std::path::Path,
+        method: &str,
+        path: &str,
+        body: Option<&str>,
+    ) -> (u16, String) {
+        let mut stream = UnixStream::connect(sock_path).expect("connect to UDS failed");
+        stream.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
+        stream.set_write_timeout(Some(Duration::from_secs(30))).unwrap();
+
+        let body = body.unwrap_or("");
+        let req = format!(
+            "{method} {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        stream.write_all(req.as_bytes()).unwrap();
+
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).unwrap();
+        let raw = String::from_utf8_lossy(&buf).to_string();
+        let (headers, body_str) = raw
+            .split_once("\r\n\r\n")
+            .map(|(h, b)| (h.to_string(), b.to_string()))
+            .unwrap_or_else(|| (raw.clone(), String::new()));
+        let status_line = headers.lines().next().unwrap_or("");
+        // "HTTP/1.1 200 OK" → 200
+        let status: u16 = status_line
+            .split_whitespace()
+            .nth(1)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        (status, body_str)
+    }
+
+    // GET /admin/config on admin socket — baseline generation = 0.
+    let (status, body) = uds_request(&admin_sock, "GET", "/admin/config", None);
+    assert_eq!(status, 200, "admin GET must 200; body: {body}");
+    let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(parsed["generation"], 0);
+    assert_eq!(parsed["config_version"], 0);
+
+    // PATCH /admin/config via admin UDS.
+    let (status, _) = uds_request(
+        &admin_sock,
+        "PATCH",
+        "/admin/config",
+        Some(r#"{"default_theme":"dark"}"#),
+    );
+    assert_eq!(status, 200, "admin PATCH must 200");
+
+    // GET /admin/config on admin socket — generation should be 1.
+    let (status, body) = uds_request(&admin_sock, "GET", "/admin/config", None);
+    assert_eq!(status, 200);
+    let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        parsed["generation"], 1,
+        "admin PATCH must bump generation to 1"
+    );
+    assert_eq!(parsed["effective"]["default_theme"], "dark");
+
+    // GET /infoz on main socket — MUST NOT expose generation.
+    let (status, body) = uds_request(&main_sock, "GET", "/infoz", None);
+    assert_eq!(status, 200);
+    let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert!(
+        parsed.get("generation").is_none(),
+        "/infoz must not expose generation; got: {body}"
+    );
+
+    // Clean up.
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 #[cfg(windows)]
 #[test]
 fn test_cli_rejects_uds_on_windows() {
