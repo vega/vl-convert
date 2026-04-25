@@ -1,14 +1,18 @@
 # vl-convert
 
-Rust library + CLI + Python bindings for converting Vega-Lite to static images (SVG, PNG, PDF, JPEG) without internet.
+Rust library + CLI + HTTP server + Python bindings for converting Vega-Lite to static images (SVG, PNG, PDF, JPEG) without internet.
 
 ## Architecture
 
 ```
-vl-convert-rs/      Core Rust library (Deno v8 for JS execution)
-vl-convert/         CLI wrapper
-vl-convert-python/  Python bindings (PyO3/maturin)
-vl-convert-vendor/  JS vendoring utility (dev only, not published)
+vl-convert-rs/           Core Rust library (Deno v8 for JS execution)
+vl-convert/              CLI wrapper
+vl-convert-server/       HTTP server (axum) with REST API + OpenAPI docs
+vl-convert-python/       Python bindings (PyO3/maturin)
+vl-convert-canvas2d/     Canvas 2D rendering core
+vl-convert-canvas2d-deno/ Canvas 2D Deno bridge (ops + JS polyfill)
+vl-convert-google-fonts/ Google Fonts client
+vl-convert-vendor/       JS vendoring utility (dev only, not published)
 ```
 
 ## Development Environment

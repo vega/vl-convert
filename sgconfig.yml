@@ -1,0 +1,11 @@
+# ast-grep project configuration.
+#
+# Rules in `ruleDirs` are picked up by `ast-grep scan`. Run it locally
+# with `ast-grep scan` (also available via `pixi run lint-ast`) or let
+# CI run it via the `ast-grep lint` step in `.github/workflows/CI.yml`.
+#
+# Each rule file is a single YAML document describing a structural
+# pattern and a message. See https://ast-grep.github.io/ for syntax.
+
+ruleDirs:
+  - .ast-grep/rules

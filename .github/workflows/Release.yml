@@ -17,22 +17,33 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install protobuf-compiler
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Package CLI
         run: |
-          mkdir -p bin
-          cp target/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
-          zip -r vl-convert_linux-64.zip bin/
-      - name: Upload artifacts
+          mkdir -p cli-bin
+          cp target/release/vl-convert cli-bin/
+          cp LICENSE cli-bin/
+          cp thirdparty_* cli-bin/
+          zip -r vl-convert_linux-64.zip cli-bin/
+      - name: Package server
+        run: |
+          mkdir -p server-bin
+          cp target/release/vl-convert-server server-bin/
+          cp LICENSE server-bin/
+          cp thirdparty_* server-bin/
+          zip -r vl-convert-server_linux-64.zip server-bin/
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v7
         with:
           name: vl-convert-linux-x86
-          path: |
-            vl-convert_linux-64.zip
+          path: vl-convert_linux-64.zip
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vl-convert-server-linux-x86
+          path: vl-convert-server_linux-64.zip
 
   build-cli-linux-aarch64:
     runs-on: ubuntu-24.04-arm
@@ -44,22 +55,33 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install protobuf-compiler
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Package CLI
         run: |
-          mkdir -p bin
-          cp target/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
-          zip -r vl-convert_linux-aarch64.zip bin/
-      - name: Upload artifacts
+          mkdir -p cli-bin
+          cp target/release/vl-convert cli-bin/
+          cp LICENSE cli-bin/
+          cp thirdparty_* cli-bin/
+          zip -r vl-convert_linux-aarch64.zip cli-bin/
+      - name: Package server
+        run: |
+          mkdir -p server-bin
+          cp target/release/vl-convert-server server-bin/
+          cp LICENSE server-bin/
+          cp thirdparty_* server-bin/
+          zip -r vl-convert-server_linux-aarch64.zip server-bin/
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v7
         with:
           name: vl-convert-linux-aarch64
-          path: |
-            vl-convert_linux-aarch64.zip
+          path: vl-convert_linux-aarch64.zip
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vl-convert-server-linux-aarch64
+          path: vl-convert-server_linux-aarch64.zip
 
   build-cli-win-64:
     runs-on: windows-2022
@@ -79,26 +101,41 @@ jobs:
       # pulled in via deno_runtime -> deno_tls -> rustls -> aws-lc-rs
       - name: Install NASM
         uses: ilammy/setup-nasm@v1
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Package CLI
         run: |
-          New-Item -Path "artifacts\bin" -ItemType Directory
-          Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
-          Copy-Item "LICENSE" -Destination "artifacts\bin"
-          Copy-Item "thirdparty_*" -Destination "artifacts\bin"
-      - name: zip executable
+          New-Item -Path "cli-artifacts\bin" -ItemType Directory
+          Copy-Item "target\release\vl-convert.exe" -Destination "cli-artifacts\bin"
+          Copy-Item "LICENSE" -Destination "cli-artifacts\bin"
+          Copy-Item "thirdparty_*" -Destination "cli-artifacts\bin"
+      - name: Package server
+        run: |
+          New-Item -Path "server-artifacts\bin" -ItemType Directory
+          Copy-Item "target\release\vl-convert-server.exe" -Destination "server-artifacts\bin"
+          Copy-Item "LICENSE" -Destination "server-artifacts\bin"
+          Copy-Item "thirdparty_*" -Destination "server-artifacts\bin"
+      - name: Zip CLI
         uses: vimtor/action-zip@v1
         with:
-          files: artifacts/
+          files: cli-artifacts/
           dest: vl-convert_win-64.zip
-      - name: Upload artifacts
+      - name: Zip server
+        uses: vimtor/action-zip@v1
+        with:
+          files: server-artifacts/
+          dest: vl-convert-server_win-64.zip
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v7
         with:
           name: vl-convert-win-64
-          path: |
-            vl-convert_win-64.zip
+          path: vl-convert_win-64.zip
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vl-convert-server-win-64
+          path: vl-convert-server_win-64.zip
 
   build-cli-osx-64:
     runs-on: macos-15-intel
@@ -110,22 +147,33 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Package CLI
         run: |
-          mkdir -p bin
-          cp target/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
-          zip -r vl-convert_osx-64.zip bin/
-      - name: Upload artifacts
+          mkdir -p cli-bin
+          cp target/release/vl-convert cli-bin/
+          cp LICENSE cli-bin/
+          cp thirdparty_* cli-bin/
+          zip -r vl-convert_osx-64.zip cli-bin/
+      - name: Package server
+        run: |
+          mkdir -p server-bin
+          cp target/release/vl-convert-server server-bin/
+          cp LICENSE server-bin/
+          cp thirdparty_* server-bin/
+          zip -r vl-convert-server_osx-64.zip server-bin/
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v7
         with:
           name: vl-convert-osx-64
-          path: |
-            vl-convert_osx-64.zip
+          path: vl-convert_osx-64.zip
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vl-convert-server-osx-64
+          path: vl-convert-server_osx-64.zip
 
   build-cli-osx-arm64:
     runs-on: macos-14
@@ -137,22 +185,33 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build vl-convert
+      - name: Build vl-convert and vl-convert-server
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          cargo build --release -p vl-convert -p vl-convert-server
+      - name: Package CLI
         run: |
-          mkdir -p bin
-          cp target/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
-          zip -r vl-convert_osx-arm64.zip bin/
-      - name: Upload artifacts
+          mkdir -p cli-bin
+          cp target/release/vl-convert cli-bin/
+          cp LICENSE cli-bin/
+          cp thirdparty_* cli-bin/
+          zip -r vl-convert_osx-arm64.zip cli-bin/
+      - name: Package server
+        run: |
+          mkdir -p server-bin
+          cp target/release/vl-convert-server server-bin/
+          cp LICENSE server-bin/
+          cp thirdparty_* server-bin/
+          zip -r vl-convert-server_osx-arm64.zip server-bin/
+      - name: Upload CLI artifact
         uses: actions/upload-artifact@v7
         with:
           name: vl-convert-osx-arm64
-          path: |
-            vl-convert_osx-arm64.zip
+          path: vl-convert_osx-arm64.zip
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vl-convert-server-osx-arm64
+          path: vl-convert-server_osx-arm64.zip
 
   build-wheels-linux-x86_64:
     runs-on: ubuntu-latest
