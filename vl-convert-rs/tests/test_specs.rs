@@ -724,7 +724,6 @@ mod test_png_google_fonts {
         let vl_version = VlVersion::v5_8;
         let vl_spec = load_vl_spec("google_fonts");
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
             google_fonts: vec![
                 GoogleFontRequest { family: "Bangers".to_string(), variants: None },
                 GoogleFontRequest { family: "Lugrasimo".to_string(), variants: None },

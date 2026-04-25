@@ -178,8 +178,8 @@ pub fn parse_config_overrides(
     };
 
     // Uniform `None` semantics: passing `None` for any kwarg resets that
-    // field to `default_python_config()`.
-    let default = crate::default_python_config();
+    // field to its `VlcConfig::default()` value.
+    let default = VlcConfig::default();
 
     for (key, value) in kwargs.iter() {
         let key_str: String = key.extract().map_err(|err| {
@@ -580,7 +580,7 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
         None => {
             let standard = vl_convert_rs::vlc_config_path();
             if !standard.exists() {
-                crate::default_python_config()
+                VlcConfig::default()
             } else {
                 VlcConfig::from_file(&standard)?
             }

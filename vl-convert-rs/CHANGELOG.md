@@ -4,13 +4,18 @@
 
 ### Breaking changes
 
-**Secure-by-default `VlcConfig::default()`.** The library default now applies a hardened profile that previously lived only in vl-convert-server's `apply_server_defaults`:
+**`VlcConfig::default()` profile.** The library default now sets:
 
-- `allowed_base_urls` defaults to `vec![]` (empty allowlist → **blocks all network data access**).
-- `max_v8_heap_size_mb` defaults to `Some(NonZeroUsize::new(512).unwrap())` (512MB cap per worker).
-- `max_ephemeral_workers` defaults to `Some(NonZeroUsize::new(2).unwrap())` (harmless when per-request plugins are disabled).
-
-**Migration:** to restore the previous "unrestricted" network-data behavior, explicitly set `allowed_base_urls` to an appropriate list, e.g. `vec!["http:".into(), "https:".into()]` or a more specific allowlist appropriate for your deployment. To opt out of the heap cap, pass `max_v8_heap_size_mb: None` or a larger `Some(NonZeroUsize::new(n).unwrap())`.
+- `allowed_base_urls = vec!["http:".to_string(), "https:".to_string()]`
+  — any HTTP/HTTPS URL is allowed; no filesystem access. Pass an
+  explicit prefix list (e.g. `vec!["https://cdn.mycompany.com/".into()]`)
+  to narrow access; pass `Vec::new()` to block all network data;
+  pass `vec!["*".into()]` to allow everything (including filesystem
+  reads).
+- `max_v8_heap_size_mb = Some(NonZeroUsize::new(512))` — 512 MB cap per
+  worker. `None` removes the cap.
+- `max_ephemeral_workers = Some(NonZeroUsize::new(2))` — harmless when
+  per-request plugins are disabled.
 
 **Sentinel-zero integer fields become `Option<NonZero*>`.** Fields that used `0` as a "no limit / use default" marker are now typed with explicit `Option<NonZero*>`:
 

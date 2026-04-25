@@ -19,24 +19,11 @@ pub use info::*;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use std::sync::{Arc, RwLock};
-use vl_convert_rs::converter::VlcConfig;
 use vl_convert_rs::VlConverter as VlConverterRs;
 
-/// Default `VlcConfig` for Python callers: `VlcConfig::default()` plus
-/// `allowed_base_urls = ["http:", "https:"]`. Used by `VL_CONVERTER`
-/// at startup and as the reset target for `vlc.configure(field=None)`.
-pub(crate) fn default_python_config() -> VlcConfig {
-    VlcConfig {
-        allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
-        ..VlcConfig::default()
-    }
-}
-
 lazy_static! {
-    static ref VL_CONVERTER: RwLock<Arc<VlConverterRs>> = RwLock::new(Arc::new(
-        VlConverterRs::with_config(default_python_config())
-            .expect("default Python converter config is valid")
-    ));
+    static ref VL_CONVERTER: RwLock<Arc<VlConverterRs>> =
+        RwLock::new(Arc::new(VlConverterRs::new()));
     static ref PYTHON_RUNTIME: tokio::runtime::Runtime =
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()

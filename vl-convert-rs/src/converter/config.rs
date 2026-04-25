@@ -118,8 +118,9 @@ pub struct VlcConfig {
     pub base_url: BaseUrlSetting,
     /// Allowlist for data access (HTTP URLs, filesystem paths).
     /// Uses CSP-style patterns: "https:" (scheme), "https://example.com/" (prefix),
-    /// "/data/" (filesystem). Empty list = block all network data (default).
-    /// `["*"]` = allow everything.
+    /// "/data/" (filesystem). Default is `["http:", "https:"]` — any
+    /// HTTP/HTTPS URL is allowed; no filesystem access. Pass `Vec::new()`
+    /// to block all network data; `["*"]` to allow everything.
     pub allowed_base_urls: Vec<String>,
     /// Whether to auto-download missing fonts from Google Fonts.
     pub auto_google_fonts: bool,
@@ -225,20 +226,19 @@ pub type VlConverterConfig = VlcConfig;
 
 impl Default for VlcConfig {
     fn default() -> Self {
-        // Secure/sane profile for both library and server callers.
+        // Sane profile for library, CLI, and server callers.
         //
-        // - `allowed_base_urls = vec![]` — blocks all network data (empty list
-        //   is the new "unset" state; to restore permissive behavior pass an
-        //   explicit scheme allowlist like `["http:", "https:"]`).
+        // - `allowed_base_urls = ["http:", "https:"]` — any HTTP/HTTPS URL is
+        //   allowed; no filesystem access. Pass `Vec::new()` to block all
+        //   network data; `["*"]` to allow everything (including
+        //   filesystem reads).
         // - `max_v8_heap_size_mb = Some(NZ(512))` — bounds per-worker V8 heap.
         // - `max_ephemeral_workers = Some(NZ(2))` — bounds ephemeral-worker
         //   concurrency (harmless when per-request plugins are disabled).
-        // - Absorbs the server's former `apply_server_defaults` coercions
-        //   into the library itself.
         Self {
             num_workers: NonZeroUsize::new(1).expect("1 is non-zero"),
             base_url: BaseUrlSetting::Default,
-            allowed_base_urls: Vec::new(),
+            allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
             auto_google_fonts: false,
             embed_local_fonts: false,
             subset_fonts: true,
@@ -553,12 +553,13 @@ mod tests {
     }
 
     #[test]
-    fn default_config_is_secure() {
+    fn default_config_values() {
         let cfg = VlcConfig::default();
         assert_eq!(cfg.num_workers.get(), 1, "num_workers default is 1");
-        assert!(
-            cfg.allowed_base_urls.is_empty(),
-            "allowed_base_urls default is empty (blocks all network data)"
+        assert_eq!(
+            cfg.allowed_base_urls,
+            vec!["http:".to_string(), "https:".to_string()],
+            "allowed_base_urls default permits HTTP/HTTPS"
         );
         assert_eq!(
             cfg.max_v8_heap_size_mb,

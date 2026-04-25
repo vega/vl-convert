@@ -10,8 +10,8 @@ use clap::Parser;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::str::FromStr;
 use vl_convert_rs::converter::{
-    vega_to_url, vegalite_to_url, BaseUrlSetting, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer,
-    SvgOpts, UrlOpts, VgOpts, VlConverter, VlOpts, VlcConfig,
+    vega_to_url, vegalite_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts, UrlOpts,
+    VgOpts, VlConverter, VlOpts, VlcConfig,
 };
 use vl_convert_rs::{anyhow, anyhow::bail};
 
@@ -22,9 +22,10 @@ use handlers::{
     vl_2_svg, vl_2_vg,
 };
 use io_utils::{
-    flatten_plugin_domains, merge_font_dir, parse_format_locale_option, parse_google_font_requests,
-    parse_time_format_locale_option, parse_vl_version, read_config_json, read_input_string,
-    resolve_vlc_config, write_output_binary, write_output_string,
+    flatten_plugin_domains, merge_font_dir, parse_allowed_base_urls, parse_base_url_arg,
+    parse_format_locale_option, parse_google_font_requests, parse_time_format_locale_option,
+    parse_vl_version, read_config_json, read_input_string, resolve_vlc_config,
+    write_output_binary, write_output_string, DataAccessMode,
 };
 
 #[tokio::main]
@@ -49,33 +50,27 @@ async fn main() -> Result<(), anyhow::Error> {
         Some(cli.vega_plugin.clone())
     };
 
-    let mut base_config = resolve_vlc_config(cli.vlc_config.as_deref(), cli.no_vlc_config)?;
+    let mut base_config = resolve_vlc_config(cli.vlc_config.as_deref(), cli.load_config)?;
 
-    if cli.base_url.is_some() || cli.no_base_url {
-        let base_url_setting = if cli.no_base_url {
-            BaseUrlSetting::Disabled
-        } else if let Some(ref url) = cli.base_url {
-            BaseUrlSetting::Custom(url.clone())
-        } else {
-            BaseUrlSetting::Default
-        };
-        base_config.base_url = base_url_setting;
+    if let Some(ref raw) = cli.base_url {
+        base_config.base_url = parse_base_url_arg(raw)?;
     }
-    if !cli.allowed_base_url.is_empty() || cli.no_allowed_urls {
-        base_config.allowed_base_urls = if cli.no_allowed_urls {
-            Vec::new()
-        } else {
-            cli.allowed_base_url.clone()
-        };
+    let explicit_allowlist = cli
+        .allowed_base_urls
+        .as_deref()
+        .map(parse_allowed_base_urls)
+        .transpose()?;
+    if let Some(allowlist) = DataAccessMode::resolve(cli.data_access, explicit_allowlist)? {
+        base_config.allowed_base_urls = allowlist;
     }
-    if cli.auto_google_fonts {
-        base_config.auto_google_fonts = true;
+    if let Some(v) = cli.auto_google_fonts {
+        base_config.auto_google_fonts = v;
     }
-    if cli.embed_local_fonts {
-        base_config.embed_local_fonts = true;
+    if let Some(v) = cli.embed_local_fonts {
+        base_config.embed_local_fonts = v;
     }
-    if cli.no_subset_fonts {
-        base_config.subset_fonts = false;
+    if let Some(v) = cli.subset_fonts {
+        base_config.subset_fonts = v;
     }
     if let Some(ref mf) = cli.missing_fonts {
         base_config.missing_fonts = mf.to_policy();
@@ -87,8 +82,8 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(timeout) = cli.max_v8_execution_time_secs {
         base_config.max_v8_execution_time_secs = NonZeroU64::new(timeout);
     }
-    if cli.gc_after_conversion {
-        base_config.gc_after_conversion = true;
+    if let Some(v) = cli.gc_after_conversion {
+        base_config.gc_after_conversion = v;
     }
     if let Some(plugins) = vega_plugins {
         base_config.vega_plugins = plugins;

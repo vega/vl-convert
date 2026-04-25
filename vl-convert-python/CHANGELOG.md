@@ -4,21 +4,26 @@
 
 ### Defaults
 
-`VlcConfig::default()` in `vl-convert-rs` is secure (empty
-`allowed_base_urls`, 512 MB V8 heap cap, 2 ephemeral workers). The
-Python binding boots with `default_python_config()`, which is the
-library default plus `allowed_base_urls = ["http:", "https:"]` so
-notebooks resolve `https://vega.github.io/...` style data URLs out of
-the box. To restrict, narrow the allowlist:
+The Python binding's global converter inherits `VlcConfig::default()`
+from `vl-convert-rs`:
+
+- `allowed_base_urls = ["http:", "https:"]` — any HTTP/HTTPS URL is
+  allowed; no filesystem access. Narrow with an explicit prefix list,
+  block all with `[]`, or allow everything (including filesystem)
+  with `["*"]`.
+- `max_v8_heap_size_mb = 512` — per-worker V8 heap cap.
+- `max_v8_execution_time_secs = None` — no execution-time cap.
+- `max_ephemeral_workers = 2` — concurrent ephemeral V8 isolates.
 
 ```python
 vlc.configure(allowed_base_urls=["https://cdn.mycompany.com/"])
+vlc.configure(allowed_base_urls=[])  # block all network data
 ```
 
 ### `configure(field=None)` — uniform reset semantics
 
 Passing `None` for any keyword resets that field to
-`default_python_config()`. To leave a field untouched, omit it.
+`VlcConfig::default()`. To leave a field untouched, omit it.
 
 | Kwarg | Reset value |
 |---|---|

@@ -2,7 +2,9 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
-use vl_convert_rs::converter::{FormatLocale, GoogleFontRequest, TimeFormatLocale, VlcConfig};
+use vl_convert_rs::converter::{
+    BaseUrlSetting, FormatLocale, GoogleFontRequest, TimeFormatLocale, VlcConfig,
+};
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
@@ -11,15 +13,102 @@ use vl_convert_rs::{anyhow, anyhow::bail};
 /// The library's `VlConverter::with_config` treats `VlcConfig.font_directories`
 /// as the authoritative replace target (via `set_font_directories`), so the
 /// CLI has to write the flag into the config *before* the converter is
-/// constructed. Previously this function called `register_font_directory`
-/// directly on the process-global store, which `with_config` then wiped on
-/// the next replace.
+/// constructed.
 pub(crate) fn merge_font_dir(config: &mut VlcConfig, dir: Option<String>) {
     if let Some(dir) = dir {
         let path = PathBuf::from(dir);
         if !config.font_directories.contains(&path) {
             config.font_directories.push(path);
         }
+    }
+}
+
+/// `=BOOL` value parser for clap flags. Mirrors the server CLI's
+/// `parse_boolish_arg`; accepts the same string forms.
+pub(crate) fn parse_boolish_arg(raw: &str) -> Result<bool, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => Err("expected one of: true, false, 1, 0, yes, no, on, off".to_string()),
+    }
+}
+
+/// Data-access mode for `--data-access=MODE`. Mirrors the server CLI's
+/// enum. `Default` resolves to `VlcConfig::default().allowed_base_urls`,
+/// which currently allows any HTTP/HTTPS URL.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub(crate) enum DataAccessMode {
+    Default,
+    None,
+    All,
+    Allowlist,
+}
+
+impl DataAccessMode {
+    /// Resolve `--data-access` + `--allowed-base-urls` into the final
+    /// `VlcConfig.allowed_base_urls` vector. `Ok(None)` means "no
+    /// override" (caller keeps the bootstrap value).
+    pub(crate) fn resolve(
+        mode: Option<Self>,
+        explicit: Option<Vec<String>>,
+    ) -> Result<Option<Vec<String>>, anyhow::Error> {
+        let inferred = mode.or_else(|| explicit.as_ref().map(|_| Self::Allowlist));
+        match (inferred, explicit) {
+            (None, None) => Ok(None),
+            (Some(Self::Default), None) => Ok(Some(VlcConfig::default().allowed_base_urls)),
+            (Some(Self::None), None) => Ok(Some(Vec::new())),
+            (Some(Self::All), None) => Ok(Some(vec!["*".to_string()])),
+            (Some(Self::Allowlist), Some(list)) => Ok(Some(list)),
+            (Some(Self::Allowlist), None) => bail!(
+                "--data-access=allowlist requires --allowed-base-urls=JSON|@FILE"
+            ),
+            (Some(mode), Some(_)) => bail!(
+                "--data-access={mode:?} does not accept --allowed-base-urls"
+            ),
+            (None, Some(_)) => unreachable!("inferred Allowlist when explicit is set"),
+        }
+    }
+}
+
+/// Parse a `--base-url` value into a `BaseUrlSetting`. Reserved values
+/// `default` and `disabled` map to the corresponding enum variants;
+/// any other string is taken as a custom URL or filesystem path.
+pub(crate) fn parse_base_url_arg(raw: &str) -> Result<BaseUrlSetting, anyhow::Error> {
+    match raw.trim() {
+        "default" => Ok(BaseUrlSetting::Default),
+        "disabled" => Ok(BaseUrlSetting::Disabled),
+        "" => bail!("--base-url must not be empty"),
+        other => Ok(BaseUrlSetting::Custom(other.to_string())),
+    }
+}
+
+/// Parse `--allowed-base-urls=JSON|@FILE` into `Vec<String>`. Accepts
+/// either a JSON-array literal (e.g. `["http:","https:"]`) or `@<path>`
+/// referencing a file containing the JSON array.
+pub(crate) fn parse_allowed_base_urls(raw: &str) -> Result<Vec<String>, anyhow::Error> {
+    let json_text = if let Some(path_str) = raw.strip_prefix('@') {
+        let expanded = shellexpand::tilde(path_str.trim()).to_string();
+        std::fs::read_to_string(&expanded).map_err(|err| {
+            anyhow::anyhow!("failed to read --allowed-base-urls @ {}: {err}", expanded)
+        })?
+    } else {
+        raw.to_string()
+    };
+    let value: serde_json::Value = serde_json::from_str(&json_text)
+        .map_err(|err| anyhow::anyhow!("--allowed-base-urls must be a JSON array: {err}"))?;
+    match value {
+        serde_json::Value::Array(values) => values
+            .into_iter()
+            .map(|v| match v {
+                serde_json::Value::String(s) => Ok(s),
+                _ => Err(anyhow::anyhow!(
+                    "--allowed-base-urls must be a JSON array of strings"
+                )),
+            })
+            .collect(),
+        _ => Err(anyhow::anyhow!(
+            "--allowed-base-urls must be a JSON array of strings"
+        )),
     }
 }
 
@@ -330,22 +419,20 @@ fn write_stdout_bytes(data: &[u8]) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Default `VlcConfig` for the CLI: `VlcConfig::default()` plus
-/// `allowed_base_urls = ["http:", "https:"]` so existing scripts that
-/// reference public dataset URLs work without `--allowed-base-url`.
-fn default_cli_config() -> VlcConfig {
-    VlcConfig {
-        allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
-        ..VlcConfig::default()
-    }
-}
-
+/// Resolve the bootstrap `VlcConfig` from `--vlc-config <path>` and
+/// `--load-config=BOOL`. When `load_config` is `Some(false)`, skip the
+/// config file entirely and return `VlcConfig::default()`. Otherwise
+/// load from `vlc_config` if given, else from the standard config path
+/// if it exists, else `VlcConfig::default()`.
 pub(crate) fn resolve_vlc_config(
     vlc_config: Option<&str>,
-    no_vlc_config: bool,
+    load_config: Option<bool>,
 ) -> Result<VlcConfig, anyhow::Error> {
-    if no_vlc_config {
-        return Ok(default_cli_config());
+    if matches!(load_config, Some(false)) {
+        if vlc_config.is_some() {
+            bail!("--vlc-config <path> conflicts with --load-config=false");
+        }
+        return Ok(VlcConfig::default());
     }
     let path = match vlc_config {
         Some(p) => {
@@ -355,7 +442,7 @@ pub(crate) fn resolve_vlc_config(
         None => {
             let default = vl_convert_rs::vlc_config_path();
             if !default.exists() {
-                return Ok(default_cli_config());
+                return Ok(VlcConfig::default());
             }
             default
         }

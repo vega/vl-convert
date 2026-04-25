@@ -3,6 +3,7 @@ use vl_convert_rs::converter::MissingFontsPolicy;
 pub(crate) use vl_convert_rs::DEFAULT_VL_VERSION;
 
 use crate::commands::Commands;
+use crate::io_utils::{parse_boolish_arg, DataAccessMode};
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default)]
 pub(crate) enum MissingFontsArg {
@@ -51,28 +52,41 @@ pub(crate) struct Cli {
     #[arg(long, global = true)]
     pub(crate) vlc_config: Option<String>,
 
-    /// Disable loading the default vlc-config file
-    #[arg(long, global = true, conflicts_with = "vlc_config")]
-    pub(crate) no_vlc_config: bool,
+    /// Whether to load the vlc-config file (default: true).
+    /// Pass `=false` to skip config-file loading; conflicts with
+    /// `--vlc-config`.
+    #[arg(
+        long,
+        global = true,
+        value_name = "BOOL",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        value_parser = parse_boolish_arg,
+    )]
+    pub(crate) load_config: Option<bool>,
 
-    /// Custom base URL for resolving relative data paths in Vega specs.
-    /// Can be a URL (https://...) or a local filesystem path (/data/).
+    /// Base URL for resolving relative data paths. Reserved values:
+    /// `default` (use vega-datasets CDN), `disabled` (relative paths
+    /// error). Any other string is taken as a custom URL or filesystem
+    /// path.
     #[arg(long, global = true)]
     pub(crate) base_url: Option<String>,
 
-    /// Disable relative path resolution (relative data paths produce an error)
-    #[arg(long, global = true, conflicts_with = "base_url")]
-    pub(crate) no_base_url: bool,
+    /// Data-access mode controlling which external URLs are allowed.
+    /// `default` = HTTP/HTTPS allowed (library default);
+    /// `none` = block all; `all` = allow everything (including
+    /// filesystem); `allowlist` requires `--allowed-base-urls`.
+    #[arg(long, global = true, value_enum, value_name = "MODE", ignore_case = true)]
+    pub(crate) data_access: Option<DataAccessMode>,
 
-    /// Allowed base URL pattern for external data access.
-    /// Supports CSP-style patterns: "https:" (scheme), "https://example.com/" (prefix),
-    /// "/data/" (filesystem). May be specified multiple times.
-    #[arg(long = "allowed-base-url", global = true)]
-    pub(crate) allowed_base_url: Vec<String>,
-
-    /// Disable all external data access (empty allowlist)
-    #[arg(long, global = true, conflicts_with = "allowed_base_url")]
-    pub(crate) no_allowed_urls: bool,
+    /// Allowed base URLs as a JSON array, or `@<path>` to read the
+    /// JSON from a file. Supports CSP-style patterns:
+    /// `"https:"` (scheme), `"https://example.com/"` (prefix),
+    /// `"/data/"` (filesystem). Auto-infers `--data-access=allowlist`
+    /// when used without an explicit `--data-access`.
+    #[arg(long, global = true, value_name = "JSON|@FILE")]
+    pub(crate) allowed_base_urls: Option<String>,
 
     /// Register a font from Google Fonts. Use "Family" for all variants,
     /// or "Family:400,700italic" for specific weight/style combinations.
@@ -80,17 +94,42 @@ pub(crate) struct Cli {
     #[arg(long = "google-font", global = true)]
     pub(crate) google_font: Vec<String>,
 
-    /// Automatically download missing fonts from Google Fonts.
-    #[arg(long, global = true)]
-    pub(crate) auto_google_fonts: bool,
+    /// Automatically download missing fonts from Google Fonts (default: false).
+    #[arg(
+        long,
+        global = true,
+        value_name = "BOOL",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        value_parser = parse_boolish_arg,
+    )]
+    pub(crate) auto_google_fonts: Option<bool>,
 
-    /// Embed locally installed fonts as base64 @font-face in HTML and SVG output.
-    #[arg(long, global = true)]
-    pub(crate) embed_local_fonts: bool,
+    /// Embed locally installed fonts as base64 @font-face in HTML and SVG output (default: false).
+    #[arg(
+        long,
+        global = true,
+        value_name = "BOOL",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        value_parser = parse_boolish_arg,
+    )]
+    pub(crate) embed_local_fonts: Option<bool>,
 
-    /// Disable font subsetting (embed full font files instead of only used characters)
-    #[arg(long, global = true)]
-    pub(crate) no_subset_fonts: bool,
+    /// Subset embedded fonts to only the characters used (default: true).
+    /// Pass `=false` to embed full font files.
+    #[arg(
+        long,
+        global = true,
+        value_name = "BOOL",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        value_parser = parse_boolish_arg,
+    )]
+    pub(crate) subset_fonts: Option<bool>,
 
     /// Missing-font behavior: fallback silently, warn, or error.
     #[arg(long, global = true, value_enum)]
@@ -104,9 +143,17 @@ pub(crate) struct Cli {
     #[arg(long, global = true)]
     pub(crate) max_v8_execution_time_secs: Option<u64>,
 
-    /// Run V8 garbage collection after each conversion to release memory
-    #[arg(long, global = true)]
-    pub(crate) gc_after_conversion: bool,
+    /// Run V8 garbage collection after each conversion to release memory (default: false).
+    #[arg(
+        long,
+        global = true,
+        value_name = "BOOL",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        value_parser = parse_boolish_arg,
+    )]
+    pub(crate) gc_after_conversion: Option<bool>,
 
     /// Vega plugin: file path (.js/.mjs), URL (https://...), or inline ESM string.
     /// The plugin must be a single ESM module that exports a default function

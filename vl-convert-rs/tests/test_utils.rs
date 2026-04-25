@@ -17,33 +17,26 @@ pub fn test_font_dir() -> PathBuf {
         .join("fonts")
 }
 
-/// Build a `VlConverter` with the secure default profile relaxed to allow
-/// `http:` and `https:` data loads + the test font directory already wired
-/// into `font_directories`.
+/// Build a `VlConverter` with the library default config plus the test
+/// font directory wired into `font_directories`. `VlcConfig::default()`
+/// already permits HTTP/HTTPS data loads.
 #[allow(dead_code)]
 pub fn test_converter() -> VlConverter {
     VlConverter::with_config(VlcConfig {
-        allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
         font_directories: vec![test_font_dir()],
         ..VlcConfig::default()
     })
     .expect("build test converter")
 }
 
-/// Same as [`test_converter`] but with extra `VlcConfig` overrides merged
-/// on top of the permissive defaults. Preserves the caller's
-/// `font_directories` if they set any, otherwise defaults to
-/// `vec![test_font_dir()]`.
+/// Same as [`test_converter`] but with extra `VlcConfig` overrides
+/// merged on top. Seeds the test font directory if the caller didn't.
 #[allow(dead_code)]
 pub fn test_converter_with_config(mut overrides: VlcConfig) -> VlConverter {
     if overrides.font_directories.is_empty() {
         overrides.font_directories = vec![test_font_dir()];
     }
-    VlConverter::with_config(VlcConfig {
-        allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
-        ..overrides
-    })
-    .expect("build test converter")
+    VlConverter::with_config(overrides).expect("build test converter")
 }
 
 static INIT: Once = Once::new();
