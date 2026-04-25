@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pythonize::{depythonize, pythonize};
 use std::collections::HashMap;
-use std::num::{NonZeroU64, NonZeroUsize};
+use std::num::NonZeroU64;
 use std::sync::Arc;
 use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, MissingFontsPolicy, TimeFormatLocale,
@@ -119,7 +119,7 @@ pub fn converter_config_json(config: &VlcConfig) -> serde_json::Value {
 /// value for a kwarg uniformly resets that field to its library default.
 #[derive(Default)]
 pub struct ConverterConfigOverrides {
-    pub num_workers: Option<NonZeroUsize>,
+    pub num_workers: Option<NonZeroU64>,
     pub base_url: Option<BaseUrlSetting>,
     pub allowed_base_urls: Option<Vec<String>>,
     pub google_fonts_cache_size_mb: Option<Option<NonZeroU64>>,
@@ -128,13 +128,13 @@ pub struct ConverterConfigOverrides {
     pub subset_fonts: Option<bool>,
     pub missing_fonts: Option<MissingFontsPolicy>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
-    pub max_v8_heap_size_mb: Option<Option<NonZeroUsize>>,
+    pub max_v8_heap_size_mb: Option<Option<NonZeroU64>>,
     pub max_v8_execution_time_secs: Option<Option<NonZeroU64>>,
     pub gc_after_conversion: Option<bool>,
     pub vega_plugins: Option<Vec<String>>,
     pub plugin_import_domains: Option<Vec<String>>,
     pub allow_per_request_plugins: Option<bool>,
-    pub max_ephemeral_workers: Option<Option<NonZeroUsize>>,
+    pub max_ephemeral_workers: Option<Option<NonZeroU64>>,
     pub allow_google_fonts: Option<bool>,
     pub per_request_plugin_import_domains: Option<Vec<String>>,
     pub default_theme: Option<Option<String>>,
@@ -153,18 +153,6 @@ fn extract_positive_u64(
         vl_convert_rs::anyhow::anyhow!("Invalid {key} value for configure: {err}")
     })?;
     NonZeroU64::new(raw).ok_or_else(|| {
-        vl_convert_rs::anyhow::anyhow!("Invalid {key} value for configure: must be >= 1, got 0")
-    })
-}
-
-fn extract_positive_usize(
-    key: &str,
-    value: &Bound<'_, PyAny>,
-) -> Result<NonZeroUsize, vl_convert_rs::anyhow::Error> {
-    let raw = value.extract::<usize>().map_err(|err| {
-        vl_convert_rs::anyhow::anyhow!("Invalid {key} value for configure: {err}")
-    })?;
-    NonZeroUsize::new(raw).ok_or_else(|| {
         vl_convert_rs::anyhow::anyhow!("Invalid {key} value for configure: must be >= 1, got 0")
     })
 }
@@ -190,7 +178,7 @@ pub fn parse_config_overrides(
                 overrides.num_workers = Some(if value.is_none() {
                     default.num_workers
                 } else {
-                    extract_positive_usize("num_workers", &value)?
+                    extract_positive_u64("num_workers", &value)?
                 });
             }
             "base_url" => {
@@ -307,7 +295,7 @@ pub fn parse_config_overrides(
                 if value.is_none() {
                     overrides.max_v8_heap_size_mb = Some(default.max_v8_heap_size_mb);
                 } else {
-                    let n = extract_positive_usize("max_v8_heap_size_mb", &value)?;
+                    let n = extract_positive_u64("max_v8_heap_size_mb", &value)?;
                     overrides.max_v8_heap_size_mb = Some(Some(n));
                 }
             }
@@ -369,7 +357,7 @@ pub fn parse_config_overrides(
                 if value.is_none() {
                     overrides.max_ephemeral_workers = Some(default.max_ephemeral_workers);
                 } else {
-                    let n = extract_positive_usize("max_ephemeral_workers", &value)?;
+                    let n = extract_positive_u64("max_ephemeral_workers", &value)?;
                     overrides.max_ephemeral_workers = Some(Some(n));
                 }
             }

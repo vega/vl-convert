@@ -7,7 +7,7 @@ mod handlers;
 mod io_utils;
 
 use clap::Parser;
-use std::num::{NonZeroU64, NonZeroUsize};
+use std::num::NonZeroU64;
 use std::str::FromStr;
 use vl_convert_rs::converter::{
     vega_to_url, vegalite_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts, UrlOpts,
@@ -77,7 +77,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     if let Some(heap) = cli.max_v8_heap_size_mb {
         // CLI passes `0` to mean "no cap"; otherwise treat as a hard cap.
-        base_config.max_v8_heap_size_mb = NonZeroUsize::new(heap);
+        base_config.max_v8_heap_size_mb = NonZeroU64::new(heap);
     }
     if let Some(timeout) = cli.max_v8_execution_time_secs {
         base_config.max_v8_execution_time_secs = NonZeroU64::new(timeout);
@@ -96,7 +96,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     let command = cli.command;
 
-    base_config.num_workers = NonZeroUsize::new(1).expect("1 is non-zero");
+    base_config.num_workers = NonZeroU64::new(1).expect("1 is non-zero");
 
     // Wrap all conversion work in select! so Ctrl+C drops the conversion
     // future, triggering CallerGoneGuard to terminate V8 promptly.

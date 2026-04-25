@@ -3,7 +3,7 @@ use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use deno_core::url::Url;
 use std::collections::HashMap;
-use std::num::{NonZeroU64, NonZeroUsize};
+use std::num::NonZeroU64;
 use std::path::Path;
 
 use super::fonts::GoogleFontRequest;
@@ -113,7 +113,7 @@ impl BaseUrlSetting {
 #[serde(default)]
 pub struct VlcConfig {
     /// Number of persistent worker V8 isolates. Must be at least 1.
-    pub num_workers: NonZeroUsize,
+    pub num_workers: NonZeroU64,
     /// Base URL for resolving relative data paths in Vega specs.
     pub base_url: BaseUrlSetting,
     /// Allowlist for data access (HTTP URLs, filesystem paths).
@@ -141,7 +141,7 @@ pub struct VlcConfig {
     pub google_fonts: Vec<GoogleFontRequest>,
     /// Maximum V8 heap size in megabytes per worker. `None` = no cap;
     /// `Some(n)` = explicit cap.
-    pub max_v8_heap_size_mb: Option<NonZeroUsize>,
+    pub max_v8_heap_size_mb: Option<NonZeroU64>,
     /// Maximum V8 execution time in seconds. `None` = no cap; `Some(n)` =
     /// explicit cap. When exceeded, V8 execution is terminated and an error is
     /// returned. Only applies to the V8/JavaScript portion of the conversion
@@ -171,7 +171,7 @@ pub struct VlcConfig {
     pub allow_per_request_plugins: bool,
     /// Maximum number of concurrent ephemeral workers for per-request plugins.
     /// `None` = no limit. `Some(n)` = cap concurrent ephemeral V8 isolates.
-    pub max_ephemeral_workers: Option<NonZeroUsize>,
+    pub max_ephemeral_workers: Option<NonZeroU64>,
     /// Whether to allow per-request `google_fonts` / `auto_google_fonts` overrides.
     /// Defaults to false. When false, requests containing these fields are rejected.
     pub allow_google_fonts: bool,
@@ -229,7 +229,7 @@ impl Default for VlcConfig {
         // - `max_ephemeral_workers = Some(NZ(2))` — bounds ephemeral-worker
         //   concurrency (harmless when per-request plugins are disabled).
         Self {
-            num_workers: NonZeroUsize::new(1).expect("1 is non-zero"),
+            num_workers: NonZeroU64::new(1).expect("1 is non-zero"),
             base_url: BaseUrlSetting::Default,
             allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
             auto_google_fonts: false,
@@ -237,13 +237,13 @@ impl Default for VlcConfig {
             subset_fonts: true,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: Vec::new(),
-            max_v8_heap_size_mb: NonZeroUsize::new(512),
+            max_v8_heap_size_mb: NonZeroU64::new(512),
             max_v8_execution_time_secs: None,
             gc_after_conversion: false,
             vega_plugins: Vec::new(),
             plugin_import_domains: Vec::new(),
             allow_per_request_plugins: false,
-            max_ephemeral_workers: NonZeroUsize::new(2),
+            max_ephemeral_workers: NonZeroU64::new(2),
             allow_google_fonts: false,
             per_request_plugin_import_domains: Vec::new(),
             default_theme: None,
@@ -318,7 +318,7 @@ impl VlcConfig {
 }
 
 pub fn normalize_converter_config(mut config: VlcConfig) -> Result<VlcConfig, AnyError> {
-    // `num_workers` is `NonZeroUsize` (type-level guarantee); no runtime check needed.
+    // `num_workers` is `NonZeroU64` (type-level guarantee); no runtime check needed.
 
     // Validate allowed_base_urls by parsing them (the parsed patterns are
     // stored on ConverterContext, not on the config itself)
@@ -452,7 +452,7 @@ mod tests {
         assert_eq!(config.num_workers.get(), 2);
         assert!(config.auto_google_fonts);
         assert_eq!(config.missing_fonts, MissingFontsPolicy::Warn);
-        assert_eq!(config.max_v8_heap_size_mb, NonZeroUsize::new(512));
+        assert_eq!(config.max_v8_heap_size_mb, NonZeroU64::new(512));
         assert_eq!(config.default_theme, Some("dark".to_string()));
         assert!(!config.themes.is_empty());
     }
@@ -555,12 +555,12 @@ mod tests {
         );
         assert_eq!(
             cfg.max_v8_heap_size_mb,
-            NonZeroUsize::new(512),
+            NonZeroU64::new(512),
             "max_v8_heap_size_mb default is Some(NZ(512))"
         );
         assert_eq!(
             cfg.max_ephemeral_workers,
-            NonZeroUsize::new(2),
+            NonZeroU64::new(2),
             "max_ephemeral_workers default is Some(NZ(2))"
         );
         assert_eq!(cfg.max_v8_execution_time_secs, None);
@@ -584,7 +584,7 @@ mod tests {
     fn max_v8_heap_size_mb_below_minimum_rejected() {
         // Some(NZ(1)) is below MIN_V8_HEAP_SIZE_MB
         let err = normalize_converter_config(VlcConfig {
-            max_v8_heap_size_mb: NonZeroUsize::new(1),
+            max_v8_heap_size_mb: NonZeroU64::new(1),
             ..Default::default()
         })
         .err()

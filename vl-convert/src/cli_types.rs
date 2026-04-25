@@ -143,7 +143,7 @@ pub(crate) struct Cli {
 
     /// Maximum V8 heap size per worker in megabytes [default: 0 = no limit]
     #[arg(long, global = true)]
-    pub(crate) max_v8_heap_size_mb: Option<usize>,
+    pub(crate) max_v8_heap_size_mb: Option<u64>,
 
     /// Maximum V8 execution time in seconds [default: 0 = no limit]
     #[arg(long, global = true)]

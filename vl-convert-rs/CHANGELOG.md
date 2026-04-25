@@ -17,16 +17,16 @@
 - `max_ephemeral_workers = Some(NonZeroUsize::new(2))` — harmless when
   per-request plugins are disabled.
 
-**Sentinel-zero integer fields become `Option<NonZero*>`.** Fields that used `0` as a "no limit / use default" marker are now typed with explicit `Option<NonZero*>`:
+**Sentinel-zero integer fields become `Option<NonZeroU64>`.** Fields that used `0` as a "no limit / use default" marker are now typed with explicit `Option<NonZeroU64>`:
 
-- `max_v8_heap_size_mb: usize` → `Option<NonZeroUsize>`
-- `max_v8_execution_time_secs: u64` → `Option<NonZeroU64>`
-- `max_ephemeral_workers: usize` → `Option<NonZeroUsize>`
-- `google_fonts_cache_size_mb` (new) is `Option<NonZeroU64>`
+- `max_v8_heap_size_mb`
+- `max_v8_execution_time_secs`
+- `max_ephemeral_workers`
+- `google_fonts_cache_size_mb` (new)
 
 `None` = no limit / library default; `Some(n)` = explicit cap. JSON deserialization rejects `0` at parse time.
 
-**`num_workers: usize` becomes `NonZeroUsize`.** The runtime `num_workers < 1` validation in `normalize_converter_config` is dropped in favor of a type-level guarantee. JSON `{"num_workers": 0}` is a deserialize error (400 at the HTTP layer), not a post-normalize 422.
+**`num_workers` is `NonZeroU64`.** The runtime `num_workers < 1` validation in `normalize_converter_config` is dropped in favor of a type-level guarantee. JSON `{"num_workers": 0}` is a deserialize error (400 at the HTTP layer), not a post-normalize 422.
 
 **`Option<Vec<T>>` / `Option<HashMap<_,_>>` wrappers dropped where empty = unset:**
 

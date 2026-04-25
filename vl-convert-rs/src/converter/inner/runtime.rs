@@ -41,11 +41,16 @@ impl InnerVlConverter {
 
             // `max_v8_heap_size_mb` is `Some(..)` when `heap_limit_data` is
             // set (both initialized together in `try_new`).
-            let max_bytes = self
+            let max_bytes: usize = self
                 .ctx
                 .config
                 .max_v8_heap_size_mb
-                .map(|n| n.get().saturating_mul(1024 * 1024))
+                .map(|n| {
+                    n.get()
+                        .saturating_mul(1024 * 1024)
+                        .try_into()
+                        .unwrap_or(usize::MAX)
+                })
                 .unwrap_or(0);
             let isolate = self.worker.js_runtime.v8_isolate();
 

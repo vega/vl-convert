@@ -1,4 +1,4 @@
-use std::num::{NonZeroU64, NonZeroUsize};
+use std::num::NonZeroU64;
 use vl_convert_rs::converter::{SvgOpts, VgOpts, VlcConfig};
 use vl_convert_rs::VlConverter;
 
@@ -9,7 +9,7 @@ use vl_convert_rs::VlConverter;
 #[tokio::test]
 async fn test_heap_limit_exceeded_and_recovery() {
     let converter = VlConverter::with_config(VlcConfig {
-        max_v8_heap_size_mb: NonZeroUsize::new(256),
+        max_v8_heap_size_mb: NonZeroU64::new(256),
         ..Default::default()
     })
     .expect("Failed to create converter with small heap");
@@ -74,7 +74,7 @@ async fn test_heap_limit_exceeded_and_recovery() {
 #[tokio::test]
 async fn test_heap_limit_restored_after_recovery() {
     let converter = VlConverter::with_config(VlcConfig {
-        max_v8_heap_size_mb: NonZeroUsize::new(256),
+        max_v8_heap_size_mb: NonZeroU64::new(256),
         ..Default::default()
     })
     .expect("Failed to create converter with small heap");
@@ -154,7 +154,7 @@ async fn test_no_heap_limit() {
 #[test]
 fn test_min_heap_size_validation() {
     let result = VlConverter::with_config(VlcConfig {
-        max_v8_heap_size_mb: NonZeroUsize::new(1),
+        max_v8_heap_size_mb: NonZeroU64::new(1),
         ..Default::default()
     });
     let err = result

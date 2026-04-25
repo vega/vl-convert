@@ -160,13 +160,19 @@ pub(crate) fn worker_queue_capacity(num_workers: usize) -> usize {
 
 /// Minimum `max_v8_heap_size_mb` in MB. Values below this cause V8 to
 /// abort during isolate creation (unrecoverable).
-pub(crate) const MIN_V8_HEAP_SIZE_MB: usize = 64;
+pub(crate) const MIN_V8_HEAP_SIZE_MB: u64 = 64;
 
 pub(crate) fn spawn_worker_pool(
     config: Arc<VlcConfig>,
 ) -> Result<(WorkerPool, Arc<ConverterContext>), AnyError> {
-    // `num_workers` is `NonZeroUsize`; type-enforced ≥ 1.
-    let num_workers = config.num_workers.get();
+    // `num_workers` is `NonZeroU64`; type-enforced ≥ 1. Cast to `usize`
+    // for `Vec` capacity / iteration; infallible in practice (worker
+    // counts are small).
+    let num_workers: usize = config
+        .num_workers
+        .get()
+        .try_into()
+        .expect("num_workers fits in usize");
     ensure_v8_platform_initialized();
 
     // Resolve plugins before spawning workers (needs async for HTTP + deno_emit).

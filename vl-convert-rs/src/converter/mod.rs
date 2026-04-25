@@ -148,9 +148,13 @@ impl VlConverter {
         crate::text::apply_hot_font_cache(config.google_fonts_cache_size_mb)?;
 
         let ephemeral_semaphore = if config.allow_per_request_plugins {
-            config
-                .max_ephemeral_workers
-                .map(|n| Arc::new(tokio::sync::Semaphore::new(n.get())))
+            config.max_ephemeral_workers.map(|n| {
+                let permits: usize = n
+                    .get()
+                    .try_into()
+                    .expect("max_ephemeral_workers fits in usize");
+                Arc::new(tokio::sync::Semaphore::new(permits))
+            })
         } else {
             None
         };
@@ -1630,9 +1634,9 @@ mod tests {
 
     #[test]
     fn test_config_reports_configured_num_workers() {
-        use std::num::NonZeroUsize;
+        use std::num::NonZeroU64;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: NonZeroUsize::new(4).unwrap(),
+            num_workers: NonZeroU64::new(4).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1641,10 +1645,10 @@ mod tests {
 
     #[test]
     fn test_get_or_spawn_sender_respawns_closed_pool_without_explicit_reset() {
-        use std::num::NonZeroUsize;
-        let num_workers = 2;
+        use std::num::NonZeroU64;
+        let num_workers: usize = 2;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: NonZeroUsize::new(num_workers).unwrap(),
+            num_workers: NonZeroU64::new(num_workers as u64).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1682,9 +1686,9 @@ mod tests {
 
     #[test]
     fn test_get_or_spawn_sender_spawns_pool_without_request() {
-        use std::num::NonZeroUsize;
+        use std::num::NonZeroU64;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: NonZeroUsize::new(2).unwrap(),
+            num_workers: NonZeroU64::new(2).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1716,9 +1720,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_or_spawn_sender_is_idempotent() {
-        use std::num::NonZeroUsize;
+        use std::num::NonZeroU64;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: NonZeroUsize::new(2).unwrap(),
+            num_workers: NonZeroU64::new(2).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1750,9 +1754,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_parallel_conversions_with_shared_converter() {
-        use std::num::NonZeroUsize;
+        use std::num::NonZeroU64;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: NonZeroUsize::new(4).unwrap(),
+            num_workers: NonZeroU64::new(4).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1892,9 +1896,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_vegaembed_bundle_caches_result() {
-        use std::num::NonZeroUsize;
+        use std::num::NonZeroU64;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: NonZeroUsize::new(1).unwrap(),
+            num_workers: NonZeroU64::new(1).unwrap(),
             ..Default::default()
         })
         .unwrap();
@@ -1918,9 +1922,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_bundle_vega_snippet_custom_snippet() {
-        use std::num::NonZeroUsize;
+        use std::num::NonZeroU64;
         let converter = VlConverter::with_config(VlcConfig {
-            num_workers: NonZeroUsize::new(1).unwrap(),
+            num_workers: NonZeroU64::new(1).unwrap(),
             ..Default::default()
         })
         .unwrap();

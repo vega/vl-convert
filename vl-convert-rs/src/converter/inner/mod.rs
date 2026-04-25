@@ -163,7 +163,11 @@ impl InnerVlConverter {
         // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
         // This is required for container compatibility (manylinux, slim images).
         let create_params = ctx.config.max_v8_heap_size_mb.map(|n| {
-            let max_bytes = n.get().saturating_mul(1024 * 1024);
+            let max_bytes: usize = n
+                .get()
+                .saturating_mul(1024 * 1024)
+                .try_into()
+                .unwrap_or(usize::MAX);
             v8::CreateParams::default().heap_limits(0, max_bytes)
         });
 
