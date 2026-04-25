@@ -246,7 +246,11 @@ fn register_font_directory_inner(font_dir: &str) -> Result<(), vl_convert_rs::an
     })?;
 
     let mut config = guard.config();
-    if config.font_directories.iter().any(|existing| existing == &path) {
+    if config
+        .font_directories
+        .iter()
+        .any(|existing| existing == &path)
+    {
         return Ok(());
     }
     config.font_directories.push(path);
@@ -259,9 +263,8 @@ fn register_font_directory_inner(font_dir: &str) -> Result<(), vl_convert_rs::an
 #[pyfunction]
 #[pyo3(signature = (font_dir))]
 pub fn register_font_directory(font_dir: &str) -> PyResult<()> {
-    register_font_directory_inner(font_dir).map_err(|err| {
-        PyValueError::new_err(format!("Failed to register font directory: {}", err))
-    })
+    register_font_directory_inner(font_dir)
+        .map_err(|err| PyValueError::new_err(format!("Failed to register font directory: {}", err)))
 }
 
 #[doc = async_variant_doc!("vegalite_fonts")]

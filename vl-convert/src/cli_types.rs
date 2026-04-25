@@ -77,7 +77,13 @@ pub(crate) struct Cli {
     /// `default` = HTTP/HTTPS allowed (library default);
     /// `none` = block all; `all` = allow everything (including
     /// filesystem); `allowlist` requires `--allowed-base-urls`.
-    #[arg(long, global = true, value_enum, value_name = "MODE", ignore_case = true)]
+    #[arg(
+        long,
+        global = true,
+        value_enum,
+        value_name = "MODE",
+        ignore_case = true
+    )]
     pub(crate) data_access: Option<DataAccessMode>,
 
     /// Allowed base URLs as a JSON array, or `@<path>` to read the

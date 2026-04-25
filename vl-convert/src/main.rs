@@ -24,8 +24,8 @@ use handlers::{
 use io_utils::{
     flatten_plugin_domains, merge_font_dir, parse_allowed_base_urls, parse_base_url_arg,
     parse_format_locale_option, parse_google_font_requests, parse_time_format_locale_option,
-    parse_vl_version, read_config_json, read_input_string, resolve_vlc_config,
-    write_output_binary, write_output_string, DataAccessMode,
+    parse_vl_version, read_config_json, read_input_string, resolve_vlc_config, write_output_binary,
+    write_output_string, DataAccessMode,
 };
 
 #[tokio::main]

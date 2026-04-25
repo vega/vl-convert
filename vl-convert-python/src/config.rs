@@ -334,13 +334,12 @@ pub fn parse_config_overrides(
                 if value.is_none() {
                     overrides.vega_plugins = Some(default.vega_plugins.clone());
                 } else {
-                    overrides.vega_plugins = Some(value.extract::<Vec<String>>().map_err(
-                        |err| {
+                    overrides.vega_plugins =
+                        Some(value.extract::<Vec<String>>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
                                 "Invalid vega_plugins value for configure: {err}"
                             )
-                        },
-                    )?);
+                        })?);
                 }
             }
             "plugin_import_domains" => {
@@ -472,8 +471,7 @@ pub fn parse_config_overrides(
                             "Invalid font_directories value for configure: {err}"
                         )
                     })?;
-                    overrides.font_directories =
-                        Some(raw.into_iter().map(PathBuf::from).collect());
+                    overrides.font_directories = Some(raw.into_iter().map(PathBuf::from).collect());
                 }
             }
             // Read-only config fields returned by get_config() are

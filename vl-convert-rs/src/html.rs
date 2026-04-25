@@ -758,8 +758,7 @@ impl VlConverter {
         if !self.inner.config.vega_plugins.is_empty() {
             self.warm_up()?;
         }
-        let mut resolved_plugins_owned =
-            self.inner.resolved_plugins.lock().unwrap().clone();
+        let mut resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();
         // Append per-request plugin overlay if present
         if let Some(ref plugin_source) = vl_opts.vega_plugin {
             resolved_plugins_owned.push(ResolvedPlugin {
@@ -834,8 +833,7 @@ impl VlConverter {
         if !self.inner.config.vega_plugins.is_empty() {
             self.warm_up()?;
         }
-        let mut resolved_plugins_owned =
-            self.inner.resolved_plugins.lock().unwrap().clone();
+        let mut resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();
         // Append per-request plugin overlay if present
         if let Some(ref plugin_source) = vg_opts.vega_plugin {
             resolved_plugins_owned.push(ResolvedPlugin {

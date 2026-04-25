@@ -150,14 +150,13 @@ impl VlConverter {
         crate::text::apply_hot_font_cache(config.google_fonts_cache_size_mb)?;
         crate::text::set_font_directories(&config.font_directories)?;
 
-        let ephemeral_semaphore =
-            if config.allow_per_request_plugins {
-                config.max_ephemeral_workers.map(|n| {
-                    Arc::new(tokio::sync::Semaphore::new(n.get()))
-                })
-            } else {
-                None
-            };
+        let ephemeral_semaphore = if config.allow_per_request_plugins {
+            config
+                .max_ephemeral_workers
+                .map(|n| Arc::new(tokio::sync::Semaphore::new(n.get())))
+        } else {
+            None
+        };
 
         Ok(Self {
             inner: Arc::new(VlConverterInner {
@@ -378,9 +377,8 @@ impl VlConverter {
             let local = tokio::task::LocalSet::new();
             let result = local.block_on(&rt, async move {
                 let timeout_secs = ctx.config.max_v8_execution_time_secs;
-                let deadline = timeout_secs.map(|n| {
-                    std::time::Instant::now() + std::time::Duration::from_secs(n.get())
-                });
+                let deadline = timeout_secs
+                    .map(|n| std::time::Instant::now() + std::time::Duration::from_secs(n.get()));
 
                 // Wrap plugin resolution in tokio::time::timeout if a deadline is set,
                 // since terminate_execution() can't help before V8 exists.
@@ -2424,9 +2422,7 @@ mod tests {
             .unwrap_err();
         let msg = err.to_string().to_lowercase();
         assert!(
-            msg.contains("denied")
-                || msg.contains("not allowed")
-                || msg.contains("requires net"),
+            msg.contains("denied") || msg.contains("not allowed") || msg.contains("requires net"),
             "empty allowlist should block network data, got: {msg}"
         );
     }
@@ -2435,10 +2431,8 @@ mod tests {
     /// scheme allowlist.
     #[tokio::test(flavor = "multi_thread")]
     async fn allowed_base_urls_scheme_allowlist_works() {
-        let server = TestHttpServer::new(vec![(
-            "/data.csv",
-            TestHttpResponse::ok_text("a,b\n1,2\n"),
-        )]);
+        let server =
+            TestHttpServer::new(vec![("/data.csv", TestHttpResponse::ok_text("a,b\n1,2\n"))]);
         let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
             ..Default::default()

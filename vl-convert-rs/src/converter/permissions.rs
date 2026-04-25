@@ -33,10 +33,7 @@ pub fn domain_matches_patterns(domain: &str, patterns: &[String]) -> bool {
 pub(crate) fn parse_allowed_base_urls_from_config(
     config: &VlcConfig,
 ) -> Result<Vec<AllowedBaseUrlPattern>, AnyError> {
-    Ok(
-        normalize_allowed_base_urls(Some(config.allowed_base_urls.clone()))?
-            .unwrap_or_default(),
-    )
+    Ok(normalize_allowed_base_urls(Some(config.allowed_base_urls.clone()))?.unwrap_or_default())
 }
 
 pub(crate) fn build_permissions(_config: &VlcConfig) -> Result<Permissions, AnyError> {

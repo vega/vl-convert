@@ -59,12 +59,12 @@ impl DataAccessMode {
             (Some(Self::None), None) => Ok(Some(Vec::new())),
             (Some(Self::All), None) => Ok(Some(vec!["*".to_string()])),
             (Some(Self::Allowlist), Some(list)) => Ok(Some(list)),
-            (Some(Self::Allowlist), None) => bail!(
-                "--data-access=allowlist requires --allowed-base-urls=JSON|@FILE"
-            ),
-            (Some(mode), Some(_)) => bail!(
-                "--data-access={mode:?} does not accept --allowed-base-urls"
-            ),
+            (Some(Self::Allowlist), None) => {
+                bail!("--data-access=allowlist requires --allowed-base-urls=JSON|@FILE")
+            }
+            (Some(mode), Some(_)) => {
+                bail!("--data-access={mode:?} does not accept --allowed-base-urls")
+            }
             (None, Some(_)) => unreachable!("inferred Allowlist when explicit is set"),
         }
     }
