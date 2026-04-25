@@ -157,23 +157,28 @@ if TYPE_CHECKING:
     class ConverterConfig(TypedDict):
         num_workers: int
         base_url: str | bool
-        allowed_base_urls: list[str] | None
+        allowed_base_urls: list[str]
         auto_google_fonts: bool
         embed_local_fonts: bool
         subset_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
+        google_fonts: list[GoogleFontSpec]
         google_fonts_cache_dir: str | None
-        max_v8_heap_size_mb: int
-        max_v8_execution_time_secs: int
+        google_fonts_cache_size_mb: int | None
+        max_v8_heap_size_mb: int | None
+        max_v8_execution_time_secs: int | None
         gc_after_conversion: bool
-        vega_plugins: list[str] | None
+        vega_plugins: list[str]
         plugin_import_domains: list[str]
         allow_per_request_plugins: bool
+        max_ephemeral_workers: int | None
+        allow_google_fonts: bool
         per_request_plugin_import_domains: list[str]
         default_theme: str | None
         default_format_locale: str | dict[str, Any] | None
         default_time_format_locale: str | dict[str, Any] | None
-        themes: dict[str, dict[str, Any]] | None
+        themes: dict[str, dict[str, Any]]
+        font_directories: list[str]
 
 __all__ = [
     "asyncio",
@@ -329,92 +334,138 @@ def configure(
     vega_plugins: list[str] | None = None,
     plugin_import_domains: list[str] | None = None,
     allow_per_request_plugins: bool | None = None,
+    max_ephemeral_workers: int | None = None,
+    allow_google_fonts: bool | None = None,
     per_request_plugin_import_domains: list[str] | None = None,
     default_theme: str | None = None,
     default_format_locale: str | dict[str, Any] | None = None,
     default_time_format_locale: str | dict[str, Any] | None = None,
     themes: dict[str, dict[str, Any]] | None = None,
+    font_directories: list[str] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
 
+    .. note::
+
+       **Uniform ``None`` semantics.** Passing ``None`` for any keyword argument
+       **resets that field to the library default** — it does *not* "keep the
+       current value" as in prior releases. To leave a field untouched, simply
+       omit the keyword. This rule applies uniformly to every field below
+       (scalar, list, dict, and optional).
+
+    .. warning::
+
+       **Secure-by-default.** The library default blocks all network data
+       access (``allowed_base_urls = []``) and caps V8 heap at 512 MB. To
+       restore the pre-2.0 permissive behavior for remote data, pass
+       ``allowed_base_urls=["http:", "https:"]`` (or a more specific
+       allowlist for your deployment).
+
     Parameters
     ----------
     num_workers
-        Worker count (must be >= 1). If ``None``, keep current value.
+        Worker count (must be >= 1). ``None`` resets to the library default (1).
+        Passing ``0`` raises ``ValueError``.
     base_url
         Base URL for resolving relative data paths in Vega specs.
-        ``None`` or ``True`` uses the default (vega-datasets CDN).
+        ``None`` or ``True`` resets to the default (vega-datasets CDN).
         ``False`` disables relative path resolution.
         A string sets a custom base URL or filesystem path.
-        If ``None``, keep current value.
     allowed_base_urls
-        Allowlist for data access (HTTP URLs, filesystem paths).
-        Uses CSP-style patterns: ``"https:"`` (scheme), ``"https://example.com/"``
-        (prefix), ``"/data/"`` (filesystem). ``None`` allows any HTTP/HTTPS,
-        no filesystem (default). ``[]`` disables all external access.
-        ``["*"]`` allows everything including filesystem.
+        CSP-style allowlist for data access (HTTP URLs, filesystem paths).
+        Examples: ``"https:"`` (scheme), ``"https://example.com/"`` (prefix),
+        ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` (or ``[]``)
+        resets to the library default (empty list — blocks all network data).
+        **Migration:** to restore the pre-2.0 unrestricted behavior, pass
+        ``allowed_base_urls=["http:", "https:"]``.
     google_fonts_cache_size_mb
-        Maximum font cache size in megabytes. If ``None``, keep current value.
+        Maximum Google Fonts on-disk LRU cache size in megabytes. Must be >= 1
+        if provided. ``None`` resets to the library default. Passing ``0``
+        raises ``ValueError``.
     auto_google_fonts
-        Automatically download missing fonts from Google Fonts. If ``None``, keep current value.
+        Automatically download missing fonts from Google Fonts.
+        ``None`` resets to the library default (``False``).
     embed_local_fonts
         Embed locally available fonts as base64-encoded data URIs in SVG and HTML
         output. Does not apply to PDF/PNG/JPEG (which always embed fonts via fontdb).
-        If ``None``, keep current value.
+        ``None`` resets to the library default (``False``).
     subset_fonts
         Subset fonts to only the characters used in the chart. Applies to SVG
-        and HTML output. Default is ``True``. If ``None``, keep current value.
+        and HTML output. ``None`` resets to the library default (``True``).
     missing_fonts
         Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
-        If ``None``, keep current value.
+        ``None`` resets to the library default (``"fallback"``).
     google_fonts
-        Google Fonts to register for all subsequent conversions. Each entry
-        is a dict with ``"family"`` (required) and optionally ``"variants"``
-        (list of ``(weight, style)`` tuples). Fonts are downloaded and
-        registered on each conversion call. ``None`` keeps current value.
-        Pass ``[]`` to clear.
+        Google Fonts to register for all subsequent conversions. Each entry is
+        a family-name string or a dict with ``"family"`` (required) and
+        optionally ``"variants"`` (list of ``(weight, style)`` tuples). Fonts
+        are downloaded and registered on each conversion call.
+
+        **Replace semantics.** Each call to ``configure(google_fonts=[...])``
+        **replaces** the full list on the config; it does not append to the
+        previously configured fonts. ``None`` (or ``[]``) resets to the
+        library default (empty list).
     max_v8_heap_size_mb
-        Maximum V8 heap size per worker in megabytes. Default is 0 (no limit).
-        If ``None``, keep current value.
+        Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
+        ``None`` resets to the library default (512 MB). Passing ``0`` raises
+        ``ValueError``.
     max_v8_execution_time_secs
-        Maximum V8 execution time in seconds. Default is 0 (no limit).
-        When exceeded, V8 execution is terminated and an error is returned.
-        If ``None``, keep current value.
+        Maximum V8 execution time in seconds. Must be >= 1 if provided. When
+        exceeded, V8 execution is terminated and an error is returned.
+        ``None`` resets to the library default (no cap). Passing ``0`` raises
+        ``ValueError``.
     gc_after_conversion
         Whether to run V8 garbage collection after each conversion to release
-        memory back to the OS. Default is False. If ``None``, keep current value.
+        memory back to the OS. ``None`` resets to the library default (``False``).
     vega_plugins
         List of Vega plugins to load. Each entry is a file path (``.js``/``.mjs``),
         URL (``https://...``), or inline ESM string. Plugins must be single-entry
         ESM modules with a default export function accepting a ``vega`` object.
         Multi-file plugins should be pre-bundled with esbuild or Rollup.
-        URL plugins auto-allow their domain for imports. ``None`` keeps current value.
+        URL plugins auto-allow their domain for imports. ``None`` (or ``[]``)
+        resets to the library default (empty list).
     plugin_import_domains
         Domain patterns allowed for HTTP imports inside config-level plugins.
-        Empty list (default) disables HTTP imports.
         Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
-        If ``None``, keep current value.
+        ``None`` (or ``[]``) resets to the library default (empty list —
+        HTTP imports disabled).
     allow_per_request_plugins
         Whether to accept per-request plugins via the ``vega_plugin`` parameter
-        on conversion functions. Default ``False``. If ``None``, keep current value.
+        on conversion functions. ``None`` resets to the library default (``False``).
+    max_ephemeral_workers
+        Maximum concurrent ephemeral V8 isolates for per-request plugins. Must
+        be >= 1 if provided. ``None`` resets to the library default (2).
+        Passing ``0`` raises ``ValueError``.
+    allow_google_fonts
+        Whether to accept per-request ``google_fonts`` / ``auto_google_fonts``
+        overrides on conversion calls. ``None`` resets to the library default
+        (``False``).
     per_request_plugin_import_domains
         Domain patterns allowed for HTTP imports inside per-request plugins.
-        Separate from ``plugin_import_domains``. Empty list (default) disables
-        HTTP imports in per-request plugins. If ``None``, keep current value.
+        Separate from ``plugin_import_domains``. ``None`` (or ``[]``) resets
+        to the library default (empty list — HTTP imports disabled).
     default_theme
         Default named theme (e.g. ``"dark"``) applied to all Vega-Lite conversions.
-        Per-request ``theme`` overrides this if set. ``None`` clears the default.
+        Per-request ``theme`` overrides this if set. ``None`` resets to the
+        library default (no theme).
     default_format_locale
         Default d3-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
-        Per-request ``format_locale`` overrides this if set. ``None`` clears the default.
+        Per-request ``format_locale`` overrides this if set. ``None`` resets
+        to the library default (no locale).
     default_time_format_locale
         Default d3-time-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
-        Per-request ``time_format_locale`` overrides this if set. ``None`` clears the default.
+        Per-request ``time_format_locale`` overrides this if set. ``None``
+        resets to the library default (no locale).
     themes
         Custom named themes mapping names to Vega config objects.
         Registered alongside built-in vega-themes. Custom themes take
-        priority over built-in themes if names collide. ``None`` clears.
+        priority over built-in themes if names collide. ``None`` (or ``{}``)
+        resets to the library default (empty map).
+    font_directories
+        Directories to register with the process-global font database.
+        Replacement semantics — directories not in this list are deregistered.
+        ``None`` (or ``[]``) resets to the library default (empty list).
     """
     ...
 
@@ -1228,11 +1279,14 @@ if TYPE_CHECKING:
             vega_plugins: list[str] | None = None,
             plugin_import_domains: list[str] | None = None,
             allow_per_request_plugins: bool | None = None,
+            max_ephemeral_workers: int | None = None,
+            allow_google_fonts: bool | None = None,
             per_request_plugin_import_domains: list[str] | None = None,
             default_theme: str | None = None,
-            default_format_locale: str | None = None,
-            default_time_format_locale: str | None = None,
+            default_format_locale: str | dict[str, Any] | None = None,
+            default_time_format_locale: str | dict[str, Any] | None = None,
             themes: dict[str, dict[str, Any]] | None = None,
+            font_directories: list[str] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...

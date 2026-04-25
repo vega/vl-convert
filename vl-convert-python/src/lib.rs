@@ -19,7 +19,6 @@ pub use info::*;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use std::sync::{Arc, RwLock};
-use vl_convert_rs::converter::GoogleFontRequest;
 use vl_convert_rs::VlConverter as VlConverterRs;
 
 lazy_static! {
@@ -30,7 +29,6 @@ lazy_static! {
             .enable_all()
             .build()
             .unwrap();
-    static ref CONFIGURED_GOOGLE_FONTS: RwLock<Option<Vec<GoogleFontRequest>>> = RwLock::new(None);
 }
 
 fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {

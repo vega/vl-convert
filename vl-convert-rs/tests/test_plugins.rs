@@ -34,7 +34,7 @@ fn test_plugin_custom_scheme_png() {
         "export default function(vega) { vega.scheme('testscheme', ['#ff0000', '#00ff00', '#0000ff']); }";
 
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![plugin_source.to_string()]),
+        vega_plugins: vec![plugin_source.to_string()],
         ..Default::default()
     })
     .unwrap();
@@ -58,7 +58,7 @@ async fn test_plugin_registers_expression_function() {
     let plugin_source =
         "export default function(vega) { vega.expressionFunction('double', (x) => x * 2); }";
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![plugin_source.to_string()]),
+        vega_plugins: vec![plugin_source.to_string()],
         ..Default::default()
     })
     .unwrap();
@@ -83,7 +83,7 @@ async fn test_multiple_plugins_register_different_functions() {
     let plugin_b =
         "export default function(vega) { vega.expressionFunction('addTen', (x) => x + 10); }";
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![plugin_a.to_string(), plugin_b.to_string()]),
+        vega_plugins: vec![plugin_a.to_string(), plugin_b.to_string()],
         ..Default::default()
     })
     .unwrap();
@@ -113,7 +113,7 @@ async fn test_multiple_plugins_register_different_functions() {
 async fn test_plugin_with_syntax_error() {
     let bad_plugin = "export default function(vega) { vega.expressionFunction('bad', (x) =>; }";
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![bad_plugin.to_string()]),
+        vega_plugins: vec![bad_plugin.to_string()],
         ..Default::default()
     })
     .unwrap();
@@ -135,7 +135,7 @@ async fn test_plugin_with_syntax_error() {
 async fn test_plugin_without_default_export() {
     let no_default_plugin = "export const x = 1;";
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![no_default_plugin.to_string()]),
+        vega_plugins: vec![no_default_plugin.to_string()],
         ..Default::default()
     })
     .unwrap();
@@ -161,7 +161,7 @@ async fn test_plugin_poison_behavior() {
     let bad_plugin = "export default function(vega) { throw new Error('plugin init boom'); }";
 
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![good_plugin.to_string(), bad_plugin.to_string()]),
+        vega_plugins: vec![good_plugin.to_string(), bad_plugin.to_string()],
         ..Default::default()
     })
     .unwrap();
@@ -197,7 +197,7 @@ async fn test_plugin_html_export_contains_module_script() {
         "export default function(vega) { vega.expressionFunction('myFn', (x) => x); }";
 
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![plugin_source.to_string()]),
+        vega_plugins: vec![plugin_source.to_string()],
         ..Default::default()
     })
     .unwrap();
@@ -255,7 +255,7 @@ async fn test_file_path_plugin() {
     .unwrap();
 
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![plugin_path.to_str().unwrap().to_string()]),
+        vega_plugins: vec![plugin_path.to_str().unwrap().to_string()],
         ..Default::default()
     })
     .unwrap();
@@ -289,7 +289,7 @@ export default function(vega) {
 }
 "#;
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![plugin_source.to_string()]),
+        vega_plugins: vec![plugin_source.to_string()],
         plugin_import_domains: vec!["esm.sh".to_string()],
         ..Default::default()
     })
@@ -322,7 +322,7 @@ export default function(vega) {
 }
 "#;
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![plugin_source.to_string()]),
+        vega_plugins: vec![plugin_source.to_string()],
         plugin_import_domains: vec!["esm.sh".to_string()],
         ..Default::default()
     })
@@ -451,7 +451,7 @@ async fn test_per_request_plugin_with_config_level_plugins() {
         "export default function(vega) { vega.expressionFunction('reqFn', (x) => x + 50); }";
 
     let converter = VlConverter::with_config(VlcConfig {
-        vega_plugins: Some(vec![config_plugin.to_string()]),
+        vega_plugins: vec![config_plugin.to_string()],
         allow_per_request_plugins: true,
         ..Default::default()
     })

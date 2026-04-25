@@ -21,7 +21,7 @@ async fn test_custom_theme_applied() {
     themes.insert("mytest".to_string(), json!({"background": "#abcdef"}));
 
     let converter = VlConverter::with_config(VlcConfig {
-        themes: Some(themes),
+        themes,
         default_theme: Some("mytest".to_string()),
         ..Default::default()
     })
@@ -45,7 +45,7 @@ async fn test_per_request_theme_overrides_default() {
     themes.insert("mytest".to_string(), json!({"background": "#abcdef"}));
 
     let converter = VlConverter::with_config(VlcConfig {
-        themes: Some(themes),
+        themes,
         default_theme: Some("mytest".to_string()),
         ..Default::default()
     })
@@ -82,7 +82,7 @@ async fn test_custom_theme_visible_in_get_themes() {
     themes.insert("corporate".to_string(), json!({"background": "#f5f5f5"}));
 
     let converter = VlConverter::with_config(VlcConfig {
-        themes: Some(themes),
+        themes,
         ..Default::default()
     })
     .unwrap();

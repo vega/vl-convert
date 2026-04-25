@@ -216,6 +216,15 @@ jobs:
         run: cargo check --all
       - name: Check for clippy warnings
         run: cargo clippy --all -- -D warnings
+      - name: Install ast-grep
+        uses: taiki-e/install-action@v2
+        with:
+          tool: ast-grep
+      - name: Run ast-grep lint
+        # Scans the workspace with rules from `.ast-grep/rules/` (listed
+        # in `sgconfig.yml`). Every rule is source-structural — see the
+        # rule files for rationale. Exits non-zero if any rule fires.
+        run: ast-grep scan
 
   cargo-bundle-license:
     runs-on: ubuntu-latest
@@ -288,7 +297,11 @@ jobs:
           RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
         run: |
           cargo test -p vl-convert -- --test-threads=1
-
+      - name: Run server tests
+        env:
+          RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
+        run: |
+          cargo test -p vl-convert-server -- --test-threads=1
 
       - name: Upload test failures
         uses: actions/upload-artifact@v7
@@ -334,6 +347,8 @@ jobs:
         run: cargo test -p vl-convert-rs -- --test-threads=1
       - name: Run CLI tests
         run: cargo test -p vl-convert -- --test-threads=1
+      - name: Run server tests
+        run: cargo test -p vl-convert-server -- --test-threads=1
       - name: Upload test failures
         uses: actions/upload-artifact@v7
         if: always()

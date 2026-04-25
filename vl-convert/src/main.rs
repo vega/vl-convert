@@ -7,6 +7,7 @@ mod handlers;
 mod io_utils;
 
 use clap::Parser;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::str::FromStr;
 use vl_convert_rs::converter::{
     vega_to_url, vegalite_to_url, BaseUrlSetting, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer,
@@ -21,9 +22,9 @@ use handlers::{
     vl_2_svg, vl_2_vg,
 };
 use io_utils::{
-    flatten_plugin_domains, parse_format_locale_option, parse_google_font_requests,
+    flatten_plugin_domains, merge_font_dir, parse_format_locale_option, parse_google_font_requests,
     parse_time_format_locale_option, parse_vl_version, read_config_json, read_input_string,
-    register_font_dir, resolve_vlc_config, write_output_binary, write_output_string,
+    resolve_vlc_config, write_output_binary, write_output_string,
 };
 
 #[tokio::main]
@@ -61,12 +62,11 @@ async fn main() -> Result<(), anyhow::Error> {
         base_config.base_url = base_url_setting;
     }
     if !cli.allowed_base_url.is_empty() || cli.no_allowed_urls {
-        let allowed_base_urls = if cli.no_allowed_urls {
-            Some(vec![])
+        base_config.allowed_base_urls = if cli.no_allowed_urls {
+            Vec::new()
         } else {
-            Some(cli.allowed_base_url.clone())
+            cli.allowed_base_url.clone()
         };
-        base_config.allowed_base_urls = allowed_base_urls;
     }
     if cli.auto_google_fonts {
         base_config.auto_google_fonts = true;
@@ -81,27 +81,27 @@ async fn main() -> Result<(), anyhow::Error> {
         base_config.missing_fonts = mf.to_policy();
     }
     if let Some(heap) = cli.max_v8_heap_size_mb {
-        base_config.max_v8_heap_size_mb = heap;
+        // CLI passes `0` to mean "no cap"; otherwise treat as a hard cap.
+        base_config.max_v8_heap_size_mb = NonZeroUsize::new(heap);
     }
     if let Some(timeout) = cli.max_v8_execution_time_secs {
-        base_config.max_v8_execution_time_secs = timeout;
+        base_config.max_v8_execution_time_secs = NonZeroU64::new(timeout);
     }
     if cli.gc_after_conversion {
         base_config.gc_after_conversion = true;
     }
-    if vega_plugins.is_some() {
-        base_config.vega_plugins = vega_plugins;
+    if let Some(plugins) = vega_plugins {
+        base_config.vega_plugins = plugins;
     }
     if !plugin_import_domains.is_empty() {
         base_config.plugin_import_domains = plugin_import_domains;
     }
-    let google_fonts = parse_google_font_requests(&google_font_families)?;
-    if google_fonts.is_some() {
+    if let Some(google_fonts) = parse_google_font_requests(&google_font_families)? {
         base_config.google_fonts = google_fonts;
     }
     let command = cli.command;
 
-    base_config.num_workers = 1;
+    base_config.num_workers = NonZeroUsize::new(1).expect("1 is non-zero");
 
     // Wrap all conversion work in select! so Ctrl+C drops the conversion
     // future, triggering CallerGoneGuard to terminate V8 promptly.
@@ -120,7 +120,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
 async fn run_command(
     command: Commands,
-    base_config: VlcConfig,
+    mut base_config: VlcConfig,
     google_font_families: Vec<String>,
 ) -> Result<(), anyhow::Error> {
     use crate::Commands::*;
@@ -155,7 +155,7 @@ async fn run_command(
             time_format_locale,
             bundle,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             let svg_opts = SvgOpts { bundle };
             vl_2_svg(
                 input.as_deref(),
@@ -182,7 +182,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             vl_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -209,7 +209,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             vl_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -234,7 +234,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             vl_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -356,7 +356,7 @@ async fn run_command(
             bundle,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             let svg_opts = SvgOpts { bundle };
             vg_2_svg(
                 input.as_deref(),
@@ -377,7 +377,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             vg_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -398,7 +398,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             vg_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -417,7 +417,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             vg_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -521,7 +521,7 @@ async fn run_command(
             ppi,
             font_dir,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
             let png_output = converter
@@ -542,7 +542,7 @@ async fn run_command(
             quality,
             font_dir,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
             let jpeg_output = converter
@@ -561,7 +561,7 @@ async fn run_command(
             output,
             font_dir,
         } => {
-            register_font_dir(font_dir)?;
+            merge_font_dir(&mut base_config, font_dir);
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
             let pdf_output = converter.svg_to_pdf(&svg, PdfOpts::default()).await?;

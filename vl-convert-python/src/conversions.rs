@@ -1,5 +1,5 @@
 use crate::config::converter_read_handle;
-use crate::fonts::{effective_google_fonts, parse_google_fonts_arg};
+use crate::fonts::parse_google_fonts_arg;
 use crate::utils::{
     async_variant_doc, future_into_py_object, handle_show_warnings, parse_json_spec,
     parse_option_format_locale, parse_option_time_format_locale, parse_optional_config,
@@ -55,7 +55,7 @@ pub fn vegalite_to_vega(
         theme,
         format_locale: None,
         time_format_locale: None,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         ..Default::default()
     };
 
@@ -106,7 +106,7 @@ pub fn vega_to_svg(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -152,7 +152,7 @@ pub fn vega_to_scenegraph(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -243,7 +243,7 @@ pub fn vegalite_to_svg(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -314,7 +314,7 @@ pub fn vegalite_to_scenegraph(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -384,7 +384,7 @@ pub fn vega_to_png(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -457,7 +457,7 @@ pub fn vegalite_to_png(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -508,7 +508,7 @@ pub fn vega_to_jpeg(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -581,7 +581,7 @@ pub fn vegalite_to_jpeg(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -634,7 +634,7 @@ pub fn vega_to_pdf(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -699,7 +699,7 @@ pub fn vegalite_to_pdf(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -812,7 +812,7 @@ pub fn vegalite_to_html(
 
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         vega_plugin,
         ..Default::default()
     };
@@ -865,7 +865,7 @@ pub fn vega_to_html(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         vega_plugin,
         ..Default::default()
     };
@@ -975,7 +975,7 @@ pub fn vegalite_to_vega_asyncio<'py>(
         theme,
         format_locale: None,
         time_format_locale: None,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         ..Default::default()
     };
 
@@ -1013,7 +1013,7 @@ pub fn vega_to_svg_asyncio<'py>(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1055,7 +1055,7 @@ pub fn vega_to_scenegraph_asyncio<'py>(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1132,7 +1132,7 @@ pub fn vegalite_to_svg_asyncio<'py>(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1190,7 +1190,7 @@ pub fn vegalite_to_scenegraph_asyncio<'py>(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1254,7 +1254,7 @@ pub fn vega_to_png_asyncio<'py>(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1306,7 +1306,7 @@ pub fn vegalite_to_png_asyncio<'py>(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1344,7 +1344,7 @@ pub fn vega_to_jpeg_asyncio<'py>(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1396,7 +1396,7 @@ pub fn vegalite_to_jpeg_asyncio<'py>(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1432,7 +1432,7 @@ pub fn vega_to_pdf_asyncio<'py>(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1482,7 +1482,7 @@ pub fn vegalite_to_pdf_asyncio<'py>(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         vega_plugin,
         ..Default::default()
     };
@@ -1586,7 +1586,7 @@ pub fn vegalite_to_html_asyncio<'py>(
 
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         vega_plugin,
         ..Default::default()
     };
@@ -1639,7 +1639,7 @@ pub fn vega_to_html_asyncio<'py>(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         vega_plugin,
         ..Default::default()
     };

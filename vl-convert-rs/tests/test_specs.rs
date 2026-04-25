@@ -12,7 +12,7 @@ use vl_convert_rs::converter::{
     FormatLocale, JpegOpts, PngOpts, SvgOpts, TimeFormatLocale, VlOpts,
 };
 
-use test_utils::{check_vg_png, initialize, load_vg_spec, to_dssim};
+use test_utils::{check_vg_png, initialize, load_vg_spec, test_converter, to_dssim};
 
 const BACKGROUND_COLOR: &str = "#abc";
 
@@ -361,7 +361,7 @@ mod test_vegalite_to_vega {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        let converter = test_converter();
 
         let vg_result = block_on(
             converter.vegalite_to_vega(vl_spec, VlOpts{vl_version, ..Default::default()}
@@ -406,7 +406,7 @@ mod test_vegalite_to_html_no_bundle {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        let converter = test_converter();
 
         let output = block_on(
             converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, HtmlOpts { bundle: false, renderer: Renderer::Canvas })
@@ -454,7 +454,7 @@ mod test_vegalite_to_html_bundle {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        let converter = test_converter();
 
         let output = block_on(
             converter.vegalite_to_html(vl_spec, VlOpts{vl_version, ..Default::default()}, HtmlOpts { bundle: true, renderer: Renderer::Svg })
@@ -499,7 +499,7 @@ mod test_svg {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        let converter = test_converter();
 
         // Convert to vega first
         let vg_output =
@@ -535,9 +535,9 @@ mod test_svg_allowed_base_url {
 
         // Create converter with matching base URL on the config
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![
+            allowed_base_urls: vec![
                 "https://raw.githubusercontent.com/vega/vega-datasets".to_string()
-            ]),
+            ],
             ..Default::default()
         }).unwrap();
 
@@ -574,7 +574,7 @@ mod test_svg_allowed_base_url {
 
         // Check for error with non-matching URL
         let converter_blocked = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec!["https://some-other-base".to_string()]),
+            allowed_base_urls: vec!["https://some-other-base".to_string()],
             ..Default::default()
         }).unwrap();
 
@@ -628,7 +628,7 @@ mod test_scenegraph {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        let converter = test_converter();
 
         // Convert to vega first
         let vg_output =
@@ -689,7 +689,7 @@ mod test_png_no_theme {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        let converter = test_converter();
 
         // Convert to vega first
         let vg_output = block_on(
@@ -724,10 +724,11 @@ mod test_png_google_fonts {
         let vl_version = VlVersion::v5_8;
         let vl_spec = load_vl_spec("google_fonts");
         let converter = VlConverter::with_config(VlcConfig {
-            google_fonts: Some(vec![
+            allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
+            google_fonts: vec![
                 GoogleFontRequest { family: "Bangers".to_string(), variants: None },
                 GoogleFontRequest { family: "Lugrasimo".to_string(), variants: None },
-            ]),
+            ],
             ..Default::default()
         }).unwrap();
 
@@ -775,7 +776,7 @@ mod test_png_theme_config {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        let converter = test_converter();
 
         // Convert directly to png with theme and config that overrides background color
         let output = block_on(
@@ -827,7 +828,7 @@ async fn test_font_with_quotes() {
     let vl_spec = load_vl_spec(name);
 
     // Create Vega-Lite Converter and perform conversion
-    let converter = VlConverter::new();
+    let converter = test_converter();
 
     let output = converter
         .vegalite_to_png(
@@ -861,7 +862,7 @@ async fn test_locale() {
         load_locale(format_locale_name, time_format_locale_name);
 
     // Create Vega-Lite Converter and perform conversion
-    let converter = VlConverter::new();
+    let converter = test_converter();
 
     // Convert with locale objects
     let output = converter
@@ -933,7 +934,7 @@ mod test_jpeg {
         let vl_spec = load_vl_spec(name);
 
         // Create Vega-Lite Converter and perform conversion
-        let converter = VlConverter::new();
+        let converter = test_converter();
 
         // Convert to vega first
         let vg_output =
@@ -968,7 +969,7 @@ mod test_vega_label_transform {
         initialize();
 
         let vg_spec = load_vg_spec(name);
-        let converter = VlConverter::new();
+        let converter = test_converter();
 
         let output = block_on(
             converter.vega_to_png(vg_spec, Default::default(), PngOpts { scale: Some(scale), ppi: None })

@@ -280,7 +280,7 @@ fn main() {
 
     for (name, v) in packages_info.iter_mut() {
         // Sort packages in descending order by version
-        v.sort_by(|a, b| b.0.cmp(&a.0));
+        v.sort_by_key(|e| std::cmp::Reverse(e.0.clone()));
 
         // Store the final version that will be kept (canonical name like "vega@6.2.0")
         if !v.is_empty() {
@@ -386,9 +386,11 @@ impl VlVersion {{
     }}
 }}
 
+pub const DEFAULT_VL_VERSION: &str = "{LATEST_VEGALITE}";
+
 impl Default for VlVersion {{
     fn default() -> Self {{
-        VlVersion::from_str("{LATEST_VEGALITE}").unwrap()
+        VlVersion::from_str(DEFAULT_VL_VERSION).unwrap()
     }}
 }}
 

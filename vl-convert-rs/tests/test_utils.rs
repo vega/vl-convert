@@ -3,16 +3,57 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
-use vl_convert_rs::text::register_font_directory;
+use vl_convert_rs::converter::{VlConverter, VlcConfig};
+
+/// Absolute path to the vendored `tests/fonts/` directory. The test specs
+/// reference fonts like `Caveat` from that tree, and the library's
+/// `VlConverter::with_config` treats `VlcConfig.font_directories` as
+/// authoritative (replaces the global store on construction), so every
+/// test converter has to include this path in its config — a prior
+/// `register_font_directory` call gets wiped when the converter is built.
+pub fn test_font_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fonts")
+}
+
+/// Build a `VlConverter` with the secure default profile relaxed to allow
+/// `http:` and `https:` data loads + the test font directory already wired
+/// into `font_directories`.
+#[allow(dead_code)]
+pub fn test_converter() -> VlConverter {
+    VlConverter::with_config(VlcConfig {
+        allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
+        font_directories: vec![test_font_dir()],
+        ..VlcConfig::default()
+    })
+    .expect("build test converter")
+}
+
+/// Same as [`test_converter`] but with extra `VlcConfig` overrides merged
+/// on top of the permissive defaults. Preserves the caller's
+/// `font_directories` if they set any, otherwise defaults to
+/// `vec![test_font_dir()]`.
+#[allow(dead_code)]
+pub fn test_converter_with_config(mut overrides: VlcConfig) -> VlConverter {
+    if overrides.font_directories.is_empty() {
+        overrides.font_directories = vec![test_font_dir()];
+    }
+    VlConverter::with_config(VlcConfig {
+        allowed_base_urls: vec!["http:".to_string(), "https:".to_string()],
+        ..overrides
+    })
+    .expect("build test converter")
+}
 
 static INIT: Once = Once::new();
 
 pub fn initialize() {
     INIT.call_once(|| {
-        let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let fonts_dir = root_path.join("tests").join("fonts");
-        register_font_directory(fonts_dir.to_str().unwrap())
-            .expect("Failed to register test font directory");
+        // Intentionally empty: every `test_converter*()` call seeds the
+        // test font directory via `VlcConfig.font_directories`, so the
+        // old `register_font_directory(fonts_dir)` side effect is
+        // redundant (and would get wiped by the next `with_config` anyway).
     });
 }
 
