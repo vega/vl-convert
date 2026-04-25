@@ -45,9 +45,10 @@ def reset_config_to_test_baseline():
     per-test configure and rely on this fixture to undo the effect on
     the next test.
 
-    `font_directories` is NOT reset — the `pytest_configure` hook already
-    wired the test fonts directory into the tracked config, and our
-    `register_font_directory` keeps it durable across rebuilds.
+    Font directories are not part of `VlcConfig` — they live in the
+    process-global font registry and persist across `configure()` /
+    `load_config()` calls. The `pytest_configure` hook above registers
+    the test fonts directory once per session.
     """
     vlc.configure(
         allowed_base_urls=["http:", "https:"],

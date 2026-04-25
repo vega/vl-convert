@@ -2,15 +2,10 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pythonize::pythonize;
-use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
 use vl_convert_rs::converter::{GoogleFontRequest, VgOpts, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
-use vl_convert_rs::VlConverter as VlConverterRs;
 use vl_convert_rs::{FontStyle, VariantRequest};
-
-use crate::VL_CONVERTER;
 
 use crate::utils::{
     async_variant_doc, future_into_py_object, parse_json_spec, parse_option_format_locale,
@@ -226,32 +221,8 @@ pub fn vega_fonts(
 ///
 /// Returns:
 ///     None
-/// Append `font_dir` to the current converter's `VlcConfig.font_directories`
-/// and rebuild so the library-global font store reflects the new list.
-/// The path persists across subsequent `configure()` / `load_config()`
-/// rebuilds because it lives on the tracked config.
-///
-/// Dedup: calling `register_font_directory(path)` twice is a no-op after
-/// the first call.
 fn register_font_directory_inner(font_dir: &str) -> Result<(), vl_convert_rs::anyhow::Error> {
-    let path = PathBuf::from(font_dir);
-    let mut guard = VL_CONVERTER.write().map_err(|e| {
-        vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
-    })?;
-
-    let mut config = guard.config();
-    if config
-        .font_directories
-        .iter()
-        .any(|existing| existing == &path)
-    {
-        return Ok(());
-    }
-    config.font_directories.push(path);
-
-    let converter = VlConverterRs::with_config(config)?;
-    *guard = Arc::new(converter);
-    Ok(())
+    vl_convert_rs::register_font_directory(font_dir)
 }
 
 #[pyfunction]

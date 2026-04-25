@@ -1,5 +1,4 @@
 use std::io::{self, IsTerminal, Read, Write};
-use std::path::PathBuf;
 use std::str::FromStr;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
@@ -8,19 +7,13 @@ use vl_convert_rs::converter::{
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
-/// Merge a `--font-dir` value into the base config's `font_directories`.
-///
-/// The library's `VlConverter::with_config` treats `VlcConfig.font_directories`
-/// as the authoritative replace target (via `set_font_directories`), so the
-/// CLI has to write the flag into the config *before* the converter is
-/// constructed.
-pub(crate) fn merge_font_dir(config: &mut VlcConfig, dir: Option<String>) {
+/// Register a `--font-dir` value with the library so subsequent conversions
+/// can resolve fonts from that directory.
+pub(crate) fn register_font_dir(dir: Option<String>) -> anyhow::Result<()> {
     if let Some(dir) = dir {
-        let path = PathBuf::from(dir);
-        if !config.font_directories.contains(&path) {
-            config.font_directories.push(path);
-        }
+        vl_convert_rs::register_font_directory(&dir)?;
     }
+    Ok(())
 }
 
 /// `=BOOL` value parser for clap flags. Mirrors the server CLI's

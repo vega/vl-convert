@@ -4,37 +4,29 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 use vl_convert_rs::converter::{VlConverter, VlcConfig};
+use vl_convert_rs::register_font_directory;
 
 /// Absolute path to the vendored `tests/fonts/` directory. The test specs
-/// reference fonts like `Caveat` from that tree, and the library's
-/// `VlConverter::with_config` treats `VlcConfig.font_directories` as
-/// authoritative (replaces the global store on construction), so every
-/// test converter has to include this path in its config.
+/// reference fonts like `Caveat` from that tree.
 pub fn test_font_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("fonts")
 }
 
-/// Build a `VlConverter` with the library default config plus the test
-/// font directory wired into `font_directories`. `VlcConfig::default()`
-/// already permits HTTP/HTTPS data loads.
+/// Build a `VlConverter` with the library default config. `VlcConfig::default()`
+/// permits HTTP/HTTPS data loads. The test font directory is registered once
+/// per process via [`initialize`].
 #[allow(dead_code)]
 pub fn test_converter() -> VlConverter {
-    VlConverter::with_config(VlcConfig {
-        font_directories: vec![test_font_dir()],
-        ..VlcConfig::default()
-    })
-    .expect("build test converter")
+    initialize();
+    VlConverter::with_config(VlcConfig::default()).expect("build test converter")
 }
 
-/// Same as [`test_converter`] but with extra `VlcConfig` overrides
-/// merged on top. Seeds the test font directory if the caller didn't.
+/// Same as [`test_converter`] but with extra `VlcConfig` overrides merged on top.
 #[allow(dead_code)]
-pub fn test_converter_with_config(mut overrides: VlcConfig) -> VlConverter {
-    if overrides.font_directories.is_empty() {
-        overrides.font_directories = vec![test_font_dir()];
-    }
+pub fn test_converter_with_config(overrides: VlcConfig) -> VlConverter {
+    initialize();
     VlConverter::with_config(overrides).expect("build test converter")
 }
 
@@ -42,9 +34,8 @@ static INIT: Once = Once::new();
 
 pub fn initialize() {
     INIT.call_once(|| {
-        // Intentionally empty: every `test_converter*()` call seeds the
-        // test font directory via `VlcConfig.font_directories`, which is
-        // the authoritative source for the global font registry.
+        register_font_directory(test_font_dir().to_string_lossy().as_ref())
+            .expect("Failed to register test font directory");
     });
 }
 

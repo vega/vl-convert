@@ -341,7 +341,6 @@ def configure(
     default_format_locale: str | dict[str, Any] | None = None,
     default_time_format_locale: str | dict[str, Any] | None = None,
     themes: dict[str, dict[str, Any]] | None = None,
-    font_directories: list[str] | None = None,
 ) -> None:
     """
     Configure converter worker/access settings used by subsequent conversions.
@@ -353,14 +352,6 @@ def configure(
        current value" as in prior releases. To leave a field untouched, simply
        omit the keyword. This rule applies uniformly to every field below
        (scalar, list, dict, and optional).
-
-    .. warning::
-
-       **Secure-by-default.** The library default blocks all network data
-       access (``allowed_base_urls = []``) and caps V8 heap at 512 MB. To
-       restore the pre-2.0 permissive behavior for remote data, pass
-       ``allowed_base_urls=["http:", "https:"]`` (or a more specific
-       allowlist for your deployment).
 
     Parameters
     ----------
@@ -375,10 +366,9 @@ def configure(
     allowed_base_urls
         CSP-style allowlist for data access (HTTP URLs, filesystem paths).
         Examples: ``"https:"`` (scheme), ``"https://example.com/"`` (prefix),
-        ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` (or ``[]``)
-        resets to the library default (empty list — blocks all network data).
-        **Migration:** to restore the pre-2.0 unrestricted behavior, pass
-        ``allowed_base_urls=["http:", "https:"]``.
+        ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
+        the library default (``["http:", "https:"]``); ``[]`` blocks all
+        network data.
     google_fonts_cache_size_mb
         Maximum Google Fonts on-disk LRU cache size in megabytes. Must be >= 1
         if provided. ``None`` resets to the library default. Passing ``0``
@@ -462,10 +452,6 @@ def configure(
         Registered alongside built-in vega-themes. Custom themes take
         priority over built-in themes if names collide. ``None`` (or ``{}``)
         resets to the library default (empty map).
-    font_directories
-        Directories to register with the process-global font database.
-        Replacement semantics — directories not in this list are deregistered.
-        ``None`` (or ``[]``) resets to the library default (empty list).
     """
     ...
 
@@ -1286,7 +1272,6 @@ if TYPE_CHECKING:
             default_format_locale: str | dict[str, Any] | None = None,
             default_time_format_locale: str | dict[str, Any] | None = None,
             themes: dict[str, dict[str, Any]] | None = None,
-            font_directories: list[str] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
             ...

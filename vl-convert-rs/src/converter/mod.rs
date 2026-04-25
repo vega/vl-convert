@@ -144,11 +144,8 @@ impl VlConverter {
             .try_init()
             .ok();
 
-        // Apply process-global font state from the config. These calls mutate
-        // shared state; the admin server's `ReconfigScopeGuard` snapshots and
-        // restores these before/after calling `with_config`.
+        // Apply process-global Google Fonts cache cap from the config.
         crate::text::apply_hot_font_cache(config.google_fonts_cache_size_mb)?;
-        crate::text::set_font_directories(&config.font_directories)?;
 
         let ephemeral_semaphore = if config.allow_per_request_plugins {
             config
@@ -2450,43 +2447,5 @@ mod tests {
             .await
             .unwrap();
         assert!(output.svg.contains("<svg"));
-    }
-
-    /// `VlConverter::with_config` must call `set_font_directories` so that
-    /// rebuilding with a different font list is truly authoritative.
-    #[tokio::test]
-    async fn with_config_font_directories_is_authoritative() {
-        use crate::text::current_font_directories;
-        let prior = current_font_directories();
-
-        let tmp = tempfile::tempdir().unwrap();
-        let dir_a = tmp.path().join("with_cfg_a");
-        let dir_b = tmp.path().join("with_cfg_b");
-        std::fs::create_dir_all(&dir_a).unwrap();
-        std::fs::create_dir_all(&dir_b).unwrap();
-
-        let _ = VlConverter::with_config(VlcConfig {
-            font_directories: vec![dir_a.clone()],
-            ..Default::default()
-        })
-        .unwrap();
-        let after_a = current_font_directories();
-        assert!(after_a.iter().any(|p| p == &dir_a));
-        assert!(!after_a.iter().any(|p| p == &dir_b));
-
-        let _ = VlConverter::with_config(VlcConfig {
-            font_directories: vec![dir_b.clone()],
-            ..Default::default()
-        })
-        .unwrap();
-        let after_b = current_font_directories();
-        assert!(
-            !after_b.iter().any(|p| p == &dir_a),
-            "dir_a must be deregistered when the new config omits it"
-        );
-        assert!(after_b.iter().any(|p| p == &dir_b));
-
-        // Restore prior state so neighbouring tests are unaffected.
-        crate::text::set_font_directories(&prior).unwrap();
     }
 }

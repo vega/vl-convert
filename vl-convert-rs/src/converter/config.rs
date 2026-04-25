@@ -4,7 +4,7 @@ use deno_core::error::AnyError;
 use deno_core::url::Url;
 use std::collections::HashMap;
 use std::num::{NonZeroU64, NonZeroUsize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use super::fonts::GoogleFontRequest;
 use super::permissions::{domain_matches_patterns, is_filesystem_path};
@@ -198,13 +198,6 @@ pub struct VlcConfig {
     /// `apply_hot_font_cache`. Hot-applyable: `VlConverter::with_config`
     /// calls through on construction.
     pub google_fonts_cache_size_mb: Option<NonZeroU64>,
-    /// Font directories registered with the process-global `FONT_CONFIG`
-    /// store. `VlConverter::with_config` calls
-    /// `set_font_directories(&config.font_directories)` on construction, so
-    /// the global store reflects the config list exactly. Replacement
-    /// semantics: directories not in the list are deregistered from the
-    /// global fontdb.
-    pub font_directories: Vec<PathBuf>,
 }
 
 /// Shared context passed to all workers.
@@ -258,7 +251,6 @@ impl Default for VlcConfig {
             default_time_format_locale: None,
             themes: HashMap::new(),
             google_fonts_cache_size_mb: None,
-            font_directories: Vec::new(),
         }
     }
 }
@@ -575,7 +567,6 @@ mod tests {
         assert!(cfg.google_fonts.is_empty());
         assert!(cfg.vega_plugins.is_empty());
         assert!(cfg.themes.is_empty());
-        assert!(cfg.font_directories.is_empty());
         assert_eq!(cfg.google_fonts_cache_size_mb, None);
     }
 

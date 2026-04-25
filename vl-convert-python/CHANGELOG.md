@@ -33,7 +33,7 @@ Passing `None` for any keyword resets that field to
 | `max_ephemeral_workers` | `2` |
 | `google_fonts_cache_size_mb` | library default |
 | `default_theme`, `default_format_locale`, `default_time_format_locale` | `None` |
-| `google_fonts`, `themes`, `font_directories`, `vega_plugins` | empty |
+| `google_fonts`, `themes`, `vega_plugins` | empty |
 
 ### `configure(google_fonts=[...])` — replace semantics
 
@@ -47,35 +47,22 @@ Per-request `google_fonts=` on conversion calls is merged with
 `max_ephemeral_workers`, `google_fonts_cache_size_mb` reject `0` with
 `ValueError`. Pass `None` to reset.
 
-### `register_font_directory(path)` semantics
+### `register_font_directory(path)`
 
-`vlc.register_font_directory(path)` now appends the path to the tracked
-converter's `VlcConfig.font_directories` and rebuilds the converter so
-the registration survives subsequent `vlc.configure(...)` /
-`vlc.load_config(...)` calls. Previously, a later `configure()` would
-silently wipe the registration.
-
-Cost trade-off: each call rebuilds the V8 worker pool, which is
-significantly more expensive than the prior append-only mutation. To
-batch-register many directories cheaply, prefer:
-
-```python
-vlc.configure(font_directories=[d1, d2, d3, ...])
-```
-
-which performs a single rebuild with replace-style semantics.
+`vlc.register_font_directory(path)` appends the path to the
+process-global font registry and refreshes the fontdb. Font
+directories live outside `VlcConfig`, so they persist across
+subsequent `vlc.configure(...)` / `vlc.load_config(...)` calls.
 
 ### `configure()` keyword arguments
 
-- `font_directories: list[str] | None` — replace the process-global
-  font directory registry. Directories absent from the list are
-  deregistered. `None` resets.
 - `max_ephemeral_workers: int | None`
 - `allow_google_fonts: bool | None`
 - All previously documented kwargs.
 
 ### `get_config()` keys
 
-`google_fonts`, `google_fonts_cache_size_mb`, `font_directories`,
-plus `Option<NonZero*>`-typed `max_v8_*` / `max_ephemeral_workers`
+`google_fonts`, `google_fonts_cache_size_mb`, `font_directories`
+(read-only — reflects the process-global registry), plus
+`Option<NonZero*>`-typed `max_v8_*` / `max_ephemeral_workers`
 returning `int | None`.

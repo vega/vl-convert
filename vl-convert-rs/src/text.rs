@@ -312,17 +312,25 @@ pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
     })
 }
 
-/// Replace the process-global registered-font-directory list.
+/// Append `dir` to the process-global font-directory list and refresh the
+/// fontdb. Workers pick up the new state on their next work item via
+/// `FONT_CONFIG_VERSION`.
+pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
+    {
+        let mut font_config = FONT_CONFIG
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
+        font_config.font_dirs.push(PathBuf::from(dir));
+    }
+    refresh_font_baseline_after_config_update()
+}
+
+/// Replace the process-global font-directory list with `paths`.
 ///
-/// Acquires `FONT_CONFIG`, sets `font_dirs = paths.to_vec()`, rebuilds the
-/// `ResolvedFontConfig` via `refresh_font_baseline_after_config_update`, and
-/// bumps `FONT_CONFIG_VERSION`. Workers pick up the new state on their next
-/// work item via `InnerVlConverter::refresh_font_config_if_needed`.
-///
-/// This is the single authoritative way to mutate the font-directory
-/// registry. Direct callers should prefer threading paths through
-/// `VlcConfig::font_directories` and constructing a `VlConverter` via
-/// `with_config`, which calls this function internally.
+/// Paths previously registered but absent from `paths` are dropped from the
+/// global registry, and the fontdb no longer resolves their fonts on future
+/// conversions. Bumps `FONT_CONFIG_VERSION`; workers pick up the new state
+/// on their next work item.
 pub fn set_font_directories(paths: &[PathBuf]) -> Result<(), anyhow::Error> {
     {
         let mut font_config = FONT_CONFIG

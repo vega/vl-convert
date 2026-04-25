@@ -4,7 +4,6 @@ use pyo3::types::PyDict;
 use pythonize::{depythonize, pythonize};
 use std::collections::HashMap;
 use std::num::{NonZeroU64, NonZeroUsize};
-use std::path::PathBuf;
 use std::sync::Arc;
 use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, MissingFontsPolicy, TimeFormatLocale,
@@ -68,9 +67,11 @@ pub fn converter_config_json(config: &VlcConfig) -> serde_json::Value {
             serde_json::Value::Object(entry)
         })
         .collect();
-    let font_directories_value: Vec<serde_json::Value> = config
-        .font_directories
-        .iter()
+    // Font directories are process-global, not per-config. Read from the
+    // library's current registry so `get_config()` reports what's actually
+    // active.
+    let font_directories_value: Vec<serde_json::Value> = vl_convert_rs::current_font_directories()
+        .into_iter()
         .map(|p| serde_json::Value::String(p.to_string_lossy().into_owned()))
         .collect();
     serde_json::json!({
@@ -140,7 +141,6 @@ pub struct ConverterConfigOverrides {
     pub default_format_locale: Option<Option<FormatLocale>>,
     pub default_time_format_locale: Option<Option<TimeFormatLocale>>,
     pub themes: Option<HashMap<String, serde_json::Value>>,
-    pub font_directories: Option<Vec<PathBuf>>,
 }
 
 /// Extract a positive integer, rejecting `0`. The caller is responsible for
@@ -462,21 +462,13 @@ pub fn parse_config_overrides(
                     overrides.themes = Some(themes_map);
                 }
             }
-            "font_directories" => {
-                if value.is_none() {
-                    overrides.font_directories = Some(default.font_directories.clone());
-                } else {
-                    let raw: Vec<String> = value.extract().map_err(|err| {
-                        vl_convert_rs::anyhow::anyhow!(
-                            "Invalid font_directories value for configure: {err}"
-                        )
-                    })?;
-                    overrides.font_directories = Some(raw.into_iter().map(PathBuf::from).collect());
-                }
-            }
             // Read-only config fields returned by get_config() are
             // silently ignored so that `configure(**get_config())` works.
-            "google_fonts_cache_dir" => {}
+            // `font_directories` is also read-only here: use
+            // `vlc.register_font_directory(path)` (append) or pass an
+            // explicit list via that helper. It's process-global state, not
+            // a VlcConfig field.
+            "google_fonts_cache_dir" | "font_directories" => {}
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
                     "Unknown configure argument: {other}"
@@ -551,9 +543,6 @@ pub fn apply_config_overrides(
     }
     if let Some(themes) = overrides.themes {
         config.themes = themes;
-    }
-    if let Some(font_directories) = overrides.font_directories {
-        config.font_directories = font_directories;
     }
     Ok(())
 }
