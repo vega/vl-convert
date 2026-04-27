@@ -3,7 +3,7 @@ use vl_convert_rs::converter::MissingFontsPolicy;
 pub(crate) use vl_convert_rs::DEFAULT_VL_VERSION;
 
 use crate::commands::Commands;
-use crate::io_utils::{parse_boolish_arg, DataAccessMode};
+use crate::io_utils::parse_boolish_arg;
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default)]
 pub(crate) enum MissingFontsArg {
@@ -73,25 +73,13 @@ pub(crate) struct Cli {
     #[arg(long, global = true)]
     pub(crate) base_url: Option<String>,
 
-    /// Data-access mode controlling which external URLs are allowed.
-    /// `default` = HTTP/HTTPS allowed (library default);
-    /// `none` = block all; `all` = allow everything (including
-    /// filesystem); `allowlist` requires `--allowed-base-urls`.
-    #[arg(
-        long,
-        global = true,
-        value_enum,
-        value_name = "MODE",
-        ignore_case = true
-    )]
-    pub(crate) data_access: Option<DataAccessMode>,
-
-    /// Allowed base URLs as a JSON array, or `@<path>` to read the
-    /// JSON from a file. Supports CSP-style patterns:
-    /// `"https:"` (scheme), `"https://example.com/"` (prefix),
-    /// `"/data/"` (filesystem). Auto-infers `--data-access=allowlist`
-    /// when used without an explicit `--data-access`.
-    #[arg(long, global = true, value_name = "JSON|@FILE")]
+    /// Allowed base URLs. Reserved values: `default` (HTTP/HTTPS,
+    /// library default), `none` (block all), `all` (allow everything
+    /// incl. filesystem). Otherwise a JSON array literal of CSP-style
+    /// patterns — `"https:"` (scheme), `"https://example.com/"` (prefix),
+    /// `"/data/"` (absolute filesystem path) — or `@<path>` to read the
+    /// JSON from a file.
+    #[arg(long, global = true, value_name = "default|none|all|JSON|@FILE")]
     pub(crate) allowed_base_urls: Option<String>,
 
     /// Register a font from Google Fonts. Use "Family" for all variants,

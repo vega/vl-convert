@@ -23,19 +23,15 @@ Command-line interface wrapping vl-convert-rs. Built with Clap.
 
 ## Global config flags (typed values)
 
-The CLI mirrors `vl-convert-server`'s flag idiom: typed `=BOOL` values
-on every boolean, a `--data-access=MODE` enum for URL access control,
-and `--allowed-base-urls=JSON|@FILE` for the explicit allowlist.
+Typed `=BOOL` values on every boolean and a single
+`--allowed-base-urls=<value>` flag for URL access control.
 
 ```
 --vlc-config <path>           # JSONC converter config file path
 --load-config=BOOL            # whether to load the config file (default: true)
 
 --base-url=<value>            # default | disabled | <URL/path>
---data-access=<mode>          # default | none | all | allowlist
---allowed-base-urls=<JSON|@FILE>
-                              # JSON array literal or @path-to-file with one;
-                              # auto-infers --data-access=allowlist if mode is omitted
+--allowed-base-urls=<value>   # default | none | all | JSON array | @path-to-file
 
 --auto-google-fonts=BOOL      # default: false
 --embed-local-fonts=BOOL      # default: false
@@ -54,9 +50,15 @@ and `--allowed-base-urls=JSON|@FILE` for the explicit allowlist.
 `=BOOL` accepts `true|false|1|0|yes|no|on|off` (case-insensitive). Bare
 boolean flags (e.g. `--auto-google-fonts`) resolve to `true`.
 
-To disable all external data access:
-`--data-access=none`. To allow only specific prefixes:
-`--data-access=allowlist --allowed-base-urls='["https://cdn.example.com/"]'`.
+`--allowed-base-urls` reserved values: `default` (HTTP/HTTPS, library
+default), `none` (block all), `all` (`["*"]`, allow everything incl.
+filesystem). Otherwise a JSON array of CSP-style patterns
+(`"https:"`, `"https://example.com/"`, `"/data/"`), or `@<path>` to
+read the JSON from a file.
+
+To disable all external data access: `--allowed-base-urls=none`. To
+allow only specific prefixes:
+`--allowed-base-urls='["https://cdn.example.com/"]'`.
 
 ## Testing
 

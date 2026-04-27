@@ -25,7 +25,7 @@ use io_utils::{
     flatten_plugin_domains, parse_allowed_base_urls, parse_base_url_arg,
     parse_format_locale_option, parse_google_font_requests, parse_time_format_locale_option,
     parse_vl_version, read_config_json, read_input_string, register_font_dir, resolve_vlc_config,
-    write_output_binary, write_output_string, DataAccessMode,
+    write_output_binary, write_output_string,
 };
 
 #[tokio::main]
@@ -55,13 +55,8 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(ref raw) = cli.base_url {
         base_config.base_url = parse_base_url_arg(raw)?;
     }
-    let explicit_allowlist = cli
-        .allowed_base_urls
-        .as_deref()
-        .map(parse_allowed_base_urls)
-        .transpose()?;
-    if let Some(allowlist) = DataAccessMode::resolve(cli.data_access, explicit_allowlist)? {
-        base_config.allowed_base_urls = allowlist;
+    if let Some(ref raw) = cli.allowed_base_urls {
+        base_config.allowed_base_urls = parse_allowed_base_urls(raw)?;
     }
     if let Some(v) = cli.auto_google_fonts {
         base_config.auto_google_fonts = v;

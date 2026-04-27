@@ -26,43 +26,6 @@ pub(crate) fn parse_boolish_arg(raw: &str) -> Result<bool, String> {
     }
 }
 
-/// Data-access mode for `--data-access=MODE`. Mirrors the server CLI's
-/// enum. `Default` resolves to `VlcConfig::default().allowed_base_urls`,
-/// which currently allows any HTTP/HTTPS URL.
-#[derive(Clone, Copy, Debug, clap::ValueEnum)]
-pub(crate) enum DataAccessMode {
-    Default,
-    None,
-    All,
-    Allowlist,
-}
-
-impl DataAccessMode {
-    /// Resolve `--data-access` + `--allowed-base-urls` into the final
-    /// `VlcConfig.allowed_base_urls` vector. `Ok(None)` means "no
-    /// override" (caller keeps the bootstrap value).
-    pub(crate) fn resolve(
-        mode: Option<Self>,
-        explicit: Option<Vec<String>>,
-    ) -> Result<Option<Vec<String>>, anyhow::Error> {
-        let inferred = mode.or_else(|| explicit.as_ref().map(|_| Self::Allowlist));
-        match (inferred, explicit) {
-            (None, None) => Ok(None),
-            (Some(Self::Default), None) => Ok(Some(VlcConfig::default().allowed_base_urls)),
-            (Some(Self::None), None) => Ok(Some(Vec::new())),
-            (Some(Self::All), None) => Ok(Some(vec!["*".to_string()])),
-            (Some(Self::Allowlist), Some(list)) => Ok(Some(list)),
-            (Some(Self::Allowlist), None) => {
-                bail!("--data-access=allowlist requires --allowed-base-urls=JSON|@FILE")
-            }
-            (Some(mode), Some(_)) => {
-                bail!("--data-access={mode:?} does not accept --allowed-base-urls")
-            }
-            (None, Some(_)) => unreachable!("inferred Allowlist when explicit is set"),
-        }
-    }
-}
-
 /// Parse a `--base-url` value into a `BaseUrlSetting`. Reserved values
 /// `default` and `disabled` map to the corresponding enum variants;
 /// any other string is taken as a custom URL or filesystem path.
@@ -75,10 +38,17 @@ pub(crate) fn parse_base_url_arg(raw: &str) -> Result<BaseUrlSetting, anyhow::Er
     }
 }
 
-/// Parse `--allowed-base-urls=JSON|@FILE` into `Vec<String>`. Accepts
-/// either a JSON-array literal (e.g. `["http:","https:"]`) or `@<path>`
-/// referencing a file containing the JSON array.
+/// Parse a `--allowed-base-urls` value into a `Vec<String>`. Accepts:
+/// reserved values `default` / `none` / `all`, a JSON-array literal
+/// (e.g. `["http:","https:"]`), or `@<path>` referencing a file
+/// containing the JSON array.
 pub(crate) fn parse_allowed_base_urls(raw: &str) -> Result<Vec<String>, anyhow::Error> {
+    match raw.trim() {
+        "default" => return Ok(VlcConfig::default().allowed_base_urls),
+        "none" => return Ok(Vec::new()),
+        "all" => return Ok(vec!["*".to_string()]),
+        _ => {}
+    }
     let json_text = if let Some(path_str) = raw.strip_prefix('@') {
         let expanded = shellexpand::tilde(path_str.trim()).to_string();
         std::fs::read_to_string(&expanded).map_err(|err| {
