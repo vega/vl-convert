@@ -398,7 +398,7 @@ def configure(
         library default (empty list).
     max_v8_heap_size_mb
         Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
-        ``None`` resets to the library default (512 MB). Passing ``0`` raises
+        ``None`` resets to the library default (no cap). Passing ``0`` raises
         ``ValueError``.
     max_v8_execution_time_secs
         Maximum V8 execution time in seconds. Must be >= 1 if provided. When

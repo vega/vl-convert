@@ -225,7 +225,9 @@ impl Default for VlcConfig {
         //   allowed; no filesystem access. Pass `Vec::new()` to block all
         //   network data; `["*"]` to allow everything (including
         //   filesystem reads).
-        // - `max_v8_heap_size_mb = Some(NZ(512))` — bounds per-worker V8 heap.
+        // - `max_v8_heap_size_mb = None` — no per-worker heap cap. Server
+        //   deployments should set an explicit cap; local/embedded callers
+        //   typically don't need one.
         // - `max_ephemeral_workers = Some(NZ(2))` — bounds ephemeral-worker
         //   concurrency (harmless when per-request plugins are disabled).
         Self {
@@ -237,7 +239,7 @@ impl Default for VlcConfig {
             subset_fonts: true,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: Vec::new(),
-            max_v8_heap_size_mb: NonZeroU64::new(512),
+            max_v8_heap_size_mb: None,
             max_v8_execution_time_secs: None,
             gc_after_conversion: false,
             vega_plugins: Vec::new(),
@@ -554,9 +556,8 @@ mod tests {
             "allowed_base_urls default permits HTTP/HTTPS"
         );
         assert_eq!(
-            cfg.max_v8_heap_size_mb,
-            NonZeroU64::new(512),
-            "max_v8_heap_size_mb default is Some(NZ(512))"
+            cfg.max_v8_heap_size_mb, None,
+            "max_v8_heap_size_mb default is None (no cap)"
         );
         assert_eq!(
             cfg.max_ephemeral_workers,
