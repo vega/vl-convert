@@ -50,7 +50,7 @@ async fn main() -> Result<(), anyhow::Error> {
         Some(cli.vega_plugin.clone())
     };
 
-    let mut base_config = resolve_vlc_config(cli.vlc_config.as_deref(), cli.load_config)?;
+    let mut base_config = resolve_vlc_config(cli.vlc_config.as_deref())?;
 
     if let Some(ref raw) = cli.base_url {
         base_config.base_url = parse_base_url_arg(raw)?;

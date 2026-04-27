@@ -47,24 +47,11 @@ impl LogLevel {
 #[command(version, name = "vl-convert")]
 #[command(about = "vl-convert: A utility for converting Vega-Lite specifications", long_about = None)]
 pub(crate) struct Cli {
-    /// Path to JSONC converter config file.
-    /// Defaults to the platform config directory if the file exists.
-    #[arg(long, global = true)]
+    /// Converter config: an absolute path to a JSONC config file, or the
+    /// reserved value `disabled` to skip config-file loading. When
+    /// omitted, the platform default config path is loaded if it exists.
+    #[arg(long, global = true, value_name = "disabled|PATH")]
     pub(crate) vlc_config: Option<String>,
-
-    /// Whether to load the vlc-config file (default: true).
-    /// Pass `=false` to skip config-file loading; conflicts with
-    /// `--vlc-config`.
-    #[arg(
-        long,
-        global = true,
-        value_name = "BOOL",
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        value_parser = parse_boolish_arg,
-    )]
-    pub(crate) load_config: Option<bool>,
 
     /// Base URL for resolving relative data paths. Reserved values:
     /// `default` (use vega-datasets CDN), `disabled` (relative paths

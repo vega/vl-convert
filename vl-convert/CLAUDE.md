@@ -27,8 +27,7 @@ Typed `=BOOL` values on every boolean and a single
 `--allowed-base-urls=<value>` flag for URL access control.
 
 ```
---vlc-config <path>           # JSONC converter config file path
---load-config=BOOL            # whether to load the config file (default: true)
+--vlc-config=<value>          # absolute path to JSONC config file, or `disabled` to skip
 
 --base-url=<value>            # default | disabled | <URL/path>
 --allowed-base-urls=<value>   # default | none | all | JSON array | @path-to-file
