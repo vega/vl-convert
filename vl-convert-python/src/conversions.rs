@@ -31,7 +31,13 @@ use vl_convert_rs::module_loader::import_map::VlVersion;
 /// Returns:
 ///     dict: Vega JSON specification dict
 #[pyfunction]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None))]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+))]
 pub fn vegalite_to_vega(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -96,7 +102,18 @@ pub fn vegalite_to_vega(
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None, google_fonts=None, config=None, background=None, width=None, height=None))]
+#[pyo3(signature = (
+    vg_spec,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    bundle=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_svg(
     vg_spec: PyObject,
     format_locale: Option<PyObject>,
@@ -159,7 +176,18 @@ pub fn vega_to_svg(
 /// Returns:
 ///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None, google_fonts=None, config=None, background=None, width=None, height=None))]
+#[pyo3(signature = (
+    vg_spec,
+    format_locale=None,
+    time_format_locale=None,
+    format="dict",
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_scenegraph(
     vg_spec: PyObject,
     format_locale: Option<PyObject>,
@@ -247,9 +275,21 @@ pub fn vega_to_scenegraph(
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    bundle=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_svg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -331,9 +371,21 @@ pub fn vegalite_to_svg(
 /// Returns:
 ///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    format="dict",
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_scenegraph(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -427,9 +479,19 @@ pub fn vegalite_to_scenegraph(
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(
-    signature = (vg_spec, scale=None, ppi=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, config=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vg_spec,
+    scale=None,
+    ppi=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_png(
     vg_spec: PyObject,
     scale: Option<f32>,
@@ -501,9 +563,22 @@ pub fn vega_to_png(
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    scale=None,
+    ppi=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_png(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -579,9 +654,19 @@ pub fn vegalite_to_png(
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(
-    signature = (vg_spec, scale=None, quality=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, config=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vg_spec,
+    scale=None,
+    quality=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_jpeg(
     vg_spec: PyObject,
     scale: Option<f32>,
@@ -653,9 +738,22 @@ pub fn vega_to_jpeg(
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    scale=None,
+    quality=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_jpeg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -735,7 +833,18 @@ pub fn vegalite_to_jpeg(
 /// Returns:
 ///     bytes: PDF file bytes
 #[pyfunction]
-#[pyo3(signature = (vg_spec, scale=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, config=None, background=None, width=None, height=None))]
+#[pyo3(signature = (
+    vg_spec,
+    scale=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_pdf(
     vg_spec: PyObject,
     scale: Option<f32>,
@@ -801,9 +910,20 @@ pub fn vega_to_pdf(
 /// Returns:
 ///     bytes: PDF image data
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    scale=None,
+    config=None,
+    theme=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_pdf(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -920,9 +1040,21 @@ pub fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<Stri
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, bundle=None, google_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    bundle=None,
+    google_fonts=None,
+    config=None,
+    theme=None,
+    format_locale=None,
+    time_format_locale=None,
+    renderer=None,
+    vega_plugin=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_html(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -996,7 +1128,19 @@ pub fn vegalite_to_html(
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
-#[pyo3(signature = (vg_spec, bundle=None, google_fonts=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None, config=None, background=None, width=None, height=None))]
+#[pyo3(signature = (
+    vg_spec,
+    bundle=None,
+    google_fonts=None,
+    format_locale=None,
+    time_format_locale=None,
+    renderer=None,
+    vega_plugin=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_html(
     vg_spec: PyObject,
     bundle: Option<bool>,
@@ -1111,7 +1255,13 @@ pub fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
 
 #[doc = async_variant_doc!("vegalite_to_vega")]
 #[pyfunction(name = "vegalite_to_vega")]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None))]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+))]
 pub fn vegalite_to_vega_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1157,7 +1307,18 @@ pub fn vegalite_to_vega_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_svg")]
 #[pyfunction(name = "vega_to_svg")]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None, google_fonts=None, config=None, background=None, width=None, height=None))]
+#[pyo3(signature = (
+    vg_spec,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    bundle=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_svg_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1211,7 +1372,18 @@ pub fn vega_to_svg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_scenegraph")]
 #[pyfunction(name = "vega_to_scenegraph")]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None, google_fonts=None, config=None, background=None, width=None, height=None))]
+#[pyo3(signature = (
+    vg_spec,
+    format_locale=None,
+    time_format_locale=None,
+    format="dict",
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_scenegraph_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1282,9 +1454,21 @@ pub fn vega_to_scenegraph_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_svg")]
 #[pyfunction(name = "vegalite_to_svg")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    bundle=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_svg_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1349,9 +1533,21 @@ pub fn vegalite_to_svg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_scenegraph")]
 #[pyfunction(name = "vegalite_to_scenegraph")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    format="dict",
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_scenegraph_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1433,9 +1629,19 @@ pub fn vegalite_to_scenegraph_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_png")]
 #[pyfunction(name = "vega_to_png")]
-#[pyo3(
-    signature = (vg_spec, scale=None, ppi=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, config=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vg_spec,
+    scale=None,
+    ppi=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_png_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1482,9 +1688,22 @@ pub fn vega_to_png_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_png")]
 #[pyfunction(name = "vegalite_to_png")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    scale=None,
+    ppi=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_png_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1542,9 +1761,19 @@ pub fn vegalite_to_png_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_jpeg")]
 #[pyfunction(name = "vega_to_jpeg")]
-#[pyo3(
-    signature = (vg_spec, scale=None, quality=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, config=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vg_spec,
+    scale=None,
+    quality=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_jpeg_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1591,9 +1820,22 @@ pub fn vega_to_jpeg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_jpeg")]
 #[pyfunction(name = "vegalite_to_jpeg")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    scale=None,
+    quality=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_jpeg_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1651,7 +1893,18 @@ pub fn vegalite_to_jpeg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_pdf")]
 #[pyfunction(name = "vega_to_pdf")]
-#[pyo3(signature = (vg_spec, scale=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, config=None, background=None, width=None, height=None))]
+#[pyo3(signature = (
+    vg_spec,
+    scale=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_pdf_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1698,9 +1951,20 @@ pub fn vega_to_pdf_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_pdf")]
 #[pyfunction(name = "vegalite_to_pdf")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, format_locale=None, time_format_locale=None, vega_plugin=None, google_fonts=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    scale=None,
+    config=None,
+    theme=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_pdf_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1804,9 +2068,21 @@ pub fn vega_to_url_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_html")]
 #[pyfunction(name = "vegalite_to_html")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, bundle=None, google_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None, background=None, width=None, height=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    vl_version=None,
+    bundle=None,
+    google_fonts=None,
+    config=None,
+    theme=None,
+    format_locale=None,
+    time_format_locale=None,
+    renderer=None,
+    vega_plugin=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_html_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1876,7 +2152,19 @@ pub fn vegalite_to_html_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_html")]
 #[pyfunction(name = "vega_to_html")]
-#[pyo3(signature = (vg_spec, bundle=None, google_fonts=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None, config=None, background=None, width=None, height=None))]
+#[pyo3(signature = (
+    vg_spec,
+    bundle=None,
+    google_fonts=None,
+    format_locale=None,
+    time_format_locale=None,
+    renderer=None,
+    vega_plugin=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_html_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
