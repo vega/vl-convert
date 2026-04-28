@@ -576,7 +576,112 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
     Ok(())
 }
 
-/// Configure converter options for subsequent requests
+/// Configure converter worker/access settings used by subsequent conversions.
+///
+/// All arguments are keyword-only. Unknown keywords raise ``TypeError``.
+///
+/// .. note::
+///
+///    **Uniform ``None`` semantics.** Passing ``None`` for any keyword argument
+///    **resets that field to the library default**. To leave a field
+///    untouched, simply omit the keyword. This rule applies uniformly to every
+///    field below (scalar, list, dict, and optional).
+///
+/// Parameters
+/// ----------
+/// num_workers : int, optional
+///     Worker count (must be >= 1). ``None`` resets to the library default (1).
+///     Passing ``0`` raises ``ValueError``.
+/// base_url : str | bool, optional
+///     Base URL for resolving relative data paths in Vega specs.
+///     ``None`` or ``True`` resets to the default (vega-datasets CDN).
+///     ``False`` disables relative path resolution.
+///     A string sets a custom base URL or filesystem path.
+/// allowed_base_urls : list[str], optional
+///     CSP-style allowlist for data access (HTTP URLs, filesystem paths).
+///     Examples: ``"https:"`` (scheme), ``"https://example.com/"`` (prefix),
+///     ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
+///     the library default (``["http:", "https:"]``); ``[]`` blocks all
+///     network data.
+/// google_fonts_cache_size_mb : int, optional
+///     Maximum Google Fonts on-disk LRU cache size in megabytes. Must be >= 1
+///     if provided. ``None`` resets to the library default. Passing ``0``
+///     raises ``ValueError``.
+/// auto_google_fonts : bool, optional
+///     Automatically download missing fonts from Google Fonts.
+///     ``None`` resets to the library default (``False``).
+/// embed_local_fonts : bool, optional
+///     Embed locally available fonts as base64-encoded data URIs in SVG and
+///     HTML output. Does not apply to PDF/PNG/JPEG (which always embed fonts
+///     via fontdb). ``None`` resets to the library default (``False``).
+/// subset_fonts : bool, optional
+///     Subset fonts to only the characters used in the chart. Applies to SVG
+///     and HTML output. ``None`` resets to the library default (``True``).
+/// missing_fonts : {"fallback", "warn", "error"}, optional
+///     Missing-font behavior. ``None`` resets to the library default
+///     (``"fallback"``).
+/// google_fonts : list[str | dict], optional
+///     Google Fonts to register for all subsequent conversions. Each entry is
+///     a family-name string or a dict with ``"family"`` (required) and
+///     optionally ``"variants"`` (list of ``(weight, style)`` tuples). Each
+///     call **replaces** the full configured list. ``None`` (or ``[]``)
+///     resets to the library default (empty list).
+/// max_v8_heap_size_mb : int, optional
+///     Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
+///     ``None`` resets to the library default (no cap). Passing ``0`` raises
+///     ``ValueError``.
+/// max_v8_execution_time_secs : int, optional
+///     Maximum V8 execution time in seconds. Must be >= 1 if provided. When
+///     exceeded, V8 execution is terminated and an error is returned.
+///     ``None`` resets to the library default (no cap). Passing ``0`` raises
+///     ``ValueError``.
+/// gc_after_conversion : bool, optional
+///     Whether to run V8 garbage collection after each conversion to release
+///     memory back to the OS. ``None`` resets to the library default
+///     (``False``).
+/// vega_plugins : list[str], optional
+///     List of Vega plugins to load. Each entry is a file path
+///     (``.js``/``.mjs``), URL (``https://...``), or inline ESM string.
+///     URL plugins auto-allow their domain for imports. ``None`` (or ``[]``)
+///     resets to the library default (empty list).
+/// plugin_import_domains : list[str], optional
+///     Domain patterns allowed for HTTP imports inside config-level plugins.
+///     Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
+///     ``None`` (or ``[]``) resets to the library default (empty list — HTTP
+///     imports disabled).
+/// allow_per_request_plugins : bool, optional
+///     Whether to accept per-request plugins via the ``vega_plugin`` parameter
+///     on conversion functions. ``None`` resets to the library default
+///     (``False``).
+/// max_ephemeral_workers : int, optional
+///     Maximum concurrent ephemeral V8 isolates for per-request plugins. Must
+///     be >= 1 if provided. ``None`` resets to the library default (2).
+///     Passing ``0`` raises ``ValueError``.
+/// allow_google_fonts : bool, optional
+///     Whether to accept per-request ``google_fonts`` / ``auto_google_fonts``
+///     overrides on conversion calls. ``None`` resets to the library default
+///     (``False``).
+/// per_request_plugin_import_domains : list[str], optional
+///     Domain patterns allowed for HTTP imports inside per-request plugins.
+///     Separate from ``plugin_import_domains``. ``None`` (or ``[]``) resets
+///     to the library default (empty list — HTTP imports disabled).
+/// default_theme : str, optional
+///     Default named theme (e.g. ``"dark"``) applied to all Vega-Lite
+///     conversions. Per-request ``theme`` overrides this if set. ``None``
+///     resets to the library default (no theme).
+/// default_format_locale : str | dict, optional
+///     Default d3-format locale name (e.g. ``"fr-FR"``) applied to all
+///     conversions. Per-request ``format_locale`` overrides this if set.
+///     ``None`` resets to the library default (no locale).
+/// default_time_format_locale : str | dict, optional
+///     Default d3-time-format locale name (e.g. ``"fr-FR"``) applied to all
+///     conversions. Per-request ``time_format_locale`` overrides this if set.
+///     ``None`` resets to the library default (no locale).
+/// themes : dict[str, dict], optional
+///     Custom named themes mapping names to Vega config objects. Registered
+///     alongside built-in vega-themes. Custom themes take priority over
+///     built-in themes if names collide. ``None`` (or ``{}``) resets to the
+///     library default (empty map).
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
 pub fn configure(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {
