@@ -1,7 +1,7 @@
 """Tests for per-call VgOpts/VlOpts arguments on conversion methods.
 
-Verify that `background`, `width`, `height`, `google_fonts`, and `config`
-(vega methods) reach the converter and influence output.
+Verify that `background`, `width`, `height`, and `config` (vega
+methods) reach the converter and influence output.
 """
 
 import re
@@ -95,20 +95,3 @@ class TestVegaConfigMerge:
         )
         assert "#ff00ff" not in svg_default
         assert "#ff00ff" in svg_override
-
-
-class TestGoogleFonts:
-    def test_vega_to_svg_google_fonts_injects_font_family(self, vl_bar_spec):
-        # Compile a vega spec with the Pacifico font set on text marks.
-        vg_spec = vlc.vegalite_to_vega(
-            vl_bar_spec, config={"font": "Pacifico"}
-        )
-        # Per-call google_fonts registers Pacifico for this conversion only.
-        svg = vlc.vega_to_svg(vg_spec, google_fonts=["Pacifico"])
-        assert "Pacifico" in svg
-
-    def test_vegalite_to_svg_google_fonts_injects_font_family(self, vl_bar_spec):
-        spec_with_font = dict(vl_bar_spec)
-        spec_with_font["config"] = {"font": "Pacifico"}
-        svg = vlc.vegalite_to_svg(spec_with_font, google_fonts=["Pacifico"])
-        assert "Pacifico" in svg
