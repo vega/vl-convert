@@ -584,7 +584,9 @@ def svg_to_pdf(svg: str, *, scale: float | None = None) -> bytes:
     """
     ...
 
-def svg_to_png(svg: str, *, scale: float | None = None, ppi: float | None = None) -> bytes:
+def svg_to_png(
+    svg: str, *, scale: float | None = None, ppi: float | None = None
+) -> bytes:
     """
     Convert an SVG image string to PNG image data.
 
