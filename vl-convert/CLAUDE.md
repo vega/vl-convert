@@ -29,7 +29,7 @@ Typed `=BOOL` values on every boolean and a single
 ```
 --vlc-config=<value>          # absolute path to JSONC config file, or `disabled` to skip
 
---base-url=<value>            # default | disabled | <URL/path>
+--base-url=<value>            # default | disabled | URL with scheme | absolute path
 --allowed-base-urls=<value>   # default | none | all | JSON array | @path-to-file
 
 --auto-google-fonts=BOOL      # default: false

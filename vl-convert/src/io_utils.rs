@@ -27,15 +27,31 @@ pub(crate) fn parse_boolish_arg(raw: &str) -> Result<bool, String> {
 }
 
 /// Parse a `--base-url` value into a `BaseUrlSetting`. Reserved values
-/// `default` and `disabled` map to the corresponding enum variants;
-/// any other string is taken as a custom URL or filesystem path.
+/// `default` and `disabled` map to the corresponding enum variants. A
+/// URL with scheme (`https://...`, `file://...`) is taken as-is. Any
+/// other value is treated as a filesystem path and must be absolute
+/// (after `~` expansion); relative paths are rejected so they can't be
+/// confused with reserved values.
 pub(crate) fn parse_base_url_arg(raw: &str) -> Result<BaseUrlSetting, anyhow::Error> {
-    match raw.trim() {
-        "default" => Ok(BaseUrlSetting::Default),
-        "disabled" => Ok(BaseUrlSetting::Disabled),
+    let trimmed = raw.trim();
+    match trimmed {
+        "default" => return Ok(BaseUrlSetting::Default),
+        "disabled" => return Ok(BaseUrlSetting::Disabled),
         "" => bail!("--base-url must not be empty"),
-        other => Ok(BaseUrlSetting::Custom(other.to_string())),
+        _ => {}
     }
+    if trimmed.contains("://") {
+        return Ok(BaseUrlSetting::Custom(trimmed.to_string()));
+    }
+    let expanded = shellexpand::tilde(trimmed).to_string();
+    if !std::path::Path::new(&expanded).is_absolute() {
+        bail!(
+            "--base-url path must be absolute, got '{trimmed}'. Use \
+             'default' or 'disabled' for reserved behaviors, a URL with \
+             scheme like 'https://example.com/', or an absolute path."
+        );
+    }
+    Ok(BaseUrlSetting::Custom(expanded))
 }
 
 /// Parse a `--allowed-base-urls` value into a `Vec<String>`. Accepts:

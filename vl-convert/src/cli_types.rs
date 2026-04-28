@@ -55,9 +55,10 @@ pub(crate) struct Cli {
 
     /// Base URL for resolving relative data paths. Reserved values:
     /// `default` (use vega-datasets CDN), `disabled` (relative paths
-    /// error). Any other string is taken as a custom URL or filesystem
-    /// path.
-    #[arg(long, global = true)]
+    /// error). Otherwise either a URL with scheme (`https://...`,
+    /// `file://...`) or an absolute filesystem path. Relative paths
+    /// are rejected.
+    #[arg(long, global = true, value_name = "default|disabled|URL|PATH")]
     pub(crate) base_url: Option<String>,
 
     /// Allowed base URLs. Reserved values: `default` (HTTP/HTTPS,
