@@ -459,6 +459,17 @@ pub(super) mod tests {
         let _ = stream.write_all(response_head.as_bytes());
         let _ = stream.write_all(&response.body);
         let _ = stream.flush();
+
+        let _ = stream.shutdown(std::net::Shutdown::Write);
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(500)));
+        let mut drain_buf = [0u8; 256];
+        loop {
+            use std::io::Read;
+            match stream.read(&mut drain_buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => continue,
+            }
+        }
     }
 
     fn http_reason_phrase(status: u16) -> &'static str {
