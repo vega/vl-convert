@@ -232,6 +232,35 @@ pub fn register_font_directory(font_dir: &str) -> PyResult<()> {
         .map_err(|err| PyValueError::new_err(format!("Failed to register font directory: {}", err)))
 }
 
+/// Replace the registered font directories with the given list.
+///
+/// Unlike ``register_font_directory``, which only adds, this replaces
+/// the full list — directories previously registered but absent from
+/// ``font_dirs`` are dropped from the global registry, and the fontdb
+/// no longer resolves their fonts on future conversions. Pass an empty
+/// list to clear all registrations.
+///
+/// Args:
+///     font_dirs (list[str]): Absolute paths to directories containing
+///         font files
+///
+/// Returns:
+///     None
+fn set_font_directories_inner(font_dirs: Vec<String>) -> Result<(), vl_convert_rs::anyhow::Error> {
+    let paths: Vec<std::path::PathBuf> = font_dirs
+        .into_iter()
+        .map(std::path::PathBuf::from)
+        .collect();
+    vl_convert_rs::set_font_directories(&paths)
+}
+
+#[pyfunction]
+#[pyo3(signature = (font_dirs))]
+pub fn set_font_directories(font_dirs: Vec<String>) -> PyResult<()> {
+    set_font_directories_inner(font_dirs)
+        .map_err(|err| PyValueError::new_err(format!("Failed to set font directories: {}", err)))
+}
+
 #[doc = async_variant_doc!("vegalite_fonts")]
 #[pyfunction(name = "vegalite_fonts")]
 #[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
@@ -361,6 +390,24 @@ pub fn register_font_directory_asyncio<'py>(
             .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
             .map_err(|err| {
                 PyValueError::new_err(format!("Failed to register font directory: {err}"))
+            })?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
+#[doc = async_variant_doc!("set_font_directories")]
+#[pyfunction(name = "set_font_directories")]
+#[pyo3(signature = (font_dirs))]
+pub fn set_font_directories_asyncio<'py>(
+    py: Python<'py>,
+    font_dirs: Vec<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py_object(py, async move {
+        tokio::task::spawn_blocking(move || set_font_directories_inner(font_dirs))
+            .await
+            .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("Failed to set font directories: {err}"))
             })?;
         Python::with_gil(|py| Ok(py.None().into()))
     })

@@ -326,12 +326,7 @@ pub fn set_font_directories(paths: &[PathBuf]) -> Result<(), anyhow::Error> {
     refresh_font_baseline_after_config_update()
 }
 
-/// Return the currently-registered font directories (a snapshot of
-/// `FONT_CONFIG.font_dirs`).
-///
-/// Useful for the admin-reconfig path, which snapshots this list before
-/// calling [`set_font_directories`] so it can restore prior state if the
-/// reconfig fails.
+/// Return a snapshot of the currently-registered font directories.
 pub fn current_font_directories() -> Vec<PathBuf> {
     FONT_CONFIG
         .lock()

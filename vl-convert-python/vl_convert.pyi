@@ -192,6 +192,7 @@ __all__ = [
     "get_time_format_locale",
     "javascript_bundle",
     "register_font_directory",
+    "set_font_directories",
     "warm_up_workers",
     "get_worker_memory_usage",
     "svg_to_jpeg",
@@ -311,6 +312,27 @@ def register_font_directory(font_dir: str) -> None:
     ----------
     font_dir
         Absolute path to a directory containing font files
+
+    Returns
+    -------
+    None
+    """
+    ...
+
+def set_font_directories(font_dirs: list[str]) -> None:
+    """
+    Replace the registered font directories with the given list.
+
+    Unlike ``register_font_directory``, which only adds, this replaces
+    the full list — directories previously registered but absent from
+    ``font_dirs`` are dropped from the global registry, and the fontdb
+    no longer resolves their fonts on future conversions. Pass an empty
+    list to clear all registrations.
+
+    Parameters
+    ----------
+    font_dirs
+        Absolute paths to directories containing font files
 
     Returns
     -------
@@ -1247,6 +1269,9 @@ if TYPE_CHECKING:
             ...
         async def register_font_directory(self, font_dir: str) -> None:
             """Async version of ``register_font_directory``. See sync function for full documentation."""
+            ...
+        async def set_font_directories(self, font_dirs: list[str]) -> None:
+            """Async version of ``set_font_directories``. See sync function for full documentation."""
             ...
         async def configure(
             self,
