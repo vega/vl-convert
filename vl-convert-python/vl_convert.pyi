@@ -554,7 +554,7 @@ def get_worker_memory_usage() -> list[WorkerMemoryUsage]:
     ...
 
 def svg_to_jpeg(
-    svg: str, scale: float | None = None, quality: int | None = None
+    svg: str, *, scale: float | None = None, quality: int | None = None
 ) -> bytes:
     """
     Convert an SVG image string to JPEG image data.
@@ -574,7 +574,7 @@ def svg_to_jpeg(
     """
     ...
 
-def svg_to_pdf(svg: str, scale: float | None = None) -> bytes:
+def svg_to_pdf(svg: str, *, scale: float | None = None) -> bytes:
     """
     Convert an SVG image string to PDF document data.
 
@@ -591,7 +591,7 @@ def svg_to_pdf(svg: str, scale: float | None = None) -> bytes:
     """
     ...
 
-def svg_to_png(svg: str, scale: float | None = None, ppi: float | None = None) -> bytes:
+def svg_to_png(svg: str, *, scale: float | None = None, ppi: float | None = None) -> bytes:
     """
     Convert an SVG image string to PNG image data.
 
@@ -612,6 +612,7 @@ def svg_to_png(svg: str, scale: float | None = None, ppi: float | None = None) -
 
 def vega_to_html(
     vg_spec: VlSpec,
+    *,
     bundle: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
@@ -662,6 +663,7 @@ def vega_to_html(
 
 def vega_to_jpeg(
     vg_spec: VlSpec,
+    *,
     scale: float | None = None,
     quality: int | None = None,
     format_locale: FormatLocale | None = None,
@@ -709,6 +711,7 @@ def vega_to_jpeg(
 
 def vega_to_pdf(
     vg_spec: VlSpec,
+    *,
     scale: float | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
@@ -753,6 +756,7 @@ def vega_to_pdf(
 
 def vega_to_png(
     vg_spec: VlSpec,
+    *,
     scale: float | None = None,
     ppi: float | None = None,
     format_locale: FormatLocale | None = None,
@@ -800,6 +804,7 @@ def vega_to_png(
 
 def vega_to_scenegraph(
     vg_spec: VlSpec,
+    *,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     format: Literal["dict", "msgpack"] = "dict",
@@ -845,6 +850,7 @@ def vega_to_scenegraph(
 
 def vega_to_svg(
     vg_spec: VlSpec,
+    *,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
@@ -890,7 +896,7 @@ def vega_to_svg(
     """
     ...
 
-def vega_to_url(vg_spec: VlSpec, fullscreen: bool | None = None) -> str:
+def vega_to_url(vg_spec: VlSpec, *, fullscreen: bool | None = None) -> str:
     """
     Convert a Vega spec to a URL that opens the chart in the Vega editor.
 
@@ -989,6 +995,7 @@ def vega_fonts(
 
 def vegalite_to_html(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     bundle: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
@@ -1046,6 +1053,7 @@ def vegalite_to_html(
 
 def vegalite_to_jpeg(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     scale: float | None = None,
     quality: int | None = None,
@@ -1103,6 +1111,7 @@ def vegalite_to_jpeg(
 
 def vegalite_to_pdf(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     scale: float | None = None,
     config: dict[str, Any] | None = None,
@@ -1154,6 +1163,7 @@ def vegalite_to_pdf(
 
 def vegalite_to_png(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     scale: float | None = None,
     ppi: float | None = None,
@@ -1211,6 +1221,7 @@ def vegalite_to_png(
 
 def vegalite_to_scenegraph(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
@@ -1266,6 +1277,7 @@ def vegalite_to_scenegraph(
 
 def vegalite_to_svg(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
@@ -1319,7 +1331,7 @@ def vegalite_to_svg(
     """
     ...
 
-def vegalite_to_url(vl_spec: VlSpec, fullscreen: bool | None = None) -> str:
+def vegalite_to_url(vl_spec: VlSpec, *, fullscreen: bool | None = None) -> str:
     """
     Convert a Vega-Lite spec to a URL that opens the chart in the Vega editor.
 
@@ -1338,6 +1350,7 @@ def vegalite_to_url(vl_spec: VlSpec, fullscreen: bool | None = None) -> str:
 
 def vegalite_to_vega(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
@@ -1475,7 +1488,7 @@ if TYPE_CHECKING:
         ) -> bytes:
             """Async version of ``svg_to_jpeg``. See sync function for full documentation."""
             ...
-        async def svg_to_pdf(self, svg: str, scale: float | None = None) -> bytes:
+        async def svg_to_pdf(self, svg: str, *, scale: float | None = None) -> bytes:
             """Async version of ``svg_to_pdf``. See sync function for full documentation."""
             ...
         async def svg_to_png(
@@ -1486,6 +1499,7 @@ if TYPE_CHECKING:
         async def vega_to_html(
             self,
             vg_spec: VlSpec,
+            *,
             bundle: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
@@ -1502,6 +1516,7 @@ if TYPE_CHECKING:
         async def vega_to_jpeg(
             self,
             vg_spec: VlSpec,
+            *,
             scale: float | None = None,
             quality: int | None = None,
             format_locale: FormatLocale | None = None,
@@ -1518,6 +1533,7 @@ if TYPE_CHECKING:
         async def vega_to_pdf(
             self,
             vg_spec: VlSpec,
+            *,
             scale: float | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
@@ -1533,6 +1549,7 @@ if TYPE_CHECKING:
         async def vega_to_png(
             self,
             vg_spec: VlSpec,
+            *,
             scale: float | None = None,
             ppi: float | None = None,
             format_locale: FormatLocale | None = None,
@@ -1549,6 +1566,7 @@ if TYPE_CHECKING:
         async def vega_to_scenegraph(
             self,
             vg_spec: VlSpec,
+            *,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             format: Literal["dict", "msgpack"] = "dict",
@@ -1564,6 +1582,7 @@ if TYPE_CHECKING:
         async def vega_to_svg(
             self,
             vg_spec: VlSpec,
+            *,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
@@ -1609,6 +1628,7 @@ if TYPE_CHECKING:
         async def vegalite_to_html(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             bundle: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
@@ -1627,6 +1647,7 @@ if TYPE_CHECKING:
         async def vegalite_to_jpeg(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             scale: float | None = None,
             quality: int | None = None,
@@ -1646,6 +1667,7 @@ if TYPE_CHECKING:
         async def vegalite_to_pdf(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             scale: float | None = None,
             config: dict[str, Any] | None = None,
@@ -1663,6 +1685,7 @@ if TYPE_CHECKING:
         async def vegalite_to_png(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             scale: float | None = None,
             ppi: float | None = None,
@@ -1682,6 +1705,7 @@ if TYPE_CHECKING:
         async def vegalite_to_scenegraph(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
@@ -1700,6 +1724,7 @@ if TYPE_CHECKING:
         async def vegalite_to_svg(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
@@ -1723,6 +1748,7 @@ if TYPE_CHECKING:
         async def vegalite_to_vega(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,

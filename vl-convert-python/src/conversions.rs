@@ -33,6 +33,7 @@ use vl_convert_rs::module_loader::import_map::VlVersion;
 #[pyfunction]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     config=None,
     theme=None,
@@ -104,6 +105,7 @@ pub fn vegalite_to_vega(
 #[pyfunction]
 #[pyo3(signature = (
     vg_spec,
+    *,
     format_locale=None,
     time_format_locale=None,
     vega_plugin=None,
@@ -178,6 +180,7 @@ pub fn vega_to_svg(
 #[pyfunction]
 #[pyo3(signature = (
     vg_spec,
+    *,
     format_locale=None,
     time_format_locale=None,
     format="dict",
@@ -277,6 +280,7 @@ pub fn vega_to_scenegraph(
 #[pyfunction]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     config=None,
     theme=None,
@@ -373,6 +377,7 @@ pub fn vegalite_to_svg(
 #[pyfunction]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     config=None,
     theme=None,
@@ -481,6 +486,7 @@ pub fn vegalite_to_scenegraph(
 #[pyfunction]
 #[pyo3(signature = (
     vg_spec,
+    *,
     scale=None,
     ppi=None,
     format_locale=None,
@@ -565,6 +571,7 @@ pub fn vega_to_png(
 #[pyfunction]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     scale=None,
     ppi=None,
@@ -656,6 +663,7 @@ pub fn vegalite_to_png(
 #[pyfunction]
 #[pyo3(signature = (
     vg_spec,
+    *,
     scale=None,
     quality=None,
     format_locale=None,
@@ -740,6 +748,7 @@ pub fn vega_to_jpeg(
 #[pyfunction]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     scale=None,
     quality=None,
@@ -835,6 +844,7 @@ pub fn vegalite_to_jpeg(
 #[pyfunction]
 #[pyo3(signature = (
     vg_spec,
+    *,
     scale=None,
     format_locale=None,
     time_format_locale=None,
@@ -912,6 +922,7 @@ pub fn vega_to_pdf(
 #[pyfunction]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     scale=None,
     config=None,
@@ -987,7 +998,7 @@ pub fn vegalite_to_pdf(
 /// Returns:
 ///     str: URL string
 #[pyfunction]
-#[pyo3(signature = (vl_spec, fullscreen=None))]
+#[pyo3(signature = (vl_spec, *, fullscreen=None))]
 pub fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
     let vl_spec = parse_json_spec(vl_spec)?;
     Ok(vl_convert_rs::converter::vegalite_to_url(
@@ -1006,7 +1017,7 @@ pub fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<
 /// Returns:
 ///     str: URL string
 #[pyfunction]
-#[pyo3(signature = (vg_spec, fullscreen=None))]
+#[pyo3(signature = (vg_spec, *, fullscreen=None))]
 pub fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
     Ok(vl_convert_rs::converter::vega_to_url(
@@ -1042,6 +1053,7 @@ pub fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<Stri
 #[pyfunction]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     bundle=None,
     google_fonts=None,
@@ -1130,6 +1142,7 @@ pub fn vegalite_to_html(
 #[pyfunction]
 #[pyo3(signature = (
     vg_spec,
+    *,
     bundle=None,
     google_fonts=None,
     format_locale=None,
@@ -1194,7 +1207,7 @@ pub fn vega_to_html(
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(signature = (svg, scale=None, ppi=None))]
+#[pyo3(signature = (svg, *, scale=None, ppi=None))]
 pub fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
     let svg = svg.to_string();
     let png_opts = PngOpts { scale, ppi };
@@ -1216,7 +1229,7 @@ pub fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<P
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(signature = (svg, scale=None, quality=None))]
+#[pyo3(signature = (svg, *, scale=None, quality=None))]
 pub fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
     let svg = svg.to_string();
     let jpeg_opts = JpegOpts { scale, quality };
@@ -1237,7 +1250,7 @@ pub fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResu
 /// Returns:
 ///     bytes: PDF document data
 #[pyfunction]
-#[pyo3(signature = (svg, scale=None))]
+#[pyo3(signature = (svg, *, scale=None))]
 pub fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let svg = svg.to_string();
@@ -1257,6 +1270,7 @@ pub fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
 #[pyfunction(name = "vegalite_to_vega")]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     config=None,
     theme=None,
@@ -1309,6 +1323,7 @@ pub fn vegalite_to_vega_asyncio<'py>(
 #[pyfunction(name = "vega_to_svg")]
 #[pyo3(signature = (
     vg_spec,
+    *,
     format_locale=None,
     time_format_locale=None,
     vega_plugin=None,
@@ -1374,6 +1389,7 @@ pub fn vega_to_svg_asyncio<'py>(
 #[pyfunction(name = "vega_to_scenegraph")]
 #[pyo3(signature = (
     vg_spec,
+    *,
     format_locale=None,
     time_format_locale=None,
     format="dict",
@@ -1456,6 +1472,7 @@ pub fn vega_to_scenegraph_asyncio<'py>(
 #[pyfunction(name = "vegalite_to_svg")]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     config=None,
     theme=None,
@@ -1535,6 +1552,7 @@ pub fn vegalite_to_svg_asyncio<'py>(
 #[pyfunction(name = "vegalite_to_scenegraph")]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     config=None,
     theme=None,
@@ -1631,6 +1649,7 @@ pub fn vegalite_to_scenegraph_asyncio<'py>(
 #[pyfunction(name = "vega_to_png")]
 #[pyo3(signature = (
     vg_spec,
+    *,
     scale=None,
     ppi=None,
     format_locale=None,
@@ -1690,6 +1709,7 @@ pub fn vega_to_png_asyncio<'py>(
 #[pyfunction(name = "vegalite_to_png")]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     scale=None,
     ppi=None,
@@ -1763,6 +1783,7 @@ pub fn vegalite_to_png_asyncio<'py>(
 #[pyfunction(name = "vega_to_jpeg")]
 #[pyo3(signature = (
     vg_spec,
+    *,
     scale=None,
     quality=None,
     format_locale=None,
@@ -1822,6 +1843,7 @@ pub fn vega_to_jpeg_asyncio<'py>(
 #[pyfunction(name = "vegalite_to_jpeg")]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     scale=None,
     quality=None,
@@ -1895,6 +1917,7 @@ pub fn vegalite_to_jpeg_asyncio<'py>(
 #[pyfunction(name = "vega_to_pdf")]
 #[pyo3(signature = (
     vg_spec,
+    *,
     scale=None,
     format_locale=None,
     time_format_locale=None,
@@ -1953,6 +1976,7 @@ pub fn vega_to_pdf_asyncio<'py>(
 #[pyfunction(name = "vegalite_to_pdf")]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     scale=None,
     config=None,
@@ -2020,7 +2044,7 @@ pub fn vegalite_to_pdf_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_url")]
 #[pyfunction(name = "vegalite_to_url")]
-#[pyo3(signature = (vl_spec, fullscreen=None))]
+#[pyo3(signature = (vl_spec, *, fullscreen=None))]
 pub fn vegalite_to_url_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -2044,7 +2068,7 @@ pub fn vegalite_to_url_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_url")]
 #[pyfunction(name = "vega_to_url")]
-#[pyo3(signature = (vg_spec, fullscreen=None))]
+#[pyo3(signature = (vg_spec, *, fullscreen=None))]
 pub fn vega_to_url_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -2070,6 +2094,7 @@ pub fn vega_to_url_asyncio<'py>(
 #[pyfunction(name = "vegalite_to_html")]
 #[pyo3(signature = (
     vl_spec,
+    *,
     vl_version=None,
     bundle=None,
     google_fonts=None,
@@ -2154,6 +2179,7 @@ pub fn vegalite_to_html_asyncio<'py>(
 #[pyfunction(name = "vega_to_html")]
 #[pyo3(signature = (
     vg_spec,
+    *,
     bundle=None,
     google_fonts=None,
     format_locale=None,
@@ -2225,7 +2251,7 @@ pub fn vega_to_html_asyncio<'py>(
 
 #[doc = async_variant_doc!("svg_to_png")]
 #[pyfunction(name = "svg_to_png")]
-#[pyo3(signature = (svg, scale=None, ppi=None))]
+#[pyo3(signature = (svg, *, scale=None, ppi=None))]
 pub fn svg_to_png_asyncio<'py>(
     py: Python<'py>,
     svg: &str,
@@ -2248,7 +2274,7 @@ pub fn svg_to_png_asyncio<'py>(
 
 #[doc = async_variant_doc!("svg_to_jpeg")]
 #[pyfunction(name = "svg_to_jpeg")]
-#[pyo3(signature = (svg, scale=None, quality=None))]
+#[pyo3(signature = (svg, *, scale=None, quality=None))]
 pub fn svg_to_jpeg_asyncio<'py>(
     py: Python<'py>,
     svg: &str,
@@ -2271,7 +2297,7 @@ pub fn svg_to_jpeg_asyncio<'py>(
 
 #[doc = async_variant_doc!("svg_to_pdf")]
 #[pyfunction(name = "svg_to_pdf")]
-#[pyo3(signature = (svg, scale=None))]
+#[pyo3(signature = (svg, *, scale=None))]
 pub fn svg_to_pdf_asyncio<'py>(
     py: Python<'py>,
     svg: &str,
