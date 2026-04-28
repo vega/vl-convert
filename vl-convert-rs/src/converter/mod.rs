@@ -2165,6 +2165,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_vega_loader_rejects_unsupported_sanitized_scheme() {
+        let converter = VlConverter::with_config(VlcConfig {
+            allowed_base_urls: vec!["*".to_string()],
+            ..Default::default()
+        })
+        .unwrap();
+        let spec = vega_spec_with_data_url("ftp://example.com/data.csv");
+
+        let err = converter
+            .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
+            .await
+            .unwrap_err();
+        let message = err.to_string();
+        assert!(
+            message.contains("Unsupported data URL target after Vega loader sanitize")
+                && message.contains("ftp://example.com/data.csv"),
+            "expected unsupported sanitized target error, got: {message}"
+        );
+    }
+
+    #[tokio::test]
     async fn test_vegalite_to_png_canvas_image_denies_http_access() {
         let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: vec![],
@@ -2349,23 +2370,19 @@ mod tests {
         })
         .unwrap();
 
-        // Spec with a relative data URL — should fail because base_url is disabled
-        let spec = serde_json::json!({
-            "$schema": "https://vega.github.io/schema/vega/v5.json",
-            "width": 50, "height": 50,
-            "data": [{"name": "t", "url": "data/cars.json"}],
-            "marks": []
-        });
+        // Spec with a relative data URL that is used by marks, forcing the
+        // loader to resolve it against the disabled base URL.
+        let spec = vega_spec_with_data_url("data/cars.json");
 
-        let result = converter
+        let err = converter
             .vega_to_svg(spec, VgOpts::default(), SvgOpts::default())
-            .await;
-        // The relative URL resolves to about:invalid which the op rejects
+            .await
+            .unwrap_err();
+        let message = err.to_string();
         assert!(
-            result.is_err() || {
-                // If it "succeeds", the data just isn't loaded (no marks use it)
-                true
-            }
+            message.contains("Unsupported data URL target after Vega loader sanitize")
+                && message.contains("about:invalid"),
+            "expected disabled base URL to produce unsupported target error, got: {message}"
         );
     }
 

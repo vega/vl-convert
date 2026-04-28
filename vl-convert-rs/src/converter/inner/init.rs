@@ -113,6 +113,10 @@ function buildLoader(errors) {
         const wantBinary = responseType === 'arraybuffer';
 
         try {
+            if (typeof href !== 'string') {
+                throw new Error(`Unsupported data URL target after Vega loader sanitize: ${href}`);
+            }
+
             // data: URIs are handled inline (no network, no op needed)
             if (href.startsWith('data:')) {
                 const resp = await fetch(href);
@@ -128,18 +132,22 @@ function buildLoader(errors) {
                 return await op_vega_data_fetch(href);
             }
 
-            // Filesystem path (sanitize strips file:// prefix, so href is a bare path).
-            // On Windows, stripping file:// from file:///C:/path leaves /C:/path;
-            // remove the leading slash so the Rust op receives a valid Windows path.
-            let filePath = decodeURIComponent(href);
-            if (globalThis.Deno?.build?.os === 'windows' && /^\/[A-Za-z]:/.test(filePath)) {
-                filePath = filePath.slice(1);
+            if (sanitized.localFile === true) {
+                // Filesystem path (sanitize strips file:// prefix, so href is a bare path).
+                // On Windows, stripping file:// from file:///C:/path leaves /C:/path;
+                // remove the leading slash so the Rust op receives a valid Windows path.
+                let filePath = decodeURIComponent(href);
+                if (globalThis.Deno?.build?.os === 'windows' && /^\/[A-Za-z]:/.test(filePath)) {
+                    filePath = filePath.slice(1);
+                }
+                if (wantBinary) {
+                    const buffer = await op_vega_file_read_bytes(filePath);
+                    return buffer.buffer;
+                }
+                return await op_vega_file_read(filePath);
             }
-            if (wantBinary) {
-                const buffer = await op_vega_file_read_bytes(filePath);
-                return buffer.buffer;
-            }
-            return await op_vega_file_read(filePath);
+
+            throw new Error(`Unsupported data URL target after Vega loader sanitize: ${href}`);
         } catch (error) {
             errors.push(error.message);
             throw error;
