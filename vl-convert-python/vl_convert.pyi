@@ -341,6 +341,7 @@ def set_font_directories(font_dirs: list[str]) -> None:
     ...
 
 def configure(
+    *,
     num_workers: int | None = None,
     base_url: str | bool | None = None,
     allowed_base_urls: list[str] | None = None,
@@ -1446,6 +1447,7 @@ if TYPE_CHECKING:
             ...
         async def configure(
             self,
+            *,
             num_workers: int | None = None,
             base_url: str | bool | None = None,
             allowed_base_urls: list[str] | None = None,
