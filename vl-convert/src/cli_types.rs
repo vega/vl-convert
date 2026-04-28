@@ -61,13 +61,13 @@ pub(crate) struct Cli {
     #[arg(long, global = true, value_name = "default|disabled|URL|PATH")]
     pub(crate) base_url: Option<String>,
 
-    /// Allowed base URLs. Reserved values: `default` (HTTP/HTTPS,
-    /// library default), `none` (block all), `all` (allow everything
+    /// Allowed base URLs. Reserved values: `none` (block all),
+    /// `net` (HTTP/HTTPS only, no filesystem), `all` (allow everything
     /// incl. filesystem). Otherwise a JSON array literal of CSP-style
     /// patterns — `"https:"` (scheme), `"https://example.com/"` (prefix),
     /// `"/data/"` (absolute filesystem path) — or `@<path>` to read the
     /// JSON from a file.
-    #[arg(long, global = true, value_name = "default|none|all|JSON|@FILE")]
+    #[arg(long, global = true, value_name = "none|net|all|JSON|@FILE")]
     pub(crate) allowed_base_urls: Option<String>,
 
     /// Register a font from Google Fonts. Use "Family" for all variants,

@@ -55,13 +55,13 @@ pub(crate) fn parse_base_url_arg(raw: &str) -> Result<BaseUrlSetting, anyhow::Er
 }
 
 /// Parse a `--allowed-base-urls` value into a `Vec<String>`. Accepts:
-/// reserved values `default` / `none` / `all`, a JSON-array literal
+/// reserved values `none` / `net` / `all`, a JSON-array literal
 /// (e.g. `["http:","https:"]`), or `@<path>` referencing a file
 /// containing the JSON array.
 pub(crate) fn parse_allowed_base_urls(raw: &str) -> Result<Vec<String>, anyhow::Error> {
     match raw.trim() {
-        "default" => return Ok(VlcConfig::default().allowed_base_urls),
         "none" => return Ok(Vec::new()),
+        "net" => return Ok(vec!["http:".to_string(), "https:".to_string()]),
         "all" => return Ok(vec!["*".to_string()]),
         _ => {}
     }
@@ -70,8 +70,14 @@ pub(crate) fn parse_allowed_base_urls(raw: &str) -> Result<Vec<String>, anyhow::
         std::fs::read_to_string(&expanded).map_err(|err| {
             anyhow::anyhow!("failed to read --allowed-base-urls @ {}: {err}", expanded)
         })?
-    } else {
+    } else if raw.trim_start().starts_with('[') {
         raw.to_string()
+    } else {
+        bail!(
+            "--allowed-base-urls must be one of: 'none', 'net', 'all', a JSON \
+             array literal like '[\"https:\"]', or '@<path>' to read the JSON \
+             from a file. Got: '{raw}'"
+        );
     };
     let value: serde_json::Value = serde_json::from_str(&json_text)
         .map_err(|err| anyhow::anyhow!("--allowed-base-urls must be a JSON array: {err}"))?;

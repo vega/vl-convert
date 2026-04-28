@@ -30,7 +30,7 @@ Typed `=BOOL` values on every boolean and a single
 --vlc-config=<value>          # absolute path to JSONC config file, or `disabled` to skip
 
 --base-url=<value>            # default | disabled | URL with scheme | absolute path
---allowed-base-urls=<value>   # default | none | all | JSON array | @path-to-file
+--allowed-base-urls=<value>   # none | net | all | JSON array | @path-to-file
 
 --auto-google-fonts=BOOL      # default: false
 --embed-local-fonts=BOOL      # default: false
@@ -49,9 +49,9 @@ Typed `=BOOL` values on every boolean and a single
 `=BOOL` accepts `true|false|1|0|yes|no|on|off` (case-insensitive). Bare
 boolean flags (e.g. `--auto-google-fonts`) resolve to `true`.
 
-`--allowed-base-urls` reserved values: `default` (HTTP/HTTPS, library
-default), `none` (block all), `all` (`["*"]`, allow everything incl.
-filesystem). Otherwise a JSON array of CSP-style patterns
+`--allowed-base-urls` reserved values: `none` (block all), `net`
+(HTTP/HTTPS only, no filesystem), `all` (`["*"]`, allow everything
+incl. filesystem). Otherwise a JSON array of CSP-style patterns
 (`"https:"`, `"https://example.com/"`, `"/data/"`), or `@<path>` to
 read the JSON from a file.
 
