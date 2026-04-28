@@ -517,6 +517,12 @@ pub fn apply_config_overrides(
     if let Some(allow_per_request_plugins) = overrides.allow_per_request_plugins {
         config.allow_per_request_plugins = allow_per_request_plugins;
     }
+    if let Some(max_ephemeral_workers) = overrides.max_ephemeral_workers {
+        config.max_ephemeral_workers = max_ephemeral_workers;
+    }
+    if let Some(allow_google_fonts) = overrides.allow_google_fonts {
+        config.allow_google_fonts = allow_google_fonts;
+    }
     if let Some(per_request_plugin_import_domains) = overrides.per_request_plugin_import_domains {
         config.per_request_plugin_import_domains = per_request_plugin_import_domains;
     }
