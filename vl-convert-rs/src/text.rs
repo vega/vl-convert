@@ -17,24 +17,9 @@ use vl_convert_google_fonts::GoogleFontsClient;
 /// Incremented each time font configuration is modified.
 pub static FONT_CONFIG_VERSION: AtomicU64 = AtomicU64::new(0);
 
-/// Default cap (in MB) for the on-disk Google Fonts LRU cache. Used by
-/// `apply_hot_font_cache` when called with `None` to actively reset the
-/// `GOOGLE_FONTS_CLIENT` LRU back to a known baseline (e.g. by the
-/// server admin-rollback path).
-///
-/// Mirrors `vl_convert_google_fonts::DEFAULT_MAX_FONT_CACHE_BYTES` (512 MB).
+/// Default cap (in MB) for the on-disk Google Fonts LRU cache, applied
+/// when [`apply_hot_font_cache`] is called with `None`.
 pub const DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB: u64 = 512;
-
-/// Current capacity observed on `GOOGLE_FONTS_CLIENT`. Written by
-/// `apply_hot_font_cache` on every call; read by `current_cache_size`. The
-/// value stored is `cap_mb` — 0 when no cap has been applied yet (initial
-/// startup state) and any positive integer otherwise.
-///
-/// The server admin path reads this via `current_cache_size()` so it can
-/// snapshot → attempt rebuild → restore-on-failure cleanly. Callers
-/// observe the last value written by `apply_hot_font_cache`; the library
-/// default sentinel is `DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB`.
-static CURRENT_CACHE_SIZE_MB: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone)]
 pub struct FontBaselineSnapshot {
@@ -354,58 +339,17 @@ pub fn current_font_directories() -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
-/// Return the Google Fonts LRU cache cap last applied via
-/// [`apply_hot_font_cache`].
+/// Set the on-disk Google Fonts LRU cache cap (process-global).
 ///
-/// Returns `None` when no cap has ever been applied (fresh process state).
-/// Callers that care about the library's default behavior should treat
-/// `None` as "library default" and write back
-/// [`DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB`] when restoring.
-pub fn current_cache_size() -> Option<NonZeroU64> {
-    NonZeroU64::new(CURRENT_CACHE_SIZE_MB.load(Ordering::Acquire))
-}
-
-/// Actively set the Google Fonts LRU cache cap.
-///
-/// Unlike [`configure_font_cache`] which silently ignores `None`, this
-/// function **actively resets the cap to the library default**
-/// ([`DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB`]) when called with `None`. This
-/// is required by the admin-reconfig rollback path: snapshot
-/// `current_cache_size()` → attempt rebuild → restore via
-/// `apply_hot_font_cache(prior)` where `prior` may be `None` if the cap
-/// had never been customized. Silent-ignore semantics would leak the
-/// new cap across a failed rebuild.
-///
-/// The function immediately evicts cached fonts if the new limit is
-/// exceeded.
+/// `None` resets to [`DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB`] so a fresh
+/// `with_config(VlcConfig { google_fonts_cache_size_mb: None, .. })`
+/// doesn't inherit a previous converter's explicit cap. Cached fonts
+/// over the new limit are evicted immediately.
 pub fn apply_hot_font_cache(cap_mb: Option<NonZeroU64>) -> Result<(), anyhow::Error> {
-    let bytes_per_mb: u64 = 1024 * 1024;
-    let cap_mb_value = cap_mb
+    let mb = cap_mb
         .map(NonZeroU64::get)
         .unwrap_or(DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB);
-    let bytes = cap_mb_value.saturating_mul(bytes_per_mb);
-    GOOGLE_FONTS_CLIENT.set_max_font_cache_bytes(bytes)?;
-    CURRENT_CACHE_SIZE_MB.store(cap_mb_value, Ordering::Release);
-    Ok(())
-}
-
-/// Configure the max on-disk Google Fonts cache size in bytes.
-///
-/// `None` keeps the existing configured value. Immediately evicts cached
-/// fonts if the new limit is exceeded.
-///
-/// # Deprecation
-///
-/// Prefer [`apply_hot_font_cache`], which takes an `Option<NonZeroU64>`
-/// (MB, type-checked) and actively resets to the library default when
-/// called with `None`. This function remains for backward compatibility.
-pub fn configure_font_cache(max_cache_bytes: Option<u64>) -> Result<(), anyhow::Error> {
-    if let Some(bytes) = max_cache_bytes {
-        GOOGLE_FONTS_CLIENT.set_max_font_cache_bytes(bytes)?;
-        let bytes_per_mb: u64 = 1024 * 1024;
-        let cap_mb = bytes / bytes_per_mb;
-        CURRENT_CACHE_SIZE_MB.store(cap_mb, Ordering::Release);
-    }
+    GOOGLE_FONTS_CLIENT.set_max_font_cache_bytes(mb.saturating_mul(1024 * 1024))?;
     Ok(())
 }
 
@@ -442,20 +386,5 @@ mod tests {
 
         // Restore
         set_font_directories(&prior).unwrap();
-    }
-
-    #[test]
-    fn apply_hot_font_cache_none_resets_to_default() {
-        apply_hot_font_cache(NonZeroU64::new(17)).unwrap();
-        let after_explicit = current_cache_size();
-        assert_eq!(after_explicit, NonZeroU64::new(17));
-
-        apply_hot_font_cache(None).unwrap();
-        let after_reset = current_cache_size();
-        assert_eq!(
-            after_reset,
-            NonZeroU64::new(DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB),
-            "apply_hot_font_cache(None) must actively reset to the library default"
-        );
     }
 }
