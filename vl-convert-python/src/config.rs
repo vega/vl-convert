@@ -580,13 +580,6 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
 ///
 /// All arguments are keyword-only. Unknown keywords raise ``TypeError``.
 ///
-/// .. note::
-///
-///    **Uniform ``None`` semantics.** Passing ``None`` for any keyword argument
-///    **resets that field to the library default**. To leave a field
-///    untouched, simply omit the keyword. This rule applies uniformly to every
-///    field below (scalar, list, dict, and optional).
-///
 /// Parameters
 /// ----------
 /// num_workers : int, optional

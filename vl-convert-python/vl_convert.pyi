@@ -368,14 +368,6 @@ def configure(
     """
     Configure converter worker/access settings used by subsequent conversions.
 
-    .. note::
-
-       **Uniform ``None`` semantics.** Passing ``None`` for any keyword argument
-       **resets that field to the library default** — it does *not* "keep the
-       current value" as in prior releases. To leave a field untouched, simply
-       omit the keyword. This rule applies uniformly to every field below
-       (scalar, list, dict, and optional).
-
     Parameters
     ----------
     num_workers
