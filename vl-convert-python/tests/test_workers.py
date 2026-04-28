@@ -44,7 +44,7 @@ def test_parallel_threadpool_conversions_with_configured_workers():
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [
-            executor.submit(vlc.vegalite_to_svg, SIMPLE_VL_SPEC, "v5_16")
+            executor.submit(vlc.vegalite_to_svg, SIMPLE_VL_SPEC, vl_version="v5_16")
             for _ in range(16)
         ]
         svg_results = [future.result(timeout=30) for future in futures]
@@ -59,7 +59,7 @@ def test_warm_up_workers_then_parallel_conversions():
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [
-            executor.submit(vlc.vegalite_to_svg, SIMPLE_VL_SPEC, "v5_16")
+            executor.submit(vlc.vegalite_to_svg, SIMPLE_VL_SPEC, vl_version="v5_16")
             for _ in range(16)
         ]
         svg_results = [future.result(timeout=30) for future in futures]
@@ -73,7 +73,7 @@ def test_reconfigure_workers_while_requests_are_running():
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
         futures = [
-            executor.submit(vlc.vegalite_to_svg, SIMPLE_VL_SPEC, "v5_16")
+            executor.submit(vlc.vegalite_to_svg, SIMPLE_VL_SPEC, vl_version="v5_16")
             for _ in range(24)
         ]
         vlc.configure(num_workers=2)

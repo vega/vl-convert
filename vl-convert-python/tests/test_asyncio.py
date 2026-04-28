@@ -74,7 +74,7 @@ def test_asyncio_functions_have_docstrings():
 
 def test_asyncio_smoke_and_sync_parity_shapes():
     async def scenario():
-        vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, "v5_16")
+        vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, vl_version="v5_16")
         assert isinstance(vega, dict)
 
         svg = await vlca.vega_to_svg(vega)
@@ -95,7 +95,7 @@ def test_asyncio_parallel_gather_with_workers():
         await vlca.warm_up_workers()
 
         results = await asyncio.gather(
-            *[vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16") for _ in range(16)]
+            *[vlca.vegalite_to_svg(SIMPLE_VL_SPEC, vl_version="v5_16") for _ in range(16)]
         )
 
         assert len(results) == 16
@@ -109,7 +109,7 @@ def test_asyncio_worker_lifecycle_calls():
         await vlca.configure(num_workers=3)
         config = await vlca.get_config()
         assert config["num_workers"] == 3
-        svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16")
+        svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, vl_version="v5_16")
         assert svg.lstrip().startswith("<svg")
 
     run(scenario())
@@ -143,11 +143,11 @@ def test_asyncio_configure_accepts_empty_allowed_base_urls():
 
 def test_asyncio_html_conversions():
     async def scenario():
-        vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, "v5_16")
+        vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, vl_version="v5_16")
         vega_html = await vlca.vega_to_html(vega, bundle=True)
         assert vega_html.startswith("<!DOCTYPE html>")
 
-        vegalite_html = await vlca.vegalite_to_html(SIMPLE_VL_SPEC, "v5_16", bundle=True)
+        vegalite_html = await vlca.vegalite_to_html(SIMPLE_VL_SPEC, vl_version="v5_16", bundle=True)
         assert vegalite_html.startswith("<!DOCTYPE html>")
 
     run(scenario())
@@ -167,13 +167,13 @@ def test_asyncio_cancellation_does_not_poison_followup_requests():
     async def scenario():
         await vlca.configure(num_workers=4)
 
-        task = asyncio.ensure_future(vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16"))
+        task = asyncio.ensure_future(vlca.vegalite_to_svg(SIMPLE_VL_SPEC, vl_version="v5_16"))
         assert task.cancel()
 
         with pytest.raises(asyncio.CancelledError):
             await task
 
-        svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16")
+        svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, vl_version="v5_16")
         assert svg.lstrip().startswith("<svg")
 
     run(scenario())
@@ -181,12 +181,12 @@ def test_asyncio_cancellation_does_not_poison_followup_requests():
 
 def test_sync_invalid_config_raises_value_error():
     with pytest.raises(ValueError):
-        vlc.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16", config="{bad json")
+        vlc.vegalite_to_svg(SIMPLE_VL_SPEC, vl_version="v5_16", config="{bad json")
 
 
 def test_asyncio_invalid_config_raises_value_error():
     async def scenario():
         with pytest.raises(ValueError):
-            await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, "v5_16", config="{bad json")
+            await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, vl_version="v5_16", config="{bad json")
 
     run(scenario())
