@@ -640,7 +640,7 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
 /// plugin_import_domains : list[str], optional
 ///     Domain patterns allowed for HTTP imports inside config-level plugins.
 ///     Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
-///     ``None`` (or ``[]``) resets to the library default (empty list — HTTP
+///     ``None`` (or ``[]``) resets to the library default (empty list; HTTP
 ///     imports disabled).
 /// allow_per_request_plugins : bool, optional
 ///     Whether to accept per-request plugins via the ``vega_plugin`` parameter
@@ -657,7 +657,7 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
 /// per_request_plugin_import_domains : list[str], optional
 ///     Domain patterns allowed for HTTP imports inside per-request plugins.
 ///     Separate from ``plugin_import_domains``. ``None`` (or ``[]``) resets
-///     to the library default (empty list — HTTP imports disabled).
+///     to the library default (empty list; HTTP imports disabled).
 /// default_theme : str, optional
 ///     Default named theme (e.g. ``"dark"``) applied to all Vega-Lite
 ///     conversions. Per-request ``theme`` overrides this if set. ``None``

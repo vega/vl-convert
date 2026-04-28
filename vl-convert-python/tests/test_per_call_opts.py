@@ -26,7 +26,7 @@ def vl_bar_spec():
 
 @pytest.fixture
 def vl_scatter_spec():
-    """Quantitative-axis spec — `width`/`height` overrides propagate
+    """Quantitative-axis spec. `width`/`height` overrides propagate
     deterministically (no band-size derivation)."""
     return {
         "$schema": "https://vega.github.io/schema/vega-lite/v5.json",

@@ -235,7 +235,7 @@ pub fn register_font_directory(font_dir: &str) -> PyResult<()> {
 /// Replace the registered font directories with the given list.
 ///
 /// Unlike ``register_font_directory``, which only adds, this replaces
-/// the full list — directories previously registered but absent from
+/// the full list. Directories previously registered but absent from
 /// ``font_dirs`` are dropped from the global registry, and the fontdb
 /// no longer resolves their fonts on future conversions. Pass an empty
 /// list to clear all registrations.

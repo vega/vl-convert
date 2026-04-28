@@ -324,7 +324,7 @@ def set_font_directories(font_dirs: list[str]) -> None:
     Replace the registered font directories with the given list.
 
     Unlike ``register_font_directory``, which only adds, this replaces
-    the full list — directories previously registered but absent from
+    the full list. Directories previously registered but absent from
     ``font_dirs`` are dropped from the global registry, and the fontdb
     no longer resolves their fonts on future conversions. Pass an empty
     list to clear all registrations.
@@ -433,7 +433,7 @@ def configure(
     plugin_import_domains
         Domain patterns allowed for HTTP imports inside config-level plugins.
         Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
-        ``None`` (or ``[]``) resets to the library default (empty list —
+        ``None`` (or ``[]``) resets to the library default (empty list;
         HTTP imports disabled).
     allow_per_request_plugins
         Whether to accept per-request plugins via the ``vega_plugin`` parameter
@@ -449,7 +449,7 @@ def configure(
     per_request_plugin_import_domains
         Domain patterns allowed for HTTP imports inside per-request plugins.
         Separate from ``plugin_import_domains``. ``None`` (or ``[]``) resets
-        to the library default (empty list — HTTP imports disabled).
+        to the library default (empty list; HTTP imports disabled).
     default_theme
         Default named theme (e.g. ``"dark"``) applied to all Vega-Lite conversions.
         Per-request ``theme`` overrides this if set. ``None`` resets to the

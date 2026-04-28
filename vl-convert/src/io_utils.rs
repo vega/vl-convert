@@ -407,11 +407,11 @@ fn write_stdout_bytes(data: &[u8]) -> Result<(), anyhow::Error> {
 /// Resolve the bootstrap `VlcConfig` from `--vlc-config <value>`.
 ///
 /// `value` may be:
-/// - `None` (flag omitted) — load the platform default config path if it
+/// - `None` (flag omitted): load the platform default config path if it
 ///   exists, else return `VlcConfig::default()`.
-/// - `Some("disabled")` — skip config-file loading; return
+/// - `Some("disabled")`: skip config-file loading; return
 ///   `VlcConfig::default()`.
-/// - `Some("<absolute path>")` — load that specific file. Relative paths
+/// - `Some("<absolute path>")`: load that specific file. Relative paths
 ///   are rejected to avoid ambiguity with the `disabled` reserved value.
 pub(crate) fn resolve_vlc_config(vlc_config: Option<&str>) -> Result<VlcConfig, anyhow::Error> {
     let path = match vlc_config {

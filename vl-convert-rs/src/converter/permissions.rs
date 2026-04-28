@@ -25,7 +25,7 @@ pub fn domain_matches_patterns(domain: &str, patterns: &[String]) -> bool {
 
 /// Helper to build parsed allowed_base_urls from a config's string patterns.
 ///
-/// Returns a `Vec<AllowedBaseUrlPattern>` — empty means "block all network
+/// Returns a `Vec<AllowedBaseUrlPattern>`. Empty means "block all network
 /// data" (the new secure-by-default state). Internal access-policy structs
 /// that accept `Option<Vec<_>>` should wrap this in `Some(...)` to engage
 /// the allowlist enforcer; library-internal default helpers can use `None`

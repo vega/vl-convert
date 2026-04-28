@@ -118,7 +118,7 @@ pub struct VlcConfig {
     pub base_url: BaseUrlSetting,
     /// Allowlist for data access (HTTP URLs, filesystem paths).
     /// Uses CSP-style patterns: "https:" (scheme), "https://example.com/" (prefix),
-    /// "/data/" (filesystem). Default is `["http:", "https:"]` — any
+    /// "/data/" (filesystem). Default is `["http:", "https:"]`: any
     /// HTTP/HTTPS URL is allowed; no filesystem access. Pass `Vec::new()`
     /// to block all network data; `["*"]` to allow everything.
     pub allowed_base_urls: Vec<String>,

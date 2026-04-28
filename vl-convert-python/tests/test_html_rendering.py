@@ -322,8 +322,8 @@ def test_plugin_http_import_bundle(page, update_baselines):
 
 
 def test_plugin_http_import_cdn(page, update_baselines):
-    """Plugin with HTTP import (esm.sh); bundle=False — Vega from CDN, plugin
-    source inlined as blob URL (CDN fetch happens at configure() time, so
+    """Plugin with HTTP import (esm.sh); bundle=False (Vega from CDN, plugin
+    source inlined as blob URL since CDN fetch happens at configure() time, so
     the rendered HTML is self-contained w.r.t. the plugin).
     """
     vlc.configure(
@@ -342,7 +342,7 @@ def test_plugin_http_import_cdn(page, update_baselines):
 # URL-entry plugin tests (local HTTP server)
 # ---------------------------------------------------------------------------
 
-# Plugin served from localhost — registers a distinct color scheme so the
+# Plugin served from localhost. Registers a distinct color scheme so the
 # rendered chart visually confirms the URL entry was fetched and executed.
 _URL_PLUGIN_SOURCE = (
     "export default function(vega) {"
@@ -380,10 +380,10 @@ def plugin_server():
     """Local HTTP server for URL-plugin tests.
 
     Serves:
-    - /plugin.js          — single-file scheme plugin (urlscheme)
-    - /dep.js             — ES module exporting color array
-    - /plugin_with_dep.js — imports ./dep.js (tests relative-import resolution)
-    - /plugin_redirect.js — 301 redirect to /plugin.js (tests redirect handling)
+    - /plugin.js: single-file scheme plugin (urlscheme)
+    - /dep.js: ES module exporting color array
+    - /plugin_with_dep.js: imports ./dep.js (tests relative-import resolution)
+    - /plugin_redirect.js: 301 redirect to /plugin.js (tests redirect handling)
     """
     tmp = tempfile.TemporaryDirectory()
     serve_dir = Path(tmp.name)

@@ -35,7 +35,7 @@ def reset_config_to_test_baseline():
     Rationale: individual tests call `vlc.configure(...)` to flip specific
     flags (`auto_google_fonts=True`, `allowed_base_urls=[]`,
     `embed_local_fonts=True`, etc.). Without a reset between tests, one
-    test's overrides leak into the next and cause spurious failures — for
+    test's overrides leak into the next and cause spurious failures. For
     example, `test_pacifico_bundle` leaving `auto_google_fonts=True` on
     would change the SVG output of any downstream spec that references a
     Google font, drifting it off the golden baseline.
@@ -45,7 +45,7 @@ def reset_config_to_test_baseline():
     per-test configure and rely on this fixture to undo the effect on
     the next test.
 
-    Font directories are not part of `VlcConfig` — they live in the
+    Font directories are not part of `VlcConfig`; they live in the
     process-global font registry and persist across `configure()` /
     `load_config()` calls. The `pytest_configure` hook above registers
     the test fonts directory once per session.

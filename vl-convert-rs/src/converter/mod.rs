@@ -2429,9 +2429,7 @@ mod tests {
         );
     }
 
-    /// The new default `allowed_base_urls = vec![]` must block all network
-    /// data — callers can no longer rely on an implicit "any http/https"
-    /// default.
+    /// `allowed_base_urls = vec![]` must block all network data.
     #[tokio::test]
     async fn allowed_base_urls_empty_blocks_all() {
         let converter = VlConverter::with_config(VlcConfig {

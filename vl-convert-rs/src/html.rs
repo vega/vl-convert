@@ -202,8 +202,8 @@ fn format_css2_axis(variants: &BTreeSet<(String, String)>) -> String {
 ///
 /// Requests exactly the given (weight, style) tuples from the Google Fonts
 /// CSS2 API. When `text` is provided, appends `&text=` so Google returns
-/// only the glyphs needed — significantly smaller than full unicode-range
-/// responses.
+/// only the glyphs needed (significantly smaller than full unicode-range
+/// responses).
 ///
 /// Returns `None` for local fonts.
 pub fn font_cdn_url(
@@ -370,7 +370,7 @@ impl VlConverter {
     /// data, classify fonts as Google or Local, and merge any explicit
     /// per-request Google Font overrides.
     ///
-    /// This is the single point of truth for font analysis — called once per
+    /// This is the single point of truth for font analysis. Called once per
     /// HTML generation or `vega_fonts` / `vegalite_fonts` invocation.
     async fn analyze_classified_fonts(
         &self,
@@ -714,8 +714,8 @@ impl VlConverter {
     /// # `bundle` flag
     ///
     /// Controls how **Vega/vega-embed** are delivered:
-    /// - `true` — all Vega JS is inlined in a `<script>` tag; the page works offline.
-    /// - `false` — Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
+    /// - `true`: all Vega JS is inlined in a `<script>` tag; the page works offline.
+    /// - `false`: Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
     ///
     /// **Plugins are always bundled** (HTTP imports inlined via deno_emit) regardless
     /// of this flag, with one exception: URL-backed plugins (e.g. `https://esm.sh/…`)
@@ -791,8 +791,8 @@ impl VlConverter {
     /// # `bundle` flag
     ///
     /// Controls how **Vega/vega-embed** are delivered:
-    /// - `true` — all Vega JS is inlined in a `<script>` tag; the page works offline.
-    /// - `false` — Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
+    /// - `true`: all Vega JS is inlined in a `<script>` tag; the page works offline.
+    /// - `false`: Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
     ///
     /// **Plugins are always bundled** (HTTP imports inlined via deno_emit) regardless
     /// of this flag, with one exception: URL-backed plugins (e.g. `https://esm.sh/…`)
