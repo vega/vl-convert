@@ -1,6 +1,7 @@
 use crate::anyhow;
 use crate::anyhow::anyhow;
 use crate::image_loading::custom_string_resolver;
+use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -15,6 +16,10 @@ use vl_convert_google_fonts::GoogleFontsClient;
 /// Monotonically increasing version counter for font configuration changes.
 /// Incremented each time font configuration is modified.
 pub static FONT_CONFIG_VERSION: AtomicU64 = AtomicU64::new(0);
+
+/// Default cap (in MB) for the on-disk Google Fonts LRU cache, applied
+/// when [`apply_hot_font_cache`] is called with `None`.
+pub const DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB: u64 = 512;
 
 #[derive(Clone)]
 pub struct FontBaselineSnapshot {
@@ -292,6 +297,9 @@ pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
     })
 }
 
+/// Append `dir` to the process-global font-directory list and refresh the
+/// fontdb. Workers pick up the new state on their next work item via
+/// `FONT_CONFIG_VERSION`.
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
     {
         let mut font_config = FONT_CONFIG
@@ -299,17 +307,79 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
             .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
         font_config.font_dirs.push(PathBuf::from(dir));
     }
-
     refresh_font_baseline_after_config_update()
 }
 
-/// Configure the max on-disk Google Fonts cache size in bytes.
+/// Replace the process-global font-directory list with `paths`.
 ///
-/// `None` keeps the existing configured value. Immediately evicts cached
-/// fonts if the new limit is exceeded.
-pub fn configure_font_cache(max_cache_bytes: Option<u64>) -> Result<(), anyhow::Error> {
-    if let Some(bytes) = max_cache_bytes {
-        GOOGLE_FONTS_CLIENT.set_max_font_cache_bytes(bytes)?;
+/// Paths previously registered but absent from `paths` are dropped from the
+/// global registry, and the fontdb no longer resolves their fonts on future
+/// conversions. Bumps `FONT_CONFIG_VERSION`; workers pick up the new state
+/// on their next work item.
+pub fn set_font_directories(paths: &[PathBuf]) -> Result<(), anyhow::Error> {
+    {
+        let mut font_config = FONT_CONFIG
+            .lock()
+            .map_err(|err| anyhow!("Failed to acquire font config lock: {err}"))?;
+        font_config.font_dirs = paths.to_vec();
     }
+    refresh_font_baseline_after_config_update()
+}
+
+/// Return a snapshot of the currently-registered font directories.
+pub fn current_font_directories() -> Vec<PathBuf> {
+    FONT_CONFIG
+        .lock()
+        .map(|cfg| cfg.font_dirs.clone())
+        .unwrap_or_default()
+}
+
+/// Set the on-disk Google Fonts LRU cache cap (process-global).
+///
+/// `None` resets to [`DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB`] so a fresh
+/// `with_config(VlcConfig { google_fonts_cache_size_mb: None, .. })`
+/// doesn't inherit a previous converter's explicit cap. Cached fonts
+/// over the new limit are evicted immediately.
+pub fn apply_hot_font_cache(cap_mb: Option<NonZeroU64>) -> Result<(), anyhow::Error> {
+    let mb = cap_mb
+        .map(NonZeroU64::get)
+        .unwrap_or(DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB);
+    GOOGLE_FONTS_CLIENT.set_max_font_cache_bytes(mb.saturating_mul(1024 * 1024))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn set_font_directories_replaces_existing() {
+        // Snapshot prior state so we restore it after the test — the
+        // global is shared across tests.
+        let prior = current_font_directories();
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dir_a = tmp.path().join("a");
+        let dir_b = tmp.path().join("b");
+        fs::create_dir_all(&dir_a).unwrap();
+        fs::create_dir_all(&dir_b).unwrap();
+
+        set_font_directories(std::slice::from_ref(&dir_a)).unwrap();
+        let after_a = current_font_directories();
+        assert!(after_a.iter().any(|p| p == &dir_a));
+        assert!(!after_a.iter().any(|p| p == &dir_b));
+
+        // Replace — dir_a must be gone, dir_b present
+        set_font_directories(std::slice::from_ref(&dir_b)).unwrap();
+        let after_b = current_font_directories();
+        assert!(
+            !after_b.iter().any(|p| p == &dir_a),
+            "dir_a must be dropped on replace: got {after_b:?}"
+        );
+        assert!(after_b.iter().any(|p| p == &dir_b));
+
+        // Restore
+        set_font_directories(&prior).unwrap();
+    }
 }

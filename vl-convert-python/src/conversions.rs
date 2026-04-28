@@ -1,5 +1,5 @@
 use crate::config::converter_read_handle;
-use crate::fonts::{effective_google_fonts, parse_google_fonts_arg};
+use crate::fonts::parse_google_fonts_arg;
 use crate::utils::{
     async_variant_doc, future_into_py_object, handle_show_warnings, parse_json_spec,
     parse_option_format_locale, parse_option_time_format_locale, parse_optional_config,
@@ -31,7 +31,14 @@ use vl_convert_rs::module_loader::import_map::VlVersion;
 /// Returns:
 ///     dict: Vega JSON specification dict
 #[pyfunction]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None))]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+))]
 pub fn vegalite_to_vega(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -55,7 +62,7 @@ pub fn vegalite_to_vega(
         theme,
         format_locale: None,
         time_format_locale: None,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         ..Default::default()
     };
 
@@ -88,27 +95,55 @@ pub fn vegalite_to_vega(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 ///     bundle (bool): If True, embed fonts and images as self-contained data URIs
+///     google_fonts (list): Google Fonts for this conversion
+///     config (str | dict): Vega config object merged via vega.mergeConfig()
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None))]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    bundle=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_svg(
     vg_spec: PyObject,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
     bundle: Option<bool>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     let svg_opts = SvgOpts {
@@ -135,26 +170,54 @@ pub fn vega_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     google_fonts (list): Google Fonts for this conversion
+///     config (str | dict): Vega config object merged via vega.mergeConfig()
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None))]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    format_locale=None,
+    time_format_locale=None,
+    format="dict",
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_scenegraph(
     vg_spec: PyObject,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     format: &str,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<PyObject> {
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     match format {
@@ -208,12 +271,29 @@ pub fn vega_to_scenegraph(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
 ///     bundle (bool): If True, embed fonts and images as self-contained data URIs
+///     google_fonts (list): Google Fonts for this conversion
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     str: SVG image string
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    bundle=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_svg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -224,12 +304,18 @@ pub fn vegalite_to_svg(
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
     bundle: Option<bool>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<String> {
     handle_show_warnings(show_warnings);
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -243,9 +329,11 @@ pub fn vegalite_to_svg(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     let svg_opts = SvgOpts {
@@ -280,12 +368,29 @@ pub fn vegalite_to_svg(
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     format (str): Output format, either "dict" (default) or "msgpack"
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     google_fonts (list): Google Fonts for this conversion
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     dict | bytes: scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    format="dict",
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_scenegraph(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -296,11 +401,17 @@ pub fn vegalite_to_scenegraph(
     time_format_locale: Option<PyObject>,
     format: &str,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<PyObject> {
     handle_show_warnings(show_warnings);
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -314,9 +425,11 @@ pub fn vegalite_to_scenegraph(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     match format {
@@ -363,12 +476,28 @@ pub fn vegalite_to_scenegraph(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     google_fonts (list): Google Fonts for this conversion
+///     config (str | dict): Vega config object merged via vega.mergeConfig()
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(
-    signature = (vg_spec, scale=None, ppi=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    scale=None,
+    ppi=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_png(
     vg_spec: PyObject,
     scale: Option<f32>,
@@ -376,17 +505,28 @@ pub fn vega_to_png(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     let png_opts = PngOpts { scale, ppi };
@@ -422,12 +562,30 @@ pub fn vega_to_png(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     google_fonts (list): Google Fonts for this conversion
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    scale=None,
+    ppi=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_png(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -439,6 +597,10 @@ pub fn vegalite_to_png(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<PyObject> {
     handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
@@ -450,6 +612,8 @@ pub fn vegalite_to_png(
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vl_opts = VlOpts {
         vl_version,
@@ -457,9 +621,11 @@ pub fn vegalite_to_png(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     let png_opts = PngOpts { scale, ppi };
@@ -487,12 +653,28 @@ pub fn vegalite_to_png(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     google_fonts (list): Google Fonts for this conversion
+///     config (str | dict): Vega config object merged via vega.mergeConfig()
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(
-    signature = (vg_spec, scale=None, quality=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    scale=None,
+    quality=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_jpeg(
     vg_spec: PyObject,
     scale: Option<f32>,
@@ -500,17 +682,28 @@ pub fn vega_to_jpeg(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<PyObject> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     let jpeg_opts = JpegOpts { scale, quality };
@@ -546,12 +739,30 @@ pub fn vega_to_jpeg(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     google_fonts (list): Google Fonts for this conversion
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    scale=None,
+    quality=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_jpeg(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -563,6 +774,10 @@ pub fn vegalite_to_jpeg(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<PyObject> {
     handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
@@ -574,6 +789,8 @@ pub fn vegalite_to_jpeg(
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vl_opts = VlOpts {
         vl_version,
@@ -581,9 +798,11 @@ pub fn vegalite_to_jpeg(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     let jpeg_opts = JpegOpts { scale, quality };
@@ -615,28 +834,56 @@ pub fn vegalite_to_jpeg(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     google_fonts (list): Google Fonts for this conversion
+///     config (str | dict): Vega config object merged via vega.mergeConfig()
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     bytes: PDF file bytes
 #[pyfunction]
-#[pyo3(signature = (vg_spec, scale=None, format_locale=None, time_format_locale=None, vega_plugin=None))]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    scale=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_pdf(
     vg_spec: PyObject,
     scale: Option<f32>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     let pdf_bytes = match run_converter_future(move |converter| async move {
@@ -666,12 +913,28 @@ pub fn vega_to_pdf(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     google_fonts (list): Google Fonts for this conversion
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     bytes: PDF image data
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    scale=None,
+    config=None,
+    theme=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_pdf(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -681,6 +944,10 @@ pub fn vegalite_to_pdf(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let vl_version = if let Some(vl_version) = vl_version {
@@ -692,6 +959,8 @@ pub fn vegalite_to_pdf(
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
 
     let vl_opts = VlOpts {
         vl_version,
@@ -699,9 +968,11 @@ pub fn vegalite_to_pdf(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     let pdf_data = match run_converter_future(move |converter| async move {
@@ -727,7 +998,7 @@ pub fn vegalite_to_pdf(
 /// Returns:
 ///     str: URL string
 #[pyfunction]
-#[pyo3(signature = (vl_spec, fullscreen=None))]
+#[pyo3(signature = (vl_spec, *, fullscreen=None))]
 pub fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
     let vl_spec = parse_json_spec(vl_spec)?;
     Ok(vl_convert_rs::converter::vegalite_to_url(
@@ -746,7 +1017,7 @@ pub fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<
 /// Returns:
 ///     str: URL string
 #[pyfunction]
-#[pyo3(signature = (vg_spec, fullscreen=None))]
+#[pyo3(signature = (vg_spec, *, fullscreen=None))]
 pub fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
     Ok(vl_convert_rs::converter::vega_to_url(
@@ -774,12 +1045,28 @@ pub fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<Stri
 ///     renderer (str): Vega renderer. One of 'svg' (default), 'canvas',
 ///         or 'hybrid' (where text is svg and other marks are canvas)
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, bundle=None, google_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    bundle=None,
+    google_fonts=None,
+    config=None,
+    theme=None,
+    format_locale=None,
+    time_format_locale=None,
+    renderer=None,
+    vega_plugin=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_html(
     vl_spec: PyObject,
     vl_version: Option<&str>,
@@ -791,6 +1078,9 @@ pub fn vegalite_to_html(
     time_format_locale: Option<PyObject>,
     renderer: Option<String>,
     vega_plugin: Option<String>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<String> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -809,12 +1099,13 @@ pub fn vegalite_to_html(
         vl_version,
         config,
         theme,
-
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     let html_opts = HtmlOpts {
@@ -842,10 +1133,27 @@ pub fn vegalite_to_html(
 ///     renderer (str): Vega renderer. One of 'svg' (default), 'canvas',
 ///         or 'hybrid' (where text is svg and other marks are canvas)
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
+///     config (str | dict): Vega config object merged via vega.mergeConfig()
+///     background (str): Override the spec's background color
+///     width (float): Override the spec's width
+///     height (float): Override the spec's height
 /// Returns:
 ///     string: HTML document
 #[pyfunction]
-#[pyo3(signature = (vg_spec, bundle=None, google_fonts=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None))]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    bundle=None,
+    google_fonts=None,
+    format_locale=None,
+    time_format_locale=None,
+    renderer=None,
+    vega_plugin=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_html(
     vg_spec: PyObject,
     bundle: Option<bool>,
@@ -854,6 +1162,10 @@ pub fn vega_to_html(
     time_format_locale: Option<PyObject>,
     renderer: Option<String>,
     vega_plugin: Option<String>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -862,12 +1174,16 @@ pub fn vega_to_html(
     let renderer = Renderer::from_str(&renderer)?;
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
+    let config = parse_optional_config(config)?;
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
     let html_opts = HtmlOpts {
         bundle: bundle.unwrap_or(false),
@@ -891,7 +1207,7 @@ pub fn vega_to_html(
 /// Returns:
 ///     bytes: PNG image data
 #[pyfunction]
-#[pyo3(signature = (svg, scale=None, ppi=None))]
+#[pyo3(signature = (svg, *, scale=None, ppi=None))]
 pub fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
     let svg = svg.to_string();
     let png_opts = PngOpts { scale, ppi };
@@ -913,7 +1229,7 @@ pub fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<P
 /// Returns:
 ///     bytes: JPEG image data
 #[pyfunction]
-#[pyo3(signature = (svg, scale=None, quality=None))]
+#[pyo3(signature = (svg, *, scale=None, quality=None))]
 pub fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
     let svg = svg.to_string();
     let jpeg_opts = JpegOpts { scale, quality };
@@ -934,7 +1250,7 @@ pub fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResu
 /// Returns:
 ///     bytes: PDF document data
 #[pyfunction]
-#[pyo3(signature = (svg, scale=None))]
+#[pyo3(signature = (svg, *, scale=None))]
 pub fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let svg = svg.to_string();
@@ -952,7 +1268,14 @@ pub fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
 
 #[doc = async_variant_doc!("vegalite_to_vega")]
 #[pyfunction(name = "vegalite_to_vega")]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None))]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+))]
 pub fn vegalite_to_vega_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -975,7 +1298,7 @@ pub fn vegalite_to_vega_asyncio<'py>(
         theme,
         format_locale: None,
         time_format_locale: None,
-        google_fonts: effective_google_fonts(None),
+        google_fonts: None,
         ..Default::default()
     };
 
@@ -998,7 +1321,19 @@ pub fn vegalite_to_vega_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_svg")]
 #[pyfunction(name = "vega_to_svg")]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None))]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    bundle=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_svg_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1006,16 +1341,27 @@ pub fn vega_to_svg_asyncio<'py>(
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
     bundle: Option<bool>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
@@ -1041,7 +1387,19 @@ pub fn vega_to_svg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_scenegraph")]
 #[pyfunction(name = "vega_to_scenegraph")]
-#[pyo3(signature = (vg_spec, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None))]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    format_locale=None,
+    time_format_locale=None,
+    format="dict",
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_scenegraph_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1049,15 +1407,26 @@ pub fn vega_to_scenegraph_asyncio<'py>(
     time_format_locale: Option<PyObject>,
     format: &str,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     match format {
@@ -1101,9 +1470,22 @@ pub fn vega_to_scenegraph_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_svg")]
 #[pyfunction(name = "vegalite_to_svg")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None, bundle=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    bundle=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_svg_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1115,12 +1497,18 @@ pub fn vegalite_to_svg_asyncio<'py>(
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
     bundle: Option<bool>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     handle_show_warnings(show_warnings);
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -1132,9 +1520,11 @@ pub fn vegalite_to_svg_asyncio<'py>(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
     let svg_opts = SvgOpts {
         bundle: bundle.unwrap_or(false),
@@ -1160,9 +1550,22 @@ pub fn vegalite_to_svg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_scenegraph")]
 #[pyfunction(name = "vegalite_to_scenegraph")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, format="dict", vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    format="dict",
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_scenegraph_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1174,11 +1577,17 @@ pub fn vegalite_to_scenegraph_asyncio<'py>(
     time_format_locale: Option<PyObject>,
     format: &str,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     handle_show_warnings(show_warnings);
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -1190,9 +1599,11 @@ pub fn vegalite_to_scenegraph_asyncio<'py>(
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     match format {
@@ -1236,9 +1647,20 @@ pub fn vegalite_to_scenegraph_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_png")]
 #[pyfunction(name = "vega_to_png")]
-#[pyo3(
-    signature = (vg_spec, scale=None, ppi=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    scale=None,
+    ppi=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_png_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1247,16 +1669,27 @@ pub fn vega_to_png_asyncio<'py>(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     run_converter_future_async(
@@ -1274,9 +1707,23 @@ pub fn vega_to_png_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_png")]
 #[pyfunction(name = "vegalite_to_png")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, ppi=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    scale=None,
+    ppi=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_png_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1289,6 +1736,10 @@ pub fn vegalite_to_png_asyncio<'py>(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
@@ -1300,15 +1751,19 @@ pub fn vegalite_to_png_asyncio<'py>(
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vl_opts = VlOpts {
         vl_version,
         config,
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     run_converter_future_async(
@@ -1326,9 +1781,20 @@ pub fn vegalite_to_png_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_jpeg")]
 #[pyfunction(name = "vega_to_jpeg")]
-#[pyo3(
-    signature = (vg_spec, scale=None, quality=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    scale=None,
+    quality=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_jpeg_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1337,16 +1803,27 @@ pub fn vega_to_jpeg_asyncio<'py>(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     run_converter_future_async(
@@ -1364,9 +1841,23 @@ pub fn vega_to_jpeg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_jpeg")]
 #[pyfunction(name = "vegalite_to_jpeg")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, quality=None, config=None, theme=None, show_warnings=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    scale=None,
+    quality=None,
+    config=None,
+    theme=None,
+    show_warnings=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_jpeg_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1379,6 +1870,10 @@ pub fn vegalite_to_jpeg_asyncio<'py>(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
@@ -1390,15 +1885,19 @@ pub fn vegalite_to_jpeg_asyncio<'py>(
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vl_opts = VlOpts {
         vl_version,
         config,
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     run_converter_future_async(
@@ -1416,7 +1915,19 @@ pub fn vegalite_to_jpeg_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_pdf")]
 #[pyfunction(name = "vega_to_pdf")]
-#[pyo3(signature = (vg_spec, scale=None, format_locale=None, time_format_locale=None, vega_plugin=None))]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    scale=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_pdf_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1424,17 +1935,28 @@ pub fn vega_to_pdf_asyncio<'py>(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let config = parse_optional_config(config)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     run_converter_future_async(
@@ -1452,9 +1974,21 @@ pub fn vega_to_pdf_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_pdf")]
 #[pyfunction(name = "vegalite_to_pdf")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, scale=None, config=None, theme=None, format_locale=None, time_format_locale=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    scale=None,
+    config=None,
+    theme=None,
+    format_locale=None,
+    time_format_locale=None,
+    vega_plugin=None,
+    google_fonts=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_pdf_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1465,6 +1999,10 @@ pub fn vegalite_to_pdf_asyncio<'py>(
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
+    google_fonts: Option<Vec<PyObject>>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     warn_if_scale_not_one_for_pdf(scale)?;
     let vl_version = if let Some(vl_version) = vl_version {
@@ -1476,15 +2014,19 @@ pub fn vegalite_to_pdf_asyncio<'py>(
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
+    let google_fonts = parse_google_fonts_arg(google_fonts)
+        .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
     let vl_opts = VlOpts {
         vl_version,
         config,
         theme,
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(None),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     run_converter_future_async(
@@ -1502,7 +2044,7 @@ pub fn vegalite_to_pdf_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_url")]
 #[pyfunction(name = "vegalite_to_url")]
-#[pyo3(signature = (vl_spec, fullscreen=None))]
+#[pyo3(signature = (vl_spec, *, fullscreen=None))]
 pub fn vegalite_to_url_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1526,7 +2068,7 @@ pub fn vegalite_to_url_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_url")]
 #[pyfunction(name = "vega_to_url")]
-#[pyo3(signature = (vg_spec, fullscreen=None))]
+#[pyo3(signature = (vg_spec, *, fullscreen=None))]
 pub fn vega_to_url_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1550,9 +2092,22 @@ pub fn vega_to_url_asyncio<'py>(
 
 #[doc = async_variant_doc!("vegalite_to_html")]
 #[pyfunction(name = "vegalite_to_html")]
-#[pyo3(
-    signature = (vl_spec, vl_version=None, bundle=None, google_fonts=None, config=None, theme=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None)
-)]
+#[pyo3(signature = (
+    vl_spec,
+    *,
+    vl_version=None,
+    bundle=None,
+    google_fonts=None,
+    config=None,
+    theme=None,
+    format_locale=None,
+    time_format_locale=None,
+    renderer=None,
+    vega_plugin=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vegalite_to_html_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
@@ -1565,6 +2120,9 @@ pub fn vegalite_to_html_asyncio<'py>(
     time_format_locale: Option<PyObject>,
     renderer: Option<String>,
     vega_plugin: Option<String>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -1583,12 +2141,13 @@ pub fn vegalite_to_html_asyncio<'py>(
         vl_version,
         config,
         theme,
-
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        background,
+        width,
+        height,
     };
 
     let converter = converter_read_handle()
@@ -1618,7 +2177,20 @@ pub fn vegalite_to_html_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_to_html")]
 #[pyfunction(name = "vega_to_html")]
-#[pyo3(signature = (vg_spec, bundle=None, google_fonts=None, format_locale=None, time_format_locale=None, renderer=None, vega_plugin=None))]
+#[pyo3(signature = (
+    vg_spec,
+    *,
+    bundle=None,
+    google_fonts=None,
+    format_locale=None,
+    time_format_locale=None,
+    renderer=None,
+    vega_plugin=None,
+    config=None,
+    background=None,
+    width=None,
+    height=None,
+))]
 pub fn vega_to_html_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
@@ -1628,6 +2200,10 @@ pub fn vega_to_html_asyncio<'py>(
     time_format_locale: Option<PyObject>,
     renderer: Option<String>,
     vega_plugin: Option<String>,
+    config: Option<PyObject>,
+    background: Option<String>,
+    width: Option<f32>,
+    height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -1636,12 +2212,16 @@ pub fn vega_to_html_asyncio<'py>(
     let renderer = Renderer::from_str(&renderer)?;
     let google_fonts = parse_google_fonts_arg(google_fonts)
         .map_err(|err| prefixed_py_error("Invalid google_fonts", err))?;
+    let config = parse_optional_config(config)?;
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         vega_plugin,
-        ..Default::default()
+        config,
+        background,
+        width,
+        height,
     };
 
     let converter = converter_read_handle()
@@ -1671,7 +2251,7 @@ pub fn vega_to_html_asyncio<'py>(
 
 #[doc = async_variant_doc!("svg_to_png")]
 #[pyfunction(name = "svg_to_png")]
-#[pyo3(signature = (svg, scale=None, ppi=None))]
+#[pyo3(signature = (svg, *, scale=None, ppi=None))]
 pub fn svg_to_png_asyncio<'py>(
     py: Python<'py>,
     svg: &str,
@@ -1694,7 +2274,7 @@ pub fn svg_to_png_asyncio<'py>(
 
 #[doc = async_variant_doc!("svg_to_jpeg")]
 #[pyfunction(name = "svg_to_jpeg")]
-#[pyo3(signature = (svg, scale=None, quality=None))]
+#[pyo3(signature = (svg, *, scale=None, quality=None))]
 pub fn svg_to_jpeg_asyncio<'py>(
     py: Python<'py>,
     svg: &str,
@@ -1717,7 +2297,7 @@ pub fn svg_to_jpeg_asyncio<'py>(
 
 #[doc = async_variant_doc!("svg_to_pdf")]
 #[pyfunction(name = "svg_to_pdf")]
-#[pyo3(signature = (svg, scale=None))]
+#[pyo3(signature = (svg, *, scale=None))]
 pub fn svg_to_pdf_asyncio<'py>(
     py: Python<'py>,
     svg: &str,

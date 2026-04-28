@@ -3,8 +3,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pythonize::{depythonize, pythonize};
 use std::collections::HashMap;
+use std::num::NonZeroU64;
 use std::sync::Arc;
-use vl_convert_rs::configure_font_cache as configure_font_cache_rs;
 use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, MissingFontsPolicy, TimeFormatLocale,
     VlcConfig,
@@ -18,7 +18,7 @@ use crate::utils::{
     async_variant_doc, future_into_py_object, parse_format_locale, parse_time_format_locale,
     prefixed_py_error,
 };
-use crate::{CONFIGURED_GOOGLE_FONTS, VL_CONVERTER};
+use crate::VL_CONVERTER;
 
 pub fn converter_read_handle() -> Result<Arc<VlConverterRs>, vl_convert_rs::anyhow::Error> {
     VL_CONVERTER
@@ -40,8 +40,42 @@ pub fn converter_config_json(config: &VlcConfig) -> serde_json::Value {
         BaseUrlSetting::Disabled => serde_json::Value::Bool(false),
         BaseUrlSetting::Custom(url) => serde_json::Value::String(url.clone()),
     };
+    let google_fonts_value: Vec<serde_json::Value> = config
+        .google_fonts
+        .iter()
+        .map(|req| {
+            let mut entry = serde_json::Map::new();
+            entry.insert(
+                "family".to_string(),
+                serde_json::Value::String(req.family.clone()),
+            );
+            if let Some(variants) = req.variants.as_ref() {
+                let variants_value: Vec<serde_json::Value> = variants
+                    .iter()
+                    .map(|v| {
+                        serde_json::json!({
+                            "weight": v.weight,
+                            "style": v.style.as_str(),
+                        })
+                    })
+                    .collect();
+                entry.insert(
+                    "variants".to_string(),
+                    serde_json::Value::Array(variants_value),
+                );
+            }
+            serde_json::Value::Object(entry)
+        })
+        .collect();
+    // Font directories are process-global, not per-config. Read from the
+    // library's current registry so `get_config()` reports what's actually
+    // active.
+    let font_directories_value: Vec<serde_json::Value> = vl_convert_rs::current_font_directories()
+        .into_iter()
+        .map(|p| serde_json::Value::String(p.to_string_lossy().into_owned()))
+        .collect();
     serde_json::json!({
-        "num_workers": config.num_workers,
+        "num_workers": config.num_workers.get(),
         "base_url": base_url_value,
         "allowed_base_urls": config.allowed_base_urls,
         "auto_google_fonts": config.auto_google_fonts,
@@ -52,14 +86,18 @@ pub fn converter_config_json(config: &VlcConfig) -> serde_json::Value {
             MissingFontsPolicy::Warn => "warn",
             MissingFontsPolicy::Error => "error",
         },
+        "google_fonts": google_fonts_value,
         "google_fonts_cache_dir": vl_convert_rs::google_fonts_cache_dir()
             .map(|p| p.to_string_lossy().into_owned()),
-        "max_v8_heap_size_mb": config.max_v8_heap_size_mb,
-        "max_v8_execution_time_secs": config.max_v8_execution_time_secs,
+        "google_fonts_cache_size_mb": config.google_fonts_cache_size_mb.map(|n| n.get()),
+        "max_v8_heap_size_mb": config.max_v8_heap_size_mb.map(|n| n.get()),
+        "max_v8_execution_time_secs": config.max_v8_execution_time_secs.map(|n| n.get()),
         "gc_after_conversion": config.gc_after_conversion,
         "vega_plugins": config.vega_plugins,
         "plugin_import_domains": config.plugin_import_domains,
         "allow_per_request_plugins": config.allow_per_request_plugins,
+        "max_ephemeral_workers": config.max_ephemeral_workers.map(|n| n.get()),
+        "allow_google_fonts": config.allow_google_fonts,
         "per_request_plugin_import_domains": config.per_request_plugin_import_domains,
         "default_theme": config.default_theme,
         "default_format_locale": config.default_format_locale.as_ref().map(|l| match l {
@@ -71,31 +109,52 @@ pub fn converter_config_json(config: &VlcConfig) -> serde_json::Value {
             TimeFormatLocale::Object(o) => serde_json::to_value(o).unwrap_or(serde_json::Value::Null),
         }),
         "themes": config.themes,
+        "font_directories": font_directories_value,
     })
 }
 
+/// Per-field overrides collected from `configure()` kwargs. A `Some(_)` entry
+/// means "the caller passed this kwarg; apply this value"; `None` means "the
+/// kwarg was absent; leave the field alone." Passing `None` as the Python
+/// value for a kwarg uniformly resets that field to its library default.
 #[derive(Default)]
 pub struct ConverterConfigOverrides {
-    pub num_workers: Option<usize>,
+    pub num_workers: Option<NonZeroU64>,
     pub base_url: Option<BaseUrlSetting>,
-    pub allowed_base_urls: Option<Option<Vec<String>>>,
-    pub google_fonts_cache_size_mb: Option<u64>,
+    pub allowed_base_urls: Option<Vec<String>>,
+    pub google_fonts_cache_size_mb: Option<Option<NonZeroU64>>,
     pub auto_google_fonts: Option<bool>,
     pub embed_local_fonts: Option<bool>,
     pub subset_fonts: Option<bool>,
     pub missing_fonts: Option<MissingFontsPolicy>,
-    pub google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
-    pub max_v8_heap_size_mb: Option<usize>,
-    pub max_v8_execution_time_secs: Option<u64>,
+    pub google_fonts: Option<Vec<GoogleFontRequest>>,
+    pub max_v8_heap_size_mb: Option<Option<NonZeroU64>>,
+    pub max_v8_execution_time_secs: Option<Option<NonZeroU64>>,
     pub gc_after_conversion: Option<bool>,
-    pub vega_plugins: Option<Option<Vec<String>>>,
+    pub vega_plugins: Option<Vec<String>>,
     pub plugin_import_domains: Option<Vec<String>>,
     pub allow_per_request_plugins: Option<bool>,
+    pub max_ephemeral_workers: Option<Option<NonZeroU64>>,
+    pub allow_google_fonts: Option<bool>,
     pub per_request_plugin_import_domains: Option<Vec<String>>,
     pub default_theme: Option<Option<String>>,
     pub default_format_locale: Option<Option<FormatLocale>>,
     pub default_time_format_locale: Option<Option<TimeFormatLocale>>,
-    pub themes: Option<Option<HashMap<String, serde_json::Value>>>,
+    pub themes: Option<HashMap<String, serde_json::Value>>,
+}
+
+/// Extract a positive integer, rejecting `0`. The caller is responsible for
+/// converting to the appropriate `NonZero*` wrapper.
+fn extract_positive_u64(
+    key: &str,
+    value: &Bound<'_, PyAny>,
+) -> Result<NonZeroU64, vl_convert_rs::anyhow::Error> {
+    let raw = value.extract::<u64>().map_err(|err| {
+        vl_convert_rs::anyhow::anyhow!("Invalid {key} value for configure: {err}")
+    })?;
+    NonZeroU64::new(raw).ok_or_else(|| {
+        vl_convert_rs::anyhow::anyhow!("Invalid {key} value for configure: must be >= 1, got 0")
+    })
 }
 
 pub fn parse_config_overrides(
@@ -106,23 +165,25 @@ pub fn parse_config_overrides(
         return Ok(overrides);
     };
 
+    // Uniform `None` semantics: passing `None` for any kwarg resets that
+    // field to its `VlcConfig::default()` value.
+    let default = VlcConfig::default();
+
     for (key, value) in kwargs.iter() {
         let key_str: String = key.extract().map_err(|err| {
             vl_convert_rs::anyhow::anyhow!("configure keyword parsing failed: {err}")
         })?;
         match key_str.as_str() {
             "num_workers" => {
-                if !value.is_none() {
-                    overrides.num_workers = Some(value.extract::<usize>().map_err(|err| {
-                        vl_convert_rs::anyhow::anyhow!(
-                            "Invalid num_workers value for configure: {err}"
-                        )
-                    })?);
-                }
+                overrides.num_workers = Some(if value.is_none() {
+                    default.num_workers
+                } else {
+                    extract_positive_u64("num_workers", &value)?
+                });
             }
             "base_url" => {
                 if value.is_none() {
-                    overrides.base_url = Some(BaseUrlSetting::Default);
+                    overrides.base_url = Some(default.base_url.clone());
                 } else if let Ok(b) = value.extract::<bool>() {
                     overrides.base_url = Some(if b {
                         BaseUrlSetting::Default
@@ -141,55 +202,61 @@ pub fn parse_config_overrides(
             }
             "allowed_base_urls" => {
                 if value.is_none() {
-                    overrides.allowed_base_urls = Some(None);
+                    overrides.allowed_base_urls = Some(default.allowed_base_urls.clone());
                 } else {
                     overrides.allowed_base_urls =
-                        Some(Some(value.extract::<Vec<String>>().map_err(|err| {
+                        Some(value.extract::<Vec<String>>().map_err(|err| {
                             vl_convert_rs::anyhow::anyhow!(
                                 "Invalid allowed_base_urls value for configure: {err}"
-                            )
-                        })?));
-                }
-            }
-            "google_fonts_cache_size_mb" => {
-                if !value.is_none() {
-                    overrides.google_fonts_cache_size_mb =
-                        Some(value.extract::<u64>().map_err(|err| {
-                            vl_convert_rs::anyhow::anyhow!(
-                                "Invalid google_fonts_cache_size_mb value for configure: {err}"
                             )
                         })?);
                 }
             }
+            "google_fonts_cache_size_mb" => {
+                if value.is_none() {
+                    overrides.google_fonts_cache_size_mb = Some(default.google_fonts_cache_size_mb);
+                } else {
+                    let n = extract_positive_u64("google_fonts_cache_size_mb", &value)?;
+                    overrides.google_fonts_cache_size_mb = Some(Some(n));
+                }
+            }
             "auto_google_fonts" => {
-                if !value.is_none() {
-                    overrides.auto_google_fonts = Some(value.extract::<bool>().map_err(|err| {
+                overrides.auto_google_fonts = Some(if value.is_none() {
+                    default.auto_google_fonts
+                } else {
+                    value.extract::<bool>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid auto_google_fonts value for configure: {err}"
                         )
-                    })?);
-                }
+                    })?
+                });
             }
             "embed_local_fonts" => {
-                if !value.is_none() {
-                    overrides.embed_local_fonts = Some(value.extract::<bool>().map_err(|err| {
+                overrides.embed_local_fonts = Some(if value.is_none() {
+                    default.embed_local_fonts
+                } else {
+                    value.extract::<bool>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid embed_local_fonts value for configure: {err}"
                         )
-                    })?);
-                }
+                    })?
+                });
             }
             "subset_fonts" => {
-                if !value.is_none() {
-                    overrides.subset_fonts = Some(value.extract::<bool>().map_err(|err| {
+                overrides.subset_fonts = Some(if value.is_none() {
+                    default.subset_fonts
+                } else {
+                    value.extract::<bool>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid subset_fonts value for configure: {err}"
                         )
-                    })?);
-                }
+                    })?
+                });
             }
             "missing_fonts" => {
-                if !value.is_none() {
+                if value.is_none() {
+                    overrides.missing_fonts = Some(default.missing_fonts);
+                } else {
                     let s = value.extract::<String>().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid missing_fonts value for configure: {err}"
@@ -209,7 +276,7 @@ pub fn parse_config_overrides(
             }
             "google_fonts" => {
                 if value.is_none() {
-                    overrides.google_fonts = Some(None);
+                    overrides.google_fonts = Some(default.google_fonts.clone());
                 } else {
                     let fonts: Vec<PyObject> = value.extract().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
@@ -221,54 +288,51 @@ pub fn parse_config_overrides(
                             "Invalid google_fonts value for configure: {err}"
                         )
                     })?;
-                    overrides.google_fonts = Some(parsed);
+                    overrides.google_fonts = Some(parsed.unwrap_or_default());
                 }
             }
             "max_v8_heap_size_mb" => {
-                if !value.is_none() {
-                    overrides.max_v8_heap_size_mb =
-                        Some(value.extract::<usize>().map_err(|err| {
-                            vl_convert_rs::anyhow::anyhow!(
-                                "Invalid max_v8_heap_size_mb value for configure: {err}"
-                            )
-                        })?);
+                if value.is_none() {
+                    overrides.max_v8_heap_size_mb = Some(default.max_v8_heap_size_mb);
+                } else {
+                    let n = extract_positive_u64("max_v8_heap_size_mb", &value)?;
+                    overrides.max_v8_heap_size_mb = Some(Some(n));
                 }
             }
             "max_v8_execution_time_secs" => {
-                if !value.is_none() {
-                    overrides.max_v8_execution_time_secs =
-                        Some(value.extract::<u64>().map_err(|err| {
-                            vl_convert_rs::anyhow::anyhow!(
-                                "Invalid max_v8_execution_time_secs value for configure: {err}"
-                            )
-                        })?);
+                if value.is_none() {
+                    overrides.max_v8_execution_time_secs = Some(default.max_v8_execution_time_secs);
+                } else {
+                    let n = extract_positive_u64("max_v8_execution_time_secs", &value)?;
+                    overrides.max_v8_execution_time_secs = Some(Some(n));
                 }
             }
             "gc_after_conversion" => {
-                if !value.is_none() {
-                    overrides.gc_after_conversion =
-                        Some(value.extract::<bool>().map_err(|err| {
-                            vl_convert_rs::anyhow::anyhow!(
-                                "Invalid gc_after_conversion value for configure: {err}"
-                            )
-                        })?);
-                }
+                overrides.gc_after_conversion = Some(if value.is_none() {
+                    default.gc_after_conversion
+                } else {
+                    value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid gc_after_conversion value for configure: {err}"
+                        )
+                    })?
+                });
             }
             "vega_plugins" => {
                 if value.is_none() {
-                    overrides.vega_plugins = Some(None);
+                    overrides.vega_plugins = Some(default.vega_plugins.clone());
                 } else {
-                    let raw: Vec<String> = value.extract().map_err(|err| {
-                        vl_convert_rs::anyhow::anyhow!(
-                            "Invalid vega_plugins value for configure: {err}"
-                        )
-                    })?;
-                    overrides.vega_plugins = Some(Some(raw));
+                    overrides.vega_plugins =
+                        Some(value.extract::<Vec<String>>().map_err(|err| {
+                            vl_convert_rs::anyhow::anyhow!(
+                                "Invalid vega_plugins value for configure: {err}"
+                            )
+                        })?);
                 }
             }
             "plugin_import_domains" => {
                 if value.is_none() {
-                    overrides.plugin_import_domains = Some(vec![]);
+                    overrides.plugin_import_domains = Some(default.plugin_import_domains.clone());
                 } else {
                     overrides.plugin_import_domains =
                         Some(value.extract::<Vec<String>>().map_err(|err| {
@@ -279,18 +343,39 @@ pub fn parse_config_overrides(
                 }
             }
             "allow_per_request_plugins" => {
-                if !value.is_none() {
-                    overrides.allow_per_request_plugins =
-                        Some(value.extract::<bool>().map_err(|err| {
-                            vl_convert_rs::anyhow::anyhow!(
-                                "Invalid allow_per_request_plugins value for configure: {err}"
-                            )
-                        })?);
+                overrides.allow_per_request_plugins = Some(if value.is_none() {
+                    default.allow_per_request_plugins
+                } else {
+                    value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid allow_per_request_plugins value for configure: {err}"
+                        )
+                    })?
+                });
+            }
+            "max_ephemeral_workers" => {
+                if value.is_none() {
+                    overrides.max_ephemeral_workers = Some(default.max_ephemeral_workers);
+                } else {
+                    let n = extract_positive_u64("max_ephemeral_workers", &value)?;
+                    overrides.max_ephemeral_workers = Some(Some(n));
                 }
+            }
+            "allow_google_fonts" => {
+                overrides.allow_google_fonts = Some(if value.is_none() {
+                    default.allow_google_fonts
+                } else {
+                    value.extract::<bool>().map_err(|err| {
+                        vl_convert_rs::anyhow::anyhow!(
+                            "Invalid allow_google_fonts value for configure: {err}"
+                        )
+                    })?
+                });
             }
             "per_request_plugin_import_domains" => {
                 if value.is_none() {
-                    overrides.per_request_plugin_import_domains = Some(vec![]);
+                    overrides.per_request_plugin_import_domains =
+                        Some(default.per_request_plugin_import_domains.clone());
                 } else {
                     overrides.per_request_plugin_import_domains =
                         Some(value.extract::<Vec<String>>().map_err(|err| {
@@ -302,7 +387,7 @@ pub fn parse_config_overrides(
             }
             "default_theme" => {
                 if value.is_none() {
-                    overrides.default_theme = Some(None);
+                    overrides.default_theme = Some(default.default_theme.clone());
                 } else {
                     overrides.default_theme =
                         Some(Some(value.extract::<String>().map_err(|err| {
@@ -314,7 +399,7 @@ pub fn parse_config_overrides(
             }
             "default_format_locale" => {
                 if value.is_none() {
-                    overrides.default_format_locale = Some(None);
+                    overrides.default_format_locale = Some(default.default_format_locale.clone());
                 } else {
                     let locale = parse_format_locale(value.clone().unbind()).map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
@@ -326,7 +411,8 @@ pub fn parse_config_overrides(
             }
             "default_time_format_locale" => {
                 if value.is_none() {
-                    overrides.default_time_format_locale = Some(None);
+                    overrides.default_time_format_locale =
+                        Some(default.default_time_format_locale.clone());
                 } else {
                     let locale =
                         parse_time_format_locale(value.clone().unbind()).map_err(|err| {
@@ -339,7 +425,7 @@ pub fn parse_config_overrides(
             }
             "themes" => {
                 if value.is_none() {
-                    overrides.themes = Some(None);
+                    overrides.themes = Some(default.themes.clone());
                 } else {
                     let py_dict: &Bound<'_, PyDict> = value.downcast().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
@@ -361,12 +447,16 @@ pub fn parse_config_overrides(
                         })?;
                         themes_map.insert(key, val);
                     }
-                    overrides.themes = Some(Some(themes_map));
+                    overrides.themes = Some(themes_map);
                 }
             }
             // Read-only config fields returned by get_config() are
             // silently ignored so that `configure(**get_config())` works.
-            "google_fonts_cache_dir" => {}
+            // `font_directories` is also read-only here: use
+            // `vlc.register_font_directory(path)` (append) or pass an
+            // explicit list via that helper. It's process-global state, not
+            // a VlcConfig field.
+            "google_fonts_cache_dir" | "font_directories" => {}
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
                     "Unknown configure argument: {other}"
@@ -391,9 +481,8 @@ pub fn apply_config_overrides(
     if let Some(allowed_base_urls) = overrides.allowed_base_urls {
         config.allowed_base_urls = allowed_base_urls;
     }
-    if let Some(mb) = overrides.google_fonts_cache_size_mb {
-        let bytes = mb.saturating_mul(1024 * 1024);
-        configure_font_cache_rs(Some(bytes))?;
+    if let Some(google_fonts_cache_size_mb) = overrides.google_fonts_cache_size_mb {
+        config.google_fonts_cache_size_mb = google_fonts_cache_size_mb;
     }
     if let Some(auto_google_fonts) = overrides.auto_google_fonts {
         config.auto_google_fonts = auto_google_fonts;
@@ -408,10 +497,7 @@ pub fn apply_config_overrides(
         config.missing_fonts = missing_fonts;
     }
     if let Some(google_fonts) = overrides.google_fonts {
-        let mut guard = CONFIGURED_GOOGLE_FONTS
-            .write()
-            .map_err(|e| vl_convert_rs::anyhow::anyhow!("Failed to write google_fonts: {e}"))?;
-        *guard = google_fonts;
+        config.google_fonts = google_fonts;
     }
     if let Some(max_v8_heap_size_mb) = overrides.max_v8_heap_size_mb {
         config.max_v8_heap_size_mb = max_v8_heap_size_mb;
@@ -430,6 +516,12 @@ pub fn apply_config_overrides(
     }
     if let Some(allow_per_request_plugins) = overrides.allow_per_request_plugins {
         config.allow_per_request_plugins = allow_per_request_plugins;
+    }
+    if let Some(max_ephemeral_workers) = overrides.max_ephemeral_workers {
+        config.max_ephemeral_workers = max_ephemeral_workers;
+    }
+    if let Some(allow_google_fonts) = overrides.allow_google_fonts {
+        config.allow_google_fonts = allow_google_fonts;
     }
     if let Some(per_request_plugin_import_domains) = overrides.per_request_plugin_import_domains {
         config.per_request_plugin_import_domains = per_request_plugin_import_domains;
@@ -477,18 +569,112 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
     };
     let new_converter = Arc::new(VlConverterRs::with_config(config)?);
 
-    let mut gf_guard = CONFIGURED_GOOGLE_FONTS.write().map_err(|e| {
-        vl_convert_rs::anyhow::anyhow!("Failed to acquire google_fonts write lock: {e}")
-    })?;
     let mut guard = VL_CONVERTER.write().map_err(|e| {
         vl_convert_rs::anyhow::anyhow!("Failed to acquire converter write lock: {e}")
     })?;
-    *gf_guard = None;
     *guard = new_converter;
     Ok(())
 }
 
-/// Configure converter options for subsequent requests
+/// Configure converter worker/access settings used by subsequent conversions.
+///
+/// All arguments are keyword-only. Unknown keywords raise ``TypeError``.
+///
+/// Parameters
+/// ----------
+/// num_workers : int, optional
+///     Worker count (must be >= 1). ``None`` resets to the library default (1).
+///     Passing ``0`` raises ``ValueError``.
+/// base_url : str | bool, optional
+///     Base URL for resolving relative data paths in Vega specs.
+///     ``None`` or ``True`` resets to the default (vega-datasets CDN).
+///     ``False`` disables relative path resolution.
+///     A string sets a custom base URL or filesystem path.
+/// allowed_base_urls : list[str], optional
+///     CSP-style allowlist for data access (HTTP URLs, filesystem paths).
+///     Examples: ``"https:"`` (scheme), ``"https://example.com/"`` (prefix),
+///     ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
+///     the library default (``["http:", "https:"]``); ``[]`` blocks all
+///     network data.
+/// google_fonts_cache_size_mb : int, optional
+///     Maximum Google Fonts on-disk LRU cache size in megabytes. Must be >= 1
+///     if provided. ``None`` resets to the library default. Passing ``0``
+///     raises ``ValueError``.
+/// auto_google_fonts : bool, optional
+///     Automatically download missing fonts from Google Fonts.
+///     ``None`` resets to the library default (``False``).
+/// embed_local_fonts : bool, optional
+///     Embed locally available fonts as base64-encoded data URIs in SVG and
+///     HTML output. Does not apply to PDF/PNG/JPEG (which always embed fonts
+///     via fontdb). ``None`` resets to the library default (``False``).
+/// subset_fonts : bool, optional
+///     Subset fonts to only the characters used in the chart. Applies to SVG
+///     and HTML output. ``None`` resets to the library default (``True``).
+/// missing_fonts : {"fallback", "warn", "error"}, optional
+///     Missing-font behavior. ``None`` resets to the library default
+///     (``"fallback"``).
+/// google_fonts : list[str | dict], optional
+///     Google Fonts to register for all subsequent conversions. Each entry is
+///     a family-name string or a dict with ``"family"`` (required) and
+///     optionally ``"variants"`` (list of ``(weight, style)`` tuples). Each
+///     call **replaces** the full configured list. ``None`` (or ``[]``)
+///     resets to the library default (empty list).
+/// max_v8_heap_size_mb : int, optional
+///     Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
+///     ``None`` resets to the library default (no cap). Passing ``0`` raises
+///     ``ValueError``.
+/// max_v8_execution_time_secs : int, optional
+///     Maximum V8 execution time in seconds. Must be >= 1 if provided. When
+///     exceeded, V8 execution is terminated and an error is returned.
+///     ``None`` resets to the library default (no cap). Passing ``0`` raises
+///     ``ValueError``.
+/// gc_after_conversion : bool, optional
+///     Whether to run V8 garbage collection after each conversion to release
+///     memory back to the OS. ``None`` resets to the library default
+///     (``False``).
+/// vega_plugins : list[str], optional
+///     List of Vega plugins to load. Each entry is a file path
+///     (``.js``/``.mjs``), URL (``https://...``), or inline ESM string.
+///     URL plugins auto-allow their domain for imports. ``None`` (or ``[]``)
+///     resets to the library default (empty list).
+/// plugin_import_domains : list[str], optional
+///     Domain patterns allowed for HTTP imports inside config-level plugins.
+///     Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
+///     ``None`` (or ``[]``) resets to the library default (empty list; HTTP
+///     imports disabled).
+/// allow_per_request_plugins : bool, optional
+///     Whether to accept per-request plugins via the ``vega_plugin`` parameter
+///     on conversion functions. ``None`` resets to the library default
+///     (``False``).
+/// max_ephemeral_workers : int, optional
+///     Maximum concurrent ephemeral V8 isolates for per-request plugins. Must
+///     be >= 1 if provided. ``None`` resets to the library default (2).
+///     Passing ``0`` raises ``ValueError``.
+/// allow_google_fonts : bool, optional
+///     Whether to accept per-request ``google_fonts`` / ``auto_google_fonts``
+///     overrides on conversion calls. ``None`` resets to the library default
+///     (``False``).
+/// per_request_plugin_import_domains : list[str], optional
+///     Domain patterns allowed for HTTP imports inside per-request plugins.
+///     Separate from ``plugin_import_domains``. ``None`` (or ``[]``) resets
+///     to the library default (empty list; HTTP imports disabled).
+/// default_theme : str, optional
+///     Default named theme (e.g. ``"dark"``) applied to all Vega-Lite
+///     conversions. Per-request ``theme`` overrides this if set. ``None``
+///     resets to the library default (no theme).
+/// default_format_locale : str | dict, optional
+///     Default d3-format locale name (e.g. ``"fr-FR"``) applied to all
+///     conversions. Per-request ``format_locale`` overrides this if set.
+///     ``None`` resets to the library default (no locale).
+/// default_time_format_locale : str | dict, optional
+///     Default d3-time-format locale name (e.g. ``"fr-FR"``) applied to all
+///     conversions. Per-request ``time_format_locale`` overrides this if set.
+///     ``None`` resets to the library default (no locale).
+/// themes : dict[str, dict], optional
+///     Custom named themes mapping names to Vega config objects. Registered
+///     alongside built-in vega-themes. Custom themes take priority over
+///     built-in themes if names collide. ``None`` (or ``{}``) resets to the
+///     library default (empty map).
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
 pub fn configure(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<()> {

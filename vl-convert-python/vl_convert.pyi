@@ -157,23 +157,28 @@ if TYPE_CHECKING:
     class ConverterConfig(TypedDict):
         num_workers: int
         base_url: str | bool
-        allowed_base_urls: list[str] | None
+        allowed_base_urls: list[str]
         auto_google_fonts: bool
         embed_local_fonts: bool
         subset_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
+        google_fonts: list[GoogleFontSpec]
         google_fonts_cache_dir: str | None
-        max_v8_heap_size_mb: int
-        max_v8_execution_time_secs: int
+        google_fonts_cache_size_mb: int | None
+        max_v8_heap_size_mb: int | None
+        max_v8_execution_time_secs: int | None
         gc_after_conversion: bool
-        vega_plugins: list[str] | None
+        vega_plugins: list[str]
         plugin_import_domains: list[str]
         allow_per_request_plugins: bool
+        max_ephemeral_workers: int | None
+        allow_google_fonts: bool
         per_request_plugin_import_domains: list[str]
         default_theme: str | None
         default_format_locale: str | dict[str, Any] | None
         default_time_format_locale: str | dict[str, Any] | None
-        themes: dict[str, dict[str, Any]] | None
+        themes: dict[str, dict[str, Any]]
+        font_directories: list[str]
 
 __all__ = [
     "asyncio",
@@ -187,6 +192,7 @@ __all__ = [
     "get_time_format_locale",
     "javascript_bundle",
     "register_font_directory",
+    "set_font_directories",
     "warm_up_workers",
     "get_worker_memory_usage",
     "svg_to_jpeg",
@@ -313,7 +319,29 @@ def register_font_directory(font_dir: str) -> None:
     """
     ...
 
+def set_font_directories(font_dirs: list[str]) -> None:
+    """
+    Replace the registered font directories with the given list.
+
+    Unlike ``register_font_directory``, which only adds, this replaces
+    the full list. Directories previously registered but absent from
+    ``font_dirs`` are dropped from the global registry, and the fontdb
+    no longer resolves their fonts on future conversions. Pass an empty
+    list to clear all registrations.
+
+    Parameters
+    ----------
+    font_dirs
+        Absolute paths to directories containing font files
+
+    Returns
+    -------
+    None
+    """
+    ...
+
 def configure(
+    *,
     num_workers: int | None = None,
     base_url: str | bool | None = None,
     allowed_base_urls: list[str] | None = None,
@@ -329,6 +357,8 @@ def configure(
     vega_plugins: list[str] | None = None,
     plugin_import_domains: list[str] | None = None,
     allow_per_request_plugins: bool | None = None,
+    max_ephemeral_workers: int | None = None,
+    allow_google_fonts: bool | None = None,
     per_request_plugin_import_domains: list[str] | None = None,
     default_theme: str | None = None,
     default_format_locale: str | dict[str, Any] | None = None,
@@ -341,80 +371,102 @@ def configure(
     Parameters
     ----------
     num_workers
-        Worker count (must be >= 1). If ``None``, keep current value.
+        Worker count (must be >= 1). ``None`` resets to the library default (1).
+        Passing ``0`` raises ``ValueError``.
     base_url
         Base URL for resolving relative data paths in Vega specs.
-        ``None`` or ``True`` uses the default (vega-datasets CDN).
+        ``None`` or ``True`` resets to the default (vega-datasets CDN).
         ``False`` disables relative path resolution.
         A string sets a custom base URL or filesystem path.
-        If ``None``, keep current value.
     allowed_base_urls
-        Allowlist for data access (HTTP URLs, filesystem paths).
-        Uses CSP-style patterns: ``"https:"`` (scheme), ``"https://example.com/"``
-        (prefix), ``"/data/"`` (filesystem). ``None`` allows any HTTP/HTTPS,
-        no filesystem (default). ``[]`` disables all external access.
-        ``["*"]`` allows everything including filesystem.
+        CSP-style allowlist for data access (HTTP URLs, filesystem paths).
+        Examples: ``"https:"`` (scheme), ``"https://example.com/"`` (prefix),
+        ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
+        the library default (``["http:", "https:"]``); ``[]`` blocks all
+        network data.
     google_fonts_cache_size_mb
-        Maximum font cache size in megabytes. If ``None``, keep current value.
+        Maximum Google Fonts on-disk LRU cache size in megabytes. Must be >= 1
+        if provided. ``None`` resets to the library default. Passing ``0``
+        raises ``ValueError``.
     auto_google_fonts
-        Automatically download missing fonts from Google Fonts. If ``None``, keep current value.
+        Automatically download missing fonts from Google Fonts.
+        ``None`` resets to the library default (``False``).
     embed_local_fonts
         Embed locally available fonts as base64-encoded data URIs in SVG and HTML
         output. Does not apply to PDF/PNG/JPEG (which always embed fonts via fontdb).
-        If ``None``, keep current value.
+        ``None`` resets to the library default (``False``).
     subset_fonts
         Subset fonts to only the characters used in the chart. Applies to SVG
-        and HTML output. Default is ``True``. If ``None``, keep current value.
+        and HTML output. ``None`` resets to the library default (``True``).
     missing_fonts
         Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
-        If ``None``, keep current value.
+        ``None`` resets to the library default (``"fallback"``).
     google_fonts
-        Google Fonts to register for all subsequent conversions. Each entry
-        is a dict with ``"family"`` (required) and optionally ``"variants"``
-        (list of ``(weight, style)`` tuples). Fonts are downloaded and
-        registered on each conversion call. ``None`` keeps current value.
-        Pass ``[]`` to clear.
+        Google Fonts to register for all subsequent conversions. Each entry is
+        a family-name string or a dict with ``"family"`` (required) and
+        optionally ``"variants"`` (list of ``(weight, style)`` tuples). Fonts
+        are downloaded and registered on each conversion call.
+
+        **Replace semantics.** Each call to ``configure(google_fonts=[...])``
+        **replaces** the full list on the config; it does not append to the
+        previously configured fonts. ``None`` (or ``[]``) resets to the
+        library default (empty list).
     max_v8_heap_size_mb
-        Maximum V8 heap size per worker in megabytes. Default is 0 (no limit).
-        If ``None``, keep current value.
+        Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
+        ``None`` resets to the library default (no cap). Passing ``0`` raises
+        ``ValueError``.
     max_v8_execution_time_secs
-        Maximum V8 execution time in seconds. Default is 0 (no limit).
-        When exceeded, V8 execution is terminated and an error is returned.
-        If ``None``, keep current value.
+        Maximum V8 execution time in seconds. Must be >= 1 if provided. When
+        exceeded, V8 execution is terminated and an error is returned.
+        ``None`` resets to the library default (no cap). Passing ``0`` raises
+        ``ValueError``.
     gc_after_conversion
         Whether to run V8 garbage collection after each conversion to release
-        memory back to the OS. Default is False. If ``None``, keep current value.
+        memory back to the OS. ``None`` resets to the library default (``False``).
     vega_plugins
         List of Vega plugins to load. Each entry is a file path (``.js``/``.mjs``),
         URL (``https://...``), or inline ESM string. Plugins must be single-entry
         ESM modules with a default export function accepting a ``vega`` object.
         Multi-file plugins should be pre-bundled with esbuild or Rollup.
-        URL plugins auto-allow their domain for imports. ``None`` keeps current value.
+        URL plugins auto-allow their domain for imports. ``None`` (or ``[]``)
+        resets to the library default (empty list).
     plugin_import_domains
         Domain patterns allowed for HTTP imports inside config-level plugins.
-        Empty list (default) disables HTTP imports.
         Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
-        If ``None``, keep current value.
+        ``None`` (or ``[]``) resets to the library default (empty list;
+        HTTP imports disabled).
     allow_per_request_plugins
         Whether to accept per-request plugins via the ``vega_plugin`` parameter
-        on conversion functions. Default ``False``. If ``None``, keep current value.
+        on conversion functions. ``None`` resets to the library default (``False``).
+    max_ephemeral_workers
+        Maximum concurrent ephemeral V8 isolates for per-request plugins. Must
+        be >= 1 if provided. ``None`` resets to the library default (2).
+        Passing ``0`` raises ``ValueError``.
+    allow_google_fonts
+        Whether to accept per-request ``google_fonts`` / ``auto_google_fonts``
+        overrides on conversion calls. ``None`` resets to the library default
+        (``False``).
     per_request_plugin_import_domains
         Domain patterns allowed for HTTP imports inside per-request plugins.
-        Separate from ``plugin_import_domains``. Empty list (default) disables
-        HTTP imports in per-request plugins. If ``None``, keep current value.
+        Separate from ``plugin_import_domains``. ``None`` (or ``[]``) resets
+        to the library default (empty list; HTTP imports disabled).
     default_theme
         Default named theme (e.g. ``"dark"``) applied to all Vega-Lite conversions.
-        Per-request ``theme`` overrides this if set. ``None`` clears the default.
+        Per-request ``theme`` overrides this if set. ``None`` resets to the
+        library default (no theme).
     default_format_locale
         Default d3-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
-        Per-request ``format_locale`` overrides this if set. ``None`` clears the default.
+        Per-request ``format_locale`` overrides this if set. ``None`` resets
+        to the library default (no locale).
     default_time_format_locale
         Default d3-time-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
-        Per-request ``time_format_locale`` overrides this if set. ``None`` clears the default.
+        Per-request ``time_format_locale`` overrides this if set. ``None``
+        resets to the library default (no locale).
     themes
         Custom named themes mapping names to Vega config objects.
         Registered alongside built-in vega-themes. Custom themes take
-        priority over built-in themes if names collide. ``None`` clears.
+        priority over built-in themes if names collide. ``None`` (or ``{}``)
+        resets to the library default (empty map).
     """
     ...
 
@@ -495,7 +547,7 @@ def get_worker_memory_usage() -> list[WorkerMemoryUsage]:
     ...
 
 def svg_to_jpeg(
-    svg: str, scale: float | None = None, quality: int | None = None
+    svg: str, *, scale: float | None = None, quality: int | None = None
 ) -> bytes:
     """
     Convert an SVG image string to JPEG image data.
@@ -515,7 +567,7 @@ def svg_to_jpeg(
     """
     ...
 
-def svg_to_pdf(svg: str, scale: float | None = None) -> bytes:
+def svg_to_pdf(svg: str, *, scale: float | None = None) -> bytes:
     """
     Convert an SVG image string to PDF document data.
 
@@ -532,7 +584,9 @@ def svg_to_pdf(svg: str, scale: float | None = None) -> bytes:
     """
     ...
 
-def svg_to_png(svg: str, scale: float | None = None, ppi: float | None = None) -> bytes:
+def svg_to_png(
+    svg: str, *, scale: float | None = None, ppi: float | None = None
+) -> bytes:
     """
     Convert an SVG image string to PNG image data.
 
@@ -553,12 +607,17 @@ def svg_to_png(svg: str, scale: float | None = None, ppi: float | None = None) -
 
 def vega_to_html(
     vg_spec: VlSpec,
+    *,
     bundle: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     renderer: Renderer | None = None,
     vega_plugin: str | None = None,
+    config: str | dict[str, Any] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> str:
     """
     Convert a Vega spec to an HTML document, optionally bundling dependencies.
@@ -583,6 +642,14 @@ def vega_to_html(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    config
+        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     HTML document.
@@ -591,11 +658,17 @@ def vega_to_html(
 
 def vega_to_jpeg(
     vg_spec: VlSpec,
+    *,
     scale: float | None = None,
     quality: int | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    config: str | dict[str, Any] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to JPEG image data.
@@ -615,6 +688,16 @@ def vega_to_jpeg(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    google_fonts
+        Google Fonts to register for this conversion.
+    config
+        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     JPEG image data.
@@ -623,10 +706,16 @@ def vega_to_jpeg(
 
 def vega_to_pdf(
     vg_spec: VlSpec,
+    *,
     scale: float | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    config: str | dict[str, Any] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to PDF format.
@@ -644,6 +733,16 @@ def vega_to_pdf(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    google_fonts
+        Google Fonts to register for this conversion.
+    config
+        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     PDF file bytes.
@@ -652,11 +751,17 @@ def vega_to_pdf(
 
 def vega_to_png(
     vg_spec: VlSpec,
+    *,
     scale: float | None = None,
     ppi: float | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    config: str | dict[str, Any] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> bytes:
     """
     Convert a Vega spec to PNG image data.
@@ -676,6 +781,16 @@ def vega_to_png(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    google_fonts
+        Google Fonts to register for this conversion.
+    config
+        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     PNG image data.
@@ -684,10 +799,16 @@ def vega_to_png(
 
 def vega_to_scenegraph(
     vg_spec: VlSpec,
+    *,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     format: Literal["dict", "msgpack"] = "dict",
     vega_plugin: str | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    config: str | dict[str, Any] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> dict[str, Any] | bytes:
     """
     Convert a Vega spec to a Vega Scenegraph.
@@ -706,6 +827,16 @@ def vega_to_scenegraph(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    google_fonts
+        Google Fonts to register for this conversion.
+    config
+        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
@@ -714,10 +845,16 @@ def vega_to_scenegraph(
 
 def vega_to_svg(
     vg_spec: VlSpec,
+    *,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
     bundle: bool | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    config: str | dict[str, Any] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> str:
     """
     Convert a Vega spec to an SVG image string.
@@ -736,13 +873,25 @@ def vega_to_svg(
     bundle
         If True, embed fonts and images as self-contained data URIs.
         If False (default), use ``@import`` references for Google Fonts.
+    google_fonts
+        Google Fonts to register for this conversion. Each entry is
+        a family-name string or a dict with ``"family"`` (required) and
+        optionally ``"variants"``.
+    config
+        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     SVG image string.
     """
     ...
 
-def vega_to_url(vg_spec: VlSpec, fullscreen: bool | None = None) -> str:
+def vega_to_url(vg_spec: VlSpec, *, fullscreen: bool | None = None) -> str:
     """
     Convert a Vega spec to a URL that opens the chart in the Vega editor.
 
@@ -841,6 +990,7 @@ def vega_fonts(
 
 def vegalite_to_html(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     bundle: bool | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
@@ -850,6 +1000,9 @@ def vegalite_to_html(
     time_format_locale: TimeFormatLocale | None = None,
     renderer: Renderer | None = None,
     vega_plugin: str | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to an HTML document, optionally bundling dependencies.
@@ -881,6 +1034,12 @@ def vegalite_to_html(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     HTML document.
@@ -889,6 +1048,7 @@ def vegalite_to_html(
 
 def vegalite_to_jpeg(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     scale: float | None = None,
     quality: int | None = None,
@@ -898,6 +1058,10 @@ def vegalite_to_jpeg(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to JPEG image data using a particular version of the Vega-Lite JavaScript library.
@@ -926,6 +1090,14 @@ def vegalite_to_jpeg(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    google_fonts
+        Google Fonts to register for this conversion.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     JPEG image data.
@@ -934,6 +1106,7 @@ def vegalite_to_jpeg(
 
 def vegalite_to_pdf(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     scale: float | None = None,
     config: dict[str, Any] | None = None,
@@ -941,6 +1114,10 @@ def vegalite_to_pdf(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to PDF image data using a particular version of the Vega-Lite JavaScript library.
@@ -965,6 +1142,14 @@ def vegalite_to_pdf(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    google_fonts
+        Google Fonts to register for this conversion.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     PDF image data.
@@ -973,6 +1158,7 @@ def vegalite_to_pdf(
 
 def vegalite_to_png(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     scale: float | None = None,
     ppi: float | None = None,
@@ -982,6 +1168,10 @@ def vegalite_to_png(
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> bytes:
     """
     Convert a Vega-Lite spec to PNG image data using a particular version of the Vega-Lite JavaScript library.
@@ -1010,6 +1200,14 @@ def vegalite_to_png(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    google_fonts
+        Google Fonts to register for this conversion.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     PNG image data.
@@ -1018,6 +1216,7 @@ def vegalite_to_png(
 
 def vegalite_to_scenegraph(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
@@ -1026,6 +1225,10 @@ def vegalite_to_scenegraph(
     time_format_locale: TimeFormatLocale | None = None,
     format: Literal["dict", "msgpack"] = "dict",
     vega_plugin: str | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> dict[str, Any] | bytes:
     """
     Convert a Vega-Lite spec to a Vega Scenegraph using a particular version of the Vega-Lite JavaScript library.
@@ -1053,6 +1256,14 @@ def vegalite_to_scenegraph(
     vega_plugin
         Per-request Vega plugin (inline ESM string or URL).
         Requires ``allow_per_request_plugins=True`` in ``configure()``.
+    google_fonts
+        Google Fonts to register for this conversion.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
@@ -1061,6 +1272,7 @@ def vegalite_to_scenegraph(
 
 def vegalite_to_svg(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
@@ -1069,6 +1281,10 @@ def vegalite_to_svg(
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
     bundle: bool | None = None,
+    google_fonts: list[str | GoogleFontSpec] | None = None,
+    background: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
 ) -> str:
     """
     Convert a Vega-Lite spec to an SVG image string using a particular version of the Vega-Lite JavaScript library.
@@ -1096,13 +1312,21 @@ def vegalite_to_svg(
     bundle
         If True, embed fonts and images as self-contained data URIs.
         If False (default), use ``@import`` references for Google Fonts.
+    google_fonts
+        Google Fonts to register for this conversion.
+    background
+        Override the spec's background color.
+    width
+        Override the spec's width.
+    height
+        Override the spec's height.
     Returns
     -------
     SVG image string.
     """
     ...
 
-def vegalite_to_url(vl_spec: VlSpec, fullscreen: bool | None = None) -> str:
+def vegalite_to_url(vl_spec: VlSpec, *, fullscreen: bool | None = None) -> str:
     """
     Convert a Vega-Lite spec to a URL that opens the chart in the Vega editor.
 
@@ -1121,6 +1345,7 @@ def vegalite_to_url(vl_spec: VlSpec, fullscreen: bool | None = None) -> str:
 
 def vegalite_to_vega(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
@@ -1211,8 +1436,12 @@ if TYPE_CHECKING:
         async def register_font_directory(self, font_dir: str) -> None:
             """Async version of ``register_font_directory``. See sync function for full documentation."""
             ...
+        async def set_font_directories(self, font_dirs: list[str]) -> None:
+            """Async version of ``set_font_directories``. See sync function for full documentation."""
+            ...
         async def configure(
             self,
+            *,
             num_workers: int | None = None,
             base_url: str | bool | None = None,
             allowed_base_urls: list[str] | None = None,
@@ -1228,10 +1457,12 @@ if TYPE_CHECKING:
             vega_plugins: list[str] | None = None,
             plugin_import_domains: list[str] | None = None,
             allow_per_request_plugins: bool | None = None,
+            max_ephemeral_workers: int | None = None,
+            allow_google_fonts: bool | None = None,
             per_request_plugin_import_domains: list[str] | None = None,
             default_theme: str | None = None,
-            default_format_locale: str | None = None,
-            default_time_format_locale: str | None = None,
+            default_format_locale: str | dict[str, Any] | None = None,
+            default_time_format_locale: str | dict[str, Any] | None = None,
             themes: dict[str, dict[str, Any]] | None = None,
         ) -> None:
             """Async version of ``configure``. See sync function for full documentation."""
@@ -1253,7 +1484,7 @@ if TYPE_CHECKING:
         ) -> bytes:
             """Async version of ``svg_to_jpeg``. See sync function for full documentation."""
             ...
-        async def svg_to_pdf(self, svg: str, scale: float | None = None) -> bytes:
+        async def svg_to_pdf(self, svg: str, *, scale: float | None = None) -> bytes:
             """Async version of ``svg_to_pdf``. See sync function for full documentation."""
             ...
         async def svg_to_png(
@@ -1264,64 +1495,99 @@ if TYPE_CHECKING:
         async def vega_to_html(
             self,
             vg_spec: VlSpec,
+            *,
             bundle: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             renderer: Renderer | None = None,
             vega_plugin: str | None = None,
+            config: str | dict[str, Any] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> str:
             """Async version of ``vega_to_html``. See sync function for full documentation."""
             ...
         async def vega_to_jpeg(
             self,
             vg_spec: VlSpec,
+            *,
             scale: float | None = None,
             quality: int | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            config: str | dict[str, Any] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> bytes:
             """Async version of ``vega_to_jpeg``. See sync function for full documentation."""
             ...
         async def vega_to_pdf(
             self,
             vg_spec: VlSpec,
+            *,
             scale: float | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            config: str | dict[str, Any] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> bytes:
             """Async version of ``vega_to_pdf``. See sync function for full documentation."""
             ...
         async def vega_to_png(
             self,
             vg_spec: VlSpec,
+            *,
             scale: float | None = None,
             ppi: float | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            config: str | dict[str, Any] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> bytes:
             """Async version of ``vega_to_png``. See sync function for full documentation."""
             ...
         async def vega_to_scenegraph(
             self,
             vg_spec: VlSpec,
+            *,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             format: Literal["dict", "msgpack"] = "dict",
             vega_plugin: str | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            config: str | dict[str, Any] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> dict[str, Any] | bytes:
             """Async version of ``vega_to_scenegraph``. See sync function for full documentation."""
             ...
         async def vega_to_svg(
             self,
             vg_spec: VlSpec,
+            *,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
             bundle: bool | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            config: str | dict[str, Any] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> str:
             """Async version of ``vega_to_svg``. See sync function for full documentation."""
             ...
@@ -1358,6 +1624,7 @@ if TYPE_CHECKING:
         async def vegalite_to_html(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             bundle: bool | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
@@ -1367,12 +1634,16 @@ if TYPE_CHECKING:
             time_format_locale: TimeFormatLocale | None = None,
             renderer: Renderer | None = None,
             vega_plugin: str | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> str:
             """Async version of ``vegalite_to_html``. See sync function for full documentation."""
             ...
         async def vegalite_to_jpeg(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             scale: float | None = None,
             quality: int | None = None,
@@ -1382,12 +1653,17 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> bytes:
             """Async version of ``vegalite_to_jpeg``. See sync function for full documentation."""
             ...
         async def vegalite_to_pdf(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             scale: float | None = None,
             config: dict[str, Any] | None = None,
@@ -1395,12 +1671,17 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> bytes:
             """Async version of ``vegalite_to_pdf``. See sync function for full documentation."""
             ...
         async def vegalite_to_png(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             scale: float | None = None,
             ppi: float | None = None,
@@ -1410,12 +1691,17 @@ if TYPE_CHECKING:
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> bytes:
             """Async version of ``vegalite_to_png``. See sync function for full documentation."""
             ...
         async def vegalite_to_scenegraph(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
@@ -1424,12 +1710,17 @@ if TYPE_CHECKING:
             time_format_locale: TimeFormatLocale | None = None,
             format: Literal["dict", "msgpack"] = "dict",
             vega_plugin: str | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> dict[str, Any] | bytes:
             """Async version of ``vegalite_to_scenegraph``. See sync function for full documentation."""
             ...
         async def vegalite_to_svg(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
@@ -1438,6 +1729,10 @@ if TYPE_CHECKING:
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
             bundle: bool | None = None,
+            google_fonts: list[str | GoogleFontSpec] | None = None,
+            background: str | None = None,
+            width: float | None = None,
+            height: float | None = None,
         ) -> str:
             """Async version of ``vegalite_to_svg``. See sync function for full documentation."""
             ...
@@ -1449,6 +1744,7 @@ if TYPE_CHECKING:
         async def vegalite_to_vega(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,

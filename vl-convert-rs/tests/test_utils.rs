@@ -3,15 +3,38 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
-use vl_convert_rs::text::register_font_directory;
+use vl_convert_rs::converter::{VlConverter, VlcConfig};
+use vl_convert_rs::register_font_directory;
+
+/// Absolute path to the vendored `tests/fonts/` directory. The test specs
+/// reference fonts like `Caveat` from that tree.
+pub fn test_font_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fonts")
+}
+
+/// Build a `VlConverter` with the library default config. `VlcConfig::default()`
+/// permits HTTP/HTTPS data loads. The test font directory is registered once
+/// per process via [`initialize`].
+#[allow(dead_code)]
+pub fn test_converter() -> VlConverter {
+    initialize();
+    VlConverter::with_config(VlcConfig::default()).expect("build test converter")
+}
+
+/// Same as [`test_converter`] but with extra `VlcConfig` overrides merged on top.
+#[allow(dead_code)]
+pub fn test_converter_with_config(overrides: VlcConfig) -> VlConverter {
+    initialize();
+    VlConverter::with_config(overrides).expect("build test converter")
+}
 
 static INIT: Once = Once::new();
 
 pub fn initialize() {
     INIT.call_once(|| {
-        let root_path = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let fonts_dir = root_path.join("tests").join("fonts");
-        register_font_directory(fonts_dir.to_str().unwrap())
+        register_font_directory(test_font_dir().to_string_lossy().as_ref())
             .expect("Failed to register test font directory");
     });
 }

@@ -5,7 +5,6 @@ use pythonize::pythonize;
 use std::str::FromStr;
 use vl_convert_rs::converter::{GoogleFontRequest, VgOpts, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
-use vl_convert_rs::text::register_font_directory as register_font_directory_rs;
 use vl_convert_rs::{FontStyle, VariantRequest};
 
 use crate::utils::{
@@ -13,25 +12,6 @@ use crate::utils::{
     parse_option_time_format_locale, parse_optional_config, prefixed_py_error,
     run_converter_future, run_converter_future_async,
 };
-use crate::CONFIGURED_GOOGLE_FONTS;
-
-pub fn effective_google_fonts(
-    per_call: Option<Vec<GoogleFontRequest>>,
-) -> Option<Vec<GoogleFontRequest>> {
-    let configured = CONFIGURED_GOOGLE_FONTS
-        .read()
-        .ok()
-        .and_then(|guard| guard.clone());
-    match (configured, per_call) {
-        (None, None) => None,
-        (Some(c), None) => Some(c),
-        (None, Some(p)) => Some(p),
-        (Some(mut c), Some(p)) => {
-            c.extend(p);
-            Some(c)
-        }
-    }
-}
 
 pub fn parse_variant_args(
     variants: Option<Vec<(u16, String)>>,
@@ -148,7 +128,7 @@ pub fn vegalite_fonts(
 
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         ..Default::default()
     };
 
@@ -207,7 +187,7 @@ pub fn vega_fonts(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         ..Default::default()
     };
 
@@ -241,13 +221,44 @@ pub fn vega_fonts(
 ///
 /// Returns:
 ///     None
+fn register_font_directory_inner(font_dir: &str) -> Result<(), vl_convert_rs::anyhow::Error> {
+    vl_convert_rs::register_font_directory(font_dir)
+}
+
 #[pyfunction]
 #[pyo3(signature = (font_dir))]
 pub fn register_font_directory(font_dir: &str) -> PyResult<()> {
-    register_font_directory_rs(font_dir).map_err(|err| {
-        PyValueError::new_err(format!("Failed to register font directory: {}", err))
-    })?;
-    Ok(())
+    register_font_directory_inner(font_dir)
+        .map_err(|err| PyValueError::new_err(format!("Failed to register font directory: {}", err)))
+}
+
+/// Replace the registered font directories with the given list.
+///
+/// Unlike ``register_font_directory``, which only adds, this replaces
+/// the full list. Directories previously registered but absent from
+/// ``font_dirs`` are dropped from the global registry, and the fontdb
+/// no longer resolves their fonts on future conversions. Pass an empty
+/// list to clear all registrations.
+///
+/// Args:
+///     font_dirs (list[str]): Absolute paths to directories containing
+///         font files
+///
+/// Returns:
+///     None
+fn set_font_directories_inner(font_dirs: Vec<String>) -> Result<(), vl_convert_rs::anyhow::Error> {
+    let paths: Vec<std::path::PathBuf> = font_dirs
+        .into_iter()
+        .map(std::path::PathBuf::from)
+        .collect();
+    vl_convert_rs::set_font_directories(&paths)
+}
+
+#[pyfunction]
+#[pyo3(signature = (font_dirs))]
+pub fn set_font_directories(font_dirs: Vec<String>) -> PyResult<()> {
+    set_font_directories_inner(font_dirs)
+        .map_err(|err| PyValueError::new_err(format!("Failed to set font directories: {}", err)))
 }
 
 #[doc = async_variant_doc!("vegalite_fonts")]
@@ -283,7 +294,7 @@ pub fn vegalite_fonts_asyncio<'py>(
 
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         ..Default::default()
     };
 
@@ -334,7 +345,7 @@ pub fn vega_fonts_asyncio<'py>(
     let vg_opts = VgOpts {
         format_locale,
         time_format_locale,
-        google_fonts: effective_google_fonts(google_fonts),
+        google_fonts,
         ..Default::default()
     };
 
@@ -374,11 +385,29 @@ pub fn register_font_directory_asyncio<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let font_dir = font_dir.to_string();
     future_into_py_object(py, async move {
-        tokio::task::spawn_blocking(move || register_font_directory_rs(&font_dir))
+        tokio::task::spawn_blocking(move || register_font_directory_inner(&font_dir))
             .await
             .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
             .map_err(|err| {
                 PyValueError::new_err(format!("Failed to register font directory: {err}"))
+            })?;
+        Python::with_gil(|py| Ok(py.None().into()))
+    })
+}
+
+#[doc = async_variant_doc!("set_font_directories")]
+#[pyfunction(name = "set_font_directories")]
+#[pyo3(signature = (font_dirs))]
+pub fn set_font_directories_asyncio<'py>(
+    py: Python<'py>,
+    font_dirs: Vec<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    future_into_py_object(py, async move {
+        tokio::task::spawn_blocking(move || set_font_directories_inner(font_dirs))
+            .await
+            .map_err(|err| PyValueError::new_err(format!("Task join error: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("Failed to set font directories: {err}"))
             })?;
         Python::with_gil(|py| Ok(py.None().into()))
     })

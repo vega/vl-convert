@@ -7,10 +7,11 @@ mod handlers;
 mod io_utils;
 
 use clap::Parser;
+use std::num::NonZeroU64;
 use std::str::FromStr;
 use vl_convert_rs::converter::{
-    vega_to_url, vegalite_to_url, BaseUrlSetting, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer,
-    SvgOpts, UrlOpts, VgOpts, VlConverter, VlOpts, VlcConfig,
+    vega_to_url, vegalite_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts, UrlOpts,
+    VgOpts, VlConverter, VlOpts, VlcConfig,
 };
 use vl_convert_rs::{anyhow, anyhow::bail};
 
@@ -21,9 +22,10 @@ use handlers::{
     vl_2_svg, vl_2_vg,
 };
 use io_utils::{
-    flatten_plugin_domains, parse_format_locale_option, parse_google_font_requests,
-    parse_time_format_locale_option, parse_vl_version, read_config_json, read_input_string,
-    register_font_dir, resolve_vlc_config, write_output_binary, write_output_string,
+    flatten_plugin_domains, parse_allowed_base_urls, parse_base_url_arg,
+    parse_format_locale_option, parse_google_font_requests, parse_time_format_locale_option,
+    parse_vl_version, read_config_json, read_input_string, register_font_dir, resolve_vlc_config,
+    write_output_binary, write_output_string,
 };
 
 #[tokio::main]
@@ -48,60 +50,48 @@ async fn main() -> Result<(), anyhow::Error> {
         Some(cli.vega_plugin.clone())
     };
 
-    let mut base_config = resolve_vlc_config(cli.vlc_config.as_deref(), cli.no_vlc_config)?;
+    let mut base_config = resolve_vlc_config(cli.vlc_config.as_deref())?;
 
-    if cli.base_url.is_some() || cli.no_base_url {
-        let base_url_setting = if cli.no_base_url {
-            BaseUrlSetting::Disabled
-        } else if let Some(ref url) = cli.base_url {
-            BaseUrlSetting::Custom(url.clone())
-        } else {
-            BaseUrlSetting::Default
-        };
-        base_config.base_url = base_url_setting;
+    if let Some(ref raw) = cli.base_url {
+        base_config.base_url = parse_base_url_arg(raw)?;
     }
-    if !cli.allowed_base_url.is_empty() || cli.no_allowed_urls {
-        let allowed_base_urls = if cli.no_allowed_urls {
-            Some(vec![])
-        } else {
-            Some(cli.allowed_base_url.clone())
-        };
-        base_config.allowed_base_urls = allowed_base_urls;
+    if let Some(ref raw) = cli.allowed_base_urls {
+        base_config.allowed_base_urls = parse_allowed_base_urls(raw)?;
     }
-    if cli.auto_google_fonts {
-        base_config.auto_google_fonts = true;
+    if let Some(v) = cli.auto_google_fonts {
+        base_config.auto_google_fonts = v;
     }
-    if cli.embed_local_fonts {
-        base_config.embed_local_fonts = true;
+    if let Some(v) = cli.embed_local_fonts {
+        base_config.embed_local_fonts = v;
     }
-    if cli.no_subset_fonts {
-        base_config.subset_fonts = false;
+    if let Some(v) = cli.subset_fonts {
+        base_config.subset_fonts = v;
     }
     if let Some(ref mf) = cli.missing_fonts {
         base_config.missing_fonts = mf.to_policy();
     }
     if let Some(heap) = cli.max_v8_heap_size_mb {
-        base_config.max_v8_heap_size_mb = heap;
+        // CLI passes `0` to mean "no cap"; otherwise treat as a hard cap.
+        base_config.max_v8_heap_size_mb = NonZeroU64::new(heap);
     }
     if let Some(timeout) = cli.max_v8_execution_time_secs {
-        base_config.max_v8_execution_time_secs = timeout;
+        base_config.max_v8_execution_time_secs = NonZeroU64::new(timeout);
     }
-    if cli.gc_after_conversion {
-        base_config.gc_after_conversion = true;
+    if let Some(v) = cli.gc_after_conversion {
+        base_config.gc_after_conversion = v;
     }
-    if vega_plugins.is_some() {
-        base_config.vega_plugins = vega_plugins;
+    if let Some(plugins) = vega_plugins {
+        base_config.vega_plugins = plugins;
     }
     if !plugin_import_domains.is_empty() {
         base_config.plugin_import_domains = plugin_import_domains;
     }
-    let google_fonts = parse_google_font_requests(&google_font_families)?;
-    if google_fonts.is_some() {
+    if let Some(google_fonts) = parse_google_font_requests(&google_font_families)? {
         base_config.google_fonts = google_fonts;
     }
     let command = cli.command;
 
-    base_config.num_workers = 1;
+    base_config.num_workers = NonZeroU64::new(1).expect("1 is non-zero");
 
     // Wrap all conversion work in select! so Ctrl+C drops the conversion
     // future, triggering CallerGoneGuard to terminate V8 promptly.

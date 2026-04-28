@@ -24,10 +24,16 @@ pub fn domain_matches_patterns(domain: &str, patterns: &[String]) -> bool {
 }
 
 /// Helper to build parsed allowed_base_urls from a config's string patterns.
+///
+/// Returns a `Vec<AllowedBaseUrlPattern>`. Empty means "block all network
+/// data" (the new secure-by-default state). Internal access-policy structs
+/// that accept `Option<Vec<_>>` should wrap this in `Some(...)` to engage
+/// the allowlist enforcer; library-internal default helpers can use `None`
+/// to mean "allow any http/https" (not reachable via `VlcConfig`).
 pub(crate) fn parse_allowed_base_urls_from_config(
     config: &VlcConfig,
-) -> Result<Option<Vec<AllowedBaseUrlPattern>>, AnyError> {
-    normalize_allowed_base_urls(config.allowed_base_urls.clone())
+) -> Result<Vec<AllowedBaseUrlPattern>, AnyError> {
+    Ok(normalize_allowed_base_urls(Some(config.allowed_base_urls.clone()))?.unwrap_or_default())
 }
 
 pub(crate) fn build_permissions(_config: &VlcConfig) -> Result<Permissions, AnyError> {
@@ -151,7 +157,7 @@ mod tests {
         use super::super::VlConverter;
         // Empty list means no external access at all (valid config)
         let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: Some(vec![]),
+            allowed_base_urls: vec![],
             ..Default::default()
         });
         assert!(converter.is_ok());

@@ -92,19 +92,19 @@ pub(crate) async fn resolve_plugin(
 }
 
 /// Resolve and bundle all plugins. Runs async on a dedicated thread.
-/// Returns the resolved plugins (or None if no plugins configured).
+/// Returns the resolved plugins (empty if no plugins configured).
 pub(crate) async fn resolve_and_bundle_plugins(
     config: &VlcConfig,
-) -> Result<Option<Vec<ResolvedPlugin>>, AnyError> {
-    let Some(ref plugins) = config.vega_plugins else {
-        return Ok(None);
-    };
+) -> Result<Vec<ResolvedPlugin>, AnyError> {
+    if config.vega_plugins.is_empty() {
+        return Ok(Vec::new());
+    }
     let mut resolved = Vec::new();
-    for (i, entry) in plugins.iter().enumerate() {
+    for (i, entry) in config.vega_plugins.iter().enumerate() {
         let plugin = resolve_plugin(entry, &config.plugin_import_domains)
             .await
             .map_err(|e| anyhow!("Vega plugin {i} bundling failed: {e}"))?;
         resolved.push(plugin);
     }
-    Ok(Some(resolved))
+    Ok(resolved)
 }

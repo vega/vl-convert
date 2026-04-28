@@ -23,7 +23,7 @@ vl-convert inlines the source code of supported versions of Vega-Lite so that no
    - `vl-convert/README.md` - Update help text examples showing version lists
 5. Run tests: `pixi run test-rs`. The new version tests will fail because expected output files don't exist yet.
 6. Create expected test outputs (see "Updating test snapshots" below).
-7. Optionally update `DEFAULT_VL_VERSION` in `vl-convert/src/main.rs` if this should become the new default.
+7. The default version (`DEFAULT_VL_VERSION`) is automatically set to the last entry in `VL_PATHS` during code generation. To change which version is the default, reorder `VL_PATHS` so the desired default is last.
 8. Run all tests to verify: `pixi run test-rs && pixi run test-cli`
 9. Commit updated files.
 

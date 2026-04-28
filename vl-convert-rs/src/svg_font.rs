@@ -37,7 +37,7 @@ fn apply_edits(mut svg: String, mut edits: Vec<SvgEdit>) -> String {
     }
 
     // Sort descending by start position
-    edits.sort_by(|a, b| b.range.start.cmp(&a.range.start));
+    edits.sort_by_key(|e| std::cmp::Reverse(e.range.start));
 
     // Hard assert: overlapping edits would silently corrupt the SVG in
     // release builds if this were only a debug_assert.

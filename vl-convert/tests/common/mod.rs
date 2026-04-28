@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
 pub use assert_cmd::prelude::*;
 pub use dssim::{Dssim, DssimImage};
@@ -23,6 +23,12 @@ pub fn initialize() {
         fs::remove_dir_all(&outdir).ok();
         fs::create_dir_all(&outdir).unwrap();
     });
+}
+
+/// Build an `assert_cmd::Command` for the vl-convert binary. Centralized
+/// so future test-wide CLI flags can be added in one place.
+pub fn vl_convert_cmd() -> Result<Command, Box<dyn std::error::Error>> {
+    Command::cargo_bin("vl-convert").map_err(Into::into)
 }
 
 pub fn vg_spec_path(name: &str) -> String {

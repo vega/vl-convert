@@ -19,7 +19,6 @@ pub use info::*;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 use std::sync::{Arc, RwLock};
-use vl_convert_rs::converter::GoogleFontRequest;
 use vl_convert_rs::VlConverter as VlConverterRs;
 
 lazy_static! {
@@ -30,7 +29,6 @@ lazy_static! {
             .enable_all()
             .build()
             .unwrap();
-    static ref CONFIGURED_GOOGLE_FONTS: RwLock<Option<Vec<GoogleFontRequest>>> = RwLock::new(None);
 }
 
 fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -60,6 +58,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(svg_to_jpeg_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(set_font_directories_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(load_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_config_asyncio, &asyncio)?)?;
@@ -108,6 +107,7 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_jpeg, m)?)?;
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
+    m.add_function(wrap_pyfunction!(set_font_directories, m)?)?;
     m.add_function(wrap_pyfunction!(configure, m)?)?;
     m.add_function(wrap_pyfunction!(load_config, m)?)?;
     m.add_function(wrap_pyfunction!(get_config_path, m)?)?;

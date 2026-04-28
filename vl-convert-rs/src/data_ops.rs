@@ -163,6 +163,17 @@ pub(crate) fn normalize_allowed_base_url(
         });
     }
 
+    if !allowed_base_url.contains("://") {
+        bail!(
+            "allowed_base_urls entry '{}' is not a valid pattern. Expected: \
+             \"*\", a URL scheme like \"https:\", a URL prefix like \
+             \"https://example.com/\", a wildcard host like \
+             \"https://*.example.com/\", an absolute filesystem path like \
+             \"/data/\", or a file:// URL. Relative paths are not supported.",
+            allowed_base_url
+        );
+    }
+
     let parsed_url = Url::parse(allowed_base_url)
         .map_err(|err| anyhow!("Invalid allowed_base_url '{}': {}", allowed_base_url, err))?;
 
@@ -589,6 +600,19 @@ mod tests {
     #[test]
     fn test_normalize_allowed_base_url_rejects_userinfo() {
         assert!(normalize_allowed_base_url("https://user@example.com/").is_err());
+    }
+
+    #[test]
+    fn test_normalize_allowed_base_url_rejects_relative_path() {
+        for raw in ["./data/", "../data/", "data/", "data"] {
+            let err = normalize_allowed_base_url(raw)
+                .err()
+                .unwrap_or_else(|| panic!("expected '{raw}' to be rejected"));
+            assert!(
+                err.to_string().contains("Relative paths are not supported"),
+                "expected relative-path rejection for '{raw}', got: {err}"
+            );
+        }
     }
 
     #[test]

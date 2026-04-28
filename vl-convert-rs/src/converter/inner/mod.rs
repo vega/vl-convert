@@ -85,7 +85,7 @@ pub(crate) struct InnerVlConverter {
     usvg_options: usvg::Options<'static>,
     pub(crate) ctx: Arc<ConverterContext>,
     /// Pointer to the heap-limit callback data (leaked Box). `None` when
-    /// `max_v8_heap_size_mb` is 0 (no limit).
+    /// `max_v8_heap_size_mb` is `None` (no cap).
     heap_limit_data: Option<*const HeapLimitCallbackData>,
     /// Shared flag set by the timeout timer thread when a conversion exceeds
     /// `max_v8_execution_time_secs`. Checked by `annotate_timeout_error()`.
@@ -162,12 +162,14 @@ impl InnerVlConverter {
         // Configure WorkerOptions with our custom extensions and V8 snapshot.
         // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
         // This is required for container compatibility (manylinux, slim images).
-        let create_params = if ctx.config.max_v8_heap_size_mb > 0 {
-            let max_bytes = ctx.config.max_v8_heap_size_mb.saturating_mul(1024 * 1024);
-            Some(v8::CreateParams::default().heap_limits(0, max_bytes))
-        } else {
-            None
-        };
+        let create_params = ctx.config.max_v8_heap_size_mb.map(|n| {
+            let max_bytes: usize = n
+                .get()
+                .saturating_mul(1024 * 1024)
+                .try_into()
+                .unwrap_or(usize::MAX);
+            v8::CreateParams::default().heap_limits(0, max_bytes)
+        });
 
         let options = WorkerOptions {
             extensions: vec![
@@ -186,7 +188,7 @@ impl InnerVlConverter {
 
         // Register a near-heap-limit callback so V8 terminates JS execution
         // instead of calling FatalProcessOutOfMemory() (which aborts the process).
-        let heap_limit_data = if ctx.config.max_v8_heap_size_mb > 0 {
+        let heap_limit_data = if ctx.config.max_v8_heap_size_mb.is_some() {
             let isolate = worker.js_runtime.v8_isolate();
             let cb_data = Box::new(HeapLimitCallbackData {
                 handle: isolate.thread_safe_handle(),
@@ -221,9 +223,12 @@ impl InnerVlConverter {
         );
         worker.js_runtime.op_state().borrow_mut().put(shared_config);
 
-        // Store data access policy for the Rust data loading ops
+        // Store data access policy for the Rust data loading ops.
+        // The ConverterContext tracks `parsed_allowed_base_urls` as a
+        // `Vec<...>` (empty = block all), so we always wrap in `Some(...)`
+        // to engage the allowlist enforcer.
         let data_policy = crate::data_ops::DataAccessPolicy {
-            allowed_base_urls: ctx.parsed_allowed_base_urls.clone(),
+            allowed_base_urls: Some(ctx.parsed_allowed_base_urls.clone()),
         };
         worker.js_runtime.op_state().borrow_mut().put(data_policy);
 
@@ -252,7 +257,11 @@ pub(crate) struct VlConverterInner {
     /// Resolved plugins populated when the worker pool is first spawned.
     /// Separate from config because spawn_worker_pool() creates a new Arc
     /// but VlConverterInner.config is set at with_config() time.
-    pub(crate) resolved_plugins: Mutex<Option<Vec<ResolvedPlugin>>>,
+    /// Empty = no plugins resolved yet / no plugins configured.
+    pub(crate) resolved_plugins: Mutex<Vec<ResolvedPlugin>>,
+    /// Semaphore limiting concurrent ephemeral workers for per-request plugins.
+    /// None when max_ephemeral_workers is None (no limit).
+    pub(super) ephemeral_semaphore: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 #[cfg(test)]
@@ -450,6 +459,17 @@ pub(super) mod tests {
         let _ = stream.write_all(response_head.as_bytes());
         let _ = stream.write_all(&response.body);
         let _ = stream.flush();
+
+        let _ = stream.shutdown(std::net::Shutdown::Write);
+        let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(500)));
+        let mut drain_buf = [0u8; 256];
+        loop {
+            use std::io::Read;
+            match stream.read(&mut drain_buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => continue,
+            }
+        }
     }
 
     fn http_reason_phrase(status: u16) -> &'static str {
@@ -543,8 +563,8 @@ pub(super) mod tests {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
                 config: VlcConfig::default(),
-                parsed_allowed_base_urls: None,
-                resolved_plugins: None,
+                parsed_allowed_base_urls: Vec::new(),
+                resolved_plugins: Vec::new(),
             }),
             get_font_baseline_snapshot().unwrap(),
         )
@@ -562,8 +582,8 @@ pub(super) mod tests {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
                 config: VlcConfig::default(),
-                parsed_allowed_base_urls: None,
-                resolved_plugins: None,
+                parsed_allowed_base_urls: Vec::new(),
+                resolved_plugins: Vec::new(),
             }),
             get_font_baseline_snapshot().unwrap(),
         )
@@ -617,8 +637,8 @@ pub(super) mod tests {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
                 config: VlcConfig::default(),
-                parsed_allowed_base_urls: None,
-                resolved_plugins: None,
+                parsed_allowed_base_urls: Vec::new(),
+                resolved_plugins: Vec::new(),
             }),
             get_font_baseline_snapshot().unwrap(),
         )
@@ -671,15 +691,15 @@ pub(super) mod tests {
     #[tokio::test]
     async fn test_image_decode_rejects_and_error_events_fire() {
         use super::super::ACCESS_DENIED_MARKER;
-        // Use allowed_base_urls: Some(vec![]) to deny all HTTP access via ops
+        // Use allowed_base_urls: vec![] to deny all HTTP access via ops
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
                 config: VlcConfig {
-                    allowed_base_urls: Some(vec![]),
+                    allowed_base_urls: vec![],
                     ..Default::default()
                 },
-                parsed_allowed_base_urls: Some(vec![]),
-                resolved_plugins: None,
+                parsed_allowed_base_urls: Vec::new(),
+                resolved_plugins: Vec::new(),
             }),
             get_font_baseline_snapshot().unwrap(),
         )
@@ -745,8 +765,8 @@ pub(super) mod tests {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
                 config: VlcConfig::default(),
-                parsed_allowed_base_urls: None,
-                resolved_plugins: None,
+                parsed_allowed_base_urls: Vec::new(),
+                resolved_plugins: Vec::new(),
             }),
             get_font_baseline_snapshot().unwrap(),
         )
@@ -815,8 +835,8 @@ pub(super) mod tests {
         let mut ctx = InnerVlConverter::try_new(
             std::sync::Arc::new(ConverterContext {
                 config: VlcConfig::default(),
-                parsed_allowed_base_urls: None,
-                resolved_plugins: None,
+                parsed_allowed_base_urls: Vec::new(),
+                resolved_plugins: Vec::new(),
             }),
             get_font_baseline_snapshot().unwrap(),
         )

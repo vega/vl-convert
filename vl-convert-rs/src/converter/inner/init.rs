@@ -113,6 +113,10 @@ function buildLoader(errors) {
         const wantBinary = responseType === 'arraybuffer';
 
         try {
+            if (typeof href !== 'string') {
+                throw new Error(`Unsupported data URL target after Vega loader sanitize: ${href}`);
+            }
+
             // data: URIs are handled inline (no network, no op needed)
             if (href.startsWith('data:')) {
                 const resp = await fetch(href);
@@ -128,18 +132,22 @@ function buildLoader(errors) {
                 return await op_vega_data_fetch(href);
             }
 
-            // Filesystem path (sanitize strips file:// prefix, so href is a bare path).
-            // On Windows, stripping file:// from file:///C:/path leaves /C:/path;
-            // remove the leading slash so the Rust op receives a valid Windows path.
-            let filePath = decodeURIComponent(href);
-            if (globalThis.Deno?.build?.os === 'windows' && /^\/[A-Za-z]:/.test(filePath)) {
-                filePath = filePath.slice(1);
+            if (sanitized.localFile === true) {
+                // Filesystem path (sanitize strips file:// prefix, so href is a bare path).
+                // On Windows, stripping file:// from file:///C:/path leaves /C:/path;
+                // remove the leading slash so the Rust op receives a valid Windows path.
+                let filePath = decodeURIComponent(href);
+                if (globalThis.Deno?.build?.os === 'windows' && /^\/[A-Za-z]:/.test(filePath)) {
+                    filePath = filePath.slice(1);
+                }
+                if (wantBinary) {
+                    const buffer = await op_vega_file_read_bytes(filePath);
+                    return buffer.buffer;
+                }
+                return await op_vega_file_read(filePath);
             }
-            if (wantBinary) {
-                const buffer = await op_vega_file_read_bytes(filePath);
-                return buffer.buffer;
-            }
-            return await op_vega_file_read(filePath);
+
+            throw new Error(`Unsupported data URL target after Vega loader sanitize: ${href}`);
         } catch (error) {
             errors.push(error.message);
             throw error;
@@ -330,16 +338,15 @@ function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, config, err
                 .await?;
 
             // Clone to release the borrow on self.ctx before calling load_plugin.
-            if let Some(plugins) = self.ctx.resolved_plugins.clone() {
-                for (i, plugin) in plugins.iter().enumerate() {
-                    self.load_plugin(i, &plugin.bundled_source, true).await?;
-                }
+            let plugins = self.ctx.resolved_plugins.clone();
+            for (i, plugin) in plugins.iter().enumerate() {
+                self.load_plugin(i, &plugin.bundled_source, true).await?;
             }
 
             // Register custom themes: replace the frozen vegaThemes module namespace
             // with a mutable copy that includes the custom themes.
-            if let Some(ref themes) = self.ctx.config.themes {
-                let themes_json = serde_json::to_string(themes)?;
+            if !self.ctx.config.themes.is_empty() {
+                let themes_json = serde_json::to_string(&self.ctx.config.themes)?;
                 self.worker.js_runtime.execute_script(
                     "ext:<anon>",
                     format!("vegaThemes = Object.assign({{}}, vegaThemes, {themes_json});"),

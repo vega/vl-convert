@@ -1,16 +1,100 @@
 use std::io::{self, IsTerminal, Read, Write};
 use std::str::FromStr;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
-use vl_convert_rs::converter::{FormatLocale, GoogleFontRequest, TimeFormatLocale, VlcConfig};
+use vl_convert_rs::converter::{
+    BaseUrlSetting, FormatLocale, GoogleFontRequest, TimeFormatLocale, VlcConfig,
+};
 use vl_convert_rs::module_loader::import_map::VlVersion;
-use vl_convert_rs::text::register_font_directory;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
-pub(crate) fn register_font_dir(dir: Option<String>) -> Result<(), anyhow::Error> {
+/// Register a `--font-dir` value with the library so subsequent conversions
+/// can resolve fonts from that directory.
+pub(crate) fn register_font_dir(dir: Option<String>) -> anyhow::Result<()> {
     if let Some(dir) = dir {
-        register_font_directory(&dir)?
+        vl_convert_rs::register_font_directory(&dir)?;
     }
     Ok(())
+}
+
+/// `=BOOL` value parser for clap flags. Mirrors the server CLI's
+/// `parse_boolish_arg`; accepts the same string forms.
+pub(crate) fn parse_boolish_arg(raw: &str) -> Result<bool, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => Err("expected one of: true, false, 1, 0, yes, no, on, off".to_string()),
+    }
+}
+
+/// Parse a `--base-url` value into a `BaseUrlSetting`. Reserved values
+/// `default` and `disabled` map to the corresponding enum variants. A
+/// URL with scheme (`https://...`, `file://...`) is taken as-is. Any
+/// other value is treated as a filesystem path and must be absolute
+/// (after `~` expansion); relative paths are rejected so they can't be
+/// confused with reserved values.
+pub(crate) fn parse_base_url_arg(raw: &str) -> Result<BaseUrlSetting, anyhow::Error> {
+    let trimmed = raw.trim();
+    match trimmed {
+        "default" => return Ok(BaseUrlSetting::Default),
+        "disabled" => return Ok(BaseUrlSetting::Disabled),
+        "" => bail!("--base-url must not be empty"),
+        _ => {}
+    }
+    if trimmed.contains("://") {
+        return Ok(BaseUrlSetting::Custom(trimmed.to_string()));
+    }
+    let expanded = shellexpand::tilde(trimmed).to_string();
+    if !std::path::Path::new(&expanded).is_absolute() {
+        bail!(
+            "--base-url path must be absolute, got '{trimmed}'. Use \
+             'default' or 'disabled' for reserved behaviors, a URL with \
+             scheme like 'https://example.com/', or an absolute path."
+        );
+    }
+    Ok(BaseUrlSetting::Custom(expanded))
+}
+
+/// Parse a `--allowed-base-urls` value into a `Vec<String>`. Accepts:
+/// reserved values `none` / `net` / `all`, a JSON-array literal
+/// (e.g. `["http:","https:"]`), or `@<path>` referencing a file
+/// containing the JSON array.
+pub(crate) fn parse_allowed_base_urls(raw: &str) -> Result<Vec<String>, anyhow::Error> {
+    match raw.trim() {
+        "none" => return Ok(Vec::new()),
+        "net" => return Ok(vec!["http:".to_string(), "https:".to_string()]),
+        "all" => return Ok(vec!["*".to_string()]),
+        _ => {}
+    }
+    let json_text = if let Some(path_str) = raw.strip_prefix('@') {
+        let expanded = shellexpand::tilde(path_str.trim()).to_string();
+        std::fs::read_to_string(&expanded).map_err(|err| {
+            anyhow::anyhow!("failed to read --allowed-base-urls @ {}: {err}", expanded)
+        })?
+    } else if raw.trim_start().starts_with('[') {
+        raw.to_string()
+    } else {
+        bail!(
+            "--allowed-base-urls must be one of: 'none', 'net', 'all', a JSON \
+             array literal like '[\"https:\"]', or '@<path>' to read the JSON \
+             from a file. Got: '{raw}'"
+        );
+    };
+    let value: serde_json::Value = serde_json::from_str(&json_text)
+        .map_err(|err| anyhow::anyhow!("--allowed-base-urls must be a JSON array: {err}"))?;
+    match value {
+        serde_json::Value::Array(values) => values
+            .into_iter()
+            .map(|v| match v {
+                serde_json::Value::String(s) => Ok(s),
+                _ => Err(anyhow::anyhow!(
+                    "--allowed-base-urls must be a JSON array of strings"
+                )),
+            })
+            .collect(),
+        _ => Err(anyhow::anyhow!(
+            "--allowed-base-urls must be a JSON array of strings"
+        )),
+    }
 }
 
 /// Parse a `--google-font` value like `"Roboto"` or `"Roboto:400,700italic"`
@@ -320,17 +404,32 @@ fn write_stdout_bytes(data: &[u8]) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-pub(crate) fn resolve_vlc_config(
-    vlc_config: Option<&str>,
-    no_vlc_config: bool,
-) -> Result<VlcConfig, anyhow::Error> {
-    if no_vlc_config {
-        return Ok(VlcConfig::default());
-    }
+/// Resolve the bootstrap `VlcConfig` from `--vlc-config <value>`.
+///
+/// `value` may be:
+/// - `None` (flag omitted): load the platform default config path if it
+///   exists, else return `VlcConfig::default()`.
+/// - `Some("disabled")`: skip config-file loading; return
+///   `VlcConfig::default()`.
+/// - `Some("<absolute path>")`: load that specific file. Relative paths
+///   are rejected to avoid ambiguity with the `disabled` reserved value.
+pub(crate) fn resolve_vlc_config(vlc_config: Option<&str>) -> Result<VlcConfig, anyhow::Error> {
     let path = match vlc_config {
-        Some(p) => {
-            let expanded = shellexpand::tilde(p.trim()).to_string();
-            std::path::PathBuf::from(expanded)
+        Some(raw) => {
+            let trimmed = raw.trim();
+            if trimmed == "disabled" {
+                return Ok(VlcConfig::default());
+            }
+            let expanded = shellexpand::tilde(trimmed).to_string();
+            let path = std::path::PathBuf::from(&expanded);
+            if !path.is_absolute() {
+                bail!(
+                    "--vlc-config path must be absolute, got '{expanded}'. \
+                     Use 'disabled' to skip config-file loading, or pass an \
+                     absolute path."
+                );
+            }
+            path
         }
         None => {
             let default = vl_convert_rs::vlc_config_path();

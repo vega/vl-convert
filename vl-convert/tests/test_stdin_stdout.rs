@@ -13,7 +13,7 @@ fn test_stdin_vl2vg_file_output() -> Result<(), Box<dyn std::error::Error>> {
     let vl_spec = load_vl_spec_string("circle_binned");
     let output = output_path("stdin_vl2vg.vg.json");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2vg")
         .arg("-o").arg(&output)
@@ -42,7 +42,7 @@ fn test_file_input_vl2svg_stdout() -> Result<(), Box<dyn std::error::Error>> {
 
     let vl_path = vl_spec_path("circle_binned");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let output = cmd
         .arg("vl2svg")
         .arg("-i").arg(vl_path)
@@ -63,7 +63,7 @@ fn test_stdin_stdout_vl2vg() -> Result<(), Box<dyn std::error::Error>> {
 
     let vl_spec = load_vl_spec_string("circle_binned");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2vg")
         .arg("--vl-version").arg("5.8")
@@ -91,7 +91,7 @@ fn test_stdin_vl2png_file_output() -> Result<(), Box<dyn std::error::Error>> {
     let vl_spec = load_vl_spec_string("circle_binned");
     let output = output_path("stdin_vl2png.png");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2png")
         .arg("-o").arg(&output)
@@ -119,7 +119,7 @@ fn test_png_explicit_stdout_override() -> Result<(), Box<dyn std::error::Error>>
 
     let vl_spec = load_vl_spec_string("circle_binned");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2png")
         .arg("-o").arg("-")
@@ -145,7 +145,7 @@ fn test_jpeg_explicit_stdout_override() -> Result<(), Box<dyn std::error::Error>
 
     let vl_spec = load_vl_spec_string("circle_binned");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2jpeg")
         .arg("-o").arg("-")
@@ -171,7 +171,7 @@ fn test_pdf_explicit_stdout_override() -> Result<(), Box<dyn std::error::Error>>
 
     let vl_spec = load_vl_spec_string("circle_binned");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2pdf")
         .arg("-o").arg("-")
@@ -197,7 +197,7 @@ fn test_stdin_invalid_json() -> Result<(), Box<dyn std::error::Error>> {
 
     let invalid_json = "not valid json {";
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2vg")
         .arg("--vl-version").arg("5.8")
@@ -222,7 +222,7 @@ fn test_implicit_stdin_vl2vg() -> Result<(), Box<dyn std::error::Error>> {
     let vl_spec = load_vl_spec_string("circle_binned");
     let output = output_path("implicit_stdin.vg.json");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2vg")
         .arg("-o").arg(&output)
@@ -248,7 +248,7 @@ fn test_explicit_stdin_dash() -> Result<(), Box<dyn std::error::Error>> {
     let vl_spec = load_vl_spec_string("circle_binned");
     let output = output_path("explicit_stdin_dash.vg.json");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2vg")
         .arg("-i").arg("-")
@@ -275,7 +275,7 @@ fn test_backward_compat_file_to_file() -> Result<(), Box<dyn std::error::Error>>
     let vl_path = vl_spec_path("circle_binned");
     let output = output_path("backward_compat.vg.json");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     cmd.arg("vl2vg")
         .arg("-i").arg(vl_path)
         .arg("-o").arg(&output)
@@ -296,7 +296,7 @@ fn test_vl2url_stdin() -> Result<(), Box<dyn std::error::Error>> {
 
     let vl_spec = load_vl_spec_string("circle_binned");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2url")
         .stdin(Stdio::piped())
@@ -322,7 +322,7 @@ fn test_vg2url_stdin() -> Result<(), Box<dyn std::error::Error>> {
     // First convert VL to VG via stdin/stdout
     let vl_spec = load_vl_spec_string("circle_binned");
 
-    let mut cmd1 = Command::cargo_bin("vl-convert")?;
+    let mut cmd1 = vl_convert_cmd()?;
     let mut child1 = cmd1
         .arg("vl2vg")
         .arg("--vl-version").arg("5.8")
@@ -337,7 +337,7 @@ fn test_vg2url_stdin() -> Result<(), Box<dyn std::error::Error>> {
     assert!(vg_output.status.success());
 
     // Now pipe VG to vg2url
-    let mut cmd2 = Command::cargo_bin("vl-convert")?;
+    let mut cmd2 = vl_convert_cmd()?;
     let mut child2 = cmd2
         .arg("vg2url")
         .stdin(Stdio::piped())
@@ -361,7 +361,7 @@ fn test_svg2png_stdin_stdout() -> Result<(), Box<dyn std::error::Error>> {
     // First generate SVG via stdin/stdout
     let vl_spec = load_vl_spec_string("circle_binned");
 
-    let mut cmd1 = Command::cargo_bin("vl-convert")?;
+    let mut cmd1 = vl_convert_cmd()?;
     let mut child1 = cmd1
         .arg("vl2svg")
         .arg("--vl-version").arg("5.8")
@@ -377,7 +377,7 @@ fn test_svg2png_stdin_stdout() -> Result<(), Box<dyn std::error::Error>> {
 
     // Now convert SVG to PNG with explicit stdout override
     let output = output_path("svg2png_pipeline.png");
-    let mut cmd2 = Command::cargo_bin("vl-convert")?;
+    let mut cmd2 = vl_convert_cmd()?;
     let mut child2 = cmd2
         .arg("svg2png")
         .arg("-o").arg(&output)
@@ -402,7 +402,7 @@ fn test_vl2html_stdout() -> Result<(), Box<dyn std::error::Error>> {
 
     let vl_path = vl_spec_path("circle_binned");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let output = cmd
         .arg("vl2html")
         .arg("-i").arg(vl_path)
@@ -424,7 +424,7 @@ fn test_vg2svg_stdin() -> Result<(), Box<dyn std::error::Error>> {
     // First convert VL to VG
     let vl_spec = load_vl_spec_string("circle_binned");
 
-    let mut cmd1 = Command::cargo_bin("vl-convert")?;
+    let mut cmd1 = vl_convert_cmd()?;
     let mut child1 = cmd1
         .arg("vl2vg")
         .arg("--vl-version").arg("5.8")
@@ -439,7 +439,7 @@ fn test_vg2svg_stdin() -> Result<(), Box<dyn std::error::Error>> {
     assert!(vg_output.status.success());
 
     // Now convert VG to SVG via stdin/stdout
-    let mut cmd2 = Command::cargo_bin("vl-convert")?;
+    let mut cmd2 = vl_convert_cmd()?;
     let mut child2 = cmd2
         .arg("vg2svg")
         .stdin(Stdio::piped())
@@ -462,7 +462,7 @@ fn test_vg2svg_stdin() -> Result<(), Box<dyn std::error::Error>> {
 fn test_empty_stdin_error() -> Result<(), Box<dyn std::error::Error>> {
     initialize();
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2vg")
         .arg("--vl-version").arg("5.8")
@@ -492,7 +492,7 @@ fn test_vg2png_stdin() -> Result<(), Box<dyn std::error::Error>> {
     let output = output_path("vg2png_stdin.png");
 
     // First convert VL to VG
-    let mut cmd1 = Command::cargo_bin("vl-convert")?;
+    let mut cmd1 = vl_convert_cmd()?;
     let mut child1 = cmd1
         .arg("vl2vg")
         .arg("--vl-version").arg("5.8")
@@ -507,7 +507,7 @@ fn test_vg2png_stdin() -> Result<(), Box<dyn std::error::Error>> {
     assert!(vg_output.status.success());
 
     // Now convert VG to PNG via stdin
-    let mut cmd2 = Command::cargo_bin("vl-convert")?;
+    let mut cmd2 = vl_convert_cmd()?;
     let mut child2 = cmd2
         .arg("vg2png")
         .arg("-o").arg(&output)
@@ -534,7 +534,7 @@ fn test_vg2jpeg_stdin() -> Result<(), Box<dyn std::error::Error>> {
     let output = output_path("vg2jpeg_stdin.jpg");
 
     // First convert VL to VG
-    let mut cmd1 = Command::cargo_bin("vl-convert")?;
+    let mut cmd1 = vl_convert_cmd()?;
     let mut child1 = cmd1
         .arg("vl2vg")
         .arg("--vl-version").arg("5.8")
@@ -549,7 +549,7 @@ fn test_vg2jpeg_stdin() -> Result<(), Box<dyn std::error::Error>> {
     assert!(vg_output.status.success());
 
     // Now convert VG to JPEG via stdin
-    let mut cmd2 = Command::cargo_bin("vl-convert")?;
+    let mut cmd2 = vl_convert_cmd()?;
     let mut child2 = cmd2
         .arg("vg2jpeg")
         .arg("-o").arg(&output)
@@ -576,7 +576,7 @@ fn test_vg2pdf_stdin() -> Result<(), Box<dyn std::error::Error>> {
     let output = output_path("vg2pdf_stdin.pdf");
 
     // First convert VL to VG
-    let mut cmd1 = Command::cargo_bin("vl-convert")?;
+    let mut cmd1 = vl_convert_cmd()?;
     let mut child1 = cmd1
         .arg("vl2vg")
         .arg("--vl-version").arg("5.8")
@@ -591,7 +591,7 @@ fn test_vg2pdf_stdin() -> Result<(), Box<dyn std::error::Error>> {
     assert!(vg_output.status.success());
 
     // Now convert VG to PDF via stdin
-    let mut cmd2 = Command::cargo_bin("vl-convert")?;
+    let mut cmd2 = vl_convert_cmd()?;
     let mut child2 = cmd2
         .arg("vg2pdf")
         .arg("-o").arg(&output)
@@ -617,7 +617,7 @@ fn test_vl2url_file_output() -> Result<(), Box<dyn std::error::Error>> {
     let vl_spec = load_vl_spec_string("circle_binned");
     let output = output_path("vl2url_output.txt");
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let mut child = cmd
         .arg("vl2url")
         .arg("-o").arg(&output)
@@ -644,7 +644,7 @@ fn test_vg2url_file_output() -> Result<(), Box<dyn std::error::Error>> {
     let vl_spec = load_vl_spec_string("circle_binned");
     let vg_output_path = output_path("vg_spec_for_url.vg.json");
 
-    let mut cmd1 = Command::cargo_bin("vl-convert")?;
+    let mut cmd1 = vl_convert_cmd()?;
     let mut child1 = cmd1
         .arg("vl2vg")
         .arg("--vl-version").arg("5.8")
@@ -660,7 +660,7 @@ fn test_vg2url_file_output() -> Result<(), Box<dyn std::error::Error>> {
 
     // Now convert VG to URL with file output
     let url_output = output_path("vg2url_output.txt");
-    let mut cmd2 = Command::cargo_bin("vl-convert")?;
+    let mut cmd2 = vl_convert_cmd()?;
     let result2 = cmd2
         .arg("vg2url")
         .arg("-i").arg(&vg_output_path)
@@ -689,7 +689,7 @@ fn test_vg2svg_with_inline_plugin() -> Result<(), Box<dyn std::error::Error>> {
     let mut spec_file = NamedTempFile::new()?;
     spec_file.write_all(spec_str.as_bytes())?;
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let output = cmd
         .arg("vg2svg")
         .arg("-i")
@@ -737,7 +737,7 @@ fn test_vg2svg_with_file_plugin() -> Result<(), Box<dyn std::error::Error>> {
     let mut spec_file = NamedTempFile::with_suffix(".json")?;
     spec_file.write_all(serde_json::to_string(&spec)?.as_bytes())?;
 
-    let mut cmd = Command::cargo_bin("vl-convert")?;
+    let mut cmd = vl_convert_cmd()?;
     let output = cmd
         .arg("vg2svg")
         .arg("-i")
