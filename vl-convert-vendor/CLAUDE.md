@@ -21,5 +21,4 @@ When adding/removing Vega-Lite versions, update:
 5. `vl-convert-rs/tests/vl-specs/expected/` - add/remove version directories
 6. `vl-convert/src/main.rs` - help text version lists (6 occurrences of "One of 5.8, 5.14, ...")
 7. `vl-convert/README.md` - help text examples showing version lists
-8. `vl-convert-server/src/types.rs` - `vl_version` doc comment in `VegaliteCommon` listing supported versions
-9. `DEFAULT_VL_VERSION` is auto-generated from the last entry in `VL_PATHS` — reorder to change the default
+8. `DEFAULT_VL_VERSION` is auto-generated from the last entry in `VL_PATHS` — reorder to change the default
