@@ -5,6 +5,7 @@ mod cli_types;
 mod commands;
 mod handlers;
 mod io_utils;
+mod serve;
 
 use clap::Parser;
 use std::num::NonZeroU64;
@@ -22,19 +23,19 @@ use handlers::{
     vl_2_svg, vl_2_vg,
 };
 use io_utils::{
-    flatten_plugin_domains, parse_allowed_base_urls, parse_base_url_arg,
-    parse_format_locale_option, parse_google_font_requests, parse_time_format_locale_option,
-    parse_vl_version, read_config_json, read_input_string, register_font_dir, resolve_vlc_config,
-    write_output_binary, write_output_string,
+    apply_global_font_dirs, apply_global_google_fonts_cache, flatten_plugin_domains,
+    parse_allowed_base_urls, parse_base_url_arg, parse_format_locale_option,
+    parse_google_font_requests, parse_nullable_string_arg, parse_themes_json,
+    parse_time_format_locale_option, parse_vl_version, read_config_json, read_input_string,
+    resolve_vlc_config, synthesize_log_filter, write_output_binary, write_output_string,
 };
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
 
-    env_logger::Builder::new()
-        .filter_module("vl_convert", cli.log_level.to_filter())
-        .init();
+    let log_filter = synthesize_log_filter(cli.log_level, cli.log_filter.as_deref());
+    vl_convert_server::init_tracing(&log_filter, cli.log_format);
 
     // Handle config-path before loading the config so it works even with a broken config file.
     if let Commands::ConfigPath = cli.command {
@@ -51,6 +52,9 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     let mut base_config = resolve_vlc_config(cli.vlc_config.as_deref())?;
+
+    apply_global_font_dirs(&cli)?;
+    apply_global_google_fonts_cache(&cli)?;
 
     if let Some(ref raw) = cli.base_url {
         base_config.base_url = parse_base_url_arg(raw)?;
@@ -89,9 +93,49 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(google_fonts) = parse_google_font_requests(&google_font_families)? {
         base_config.google_fonts = google_fonts;
     }
-    let command = cli.command;
+    // Theme / locale / themes globals: `Option<String>` from clap
+    // discriminates "flag not passed" (`None`, leave config-loaded value
+    // alone) from "flag passed" (`Some(raw)`, override). The literal
+    // string `null` (any case) inside the value resolves to "explicitly
+    // clear the field" — see `parse_nullable_string_arg`,
+    // `parse_format_locale_option`, `parse_time_format_locale_option`,
+    // and `parse_themes_json` in io_utils.rs.
+    if let Some(raw) = cli.default_theme.as_deref() {
+        base_config.default_theme = parse_nullable_string_arg(raw);
+    }
+    if let Some(raw) = cli.default_format_locale.as_deref() {
+        base_config.default_format_locale = parse_format_locale_option(Some(raw))?;
+    }
+    if let Some(raw) = cli.default_time_format_locale.as_deref() {
+        base_config.default_time_format_locale = parse_time_format_locale_option(Some(raw))?;
+    }
+    if let Some(raw) = cli.themes.as_deref() {
+        base_config.themes = parse_themes_json(raw)?.unwrap_or_default();
+    }
+    // One-shot conversion subcommands always run with one worker; the
+    // serve subcommand keeps whatever the user supplied (or the
+    // library default) so `--workers <N>` can scale the worker pool.
+    if !matches!(cli.command, Commands::Serve(_)) {
+        base_config.num_workers = NonZeroU64::new(1).expect("1 is non-zero");
+    }
 
-    base_config.num_workers = NonZeroU64::new(1).expect("1 is non-zero");
+    // Dispatch to `vl-convert serve` after every global-flag plumbing
+    // step has run, so the serve path inherits the same converter
+    // state (font dirs, base URL, plugin domains, etc.) as a one-shot
+    // conversion would. The conversion `tokio::select!` block below
+    // never runs in this branch — `run_serve` owns its own signal /
+    // shutdown lifecycle. We pluck the `Serve` variant's args out of
+    // `cli.command` via `std::mem::replace` (replacing with the inert
+    // `ConfigPath` variant) so `&cli` stays usable for global flag
+    // access inside `run_serve`.
+    if matches!(cli.command, Commands::Serve(_)) {
+        let command = std::mem::replace(&mut cli.command, Commands::ConfigPath);
+        let Commands::Serve(args) = command else {
+            unreachable!("matches! guard above");
+        };
+        return serve::run_serve(&cli, base_config, args).await;
+    }
+    let command = cli.command;
 
     // Wrap all conversion work in select! so Ctrl+C drops the conversion
     // future, triggering CallerGoneGuard to terminate V8 promptly.
@@ -140,12 +184,10 @@ async fn run_command(
             vl_version,
             theme,
             config,
-            font_dir,
             format_locale,
             time_format_locale,
             bundle,
         } => {
-            register_font_dir(font_dir)?;
             let svg_opts = SvgOpts { bundle };
             vl_2_svg(
                 input.as_deref(),
@@ -168,11 +210,9 @@ async fn run_command(
             config,
             scale,
             ppi,
-            font_dir,
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
             vl_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -195,11 +235,9 @@ async fn run_command(
             config,
             scale,
             quality,
-            font_dir,
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
             vl_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -220,11 +258,9 @@ async fn run_command(
             vl_version,
             theme,
             config,
-            font_dir,
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
             vl_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -341,12 +377,10 @@ async fn run_command(
         Vg2svg {
             input,
             output,
-            font_dir,
             format_locale,
             bundle,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
             let svg_opts = SvgOpts { bundle };
             vg_2_svg(
                 input.as_deref(),
@@ -363,11 +397,9 @@ async fn run_command(
             output,
             scale,
             ppi,
-            font_dir,
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
             vg_2_png(
                 input.as_deref(),
                 output.as_deref(),
@@ -384,11 +416,9 @@ async fn run_command(
             output,
             scale,
             quality,
-            font_dir,
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
             vg_2_jpeg(
                 input.as_deref(),
                 output.as_deref(),
@@ -403,11 +433,9 @@ async fn run_command(
         Vg2pdf {
             input,
             output,
-            font_dir,
             format_locale,
             time_format_locale,
         } => {
-            register_font_dir(font_dir)?;
             vg_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
@@ -509,9 +537,7 @@ async fn run_command(
             output,
             scale,
             ppi,
-            font_dir,
         } => {
-            register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
             let png_output = converter
@@ -530,9 +556,7 @@ async fn run_command(
             output,
             scale,
             quality,
-            font_dir,
         } => {
-            register_font_dir(font_dir)?;
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
             let jpeg_output = converter
@@ -546,12 +570,7 @@ async fn run_command(
                 .await?;
             write_output_binary(output.as_deref(), &jpeg_output.data, "JPEG")?;
         }
-        Svg2pdf {
-            input,
-            output,
-            font_dir,
-        } => {
-            register_font_dir(font_dir)?;
+        Svg2pdf { input, output } => {
             let svg = read_input_string(input.as_deref())?;
             let converter = VlConverter::with_config(base_config)?;
             let pdf_output = converter.svg_to_pdf(&svg, PdfOpts::default()).await?;
@@ -560,6 +579,7 @@ async fn run_command(
         LsThemes => list_themes(base_config).await?,
         CatTheme { theme } => cat_theme(&theme, base_config).await?,
         ConfigPath => unreachable!("handled before config loading"),
+        Serve(_) => unreachable!("handled by serve::run_serve before run_command"),
     }
 
     Ok(())

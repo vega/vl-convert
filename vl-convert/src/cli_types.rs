@@ -1,6 +1,9 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 use vl_convert_rs::converter::MissingFontsPolicy;
 pub(crate) use vl_convert_rs::DEFAULT_VL_VERSION;
+pub(crate) use vl_convert_server::LogFormat;
 
 use crate::commands::Commands;
 use crate::io_utils::parse_boolish_arg;
@@ -33,12 +36,12 @@ pub(crate) enum LogLevel {
 }
 
 impl LogLevel {
-    pub(crate) fn to_filter(self) -> log::LevelFilter {
+    pub(crate) fn as_directive_str(self) -> &'static str {
         match self {
-            LogLevel::Error => log::LevelFilter::Error,
-            LogLevel::Warn => log::LevelFilter::Warn,
-            LogLevel::Info => log::LevelFilter::Info,
-            LogLevel::Debug => log::LevelFilter::Debug,
+            LogLevel::Error => "error",
+            LogLevel::Warn => "warn",
+            LogLevel::Info => "info",
+            LogLevel::Debug => "debug",
         }
     }
 }
@@ -151,9 +154,58 @@ pub(crate) struct Cli {
     #[arg(long = "plugin-import-domains", global = true)]
     pub(crate) plugin_import_domains: Vec<String>,
 
+    /// Additional directory to search for fonts. Repeatable: pass the
+    /// flag multiple times (`--font-dir /a --font-dir /b`) to register
+    /// multiple directories. Calls
+    /// `vl_convert_rs::set_font_directories` once at startup with the
+    /// combined list (replace semantics).
+    #[arg(long, global = true, value_name = "PATH")]
+    pub(crate) font_dir: Vec<PathBuf>,
+
+    /// Capacity (MB) of the on-disk Google Fonts LRU cache. `0` resolves
+    /// to the library default (`Option<NonZeroU64>::None`).
+    #[arg(long, global = true, value_name = "MB")]
+    pub(crate) google_fonts_cache_size_mb: Option<u64>,
+
+    /// Default Vega-Lite theme applied when a request omits `theme`.
+    /// Pass the literal string `null` to clear a value loaded from the
+    /// `--vlc-config` file.
+    #[arg(long, global = true, value_name = "THEME|null")]
+    pub(crate) default_theme: Option<String>,
+
+    /// Default d3-format locale: a locale name string, JSON object
+    /// literal, `@<path>` to a JSON file, or the literal string `null`
+    /// to clear a value loaded from the `--vlc-config` file.
+    #[arg(long, global = true, value_name = "LOCALE|JSON|@FILE|null")]
+    pub(crate) default_format_locale: Option<String>,
+
+    /// Default d3-time-format locale: a locale name string, JSON object
+    /// literal, `@<path>` to a JSON file, or the literal string `null`
+    /// to clear a value loaded from the `--vlc-config` file.
+    #[arg(long, global = true, value_name = "LOCALE|JSON|@FILE|null")]
+    pub(crate) default_time_format_locale: Option<String>,
+
+    /// Custom named themes as a JSON object literal, `@<path>` to a JSON
+    /// file, or the literal string `null` to clear a map loaded from the
+    /// `--vlc-config` file.
+    #[arg(long, global = true, value_name = "JSON|@FILE|null")]
+    pub(crate) themes: Option<String>,
+
     /// Log level for Vega/Vega-Lite messages
     #[arg(long, global = true, value_enum, default_value_t = LogLevel::Warn)]
     pub(crate) log_level: LogLevel,
+
+    /// Tracing-subscriber output format. `text` is human-readable;
+    /// `json` emits one structured line per event for log aggregators.
+    #[arg(long, global = true, value_enum, default_value_t = LogFormat::Text)]
+    pub(crate) log_format: LogFormat,
+
+    /// Raw `tracing-subscriber::EnvFilter` directive (e.g.
+    /// `"vl_convert=debug,tower_http=info"`). When set, this wins over
+    /// `--log-level`. When unset, a directive is synthesized from
+    /// `--log-level`.
+    #[arg(long, global = true, value_name = "DIRECTIVE")]
+    pub(crate) log_filter: Option<String>,
 
     #[command(subcommand)]
     pub(crate) command: Commands,

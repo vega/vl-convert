@@ -1,5 +1,8 @@
 #![allow(dead_code, unused_imports)]
 
+#[cfg(unix)]
+pub mod uds;
+
 pub use assert_cmd::prelude::*;
 pub use dssim::{Dssim, DssimImage};
 pub use predicates::prelude::*;

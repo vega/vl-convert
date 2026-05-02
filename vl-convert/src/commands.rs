@@ -53,10 +53,6 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -100,10 +96,6 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
 
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -143,10 +135,6 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "90")]
         quality: u8,
 
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -177,10 +165,6 @@ pub(crate) enum Commands {
         /// Path to Vega-Lite config file
         #[arg(short, long)]
         config: Option<String>,
-
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -295,10 +279,6 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -330,10 +310,6 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
 
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -361,10 +337,6 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "90")]
         quality: u8,
 
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
-
         /// d3-format locale name or file with .json extension
         #[arg(long)]
         format_locale: Option<String>,
@@ -383,10 +355,6 @@ pub(crate) enum Commands {
         /// Path to output PDF file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
         output: Option<String>,
-
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
 
         /// d3-format locale name or file with .json extension
         #[arg(long)]
@@ -484,10 +452,6 @@ pub(crate) enum Commands {
         /// Pixels per inch
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
-
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
     },
 
     /// Convert an SVG image to a JPEG image
@@ -507,10 +471,6 @@ pub(crate) enum Commands {
         /// JPEG Quality between 0 (worst) and 100 (best)
         #[arg(short, long, default_value = "90")]
         quality: u8,
-
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
     },
 
     /// Convert an SVG image to a PDF image
@@ -522,10 +482,6 @@ pub(crate) enum Commands {
         /// Path to output PDF file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
         output: Option<String>,
-
-        /// Additional directory to search for fonts
-        #[arg(long)]
-        font_dir: Option<String>,
     },
 
     /// List available themes
@@ -540,4 +496,7 @@ pub(crate) enum Commands {
 
     /// Print the default vlc-config file path
     ConfigPath,
+
+    /// Run the HTTP conversion server.
+    Serve(crate::serve::ServeArgs),
 }

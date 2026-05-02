@@ -10437,19 +10437,25 @@ name = "vl-convert"
 version = "2.0.0-rc1"
 dependencies = [
  "assert_cmd",
+ "bytes",
  "clap",
  "dssim",
- "env_logger",
+ "http-body-util",
+ "hyper 1.8.1",
+ "hyper-util",
  "itertools 0.14.0",
  "log",
  "predicates",
  "rstest",
+ "serde",
  "serde_json",
  "shellexpand",
  "tempfile",
  "tokio",
+ "tracing",
  "vl-convert-google-fonts",
  "vl-convert-rs",
+ "vl-convert-server",
 ]
 
 [[package]]

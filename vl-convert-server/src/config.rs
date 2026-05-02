@@ -20,6 +20,9 @@ pub enum LogFormat {
 }
 
 pub fn init_tracing(filter: &str, format: LogFormat) {
+    // `tracing-subscriber`'s `init()` enables the `tracing-log`
+    // compat layer by default, so `log::*` records from upstream
+    // crates (e.g. `vl-convert-rs`) flow into this subscriber.
     let filter: EnvFilter = filter.parse().expect("valid tracing filter directives");
 
     // Explicit stderr: tracing_subscriber::fmt() defaults to stdout,

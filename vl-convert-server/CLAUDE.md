@@ -415,7 +415,11 @@ touch `VlcConfig` / `ConfigPatch` / `ConfigReplace` / `ConfigView`.
 ## Notes for downstream binary authors
 
 The crate ships no binary — these are invariants any downstream binary
-should honor when composing `bind_listener` + `build_app` + `serve`:
+should honor when composing `bind_listener` + `build_app` + `serve`.
+The canonical reference implementation in this repo is
+`vl-convert/src/serve.rs` (the `vl-convert serve` subcommand) — that
+file shows the lifecycle wiring (signals, ready-JSON, drain watchdog,
+stdin-EOF watcher) end-to-end.
 
 - **Signal handling**: when honoring SIGTERM for graceful shutdown,
   call `tokio::signal::unix::signal(SignalKind::terminate())` **in
