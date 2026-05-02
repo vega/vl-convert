@@ -18,7 +18,7 @@ use vl_convert_google_fonts::GoogleFontsClient;
 pub static FONT_CONFIG_VERSION: AtomicU64 = AtomicU64::new(0);
 
 /// Default cap (in MB) for the on-disk Google Fonts LRU cache, applied
-/// when [`apply_hot_font_cache`] is called with `None`.
+/// when [`set_google_fonts_cache_size_mb`] is called with `None`.
 pub const DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB: u64 = 512;
 
 #[derive(Clone)]
@@ -336,16 +336,25 @@ pub fn current_font_directories() -> Vec<PathBuf> {
 
 /// Set the on-disk Google Fonts LRU cache cap (process-global).
 ///
-/// `None` resets to [`DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB`] so a fresh
-/// `with_config(VlcConfig { google_fonts_cache_size_mb: None, .. })`
-/// doesn't inherit a previous converter's explicit cap. Cached fonts
-/// over the new limit are evicted immediately.
-pub fn apply_hot_font_cache(cap_mb: Option<NonZeroU64>) -> Result<(), anyhow::Error> {
+/// `None` resets to [`DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB`]. Cached
+/// fonts over the new limit are evicted immediately.
+pub fn set_google_fonts_cache_size_mb(cap_mb: Option<NonZeroU64>) -> Result<(), anyhow::Error> {
     let mb = cap_mb
         .map(NonZeroU64::get)
         .unwrap_or(DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB);
     GOOGLE_FONTS_CLIENT.set_max_font_cache_bytes(mb.saturating_mul(1024 * 1024))?;
     Ok(())
+}
+
+/// Read the currently-active Google Fonts LRU cache cap (in MB).
+///
+/// Always returns the *resolved* cap — at process start this is
+/// [`DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB`]; subsequent
+/// [`set_google_fonts_cache_size_mb`] calls overwrite it.
+pub fn current_google_fonts_cache_size_mb() -> NonZeroU64 {
+    let bytes = GOOGLE_FONTS_CLIENT.max_font_cache_bytes();
+    let mb = (bytes / (1024 * 1024)).max(1);
+    NonZeroU64::new(mb).expect("max(1) above guarantees non-zero")
 }
 
 #[cfg(test)]

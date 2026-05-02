@@ -5,23 +5,21 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use axum::Router;
 use serde_json::json;
-use std::path::PathBuf;
 use std::sync::Arc;
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use utoipa_swagger_ui::SwaggerUi;
-use vl_convert_rs::converter::{normalize_converter_config, VlConverter, VlcConfig};
+use vl_convert_rs::converter::{normalize_converter_config, VlcConfig};
 
 use crate::budget::{BudgetStatus, BudgetTracker};
 use crate::config::{ApiKey, RuntimeSnapshot};
 use crate::health::ReadinessState;
 use crate::reconfig::{
-    apply_patch, requires_rebuild, DrainError, PatchRejection, ReconfigCoordinator,
-    ReconfigScopeGuard,
+    apply_patch, DrainError, PatchRejection, ReconfigCoordinator, ReconfigScopeGuard,
 };
 use crate::types::{
     ConfigPatch, ConfigReplace, ConfigValidationError, ConfigView, ErrorResponse, FieldError,
-    FieldErrorCode, FontDirRequest, VlcConfigView,
+    FieldErrorCode, FontDirRequest,
 };
 
 /// OpenAPI doc for the admin surface. Published at `/admin/api-doc/openapi.json`;
@@ -35,8 +33,8 @@ use crate::types::{
 /// `MissingFontsPolicy`, etc.) without `ToSchema` derives, and `ConfigPatch`
 /// uses an `Option<Option<T>>` tri-state pattern that doesn't reduce to a
 /// clean OpenAPI schema. The spec publishes path + method + tag + response
-/// status codes; wrappers consult `vl-convert-server/CLAUDE.md` §Admin
-/// reconfig & drain for precise body contracts.
+/// status codes; wrappers should consult the request/response DTOs in
+/// `types.rs` for precise body contracts.
 #[derive(OpenApi)]
 #[openapi(tags(
     (name = "Admin", description = "Admin-only endpoints (config + budget)"),
@@ -52,11 +50,6 @@ struct AdminApiDoc;
 /// middleware on the main router participates in the same drain domain
 /// as any admin-side reconfig. See `test_admin_state_composition`.
 ///
-/// Deliberately no `font_directories` field: the registered directory
-/// list lives on `snapshot.config.font_directories` after Task 0, so
-/// admin handlers read it from the current runtime snapshot rather
-/// than a cached parallel copy.
-///
 /// Design note — `/admin/budget` handlers take `State<Arc<AdminState>>`
 /// rather than `State<Arc<BudgetTracker>>`. A `FromRef<Arc<AdminState>>
 /// for Arc<BudgetTracker>` projection would preserve the previous
@@ -65,14 +58,6 @@ struct AdminApiDoc;
 /// type carries a local marker at the impl site (`Arc` isn't
 /// `#[fundamental]`). Accepting the signature change keeps the state
 /// plumbing single-sourced and avoids a local newtype wrapper.
-//
-// `runtime`, `baseline`, `coordinator`, `readiness`, `admin_api_key`,
-// and `opaque_errors` are consumed by the Task 7/8/9 admin-config
-// handlers — `tracker` is the only field the current-task handlers
-// touch. Suppress the dead-code lint for the whole struct until those
-// follower tasks land; the test_admin_state_composition unit test
-// reads every field, but dead-code analysis ignores test-only reads.
-#[allow(dead_code)]
 pub(crate) struct AdminState {
     /// Atomic holder for the current converter + config. Shared with
     /// `AppState.runtime` by Arc identity.
@@ -80,13 +65,6 @@ pub(crate) struct AdminState {
     /// Snapshot-clone of the resolved startup `VlcConfig`. `DELETE
     /// /admin/config` restores this. Immutable for the process lifetime.
     pub baseline: Arc<VlcConfig>,
-    /// Startup font-directory list, captured from
-    /// `vl_convert_rs::current_font_directories()` at app construction.
-    /// Mirrors `RuntimeSnapshot.font_directories` at startup; included
-    /// in the `baseline` projection of `ConfigView` (the wire-shape is
-    /// preserved post-PR-#274 even though the field is no longer on
-    /// `VlcConfig`).
-    pub baseline_font_directories: Vec<PathBuf>,
     /// Reconfig coordinator shared with the gate middleware. Shared
     /// with `AppState.coordinator` by Arc identity.
     pub coordinator: Arc<ReconfigCoordinator>,
@@ -95,8 +73,7 @@ pub(crate) struct AdminState {
     pub readiness: Arc<ReadinessState>,
     /// Optional bearer-token credential for admin-scope auth. `None`
     /// disables admin auth — the admin listener is expected to be
-    /// loopback-only or UDS-perm-guarded in that case. Plumbed through
-    /// the CLI by Task 9.
+    /// loopback-only or UDS-perm-guarded in that case.
     pub admin_api_key: Option<ApiKey>,
     /// Budget tracker — same `Arc` the main router's budget middleware
     /// uses, so `POST /admin/budget` mutations are observed by the
@@ -117,7 +94,11 @@ pub(crate) fn admin_router(admin_state: Arc<AdminState>) -> Router {
         .routes(routes!(patch_config))
         .routes(routes!(put_config))
         .routes(routes!(delete_config))
+        .routes(routes!(get_font_dirs))
+        .routes(routes!(put_font_dirs))
         .routes(routes!(post_font_dir))
+        .routes(routes!(get_font_cache_size))
+        .routes(routes!(put_font_cache_size))
         .split_for_parts();
 
     admin_routes
@@ -215,20 +196,14 @@ async fn update_budget(
 }
 
 // =============================================================================
-// /admin/config handlers (Task 7)
+// /admin/config handlers
 // =============================================================================
 
 /// Build the ConfigView response payload from a snapshot + admin state.
 fn build_config_view(snapshot: &RuntimeSnapshot, admin: &AdminState) -> ConfigView {
     ConfigView {
-        baseline: VlcConfigView {
-            config: (*admin.baseline).clone(),
-            font_directories: admin.baseline_font_directories.clone(),
-        },
-        effective: VlcConfigView {
-            config: (*snapshot.config).clone(),
-            font_directories: snapshot.font_directories.clone(),
-        },
+        baseline: (*admin.baseline).clone(),
+        effective: (*snapshot.config).clone(),
         generation: snapshot.generation,
         config_version: snapshot.config_version,
     }
@@ -239,8 +214,9 @@ fn validation_error_from_anyhow(err: &vl_convert_rs::anyhow::Error) -> ConfigVal
     ConfigValidationError {
         error: msg.clone(),
         field_errors: vec![FieldError {
-            // Field path resolution is a Task 13 refinement; for now attribute
-            // to the root so the response is still structurally well-formed.
+            // Per-field path attribution would require parsing the
+            // anyhow message; for now attribute to the root so the
+            // response stays structurally well-formed.
             path: "".to_string(),
             code: FieldErrorCode::CrossFieldInvariant,
             message: msg,
@@ -299,7 +275,7 @@ fn json_rejection_response(rej: JsonRejection, opaque: bool) -> Response {
     responses((
         status = 200,
         description = "ConfigView { baseline, effective, generation, config_version }. \
-                       Schema mirrors the Python get_config() shape — see vl-convert-server/CLAUDE.md §Admin reconfig & drain."
+                       Schema mirrors the Python get_config() shape."
     )),
     tag = "Admin",
 )]
@@ -345,30 +321,6 @@ async fn patch_config(
 
     let current = admin.runtime.load_full();
 
-    // `font_directories` is non-nullable on the wire even though it
-    // doesn't live on `VlcConfig` anymore (post-PR-#274). Reject
-    // explicit `null` here so PATCH semantics match the historical
-    // contract.
-    if matches!(patch.font_directories, Some(None)) {
-        let err = ConfigValidationError {
-            error: "null received on non-nullable field(s)".to_string(),
-            field_errors: vec![FieldError {
-                path: "font_directories".to_string(),
-                code: FieldErrorCode::NonNullable,
-                message: "field 'font_directories' is not nullable".to_string(),
-            }],
-        };
-        return non_nullable_error_response(err, admin.opaque_errors);
-    }
-
-    // Either the requested new value, or the current snapshot's value if
-    // the patch didn't touch font_directories.
-    let new_font_dirs: Vec<PathBuf> = patch
-        .font_directories
-        .clone()
-        .flatten()
-        .unwrap_or_else(|| current.font_directories.clone());
-
     let new_config = match apply_patch(&current.config, &patch) {
         Ok(c) => c,
         Err(PatchRejection::NonNullable(err)) => {
@@ -382,7 +334,7 @@ async fn patch_config(
         }
     };
 
-    run_commit(&admin, &current, new_config, new_font_dirs, &mut scope).await
+    run_commit(&admin, &current, new_config, &mut scope).await
 }
 
 /// PUT /admin/config — full replacement. Identical to patch_config past the
@@ -407,10 +359,6 @@ async fn put_config(
         Ok(b) => b,
         Err(rej) => return json_rejection_response(rej, admin.opaque_errors),
     };
-    // Extract `font_directories` before consuming `replace`; the
-    // `From<ConfigReplace> for VlcConfig` impl drops the field
-    // because it's no longer on `VlcConfig` post-PR-#274.
-    let new_font_dirs = replace.font_directories.clone();
     let new_config: VlcConfig = replace.into();
 
     let coordinator = admin.coordinator.clone();
@@ -418,7 +366,7 @@ async fn put_config(
     let _lock_guard = coordinator.lock().await;
     let mut scope = ReconfigScopeGuard::new(&coordinator, &readiness);
     let current = admin.runtime.load_full();
-    run_commit(&admin, &current, new_config, new_font_dirs, &mut scope).await
+    run_commit(&admin, &current, new_config, &mut scope).await
 }
 
 /// DELETE /admin/config — reset to the startup baseline.
@@ -440,22 +388,25 @@ async fn delete_config(State(admin): State<Arc<AdminState>>) -> Response {
     let mut scope = ReconfigScopeGuard::new(&coordinator, &readiness);
     let current = admin.runtime.load_full();
     let new_config = (*admin.baseline).clone();
-    let new_font_dirs = admin.baseline_font_directories.clone();
-    run_commit(&admin, &current, new_config, new_font_dirs, &mut scope).await
+    run_commit(&admin, &current, new_config, &mut scope).await
 }
 
-/// Common post-apply commit pipeline: validate, short-circuit on identity,
-/// hot-apply or drain+rebuild, and return the resulting ConfigView.
+/// Common post-apply commit pipeline: validate, identity short-circuit,
+/// drain + rebuild, swap the snapshot, return the resulting ConfigView.
+///
+/// `VlcConfig` no longer carries any hot-applyable fields (process-
+/// global state lives outside the DTO under
+/// `/admin/config/fonts/{directories,cache_size}`), so every non-identity
+/// commit drains and rebuilds. `generation` and `config_version` move
+/// in lockstep.
 async fn run_commit<'a>(
     admin: &AdminState,
     current: &Arc<RuntimeSnapshot>,
     new_config: VlcConfig,
-    new_font_dirs: Vec<PathBuf>,
     scope: &mut ReconfigScopeGuard<'a>,
 ) -> Response {
     // Normalize: validates URLs, V8 heap minimum, resolves plugin files,
-    // etc. Any error here is a 422 validation failure (no globals were
-    // mutated, no rollback needed).
+    // etc. Any error here is a 422 validation failure.
     let new_config = match normalize_converter_config(new_config) {
         Ok(c) => c,
         Err(err) => {
@@ -466,93 +417,14 @@ async fn run_commit<'a>(
         }
     };
 
-    // Identity short-circuit: equal configs and equal font_dirs don't
-    // bump generation/version.
-    if new_config == *current.config && new_font_dirs == current.font_directories {
+    if new_config == *current.config {
         let view = build_config_view(current, admin);
         return (StatusCode::OK, Json(view)).into_response();
     }
 
-    if requires_rebuild(&current.config, &new_config) {
-        commit_rebuild(admin, current, new_config, new_font_dirs, scope).await
-    } else {
-        commit_hot_apply(admin, current, new_config, new_font_dirs)
-    }
-}
-
-/// Hot-apply path: update process-global font state and swap the snapshot
-/// without rebuilding the converter. `generation` unchanged;
-/// `config_version` bumped.
-fn commit_hot_apply(
-    admin: &AdminState,
-    current: &Arc<RuntimeSnapshot>,
-    new_config: VlcConfig,
-    new_font_dirs: Vec<PathBuf>,
-) -> Response {
-    // Apply hot-apply fields only when they differ. Failure here is rare
-    // (the library helpers return errors only for fontdb I/O failures) but
-    // we surface them as 503 so the client knows the config is NOT
-    // committed and can retry.
-    if current.config.google_fonts_cache_size_mb != new_config.google_fonts_cache_size_mb {
-        if let Err(err) =
-            vl_convert_rs::text::apply_hot_font_cache(new_config.google_fonts_cache_size_mb)
-        {
-            let msg =
-                format!("failed to apply google_fonts_cache_size_mb: {err}; config not committed");
-            return simple_error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                &msg,
-                admin.opaque_errors,
-            );
-        }
-    }
-    // Compare against the snapshot's `font_directories` (the server-side
-    // mirror of the global registry) — `VlcConfig` no longer has the field
-    // post-PR-#274.
-    if current.font_directories != new_font_dirs {
-        if let Err(err) = vl_convert_rs::text::set_font_directories(&new_font_dirs) {
-            // Best effort rollback of the cache cap to keep globals in sync
-            // with the snapshot we're about to refuse to swap in.
-            let _ = vl_convert_rs::text::apply_hot_font_cache(
-                current.config.google_fonts_cache_size_mb,
-            );
-            let msg = format!("failed to apply font_directories: {err}; config not committed");
-            return simple_error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                &msg,
-                admin.opaque_errors,
-            );
-        }
-    }
-
-    let new_snapshot = Arc::new(RuntimeSnapshot {
-        converter: current.converter.clone(),
-        config: Arc::new(new_config),
-        font_directories: new_font_dirs,
-        generation: current.generation,
-        config_version: current.config_version + 1,
-    });
-    admin.runtime.store(new_snapshot.clone());
-    let view = build_config_view(&new_snapshot, admin);
-    (StatusCode::OK, Json(view)).into_response()
-}
-
-/// Drain + rebuild path: closes the gate, waits for in-flight requests to
-/// finish, snapshots prior globals for rollback, builds a new converter,
-/// warms it up, and atomically swaps the snapshot. Guard-drop handles
-/// gate reopening and readiness clearing on every exit path, and fires
-/// the armed rollback on failure after `with_config` has mutated globals.
-async fn commit_rebuild<'a>(
-    admin: &AdminState,
-    current: &Arc<RuntimeSnapshot>,
-    new_config: VlcConfig,
-    new_font_dirs: Vec<PathBuf>,
-    scope: &mut ReconfigScopeGuard<'a>,
-) -> Response {
     let coordinator = admin.coordinator.clone();
     coordinator.close_gate();
     scope.mark_gate_closed();
-
     match coordinator.drain().await {
         Ok(()) => {}
         Err(DrainError::Cancelled) => {
@@ -577,39 +449,9 @@ async fn commit_rebuild<'a>(
         }
     }
 
-    // Snapshot prior process-globals so we can restore them if a later
-    // step fails. Post-PR-#274 the library's `with_config` no longer
-    // touches `font_directories` (it lives outside `VlcConfig`); we must
-    // mutate the global font registry explicitly via `set_font_directories`
-    // before rebuilding. `with_config` still mutates the Google Fonts cache
-    // cap (via `apply_hot_font_cache`) based on `new_config.google_fonts_cache_size_mb`.
-    let prior_font_dirs = vl_convert_rs::text::current_font_directories();
-    let prior_cache = current.config.google_fonts_cache_size_mb;
-    scope.arm_rollback(move || {
-        // Best-effort restoration; we mutated globals before reaching this
-        // point and want to put them back. Failures here are logged and
-        // swallowed because there's no better recovery path from a Drop
-        // impl.
-        if let Err(err) = vl_convert_rs::text::set_font_directories(&prior_font_dirs) {
-            log::error!("rollback: set_font_directories failed: {err}");
-        }
-        if let Err(err) = vl_convert_rs::text::apply_hot_font_cache(prior_cache) {
-            log::error!("rollback: apply_hot_font_cache failed: {err}");
-        }
-    });
-
-    // Apply the new font directory list before rebuilding so the new
-    // VlConverter sees the updated registry as its initial fontdb baseline.
-    if let Err(err) = vl_convert_rs::text::set_font_directories(&new_font_dirs) {
-        let msg = format!("failed to apply font_directories: {err}; config not committed");
-        return simple_error_response(StatusCode::SERVICE_UNAVAILABLE, &msg, admin.opaque_errors);
-    }
-
-    let new_converter = match VlConverter::with_config(new_config.clone()) {
+    let new_converter = match current.converter.clone().reconfigure(new_config.clone()) {
         Ok(c) => c,
         Err(err) => {
-            // with_config may have partially mutated globals before failing;
-            // guard drop fires rollback.
             return validation_error_response(
                 validation_error_from_anyhow(&err),
                 admin.opaque_errors,
@@ -625,51 +467,99 @@ async fn commit_rebuild<'a>(
     let new_snapshot = Arc::new(RuntimeSnapshot {
         converter: new_converter,
         config: Arc::new(new_config),
-        // We just called `set_font_directories(&new_font_dirs)` so the
-        // global registry matches; mirror onto the snapshot.
-        font_directories: new_font_dirs,
         generation: current.generation + 1,
         config_version: current.config_version + 1,
     });
     admin.runtime.store(new_snapshot.clone());
-
-    // Commit succeeded — globals already match the new config, so the
-    // rollback closure must NOT run. Disarm before the guard drops.
-    scope.disarm_rollback();
 
     let view = build_config_view(&new_snapshot, admin);
     (StatusCode::OK, Json(view)).into_response()
 }
 
 // =============================================================================
-// POST /admin/config/fonts/directories (Task 8)
+// /admin/config/fonts/directories
 // =============================================================================
+//
+// Font directories are process-global state (`vl_convert_rs`'s
+// `register_font_directory` / `set_font_directories` / `current_font_directories`)
+// and are deliberately not part of the writable `VlcConfig` DTO. The
+// dedicated endpoints below are the only admin-API surface for them;
+// they serialize against `coordinator.lock()` so they can't interleave
+// with `/admin/config` PATCH/PUT/DELETE.
 
-/// Append a single font directory to the process-global registry and to
-/// the snapshot's `VlcConfig.font_directories`. Append-only convenience for
-/// callers that mirror `vlc.register_font_directory(path)` semantics —
-/// replace-style modification is via `PATCH /admin/config {"font_directories": [...]}`.
-///
-/// Flow:
-///
-/// 1. Parse body (serde → 400 on malformed JSON / unknown field).
-/// 2. Validate path exists and is a directory (400 otherwise).
-/// 3. Acquire `coordinator.lock()` so POST serializes against PATCH / PUT /
-///    DELETE — no dedup race, no lost-update vs a rebuild's global-snapshot.
-/// 4. Install `ReconfigScopeGuard` for drop-safety (though this path never
-///    closes the gate, a mid-call panic still needs to unwind cleanly).
-/// 5. Dedup: if the path is already in `snap.config.font_directories`,
-///    return 200 with the current ConfigView and no state change.
-/// 6. `register_font_directory(path)` — global mutation.
-/// 7. Build new `VlcConfig` with the path appended; swap a new snapshot
-///    (same converter, `config_version + 1`, `generation` unchanged).
+/// GET — return the currently-registered font directories.
+#[utoipa::path(
+    get,
+    path = "/admin/config/fonts/directories",
+    responses((status = 200, description = "Array of absolute filesystem paths")),
+    tag = "Admin",
+)]
+async fn get_font_dirs(State(_admin): State<Arc<AdminState>>) -> Response {
+    let dirs: Vec<String> = vl_convert_rs::current_font_directories()
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    (StatusCode::OK, Json(dirs)).into_response()
+}
+
+/// PUT — replace the list wholesale. Equivalent to
+/// `vl_convert_rs::set_font_directories(...)`. Pass `{"paths": []}` to clear.
+#[utoipa::path(
+    put,
+    path = "/admin/config/fonts/directories",
+    responses(
+        (status = 200, description = "Replacement applied; response is the new list"),
+        (status = 400, description = "Malformed body or any path is not an existing directory"),
+        (status = 503, description = "Library-level set_font_directories failed; registry NOT updated"),
+    ),
+    tag = "Admin",
+)]
+async fn put_font_dirs(
+    State(admin): State<Arc<AdminState>>,
+    body: Result<Json<crate::types::FontDirReplace>, JsonRejection>,
+) -> Response {
+    let Json(req) = match body {
+        Ok(b) => b,
+        Err(rej) => return json_rejection_response(rej, admin.opaque_errors),
+    };
+
+    for path in &req.paths {
+        if !path.is_dir() {
+            return simple_error_response(
+                StatusCode::BAD_REQUEST,
+                &format!("path not found or not a directory: {}", path.display()),
+                admin.opaque_errors,
+            );
+        }
+    }
+
+    let _lock = admin.coordinator.lock().await;
+    if let Err(err) = vl_convert_rs::set_font_directories(&req.paths) {
+        return simple_error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            &format!("failed to set font directories: {err}"),
+            admin.opaque_errors,
+        );
+    }
+
+    let dirs: Vec<String> = req
+        .paths
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    (StatusCode::OK, Json(dirs)).into_response()
+}
+
+/// POST — append a single font directory. Equivalent to
+/// `vl_convert_rs::register_font_directory(path)`. Idempotent on
+/// already-registered paths.
 #[utoipa::path(
     post,
     path = "/admin/config/fonts/directories",
     responses(
-        (status = 200, description = "Font directory appended (or already present); response is fresh ConfigView"),
+        (status = 200, description = "Font directory appended (or already present); response is the new list"),
         (status = 400, description = "Missing path or path not found / not a directory"),
-        (status = 503, description = "Library-level register_font_directory failed; config NOT committed"),
+        (status = 503, description = "Library-level register_font_directory failed; registry NOT updated"),
     ),
     tag = "Admin",
 )]
@@ -690,50 +580,86 @@ async fn post_font_dir(
         );
     }
 
-    // Serialize against every other admin mutation. Matches the flow in
-    // `run_commit` (§2.3) so a racing PATCH doesn't see a half-registered
-    // font directory (global pushed, but snapshot not updated).
     let _lock = admin.coordinator.lock().await;
-    let scope = ReconfigScopeGuard::new(&admin.coordinator, &admin.readiness);
 
-    let current = admin.runtime.load_full();
-
-    // Dedup BEFORE the register call. If the path is already tracked, the
-    // library-global `FONT_CONFIG.font_dirs` also already contains it (they
-    // stay in sync via `VlConverter::with_config` -> `set_font_directories`
-    // at build-time and POST here at runtime), so a second
-    // `register_font_directory` would be redundant.
-    if current.font_directories.contains(&req.path) {
-        drop(scope);
-        let view = build_config_view(&current, &admin);
-        return (StatusCode::OK, Json(view)).into_response();
+    // Library-level `register_font_directory` is unconditionally append
+    // (not a set), so dedup here so POST'ing the same path twice is a
+    // no-op rather than duplicating it in the registry.
+    if !vl_convert_rs::current_font_directories().contains(&req.path) {
+        let path_str = req.path.to_string_lossy();
+        if let Err(err) = vl_convert_rs::text::register_font_directory(&path_str) {
+            return simple_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                &format!("failed to register font directory: {err}"),
+                admin.opaque_errors,
+            );
+        }
     }
 
-    let path_str = req.path.to_string_lossy();
-    if let Err(err) = vl_convert_rs::text::register_font_directory(&path_str) {
-        drop(scope);
+    let dirs: Vec<String> = vl_convert_rs::current_font_directories()
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    (StatusCode::OK, Json(dirs)).into_response()
+}
+
+// =============================================================================
+// /admin/config/fonts/cache_size
+// =============================================================================
+//
+// Process-global Google Fonts LRU cache cap. Settable via
+// `vl_convert_rs::set_google_fonts_cache_size_mb` and not part of the
+// writable `VlcConfig` DTO. Same shape as the directories endpoints:
+// dedicated GET/PUT under `/admin/config/fonts/cache_size`,
+// serialized against `coordinator.lock()`, no gate close, no drain.
+
+/// GET — return the currently-active Google Fonts cache cap (MB).
+#[utoipa::path(
+    get,
+    path = "/admin/config/fonts/cache_size",
+    responses((
+        status = 200,
+        description = "{\"max_size_mb\": <number>} — the resolved cap"
+    )),
+    tag = "Admin",
+)]
+async fn get_font_cache_size(State(_admin): State<Arc<AdminState>>) -> Response {
+    let mb = vl_convert_rs::current_google_fonts_cache_size_mb().get();
+    (StatusCode::OK, Json(json!({ "max_size_mb": mb }))).into_response()
+}
+
+/// PUT — set the Google Fonts cache cap. `{"max_size_mb": null}` resets
+/// to the library default.
+#[utoipa::path(
+    put,
+    path = "/admin/config/fonts/cache_size",
+    responses(
+        (status = 200, description = "Cap updated; response is the new resolved cap"),
+        (status = 400, description = "Malformed body"),
+        (status = 503, description = "Library-level set_google_fonts_cache_size_mb failed"),
+    ),
+    tag = "Admin",
+)]
+async fn put_font_cache_size(
+    State(admin): State<Arc<AdminState>>,
+    body: Result<Json<crate::types::CacheSizeReplace>, JsonRejection>,
+) -> Response {
+    let Json(req) = match body {
+        Ok(b) => b,
+        Err(rej) => return json_rejection_response(rej, admin.opaque_errors),
+    };
+
+    let _lock = admin.coordinator.lock().await;
+    if let Err(err) = vl_convert_rs::set_google_fonts_cache_size_mb(req.max_size_mb) {
         return simple_error_response(
             StatusCode::SERVICE_UNAVAILABLE,
-            &format!("failed to register font directory: {err}"),
+            &format!("failed to set google_fonts_cache_size_mb: {err}"),
             admin.opaque_errors,
         );
     }
 
-    let mut new_dirs = current.font_directories.clone();
-    new_dirs.push(req.path.clone());
-
-    let new_snapshot = Arc::new(RuntimeSnapshot {
-        converter: current.converter.clone(),
-        config: current.config.clone(),
-        font_directories: new_dirs,
-        generation: current.generation,
-        config_version: current.config_version + 1,
-    });
-    admin.runtime.store(new_snapshot.clone());
-
-    drop(scope);
-    let view = build_config_view(&new_snapshot, &admin);
-    (StatusCode::OK, Json(view)).into_response()
+    let mb = vl_convert_rs::current_google_fonts_cache_size_mb().get();
+    (StatusCode::OK, Json(json!({ "max_size_mb": mb }))).into_response()
 }
 
 #[cfg(test)]
@@ -756,7 +682,6 @@ mod tests {
             converter: vl_convert_rs::converter::VlConverter::with_config(VlcConfig::default())
                 .expect("construct test VlConverter"),
             config: Arc::new(VlcConfig::default()),
-            font_directories: Vec::new(),
             generation: 0,
             config_version: 0,
         }));
@@ -778,7 +703,6 @@ mod tests {
         let admin_state = Arc::new(AdminState {
             runtime: runtime.clone(),
             baseline,
-            baseline_font_directories: Vec::new(),
             coordinator: coordinator.clone(),
             readiness: readiness.clone(),
             admin_api_key: None,

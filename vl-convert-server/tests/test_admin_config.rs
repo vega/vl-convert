@@ -97,6 +97,68 @@ async fn post_font_dir(server: &BudgetServer, body: Value) -> (reqwest::StatusCo
     (status, body)
 }
 
+async fn get_font_dirs(server: &BudgetServer) -> (reqwest::StatusCode, Value) {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(format!(
+            "{}/admin/config/fonts/directories",
+            server.admin_base_url
+        ))
+        .send()
+        .await
+        .expect("admin GET /admin/config/fonts/directories failed");
+    let status = resp.status();
+    let body = resp.json::<Value>().await.unwrap_or_else(|_| Value::Null);
+    (status, body)
+}
+
+async fn put_font_dirs(server: &BudgetServer, body: Value) -> (reqwest::StatusCode, Value) {
+    let client = reqwest::Client::new();
+    let resp = client
+        .put(format!(
+            "{}/admin/config/fonts/directories",
+            server.admin_base_url
+        ))
+        .json(&body)
+        .send()
+        .await
+        .expect("admin PUT /admin/config/fonts/directories failed");
+    let status = resp.status();
+    let body = resp.json::<Value>().await.unwrap_or_else(|_| Value::Null);
+    (status, body)
+}
+
+async fn get_font_cache_size(server: &BudgetServer) -> (reqwest::StatusCode, Value) {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(format!(
+            "{}/admin/config/fonts/cache_size",
+            server.admin_base_url
+        ))
+        .send()
+        .await
+        .expect("admin GET /admin/config/fonts/cache_size failed");
+    let status = resp.status();
+    let body = resp.json::<Value>().await.unwrap_or_else(|_| Value::Null);
+    (status, body)
+}
+
+async fn put_font_cache_size(server: &BudgetServer, body: Value) -> (reqwest::StatusCode, Value) {
+    let client = reqwest::Client::new();
+    let resp = client
+        .put(format!(
+            "{}/admin/config/fonts/cache_size",
+            server.admin_base_url
+        ))
+        .json(&body)
+        .send()
+        .await
+        .expect("admin PUT /admin/config/fonts/cache_size failed");
+    let status = resp.status();
+    let body = resp.json::<Value>().await.unwrap_or_else(|_| Value::Null);
+    (status, body)
+}
+
 // ---------- GET ----------
 
 #[tokio::test]
@@ -159,42 +221,18 @@ async fn test_admin_config_patch_default_theme_applies_and_rerenders() {
 
 #[tokio::test]
 async fn test_admin_config_patch_null_sets_option_fields_to_none() {
-    // Seed a server with default_theme and google_fonts_cache_size_mb set to
-    // known non-default values, then PATCH each to null and verify they
-    // clear. Design §2.5: null on an Option<T> field = Some(None) = clear.
+    // PATCH null on an Option<T> field clears it; null on a
+    // non-nullable field is a 400 (covered by the next test).
     let server = default_admin_server();
 
-    // Seed: set default_theme = "dark".
     let (s, _) = patch_config(&server, json!({"default_theme": "dark"})).await;
     assert_eq!(s, 200);
 
-    // Now null it.
     let (s, _) = patch_config(&server, json!({"default_theme": Value::Null})).await;
     assert_eq!(s, 200);
 
     let (_, body) = get_config(&server).await;
     assert!(body["effective"]["default_theme"].is_null());
-
-    // google_fonts_cache_size_mb — is an Option<NonZeroU64> and is the
-    // hot-apply field, so null goes through the hot-apply commit (no
-    // generation bump, config_version bumps). Start by setting to a value.
-    let (_, before) = get_config(&server).await;
-    let gen_before = before["generation"].as_u64().unwrap();
-    let cv_before = before["config_version"].as_u64().unwrap();
-
-    let (s, _) = patch_config(&server, json!({"google_fonts_cache_size_mb": 50})).await;
-    assert_eq!(s, 200);
-
-    // PATCH to null clears it.
-    let (s, _) = patch_config(&server, json!({"google_fonts_cache_size_mb": Value::Null})).await;
-    assert_eq!(s, 200);
-
-    let (_, after) = get_config(&server).await;
-    assert!(after["effective"]["google_fonts_cache_size_mb"].is_null());
-    // Hot-apply path — generation unchanged, config_version bumped twice
-    // (set then null).
-    assert_eq!(after["generation"], gen_before);
-    assert_eq!(after["config_version"], cv_before + 2);
 }
 
 #[tokio::test]
@@ -250,83 +288,40 @@ async fn test_admin_config_patch_invalid_value_422() {
     assert!(body.get("error").is_some() || body.get("field_errors").is_some());
 }
 
-// ---------- PATCH hot-apply ----------
-
 #[tokio::test]
-async fn test_admin_config_patch_google_fonts_cache_size_hot_apply() {
-    // Hot-apply path — generation unchanged, config_version + 1.
+async fn test_admin_config_patch_rejects_google_fonts_cache_size_mb() {
+    // `google_fonts_cache_size_mb` is no longer a writable VlcConfig
+    // field — it's process-global, mutated via
+    // `PUT /admin/config/fonts/cache_size`.
     let server = default_admin_server();
-
-    let (_, before) = get_config(&server).await;
-    let gen_before = before["generation"].as_u64().unwrap();
-    let cv_before = before["config_version"].as_u64().unwrap();
-
-    let (status, body) = patch_config(&server, json!({"google_fonts_cache_size_mb": 64})).await;
-    assert_eq!(status, 200, "body: {body:?}");
-
-    let (_, after) = get_config(&server).await;
-    assert_eq!(after["effective"]["google_fonts_cache_size_mb"], 64);
+    let (status, _) = patch_config(&server, json!({"google_fonts_cache_size_mb": 64})).await;
     assert_eq!(
-        after["generation"], gen_before,
-        "hot-apply must not bump generation"
+        status, 400,
+        "google_fonts_cache_size_mb is not a writable VlcConfig field; PATCH must 400"
     );
-    assert_eq!(after["config_version"], cv_before + 1);
 }
 
 #[tokio::test]
-async fn test_admin_config_patch_font_directories_replace_hot_apply() {
-    // Hot-apply, replace semantics. Create two real tempdirs, set
-    // font_directories to one, then to the other — the effective list must
-    // match exactly.
-    let tmp_a = tempfile::tempdir().unwrap();
-    let tmp_b = tempfile::tempdir().unwrap();
+async fn test_admin_config_patch_rejects_font_directories() {
+    // `font_directories` is no longer part of the writable `VlcConfig`
+    // DTO. PATCH /admin/config must reject it via deny_unknown_fields.
+    let tmp = tempfile::tempdir().unwrap();
     let server = default_admin_server();
 
-    let (_, before) = get_config(&server).await;
-    let gen_before = before["generation"].as_u64().unwrap();
-    let cv_before = before["config_version"].as_u64().unwrap();
-
-    let path_a = tmp_a.path().to_string_lossy().to_string();
-    let (status, _) = patch_config(&server, json!({"font_directories": [path_a.clone()]})).await;
-    assert_eq!(status, 200);
-
-    let (_, after1) = get_config(&server).await;
-    let dirs: Vec<String> = after1["effective"]["font_directories"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_string())
-        .collect();
-    assert_eq!(dirs, vec![path_a.clone()]);
-    assert_eq!(after1["generation"], gen_before, "hot-apply: no gen bump");
-    assert_eq!(after1["config_version"], cv_before + 1);
-
-    // Now replace with just path_b. Replace semantics: path_a must be gone.
-    let path_b = tmp_b.path().to_string_lossy().to_string();
-    let (status, _) = patch_config(&server, json!({"font_directories": [path_b.clone()]})).await;
-    assert_eq!(status, 200);
-
-    let (_, after2) = get_config(&server).await;
-    let dirs: Vec<String> = after2["effective"]["font_directories"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_string())
-        .collect();
-    // Exactly [path_b], nothing else (set_font_directories is authoritative).
+    let path = tmp.path().to_string_lossy().to_string();
+    let (status, _) = patch_config(&server, json!({"font_directories": [path]})).await;
     assert_eq!(
-        dirs,
-        vec![path_b],
-        "replace semantics: second PATCH must replace list"
+        status, 400,
+        "font_directories is not a writable VlcConfig field; PATCH must 400"
     );
-    assert_eq!(after2["generation"], gen_before);
-    assert_eq!(after2["config_version"], cv_before + 2);
 }
 
 // ---------- PUT full replacement ----------
 
 /// Helper — produce a JSON body that fully replaces every VlcConfig field
-/// with the library defaults. Matches ConfigReplace shape.
+/// with the library defaults (`VlcConfig::default()`). Used by identity-PUT
+/// tests where the body must match what `GET /admin/config` returns at
+/// startup against a server initialised with `VlcConfig::default()`.
 fn default_config_put_body() -> Value {
     json!({
         "num_workers": 1,
@@ -350,8 +345,6 @@ fn default_config_put_body() -> Value {
         "default_format_locale": Value::Null,
         "default_time_format_locale": Value::Null,
         "themes": {},
-        "google_fonts_cache_size_mb": Value::Null,
-        "font_directories": [],
     })
 }
 
@@ -506,8 +499,17 @@ async fn test_admin_config_generation_not_exposed_on_infoz() {
 
 // ---------- POST /admin/config/fonts/directories ----------
 
+fn dirs_from_get(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect()
+}
+
 #[tokio::test]
-async fn test_admin_config_font_dir_post_register_and_use() {
+async fn test_admin_config_font_dir_post_register_and_get() {
     let tmp = tempfile::tempdir().unwrap();
     let server = default_admin_server();
 
@@ -515,71 +517,132 @@ async fn test_admin_config_font_dir_post_register_and_use() {
     let (status, body) = post_font_dir(&server, json!({"path": path.clone()})).await;
     assert_eq!(status, 200, "body: {body:?}");
 
-    // GET shows the directory in effective.font_directories.
-    let (_, after) = get_config(&server).await;
-    let dirs: Vec<String> = after["effective"]["font_directories"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_string())
-        .collect();
+    let (_, listing) = get_font_dirs(&server).await;
     assert!(
-        dirs.contains(&path),
-        "posted font dir {path} not found in effective list: {dirs:?}"
+        dirs_from_get(&listing).contains(&path),
+        "posted font dir {path} not in GET listing: {listing:?}"
     );
-    // Hot-apply path (POST) — generation unchanged.
-    assert_eq!(after["generation"], 0);
 }
 
 #[tokio::test]
-async fn test_admin_config_font_dir_post_dedup() {
-    let tmp = tempfile::tempdir().unwrap();
+async fn test_admin_config_font_dir_put_replaces() {
+    // PUT replaces the global registry wholesale.
+    let tmp_a = tempfile::tempdir().unwrap();
+    let tmp_b = tempfile::tempdir().unwrap();
     let server = default_admin_server();
 
+    let path_a = tmp_a.path().to_string_lossy().to_string();
+    let path_b = tmp_b.path().to_string_lossy().to_string();
+
+    let (s, _) = put_font_dirs(&server, json!({"paths": [path_a.clone()]})).await;
+    assert_eq!(s, 200);
+    let (_, after1) = get_font_dirs(&server).await;
+    assert_eq!(dirs_from_get(&after1), vec![path_a.clone()]);
+
+    // Replace with just path_b. path_a must be gone.
+    let (s, _) = put_font_dirs(&server, json!({"paths": [path_b.clone()]})).await;
+    assert_eq!(s, 200);
+    let (_, after2) = get_font_dirs(&server).await;
+    assert_eq!(dirs_from_get(&after2), vec![path_b]);
+}
+
+#[tokio::test]
+async fn test_admin_config_font_dir_put_clears_with_empty_list() {
+    let tmp = tempfile::tempdir().unwrap();
+    let server = default_admin_server();
     let path = tmp.path().to_string_lossy().to_string();
-    // First POST.
+
+    let (s, _) = put_font_dirs(&server, json!({"paths": [path.clone()]})).await;
+    assert_eq!(s, 200);
+    let (_, after) = get_font_dirs(&server).await;
+    assert_eq!(dirs_from_get(&after), vec![path]);
+
+    let (s, _) = put_font_dirs(&server, json!({"paths": []})).await;
+    assert_eq!(s, 200);
+    let (_, cleared) = get_font_dirs(&server).await;
+    assert_eq!(dirs_from_get(&cleared), Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn test_admin_config_font_dir_post_idempotent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let server = default_admin_server();
+    let path = tmp.path().to_string_lossy().to_string();
+
     let (s, _) = post_font_dir(&server, json!({"path": path.clone()})).await;
     assert_eq!(s, 200);
+    let (_, listing_first) = get_font_dirs(&server).await;
+    let dirs_first = dirs_from_get(&listing_first);
 
-    let (_, after_first) = get_config(&server).await;
-    let cv_after_first = after_first["config_version"].as_u64().unwrap();
-    let dirs_first: Vec<String> = after_first["effective"]["font_directories"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_string())
-        .collect();
-
-    // Second POST of the same path — must still 200, no duplication.
+    // Second POST of the same path — registry idempotent.
     let (s, _) = post_font_dir(&server, json!({"path": path.clone()})).await;
-    assert_eq!(s, 200, "dedup POST must still 200");
+    assert_eq!(s, 200);
+    let (_, listing_second) = get_font_dirs(&server).await;
+    let dirs_second = dirs_from_get(&listing_second);
 
-    let (_, after_second) = get_config(&server).await;
-    let dirs_second: Vec<String> = after_second["effective"]["font_directories"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap().to_string())
-        .collect();
-    // The dedup short-circuit should leave config_version unchanged AND the
-    // directory list unchanged.
     assert_eq!(
         dirs_first, dirs_second,
-        "dedup POST must not duplicate dir in effective list"
-    );
-    assert_eq!(
-        after_second["config_version"].as_u64().unwrap(),
-        cv_after_first,
-        "dedup POST must not bump config_version"
+        "POST of an already-registered path must not duplicate"
     );
 }
 
 #[tokio::test]
 async fn test_admin_config_font_dir_nonexistent_400() {
     let server = default_admin_server();
-    let bogus = "/this/path/does/not/exist/vlc/task13";
+    let bogus = "/this/path/does/not/exist/vlc/font_directories";
     let (status, _) = post_font_dir(&server, json!({"path": bogus})).await;
-    assert_eq!(status, 400, "nonexistent font directory path must be 400");
+    assert_eq!(status, 400, "POST nonexistent must 400");
+    let (status, _) = put_font_dirs(&server, json!({"paths": [bogus]})).await;
+    assert_eq!(status, 400, "PUT containing nonexistent path must 400");
+}
+
+// ---------- /admin/config/fonts/cache_size ----------
+
+#[tokio::test]
+async fn test_admin_config_cache_size_get_returns_resolved_cap() {
+    let server = default_admin_server();
+    let (status, body) = get_font_cache_size(&server).await;
+    assert_eq!(status, 200);
+    let mb = body["max_size_mb"]
+        .as_u64()
+        .expect("max_size_mb is a number");
+    assert!(mb > 0, "resolved cap must be positive, got {mb}");
+}
+
+#[tokio::test]
+async fn test_admin_config_cache_size_put_sets_and_get_reflects() {
+    let server = default_admin_server();
+
+    let (status, body) = put_font_cache_size(&server, json!({"max_size_mb": 64})).await;
+    assert_eq!(status, 200);
+    assert_eq!(body["max_size_mb"], 64);
+
+    let (_, after) = get_font_cache_size(&server).await;
+    assert_eq!(after["max_size_mb"], 64);
+}
+
+#[tokio::test]
+async fn test_admin_config_cache_size_put_null_resets_to_default() {
+    let server = default_admin_server();
+
+    // Set to a small non-default value first.
+    let (s, _) = put_font_cache_size(&server, json!({"max_size_mb": 32})).await;
+    assert_eq!(s, 200);
+
+    // null resets.
+    let (status, body) = put_font_cache_size(&server, json!({"max_size_mb": null})).await;
+    assert_eq!(status, 200);
+    let resolved = body["max_size_mb"].as_u64().unwrap();
+    assert_ne!(resolved, 32, "null must reset away from explicit value");
+    assert!(resolved > 0);
+}
+
+#[tokio::test]
+async fn test_admin_config_cache_size_put_rejects_zero() {
+    // NonZeroU64 rejects 0 at parse time → 400.
+    let server = default_admin_server();
+    let (status, _) = put_font_cache_size(&server, json!({"max_size_mb": 0})).await;
+    assert_eq!(status, 400);
 }
 
 // ---------- Helper — opaque-errors server variant doesn't change core semantics ----------

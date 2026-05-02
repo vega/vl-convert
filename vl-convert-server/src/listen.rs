@@ -44,6 +44,26 @@ impl ListenAddr {
             port,
         }
     }
+
+    /// True when the bind target is locally-only — UDS (filesystem-permission
+    /// gated) or a TCP host that resolves to a loopback address. Used by
+    /// `validate_serve_config` to enforce the admin-without-key rule and
+    /// by `--ready-json` callers that want a quick "trust boundary" hint.
+    ///
+    /// The TCP arm parses `host` as an `IpAddr` and asks the OS view of
+    /// loopback status. Hostnames (e.g. `localhost`) deliberately read as
+    /// non-loopback because we cannot resolve them synchronously here
+    /// without a runtime; callers who want to trust a hostname should
+    /// pre-resolve to `127.0.0.1` / `::1` at the CLI/env layer.
+    pub fn is_loopback_or_uds(&self) -> bool {
+        match self {
+            Self::Tcp { host, .. } => host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback()),
+            #[cfg(unix)]
+            Self::Uds { .. } => true,
+        }
+    }
 }
 
 impl fmt::Display for ListenAddr {
@@ -116,5 +136,32 @@ mod tests {
             addr,
             ListenAddr::Tcp { ref host, port: 9000 } if host == "127.0.0.1"
         ));
+    }
+
+    #[test]
+    fn is_loopback_or_uds_tcp_table() {
+        // `localhost` is intentionally non-loopback — we cannot resolve
+        // hostnames synchronously here. Callers must pre-resolve.
+        for (host, expected) in [
+            ("127.0.0.1", true),
+            ("::1", true),
+            ("0.0.0.0", false),
+            ("localhost", false),
+        ] {
+            let addr = ListenAddr::Tcp {
+                host: host.to_string(),
+                port: 0,
+            };
+            assert_eq!(addr.is_loopback_or_uds(), expected, "host = {host:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn is_loopback_or_uds_treats_uds_as_local() {
+        let addr = ListenAddr::Uds {
+            path: PathBuf::from("/tmp/x.sock"),
+        };
+        assert!(addr.is_loopback_or_uds());
     }
 }

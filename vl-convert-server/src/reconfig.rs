@@ -86,11 +86,6 @@ impl ReconfigCoordinator {
         self.reconfig_lock.lock().await
     }
 
-    /// Read the coordinator's shutdown token (cheap `Clone`).
-    pub(crate) fn shutdown_token(&self) -> CancellationToken {
-        self.shutdown_token.clone()
-    }
-
     /// Close the admission gate. New requests hitting the gate middleware
     /// will be rejected with 503 until [`Self::open_gate`] fires.
     pub(crate) fn close_gate(&self) {
@@ -103,10 +98,12 @@ impl ReconfigCoordinator {
         self.gate_closed.store(false, Ordering::SeqCst);
     }
 
+    #[cfg(test)]
     pub(crate) fn is_gate_closed(&self) -> bool {
         self.gate_closed.load(Ordering::SeqCst)
     }
 
+    #[cfg(test)]
     pub(crate) fn inflight(&self) -> usize {
         self.inflight.load(Ordering::SeqCst)
     }
@@ -204,24 +201,14 @@ impl Drop for InflightGuard {
 ///
 /// 1. Reopens the admission gate (if the handler closed it).
 /// 2. Clears `readiness.reconfig_in_progress`.
-/// 3. Runs the rollback closure (if one is armed).
-///
-/// Rollback closures are armed by the handler *after* it mutates process-
-/// global state (e.g. `set_font_directories`, `apply_hot_font_cache`), and
-/// disarmed once the handler successfully commits a new snapshot. This
-/// guarantees that a mid-rebuild cancellation or warm-up failure always
-/// restores globals to their pre-reconfig values before the gate reopens.
 pub(crate) struct ReconfigScopeGuard<'a> {
     coord: &'a Arc<ReconfigCoordinator>,
     readiness: &'a Arc<ReadinessState>,
     /// Whether the guard should reopen the gate + clear readiness on drop.
     /// The handler sets this to `true` when it calls `close_gate()` (at
-    /// the start of the drain/rebuild path) and leaves it `false` on the
-    /// hot-apply / identity-patch paths that never closed the gate.
+    /// the start of the drain/rebuild path); identity short-circuits and
+    /// dedicated font-dir endpoints leave it `false`.
     gate_was_closed: bool,
-    /// Optional rollback closure. Armed after mutating globals and
-    /// disarmed (set to `None`) after a successful commit.
-    rollback: Option<Box<dyn FnOnce() + Send + 'a>>,
 }
 
 impl<'a> ReconfigScopeGuard<'a> {
@@ -234,7 +221,6 @@ impl<'a> ReconfigScopeGuard<'a> {
             coord,
             readiness,
             gate_was_closed: false,
-            rollback: None,
         }
     }
 
@@ -246,39 +232,10 @@ impl<'a> ReconfigScopeGuard<'a> {
             .reconfig_in_progress
             .store(true, Ordering::Release);
     }
-
-    /// Arm the rollback closure. Fires on drop unless `disarm_rollback`
-    /// clears it first. Use after mutating process-global state that a
-    /// subsequent `with_config` / `warm_up` failure would strand.
-    pub(crate) fn arm_rollback<F>(&mut self, rollback: F)
-    where
-        F: FnOnce() + Send + 'a,
-    {
-        self.rollback = Some(Box::new(rollback));
-    }
-
-    /// Clear the rollback closure. Call once the commit has succeeded.
-    pub(crate) fn disarm_rollback(&mut self) {
-        self.rollback = None;
-    }
 }
 
 impl<'a> Drop for ReconfigScopeGuard<'a> {
     fn drop(&mut self) {
-        // CRITICAL ORDERING: fire the rollback BEFORE reopening the gate or
-        // clearing `reconfig_in_progress`. If we reopened the gate first,
-        // a request admitted in the window between `open_gate` and the
-        // rollback closure firing would observe the pre-rollback
-        // process-globals (a failed `with_config` that mutated
-        // `FONT_CONFIG` / Google Fonts cache) combined with the still-old
-        // `RuntimeSnapshot` — effectively serving traffic against a config
-        // that was never committed. Running rollback first guarantees:
-        // when the gate reopens, globals are either committed (success
-        // path, rollback disarmed) or restored (failure path, rollback
-        // fired).
-        if let Some(rollback) = self.rollback.take() {
-            rollback();
-        }
         if self.gate_was_closed {
             self.coord.open_gate();
             self.readiness
@@ -343,9 +300,6 @@ pub(crate) fn apply_patch(
     }
     if let Some(v) = patch.default_time_format_locale.as_ref() {
         new.default_time_format_locale = v.clone();
-    }
-    if let Some(v) = patch.google_fonts_cache_size_mb.as_ref() {
-        new.google_fonts_cache_size_mb = *v;
     }
 
     // Non-optional VlcConfig fields. Outer Option distinguishes
@@ -419,10 +373,6 @@ pub(crate) fn apply_patch(
     >| {
         n.themes = v.clone();
     });
-    // Note: `font_directories` is no longer a `VlcConfig` field
-    // (PR #274). The patch DTO still carries it, but the admin handler
-    // routes it directly through `set_font_directories` +
-    // `RuntimeSnapshot.font_directories` rather than via this function.
 
     if !null_fields.is_empty() {
         return Err(PatchRejection::NonNullable(ConfigValidationError {
@@ -432,31 +382,6 @@ pub(crate) fn apply_patch(
     }
 
     Ok(new)
-}
-
-/// Decide whether the new config can be committed via the hot-apply path
-/// (swap snapshot, call `apply_hot_font_cache`) or requires the full
-/// drain + rebuild pipeline.
-///
-/// Returns `false` iff the *only* fields that differ between `cur` and
-/// `new` are hot-applyable — currently only `google_fonts_cache_size_mb`.
-/// (Font directories are now hot-applied via the snapshot's
-/// `font_directories` field rather than `VlcConfig`, so they don't
-/// participate in this projection.) Any other field difference requires
-/// a rebuild because its value is baked into worker state (V8 flags,
-/// plugin modules, resolved locales, etc.).
-pub(crate) fn requires_rebuild(cur: &VlcConfig, new: &VlcConfig) -> bool {
-    if cur == new {
-        return false;
-    }
-    // Project both configs to "all fields except the hot-apply ones" and
-    // compare. If those projections agree, every actual difference must be
-    // on a hot-apply field, so no rebuild is needed.
-    let mut cur_for_compare = cur.clone();
-    let mut new_for_compare = new.clone();
-    cur_for_compare.google_fonts_cache_size_mb = None;
-    new_for_compare.google_fonts_cache_size_mb = None;
-    cur_for_compare != new_for_compare
 }
 
 #[cfg(test)]
@@ -599,9 +524,8 @@ mod tests {
         assert_eq!(coord.inflight(), 0);
     }
 
-    // --- apply_patch / requires_rebuild ---------------------------------
+    // --- apply_patch -----------------------------------------------------
 
-    use std::num::NonZeroU64;
     use vl_convert_rs::converter::MissingFontsPolicy;
 
     #[test]
@@ -660,67 +584,6 @@ mod tests {
         };
         let new = apply_patch(&cur, &patch).unwrap();
         assert_eq!(new.missing_fonts, MissingFontsPolicy::Warn);
-    }
-
-    // Note: `apply_patch_font_directories_replaces` and the "font_directories
-    // is hot-applyable" tests were removed when `font_directories` left
-    // `VlcConfig` (PR #274). The wire-level contract is now exercised by
-    // `tests/test_admin_config.rs` (which still PATCHes `font_directories`
-    // and asserts hot-apply via the live admin handler).
-
-    #[test]
-    fn requires_rebuild_identity_is_false() {
-        let cur = VlcConfig::default();
-        let new = cur.clone();
-        assert!(!requires_rebuild(&cur, &new));
-    }
-
-    #[test]
-    fn requires_rebuild_cache_size_only_is_false() {
-        let cur = VlcConfig::default();
-        let mut new = cur.clone();
-        new.google_fonts_cache_size_mb = NonZeroU64::new(128);
-        assert!(!requires_rebuild(&cur, &new));
-    }
-
-    #[test]
-    fn requires_rebuild_non_hot_apply_field_is_true() {
-        let cur = VlcConfig::default();
-        let mut new = cur.clone();
-        new.default_theme = Some("dark".to_string());
-        assert!(requires_rebuild(&cur, &new));
-    }
-
-    #[test]
-    fn requires_rebuild_mix_hot_and_non_hot_is_true() {
-        let cur = VlcConfig::default();
-        let mut new = cur.clone();
-        new.google_fonts_cache_size_mb = NonZeroU64::new(256);
-        new.auto_google_fonts = !cur.auto_google_fonts;
-        assert!(requires_rebuild(&cur, &new));
-    }
-
-    #[test]
-    fn apply_patch_hot_apply_field_then_requires_rebuild_false() {
-        let cur = VlcConfig::default();
-        let patch = ConfigPatch {
-            google_fonts_cache_size_mb: Some(NonZeroU64::new(64)),
-            ..Default::default()
-        };
-        let new = apply_patch(&cur, &patch).unwrap();
-        assert!(!requires_rebuild(&cur, &new));
-        assert_eq!(new.google_fonts_cache_size_mb, NonZeroU64::new(64));
-    }
-
-    #[test]
-    fn apply_patch_non_hot_apply_field_then_requires_rebuild_true() {
-        let cur = VlcConfig::default();
-        let patch = ConfigPatch {
-            subset_fonts: Some(Some(!cur.subset_fonts)),
-            ..Default::default()
-        };
-        let new = apply_patch(&cur, &patch).unwrap();
-        assert!(requires_rebuild(&cur, &new));
     }
 
     #[test]

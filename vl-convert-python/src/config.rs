@@ -34,85 +34,6 @@ pub fn converter_config() -> Result<VlcConfig, vl_convert_rs::anyhow::Error> {
         .map(|guard| guard.config())
 }
 
-pub fn converter_config_json(config: &VlcConfig) -> serde_json::Value {
-    let base_url_value = match &config.base_url {
-        BaseUrlSetting::Default => serde_json::Value::Bool(true),
-        BaseUrlSetting::Disabled => serde_json::Value::Bool(false),
-        BaseUrlSetting::Custom(url) => serde_json::Value::String(url.clone()),
-    };
-    let google_fonts_value: Vec<serde_json::Value> = config
-        .google_fonts
-        .iter()
-        .map(|req| {
-            let mut entry = serde_json::Map::new();
-            entry.insert(
-                "family".to_string(),
-                serde_json::Value::String(req.family.clone()),
-            );
-            if let Some(variants) = req.variants.as_ref() {
-                let variants_value: Vec<serde_json::Value> = variants
-                    .iter()
-                    .map(|v| {
-                        serde_json::json!({
-                            "weight": v.weight,
-                            "style": v.style.as_str(),
-                        })
-                    })
-                    .collect();
-                entry.insert(
-                    "variants".to_string(),
-                    serde_json::Value::Array(variants_value),
-                );
-            }
-            serde_json::Value::Object(entry)
-        })
-        .collect();
-    // Font directories are process-global, not per-config. Read from the
-    // library's current registry so `get_config()` reports what's actually
-    // active.
-    let font_directories_value: Vec<serde_json::Value> = vl_convert_rs::current_font_directories()
-        .into_iter()
-        .map(|p| serde_json::Value::String(p.to_string_lossy().into_owned()))
-        .collect();
-    serde_json::json!({
-        "num_workers": config.num_workers.get(),
-        "base_url": base_url_value,
-        "allowed_base_urls": config.allowed_base_urls,
-        "auto_google_fonts": config.auto_google_fonts,
-        "embed_local_fonts": config.embed_local_fonts,
-        "subset_fonts": config.subset_fonts,
-        "missing_fonts": match config.missing_fonts {
-            MissingFontsPolicy::Fallback => "fallback",
-            MissingFontsPolicy::Warn => "warn",
-            MissingFontsPolicy::Error => "error",
-        },
-        "google_fonts": google_fonts_value,
-        "google_fonts_cache_dir": vl_convert_rs::google_fonts_cache_dir()
-            .map(|p| p.to_string_lossy().into_owned()),
-        "google_fonts_cache_size_mb": config.google_fonts_cache_size_mb.map(|n| n.get()),
-        "max_v8_heap_size_mb": config.max_v8_heap_size_mb.map(|n| n.get()),
-        "max_v8_execution_time_secs": config.max_v8_execution_time_secs.map(|n| n.get()),
-        "gc_after_conversion": config.gc_after_conversion,
-        "vega_plugins": config.vega_plugins,
-        "plugin_import_domains": config.plugin_import_domains,
-        "allow_per_request_plugins": config.allow_per_request_plugins,
-        "max_ephemeral_workers": config.max_ephemeral_workers.map(|n| n.get()),
-        "allow_google_fonts": config.allow_google_fonts,
-        "per_request_plugin_import_domains": config.per_request_plugin_import_domains,
-        "default_theme": config.default_theme,
-        "default_format_locale": config.default_format_locale.as_ref().map(|l| match l {
-            FormatLocale::Name(n) => serde_json::Value::String(n.clone()),
-            FormatLocale::Object(o) => serde_json::to_value(o).unwrap_or(serde_json::Value::Null),
-        }),
-        "default_time_format_locale": config.default_time_format_locale.as_ref().map(|l| match l {
-            TimeFormatLocale::Name(n) => serde_json::Value::String(n.clone()),
-            TimeFormatLocale::Object(o) => serde_json::to_value(o).unwrap_or(serde_json::Value::Null),
-        }),
-        "themes": config.themes,
-        "font_directories": font_directories_value,
-    })
-}
-
 /// Per-field overrides collected from `configure()` kwargs. A `Some(_)` entry
 /// means "the caller passed this kwarg; apply this value"; `None` means "the
 /// kwarg was absent; leave the field alone." Passing `None` as the Python
@@ -122,7 +43,6 @@ pub struct ConverterConfigOverrides {
     pub num_workers: Option<NonZeroU64>,
     pub base_url: Option<BaseUrlSetting>,
     pub allowed_base_urls: Option<Vec<String>>,
-    pub google_fonts_cache_size_mb: Option<Option<NonZeroU64>>,
     pub auto_google_fonts: Option<bool>,
     pub embed_local_fonts: Option<bool>,
     pub subset_fonts: Option<bool>,
@@ -210,14 +130,6 @@ pub fn parse_config_overrides(
                                 "Invalid allowed_base_urls value for configure: {err}"
                             )
                         })?);
-                }
-            }
-            "google_fonts_cache_size_mb" => {
-                if value.is_none() {
-                    overrides.google_fonts_cache_size_mb = Some(default.google_fonts_cache_size_mb);
-                } else {
-                    let n = extract_positive_u64("google_fonts_cache_size_mb", &value)?;
-                    overrides.google_fonts_cache_size_mb = Some(Some(n));
                 }
             }
             "auto_google_fonts" => {
@@ -450,13 +362,6 @@ pub fn parse_config_overrides(
                     overrides.themes = Some(themes_map);
                 }
             }
-            // Read-only config fields returned by get_config() are
-            // silently ignored so that `configure(**get_config())` works.
-            // `font_directories` is also read-only here: use
-            // `vlc.register_font_directory(path)` (append) or pass an
-            // explicit list via that helper. It's process-global state, not
-            // a VlcConfig field.
-            "google_fonts_cache_dir" | "font_directories" => {}
             other => {
                 return Err(vl_convert_rs::anyhow::anyhow!(
                     "Unknown configure argument: {other}"
@@ -480,9 +385,6 @@ pub fn apply_config_overrides(
     }
     if let Some(allowed_base_urls) = overrides.allowed_base_urls {
         config.allowed_base_urls = allowed_base_urls;
-    }
-    if let Some(google_fonts_cache_size_mb) = overrides.google_fonts_cache_size_mb {
-        config.google_fonts_cache_size_mb = google_fonts_cache_size_mb;
     }
     if let Some(auto_google_fonts) = overrides.auto_google_fonts {
         config.auto_google_fonts = auto_google_fonts;
@@ -550,8 +452,13 @@ pub fn configure_converter_with_config_overrides(
 
     let mut config = guard.config();
     apply_config_overrides(&mut config, overrides)?;
-    let converter = VlConverterRs::with_config(config)?;
-    *guard = Arc::new(converter);
+    // `reconfigure` short-circuits on identity, hot-applies for
+    // cache-size-only changes, and otherwise builds a fresh
+    // converter. Cloning the inner `Arc<VlConverter>` is cheap;
+    // the existing `Arc<VlConverter>` we hold keeps the old worker
+    // pool alive for any in-progress conversions on other threads.
+    let new_converter = (**guard).clone().reconfigure(config)?;
+    *guard = Arc::new(new_converter);
     Ok(())
 }
 
@@ -596,10 +503,6 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
 ///     ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
 ///     the library default (``["http:", "https:"]``); ``[]`` blocks all
 ///     network data.
-/// google_fonts_cache_size_mb : int, optional
-///     Maximum Google Fonts on-disk LRU cache size in megabytes. Must be >= 1
-///     if provided. ``None`` resets to the library default. Passing ``0``
-///     raises ``ValueError``.
 /// auto_google_fonts : bool, optional
 ///     Automatically download missing fonts from Google Fonts.
 ///     ``None`` resets to the library default (``False``).
@@ -717,7 +620,7 @@ pub fn get_config() -> PyResult<PyObject> {
     let config = converter_config()
         .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
     Python::with_gil(|py| {
-        pythonize(py, &converter_config_json(&config))
+        pythonize(py, &config)
             .map_err(|err| PyValueError::new_err(err.to_string()))
             .map(|obj| obj.into())
     })
@@ -767,7 +670,7 @@ pub fn get_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
             .map_err(|err| prefixed_py_error("Failed to read converter config", err))?
             .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
         Python::with_gil(|py| {
-            pythonize(py, &converter_config_json(&config))
+            pythonize(py, &config)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
         })

@@ -59,6 +59,11 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     asyncio.add_function(wrap_pyfunction!(svg_to_pdf_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(register_font_directory_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(set_font_directories_asyncio, &asyncio)?)?;
+    // Synchronous re-exports — process-global reads / setters, no async work.
+    asyncio.add_function(wrap_pyfunction!(current_font_directories, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(google_fonts_cache_dir, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(google_fonts_cache_size_mb, &asyncio)?)?;
+    asyncio.add_function(wrap_pyfunction!(set_google_fonts_cache_size_mb, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(configure_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(load_config_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(get_config_asyncio, &asyncio)?)?;
@@ -108,6 +113,10 @@ fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(svg_to_pdf, m)?)?;
     m.add_function(wrap_pyfunction!(register_font_directory, m)?)?;
     m.add_function(wrap_pyfunction!(set_font_directories, m)?)?;
+    m.add_function(wrap_pyfunction!(current_font_directories, m)?)?;
+    m.add_function(wrap_pyfunction!(google_fonts_cache_dir, m)?)?;
+    m.add_function(wrap_pyfunction!(google_fonts_cache_size_mb, m)?)?;
+    m.add_function(wrap_pyfunction!(set_google_fonts_cache_size_mb, m)?)?;
     m.add_function(wrap_pyfunction!(configure, m)?)?;
     m.add_function(wrap_pyfunction!(load_config, m)?)?;
     m.add_function(wrap_pyfunction!(get_config_path, m)?)?;

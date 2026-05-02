@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::num::NonZeroU64;
-use std::path::PathBuf;
 use utoipa::ToSchema;
 use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, MissingFontsPolicy, TimeFormatLocale,
@@ -37,10 +36,10 @@ pub(crate) mod double_option {
     }
 }
 
-/// Wire-shape adapter for `BaseUrlSetting`: accepts the `bool | string` form
-/// that `VlcConfigView` emits (`true` → `Default`, `false` → `Disabled`,
-/// any string → `Custom(s)`) so `GET /admin/config` round-trips losslessly
-/// through `PUT` / `PATCH`.
+/// Wire-shape adapter for `BaseUrlSetting`: accepts the `bool | string`
+/// form `VlcConfig::Serialize` emits (`true` → `Default`, `false` →
+/// `Disabled`, any string → `Custom(s)`) so `GET /admin/config`
+/// round-trips losslessly through `PUT` / `PATCH`.
 ///
 /// Strings are **always** mapped to `BaseUrlSetting::Custom(s)` — we do NOT
 /// reinterpret `"default"` / `"disabled"` as enum shorthands even though
@@ -383,20 +382,15 @@ pub struct ErrorResponse {
 }
 
 // =============================================================================
-// Admin /config DTOs (Task 7 — admin-config-parity plan)
+// Admin /config DTOs
 // =============================================================================
 //
-// Tri-state semantics (design §2.5): for each patch field, the outer `Option`
+// Tri-state semantics: for each patch field, the outer `Option`
 // distinguishes "absent in the JSON body" (`None`) from "present with value"
 // (`Some(_)`). The inner `Option` (when present on VlcConfig fields whose
 // type is `Option<T>`) maps a JSON `null` to `Some(None)`. Non-optional
 // VlcConfig fields use a single-layer `Option<T>`: null-on-non-nullable is
 // rejected at serde parse time (400) and absence means "preserve current".
-//
-// Utoipa `ToSchema` derives are intentionally deferred to Task 13b — the
-// `Option<Option<T>>` pattern through the `double_option` helper does not
-// compose cleanly with `ToSchema` today. The admin-config surface's OpenAPI
-// documentation lands as a follower task.
 
 /// PATCH /admin/config body: a partial update where every field is optional.
 ///
@@ -413,10 +407,10 @@ pub struct ErrorResponse {
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ConfigPatch {
-    // `Option<Option<T>>` is a serde-layer tri-state (absent / null / value);
-    // utoipa collapses it to `Option<T>` in the published schema. The
-    // absent-vs-null distinction is documented in CLAUDE.md and enforced
-    // by the server at parse time.
+    // `Option<Option<T>>` is a serde-layer tri-state (absent / null / value)
+    // wired up via `double_option::deserialize`; utoipa collapses it to
+    // `Option<T>` in the published schema. Absent → preserve current,
+    // null → clear (or 400 for non-nullable fields), value → set.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable)]
     pub num_workers: Option<Option<NonZeroU64>>,
@@ -480,12 +474,6 @@ pub(crate) struct ConfigPatch {
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<Object>, nullable)]
     pub themes: Option<Option<HashMap<String, serde_json::Value>>>,
-    #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<u64>, nullable)]
-    pub google_fonts_cache_size_mb: Option<Option<NonZeroU64>>,
-    #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<Vec<String>>, nullable)]
-    pub font_directories: Option<Option<Vec<PathBuf>>>,
 }
 
 /// PUT /admin/config body: full replacement. Every VlcConfig field must be
@@ -532,19 +520,10 @@ pub(crate) struct ConfigReplace {
     pub default_time_format_locale: Option<TimeFormatLocale>,
     #[schema(value_type = Object)]
     pub themes: HashMap<String, serde_json::Value>,
-    #[schema(value_type = Option<u64>, nullable)]
-    pub google_fonts_cache_size_mb: Option<NonZeroU64>,
-    #[schema(value_type = Vec<String>)]
-    pub font_directories: Vec<PathBuf>,
 }
 
 impl From<ConfigReplace> for VlcConfig {
     fn from(r: ConfigReplace) -> Self {
-        // Note: `font_directories` lives on `RuntimeSnapshot.font_directories`
-        // (not on `VlcConfig` post-PR-#274). The PUT handler reads
-        // `r.font_directories` separately and threads it through to
-        // `set_font_directories` + the snapshot's font-dir field; the
-        // wire-level DTO field stays public.
         VlcConfig {
             num_workers: r.num_workers,
             base_url: r.base_url,
@@ -567,7 +546,6 @@ impl From<ConfigReplace> for VlcConfig {
             default_format_locale: r.default_format_locale,
             default_time_format_locale: r.default_time_format_locale,
             themes: r.themes,
-            google_fonts_cache_size_mb: r.google_fonts_cache_size_mb,
         }
     }
 }
@@ -575,15 +553,15 @@ impl From<ConfigReplace> for VlcConfig {
 /// Successful GET / PATCH / PUT / DELETE response body for `/admin/config`.
 #[derive(Debug, Serialize)]
 pub(crate) struct ConfigView {
-    pub baseline: VlcConfigView,
-    pub effective: VlcConfigView,
+    pub baseline: VlcConfig,
+    pub effective: VlcConfig,
     pub generation: u64,
     pub config_version: u64,
 }
 
 /// Request body for `POST /admin/config/fonts/directories`. Single-path
-/// append — callers wanting replace-semantics use `PATCH /admin/config`
-/// with the `font_directories` field.
+/// append — callers wanting replace-semantics use
+/// `PUT /admin/config/fonts/directories` with the full list.
 #[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct FontDirRequest {
@@ -592,147 +570,25 @@ pub(crate) struct FontDirRequest {
     pub path: std::path::PathBuf,
 }
 
-/// `VlcConfig` projected as the JSON shape produced by the Python binding's
-/// `get_config()` helper (`vl-convert-python/src/config.rs::converter_config_json`).
-/// Kept byte-equivalent so server and Python callers see the same shape.
-///
-/// Not derived from `VlcConfig::Serialize` because the library type does not
-/// implement `Serialize` (and `FormatLocale` / `TimeFormatLocale` / `BaseUrlSetting`
-/// serialize to different shapes than the library's `Deserialize` path accepts).
-#[derive(Debug)]
-pub(crate) struct VlcConfigView {
-    pub config: VlcConfig,
-    /// Server-side font-dir mirror (lives on `RuntimeSnapshot.font_directories`
-    /// post-PR-#274). Threaded through the view so the JSON response
-    /// continues to expose `font_directories` even though the field is
-    /// no longer on `VlcConfig`.
-    pub font_directories: Vec<PathBuf>,
+/// Request body for `PUT /admin/config/fonts/directories`. Replaces
+/// the global registry wholesale; pass `[]` to clear. Equivalent to
+/// `vl_convert_rs::set_font_directories(...)` at the library layer.
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
+pub(crate) struct FontDirReplace {
+    /// Absolute filesystem paths to register, in order.
+    #[schema(value_type = Vec<String>)]
+    pub paths: Vec<std::path::PathBuf>,
 }
 
-impl Serialize for VlcConfigView {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeMap;
-        let cfg = &self.config;
-        let mut map = serializer.serialize_map(Some(23))?;
-
-        map.serialize_entry("num_workers", &cfg.num_workers.get())?;
-        // Matches Python get_config(): Default → true, Disabled → false,
-        // Custom(s) → s.
-        let base_url_value: serde_json::Value = match &cfg.base_url {
-            BaseUrlSetting::Default => serde_json::Value::Bool(true),
-            BaseUrlSetting::Disabled => serde_json::Value::Bool(false),
-            BaseUrlSetting::Custom(s) => serde_json::Value::String(s.clone()),
-        };
-        map.serialize_entry("base_url", &base_url_value)?;
-        map.serialize_entry("allowed_base_urls", &cfg.allowed_base_urls)?;
-        map.serialize_entry("auto_google_fonts", &cfg.auto_google_fonts)?;
-        map.serialize_entry("embed_local_fonts", &cfg.embed_local_fonts)?;
-        map.serialize_entry("subset_fonts", &cfg.subset_fonts)?;
-        let missing_fonts_str = match cfg.missing_fonts {
-            MissingFontsPolicy::Fallback => "fallback",
-            MissingFontsPolicy::Warn => "warn",
-            MissingFontsPolicy::Error => "error",
-        };
-        map.serialize_entry("missing_fonts", missing_fonts_str)?;
-
-        // GoogleFontRequest/VariantRequest don't implement Serialize on the
-        // library side in a JSON-equivalent shape; reproduce the Python
-        // projection manually.
-        let google_fonts_value: Vec<serde_json::Value> = cfg
-            .google_fonts
-            .iter()
-            .map(|req| {
-                let mut entry = serde_json::Map::new();
-                entry.insert(
-                    "family".to_string(),
-                    serde_json::Value::String(req.family.clone()),
-                );
-                if let Some(variants) = req.variants.as_ref() {
-                    let variants_value: Vec<serde_json::Value> = variants
-                        .iter()
-                        .map(|v| {
-                            serde_json::json!({
-                                "weight": v.weight,
-                                "style": v.style.as_str(),
-                            })
-                        })
-                        .collect();
-                    entry.insert(
-                        "variants".to_string(),
-                        serde_json::Value::Array(variants_value),
-                    );
-                }
-                serde_json::Value::Object(entry)
-            })
-            .collect();
-        map.serialize_entry("google_fonts", &google_fonts_value)?;
-
-        // Matches Python's `converter_config_json`: an optional absolute path
-        // to the on-disk Google Fonts cache directory. `None` when the
-        // cache is uninitialized / unavailable (e.g. the process has no
-        // writable cache directory available).
-        let google_fonts_cache_dir_value: Option<String> =
-            vl_convert_rs::google_fonts_cache_dir().map(|p| p.to_string_lossy().into_owned());
-        map.serialize_entry("google_fonts_cache_dir", &google_fonts_cache_dir_value)?;
-
-        map.serialize_entry(
-            "google_fonts_cache_size_mb",
-            &cfg.google_fonts_cache_size_mb.map(|n| n.get()),
-        )?;
-        map.serialize_entry(
-            "max_v8_heap_size_mb",
-            &cfg.max_v8_heap_size_mb.map(|n| n.get()),
-        )?;
-        map.serialize_entry(
-            "max_v8_execution_time_secs",
-            &cfg.max_v8_execution_time_secs.map(|n| n.get()),
-        )?;
-        map.serialize_entry("gc_after_conversion", &cfg.gc_after_conversion)?;
-        map.serialize_entry("vega_plugins", &cfg.vega_plugins)?;
-        map.serialize_entry("plugin_import_domains", &cfg.plugin_import_domains)?;
-        map.serialize_entry("allow_per_request_plugins", &cfg.allow_per_request_plugins)?;
-        map.serialize_entry(
-            "max_ephemeral_workers",
-            &cfg.max_ephemeral_workers.map(|n| n.get()),
-        )?;
-        map.serialize_entry("allow_google_fonts", &cfg.allow_google_fonts)?;
-        map.serialize_entry(
-            "per_request_plugin_import_domains",
-            &cfg.per_request_plugin_import_domains,
-        )?;
-        map.serialize_entry("default_theme", &cfg.default_theme)?;
-
-        let default_format_locale_value: Option<serde_json::Value> =
-            cfg.default_format_locale.as_ref().map(|l| match l {
-                FormatLocale::Name(n) => serde_json::Value::String(n.clone()),
-                FormatLocale::Object(o) => o.clone(),
-            });
-        map.serialize_entry("default_format_locale", &default_format_locale_value)?;
-
-        let default_time_format_locale_value: Option<serde_json::Value> =
-            cfg.default_time_format_locale.as_ref().map(|l| match l {
-                TimeFormatLocale::Name(n) => serde_json::Value::String(n.clone()),
-                TimeFormatLocale::Object(o) => o.clone(),
-            });
-        map.serialize_entry(
-            "default_time_format_locale",
-            &default_time_format_locale_value,
-        )?;
-
-        map.serialize_entry("themes", &cfg.themes)?;
-
-        let font_directories_value: Vec<String> = self
-            .font_directories
-            .iter()
-            .map(|p| p.to_string_lossy().into_owned())
-            .collect();
-        map.serialize_entry("font_directories", &font_directories_value)?;
-
-        map.end()
-    }
+/// Request body for `PUT /admin/config/fonts/cache_size`. `null` resets
+/// to the library default. Equivalent to
+/// `vl_convert_rs::set_google_fonts_cache_size_mb(...)` at the library
+/// layer.
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
+pub(crate) struct CacheSizeReplace {
+    /// Cache cap in megabytes. `null` → library default.
+    #[schema(value_type = Option<u64>, nullable)]
+    pub max_size_mb: Option<NonZeroU64>,
 }
 
 /// Error code for a single field-level validation failure. Static slice so
@@ -858,21 +714,21 @@ mod tests {
         );
     }
 
-    #[test]
-    fn config_replace_round_trips_default_get_shape() {
-        // Simulate a payload that a client would obtain by GET'ing
-        // /admin/config (where `base_url` serializes as `true`) and then
-        // immediately PUT'ing back. Must succeed.
-        let body = serde_json::json!({
-            "num_workers": 2,
+    /// Build a complete `ConfigReplace` body, optionally overriding /
+    /// adding fields. Accepts the GET-shape that `VlcConfigView`
+    /// emits, so tests for round-trips and acceptance of read-only
+    /// extras can express only the field(s) they care about.
+    fn put_body(extra: &[(&str, serde_json::Value)]) -> serde_json::Value {
+        let mut body = serde_json::json!({
+            "num_workers": 1,
             "base_url": true,
-            "allowed_base_urls": [],
-            "auto_google_fonts": true,
-            "embed_local_fonts": true,
+            "allowed_base_urls": ["http:", "https:"],
+            "auto_google_fonts": false,
+            "embed_local_fonts": false,
             "subset_fonts": true,
-            "missing_fonts": "warn",
+            "missing_fonts": "fallback",
             "google_fonts": [],
-            "max_v8_heap_size_mb": 512,
+            "max_v8_heap_size_mb": null,
             "max_v8_execution_time_secs": null,
             "gc_after_conversion": false,
             "vega_plugins": [],
@@ -885,68 +741,130 @@ mod tests {
             "default_format_locale": null,
             "default_time_format_locale": null,
             "themes": {},
-            "google_fonts_cache_size_mb": null,
-            "font_directories": []
         });
-        let replace: ConfigReplace = serde_json::from_value(body)
-            .expect("base_url: true must round-trip through ConfigReplace");
-        assert_eq!(replace.base_url, BaseUrlSetting::Default);
+        let obj = body.as_object_mut().unwrap();
+        for (k, v) in extra {
+            obj.insert((*k).to_string(), v.clone());
+        }
+        body
     }
 
     #[test]
-    fn config_replace_round_trips_disabled_get_shape() {
-        let body = serde_json::json!({
-            "num_workers": 2,
-            "base_url": false,
-            "allowed_base_urls": [],
-            "auto_google_fonts": true,
-            "embed_local_fonts": true,
-            "subset_fonts": true,
-            "missing_fonts": "warn",
-            "google_fonts": [],
-            "max_v8_heap_size_mb": 512,
-            "max_v8_execution_time_secs": null,
-            "gc_after_conversion": false,
-            "vega_plugins": [],
-            "plugin_import_domains": [],
-            "allow_per_request_plugins": false,
-            "max_ephemeral_workers": 2,
-            "allow_google_fonts": false,
-            "per_request_plugin_import_domains": [],
-            "default_theme": null,
-            "default_format_locale": null,
-            "default_time_format_locale": null,
-            "themes": {},
-            "google_fonts_cache_size_mb": null,
-            "font_directories": []
-        });
-        let replace: ConfigReplace = serde_json::from_value(body).expect("parse");
-        assert_eq!(replace.base_url, BaseUrlSetting::Disabled);
+    fn config_replace_round_trips_base_url_view_shapes() {
+        // `VlcConfigView` emits `base_url: true | false` for the
+        // Default / Disabled enum variants; PUT must accept both.
+        let cases = [
+            (serde_json::Value::Bool(true), BaseUrlSetting::Default),
+            (serde_json::Value::Bool(false), BaseUrlSetting::Disabled),
+        ];
+        for (json_value, expected) in cases {
+            let body = put_body(&[("base_url", json_value.clone())]);
+            let replace: ConfigReplace = serde_json::from_value(body)
+                .unwrap_or_else(|e| panic!("base_url={json_value} must parse: {e}"));
+            assert_eq!(replace.base_url, expected);
+        }
     }
 
     #[test]
-    fn vlc_config_view_emits_google_fonts_cache_dir_key() {
-        // Byte-equivalence with Python's `converter_config_json` requires
-        // the `google_fonts_cache_dir` key to be present on every GET
-        // response. Value may be string-or-null depending on the
-        // library's cache-dir resolver, but the KEY must exist.
-        let view = VlcConfigView {
-            config: VlcConfig::default(),
-            font_directories: Vec::new(),
-        };
-        let value: serde_json::Value = serde_json::to_value(&view).expect("serialize");
-        let obj = value.as_object().expect("object");
+    fn config_replace_rejects_cache_dir_field() {
+        // `google_fonts_cache_dir` lives on the outer `ConfigView`
+        // envelope (read-only system info). `ConfigReplace` is the
+        // writable inner shape and must reject it via
+        // `deny_unknown_fields`.
+        let body = put_body(&[("google_fonts_cache_dir", serde_json::json!("/tmp/cache"))]);
+        let err = serde_json::from_value::<ConfigReplace>(body)
+            .expect_err("google_fonts_cache_dir is not a writable field");
         assert!(
-            obj.contains_key("google_fonts_cache_dir"),
-            "VlcConfigView must emit `google_fonts_cache_dir` for parity \
-             with Python get_config()"
+            err.to_string().contains("google_fonts_cache_dir"),
+            "unexpected error: {err}"
         );
-        // When present, must be either a JSON string or null (matches
-        // Python's `Option<String>` shape).
-        let v = obj.get("google_fonts_cache_dir").unwrap();
+    }
+
+    #[test]
+    fn config_replace_still_rejects_unknown_field() {
+        let body = put_body(&[("totally_made_up_field", serde_json::json!(123))]);
+        let err = serde_json::from_value::<ConfigReplace>(body)
+            .expect_err("unknown fields must still 400");
         assert!(
-            v.is_string() || v.is_null(),
-            "google_fonts_cache_dir must be string-or-null, got {v:?}"
+            err.to_string().contains("totally_made_up_field"),
+            "expected unknown-field error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn config_replace_round_trips_lowercase_google_font_style() {
+        // VlcConfigView emits `style: "normal"|"italic"`; PUT must
+        // accept the same shape via FontStyle's lowercase serde derive.
+        for (style, expected) in [
+            ("normal", vl_convert_google_fonts::FontStyle::Normal),
+            ("italic", vl_convert_google_fonts::FontStyle::Italic),
+        ] {
+            let body = put_body(&[(
+                "google_fonts",
+                serde_json::json!([{
+                    "family": "Roboto",
+                    "variants": [{"weight": 400, "style": style}]
+                }]),
+            )]);
+            let replace: ConfigReplace = serde_json::from_value(body)
+                .unwrap_or_else(|e| panic!("style={style:?} must parse: {e}"));
+            let variant = &replace.google_fonts[0].variants.as_ref().unwrap()[0];
+            assert_eq!(variant.weight, 400);
+            assert_eq!(variant.style, expected);
+        }
+    }
+
+    #[test]
+    fn config_patch_accepts_lowercase_google_font_style() {
+        let body = serde_json::json!({
+            "google_fonts": [{
+                "family": "Inter",
+                "variants": [{"weight": 500, "style": "normal"}]
+            }]
+        });
+        let patch: ConfigPatch = serde_json::from_value(body).expect("ConfigPatch must parse");
+        let google_fonts = patch.google_fonts.unwrap().unwrap();
+        assert_eq!(google_fonts[0].family, "Inter");
+        let variants = google_fonts[0].variants.as_ref().unwrap();
+        assert!(matches!(
+            variants[0].style,
+            vl_convert_google_fonts::FontStyle::Normal
+        ));
+    }
+
+    #[test]
+    fn config_patch_rejects_unknown_google_font_style() {
+        let body = serde_json::json!({
+            "google_fonts": [{
+                "family": "Inter",
+                "variants": [{"weight": 500, "style": "oblique"}]
+            }]
+        });
+        let err = serde_json::from_value::<ConfigPatch>(body)
+            .expect_err("unknown style must surface as a serde error");
+        // Serde's `unknown variant` form mentions the rejected value
+        // and the accepted ones — that's enough.
+        let msg = err.to_string();
+        assert!(
+            msg.contains("oblique") && msg.contains("normal") && msg.contains("italic"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn vlc_config_serialize_does_not_emit_google_fonts_cache_dir() {
+        // `google_fonts_cache_dir` is read-only system state and lives
+        // on the outer `ConfigView` envelope, not on `VlcConfig`.
+        // Regression guard: do not regress this back into a flattened
+        // union of writable + read-only fields.
+        let value: serde_json::Value = serde_json::to_value(VlcConfig::default()).expect("ser");
+        assert!(
+            !value
+                .as_object()
+                .unwrap()
+                .contains_key("google_fonts_cache_dir"),
+            "google_fonts_cache_dir must live on the ConfigView envelope, \
+             not on VlcConfig"
         );
     }
 }

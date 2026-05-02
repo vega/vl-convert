@@ -115,5 +115,7 @@ pub async fn infoz() -> Json<Value> {
         "vega_themes_version": import_map::VEGA_THEMES_VERSION,
         "vega_embed_version": import_map::VEGA_EMBED_VERSION,
         "vegalite_versions": crate::util::vegalite_versions(),
+        "google_fonts_cache_dir": vl_convert_rs::google_fonts_cache_dir()
+            .map(|p| p.to_string_lossy().into_owned()),
     }))
 }

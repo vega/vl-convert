@@ -261,6 +261,89 @@ pub fn set_font_directories(font_dirs: Vec<String>) -> PyResult<()> {
         .map_err(|err| PyValueError::new_err(format!("Failed to set font directories: {}", err)))
 }
 
+/// Return the currently-registered font directories.
+///
+/// The registry is process-global state, not a ``configure()`` field
+/// and not env-var-controlled. It starts empty and is mutated only by:
+///
+/// - ``register_font_directory(path)`` — append one path.
+/// - ``set_font_directories(paths)`` — replace the full list.
+///
+/// Synchronous; the asyncio submodule re-exports this same function
+/// (no awaitable variant — the call is a cheap process-global read).
+///
+/// Returns:
+///     list[str]: Absolute paths to the registered font directories.
+#[pyfunction]
+pub fn current_font_directories() -> Vec<String> {
+    vl_convert_rs::current_font_directories()
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
+/// Return the active Google Fonts on-disk LRU cache cap (in MB).
+///
+/// Process-global state. Always returns the resolved cap — at process
+/// start this is the library default (512 MB); subsequent
+/// ``set_google_fonts_cache_size_mb`` calls overwrite it.
+///
+/// Returns:
+///     int: Active cap in megabytes (always positive).
+#[pyfunction]
+pub fn google_fonts_cache_size_mb() -> u64 {
+    vl_convert_rs::current_google_fonts_cache_size_mb().get()
+}
+
+/// Set the Google Fonts on-disk LRU cache cap (in MB).
+///
+/// ``None`` resets to the library default. Cached fonts over the new
+/// limit are evicted immediately. Process-global; affects every
+/// converter in the process.
+///
+/// Args:
+///     max_size_mb (int | None): New cap in megabytes; must be >= 1 or
+///         ``None``. ``0`` raises ``ValueError``.
+#[pyfunction]
+#[pyo3(signature = (max_size_mb))]
+pub fn set_google_fonts_cache_size_mb(max_size_mb: Option<u64>) -> PyResult<()> {
+    let cap = match max_size_mb {
+        None => None,
+        Some(0) => {
+            return Err(PyValueError::new_err(
+                "max_size_mb must be >= 1; pass None to reset to the library default",
+            ));
+        }
+        Some(n) => Some(std::num::NonZeroU64::new(n).expect("non-zero checked above")),
+    };
+    vl_convert_rs::set_google_fonts_cache_size_mb(cap)
+        .map_err(|err| PyValueError::new_err(format!("Failed to set cache size: {err}")))
+}
+
+/// Return the path of the on-disk Google Fonts cache directory.
+///
+/// Resolved once per process from the environment:
+///
+/// 1. ``VL_CONVERT_FONT_CACHE_DIR=none`` → ``None`` (caching disabled,
+///    fonts always fetched fresh).
+/// 2. ``VL_CONVERT_FONT_CACHE_DIR=/some/path`` → that path.
+/// 3. Unset → the OS cache directory joined with ``vl-convert/google-fonts``
+///    (e.g. ``~/Library/Caches/vl-convert/google-fonts`` on macOS).
+///
+/// The value is fixed for the lifetime of the process — there is no
+/// runtime setter.
+///
+/// Synchronous; the asyncio submodule re-exports this same function
+/// (no awaitable variant — the call reads a process-global value).
+///
+/// Returns:
+///     Optional[str]: Absolute path to the Google Fonts cache
+///         directory, or ``None`` if caching is disabled.
+#[pyfunction]
+pub fn google_fonts_cache_dir() -> Option<String> {
+    vl_convert_rs::google_fonts_cache_dir().map(|p| p.to_string_lossy().into_owned())
+}
+
 #[doc = async_variant_doc!("vegalite_fonts")]
 #[pyfunction(name = "vegalite_fonts")]
 #[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]

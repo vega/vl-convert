@@ -144,9 +144,6 @@ impl VlConverter {
             .try_init()
             .ok();
 
-        // Apply process-global Google Fonts cache cap from the config.
-        crate::text::apply_hot_font_cache(config.google_fonts_cache_size_mb)?;
-
         let ephemeral_semaphore = if config.allow_per_request_plugins {
             config.max_ephemeral_workers.map(|n| {
                 let permits: usize = n
@@ -163,7 +160,7 @@ impl VlConverter {
             inner: Arc::new(VlConverterInner {
                 vegaembed_bundles: Default::default(),
                 pool: Default::default(),
-                config,
+                config: arc_swap::ArcSwap::from(config),
                 resolved_plugins: Mutex::new(Vec::new()),
                 ephemeral_semaphore,
             }),
@@ -171,16 +168,40 @@ impl VlConverter {
     }
 
     pub fn config(&self) -> VlcConfig {
-        (*self.inner.config).clone()
+        (*self.inner.config()).clone()
+    }
+
+    /// Apply `new_config` to this converter, returning the converter
+    /// to use going forward.
+    ///
+    /// - **No-op**: `new_config` equals the current config; returns
+    ///   `self` unchanged.
+    /// - **Rebuild**: any other field differs; constructs a brand-new
+    ///   `VlConverter` via [`Self::with_config`] (which creates a
+    ///   fresh worker pool). The returned converter is **not warmed
+    ///   up**; call [`Self::warm_up`] if you need workers ready before
+    ///   the first conversion.
+    ///
+    /// Caller is responsible for any other concerns specific to its
+    /// runtime (drain, snapshot atomicity, warm-up timing). Process-
+    /// global state (font directories, Google Fonts cache cap) lives
+    /// outside `VlcConfig` and is mutated through its own dedicated
+    /// APIs — `reconfigure` does not touch it.
+    pub fn reconfigure(self, new_config: VlcConfig) -> Result<Self, AnyError> {
+        let new_config = normalize_converter_config(new_config)?;
+        if new_config == *self.inner.config() {
+            return Ok(self);
+        }
+        VlConverter::with_config(new_config)
     }
 
     fn image_access_policy(&self) -> ImageAccessPolicy {
-        let parsed = parse_allowed_base_urls_from_config(&self.inner.config)
+        let config = self.inner.config();
+        let parsed = parse_allowed_base_urls_from_config(&config)
             .expect("allowed_base_urls were already validated");
         // Use base_url as usvg's resources_dir when it points to a local path
-        let filesystem_root = if self.inner.config.base_url.is_filesystem() {
-            self.inner
-                .config
+        let filesystem_root = if config.base_url.is_filesystem() {
+            config
                 .base_url
                 .resolved_url()
                 .ok()
@@ -238,7 +259,7 @@ impl VlConverter {
             *guard = None;
         }
 
-        let (pool, ctx) = spawn_worker_pool(self.inner.config.clone())?;
+        let (pool, ctx) = spawn_worker_pool(self.inner.config().clone())?;
         if !ctx.resolved_plugins.is_empty() {
             *self.inner.resolved_plugins.lock().unwrap() = ctx.resolved_plugins.clone();
         }
@@ -321,7 +342,7 @@ impl VlConverter {
             + Send
             + 'static,
     ) -> Result<R, AnyError> {
-        if !self.inner.config.allow_per_request_plugins {
+        if !self.inner.config().allow_per_request_plugins {
             bail!(
                 "Per-request plugins are disabled. Set allow_per_request_plugins=true \
                  in the converter config to enable."
@@ -341,7 +362,7 @@ impl VlConverter {
         };
 
         // Resolve config-level plugins if needed
-        if !self.inner.config.vega_plugins.is_empty() {
+        if !self.inner.config().vega_plugins.is_empty() {
             self.warm_up()?;
         }
         let resolved_plugins = self
@@ -350,9 +371,10 @@ impl VlConverter {
             .lock()
             .map_err(|e| anyhow!("Failed to lock resolved_plugins: {e}"))?
             .clone();
-        let parsed_allowed_base_urls = parse_allowed_base_urls_from_config(&self.inner.config)?;
+        let config = self.inner.config();
+        let parsed_allowed_base_urls = parse_allowed_base_urls_from_config(&config)?;
         let ctx = Arc::new(ConverterContext {
-            config: (*self.inner.config).clone(),
+            config: (*config).clone(),
             parsed_allowed_base_urls,
             resolved_plugins,
         });
@@ -454,8 +476,8 @@ impl VlConverter {
     }
 
     fn should_preprocess_fonts(&self) -> bool {
-        self.inner.config.auto_google_fonts
-            || self.inner.config.missing_fonts != MissingFontsPolicy::Fallback
+        self.inner.config().auto_google_fonts
+            || self.inner.config().missing_fonts != MissingFontsPolicy::Fallback
     }
 
     /// If font preprocessing is enabled, compile VL→Vega and process referenced fonts.
@@ -487,8 +509,8 @@ impl VlConverter {
         let compile_logs = vega_output.logs;
         let auto_requests = preprocess_fonts(
             &vega_spec,
-            self.inner.config.auto_google_fonts,
-            self.inner.config.missing_fonts,
+            self.inner.config().auto_google_fonts,
+            self.inner.config().missing_fonts,
         )
         .await?;
         if !auto_requests.is_empty() {
@@ -517,8 +539,8 @@ impl VlConverter {
             };
             preprocess_fonts(
                 &spec_value,
-                self.inner.config.auto_google_fonts,
-                self.inner.config.missing_fonts,
+                self.inner.config().auto_google_fonts,
+                self.inner.config().missing_fonts,
             )
             .await
         } else {
@@ -540,8 +562,8 @@ impl VlConverter {
         let font_strings = crate::extract::extract_fonts_from_svg(svg);
         let auto_requests = classify_and_request_fonts(
             font_strings,
-            self.inner.config.auto_google_fonts,
-            self.inner.config.missing_fonts,
+            self.inner.config().auto_google_fonts,
+            self.inner.config().missing_fonts,
             false,
         )
         .await?;
@@ -555,7 +577,7 @@ impl VlConverter {
 
     /// Apply config-level defaults to VlOpts where the per-request value is None.
     pub(crate) fn apply_vl_defaults(&self, opts: &mut VlOpts) {
-        let config = &self.inner.config;
+        let config = self.inner.config();
         if opts.theme.is_none() {
             opts.theme = config.default_theme.clone();
         }
@@ -569,7 +591,7 @@ impl VlConverter {
 
     /// Apply config-level defaults to VgOpts where the per-request value is None.
     pub(crate) fn apply_vg_defaults(&self, opts: &mut VgOpts) {
-        let config = &self.inner.config;
+        let config = self.inner.config();
         if opts.format_locale.is_none() {
             opts.format_locale = config.default_format_locale.clone();
         }

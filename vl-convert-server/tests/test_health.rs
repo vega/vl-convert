@@ -73,6 +73,7 @@ async fn test_infoz_surface_unchanged() {
         "vega_themes_version",
         "vega_embed_version",
         "vegalite_versions",
+        "google_fonts_cache_dir",
     ]
     .into_iter()
     .collect();

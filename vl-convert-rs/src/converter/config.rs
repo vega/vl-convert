@@ -17,7 +17,7 @@ use super::worker_pool::MIN_V8_HEAP_SIZE_MB;
 /// checked (e.g. for `"Roboto, Arial, sans-serif"` only `Roboto` is examined).
 /// This matches Vega's rendering behavior, which tries the first font and falls
 /// back to system generics.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MissingFontsPolicy {
     /// Silently fall back to the default font (no validation).
@@ -61,6 +61,16 @@ impl<'de> serde::Deserialize<'de> for BaseUrlSetting {
             "default" => Ok(BaseUrlSetting::Default),
             "disabled" => Ok(BaseUrlSetting::Disabled),
             _ => Ok(BaseUrlSetting::Custom(s)),
+        }
+    }
+}
+
+impl serde::Serialize for BaseUrlSetting {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            BaseUrlSetting::Default => s.serialize_bool(true),
+            BaseUrlSetting::Disabled => s.serialize_bool(false),
+            BaseUrlSetting::Custom(url) => s.serialize_str(url),
         }
     }
 }
@@ -109,7 +119,7 @@ impl BaseUrlSetting {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct VlcConfig {
     /// Number of persistent worker V8 isolates. Must be at least 1.
@@ -193,11 +203,6 @@ pub struct VlcConfig {
     /// vega-themes. Custom themes take priority if names collide. Empty =
     /// no custom themes.
     pub themes: HashMap<String, serde_json::Value>,
-    /// Capacity (MB) of the on-disk Google Fonts LRU cache. `None` → library
-    /// default. Backed by the process-global `GOOGLE_FONTS_CLIENT` via
-    /// `apply_hot_font_cache`. Hot-applyable: `VlConverter::with_config`
-    /// calls through on construction.
-    pub google_fonts_cache_size_mb: Option<NonZeroU64>,
 }
 
 /// Shared context passed to all workers.
@@ -252,7 +257,6 @@ impl Default for VlcConfig {
             default_format_locale: None,
             default_time_format_locale: None,
             themes: HashMap::new(),
-            google_fonts_cache_size_mb: None,
         }
     }
 }
@@ -568,7 +572,6 @@ mod tests {
         assert!(cfg.google_fonts.is_empty());
         assert!(cfg.vega_plugins.is_empty());
         assert!(cfg.themes.is_empty());
-        assert_eq!(cfg.google_fonts_cache_size_mb, None);
     }
 
     #[test]

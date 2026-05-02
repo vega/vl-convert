@@ -1,10 +1,16 @@
 # vl-convert-server
 
-HTTP server exposing Vega/Vega-Lite → SVG/PNG/PDF/etc. conversion over
-either TCP or a pathname Unix-domain socket (AF_UNIX SOCK_STREAM). The
-crate ships both a binary (`src/main.rs`) and a library
-(`src/lib.rs`); tests live under `tests/` and share a common harness
-in `tests/common/mod.rs`.
+Library crate that builds and serves an HTTP application exposing
+Vega/Vega-Lite → SVG/PNG/PDF/etc. conversion over either TCP or a
+pathname Unix-domain socket (AF_UNIX SOCK_STREAM). Public entry points
+live in `src/lib.rs` (`build_app` + `serve` + `bind_listener`); tests
+live under `tests/` and share a common harness in `tests/common/mod.rs`.
+
+The crate is **library-only** — there is no `src/main.rs` and no
+`[[bin]]` target. Downstream callers (custom binaries, embedded
+deployments) compose `bind_listener` + `build_app` + `serve`
+themselves; the "Notes for downstream binary authors" section at the
+end captures the invariants such a binary must uphold.
 
 This file captures design invariants and gotchas that are easy to
 regress — read it before making non-trivial changes.
@@ -15,7 +21,8 @@ Routes are registered in `src/router.rs` (`build_router`):
 
 - **Health** — `/healthz`, `/readyz`, `/infoz`. Exempt from auth, UA,
   and budget middleware.
-- **API** — `/themes`, `/vegalite/*`, `/vega/*`, `/svg/*`, `/bundle*`.
+- **API** — `/themes`, `/vegalite/*`, `/vega/*`, `/svg/*`,
+  `/bundling/bundle`, `/bundling/bundle-snippet`.
   Handlers in `vegalite.rs`, `vega.rs`, `svg.rs`, `themes.rs`,
   `bundling.rs`; request/response DTOs in `types.rs`.
 - **Docs** — `/docs` (Swagger UI) and `/api-doc/openapi.json` are
@@ -23,18 +30,37 @@ Routes are registered in `src/router.rs` (`build_router`):
   DTO `ToSchema` derives. Keep those annotations in sync when editing
   a handler signature.
 - **Admin** — separate router built in `admin.rs`, mounted on its own
-  listener; currently exposes `/admin/budget`.
+  listener. Exposes `/admin/config` (GET/PATCH/PUT/DELETE),
+  `/admin/config/fonts/directories` (GET/PUT/POST),
+  `/admin/config/fonts/cache_size` (GET/PUT), and `/admin/budget`,
+  plus `/admin/docs` and `/admin/api-doc/openapi.json`. Auth and
+  trust-boundary rules differ from the main router — see "Admin auth"
+  below.
 
 ## App construction
 
 `build_app(VlcConfig, &ServeConfig) -> BuiltApp` is the single entry
-point. It validates config, calls `apply_server_defaults` (force empty
-`allowed_base_urls`, 512MB V8 heap when unset), warms up a
-`VlConverter`, assembles `AppState` inside an `Arc`, builds an
-optional `BudgetTracker`, binds the admin listener through
-`bind_listener` when configured, then composes the tower middleware
-stack (compression, CORS, body-limit, concurrency/load-shed, timeout,
-request-id, auth, UA, tracing, catch-panic).
+point. It runs `validate_serve_config` (which rejects a non-loopback
+TCP admin listener configured without an `admin_api_key`), warms up a
+`VlConverter` against the supplied `VlcConfig`, assembles `AppState`
+inside an `Arc`, builds an optional `BudgetTracker`, binds the admin
+listener through `bind_listener` when configured, then composes the
+router and tower middleware stack. The API sub-router carries optional
+budget middleware plus auth, UA, and the reconfig gate. The outer app
+stack adds compression, optional concurrency/load-shed, optional
+timeout, body-limit, CORS, request-id propagation/set layers, tracing,
+and catch-panic.
+
+`build_app` does not transform the supplied `VlcConfig` — what the
+caller passes is what the workers run. The library defaults (open
+`["http:", "https:"]` allowlist, no V8 heap cap, no V8 execution
+timer) match the CLI surface, so a server caller hardens those
+fields the same way a CLI user does (e.g. `allowed_base_urls = []`
+for SSRF protection, an explicit `max_v8_heap_size_mb`, an explicit
+`max_v8_execution_time_secs` to bound runaway specs). `tower::TimeoutLayer`
+only drops the *response future* on timeout — without an explicit
+`max_v8_execution_time_secs` a runaway spec keeps executing past the
+504 and can starve the worker pool.
 
 `BuiltApp.router` is a standalone `tower::Service` — tests call
 `router.oneshot(req)` without ever invoking `serve()`. `BuiltApp.admin`
@@ -42,17 +68,24 @@ travels with it to `serve()`, which spawns it beside the main listener.
 
 ## Conversion flow
 
-Every conversion handler follows the same shape:
+Vega/Vega-Lite conversion handlers follow the same shape:
 
 1. Deserialize body into a DTO from `types.rs`.
-2. `util::validate_common_opts(&req, &state)` — parses locale / font /
-   plugin options and enforces feature-gates (`allow_google_fonts`,
+2. Load one runtime snapshot, then `util::validate_common_opts(req,
+   &snap.config)` — parses locale / font / plugin options and
+   enforces feature-gates (`allow_google_fonts`,
    `allow_per_request_plugins`).
 3. Call the corresponding `VlConverter` method in `vl-convert-rs`.
 4. On error return `util::error_response` (opaque vs. detailed per
    `ServeConfig::opaque_errors`); on success set the `x-vlc-logs`
    header via `util::append_vlc_logs_header` so clients see converter
    warnings.
+
+The editor-URL helpers (`/vegalite/url`, `/vega/url`) call the URL
+helpers directly and do not produce converter logs; font-analysis
+endpoints validate common options but return the font JSON without an
+`x-vlc-logs` header. Raw SVG conversion endpoints do not use common
+options but do append converter logs on success.
 
 Per-request budget is charged/settled by `budget::middleware`,
 independently of handler code.
@@ -72,11 +105,12 @@ Integration tests share `tests/common/mod.rs`:
   file outlives the server. reqwest has no UDS transport at the
   workspace pin; `uds_get` / `uds_post_json` drive raw
   hyper + `tokio::net::UnixStream` instead.
-- **Subprocess e2e** — `tests/test_uds_e2e.rs` spawns the built
-  binary with `--ready-json` and parses its stdout line, covering
-  signal handling, stdin-EOF watcher, and readiness emission together.
 - All tests must run single-threaded (`--test-threads=1`) — Deno v8
   isolates aren't thread-safe.
+
+The crate has no subprocess-spawning e2e tests (it ships no binary).
+Downstream binary authors should put subprocess tests in their own
+crate.
 
 ## Listener architecture
 
@@ -105,9 +139,9 @@ pub async fn serve(listener: BoundListener, built: BuiltApp, shutdown: impl Futu
 It matches on `BoundListener::{Tcp, Uds}` and dispatches internally.
 Do not add a parallel `serve_uds` function — the `CancellationToken`
 + `JoinSet` drain composition lives in `serve()` and must remain
-single-sourced. A parallel function would force callers (`main.rs`,
-tests, `build_app`'s admin path) through a 2×2 transport matrix and
-create two places that must stay in sync.
+single-sourced. A parallel function would force callers (downstream
+binaries, tests, `build_app`'s admin path) through a 2×2 transport
+matrix and create two places that must stay in sync.
 
 ## UDS lifecycle
 
@@ -146,41 +180,16 @@ the request.
 tokio versions that may probe new `UCred` fields failing in
 restricted environments. Don't change it to `.expect()`.
 
-## Signal handling
-
-When using `tokio::signal` in a binary that must honor SIGTERM for
-graceful shutdown, call
-`tokio::signal::unix::signal(SignalKind::terminate())` **in the main
-function body** — not inside a `tokio::spawn` block. The `signal()`
-call registers the kernel handler synchronously at construction.
-Wrapping it in a spawned task defers registration until the task is
-first polled, creating a race where an early signal takes the
-process's default disposition (terminate without cleanup). Pass the
-returned `Signal` into the spawned consumer task by move.
-
-## Shutdown and drain
-
-When N independent sources (SIGINT, SIGTERM, stdin-EOF, or a future
-readiness-file sentinel) can all trigger graceful shutdown, spawn
-each as its own task writing to a shared
-`tokio::sync::mpsc::channel(4)`; have one aggregator future await
-the first message. See `src/main.rs` for the reference
-implementation.
-
-This makes adding new triggers purely additive — no restructuring of
-the `select!` that drives `serve()`'s shutdown future. A straight
-`tokio::select!` over N arms becomes fragile as N grows and makes
-conditional triggers (e.g., an auto-enabled stdin watcher) awkward.
-The aggregator decouples registration from awaiting.
-
 ## Observability
 
-`tracing_subscriber::fmt()` writes to stdout by default. This crate's
-binary reserves stdout for the `--ready-json` emitter (one JSON line,
-then silence for the process lifetime), so `init_tracing` must chain
+`tracing_subscriber::fmt()` writes to stdout by default. The library
+forces stderr in `init_tracing` because downstream binaries commonly
+reserve stdout for a structured-readiness emitter (one JSON line per
+process, parsed by orchestrators). Without the explicit
 `.with_writer(std::io::stderr)` on both the text and JSON formatter
-branches. Without the explicit writer, WARN lines would appear on
-stdout alongside the JSON and break machine parsers.
+branches, WARN lines would appear on stdout alongside that JSON and
+break machine parsers. Library consumers that re-init tracing
+themselves should preserve the same property.
 
 ## Rate limiting
 
@@ -232,22 +241,24 @@ health check. No partial-view window exists.
 
 ### Drain-then-rebuild semantics
 
-Because `vl-convert-rs` has no hot-apply setters (every field except
-`google_fonts_cache_size_mb` and `font_directories`), a committed
-admin mutation that touches *any* other field goes through a
+`VlcConfig` carries no hot-applyable fields — every successful
+non-identity commit through `/admin/config` goes through a
 **drain-then-rebuild-then-swap** pipeline:
 
 1. Close the gate (`AtomicBool::store(true, SeqCst)`).
 2. Drain: wait for `inflight` counter to reach zero, bounded by
-   `reconfig_drain_timeout_secs` (default mirrors `drain_timeout_secs`).
-3. Snapshot prior process-globals (`font_directories`, cache size) so
-   they can be rolled back on failure.
-4. Build the new `VlConverter` (which mutates globals via
-   `set_font_directories` + `apply_hot_font_cache`).
-5. `warm_up()` — on failure, roll back globals via the `ReconfigScopeGuard`'s
-   armed closure.
-6. On success: swap snapshot, `generation + 1`, `config_version + 1`,
-   disarm rollback, reopen gate.
+   `reconfig_drain_timeout_secs` (default `30` seconds).
+3. Build the new `VlConverter` via `current.converter.clone().reconfigure(new_config)`.
+4. `warm_up()` the new converter.
+5. On success: swap snapshot, `generation + 1`, `config_version + 1`,
+   reopen gate.
+
+Process-global state (font directories, the Google Fonts cache cap)
+is NOT part of this pipeline. Each lives behind its own dedicated
+endpoint family under `/admin/config/fonts/...` — `directories`
+(GET/PUT/POST) and `cache_size` (GET/PUT). These serialize against
+the same `coordinator.lock()` but never close the gate or rebuild
+the converter.
 
 ### Race-free admission handshake
 
@@ -270,15 +281,6 @@ so they share a single total order.
 The drain loop registers `Notify::notified()` **before** reading the
 counter and uses a single absolute `sleep_until(deadline)` for the
 whole drain window — **not** a recomputed sleep per iteration.
-
-### Hot-apply short-circuit
-
-`requires_rebuild(cur, new)` returns `false` only when the only
-fields that differ are `google_fonts_cache_size_mb` or
-`font_directories`. The hot-apply path calls
-`apply_hot_font_cache` / `set_font_directories` directly and swaps a
-new snapshot with the **same** converter, `generation` unchanged,
-`config_version + 1`. No drain.
 
 ### Gate middleware ordering
 
@@ -313,7 +315,7 @@ disarmed) or restored (failure path, rollback fired).
 The rollback closure is armed only after globals are mutated (Step 3
 of the rebuild pipeline) and disarmed only after the commit succeeds
 (Step 6). A failed `warm_up`, a timeout, a panic, or a dropped admin
-client all trigger the rollback. See `src/reconfig.rs` + design §2.6.1.
+client all trigger the rollback. See `src/reconfig.rs`.
 
 ### `generation` is admin-only, `config_version` tracks all commits
 
@@ -329,11 +331,19 @@ rebuild" use `generation`.
 
 ### Admin auth
 
-Separate from main's `--api-key`. `--admin-api-key` /
-`VLC_ADMIN_API_KEY` is optional (listener placement is the default
-trust boundary), with a hard bail at startup for the
-non-loopback-TCP-admin-without-key case (via `advise_admin_security`
-in `main.rs`).
+Separate from `ServeConfig.api_key` (the main-listener bearer token).
+`ServeConfig.admin_api_key` is optional because listener placement is
+the default trust boundary (UDS `0o600` or TCP loopback). The hard
+bail for the non-loopback-TCP-admin-without-key case is enforced by
+`validate_serve_config` in `src/config.rs`, called from `build_app`
+before `bind_listener` runs. Any downstream binary that drives
+`build_app` automatically inherits this protection.
+
+`validate_serve_config` treats `None` and whitespace-only `Some(_)`
+identically when checking `admin_api_key`. This prevents a
+misconfigured empty env var (`VLC_ADMIN_API_KEY=""`) from satisfying
+the non-loopback admin guard while leaving the bearer effectively
+guessable.
 
 ### SIGTERM wins over in-progress reconfig
 
@@ -347,19 +357,91 @@ globals roll back via the scope guard.
 ### `null` = natural JSON ↔ Option
 
 `PATCH /admin/config {"max_v8_heap_size_mb": null}` sets the field to
-`None` (unbounded — the *only* way to express "no cap" after the
-sentinel-zero removal). `PATCH {"allowed_base_urls": null}` is a **400**
-because `allowed_base_urls: Vec<String>` isn't nullable. "Reset to
-library default" has no field-level PATCH primitive; use `DELETE` or
-pass the explicit default value.
+`None` (the only way to express "no cap" — zero is rejected because
+the field is `NonZeroU64`). `PATCH {"allowed_base_urls": null}` is a
+**400** because `allowed_base_urls: Vec<String>` isn't nullable.
+"Reset to library default" has no field-level PATCH primitive; use
+`DELETE` or pass the explicit default value.
 
-### Single source of truth for font directories
+### Process-global font state is not part of the config DTO
 
-Library state (`FONT_CONFIG.font_dirs`) is authoritative. The
-`VlcConfig.font_directories` field on the current snapshot mirrors it
-exactly after Task 0's `set_font_directories` API was added.
-`PATCH/PUT` with a `font_directories` list calls `set_font_directories`
-which replaces the global wholesale (including deregistering dropped
-entries); `POST /admin/config/fonts/directories` appends a single path
-via `register_font_directory`. Both paths hot-apply — no rebuild, no
-drain.
+Font directories and the Google Fonts cache cap are process-global
+(`vl_convert_rs::{current_font_directories, set_font_directories,
+register_font_directory, current_google_fonts_cache_size_mb,
+set_google_fonts_cache_size_mb}`). Neither is a `VlcConfig` field;
+neither is accepted by `ConfigPatch` / `ConfigReplace` / `ConfigView`.
+Each has its own dedicated endpoint family under `/admin/config/fonts/...`:
+
+- `GET /admin/config/fonts/directories` — return the current list
+- `PUT /admin/config/fonts/directories` `{"paths": […]}` — replace
+  wholesale (`set_font_directories`)
+- `POST /admin/config/fonts/directories` `{"path": "…"}` — append
+  one (`register_font_directory`)
+- `GET /admin/config/fonts/cache_size` — return the resolved cap
+  (`{"max_size_mb": <number>}`)
+- `PUT /admin/config/fonts/cache_size` `{"max_size_mb": N | null}` —
+  set the cap; null resets to the library default
+  (`set_google_fonts_cache_size_mb`)
+
+All five serialize against `coordinator.lock()` so they can't
+interleave with `/admin/config` PATCH/PUT/DELETE, but none of them
+close the gate or rebuild the converter.
+
+The general pattern: when a "config-like" knob is actually
+process-global (mutates state outside any individual `VlConverter`),
+keep it out of `VlcConfig` and give it its own admin endpoint. The
+clue is hot-applyability — anything that doesn't require a worker
+rebuild is almost certainly process-global state masquerading as
+config.
+
+### Read-only system info goes on `/infoz`, not in the config DTO
+
+`/admin/config`'s `ConfigView` is purely the configuration surface
+(baseline + effective + version counters). Read-only process-global
+state — anything resolved at process start and not mutable at
+runtime — lives on `/infoz` instead, alongside `version` and the
+vendored Vega/Vega-Lite versions.
+
+`google_fonts_cache_dir` is the current example: resolved once from
+`VL_CONVERT_FONT_CACHE_DIR` (or the OS cache dir fallback) and
+fixed for the process lifetime. Operators configure it via env var
+at process start; `/infoz` reports it.
+
+Adding a new read-only system field follows the same pattern: emit
+it from `health::infoz()`, extend the locked surface set in
+`tests/test_health.rs::test_infoz_surface_unchanged`, and don't
+touch `VlcConfig` / `ConfigPatch` / `ConfigReplace` / `ConfigView`.
+
+## Notes for downstream binary authors
+
+The crate ships no binary — these are invariants any downstream binary
+should honor when composing `bind_listener` + `build_app` + `serve`:
+
+- **Signal handling**: when honoring SIGTERM for graceful shutdown,
+  call `tokio::signal::unix::signal(SignalKind::terminate())` **in
+  the main function body**, not inside a `tokio::spawn` block. The
+  `signal()` call registers the kernel handler synchronously at
+  construction; deferring it to the first poll of a spawned task
+  creates a race where an early signal takes the process's default
+  disposition (terminate without cleanup). Pass the returned `Signal`
+  into the consumer task by move.
+- **Shutdown aggregation**: when multiple independent sources (SIGINT,
+  SIGTERM, stdin-EOF, readiness-file sentinel, etc.) can all trigger
+  graceful shutdown, spawn each as its own task writing to a shared
+  `tokio::sync::mpsc::channel(4)` and have one aggregator future await
+  the first message. This keeps registration additive — a straight
+  `tokio::select!` over N arms grows fragile as N grows. Pass the
+  resulting future into `serve()` as the `shutdown` argument.
+- **Stdout discipline**: if the binary emits a structured-readiness
+  line (single JSON document on stdout for orchestrators), keep
+  tracing on stderr. `init_tracing` already does this; if you re-init
+  tracing yourself, preserve `.with_writer(std::io::stderr)`.
+- **UDS bind**: always go through `bind_listener` — never raw
+  `UnixListener::bind` — so the `0o600` chmod and `UdsCleanup` Drop
+  guard are applied. See "UDS lifecycle" above.
+- **Always go through `build_app`**: it runs `validate_serve_config`
+  (admin loopback check) and warms up the worker pool. Don't bypass
+  it by binding a listener and feeding requests into the router
+  directly. If you want SSRF protection or a finite V8 heap/timer,
+  set those fields on `VlcConfig` before passing it in — the same way
+  a CLI user would.

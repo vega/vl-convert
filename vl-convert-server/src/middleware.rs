@@ -483,7 +483,7 @@ mod tests {
     // (b) gate-open increments and decrements inflight via the drop-guard,
     // (c) the `state.opaque_errors` flag is honored in the 503 body shape.
     // Full-router integration (gate-closed-bypasses-budget, health-
-    // endpoints-bypass-gate) lives in the Task 13 integration test suite.
+    // endpoints-bypass-gate) lives in the integration test suite.
 
     use crate::reconfig::ReconfigCoordinator;
     use crate::RuntimeSnapshot;
@@ -505,7 +505,6 @@ mod tests {
             Arc::new(ArcSwap::from_pointee(RuntimeSnapshot {
                 converter: vl_convert_rs::converter::VlConverter::new(),
                 config: Arc::new(vl_convert_rs::converter::VlcConfig::default()),
-                font_directories: Vec::new(),
                 generation: 0,
                 config_version: 0,
             }));

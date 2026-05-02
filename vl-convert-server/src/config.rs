@@ -1,6 +1,5 @@
 use arc_swap::ArcSwap;
 use axum::Router;
-use std::path::PathBuf;
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
 use tokio_util::sync::CancellationToken;
@@ -164,26 +163,11 @@ impl Default for ServeConfig {
 pub(crate) struct RuntimeSnapshot {
     pub converter: VlConverter,
     pub config: Arc<VlcConfig>,
-    /// Server-side mirror of the process-global font-directory registry
-    /// (`vl_convert_rs::current_font_directories()`). Lives on the snapshot
-    /// because PR #274 removed `font_directories` from `VlcConfig` —
-    /// font directories are now process-global state and we need a place
-    /// to read/restore them atomically alongside the rest of the runtime
-    /// view. Populated at construction by every site that builds a
-    /// `RuntimeSnapshot`; mutated via the admin font-dir handlers, which
-    /// also call `vl_convert_rs::set_font_directories` to keep the global
-    /// registry in sync.
-    pub font_directories: Vec<PathBuf>,
     /// Bumps on every rebuild-commit (drain+rebuild path). Exposed through
     /// admin endpoints; not used on the conversion hot path.
-    //
-    // Task 6 (admin.rs rewrite) and Task 8 (/admin/config surface) will read
-    // this. Suppress the dead-code lint until then.
-    #[allow(dead_code)]
     pub generation: u64,
     /// Bumps on every successful commit (including hot-apply paths that don't
     /// rebuild the converter). `generation <= config_version` always.
-    #[allow(dead_code)]
     pub config_version: u64,
 }
 
@@ -195,10 +179,6 @@ pub(crate) struct AppState {
     pub readiness: Arc<health::ReadinessState>,
     /// Shared with the gate middleware (main router) and admin handlers so
     /// every drain-participating actor works against the same coordinator.
-    //
-    // Task 4 (install gate middleware) and Task 6 (admin.rs rewrite) will be
-    // the first consumers. Suppress the dead-code lint until they land.
-    #[allow(dead_code)]
     pub coordinator: Arc<ReconfigCoordinator>,
 }
 
@@ -226,10 +206,10 @@ pub struct BuiltApp {
     /// [`Self::current_converter`] / [`Self::current_config`] for callers
     /// that want to drive conversions programmatically alongside serving HTTP.
     pub(crate) runtime: Arc<ArcSwap<RuntimeSnapshot>>,
-    /// Shared shutdown signal used by [`crate::serve`] and by the admin
-    /// reconfig path (via `coordinator.shutdown_token()`). Populated in
-    /// `build_app`; `serve()` clones it so cancellations observed by the
-    /// coordinator also abort the main / admin listeners.
+    /// Shared shutdown signal used by [`crate::serve`] and by the
+    /// reconfig coordinator (which holds its own clone). Populated in
+    /// `build_app`; `serve()` clones it so cancellations observed by
+    /// the coordinator also abort the main / admin listeners.
     pub(crate) shutdown_token: CancellationToken,
     /// Budget tracker. Consumed by [`crate::serve`] to drive the refill loop.
     pub(crate) tracker: Option<Arc<BudgetTracker>>,
@@ -278,6 +258,28 @@ pub(crate) struct AdminConfig {
 pub(crate) fn validate_serve_config(serve_config: &ServeConfig) -> Result<(), anyhow::Error> {
     if serve_config.budget_hold_ms <= 0 {
         anyhow::bail!("budget_hold_ms must be positive");
+    }
+
+    // Refuse to bind a non-loopback TCP admin listener without an
+    // admin bearer key. Without the key, `admin_auth_middleware` is a
+    // no-op and `/admin/config` mutation would be reachable from
+    // anywhere the listener is exposed. UDS admin without a key is
+    // allowed because filesystem permissions are the trust boundary.
+    // Whitespace-only keys (e.g. `VLC_ADMIN_API_KEY=""`) count as
+    // missing — otherwise they'd satisfy this guard while letting
+    // `Authorization: Bearer ` accept the empty string.
+    if let Some(admin_addr) = &serve_config.admin {
+        let key_unset = serve_config
+            .admin_api_key
+            .as_deref()
+            .is_none_or(|k| k.trim().is_empty());
+        if key_unset && !admin_addr.is_loopback_or_uds() {
+            anyhow::bail!(
+                "admin listener bound to non-loopback address {admin_addr} requires \
+                 a non-empty admin_api_key; either set admin_api_key or use a \
+                 loopback / UDS bind"
+            );
+        }
     }
 
     Ok(())

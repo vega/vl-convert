@@ -3,8 +3,12 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
-/// CSS font style.
+/// CSS font style. Serializes/deserializes as lowercase
+/// (`"normal"`/`"italic"`) — matches the CSS wire form, the
+/// `Display`/`FromStr` shape, and the JSON shape Python and the
+/// server's admin API speak.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum FontStyle {
     Normal,
     Italic,

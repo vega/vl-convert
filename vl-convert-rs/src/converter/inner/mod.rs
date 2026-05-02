@@ -253,7 +253,13 @@ impl InnerVlConverter {
 pub(crate) struct VlConverterInner {
     pub(super) vegaembed_bundles: Mutex<HashMap<VlVersion, String>>,
     pub(super) pool: Mutex<Option<super::worker_pool::WorkerPool>>,
-    pub(crate) config: Arc<VlcConfig>,
+    /// Active config. Read on the conversion hot path (a single
+    /// `load_full()` per request). Wholesale config changes happen by
+    /// constructing a fresh `VlConverterInner` via
+    /// [`VlConverter::with_config`] — there's no in-place mutation
+    /// path; the `ArcSwap` here is purely for the cheap `load_full()`
+    /// read pattern.
+    pub(crate) config: arc_swap::ArcSwap<VlcConfig>,
     /// Resolved plugins populated when the worker pool is first spawned.
     /// Separate from config because spawn_worker_pool() creates a new Arc
     /// but VlConverterInner.config is set at with_config() time.
@@ -262,6 +268,15 @@ pub(crate) struct VlConverterInner {
     /// Semaphore limiting concurrent ephemeral workers for per-request plugins.
     /// None when max_ephemeral_workers is None (no limit).
     pub(super) ephemeral_semaphore: Option<Arc<tokio::sync::Semaphore>>,
+}
+
+impl VlConverterInner {
+    /// Snapshot of the active config. Cheap (one ArcSwap load + Arc clone).
+    /// Hold the returned `Arc` for the duration of one logical operation;
+    /// don't re-load mid-flow if you need consistency.
+    pub(crate) fn config(&self) -> Arc<VlcConfig> {
+        self.config.load_full()
+    }
 }
 
 #[cfg(test)]

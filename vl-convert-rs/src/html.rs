@@ -334,7 +334,7 @@ impl VlConverter {
         mut vg_opts: VgOpts,
         auto_google_fonts: bool,
     ) -> Result<serde_json::Value, AnyError> {
-        let missing = self.inner.config.missing_fonts;
+        let missing = self.inner.config().missing_fonts;
 
         if auto_google_fonts || missing != MissingFontsPolicy::Fallback {
             let font_strings = extract_fonts_from_vega(&vega_spec);
@@ -379,7 +379,7 @@ impl VlConverter {
         auto_google_fonts: bool,
         embed_local_fonts: bool,
     ) -> Result<FontAnalysis, AnyError> {
-        let missing = self.inner.config.missing_fonts;
+        let missing = self.inner.config().missing_fonts;
 
         let explicit_requests = vg_opts.google_fonts.clone();
         let format_locale_value = vg_opts
@@ -527,7 +527,7 @@ impl VlConverter {
                     .await?
                 };
 
-                let missing = self.inner.config.missing_fonts;
+                let missing = self.inner.config().missing_fonts;
                 let fontdb = USVG_OPTIONS
                     .lock()
                     .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
@@ -659,7 +659,7 @@ impl VlConverter {
         embed_local: bool,
     ) -> Result<String, AnyError> {
         let include_font_face = bundle || embed_local;
-        let subset_fonts = self.inner.config.subset_fonts;
+        let subset_fonts = self.inner.config().subset_fonts;
         let fonts = self
             .vega_fonts(
                 vega_spec,
@@ -732,8 +732,8 @@ impl VlConverter {
         let vl_version = vl_opts.vl_version;
         let vl_spec = vl_spec.into();
 
-        let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = self.inner.config.embed_local_fonts;
+        let auto_install = self.inner.config().auto_google_fonts;
+        let embed_local = self.inner.config().embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vl_opts.google_fonts.is_some();
         let mut logs = Vec::new();
@@ -755,7 +755,7 @@ impl VlConverter {
         };
 
         // Ensure plugins are resolved (triggers pool spawn if not yet started)
-        if !self.inner.config.vega_plugins.is_empty() {
+        if !self.inner.config().vega_plugins.is_empty() {
             self.warm_up()?;
         }
         let mut resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();
@@ -808,8 +808,8 @@ impl VlConverter {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
 
-        let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = self.inner.config.embed_local_fonts;
+        let auto_install = self.inner.config().auto_google_fonts;
+        let embed_local = self.inner.config().embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vg_opts.google_fonts.is_some();
         let font_head_html = if has_font_work {
@@ -830,7 +830,7 @@ impl VlConverter {
         };
 
         // Ensure plugins are resolved (triggers pool spawn if not yet started)
-        if !self.inner.config.vega_plugins.is_empty() {
+        if !self.inner.config().vega_plugins.is_empty() {
             self.warm_up()?;
         }
         let mut resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();

@@ -11,9 +11,10 @@ use vl_convert_google_fonts::{family_to_id, RegisteredFontBatch};
 use super::config::MissingFontsPolicy;
 use vl_convert_google_fonts::VariantRequest;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GoogleFontRequest {
     pub family: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub variants: Option<Vec<VariantRequest>>,
 }
 

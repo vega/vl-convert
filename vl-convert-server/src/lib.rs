@@ -8,15 +8,6 @@ mod json_fmt;
 mod listen;
 mod listener;
 mod middleware;
-// The coordinator's gate middleware + scope-guard consumers land in
-// subsequent tasks (Task 4 wires the gate middleware into the main router,
-// Task 6 rewrites `admin.rs` to drive drain/rebuild/commit). Until those
-// tasks run, several coordinator methods and the `ScopeGuard`/`InflightGuard`
-// types exist only for the (already-landed) unit tests in `reconfig.rs`.
-// Suppress dead-code lints on the whole module rather than sprinkle
-// `#[allow(dead_code)]` inside it — Task 2's module is explicitly off-limits
-// to this task, and the warnings will clear as each follower task lands.
-#[allow(dead_code)]
 mod reconfig;
 mod router;
 mod svg;
@@ -163,16 +154,15 @@ pub async fn build_app(
     // locale aliases, etc.). Seeding from the pre-normalized input would
     // make `GET /admin/config` report a stale `effective` view and let a
     // later identity PUT/DELETE unintentionally replay the unresolved
-    // values. By taking `converter.config()` here we guarantee baseline ==
-    // initial effective == what the workers are running, which is the
-    // contract CLAUDE.md §"Admin reconfig & drain" documents for DELETE.
+    // values. Taking `converter.config()` here guarantees
+    // baseline == initial effective == what the workers are running,
+    // which is the contract `DELETE /admin/config` resets to.
     let normalized = converter.config();
     let baseline = Arc::new(normalized.clone());
 
     let runtime = Arc::new(ArcSwap::from_pointee(RuntimeSnapshot {
         converter,
         config: Arc::new(normalized),
-        font_directories: vl_convert_rs::current_font_directories(),
         generation: 0,
         config_version: 0,
     }));
@@ -213,12 +203,10 @@ pub async fn build_app(
         // Assemble AdminState from the shared Arc'd handles. `runtime`,
         // `coordinator`, and `readiness` are intentionally the SAME Arcs
         // as on `AppState`, so admin-side reconfig commits are observed
-        // by the main listener atomically. Task 9 will plumb
-        // `admin_api_key` from ServeConfig; for now the field is `None`.
+        // by the main listener atomically.
         let admin_state = Arc::new(admin::AdminState {
             runtime: runtime.clone(),
             baseline: baseline.clone(),
-            baseline_font_directories: vl_convert_rs::current_font_directories(),
             coordinator: coordinator.clone(),
             readiness: readiness.clone(),
             admin_api_key: serve_config
@@ -275,5 +263,51 @@ mod tests {
             err.to_string().contains("budget_hold_ms must be positive"),
             "unexpected error: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_build_app_rejects_non_loopback_admin_without_usable_key() {
+        // None and whitespace-only keys must all trigger the validator
+        // — a misconfigured `VLC_ADMIN_API_KEY=""` env var must not
+        // satisfy the non-loopback guard.
+        for key in [None, Some(""), Some("   "), Some("\t")] {
+            let mut serve_config = default_serve_config();
+            serve_config.admin = Some(crate::ListenAddr::Tcp {
+                host: "0.0.0.0".to_string(),
+                port: 0,
+            });
+            serve_config.admin_api_key = key.map(String::from);
+
+            let err = build_app(VlcConfig::default(), &serve_config)
+                .await
+                .err()
+                .unwrap();
+            assert!(
+                err.to_string().contains("admin_api_key"),
+                "key {key:?} must trigger validator: {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_build_app_accepts_non_loopback_admin_with_key() {
+        // The validation pre-bind should pass; an actual bind may still
+        // fail at runtime depending on the test environment, but the
+        // error must come from `bind_listener`, not from the validator.
+        let mut serve_config = default_serve_config();
+        serve_config.admin = Some(crate::ListenAddr::Tcp {
+            host: "0.0.0.0".to_string(),
+            port: 0,
+        });
+        serve_config.admin_api_key = Some("supersecret".to_string());
+        // Need budget tracker so the admin listener is wired up at all.
+        serve_config.global_budget_ms = Some(1_000);
+
+        if let Err(err) = build_app(VlcConfig::default(), &serve_config).await {
+            assert!(
+                !err.to_string().contains("admin_api_key"),
+                "validator rejected admin with key: {err}"
+            );
+        }
     }
 }

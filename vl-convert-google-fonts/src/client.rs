@@ -343,7 +343,7 @@ impl GoogleFontsClient {
     }
 
     /// Read the current font cache size limit.
-    fn max_font_cache_bytes(&self) -> u64 {
+    pub fn max_font_cache_bytes(&self) -> u64 {
         self.max_font_cache_bytes.load(Ordering::Relaxed)
     }
 

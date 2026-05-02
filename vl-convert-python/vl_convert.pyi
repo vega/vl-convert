@@ -163,8 +163,6 @@ if TYPE_CHECKING:
         subset_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
         google_fonts: list[GoogleFontSpec]
-        google_fonts_cache_dir: str | None
-        google_fonts_cache_size_mb: int | None
         max_v8_heap_size_mb: int | None
         max_v8_execution_time_secs: int | None
         gc_after_conversion: bool
@@ -178,7 +176,6 @@ if TYPE_CHECKING:
         default_format_locale: str | dict[str, Any] | None
         default_time_format_locale: str | dict[str, Any] | None
         themes: dict[str, dict[str, Any]]
-        font_directories: list[str]
 
 __all__ = [
     "asyncio",
@@ -193,6 +190,10 @@ __all__ = [
     "javascript_bundle",
     "register_font_directory",
     "set_font_directories",
+    "current_font_directories",
+    "google_fonts_cache_dir",
+    "google_fonts_cache_size_mb",
+    "set_google_fonts_cache_size_mb",
     "warm_up_workers",
     "get_worker_memory_usage",
     "svg_to_jpeg",
@@ -340,12 +341,82 @@ def set_font_directories(font_dirs: list[str]) -> None:
     """
     ...
 
+def current_font_directories() -> list[str]:
+    """
+    Return the currently-registered font directories.
+
+    The registry is process-global state, not a ``configure()`` field
+    and not env-var-controlled. It starts empty and is mutated only by:
+
+    - ``register_font_directory(path)`` — append one path.
+    - ``set_font_directories(paths)`` — replace the full list.
+
+    Returns
+    -------
+    list[str]
+        Absolute paths to the registered font directories.
+    """
+    ...
+
+def google_fonts_cache_dir() -> str | None:
+    """
+    Return the path of the on-disk Google Fonts cache directory.
+
+    Resolved once per process from the environment:
+
+    1. ``VL_CONVERT_FONT_CACHE_DIR=none`` → ``None`` (caching disabled,
+       fonts always fetched fresh).
+    2. ``VL_CONVERT_FONT_CACHE_DIR=/some/path`` → that path.
+    3. Unset → the OS cache directory joined with ``vl-convert/google-fonts``
+       (e.g. ``~/Library/Caches/vl-convert/google-fonts`` on macOS).
+
+    The value is fixed for the lifetime of the process — there is no
+    runtime setter.
+
+    Returns
+    -------
+    Optional[str]
+        Absolute path to the Google Fonts cache directory, or ``None``
+        if caching is disabled.
+    """
+    ...
+
+def google_fonts_cache_size_mb() -> int:
+    """
+    Return the active Google Fonts on-disk LRU cache cap (in MB).
+
+    Process-global state. Always returns the resolved cap — at process
+    start this is the library default (512 MB); subsequent
+    ``set_google_fonts_cache_size_mb`` calls overwrite it.
+
+    Returns
+    -------
+    int
+        Active cap in megabytes (always positive).
+    """
+    ...
+
+def set_google_fonts_cache_size_mb(max_size_mb: int | None) -> None:
+    """
+    Set the Google Fonts on-disk LRU cache cap (in MB).
+
+    ``None`` resets to the library default. Cached fonts over the new
+    limit are evicted immediately. Process-global; affects every
+    converter in the process.
+
+    Parameters
+    ----------
+    max_size_mb
+        New cap in megabytes; must be >= 1 or ``None``. Passing ``0``
+        raises ``ValueError``.
+    """
+    ...
+
 def configure(
     *,
     num_workers: int | None = None,
     base_url: str | bool | None = None,
     allowed_base_urls: list[str] | None = None,
-    google_fonts_cache_size_mb: int | None = None,
     auto_google_fonts: bool | None = None,
     embed_local_fonts: bool | None = None,
     subset_fonts: bool | None = None,
@@ -384,10 +455,6 @@ def configure(
         ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
         the library default (``["http:", "https:"]``); ``[]`` blocks all
         network data.
-    google_fonts_cache_size_mb
-        Maximum Google Fonts on-disk LRU cache size in megabytes. Must be >= 1
-        if provided. ``None`` resets to the library default. Passing ``0``
-        raises ``ValueError``.
     auto_google_fonts
         Automatically download missing fonts from Google Fonts.
         ``None`` resets to the library default (``False``).
@@ -1439,13 +1506,24 @@ if TYPE_CHECKING:
         async def set_font_directories(self, font_dirs: list[str]) -> None:
             """Async version of ``set_font_directories``. See sync function for full documentation."""
             ...
+        def current_font_directories(self) -> list[str]:
+            """Synchronous re-export of ``current_font_directories``. See sync function for full documentation."""
+            ...
+        def google_fonts_cache_dir(self) -> str | None:
+            """Synchronous re-export of ``google_fonts_cache_dir``. See sync function for full documentation."""
+            ...
+        def google_fonts_cache_size_mb(self) -> int:
+            """Synchronous re-export of ``google_fonts_cache_size_mb``. See sync function for full documentation."""
+            ...
+        def set_google_fonts_cache_size_mb(self, max_size_mb: int | None) -> None:
+            """Synchronous re-export of ``set_google_fonts_cache_size_mb``. See sync function for full documentation."""
+            ...
         async def configure(
             self,
             *,
             num_workers: int | None = None,
             base_url: str | bool | None = None,
             allowed_base_urls: list[str] | None = None,
-            google_fonts_cache_size_mb: int | None = None,
             auto_google_fonts: bool | None = None,
             embed_local_fonts: bool | None = None,
             subset_fonts: bool | None = None,

@@ -39,8 +39,8 @@ pub use serde_json;
 
 pub use module_loader::import_map::DEFAULT_VL_VERSION;
 pub use text::{
-    apply_hot_font_cache, current_font_directories, register_font_directory, set_font_directories,
-    DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB,
+    current_font_directories, current_google_fonts_cache_size_mb, register_font_directory,
+    set_font_directories, set_google_fonts_cache_size_mb, DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB,
 };
 pub use vl_convert_google_fonts::{google_fonts_cache_dir, FontStyle, VariantRequest};
 
