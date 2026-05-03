@@ -295,39 +295,34 @@ the top-level router separately, after the api_router's layer stack).
 
 The admin handler installs a scope guard after acquiring
 `coordinator.lock()`. On any exit path (`return`, `?`, panic caught by
-`CatchPanicLayer`, client disconnect drop), the guard's `Drop`:
+`CatchPanicLayer`, client disconnect drop), if the handler called
+`mark_gate_closed()` (which it does just before `coordinator.drain()`),
+the guard's `Drop` reopens the gate and clears
+`readiness.reconfig_in_progress`. The actual implementation is 8
+lines (see `src/reconfig.rs::ReconfigScopeGuard`).
 
-1. **Fires any armed rollback closure first** (restores globals to
-   pre-rebuild state).
-2. Reopens the gate if the handler had closed it.
-3. Clears `readiness.reconfig_in_progress`.
+There is no rollback machinery. The `/admin/config` PATCH/PUT/DELETE
+commit pipeline never mutates process-global state (font directories,
+Google Fonts cache size); those live on dedicated endpoints under
+`/admin/config/fonts/{directories,cache_size}`, each a single library
+call under `coordinator.lock()` with no gate close or drain.
 
-**Ordering is load-bearing**: the rollback MUST run before the gate
-reopens, otherwise a request admitted in the window between
-`open_gate` and the rollback closure firing would observe the
-pre-rollback process-globals (a failed `with_config` that mutated
-`FONT_CONFIG` / Google Fonts cache) combined with the still-old
-`RuntimeSnapshot` — effectively serving traffic against a config that
-was never committed. Running rollback first guarantees: when the gate
-reopens, globals are either committed (success path, rollback
-disarmed) or restored (failure path, rollback fired).
+The PATCH-identity short-circuit and the dedicated font-directories /
+cache-size endpoints don't close the gate, so they don't go through
+`ReconfigScopeGuard` at all.
 
-The rollback closure is armed only after globals are mutated (Step 3
-of the rebuild pipeline) and disarmed only after the commit succeeds
-(Step 6). A failed `warm_up`, a timeout, a panic, or a dropped admin
-client all trigger the rollback. See `src/reconfig.rs`.
+### `generation` and `config_version`
 
-### `generation` is admin-only, `config_version` tracks all commits
+Both counters bump on every successful commit through `/admin/config`.
+They are exposed on `GET /admin/config` only; not on `/infoz` (public
+surface stays stable; `test_infoz_surface_unchanged` guards against
+regression).
 
-- `generation` — bumps on every **rebuild commit**. Exposed on
-  `GET /admin/config` only. NOT on `/infoz` (public surface stays
-  stable; `test_infoz_surface_unchanged` guards against regression).
-- `config_version` — bumps on every **successful commit** including
-  hot-apply. Also admin-only.
-
-Wrappers that care about "did my mutation take effect" use
-`config_version`; operators who care about "did the worker pool
-rebuild" use `generation`.
+The two are kept as separate fields so a future hot-apply
+re-introduction can move them independently — `generation` would
+bump only on rebuilds and `config_version` on every commit. In the
+current design (no hot-apply paths) the two values move together and
+are always equal.
 
 ### Admin auth
 

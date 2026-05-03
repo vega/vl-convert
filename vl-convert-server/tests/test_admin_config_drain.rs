@@ -322,18 +322,6 @@ async fn test_back_to_back_patches_serialize() {
     assert_eq!(body["config_version"], 2);
 }
 
-/// #[ignore]'d — there is no test-only hook in vl-convert-rs to force a
-/// `VlConverter::with_config` or `warm_up` failure. The production code
-/// path is covered by the admin handler's ReconfigScopeGuard rollback
-/// closure, but exercising it from an integration test would require a
-/// library-side fault-injection hook that does not exist. Documented in
-/// findings.md.
-#[ignore]
-#[tokio::test]
-async fn test_failed_rebuild_restores_globals() {
-    // Intentionally empty — see doc comment above.
-}
-
 /// Admission race regression — stress the gate middleware with many
 /// concurrent POSTs while a PATCH closes the gate mid-burst. Every request
 /// must either admit cleanly (200/4xx), get rejected with 503, or get a

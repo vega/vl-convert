@@ -11,9 +11,9 @@ use crate::AppState;
 /// Mirrors `auth_middleware` but reads `admin_api_key` from `AdminState`,
 /// which carries `opaque_errors` for response shape. When the admin key
 /// is `None` the middleware is a no-op — admin is still gated by the
-/// listener's placement (UDS `0o600` or TCP loopback; main.rs's
-/// `advise_listener_security` enforces the non-loopback-TCP case at
-/// startup).
+/// listener's placement (UDS `0o600` or TCP loopback;
+/// `validate_serve_config` in `src/config.rs` hard-bails on the
+/// non-loopback-TCP case before `bind_listener` runs).
 pub(crate) async fn admin_auth_middleware(
     axum::extract::State(state): axum::extract::State<Arc<AdminState>>,
     req: axum::http::Request<axum::body::Body>,

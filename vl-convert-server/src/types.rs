@@ -767,10 +767,9 @@ mod tests {
 
     #[test]
     fn config_replace_rejects_cache_dir_field() {
-        // `google_fonts_cache_dir` lives on the outer `ConfigView`
-        // envelope (read-only system info). `ConfigReplace` is the
-        // writable inner shape and must reject it via
-        // `deny_unknown_fields`.
+        // `google_fonts_cache_dir` is read-only system state surfaced on
+        // `/infoz`, not part of the writable config DTO. `ConfigReplace`
+        // must reject it via `deny_unknown_fields`.
         let body = put_body(&[("google_fonts_cache_dir", serde_json::json!("/tmp/cache"))]);
         let err = serde_json::from_value::<ConfigReplace>(body)
             .expect_err("google_fonts_cache_dir is not a writable field");
@@ -853,18 +852,17 @@ mod tests {
 
     #[test]
     fn vlc_config_serialize_does_not_emit_google_fonts_cache_dir() {
-        // `google_fonts_cache_dir` is read-only system state and lives
-        // on the outer `ConfigView` envelope, not on `VlcConfig`.
-        // Regression guard: do not regress this back into a flattened
-        // union of writable + read-only fields.
+        // `google_fonts_cache_dir` is read-only system state surfaced on
+        // `/infoz`, not on `VlcConfig`. Regression guard: do not regress
+        // this back into a flattened union of writable + read-only
+        // fields.
         let value: serde_json::Value = serde_json::to_value(VlcConfig::default()).expect("ser");
         assert!(
             !value
                 .as_object()
                 .unwrap()
                 .contains_key("google_fonts_cache_dir"),
-            "google_fonts_cache_dir must live on the ConfigView envelope, \
-             not on VlcConfig"
+            "google_fonts_cache_dir must live on /infoz, not on VlcConfig"
         );
     }
 }
