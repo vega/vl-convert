@@ -500,3 +500,9 @@ pub(crate) enum Commands {
     /// Run the HTTP conversion server.
     Serve(crate::serve::ServeArgs),
 }
+
+impl Commands {
+    pub(crate) fn is_serve(&self) -> bool {
+        matches!(self, Commands::Serve(_))
+    }
+}

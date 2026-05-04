@@ -389,7 +389,9 @@ impl From<&ServeArgs> for ServeConfig {
             None => args.admin_port.map(ListenAddr::loopback_tcp),
         };
 
-        let socket_mode = args.socket_mode.unwrap_or(0o600);
+        let socket_mode = args
+            .socket_mode
+            .unwrap_or_else(|| ServeConfig::default().socket_mode);
         let reconfig_drain_timeout_secs = args
             .reconfig_drain_timeout_secs
             .unwrap_or(args.drain_timeout_secs);
@@ -544,13 +546,11 @@ fn advise_admin_security(
             if is_loopback {
                 log::warn!(
                     "Admin listener binding to {url} with no admin API key — \
-                     loopback is still the trust boundary. Set --admin-api-key \
-                     for defense-in-depth."
+                     loopback is still the trust boundary. Set \
+                     --admin-api-key as a redundant guard."
                 );
             } else {
-                // `validate_serve_config` already hard-bails on this
-                // case before we reach here; treat the advisory as a
-                // belt-and-braces log line.
+                // Dead in practice — `validate_serve_config` bails first.
                 log::warn!(
                     "Admin listener at {url} is non-loopback and has no \
                      --admin-api-key set."
@@ -559,6 +559,23 @@ fn advise_admin_security(
             Ok(())
         }
     }
+}
+
+/// Warn when the listener is non-loopback TCP and the operator hasn't
+/// narrowed `allowed_base_urls` away from the library default.
+fn advise_data_access_security(main: &BoundListener, allowed_base_urls_is_library_default: bool) {
+    if !allowed_base_urls_is_library_default || main.is_loopback() {
+        return;
+    }
+    let endpoint = main.endpoint_label();
+    log::warn!(
+        "Server binding to {endpoint} with the library-default \
+         allowed_base_urls (any http: or https: URL is permitted, \
+         including private-network targets). Pass \
+         --allowed-base-urls=net to keep the same scheme allowlist \
+         but make the choice explicit, or pass an explicit list / \
+         --allowed-base-urls=none for production deployments."
+    );
 }
 
 /// Emit the readiness JSON signal on stdout. Exactly one line of
@@ -717,9 +734,8 @@ pub(crate) async fn run_serve(
     mut base_config: VlcConfig,
     args: ServeArgs,
 ) -> anyhow::Result<()> {
-    // Step 1 — per-request converter gates onto base_config. These four
-    // mutate `VlcConfig` but are meaningless outside serve, so the main
-    // CLI plumbing block leaves them alone and we apply them here.
+    // Per-request gates only mean something inside serve, so the main
+    // CLI plumbing leaves them unset and we apply them here.
     if let Some(v) = args.allow_google_fonts {
         base_config.allow_google_fonts = v;
     }
@@ -727,8 +743,6 @@ pub(crate) async fn run_serve(
         base_config.allow_per_request_plugins = v;
     }
     if let Some(v) = args.max_ephemeral_workers {
-        // CLI shape is `Option<u64>`; library field is
-        // `Option<NonZeroU64>`. `0` collapses to `None` (no cap).
         base_config.max_ephemeral_workers = NonZeroU64::new(v);
     }
     let per_request_domains =
@@ -737,64 +751,43 @@ pub(crate) async fn run_serve(
         base_config.per_request_plugin_import_domains = per_request_domains;
     }
 
-    // Step 2 — `--workers` override. The conversion path forces
-    // `num_workers = 1` in main.rs but skips that line for `Serve`, so
-    // here we either honor an explicit `--workers <N>` or leave the
-    // value resolved from `--vlc-config` / library default in place.
     if let Some(n) = args.workers {
-        // Library field is `NonZeroU64`; CLI parser produces
-        // `NonZeroUsize`. Convert via `get()` because both are
-        // documented to be >= 1.
         let n_u64 = u64::try_from(n.get())
             .map_err(|e| anyhow::anyhow!("--workers {} doesn't fit in u64: {e}", n.get()))?;
         base_config.num_workers =
             NonZeroU64::new(n_u64).expect("NonZeroUsize.get() is always >= 1");
     }
 
-    // Step 3 — install SIGTERM handler eagerly, BEFORE any
-    // `tokio::spawn`. `tokio::signal::unix::signal(...)` registers
-    // the kernel handler synchronously at construction; deferring
-    // it to a spawned task creates a window in which an early
-    // SIGTERM takes the default disposition (terminate without
-    // cleanup). The Signal binding is moved into the signal task
-    // below.
+    // Must be installed before any `tokio::spawn` — `signal()`
+    // registers the kernel handler synchronously, and deferring it
+    // leaves early SIGTERMs with the default disposition.
     #[cfg(unix)]
     let mut sigterm_recv =
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
             .map_err(|e| anyhow::anyhow!("failed to install SIGTERM handler: {e}"))?;
 
-    // Step 4 — build the ServeConfig from args + globals (log_format
-    // is a Cli global, not a serve-local flag).
     let mut serve_config: ServeConfig = (&args).into();
     serve_config.log_format = cli.log_format;
 
-    // Step 5 — build the app (validates admin-loopback rule, warms
-    // workers, binds admin listener if configured) then bind the main
-    // listener.
+    // Capture before `base_config` moves into `build_app`.
+    let allowed_base_urls_is_library_default = base_config.allowed_base_urls == ["http:", "https:"];
+
+    // Validate + warm before we expose a public socket.
     let built = build_app(base_config, &serve_config).await?;
     let listener: BoundListener =
         bind_listener(&serve_config.main, serve_config.socket_mode).await?;
 
-    // Step 6 — security advisories. `advise_admin_security`'s hard
-    // bail is already enforced inside `build_app` via
-    // `validate_serve_config`, so here it's belt-and-braces logging.
     let endpoint = listener.endpoint_label();
     advise_listener_security(&listener, &serve_config);
     advise_admin_security(built.admin_endpoint_info(), &serve_config)?;
+    advise_data_access_security(&listener, allowed_base_urls_is_library_default);
 
-    // Step 7 — log the listening endpoint on both stderr (eprintln!
-    // for unconditional human-visible output) and via tracing
-    // (so structured-log consumers see it too).
     eprintln!("Listening on {endpoint}");
     log::info!("Listening on {endpoint}");
 
-    // Step 8 — emit ready-JSON line on stdout if enabled. Must fire
-    // BEFORE any subsequent await that could cancel (signal task
-    // spawn, stdin watcher spawn) so parents blocked on `read_line()`
-    // unblock promptly.
+    // Must fire before any subsequent await that could cancel, so a
+    // parent blocked on `read_line()` unblocks promptly.
     emit_ready_json_if_enabled(args.ready_json, &listener, built.admin_endpoint_info())?;
-
-    // Step 9 — shutdown plumbing.
     let drain_secs = args.drain_timeout_secs;
     let (signal_tx, signal_rx) = tokio::sync::oneshot::channel::<()>();
 
@@ -884,11 +877,18 @@ pub(crate) async fn run_serve(
         }
     };
 
-    // Step 10 — race the serve future against the watchdog. The
-    // watchdog branch is unreachable because the watchdog calls
-    // `std::process::exit` before completing.
+    // The watchdog arm normally never returns — `std::process::exit(1)`
+    // fires on drain-timeout. If the signal sender drops without
+    // firing (caught aggregator panic), log and exit cleanly rather
+    // than panic from a stale `unreachable!()`.
     tokio::select! {
         result = serve_app(listener, built, shutdown) => result,
-        _ = watchdog => unreachable!("watchdog exits the process before returning"),
+        _ = watchdog => {
+            log::error!(
+                "watchdog returned without firing process::exit; \
+                 signal sender dropped before the drain deadline."
+            );
+            Ok(())
+        }
     }
 }

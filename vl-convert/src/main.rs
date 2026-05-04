@@ -115,7 +115,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // One-shot conversion subcommands always run with one worker; the
     // serve subcommand keeps whatever the user supplied (or the
     // library default) so `--workers <N>` can scale the worker pool.
-    if !matches!(cli.command, Commands::Serve(_)) {
+    if !cli.command.is_serve() {
         base_config.num_workers = NonZeroU64::new(1).expect("1 is non-zero");
     }
 
@@ -128,10 +128,10 @@ async fn main() -> Result<(), anyhow::Error> {
     // `cli.command` via `std::mem::replace` (replacing with the inert
     // `ConfigPath` variant) so `&cli` stays usable for global flag
     // access inside `run_serve`.
-    if matches!(cli.command, Commands::Serve(_)) {
+    if cli.command.is_serve() {
         let command = std::mem::replace(&mut cli.command, Commands::ConfigPath);
         let Commands::Serve(args) = command else {
-            unreachable!("matches! guard above");
+            unreachable!("is_serve() guard above");
         };
         return serve::run_serve(&cli, base_config, args).await;
     }

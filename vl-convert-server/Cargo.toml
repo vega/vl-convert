@@ -27,7 +27,10 @@ subtle = "2"
 http = "1"
 tracing = "0.1"
 tracing-log = "0.2"
-tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+# `tracing-log` is load-bearing: it installs the `log → tracing` bridge
+# `init_tracing` relies on. Pinned explicitly so it's not lost to a
+# future `default-features = false` flip.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter", "tracing-log"] }
 dashmap = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 utoipa = { version = "5", features = ["axum_extras"] }
