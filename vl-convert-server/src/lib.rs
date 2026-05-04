@@ -266,10 +266,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_build_app_rejects_empty_main_api_key() {
+        for key in ["", "   ", "\t"] {
+            let mut serve_config = default_serve_config();
+            serve_config.api_key = Some(key.to_string());
+
+            let err = build_app(VlcConfig::default(), &serve_config)
+                .await
+                .err()
+                .unwrap();
+            assert!(
+                err.to_string().contains("api_key"),
+                "key {key:?} must trigger validator: {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_build_app_rejects_empty_admin_api_key_on_safe_admin_bind() {
+        for key in ["", "   ", "\t"] {
+            let mut serve_config = default_serve_config();
+            serve_config.admin = Some(crate::ListenAddr::loopback_tcp(0));
+            serve_config.admin_api_key = Some(key.to_string());
+
+            let err = build_app(VlcConfig::default(), &serve_config)
+                .await
+                .err()
+                .unwrap();
+            assert!(
+                err.to_string().contains("admin_api_key"),
+                "loopback admin key {key:?} must trigger validator: {err}"
+            );
+        }
+
+        #[cfg(unix)]
+        for key in ["", "   ", "\t"] {
+            let mut serve_config = default_serve_config();
+            serve_config.admin = Some(crate::ListenAddr::Uds {
+                path: "/tmp/vl-convert-admin-test.sock".into(),
+            });
+            serve_config.admin_api_key = Some(key.to_string());
+
+            let err = build_app(VlcConfig::default(), &serve_config)
+                .await
+                .err()
+                .unwrap();
+            assert!(
+                err.to_string().contains("admin_api_key"),
+                "UDS admin key {key:?} must trigger validator: {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_build_app_rejects_non_loopback_admin_without_usable_key() {
-        // None and whitespace-only keys must all trigger the validator
-        // — a misconfigured `VLC_ADMIN_API_KEY=""` env var must not
-        // satisfy the non-loopback guard.
+        // None triggers the non-loopback admin guard; whitespace-only
+        // keys are rejected earlier as invalid configured secrets.
         for key in [None, Some(""), Some("   "), Some("\t")] {
             let mut serve_config = default_serve_config();
             serve_config.admin = Some(crate::ListenAddr::Tcp {

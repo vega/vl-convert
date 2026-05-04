@@ -264,20 +264,28 @@ pub(crate) fn validate_serve_config(serve_config: &ServeConfig) -> Result<(), an
         anyhow::bail!("budget_hold_ms must be positive");
     }
 
+    if serve_config
+        .api_key
+        .as_deref()
+        .is_some_and(|key| key.trim().is_empty())
+    {
+        anyhow::bail!("api_key must not be empty or whitespace-only");
+    }
+    if serve_config
+        .admin_api_key
+        .as_deref()
+        .is_some_and(|key| key.trim().is_empty())
+    {
+        anyhow::bail!("admin_api_key must not be empty or whitespace-only");
+    }
+
     // Refuse to bind a non-loopback TCP admin listener without an
     // admin bearer key. Without the key, `admin_auth_middleware` is a
     // no-op and `/admin/config` mutation would be reachable from
     // anywhere the listener is exposed. UDS admin without a key is
     // allowed because filesystem permissions are the trust boundary.
-    // Whitespace-only keys (e.g. `VLC_ADMIN_API_KEY=""`) count as
-    // missing — otherwise they'd satisfy this guard while letting
-    // `Authorization: Bearer ` accept the empty string.
     if let Some(admin_addr) = &serve_config.admin {
-        let key_unset = serve_config
-            .admin_api_key
-            .as_deref()
-            .is_none_or(|k| k.trim().is_empty());
-        if key_unset && !admin_addr.is_loopback_or_uds() {
+        if serve_config.admin_api_key.is_none() && !admin_addr.is_loopback_or_uds() {
             anyhow::bail!(
                 "admin listener bound to non-loopback address {admin_addr} requires \
                  a non-empty admin_api_key; either set admin_api_key or use a \

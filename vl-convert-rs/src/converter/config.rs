@@ -56,11 +56,18 @@ impl<'de> serde::Deserialize<'de> for BaseUrlSetting {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
-        match s.as_str() {
-            "default" => Ok(BaseUrlSetting::Default),
-            "disabled" => Ok(BaseUrlSetting::Disabled),
-            _ => Ok(BaseUrlSetting::Custom(s)),
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::Bool(true) => Ok(BaseUrlSetting::Default),
+            serde_json::Value::Bool(false) => Ok(BaseUrlSetting::Disabled),
+            serde_json::Value::String(s) => match s.as_str() {
+                "default" => Ok(BaseUrlSetting::Default),
+                "disabled" => Ok(BaseUrlSetting::Disabled),
+                _ => Ok(BaseUrlSetting::Custom(s)),
+            },
+            _ => Err(serde::de::Error::custom(
+                "base_url must be true, false, or a string",
+            )),
         }
     }
 }
@@ -401,6 +408,18 @@ mod tests {
     }
 
     #[test]
+    fn test_base_url_setting_default_bool() {
+        let config: VlcConfig = serde_json::from_str(r#"{"base_url": true}"#).unwrap();
+        assert_eq!(config.base_url, BaseUrlSetting::Default);
+    }
+
+    #[test]
+    fn test_base_url_setting_disabled_bool() {
+        let config: VlcConfig = serde_json::from_str(r#"{"base_url": false}"#).unwrap();
+        assert_eq!(config.base_url, BaseUrlSetting::Disabled);
+    }
+
+    #[test]
     fn test_base_url_setting_custom() {
         let config: VlcConfig =
             serde_json::from_str(r#"{"base_url": "https://example.com/"}"#).unwrap();
@@ -572,6 +591,13 @@ mod tests {
         assert!(cfg.google_fonts.is_empty());
         assert!(cfg.vega_plugins.is_empty());
         assert!(cfg.themes.is_empty());
+    }
+
+    #[test]
+    fn test_default_config_round_trips_through_json_value() {
+        let value = serde_json::to_value(VlcConfig::default()).unwrap();
+        let round_trip: VlcConfig = serde_json::from_value(value).unwrap();
+        assert_eq!(round_trip, VlcConfig::default());
     }
 
     #[test]

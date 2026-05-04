@@ -131,6 +131,19 @@ pub(crate) fn parse_positive_i64_arg(raw: &str) -> Result<i64, String> {
     Ok(parsed)
 }
 
+/// Value parser for non-negative `i64` budget caps.
+/// Accepts zero to preserve the existing "disabled" budget dimension.
+pub(crate) fn parse_budget_ms_arg(raw: &str) -> Result<i64, String> {
+    let parsed: i64 = raw
+        .trim()
+        .parse()
+        .map_err(|err| format!("invalid non-negative integer '{raw}': {err}"))?;
+    if parsed < 0 {
+        return Err("must be non-negative".to_string());
+    }
+    Ok(parsed)
+}
+
 /// Serve-local flags for the `vl-convert serve` subcommand.
 ///
 /// Globals (logging, font dirs, allowed-base-urls, etc.) live on
@@ -267,13 +280,13 @@ pub(crate) struct ServeArgs {
     pub(crate) cors_origin: Option<String>,
 
     /// Conversion-time budget per IP, in milliseconds per minute.
-    #[arg(long, value_name = "MS")]
-    pub(crate) per_ip_budget_ms: Option<u64>,
+    #[arg(long, value_parser = parse_budget_ms_arg, value_name = "MS")]
+    pub(crate) per_ip_budget_ms: Option<i64>,
 
     /// Total conversion-time budget for the server, in milliseconds
     /// per minute.
-    #[arg(long, value_name = "MS")]
-    pub(crate) global_budget_ms: Option<u64>,
+    #[arg(long, value_parser = parse_budget_ms_arg, value_name = "MS")]
+    pub(crate) global_budget_ms: Option<i64>,
 
     /// Per-request budget hold in milliseconds. Must be positive.
     #[arg(long, value_parser = parse_positive_i64_arg, value_name = "MS")]
@@ -422,15 +435,11 @@ impl From<&ServeArgs> for ServeConfig {
         if let Some(v) = args.trust_proxy {
             cfg.trust_proxy = v;
         }
-        // Budget knobs: CLI uses u64 for cleanliness; ServeConfig uses
-        // i64 because budget_hold_ms can carry settlement deltas. The
-        // `as i64` cast is lossless for any practical millisecond
-        // budget — `i64::MAX ≈ 9.2 × 10¹⁸ ms ≈ 300 billion years`.
         if let Some(v) = args.per_ip_budget_ms {
-            cfg.per_ip_budget_ms = Some(v as i64);
+            cfg.per_ip_budget_ms = Some(v);
         }
         if let Some(v) = args.global_budget_ms {
-            cfg.global_budget_ms = Some(v as i64);
+            cfg.global_budget_ms = Some(v);
         }
         if let Some(v) = args.budget_hold_ms {
             cfg.budget_hold_ms = v;
@@ -890,5 +899,71 @@ pub(crate) async fn run_serve(
             );
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn default_args() -> ServeArgs {
+        ServeArgs {
+            host: None,
+            port: None,
+            unix_socket: None,
+            socket_mode: None,
+            admin_port: None,
+            admin_unix_socket: None,
+            admin_api_key: None,
+            api_key: None,
+            workers: None,
+            max_concurrent_requests: None,
+            request_timeout_secs: None,
+            drain_timeout_secs: 30,
+            reconfig_drain_timeout_secs: None,
+            max_body_size_mb: None,
+            opaque_errors: None,
+            require_user_agent: None,
+            trust_proxy: None,
+            cors_origin: None,
+            per_ip_budget_ms: None,
+            global_budget_ms: None,
+            budget_hold_ms: None,
+            ready_json: false,
+            exit_on_parent_close: None,
+            allow_google_fonts: None,
+            allow_per_request_plugins: None,
+            max_ephemeral_workers: None,
+            per_request_plugin_import_domains: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn parse_budget_ms_arg_accepts_non_negative_i64_values() {
+        assert_eq!(parse_budget_ms_arg("0").unwrap(), 0);
+        assert_eq!(parse_budget_ms_arg("1").unwrap(), 1);
+        assert_eq!(
+            parse_budget_ms_arg(&i64::MAX.to_string()).unwrap(),
+            i64::MAX
+        );
+    }
+
+    #[test]
+    fn parse_budget_ms_arg_rejects_negative_and_overflow_values() {
+        assert!(parse_budget_ms_arg("-1").is_err());
+
+        let overflow = (i64::MAX as u128 + 1).to_string();
+        assert!(parse_budget_ms_arg(&overflow).is_err());
+    }
+
+    #[test]
+    fn serve_config_from_args_preserves_budget_values() {
+        let mut args = default_args();
+        args.per_ip_budget_ms = Some(0);
+        args.global_budget_ms = Some(i64::MAX);
+
+        let config = ServeConfig::from(&args);
+        assert_eq!(config.per_ip_budget_ms, Some(0));
+        assert_eq!(config.global_budget_ms, Some(i64::MAX));
     }
 }
