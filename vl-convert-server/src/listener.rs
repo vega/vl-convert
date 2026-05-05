@@ -463,7 +463,10 @@ mod tests {
              through the drain window)",
         );
         assert!(
-            matches!(err.kind(), ErrorKind::ConnectionRefused | ErrorKind::NotFound),
+            matches!(
+                err.kind(),
+                ErrorKind::ConnectionRefused | ErrorKind::NotFound
+            ),
             "expected ECONNREFUSED or ENOENT, got {err:?}"
         );
 
