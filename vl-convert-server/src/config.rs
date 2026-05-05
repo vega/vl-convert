@@ -169,10 +169,6 @@ pub(crate) struct RuntimeSnapshot {
     /// Bumps on every rebuild-commit (drain+rebuild path). Exposed through
     /// admin endpoints; not used on the conversion hot path.
     pub generation: u64,
-    /// Bumps on every successful commit. Kept distinct from `generation` so a
-    /// future hot-apply re-introduction can advance one without the other; in
-    /// the current design (no hot-apply paths) the two always move together.
-    pub config_version: u64,
 }
 
 pub(crate) struct AppState {

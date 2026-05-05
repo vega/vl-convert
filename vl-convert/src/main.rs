@@ -23,8 +23,8 @@ use handlers::{
     vl_2_svg, vl_2_vg,
 };
 use io_utils::{
-    apply_global_font_dirs, apply_global_google_fonts_cache, flatten_plugin_domains,
-    parse_allowed_base_urls, parse_base_url_arg, parse_format_locale_option,
+    apply_global_font_dirs, apply_global_google_fonts_cache, expand_allowed_base_urls,
+    flatten_plugin_domains, parse_base_url_arg, parse_format_locale_option,
     parse_google_font_requests, parse_nullable_string_arg, parse_themes_json,
     parse_time_format_locale_option, parse_vl_version, read_config_json, read_input_string,
     resolve_vlc_config, synthesize_log_filter, write_output_binary, write_output_string,
@@ -59,8 +59,8 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(ref raw) = cli.base_url {
         base_config.base_url = parse_base_url_arg(raw)?;
     }
-    if let Some(ref raw) = cli.allowed_base_urls {
-        base_config.allowed_base_urls = parse_allowed_base_urls(raw)?;
+    if !cli.allowed_base_urls.is_empty() {
+        base_config.allowed_base_urls = expand_allowed_base_urls(&cli.allowed_base_urls);
     }
     if let Some(v) = cli.auto_google_fonts {
         base_config.auto_google_fonts = v;

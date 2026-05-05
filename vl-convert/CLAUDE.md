@@ -35,24 +35,24 @@ Typed `=BOOL` values on every boolean and a single
 --vlc-config=<value>          # absolute path to JSONC config file, or `disabled` to skip
 
 --base-url=<value>            # default | disabled | URL with scheme | absolute path
---allowed-base-urls=<value>   # none | net | all | JSON array | @path-to-file
+--allowed-base-urls=<value>   # none | net | all | URL_PREFIX[;URL_PREFIX...]
 
 --auto-google-fonts=BOOL      # default: false
 --embed-local-fonts=BOOL      # default: false
 --subset-fonts=BOOL           # default: true
 --gc-after-conversion=BOOL    # default: false
 --missing-fonts <fallback|warn|error>
---font-dir <PATH>             # repeatable: pass multiple times for multiple dirs
---google-font <Family[:variants]>
+--font-dir <PATH>             # repeatable; `:`-separated on Unix, `;` on Windows (PATH convention)
+--google-font <Family[:variants][;Family[:variants]...]>
 --google-fonts-cache-size-mb <MB>   # 0 = library default
 --default-theme <THEME|null>            # null clears the value
---default-format-locale <LOCALE|JSON|@FILE|null>
---default-time-format-locale <LOCALE|JSON|@FILE|null>
---themes <JSON|@FILE|null>    # custom named themes map
+--default-format-locale <LOCALE|JSON|FILE.json|null>
+--default-time-format-locale <LOCALE|JSON|FILE.json|null>
+--themes <JSON|FILE.json|null>    # custom named themes map
 --max-v8-heap-size-mb <n>     # 0 = no cap
 --max-v8-execution-time-secs <n>   # 0 = no cap
---vega-plugin <path|url|inline-esm>
---plugin-import-domains <csv>
+--vega-plugin <path|URL[;path|URL...]>   # inline ESM not accepted on the CLI; use --vlc-config
+--plugin-import-domains <DOMAIN[;DOMAIN...]>
 --log-level <error|warn|info|debug>
 --log-format <text|json>      # default: text
 --log-filter <DIRECTIVE>      # raw EnvFilter directive; wins over --log-level
@@ -74,6 +74,49 @@ by parsing the `null` literal at consumption time in `io_utils.rs`
 `Option<String>` because clap 4's custom value parsers panic at
 runtime on `Option<Option<T>>` field types.
 
+## Env-var fallback
+
+Every flag (22 globals + 27 serve-local) has a `VLC_<SCREAMING_SNAKE_CASE>`
+env-var fallback via `clap`'s `env` attribute. Precedence ladder:
+
+```
+CLI flag > VLC_<NAME> > config-file (--vlc-config) > library default
+```
+
+For `--port` specifically: `--port > VLC_PORT > PORT (PaaS) > 3000`.
+The PaaS `PORT` fallback is baked into the `From<&ServeArgs>` impl.
+
+**Naming exceptions**:
+- `--vlc-config` uses `VLC_CONFIG` (not `VLC_VLC_CONFIG`).
+- `--font-dir` uses `value_delimiter = ':'` on Unix and `';'` on Windows so
+  PATH-style env values split correctly.
+
+**List-value delimiter**: every Vec-shaped flag splits its value on `;`
+(`--allowed-base-urls`, `--google-font`, `--vega-plugin`,
+`--plugin-import-domains`, `--per-request-plugin-import-domains`). The
+sole carve-out is `--font-dir`, which follows the OS PATH convention
+(`:` Unix, `;` Windows). The `;`-everywhere rule lets a single `VLC_*`
+env value carry a multi-entry list — e.g.
+`VLC_GOOGLE_FONT="Roboto:400,700italic;Inter:400"` registers two
+families (commas inside variants survive because they're not the
+delimiter); `VLC_ALLOWED_BASE_URLS="https://x.com/;https://y.com/"`
+yields two prefixes.
+
+**`--vega-plugin` value shape**: the flag accepts a file path or URL
+only. Inline ESM strings used to be accepted but are now rejected at
+parse time so the `;` delimiter is unambiguous. Inline-ESM plugins go
+in `--vlc-config` JSONC or via the HTTP/library API.
+
+**`--allowed-base-urls` reserved literals only fire on a single-value
+invocation**: `none`, `net`, and `all` expand to canonical allowlists
+(`[]`, `["http:", "https:"]`, `["*"]`) only when they're the sole
+value. Mixed invocations like `--allowed-base-urls="none;https://x.com/"`
+treat each entry as a literal CSP pattern.
+
+See `tests/test_env_vars.rs` and `src/cli_types.rs::tests` for
+verification (port precedence, `;`-delimiter splitting, reserved-literal
+expansion, value-parser passage, and inline-ESM rejection).
+
 ## Logging stack
 
 Logging routes through `tracing-subscriber` (configured by
@@ -89,13 +132,13 @@ boolean flags (e.g. `--auto-google-fonts`) resolve to `true`.
 
 `--allowed-base-urls` reserved values: `none` (block all), `net`
 (HTTP/HTTPS only, no filesystem), `all` (`["*"]`, allow everything
-incl. filesystem). Otherwise a JSON array of CSP-style patterns
-(`"https:"`, `"https://example.com/"`, `"/data/"`), or `@<path>` to
-read the JSON from a file.
+incl. filesystem). Otherwise a `;`-separated list of CSP-style
+patterns (`"https:"`, `"https://example.com/"`, `"/data/"`). Long
+allowlists belong in `--vlc-config` JSONC.
 
 To disable all external data access: `--allowed-base-urls=none`. To
 allow only specific prefixes:
-`--allowed-base-urls='["https://cdn.example.com/"]'`.
+`--allowed-base-urls="https://cdn.example.com/;https://other.example.com/"`.
 
 ## Testing
 

@@ -556,7 +556,6 @@ pub(crate) struct ConfigView {
     pub baseline: VlcConfig,
     pub effective: VlcConfig,
     pub generation: u64,
-    pub config_version: u64,
 }
 
 /// Request body for `POST /admin/config/fonts/directories`. Single-path

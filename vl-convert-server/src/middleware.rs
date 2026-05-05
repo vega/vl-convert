@@ -506,7 +506,6 @@ mod tests {
                 converter: vl_convert_rs::converter::VlConverter::new(),
                 config: Arc::new(vl_convert_rs::converter::VlcConfig::default()),
                 generation: 0,
-                config_version: 0,
             }));
         let state = Arc::new(crate::config::AppState {
             runtime,

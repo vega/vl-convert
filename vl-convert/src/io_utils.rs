@@ -50,30 +50,22 @@ pub(crate) fn apply_global_google_fonts_cache(cli: &Cli) -> anyhow::Result<()> {
     vl_convert_rs::set_google_fonts_cache_size_mb(NonZeroU64::new(mb))
 }
 
-/// Parse a `--themes` value (JSON object literal, `@<path>` to a JSON
-/// file, or the literal string `null`) into an optional themes map.
-/// Port of v3's `parse_json_map` adapted to the CLI's narrower shape
-/// (no env-var indirection and no `@-` stdin support — see v3
-/// `vl-convert-server/src/settings/parsers.rs`).
+/// Parse a `--themes` value (inline JSON object, path to a `.json` /
+/// `.jsonc` file, or the literal string `null`) into an optional themes
+/// map. File contents are parsed as JSONC (comments and trailing commas
+/// allowed); inline values must be valid JSON.
 pub(crate) fn parse_themes_json(
     raw: &str,
 ) -> Result<Option<HashMap<String, serde_json::Value>>, anyhow::Error> {
     if is_null_literal(raw) {
         return Ok(None);
     }
-    let json_text = if let Some(path_str) = raw.strip_prefix('@') {
-        let trimmed = path_str.trim();
-        if trimmed.is_empty() {
-            bail!("--themes must specify a path after '@'");
-        }
-        let expanded = shellexpand::tilde(trimmed).to_string();
-        std::fs::read_to_string(&expanded)
-            .map_err(|err| anyhow::anyhow!("failed to read --themes @ {}: {err}", expanded))?
-    } else {
-        raw.to_string()
-    };
-    let value: serde_json::Value = serde_json::from_str(&json_text)
-        .map_err(|err| anyhow::anyhow!("--themes must be a JSON object: {err}"))?;
+    let value = read_inline_or_jsonc_file(raw, "--themes")?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "--themes must be an inline JSON object, a path to a .json or \
+             .jsonc file, or the literal string `null`"
+        )
+    })?;
     if value.is_null() {
         return Ok(None);
     }
@@ -104,6 +96,31 @@ pub(crate) fn parse_boolish_arg(raw: &str) -> Result<bool, String> {
     }
 }
 
+/// Value parser for `--vega-plugin`. Accepts a file path or URL with
+/// scheme; rejects inline ESM strings (which used to be accepted but
+/// would silently corrupt under the `;` env-var delimiter).
+pub(crate) fn parse_vega_plugin_arg(raw: &str) -> Result<String, String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return Err("--vega-plugin must not be empty".into());
+    }
+    if s.contains("://")
+        || s.starts_with('/')
+        || s.starts_with('~')
+        || s.starts_with("./")
+        || s.starts_with("../")
+        || s.ends_with(".js")
+        || s.ends_with(".mjs")
+    {
+        return Ok(s.to_string());
+    }
+    Err(format!(
+        "--vega-plugin '{s}' must be a file path or URL with scheme. \
+         Inline ESM strings are no longer accepted on the CLI flag — \
+         put inline plugins in `--vlc-config` JSONC instead."
+    ))
+}
+
 /// Parse a `--base-url` value into a `BaseUrlSetting`. Reserved values
 /// `default` and `disabled` map to the corresponding enum variants. A
 /// URL with scheme (`https://...`, `file://...`) is taken as-is. Any
@@ -132,47 +149,25 @@ pub(crate) fn parse_base_url_arg(raw: &str) -> Result<BaseUrlSetting, anyhow::Er
     Ok(BaseUrlSetting::Custom(expanded))
 }
 
-/// Parse a `--allowed-base-urls` value into a `Vec<String>`. Accepts:
-/// reserved values `none` / `net` / `all`, a JSON-array literal
-/// (e.g. `["http:","https:"]`), or `@<path>` referencing a file
-/// containing the JSON array.
-pub(crate) fn parse_allowed_base_urls(raw: &str) -> Result<Vec<String>, anyhow::Error> {
-    match raw.trim() {
-        "none" => return Ok(Vec::new()),
-        "net" => return Ok(vec!["http:".to_string(), "https:".to_string()]),
-        "all" => return Ok(vec!["*".to_string()]),
-        _ => {}
+/// Expand a `;`-delimited `--allowed-base-urls` Vec into the final
+/// allowlist. A single-element Vec matching a reserved literal
+/// (`none` / `net` / `all`) is replaced by the canonical expansion;
+/// any other shape is taken verbatim (each entry is trimmed but
+/// otherwise treated as a literal CSP pattern). Reserved literals
+/// that appear inside a multi-element Vec are NOT recognized as
+/// shortcuts — they're left as-is so the operator either notices the
+/// mistake or genuinely intends to match a host literally named
+/// `"none"` (vanishingly rare but unambiguous).
+pub(crate) fn expand_allowed_base_urls(values: &[String]) -> Vec<String> {
+    if values.len() == 1 {
+        match values[0].trim() {
+            "none" => return Vec::new(),
+            "net" => return vec!["http:".to_string(), "https:".to_string()],
+            "all" => return vec!["*".to_string()],
+            _ => {}
+        }
     }
-    let json_text = if let Some(path_str) = raw.strip_prefix('@') {
-        let expanded = shellexpand::tilde(path_str.trim()).to_string();
-        std::fs::read_to_string(&expanded).map_err(|err| {
-            anyhow::anyhow!("failed to read --allowed-base-urls @ {}: {err}", expanded)
-        })?
-    } else if raw.trim_start().starts_with('[') {
-        raw.to_string()
-    } else {
-        bail!(
-            "--allowed-base-urls must be one of: 'none', 'net', 'all', a JSON \
-             array literal like '[\"https:\"]', or '@<path>' to read the JSON \
-             from a file. Got: '{raw}'"
-        );
-    };
-    let value: serde_json::Value = serde_json::from_str(&json_text)
-        .map_err(|err| anyhow::anyhow!("--allowed-base-urls must be a JSON array: {err}"))?;
-    match value {
-        serde_json::Value::Array(values) => values
-            .into_iter()
-            .map(|v| match v {
-                serde_json::Value::String(s) => Ok(s),
-                _ => Err(anyhow::anyhow!(
-                    "--allowed-base-urls must be a JSON array of strings"
-                )),
-            })
-            .collect(),
-        _ => Err(anyhow::anyhow!(
-            "--allowed-base-urls must be a JSON array of strings"
-        )),
-    }
+    values.iter().map(|s| s.trim().to_string()).collect()
 }
 
 /// Parse a `--google-font` value like `"Roboto"` or `"Roboto:400,700italic"`
@@ -262,20 +257,6 @@ pub(crate) fn read_input_string(input: Option<&str>) -> Result<String, anyhow::E
     }
 }
 
-/// Read a file that is always a filesystem path (never stdin).
-///
-/// This function is used for reading configuration files (locale, time format)
-/// that should not come from stdin. For reading input specifications that may
-/// come from stdin or a file, use `read_input_string()` instead.
-fn read_file_string(path: &str) -> Result<String, anyhow::Error> {
-    match std::fs::read_to_string(path) {
-        Ok(contents) => Ok(contents),
-        Err(err) => {
-            bail!("Failed to read file: {}\n{}", path, err);
-        }
-    }
-}
-
 pub(crate) fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow::Error> {
     match serde_json::from_str::<serde_json::Value>(input_str) {
         Ok(input_json) => Ok(input_json),
@@ -286,11 +267,8 @@ pub(crate) fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow
 }
 
 fn format_locale_from_str(s: &str) -> Result<FormatLocale, anyhow::Error> {
-    if let Some(json) = read_locale_at_or_inline(s, "--format-locale")? {
+    if let Some(json) = read_inline_or_jsonc_file(s, "--format-locale")? {
         Ok(FormatLocale::Object(json))
-    } else if s.ends_with(".json") {
-        let body = read_file_string(s)?;
-        Ok(FormatLocale::Object(parse_as_json(&body)?))
     } else {
         Ok(FormatLocale::Name(s.to_string()))
     }
@@ -315,42 +293,52 @@ pub(crate) fn parse_format_locale_option(
 }
 
 fn time_format_locale_from_str(s: &str) -> Result<TimeFormatLocale, anyhow::Error> {
-    if let Some(json) = read_locale_at_or_inline(s, "--time-format-locale")? {
+    if let Some(json) = read_inline_or_jsonc_file(s, "--time-format-locale")? {
         Ok(TimeFormatLocale::Object(json))
-    } else if s.ends_with(".json") {
-        let body = read_file_string(s)?;
-        Ok(TimeFormatLocale::Object(parse_as_json(&body)?))
     } else {
         Ok(TimeFormatLocale::Name(s.to_string()))
     }
 }
 
-/// Match v3's `parse_format_locale` / `parse_time_format_locale`:
-/// `@<path>` reads JSON from the file; an inline value beginning with
-/// `{` is parsed as a JSON object literal. Returns `Some(json)` if
-/// either form matched, `None` otherwise (caller should fall through to
-/// the historic `*.json` path / locale-name branches).
-fn read_locale_at_or_inline(
+fn looks_like_json_file_path(s: &str) -> bool {
+    let lower = s.trim().to_ascii_lowercase();
+    lower.ends_with(".json") || lower.ends_with(".jsonc")
+}
+
+fn parse_jsonc_value(text: &str, flag: &str) -> Result<serde_json::Value, anyhow::Error> {
+    let value: Option<serde_json::Value> = jsonc_parser::parse_to_serde_value(
+        text,
+        &jsonc_parser::ParseOptions {
+            allow_comments: true,
+            allow_trailing_commas: true,
+            allow_loose_object_property_names: false,
+            allow_missing_commas: false,
+            allow_single_quoted_strings: false,
+            allow_hexadecimal_numbers: false,
+            allow_unary_plus_numbers: false,
+        },
+    )
+    .map_err(|err| anyhow::anyhow!("{flag} JSON parse error: {err}"))?;
+    value.ok_or_else(|| anyhow::anyhow!("{flag} value is empty"))
+}
+
+/// If `raw` is an inline JSON object (starts with `{`) or a path ending
+/// in `.json` / `.jsonc`, parse it (JSONC) and return `Some(value)`.
+/// Otherwise returns `None` so callers can fall through to a locale-name
+/// branch.
+fn read_inline_or_jsonc_file(
     raw: &str,
     flag: &str,
 ) -> Result<Option<serde_json::Value>, anyhow::Error> {
-    if let Some(path_str) = raw.strip_prefix('@') {
-        let trimmed = path_str.trim();
-        if trimmed.is_empty() {
-            bail!("{flag} must specify a path after '@'");
-        }
-        let expanded = shellexpand::tilde(trimmed).to_string();
-        let body = std::fs::read_to_string(&expanded)
-            .map_err(|err| anyhow::anyhow!("failed to read {flag} @ {expanded}: {err}"))?;
-        let value: serde_json::Value = serde_json::from_str(&body)
-            .map_err(|err| anyhow::anyhow!("{flag} @file must be a JSON object: {err}"))?;
-        return Ok(Some(value));
-    }
     let trimmed = raw.trim_start();
     if trimmed.starts_with('{') {
-        let value: serde_json::Value = serde_json::from_str(raw)
-            .map_err(|err| anyhow::anyhow!("{flag} must be a JSON object: {err}"))?;
-        return Ok(Some(value));
+        return Ok(Some(parse_jsonc_value(raw, flag)?));
+    }
+    if looks_like_json_file_path(raw) {
+        let path = shellexpand::tilde(raw.trim()).to_string();
+        let body = std::fs::read_to_string(&path)
+            .map_err(|err| anyhow::anyhow!("failed to read {flag} file {path}: {err}"))?;
+        return Ok(Some(parse_jsonc_value(&body, flag)?));
     }
     Ok(None)
 }
@@ -628,26 +616,59 @@ mod tests {
 
     #[test]
     fn parse_themes_json_rejects_array() {
+        // A bare `[1, 2]` doesn't look like an inline object literal
+        // (no leading `{`) and isn't a .json/.jsonc path, so it's
+        // rejected up-front with the same error as any other unrecognized
+        // value form.
         let err = parse_themes_json("[1, 2]").unwrap_err();
-        assert!(err.to_string().contains("must be a JSON object"));
+        assert!(
+            err.to_string().contains(".json or .jsonc"),
+            "error should point at the supported value forms; got: {err}"
+        );
     }
 
     #[test]
     fn parse_themes_json_rejects_invalid_json() {
+        // `{not json}` looks like an inline object literal (leading `{`)
+        // so it routes to the JSONC parser, which surfaces a parse error.
         let err = parse_themes_json("{not json}").unwrap_err();
-        assert!(err.to_string().contains("must be a JSON object"));
+        assert!(
+            err.to_string().contains("--themes JSON parse error"),
+            "error should be a JSONC parse error; got: {err}"
+        );
     }
 
     #[test]
-    fn parse_themes_json_at_file_missing() {
-        let err = parse_themes_json("@/this/path/does/not/exist.json").unwrap_err();
+    fn parse_themes_json_dotjson_file_missing() {
+        let err = parse_themes_json("/this/path/does/not/exist.json").unwrap_err();
         assert!(err.to_string().contains("failed to read --themes"));
     }
 
     #[test]
-    fn parse_themes_json_at_file_empty_path() {
-        let err = parse_themes_json("@").unwrap_err();
-        assert!(err.to_string().contains("specify a path"));
+    fn parse_themes_json_rejects_bare_string() {
+        let err = parse_themes_json("mytheme").unwrap_err();
+        assert!(
+            err.to_string().contains(".json or .jsonc"),
+            "error should point at the supported value forms; got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_themes_json_jsonc_file_with_comments() {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        write!(
+            tmp,
+            r##"{{
+                // theme map with a JSONC comment and a trailing comma
+                "mytheme": {{ "background": "#fff" }},
+            }}"##
+        )
+        .unwrap();
+        let arg = tmp.path().display().to_string();
+        let parsed = parsed_or_panic(&arg);
+        assert_eq!(parsed.len(), 1);
+        assert!(parsed.contains_key("mytheme"));
     }
 
     fn parsed_or_panic(raw: &str) -> std::collections::HashMap<String, serde_json::Value> {
@@ -666,13 +687,32 @@ mod tests {
     }
 
     #[test]
-    fn parse_format_locale_handles_at_file() {
+    fn parse_format_locale_handles_dotjson_file() {
         use std::io::Write;
-        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut tmp = tempfile::NamedTempFile::with_suffix(".json").unwrap();
         writeln!(tmp, r#"{{"decimal":".","thousands":",","grouping":[3]}}"#).unwrap();
-        let arg = format!("@{}", tmp.path().display());
+        let arg = tmp.path().display().to_string();
         let parsed = parse_format_locale_option(Some(&arg))
-            .expect("@file should parse")
+            .expect(".json file should parse")
+            .expect("not null");
+        assert!(matches!(parsed, FormatLocale::Object(_)));
+    }
+
+    #[test]
+    fn parse_format_locale_handles_dotjsonc_file_with_comments() {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        write!(
+            tmp,
+            r#"{{
+                // d3-format locale with a JSONC comment
+                "decimal": ".", "thousands": ",", "grouping": [3],
+            }}"#
+        )
+        .unwrap();
+        let arg = tmp.path().display().to_string();
+        let parsed = parse_format_locale_option(Some(&arg))
+            .expect(".jsonc file should parse")
             .expect("not null");
         assert!(matches!(parsed, FormatLocale::Object(_)));
     }
@@ -683,12 +723,6 @@ mod tests {
             .expect("locale name should parse")
             .expect("not null");
         assert!(matches!(parsed, FormatLocale::Name(s) if s == "de-DE"));
-    }
-
-    #[test]
-    fn parse_format_locale_at_empty_path_errors() {
-        let err = parse_format_locale_option(Some("@")).unwrap_err();
-        assert!(err.to_string().contains("specify a path"));
     }
 
     #[test]

@@ -51,9 +51,8 @@ async fn test_infoz() {
 
 /// Locks the public `/infoz` surface: the exact set of keys must be
 /// `{version, vega_version, vega_themes_version, vega_embed_version,
-/// vegalite_versions}`. Anything else (notably `generation` /
-/// `config_version`) would leak admin-scope observability to
-/// unauthenticated callers. Design §2.8.
+/// vegalite_versions}`. Anything else (notably `generation`) would
+/// leak admin-scope observability to unauthenticated callers. Design §2.8.
 #[tokio::test]
 async fn test_infoz_surface_unchanged() {
     let server = &*DEFAULT_SERVER;
@@ -87,10 +86,6 @@ async fn test_infoz_surface_unchanged() {
     assert!(
         !obj.contains_key("generation"),
         "/infoz must not expose `generation`"
-    );
-    assert!(
-        !obj.contains_key("config_version"),
-        "/infoz must not expose `config_version`"
     );
 }
 

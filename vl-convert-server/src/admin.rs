@@ -205,7 +205,6 @@ fn build_config_view(snapshot: &RuntimeSnapshot, admin: &AdminState) -> ConfigVi
         baseline: (*admin.baseline).clone(),
         effective: (*snapshot.config).clone(),
         generation: snapshot.generation,
-        config_version: snapshot.config_version,
     }
 }
 
@@ -268,13 +267,13 @@ fn json_rejection_response(rej: JsonRejection, opaque: bool) -> Response {
 }
 
 /// GET /admin/config — returns the baseline, current effective config,
-/// and monotonic generation + config_version counters.
+/// and the monotonic generation counter.
 #[utoipa::path(
     get,
     path = "/admin/config",
     responses((
         status = 200,
-        description = "ConfigView { baseline, effective, generation, config_version }. \
+        description = "ConfigView { baseline, effective, generation }. \
                        Schema mirrors the Python get_config() shape."
     )),
     tag = "Admin",
@@ -397,8 +396,8 @@ async fn delete_config(State(admin): State<Arc<AdminState>>) -> Response {
 /// `VlcConfig` no longer carries any hot-applyable fields (process-
 /// global state lives outside the DTO under
 /// `/admin/config/fonts/{directories,cache_size}`), so every non-identity
-/// commit drains and rebuilds. `generation` and `config_version` move
-/// in lockstep.
+/// commit drains and rebuilds. `generation` moves
+/// forward by 1 on every successful commit.
 async fn run_commit<'a>(
     admin: &AdminState,
     current: &Arc<RuntimeSnapshot>,
@@ -468,7 +467,6 @@ async fn run_commit<'a>(
         converter: new_converter,
         config: Arc::new(new_config),
         generation: current.generation + 1,
-        config_version: current.config_version + 1,
     });
     admin.runtime.store(new_snapshot.clone());
 
@@ -683,7 +681,6 @@ mod tests {
                 .expect("construct test VlConverter"),
             config: Arc::new(VlcConfig::default()),
             generation: 0,
-            config_version: 0,
         }));
         let coordinator =
             ReconfigCoordinator::new(CancellationToken::new(), Duration::from_secs(30));

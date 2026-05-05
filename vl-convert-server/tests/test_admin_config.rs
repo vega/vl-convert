@@ -167,11 +167,10 @@ async fn test_admin_config_get_baseline_and_live() {
     let (status, body) = get_config(&server).await;
     assert_eq!(status, 200);
 
-    // Shape: baseline + effective + generation + config_version.
+    // Shape: baseline + effective + generation.
     assert!(body.get("baseline").is_some(), "missing baseline key");
     assert!(body.get("effective").is_some(), "missing effective key");
     assert_eq!(body["generation"], 0);
-    assert_eq!(body["config_version"], 0);
 
     // At startup, baseline == effective for a default config.
     assert_eq!(body["baseline"], body["effective"]);
@@ -203,7 +202,6 @@ async fn test_admin_config_patch_default_theme_applies_and_rerenders() {
         after["generation"], 1,
         "generation must bump on rebuild-required field"
     );
-    assert_eq!(after["config_version"], 1);
 
     // A conversion still succeeds (new converter is live and serving).
     let resp = server
@@ -365,7 +363,6 @@ async fn test_admin_config_put_full_replacement() {
         after["generation"], 1,
         "PUT with rebuild field must bump generation"
     );
-    assert_eq!(after["config_version"], 1);
 }
 
 #[tokio::test]
@@ -374,7 +371,6 @@ async fn test_admin_config_put_identity_short_circuit() {
 
     let (_, before) = get_config(&server).await;
     let gen_before = before["generation"].as_u64().unwrap();
-    let cv_before = before["config_version"].as_u64().unwrap();
 
     // PUT the current (default) config.
     let body = default_config_put_body();
@@ -385,10 +381,6 @@ async fn test_admin_config_put_identity_short_circuit() {
     assert_eq!(
         after["generation"], gen_before,
         "identity PUT must not bump generation"
-    );
-    assert_eq!(
-        after["config_version"], cv_before,
-        "identity PUT must not bump config_version"
     );
 }
 
@@ -422,7 +414,6 @@ async fn test_admin_config_delete_resets_to_baseline() {
     let (_, after_patch) = get_config(&server).await;
     assert_eq!(after_patch["effective"]["default_theme"], "dark");
     let gen_after_patch = after_patch["generation"].as_u64().unwrap();
-    let cv_after_patch = after_patch["config_version"].as_u64().unwrap();
 
     // DELETE resets.
     let (s, _) = delete_config(&server).await;
@@ -438,7 +429,6 @@ async fn test_admin_config_delete_resets_to_baseline() {
         gen_after_patch + 1,
         "DELETE must bump generation when config differs"
     );
-    assert_eq!(after_delete["config_version"], cv_after_patch + 1);
 }
 
 // ---------- Back-to-back PATCHes ----------
@@ -449,7 +439,6 @@ async fn test_admin_config_back_to_back_patches_serialize() {
 
     let (_, before) = get_config(&server).await;
     let gen_before = before["generation"].as_u64().unwrap();
-    let cv_before = before["config_version"].as_u64().unwrap();
 
     // Two sequential PATCHes — both rebuild-required fields.
     let (s, _) = patch_config(&server, json!({"default_theme": "dark"})).await;
@@ -459,7 +448,6 @@ async fn test_admin_config_back_to_back_patches_serialize() {
 
     let (_, after) = get_config(&server).await;
     assert_eq!(after["generation"], gen_before + 2);
-    assert_eq!(after["config_version"], cv_before + 2);
     assert_eq!(after["effective"]["default_theme"], "dark");
     assert_eq!(after["effective"]["auto_google_fonts"], true);
 }
@@ -487,10 +475,6 @@ async fn test_admin_config_generation_not_exposed_on_infoz() {
     assert!(
         body.get("generation").is_none(),
         "/infoz body must not expose generation; got: {body}"
-    );
-    assert!(
-        body.get("config_version").is_none(),
-        "/infoz body must not expose config_version; got: {body}"
     );
     // Existing infoz surface must still include the established keys.
     assert!(body.get("version").is_some());

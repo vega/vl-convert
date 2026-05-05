@@ -164,7 +164,6 @@ pub async fn build_app(
         converter,
         config: Arc::new(normalized),
         generation: 0,
-        config_version: 0,
     }));
 
     let api_key = serve_config

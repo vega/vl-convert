@@ -278,8 +278,8 @@ async fn test_drain_timeout_returns_504_and_reverts_gate() {
 
 #[tokio::test]
 async fn test_back_to_back_patches_serialize() {
-    // Two PATCHes sent concurrently. Both should return 200, generation +
-    // config_version should bump by 2 (the reconfig_lock serializes them).
+    // Two PATCHes sent concurrently. Both should return 200, generation
+    // should bump by 2 (the reconfig_lock serializes them).
     let mut serve_config = default_serve_config();
     serve_config.reconfig_drain_timeout_secs = 30;
     let server = start_admin_config_server(VlcConfig::default(), serve_config);
@@ -319,7 +319,6 @@ async fn test_back_to_back_patches_serialize() {
         body["generation"], 2,
         "two sequential rebuild PATCHes must bump generation by 2"
     );
-    assert_eq!(body["config_version"], 2);
 }
 
 /// Admission race regression — stress the gate middleware with many

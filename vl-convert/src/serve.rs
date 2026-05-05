@@ -163,12 +163,12 @@ pub(crate) fn parse_budget_ms_arg(raw: &str) -> Result<i64, String> {
 pub(crate) struct ServeArgs {
     /// Bind address for the main HTTP listener (TCP). Mutually
     /// exclusive with `--unix-socket`.
-    #[arg(long, group = "main_listener", value_name = "HOST")]
+    #[arg(long, group = "main_listener", value_name = "HOST", env = "VLC_HOST")]
     pub(crate) host: Option<String>,
 
     /// Port for the main HTTP listener (TCP). Mutually exclusive with
     /// `--unix-socket`.
-    #[arg(long, group = "main_listener", value_name = "PORT")]
+    #[arg(long, group = "main_listener", value_name = "PORT", env = "VLC_PORT")]
     pub(crate) port: Option<u16>,
 
     /// Bind the main HTTP listener on a UDS path instead of TCP
@@ -179,17 +179,23 @@ pub(crate) struct ServeArgs {
         value_parser = parse_socket_path_arg,
         group = "main_listener",
         conflicts_with_all = ["host", "port"],
+        env = "VLC_UNIX_SOCKET",
     )]
     pub(crate) unix_socket: Option<PathBuf>,
 
     /// Unix permission mode for UDS listeners (octal, e.g. 0600).
     /// Defaults to 0o600 when unset.
-    #[arg(long, value_name = "OCTAL", value_parser = parse_socket_mode_arg)]
+    #[arg(long, value_name = "OCTAL", value_parser = parse_socket_mode_arg, env = "VLC_SOCKET_MODE")]
     pub(crate) socket_mode: Option<u32>,
 
     /// Bind an admin listener on `127.0.0.1:<port>` for runtime
     /// reconfiguration. Mutually exclusive with `--admin-unix-socket`.
-    #[arg(long, group = "admin_listener", value_name = "PORT")]
+    #[arg(
+        long,
+        group = "admin_listener",
+        value_name = "PORT",
+        env = "VLC_ADMIN_PORT"
+    )]
     pub(crate) admin_port: Option<u16>,
 
     /// Bind the admin HTTP listener on a UDS path instead of TCP
@@ -200,6 +206,7 @@ pub(crate) struct ServeArgs {
         value_parser = parse_socket_path_arg,
         group = "admin_listener",
         conflicts_with = "admin_port",
+        env = "VLC_ADMIN_UNIX_SOCKET",
     )]
     pub(crate) admin_unix_socket: Option<PathBuf>,
 
@@ -207,38 +214,43 @@ pub(crate) struct ServeArgs {
     /// Independent of `--api-key`. When unset, the admin surface is
     /// listener-gated only (UDS filesystem permissions, or TCP
     /// loopback). Non-loopback TCP admin without a key fails startup.
-    #[arg(long, value_name = "KEY")]
+    #[arg(long, value_name = "KEY", env = "VLC_ADMIN_API_KEY")]
     pub(crate) admin_api_key: Option<String>,
 
     /// API key for Bearer-token authentication on the main listener.
-    #[arg(long, value_name = "KEY")]
+    #[arg(long, value_name = "KEY", env = "VLC_API_KEY")]
     pub(crate) api_key: Option<String>,
 
     /// Number of converter worker threads (must be >= 1). Defaults to
     /// the value loaded from `--vlc-config`, which itself defaults to
     /// the library default (= 1).
-    #[arg(long, value_parser = parse_non_zero_usize_arg, value_name = "N")]
+    #[arg(long, value_parser = parse_non_zero_usize_arg, value_name = "N", env = "VLC_WORKERS")]
     pub(crate) workers: Option<NonZeroUsize>,
 
     /// Maximum simultaneous in-flight requests.
-    #[arg(long, value_name = "N")]
+    #[arg(long, value_name = "N", env = "VLC_MAX_CONCURRENT_REQUESTS")]
     pub(crate) max_concurrent_requests: Option<usize>,
 
     /// HTTP request timeout in seconds.
-    #[arg(long, value_name = "SECS")]
+    #[arg(long, value_name = "SECS", env = "VLC_REQUEST_TIMEOUT_SECS")]
     pub(crate) request_timeout_secs: Option<u64>,
 
     /// Graceful shutdown drain timeout in seconds (default: 30).
-    #[arg(long, value_name = "SECS", default_value_t = 30)]
+    #[arg(
+        long,
+        value_name = "SECS",
+        default_value_t = 30,
+        env = "VLC_DRAIN_TIMEOUT_SECS"
+    )]
     pub(crate) drain_timeout_secs: u64,
 
     /// Per-reconfig drain timeout in seconds. Defaults to the same
     /// value as `--drain-timeout-secs`.
-    #[arg(long, value_name = "SECS")]
+    #[arg(long, value_name = "SECS", env = "VLC_RECONFIG_DRAIN_TIMEOUT_SECS")]
     pub(crate) reconfig_drain_timeout_secs: Option<u64>,
 
     /// Maximum request body size in megabytes.
-    #[arg(long, value_name = "MB")]
+    #[arg(long, value_name = "MB", env = "VLC_MAX_BODY_SIZE_MB")]
     pub(crate) max_body_size_mb: Option<usize>,
 
     /// Return only HTTP status codes on error (no message bodies).
@@ -249,6 +261,7 @@ pub(crate) struct ServeArgs {
         require_equals = true,
         default_missing_value = "true",
         value_parser = parse_boolish_arg,
+        env = "VLC_OPAQUE_ERRORS",
     )]
     pub(crate) opaque_errors: Option<bool>,
 
@@ -260,6 +273,7 @@ pub(crate) struct ServeArgs {
         require_equals = true,
         default_missing_value = "true",
         value_parser = parse_boolish_arg,
+        env = "VLC_REQUIRE_USER_AGENT",
     )]
     pub(crate) require_user_agent: Option<bool>,
 
@@ -272,24 +286,25 @@ pub(crate) struct ServeArgs {
         require_equals = true,
         default_missing_value = "true",
         value_parser = parse_boolish_arg,
+        env = "VLC_TRUST_PROXY",
     )]
     pub(crate) trust_proxy: Option<bool>,
 
     /// Allowed CORS origin(s), comma-separated or `*`.
-    #[arg(long, value_name = "ORIGIN")]
+    #[arg(long, value_name = "ORIGIN", env = "VLC_CORS_ORIGIN")]
     pub(crate) cors_origin: Option<String>,
 
     /// Conversion-time budget per IP, in milliseconds per minute.
-    #[arg(long, value_parser = parse_budget_ms_arg, value_name = "MS")]
+    #[arg(long, value_parser = parse_budget_ms_arg, value_name = "MS", env = "VLC_PER_IP_BUDGET_MS")]
     pub(crate) per_ip_budget_ms: Option<i64>,
 
     /// Total conversion-time budget for the server, in milliseconds
     /// per minute.
-    #[arg(long, value_parser = parse_budget_ms_arg, value_name = "MS")]
+    #[arg(long, value_parser = parse_budget_ms_arg, value_name = "MS", env = "VLC_GLOBAL_BUDGET_MS")]
     pub(crate) global_budget_ms: Option<i64>,
 
     /// Per-request budget hold in milliseconds. Must be positive.
-    #[arg(long, value_parser = parse_positive_i64_arg, value_name = "MS")]
+    #[arg(long, value_parser = parse_positive_i64_arg, value_name = "MS", env = "VLC_BUDGET_HOLD_MS")]
     pub(crate) budget_hold_ms: Option<i64>,
 
     /// Emit one JSON readiness line on stdout after all listeners
@@ -302,6 +317,7 @@ pub(crate) struct ServeArgs {
         default_missing_value = "true",
         value_parser = parse_boolish_arg,
         default_value_t = false,
+        env = "VLC_READY_JSON",
     )]
     pub(crate) ready_json: bool,
 
@@ -315,6 +331,7 @@ pub(crate) struct ServeArgs {
         require_equals = true,
         default_missing_value = "true",
         value_parser = parse_boolish_arg,
+        env = "VLC_EXIT_ON_PARENT_CLOSE",
     )]
     pub(crate) exit_on_parent_close: Option<bool>,
 
@@ -326,6 +343,7 @@ pub(crate) struct ServeArgs {
         require_equals = true,
         default_missing_value = "true",
         value_parser = parse_boolish_arg,
+        env = "VLC_ALLOW_GOOGLE_FONTS",
     )]
     pub(crate) allow_google_fonts: Option<bool>,
 
@@ -337,16 +355,22 @@ pub(crate) struct ServeArgs {
         require_equals = true,
         default_missing_value = "true",
         value_parser = parse_boolish_arg,
+        env = "VLC_ALLOW_PER_REQUEST_PLUGINS",
     )]
     pub(crate) allow_per_request_plugins: Option<bool>,
 
     /// Maximum concurrent ephemeral workers for per-request plugins.
-    #[arg(long, value_name = "N")]
+    #[arg(long, value_name = "N", env = "VLC_MAX_EPHEMERAL_WORKERS")]
     pub(crate) max_ephemeral_workers: Option<u64>,
 
     /// Domains allowed for HTTP imports in per-request plugins.
-    /// Comma-separated. May be specified multiple times.
-    #[arg(long = "per-request-plugin-import-domains", value_name = "csv")]
+    /// `;`-separated. May be specified multiple times.
+    #[arg(
+        long = "per-request-plugin-import-domains",
+        value_name = "DOMAIN;DOMAIN;...",
+        env = "VLC_PER_REQUEST_PLUGIN_IMPORT_DOMAINS",
+        value_delimiter = ';'
+    )]
     pub(crate) per_request_plugin_import_domains: Vec<String>,
 }
 

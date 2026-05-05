@@ -674,47 +674,6 @@ fn test_vg2url_file_output() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_vg2svg_with_inline_plugin() -> Result<(), Box<dyn std::error::Error>> {
-    initialize();
-
-    // Inline plugin source passed directly as the --vega-plugin value.
-    // The spec uses a custom color scheme registered by the plugin.
-    let plugin_source =
-        "export default function(vega) { vega.scheme('clischeme', ['red', 'green', 'blue']); }";
-
-    let spec_path = vg_spec_path("plugin_custom_scheme");
-    // plugin_custom_scheme.vg.json uses "testscheme" -- write a variant that uses "clischeme"
-    let spec_str = fs::read_to_string(&spec_path)?;
-    let spec_str = spec_str.replace("\"testscheme\"", "\"clischeme\"");
-    let mut spec_file = NamedTempFile::new()?;
-    spec_file.write_all(spec_str.as_bytes())?;
-
-    let mut cmd = vl_convert_cmd()?;
-    let output = cmd
-        .arg("vg2svg")
-        .arg("-i")
-        .arg(spec_file.path())
-        .arg("--vega-plugin")
-        .arg(plugin_source)
-        .output()?;
-
-    assert!(
-        output.status.success(),
-        "vg2svg with --vega-plugin failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let svg = String::from_utf8(output.stdout)?;
-    assert!(svg.contains("<svg"), "output should be valid SVG");
-    // The plugin registered 'clischeme' with ['red', 'green', 'blue'].
-    // Vega renders fill="red" for the first bar.
-    assert!(
-        svg.contains(r#"fill="red""#),
-        "SVG should contain fill=\"red\" from the plugin-registered scheme"
-    );
-    Ok(())
-}
-
-#[test]
 fn test_vg2svg_with_file_plugin() -> Result<(), Box<dyn std::error::Error>> {
     initialize();
 

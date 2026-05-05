@@ -230,7 +230,7 @@ but only after the library's own normalization pass has run on it.
 
 `AppState.runtime` and `AdminState.runtime` are the **same** `Arc<ArcSwap<RuntimeSnapshot>>`
 (shared by `Arc` identity; guarded by `test_admin_state_composition`). A
-`RuntimeSnapshot` is `{ converter, config: Arc<VlcConfig>, generation, config_version }`.
+`RuntimeSnapshot` is `{ converter, config: Arc<VlcConfig>, generation }`.
 Request handlers call `state.runtime.load_full()` **once** at function entry
 and use `snap.converter` + `&snap.config` for the remainder — never
 `state.runtime.load()` which returns a `Guard<'_>` unsafe across `.await`.
@@ -250,8 +250,7 @@ non-identity commit through `/admin/config` goes through a
    `reconfig_drain_timeout_secs` (default `30` seconds).
 3. Build the new `VlConverter` via `current.converter.clone().reconfigure(new_config)`.
 4. `warm_up()` the new converter.
-5. On success: swap snapshot, `generation + 1`, `config_version + 1`,
-   reopen gate.
+5. On success: swap snapshot, `generation + 1`, reopen gate.
 
 Process-global state (font directories, the Google Fonts cache cap)
 is NOT part of this pipeline. Each lives behind its own dedicated
@@ -311,18 +310,12 @@ The PATCH-identity short-circuit and the dedicated font-directories /
 cache-size endpoints don't close the gate, so they don't go through
 `ReconfigScopeGuard` at all.
 
-### `generation` and `config_version`
+### generation
 
-Both counters bump on every successful commit through `/admin/config`.
-They are exposed on `GET /admin/config` only; not on `/infoz` (public
-surface stays stable; `test_infoz_surface_unchanged` guards against
-regression).
-
-The two are kept as separate fields so a future hot-apply
-re-introduction can move them independently — `generation` would
-bump only on rebuilds and `config_version` on every commit. In the
-current design (no hot-apply paths) the two values move together and
-are always equal.
+Bumps on every successful commit through `/admin/config`. Identity
+short-circuits do not bump it. Exposed on `GET /admin/config` only;
+not on `/infoz` (public surface stays stable;
+`test_infoz_surface_unchanged` guards against regression).
 
 ### Admin auth
 

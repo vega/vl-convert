@@ -10433,6 +10433,7 @@ dependencies = [
  "hyper 1.8.1",
  "hyper-util",
  "itertools 0.14.0",
+ "jsonc-parser 0.32.1",
  "log",
  "predicates",
  "rstest",
