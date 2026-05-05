@@ -1961,6 +1961,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_bundle_vega_snippet_rejects_unvendored_import() {
+        use std::num::NonZeroU64;
+        let converter = VlConverter::with_config(VlcConfig {
+            num_workers: NonZeroU64::new(1).unwrap(),
+            ..Default::default()
+        })
+        .unwrap();
+        // A snippet referencing a module outside the vendored set used
+        // to panic on a converter worker thread (the loader called
+        // `IMPORT_MAP.get(...).unwrap_or_else(|| panic!(...))`). It
+        // must now surface as a regular bundling error.
+        let snippet = r#"import "https://example.com/x.js""#;
+
+        let err = converter
+            .bundle_vega_snippet(snippet, VlVersion::v5_16)
+            .await
+            .expect_err("snippet bundling must reject imports outside the vendored set");
+        // The converter's worker must still be alive — a follow-up
+        // bundle on the same converter should succeed.
+        let recovered = converter
+            .bundle_vega_snippet("window.__vlcBundleMarker = 'ok';", VlVersion::v5_16)
+            .await
+            .expect("worker survives a rejected snippet");
+        assert!(recovered.contains("__vlcBundleMarker"));
+        assert!(
+            err.to_string().to_lowercase().contains("vendored")
+                || err.to_string().to_lowercase().contains("import")
+                || err.to_string().to_lowercase().contains("not found"),
+            "error should explain the rejection; got: {err}"
+        );
+    }
+
+    #[tokio::test]
     async fn test_svg_helper_denies_subdomain_and_userinfo_url_confusion() {
         let converter = VlConverter::with_config(VlcConfig {
             allowed_base_urls: vec!["https://example.com".to_string()],

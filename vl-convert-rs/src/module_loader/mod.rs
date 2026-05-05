@@ -120,20 +120,31 @@ impl Loader for VlConvertBundleLoader {
             return Box::pin(async move { Ok(None) });
         }
 
-        let last_path_part = path.split('/').next_back().unwrap();
+        let Some(last_path_part) = path.rsplit('/').next() else {
+            let err = JsErrorBox::generic(format!("Module specifier has no path: {path}"));
+            return Box::pin(async move { Err(LoadError::Other(Arc::new(err))) });
+        };
         let path_no_js = path.strip_suffix(".js").unwrap_or(path).to_string();
 
         let code = if last_path_part == "vl-convert-index.js" {
             self.index_js.clone()
         } else {
-            let mut src = IMPORT_MAP
-                .get(&path_no_js)
-                .unwrap_or_else(|| panic!("Unexpected source file with path: {}", path))
-                .clone();
+            // Snippet bundling is reachable from network endpoints; an
+            // unrecognized import here means the user-supplied snippet
+            // tried to pull in a module outside the vendored set. Surface
+            // it as a `LoadError` so the caller gets a 4xx, not a panic
+            // on a converter worker thread.
+            let Some(src) = IMPORT_MAP.get(&path_no_js) else {
+                let err = JsErrorBox::generic(format!(
+                    "Snippet bundling does not allow imports outside the vendored set: {path}"
+                ));
+                return Box::pin(async move { Err(LoadError::Other(Arc::new(err))) });
+            };
+            let mut src = src.clone();
 
             if let Some(caps) = self.name_version_re.captures(module_specifier.path()) {
                 // Drop any leading slash segments
-                let name = caps["name"].rsplit('/').next().unwrap();
+                let name = caps["name"].rsplit('/').next().unwrap_or(&caps["name"]);
                 if name == "vega-embed" {
                     // Replace vega-lite
                     src = self
@@ -165,10 +176,15 @@ impl Loader for VlConvertBundleLoader {
         let url = module_specifier.to_string();
         let url_no_js = url.strip_suffix(".js").unwrap_or(&url).to_string();
 
-        let return_specifier =
-            Url::from_str(&format!("{}{}", url_no_js, ".js")).unwrap_or_else(|_| {
-                panic!("Failed to parse module specifier {url_no_js} with .js extension")
-            });
+        let return_specifier = match Url::from_str(&format!("{url_no_js}.js")) {
+            Ok(u) => u,
+            Err(e) => {
+                let err = JsErrorBox::generic(format!(
+                    "Failed to parse module specifier {url_no_js} with .js extension: {e}"
+                ));
+                return Box::pin(async move { Err(LoadError::Other(Arc::new(err))) });
+            }
+        };
 
         Box::pin(async move {
             Ok(Some(LoadResponse::Module {

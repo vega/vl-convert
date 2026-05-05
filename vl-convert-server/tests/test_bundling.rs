@@ -89,3 +89,41 @@ async fn test_bundle_snippet() {
     let body = resp.text().await.unwrap();
     assert!(!body.is_empty(), "expected non-empty bundled snippet");
 }
+
+/// Snippets that import modules outside the vendored set used to panic
+/// the converter worker (loader called `unwrap_or_else(|| panic!(...))`).
+/// The endpoint must now return a normal 422 and the worker must
+/// survive — a follow-up valid snippet on the same server succeeds.
+#[tokio::test]
+async fn test_bundle_snippet_rejects_unvendored_import() {
+    let server = &*DEFAULT_SERVER;
+
+    let bad = server
+        .client
+        .post(format!("{}/bundling/bundle-snippet", server.base_url))
+        .json(&serde_json::json!({
+            "snippet": r#"import "https://example.com/x.js""#
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        bad.status(),
+        422,
+        "snippet with unvendored import should be rejected as 422"
+    );
+
+    // Worker must still be alive — a valid snippet now succeeds.
+    let good = server
+        .client
+        .post(format!("{}/bundling/bundle-snippet", server.base_url))
+        .json(&serde_json::json!({"snippet": "window.vega = vega;"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        good.status(),
+        200,
+        "worker should survive a rejected snippet and still serve valid ones"
+    );
+}
