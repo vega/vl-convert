@@ -241,6 +241,12 @@ pub(crate) async fn serve_uds(
         }
     }
 
+    // Drop the listener before draining in-flight connections so the
+    // pathname socket stops accepting immediately. Otherwise a slow
+    // handler keeps drain blocked, and arriving clients succeed at
+    // `connect(2)` but never get accepted.
+    drop(listener);
+
     while conn_tasks.join_next().await.is_some() {}
     Ok(())
 }
@@ -385,5 +391,85 @@ mod tests {
         let guard2 = UdsCleanup::new(path2.clone());
         drop(guard2);
         assert!(!path2.exists());
+    }
+
+    /// Once shutdown is signaled, `serve_uds` must drop its listener
+    /// before awaiting the drain — otherwise a client arriving while
+    /// a slow handler is still in flight can `connect(2)` successfully
+    /// and then sit in the kernel's accept queue forever, since the
+    /// accept loop has already exited. This test gates the drain on a
+    /// `Notify` so the handler-in-flight window is deterministic.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn serve_uds_stops_accepting_immediately_on_shutdown() {
+        use axum::routing::get;
+        use std::io::ErrorKind;
+        use std::sync::Arc;
+        use tokio::sync::Notify;
+
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("t.sock");
+        let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+
+        // Handler waits on a Notify so we control exactly when the
+        // request completes. While the handler is blocked, the conn
+        // task is alive and drain blocks — that's the window where the
+        // bug used to allow new connects to succeed.
+        let release = Arc::new(Notify::new());
+        let release_h = release.clone();
+        let router = axum::Router::new().route(
+            "/slow",
+            get(move || {
+                let release = release_h.clone();
+                async move {
+                    release.notified().await;
+                    "ok"
+                }
+            }),
+        );
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let shutdown = async move {
+            let _ = shutdown_rx.await;
+        };
+        let serve_handle = tokio::spawn(serve_uds(listener, router, shutdown));
+
+        // Send a request that will block in the handler.
+        use tokio::io::AsyncWriteExt;
+        let mut busy = tokio::net::UnixStream::connect(&sock).await.unwrap();
+        busy.write_all(b"GET /slow HTTP/1.1\r\nHost: x\r\n\r\n")
+            .await
+            .unwrap();
+        busy.flush().await.unwrap();
+
+        // Wait for the request to land in the handler.
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // Trigger shutdown. The handler is still blocked on `release`,
+        // so drain cannot complete. With the fix, `drop(listener)`
+        // runs before drain awaits, and a fresh connect must fail.
+        shutdown_tx.send(()).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let connect = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            tokio::net::UnixStream::connect(&sock),
+        )
+        .await
+        .expect("connect should not hang once listener is dropped");
+        let err = connect.expect_err(
+            "connect must fail once shutdown fires, even while a handler \
+             is still in flight (regression: pathname socket stayed bound \
+             through the drain window)",
+        );
+        assert!(
+            matches!(err.kind(), ErrorKind::ConnectionRefused | ErrorKind::NotFound),
+            "expected ECONNREFUSED or ENOENT, got {err:?}"
+        );
+
+        // Release the handler so drain can complete.
+        release.notify_one();
+        drop(busy);
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), serve_handle).await;
     }
 }
