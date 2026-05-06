@@ -53,8 +53,7 @@ impl Drop for DownloadGateGuard<'_> {
 /// Google Fonts font loader client.
 pub struct GoogleFontsClient {
     config: ClientConfig,
-    /// Built eagerly — unlike the blocking client, this is safe to construct
-    /// inside an async context.
+    /// Eagerly-built async client.
     async_client: reqwest::Client,
     /// Lazily initialized: creates an internal tokio runtime, so must not be
     /// built inside an async context.
@@ -113,7 +112,7 @@ impl GoogleFontsClient {
         match self.ensure_fonts_async(&plan.files).await {
             Ok(fonts) => self.finish_load(&font_id, &plan, fonts),
             Err(e) if from_cache && e.is_retryable() => {
-                // Stale CSS may contain dead URLs — invalidate and retry
+                // Stale CSS may contain dead URLs; invalidate and retry.
                 self.invalidate_css_cache(&font_id);
                 let (css, _) = self.fetch_css_async(&font_id, family).await?;
                 let plan = resolve_from_css2(&font_id, &css, variants)?;

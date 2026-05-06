@@ -11,7 +11,7 @@ Command-line interface wrapping vl-convert-rs. Built with Clap.
 **Server**: serve (HTTP server backed by `vl-convert-server`; see
 `vl-convert-server/CLAUDE.md` for protocol invariants and the
 `Notes for downstream binary authors` section. The lifecycle wiring
-— SIGTERM, ready-JSON, drain watchdog, stdin-EOF watcher — lives in
+(SIGTERM, ready-JSON, drain watchdog, stdin-EOF watcher) lives in
 `vl-convert/src/serve.rs`.)
 
 ## Common Arguments
@@ -61,7 +61,7 @@ Typed `=BOOL` values on every boolean and a single
 All globals accept clap's `global = true` placement, so they may be
 passed before *or* after the subcommand keyword. `--font-dir` calls
 `vl_convert_rs::set_font_directories` once at startup with replace
-semantics — the entire list is authoritative.
+semantics; the entire list is authoritative.
 
 `--default-theme`, `--default-format-locale`,
 `--default-time-format-locale`, and `--themes` accept the literal string
@@ -96,19 +96,18 @@ The PaaS `PORT` fallback is baked into the `From<&ServeArgs>` impl.
 `--plugin-import-domains`, `--per-request-plugin-import-domains`). The
 sole carve-out is `--font-dir`, which follows the OS PATH convention
 (`:` Unix, `;` Windows). The `;`-everywhere rule lets a single `VLC_*`
-env value carry a multi-entry list — e.g.
+env value carry a multi-entry list, e.g.
 `VLC_GOOGLE_FONT="Roboto:400,700italic;Inter:400"` registers two
 families (commas inside variants survive because they're not the
 delimiter); `VLC_ALLOWED_BASE_URLS="https://x.com/;https://y.com/"`
 yields two prefixes.
 
 **`--vega-plugin` value shape**: the flag accepts a file path or URL
-only. Inline ESM strings used to be accepted but are now rejected at
-parse time so the `;` delimiter is unambiguous. Inline-ESM plugins go
-in `--vlc-config` JSONC or via the HTTP/library API.
+only. Inline-ESM plugins go in `--vlc-config` JSONC or via the
+HTTP/library API.
 
 **`--allowed-base-urls` reserved literals only fire on a single-value
-invocation**: `none`, `net`, and `all` expand to canonical allowlists
+invocation**: `none`, `net`, and `all` expand to reserved allowlists
 (`[]`, `["http:", "https:"]`, `["*"]`) only when they're the sole
 value. Mixed invocations like `--allowed-base-urls="none;https://x.com/"`
 treat each entry as a literal CSP pattern.

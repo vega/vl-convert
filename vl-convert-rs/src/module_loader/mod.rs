@@ -56,9 +56,7 @@ impl ModuleLoader for VlConvertModuleLoader {
         let string_specifier = module_specifier.to_string();
 
         let code = if string_specifier.ends_with("vl-convert-rs.js") {
-            // Load vl-convert-rs.js as an empty file
-            // This is the main module, which is required, but we don't need to
-            // run any code here
+            // Load the required main module as an empty file.
             "".to_string()
         } else {
             let path = module_specifier.path();
@@ -129,11 +127,8 @@ impl Loader for VlConvertBundleLoader {
         let code = if last_path_part == "vl-convert-index.js" {
             self.index_js.clone()
         } else {
-            // Snippet bundling is reachable from network endpoints; an
-            // unrecognized import here means the user-supplied snippet
-            // tried to pull in a module outside the vendored set. Surface
-            // it as a `LoadError` so the caller gets a 4xx, not a panic
-            // on a converter worker thread.
+            // User-supplied snippets may only import vendored modules.
+            // Unrecognized imports are returned as LoadError values.
             let Some(src) = IMPORT_MAP.get(&path_no_js) else {
                 let err = JsErrorBox::generic(format!(
                     "Snippet bundling does not allow imports outside the vendored set: {path}"
@@ -203,7 +198,7 @@ impl Loader for VlConvertBundleLoader {
 pub struct PluginBundleLoader {
     /// The plugin entry module source code.
     pub entry_source: String,
-    /// The entry specifier string (used to match the entry module request).
+    /// Entry specifier string for matching the entry module request.
     /// For URL plugins this is the original URL; for inline/file plugins
     /// this is the synthetic vl-plugin-entry.js path.
     pub entry_specifier: String,
@@ -328,7 +323,7 @@ impl Loader for PluginBundleLoader {
             });
         }
 
-        // Unknown scheme — return None
+        // Unrecognized scheme.
         Box::pin(async move { Ok(None) })
     }
 }

@@ -93,13 +93,9 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(google_fonts) = parse_google_font_requests(&google_font_families)? {
         base_config.google_fonts = google_fonts;
     }
-    // Theme / locale / themes globals: `Option<String>` from clap
-    // discriminates "flag not passed" (`None`, leave config-loaded value
-    // alone) from "flag passed" (`Some(raw)`, override). The literal
-    // string `null` (any case) inside the value resolves to "explicitly
-    // clear the field" — see `parse_nullable_string_arg`,
-    // `parse_format_locale_option`, `parse_time_format_locale_option`,
-    // and `parse_themes_json` in io_utils.rs.
+    // Theme, locale, and themes globals use `Option<String>` from clap to
+    // distinguish absent flags from explicit overrides. The literal string
+    // `null` clears the field during parsing.
     if let Some(raw) = cli.default_theme.as_deref() {
         base_config.default_theme = parse_nullable_string_arg(raw);
     }
@@ -119,15 +115,9 @@ async fn main() -> Result<(), anyhow::Error> {
         base_config.num_workers = NonZeroU64::new(1).expect("1 is non-zero");
     }
 
-    // Dispatch to `vl-convert serve` after every global-flag plumbing
-    // step has run, so the serve path inherits the same converter
-    // state (font dirs, base URL, plugin domains, etc.) as a one-shot
-    // conversion would. The conversion `tokio::select!` block below
-    // never runs in this branch — `run_serve` owns its own signal /
-    // shutdown lifecycle. We pluck the `Serve` variant's args out of
-    // `cli.command` via `std::mem::replace` (replacing with the inert
-    // `ConfigPath` variant) so `&cli` stays usable for global flag
-    // access inside `run_serve`.
+    // Dispatch to `vl-convert serve` after global flags have populated the
+    // converter state. `run_serve` owns the serve-mode signal and shutdown
+    // lifecycle.
     if cli.command.is_serve() {
         let command = std::mem::replace(&mut cli.command, Commands::ConfigPath);
         let Commands::Serve(args) = command else {

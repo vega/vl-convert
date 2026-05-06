@@ -452,11 +452,9 @@ pub fn configure_converter_with_config_overrides(
 
     let mut config = guard.config();
     apply_config_overrides(&mut config, overrides)?;
-    // `reconfigure` short-circuits on identity, hot-applies for
-    // cache-size-only changes, and otherwise builds a fresh
-    // converter. Cloning the inner `Arc<VlConverter>` is cheap;
-    // the existing `Arc<VlConverter>` we hold keeps the old worker
-    // pool alive for any in-progress conversions on other threads.
+    // `reconfigure` returns the current converter for identity updates and a
+    // fresh converter for config changes. The Arc held here keeps the prior
+    // worker pool alive for in-progress conversions on other threads.
     let new_converter = (**guard).clone().reconfigure(config)?;
     *guard = Arc::new(new_converter);
     Ok(())

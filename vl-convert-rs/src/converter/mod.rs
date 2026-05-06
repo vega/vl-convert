@@ -46,8 +46,8 @@ use futures::channel::oneshot;
 use crate::with_font_overlay;
 use std::sync::atomic::AtomicUsize;
 
-// Extension with our custom ops - MainWorker provides all Web APIs (URL, fetch, etc.)
-// Canvas 2D ops are now in the separate vl_convert_canvas2d extension from vl-convert-canvas2d-deno
+// Extension for worker-local vl-convert ops. MainWorker provides Web APIs
+// (URL, fetch, etc.); Canvas 2D ops live in vl_convert_canvas2d.
 deno_core::extension!(
     vl_convert_runtime,
     ops = [
@@ -176,17 +176,15 @@ impl VlConverter {
     ///
     /// - **No-op**: `new_config` equals the current config; returns
     ///   `self` unchanged.
-    /// - **Rebuild**: any other field differs; constructs a brand-new
-    ///   `VlConverter` via [`Self::with_config`] (which creates a
-    ///   fresh worker pool). The returned converter is **not warmed
-    ///   up**; call [`Self::warm_up`] if you need workers ready before
-    ///   the first conversion.
+    /// - **Rebuild**: any other field differs; constructs a fresh
+    ///   `VlConverter` via [`Self::with_config`] with a new worker pool.
+    ///   The returned converter is not warmed up; call [`Self::warm_up`]
+    ///   before serving traffic that expects ready workers.
     ///
     /// Caller is responsible for any other concerns specific to its
     /// runtime (drain, snapshot atomicity, warm-up timing). Process-
-    /// global state (font directories, Google Fonts cache cap) lives
-    /// outside `VlcConfig` and is mutated through its own dedicated
-    /// APIs — `reconfigure` does not touch it.
+    /// global state (font directories, Google Fonts cache cap) lives outside
+    /// `VlcConfig` and is mutated through its own dedicated APIs.
     pub fn reconfigure(self, new_config: VlcConfig) -> Result<Self, AnyError> {
         let new_config = normalize_converter_config(new_config)?;
         if new_config == *self.inner.config() {
@@ -212,9 +210,8 @@ impl VlConverter {
             None
         };
         ImageAccessPolicy {
-            // Always engage the allowlist enforcer — secure-by-default means
-            // an empty list blocks everything rather than falling back to
-            // "allow any http/https".
+            // Always engage the allowlist enforcer. An empty list blocks all
+            // image URLs rather than falling back to "allow any http/https".
             allowed_base_urls: Some(parsed),
             filesystem_root,
         }
@@ -693,7 +690,7 @@ impl VlConverter {
             .fontdb
             .clone();
 
-        // Analyze SVG once — extract fonts, image refs, insertion point
+        // Analyze SVG once for fonts, image refs, and insertion point.
         let analysis = crate::extract::analyze_svg(&svg)?;
         let families: std::collections::BTreeSet<String> =
             analysis.families.iter().cloned().collect();
@@ -1824,7 +1821,7 @@ mod tests {
         // Do an initial conversion to ensure the worker is running.
         // `VlConverter::new()` calls `set_font_directories` on construction,
         // which also bumps FONT_CONFIG_VERSION; snapshot the version *after*
-        // construction so we're measuring only the explicit
+        // construction so the assertion measures only the explicit
         // `set_font_directories` bump below.
         let ctx = VlConverter::new();
         let vl_spec: serde_json::Value = serde_json::from_str(
@@ -1968,18 +1965,14 @@ mod tests {
             ..Default::default()
         })
         .unwrap();
-        // A snippet referencing a module outside the vendored set used
-        // to panic on a converter worker thread (the loader called
-        // `IMPORT_MAP.get(...).unwrap_or_else(|| panic!(...))`). It
-        // must now surface as a regular bundling error.
+        // Imports outside the vendored set surface as regular bundling errors.
         let snippet = r#"import "https://example.com/x.js""#;
 
         let err = converter
             .bundle_vega_snippet(snippet, VlVersion::v5_16)
             .await
             .expect_err("snippet bundling must reject imports outside the vendored set");
-        // The converter's worker must still be alive — a follow-up
-        // bundle on the same converter should succeed.
+        // The worker remains available after a rejected snippet.
         let recovered = converter
             .bundle_vega_snippet("window.__vlcBundleMarker = 'ok';", VlVersion::v5_16)
             .await

@@ -166,8 +166,8 @@ pub(crate) struct Cli {
     /// The plugin must be a single ESM module that exports a default function
     /// accepting a vega object. Multi-file plugins should be pre-bundled
     /// with esbuild or Rollup. URL plugins auto-allow their domain for imports.
-    /// May be specified multiple times; plugins execute in order. Inline ESM
-    /// strings are not accepted on the CLI flag — put them in `--vlc-config`.
+    /// May be specified multiple times; plugins execute in order. Put inline
+    /// ESM plugins in `--vlc-config`.
     #[arg(
         long = "vega-plugin",
         global = true,
@@ -283,14 +283,9 @@ pub(crate) struct Cli {
 mod tests {
     //! In-process parse-time tests for the `VLC_*` env-var fallback layer.
     //!
-    //! These tests mutate the parent process's environment via
-    //! `std::env::set_var` so that clap's `env =` attribute resolves
-    //! against a known value at parse time. Cargo test runs with
-    //! `--test-threads=1` for this crate (Deno requirement), which
-    //! gives us total ordering across threads — but the binary's `tests`
-    //! module shares one process with any future parallel tests, so we
-    //! still gate every env-mutating test through `ENV_LOCK` to avoid
-    //! cross-pollination.
+    //! These tests mutate the parent process environment so clap's `env =`
+    //! attribute resolves against a known value at parse time. `ENV_LOCK`
+    //! serializes that process-global state.
     //!
     //! The complementary subprocess-level coverage lives in
     //! `tests/test_env_vars.rs` (port precedence ladder, log-level
@@ -305,9 +300,8 @@ mod tests {
     /// two parallel tests could read each other's values mid-parse.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-    /// RAII guard that unsets a list of env vars on drop, restoring a
-    /// clean baseline so a later test in the same process doesn't see
-    /// leftover state from a panicking earlier test.
+    /// RAII guard that unsets env vars on drop, restoring a clean baseline
+    /// for later tests in the same process.
     struct EnvScrub<'a>(&'a [&'a str]);
     impl Drop for EnvScrub<'_> {
         fn drop(&mut self) {
@@ -318,9 +312,8 @@ mod tests {
     }
 
     fn parse_with_env(env: &[(&str, &str)]) -> Cli {
-        // SAFETY: serialized through `ENV_LOCK`; the test runner forces
-        // single-threaded execution; both layers prevent concurrent
-        // mutation while still letting us exercise clap's env path.
+        // SAFETY: serialized through `ENV_LOCK`; this prevents concurrent
+        // environment mutation while exercising clap's env path.
         for (k, v) in env {
             std::env::set_var(k, v);
         }
@@ -354,10 +347,8 @@ mod tests {
 
     #[test]
     fn vlc_plugin_import_domains_splits_on_semicolon() {
-        // Phase 2 rationalization: every Vec-shaped flag splits on `;`
-        // (with `--font-dir` keeping the OS PATH separator as the sole
-        // carve-out). Locks the ';' delimiter for plugin-import-domains
-        // on the env path.
+        // Vec-shaped env values split on `;`, except `--font-dir`, which uses
+        // the OS PATH separator.
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _scrub = EnvScrub(&["VLC_PLUGIN_IMPORT_DOMAINS"]);
         let cli = parse_with_env(&[("VLC_PLUGIN_IMPORT_DOMAINS", "esm.sh;*.jsdelivr.net")]);
@@ -370,11 +361,7 @@ mod tests {
 
     #[test]
     fn vlc_vega_plugin_splits_on_semicolon() {
-        // Phase 2 rationalization: `--vega-plugin` now uses `;` as its
-        // value delimiter. Inline ESM strings are rejected at parse
-        // time by `parse_vega_plugin_arg`, so the elements that reach
-        // this Vec are always paths or URLs — none of which can
-        // legitimately contain `;`.
+        // `--vega-plugin` env values split into path-or-URL entries.
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _scrub = EnvScrub(&["VLC_VEGA_PLUGIN"]);
         let cli = parse_with_env(&[("VLC_VEGA_PLUGIN", "https://example.com/p1.js;/tmp/p2.js")]);
@@ -390,11 +377,8 @@ mod tests {
 
     #[test]
     fn vlc_google_font_splits_on_semicolon_preserves_variant_commas() {
-        // Phase 2 rationalization: `--google-font` now uses `;` as its
-        // value delimiter. The variant grammar `Family:weight,weight`
-        // contains commas inside each entry; the `;` delimiter no
-        // longer collides with that grammar, so multi-font via env is
-        // safe again.
+        // `--google-font` env values split on `;`, while variant weights keep
+        // their comma-separated grammar inside each entry.
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _scrub = EnvScrub(&["VLC_GOOGLE_FONT"]);
         let cli = parse_with_env(&[("VLC_GOOGLE_FONT", "Roboto:400,700italic;Inter:400")]);
@@ -422,9 +406,8 @@ mod tests {
 
     #[test]
     fn vlc_allowed_base_urls_reserved_literal_net() {
-        // Reserved single-value shortcut `net` expands to the library
-        // default (`["http:", "https:"]`) — HTTP/HTTPS URLs allowed,
-        // filesystem paths blocked.
+        // Reserved single-value shortcut `net` expands to the HTTP/HTTPS-only
+        // library default.
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _scrub = EnvScrub(&["VLC_ALLOWED_BASE_URLS"]);
         let cli = parse_with_env(&[("VLC_ALLOWED_BASE_URLS", "net")]);
@@ -484,9 +467,8 @@ mod tests {
 
     #[test]
     fn vlc_auto_google_fonts_runs_through_boolish_parser() {
-        // Sanity that `value_parser = parse_boolish_arg` runs on env-
-        // resolved values, not just CLI-flag values. `=true`, `=1`,
-        // `=yes`, `=on` are all accepted by the boolish parser.
+        // `value_parser = parse_boolish_arg` must run on env-resolved values.
+        // `=true`, `=1`, `=yes`, `=on` are all accepted by the boolish parser.
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _scrub = EnvScrub(&["VLC_AUTO_GOOGLE_FONTS"]);
         let cli = parse_with_env(&[("VLC_AUTO_GOOGLE_FONTS", "true")]);
@@ -498,12 +480,8 @@ mod tests {
 
     #[test]
     fn vlc_drain_timeout_secs_overrides_default() {
-        // `drain_timeout_secs` is `u64` (not `Option<u64>`) with
-        // `default_value_t = 30`. clap docs are explicit that
-        // `default_value_t` applies only when *neither* CLI nor env
-        // supplies a value — this test locks that ladder for the
-        // serve-local flag with the trickiest type, since the others
-        // are all `Option<T>`.
+        // `default_value_t` applies only when neither CLI nor env supplies a
+        // value, even for non-Option fields.
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _scrub = EnvScrub(&["VLC_DRAIN_TIMEOUT_SECS"]);
         std::env::set_var("VLC_DRAIN_TIMEOUT_SECS", "60");
@@ -520,11 +498,7 @@ mod tests {
 
     #[test]
     fn cli_flag_overrides_vlc_env_var() {
-        // Precedence: CLI flag > VLC_<NAME>. Locks the third rung of
-        // the documented `CLI flag > VLC_<NAME> > config-file >
-        // library default` ladder for one representative flag (the
-        // first two are exercised separately by the port-precedence
-        // ladder in `tests/test_env_vars.rs`).
+        // CLI flags override their `VLC_*` env fallback.
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _scrub = EnvScrub(&["VLC_LOG_LEVEL"]);
         std::env::set_var("VLC_LOG_LEVEL", "error");
@@ -534,7 +508,7 @@ mod tests {
             matches!(cli.log_level, LogLevel::Debug),
             "CLI --log-level=debug must override VLC_LOG_LEVEL=error"
         );
-        // Sanity: also confirm the resolved subcommand is what we expect.
+        // Confirm the resolved subcommand.
         assert!(matches!(cli.command, Commands::Vl2svg { .. }));
     }
 }

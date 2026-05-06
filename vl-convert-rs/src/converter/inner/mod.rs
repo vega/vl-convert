@@ -60,8 +60,8 @@ unsafe extern "C" fn near_heap_limit_callback(
     // worker init. It lives for the isolate's lifetime (bounded: one per worker).
     let cb_data = unsafe { &*(data as *const HeapLimitCallbackData) };
 
-    // If the flag was already set (repeated callback invocation during the
-    // same OOM episode), return the limit unchanged — do not keep doubling.
+    // If the flag was already set during this OOM episode, return the limit
+    // unchanged.
     if cb_data
         .heap_limit_hit
         .swap(true, std::sync::atomic::Ordering::AcqRel)
@@ -159,8 +159,8 @@ impl InnerVlConverter {
             bundle_provider: None,
         };
 
-        // Configure WorkerOptions with our custom extensions and V8 snapshot.
-        // The snapshot contains pre-compiled deno_runtime extensions plus our extension's ESM.
+        // Configure WorkerOptions with vl-convert extensions and V8 snapshot.
+        // The snapshot contains pre-compiled deno_runtime extensions plus vl-convert ESM.
         // This is required for container compatibility (manylinux, slim images).
         let create_params = ctx.config.max_v8_heap_size_mb.map(|n| {
             let max_bytes: usize = n
@@ -175,7 +175,7 @@ impl InnerVlConverter {
             extensions: vec![
                 // Canvas 2D extension from vl-convert-canvas2d-deno crate
                 vl_convert_canvas2d_deno::vl_convert_canvas2d::init(),
-                // Our runtime extension (worker-local JSON/msgpack transfer ops)
+                // Runtime extension for worker-local JSON/msgpack transfer ops.
                 super::vl_convert_runtime::init(),
             ],
             startup_snapshot: Some(crate::VL_CONVERT_SNAPSHOT),
@@ -225,7 +225,7 @@ impl InnerVlConverter {
 
         // Store data access policy for the Rust data loading ops.
         // The ConverterContext tracks `parsed_allowed_base_urls` as a
-        // `Vec<...>` (empty = block all), so we always wrap in `Some(...)`
+        // `Vec<...>` (empty = block all), so wrap in `Some(...)`
         // to engage the allowlist enforcer.
         let data_policy = crate::data_ops::DataAccessPolicy {
             allowed_base_urls: Some(ctx.parsed_allowed_base_urls.clone()),
@@ -253,12 +253,9 @@ impl InnerVlConverter {
 pub(crate) struct VlConverterInner {
     pub(super) vegaembed_bundles: Mutex<HashMap<VlVersion, String>>,
     pub(super) pool: Mutex<Option<super::worker_pool::WorkerPool>>,
-    /// Active config. Read on the conversion hot path (a single
-    /// `load_full()` per request). Wholesale config changes happen by
-    /// constructing a fresh `VlConverterInner` via
-    /// [`VlConverter::with_config`] — there's no in-place mutation
-    /// path; the `ArcSwap` here is purely for the cheap `load_full()`
-    /// read pattern.
+    /// Active config. Conversion requests read one `Arc` snapshot via
+    /// `load_full()`. Config changes construct a fresh `VlConverterInner`
+    /// via [`VlConverter::with_config`]; there is no in-place mutation path.
     pub(crate) config: arc_swap::ArcSwap<VlcConfig>,
     /// Resolved plugins populated when the worker pool is first spawned.
     /// Separate from config because spawn_worker_pool() creates a new Arc
@@ -271,9 +268,9 @@ pub(crate) struct VlConverterInner {
 }
 
 impl VlConverterInner {
-    /// Snapshot of the active config. Cheap (one ArcSwap load + Arc clone).
+    /// Snapshot of the active config.
     /// Hold the returned `Arc` for the duration of one logical operation;
-    /// don't re-load mid-flow if you need consistency.
+    /// avoid re-loading mid-flow when consistency matters.
     pub(crate) fn config(&self) -> Arc<VlcConfig> {
         self.config.load_full()
     }
@@ -902,7 +899,7 @@ pub(super) mod tests {
             .cloned()
             .unwrap_or_default();
 
-        // Path2D.addPath should now succeed (no longer unsupported)
+        // Path2D.addPath is supported.
         let add_path_succeeded = ctx
             .execute_script_to_json("addPathSucceeded")
             .await

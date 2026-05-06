@@ -312,10 +312,10 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
 
 /// Replace the process-global font-directory list with `paths`.
 ///
-/// Paths previously registered but absent from `paths` are dropped from the
-/// global registry, and the fontdb no longer resolves their fonts on future
-/// conversions. Bumps `FONT_CONFIG_VERSION`; workers pick up the new state
-/// on their next work item.
+/// The replacement list is authoritative: paths absent from `paths` are
+/// removed from the global registry and from subsequent font resolution. Bumps
+/// `FONT_CONFIG_VERSION`; workers pick up the new state on their next work
+/// item.
 pub fn set_font_directories(paths: &[PathBuf]) -> Result<(), anyhow::Error> {
     {
         let mut font_config = FONT_CONFIG
@@ -348,7 +348,7 @@ pub fn set_google_fonts_cache_size_mb(cap_mb: Option<NonZeroU64>) -> Result<(), 
 
 /// Read the currently-active Google Fonts LRU cache cap (in MB).
 ///
-/// Always returns the *resolved* cap — at process start this is
+/// Always returns the *resolved* cap. At process start this is
 /// [`DEFAULT_GOOGLE_FONTS_CACHE_SIZE_MB`]; subsequent
 /// [`set_google_fonts_cache_size_mb`] calls overwrite it.
 pub fn current_google_fonts_cache_size_mb() -> NonZeroU64 {
@@ -364,8 +364,8 @@ mod tests {
 
     #[test]
     fn set_font_directories_replaces_existing() {
-        // Snapshot prior state so we restore it after the test — the
-        // global is shared across tests.
+        // Snapshot prior state so the shared global can be restored after the
+        // test.
         let prior = current_font_directories();
 
         let tmp = tempfile::tempdir().unwrap();
@@ -379,7 +379,7 @@ mod tests {
         assert!(after_a.iter().any(|p| p == &dir_a));
         assert!(!after_a.iter().any(|p| p == &dir_b));
 
-        // Replace — dir_a must be gone, dir_b present
+        // Replace with dir_b only.
         set_font_directories(std::slice::from_ref(&dir_b)).unwrap();
         let after_b = current_font_directories();
         assert!(

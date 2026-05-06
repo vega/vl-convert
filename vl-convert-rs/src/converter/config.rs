@@ -231,16 +231,16 @@ pub type VlConverterConfig = VlcConfig;
 
 impl Default for VlcConfig {
     fn default() -> Self {
-        // Sane profile for library, CLI, and server callers.
+        // Default profile for library, CLI, and server callers.
         //
-        // - `allowed_base_urls = ["http:", "https:"]` — any HTTP/HTTPS URL is
+        // - `allowed_base_urls = ["http:", "https:"]`: any HTTP/HTTPS URL is
         //   allowed; no filesystem access. Pass `Vec::new()` to block all
         //   network data; `["*"]` to allow everything (including
         //   filesystem reads).
-        // - `max_v8_heap_size_mb = None` — no per-worker heap cap. Server
+        // - `max_v8_heap_size_mb = None`: no per-worker heap cap. Server
         //   deployments should set an explicit cap; local/embedded callers
         //   typically don't need one.
-        // - `max_ephemeral_workers = Some(NZ(2))` — bounds ephemeral-worker
+        // - `max_ephemeral_workers = Some(NZ(2))`: bounds ephemeral-worker
         //   concurrency (harmless when per-request plugins are disabled).
         Self {
             num_workers: NonZeroU64::new(1).expect("1 is non-zero"),

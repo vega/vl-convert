@@ -324,11 +324,9 @@ def set_font_directories(font_dirs: list[str]) -> None:
     """
     Replace the registered font directories with the given list.
 
-    Unlike ``register_font_directory``, which only adds, this replaces
-    the full list. Directories previously registered but absent from
-    ``font_dirs`` are dropped from the global registry, and the fontdb
-    no longer resolves their fonts on future conversions. Pass an empty
-    list to clear all registrations.
+    The replacement list is authoritative. Directories absent from
+    ``font_dirs`` are removed from the global registry and from subsequent
+    font resolution. Pass an empty list to clear all registrations.
 
     Parameters
     ----------
@@ -348,8 +346,8 @@ def current_font_directories() -> list[str]:
     The registry is process-global state, not a ``configure()`` field
     and not env-var-controlled. It starts empty and is mutated only by:
 
-    - ``register_font_directory(path)`` — append one path.
-    - ``set_font_directories(paths)`` — replace the full list.
+    - ``register_font_directory(path)``: append one path.
+    - ``set_font_directories(paths)``: replace the full list.
 
     Returns
     -------
@@ -364,13 +362,13 @@ def google_fonts_cache_dir() -> str | None:
 
     Resolved once per process from the environment:
 
-    1. ``VL_CONVERT_FONT_CACHE_DIR=none`` → ``None`` (caching disabled,
+    1. ``VL_CONVERT_FONT_CACHE_DIR=none``: ``None`` (caching disabled,
        fonts always fetched fresh).
-    2. ``VL_CONVERT_FONT_CACHE_DIR=/some/path`` → that path.
-    3. Unset → the OS cache directory joined with ``vl-convert/google-fonts``
+    2. ``VL_CONVERT_FONT_CACHE_DIR=/some/path``: that path.
+    3. Unset: the OS cache directory joined with ``vl-convert/google-fonts``
        (e.g. ``~/Library/Caches/vl-convert/google-fonts`` on macOS).
 
-    The value is fixed for the lifetime of the process — there is no
+    The value is fixed for the lifetime of the process; there is no
     runtime setter.
 
     Returns
@@ -385,8 +383,8 @@ def google_fonts_cache_size_mb() -> int:
     """
     Return the active Google Fonts on-disk LRU cache cap (in MB).
 
-    Process-global state. Always returns the resolved cap — at process
-    start this is the library default (512 MB); subsequent
+    Process-global state. Always returns the resolved cap: at process start
+    this is the library default (512 MB); subsequent
     ``set_google_fonts_cache_size_mb`` calls overwrite it.
 
     Returns
@@ -475,9 +473,8 @@ def configure(
         are downloaded and registered on each conversion call.
 
         **Replace semantics.** Each call to ``configure(google_fonts=[...])``
-        **replaces** the full list on the config; it does not append to the
-        previously configured fonts. ``None`` (or ``[]``) resets to the
-        library default (empty list).
+        **replaces** the full configured list. ``None`` (or ``[]``) resets to
+        the library default (empty list).
     max_v8_heap_size_mb
         Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
         ``None`` resets to the library default (no cap). Passing ``0`` raises
@@ -588,8 +585,7 @@ def warm_up_workers() -> None:
     """
     Eagerly start converter workers for the current converter configuration.
 
-    This can be used to avoid first-conversion startup latency by pre-initializing
-    worker runtimes before submitting conversion requests.
+    Pre-initializes worker runtimes before conversion requests are submitted.
     """
     ...
 

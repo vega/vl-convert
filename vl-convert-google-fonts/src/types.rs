@@ -3,10 +3,8 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
-/// CSS font style. Serializes/deserializes as lowercase
-/// (`"normal"`/`"italic"`) — matches the CSS wire form, the
-/// `Display`/`FromStr` shape, and the JSON shape Python and the
-/// server's admin API speak.
+/// CSS font style encoded as lowercase `"normal"` / `"italic"` across serde,
+/// `Display`, `FromStr`, Python, and server-admin JSON.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FontStyle {
@@ -50,9 +48,9 @@ impl fmt::Display for VariantRequest {
 
 /// Find the closest available variant to a requested (weight, style).
 ///
-/// Tries: exact match → closest weight with matching style → closest weight
-/// any style. Returns the index into `available`, or `None` if `available`
-/// is empty.
+/// Prefers an exact match, then the closest weight with matching style, then
+/// the closest weight regardless of style. Returns the index into `available`,
+/// or `None` if `available` is empty.
 pub fn find_closest_variant(
     requested: &VariantRequest,
     available: &[VariantRequest],

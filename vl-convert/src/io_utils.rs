@@ -28,10 +28,9 @@ pub(crate) fn parse_nullable_string_arg(raw: &str) -> Option<String> {
     }
 }
 
-/// Apply the global `--font-dir` list to the process-global font registry
-/// via [`vl_convert_rs::set_font_directories`]. Replace semantics: any
-/// directories registered earlier are overwritten by the CLI list. No-op
-/// when the user did not pass `--font-dir`.
+/// Apply the global `--font-dir` list to the process-global font registry.
+/// The CLI list is authoritative; no-op when the user did not pass
+/// `--font-dir`.
 pub(crate) fn apply_global_font_dirs(cli: &Cli) -> anyhow::Result<()> {
     if cli.font_dir.is_empty() {
         return Ok(());
@@ -75,8 +74,8 @@ pub(crate) fn parse_themes_json(
 }
 
 /// Build a `tracing-subscriber` `EnvFilter` directive from the CLI's
-/// logging globals. Explicit `--log-filter` wins; otherwise we
-/// synthesize a multi-target directive scoped to `vl_convert`,
+/// logging globals. Explicit `--log-filter` wins; otherwise this creates a
+/// multi-target directive scoped to `vl_convert`,
 /// `vl_convert_server`, and `tower_http`.
 pub(crate) fn synthesize_log_filter(level: LogLevel, explicit: Option<&str>) -> String {
     if let Some(filter) = explicit {
@@ -96,9 +95,8 @@ pub(crate) fn parse_boolish_arg(raw: &str) -> Result<bool, String> {
     }
 }
 
-/// Value parser for `--vega-plugin`. Accepts a file path or URL with
-/// scheme; rejects inline ESM strings (which used to be accepted but
-/// would silently corrupt under the `;` env-var delimiter).
+/// Value parser for `--vega-plugin`. Accepts a file path or URL with scheme;
+/// rejects inline ESM strings.
 pub(crate) fn parse_vega_plugin_arg(raw: &str) -> Result<String, String> {
     let s = raw.trim();
     if s.is_empty() {
@@ -151,13 +149,9 @@ pub(crate) fn parse_base_url_arg(raw: &str) -> Result<BaseUrlSetting, anyhow::Er
 
 /// Expand a `;`-delimited `--allowed-base-urls` Vec into the final
 /// allowlist. A single-element Vec matching a reserved literal
-/// (`none` / `net` / `all`) is replaced by the canonical expansion;
-/// any other shape is taken verbatim (each entry is trimmed but
-/// otherwise treated as a literal CSP pattern). Reserved literals
-/// that appear inside a multi-element Vec are NOT recognized as
-/// shortcuts — they're left as-is so the operator either notices the
-/// mistake or genuinely intends to match a host literally named
-/// `"none"` (vanishingly rare but unambiguous).
+/// (`none` / `net` / `all`) is replaced by its reserved expansion. Any other
+/// shape is taken verbatim after trimming each entry. Reserved literals inside
+/// a multi-element Vec are treated as literal CSP patterns.
 pub(crate) fn expand_allowed_base_urls(values: &[String]) -> Vec<String> {
     if values.len() == 1 {
         match values[0].trim() {
@@ -278,10 +272,8 @@ fn format_locale_from_str(s: &str) -> Result<FormatLocale, anyhow::Error> {
 /// [`FormatLocale`].
 ///
 /// `None` ("flag not passed") returns `Ok(None)` unchanged. The literal
-/// string `null` (any case) also resolves to `Ok(None)`, so callers that
-/// have already collapsed the outer `Option<Option<String>>` shape can
-/// still detect an explicit clear by passing `Some("null")`. Any other
-/// value is parsed as a locale name (or `*.json` path).
+/// string `null` (any case) also resolves to `Ok(None)`. Any other value is
+/// parsed as a locale name or JSON/JSONC object source.
 pub(crate) fn parse_format_locale_option(
     format_locale: Option<&str>,
 ) -> Result<Option<FormatLocale>, anyhow::Error> {

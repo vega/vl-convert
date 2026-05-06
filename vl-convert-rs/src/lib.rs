@@ -44,7 +44,7 @@ pub use text::{
 };
 pub use vl_convert_google_fonts::{google_fonts_cache_dir, FontStyle, VariantRequest};
 
-/// V8 snapshot containing the pre-compiled deno_runtime extensions plus our
+/// V8 snapshot containing the pre-compiled deno_runtime extensions plus the
 /// vl_convert_runtime extension. Generated at build time for container
 /// compatibility and faster startup.
 pub static VL_CONVERT_SNAPSHOT: &[u8] =
