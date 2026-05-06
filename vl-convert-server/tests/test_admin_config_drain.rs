@@ -1,28 +1,8 @@
-//! Drain-behavior integration tests for the admin reconfig pipeline (Task 13).
+//! Drain-behavior integration tests for the admin reconfig pipeline.
 //!
-//! Scenarios covered:
-//!
-//! * `test_drain_blocks_new_requests_with_503_retry_after` — while a PATCH
-//!   is draining, new API requests get 503 + Retry-After.
-//! * `test_drain_waits_for_inflight_to_finish` — a slow conversion pre-PATCH
-//!   completes; PATCH only returns after.
-//! * `test_drain_timeout_returns_504_and_reverts_gate` — forcing drain
-//!   timeout via `reconfig_drain_timeout_secs = 0` yields 504 + the gate
-//!   reopens afterwards.
-//! * `test_back_to_back_patches_serialize` — two concurrent PATCHes both
-//!   succeed and bump counters by 2.
-//! * `test_failed_rebuild_restores_globals` — marked `#[ignore]` because
-//!   the server does not expose a test-only rebuild-failure hook; see
-//!   `findings.md`.
-//! * `test_admission_race_regression` — stress the gate middleware with N
-//!   concurrent POSTs while a PATCH closes the gate mid-burst.
-//!
-//! The drain tests rely on the admin rebuild path closing the gate via
-//! `coordinator.close_gate()` before building the new converter. To reliably
-//! get the main listener into the "draining" state the tests (a) issue a
-//! slow conversion, (b) begin a PATCH that requires a rebuild, and (c) race
-//! probe requests against the main listener. Non-trivial to time; all
-//! assertions use generous polling windows.
+//! The tests drive rebuild-required PATCHes while main-listener requests are
+//! in flight, covering closed-gate 503s, drain waits, drain timeout handling,
+//! concurrent PATCH serialization, and the admission race around gate closure.
 
 mod common;
 
@@ -53,7 +33,7 @@ fn slow_spec() -> Value {
     })
 }
 
-/// Small and fast — used as the "probe" request checking gate state.
+/// Small request used as the gate-state probe.
 fn fast_spec() -> Value {
     json!({
         "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
@@ -73,11 +53,8 @@ async fn test_drain_blocks_new_requests_with_503_retry_after() {
     let main_url = server.handle.base_url.clone();
     let admin_url = server.admin_base_url.clone();
 
-    // Kick off a slow conversion against the main listener. This will
-    // admit via the gate (gate is currently open) and hold inflight = 1
-    // for the duration of the render. Probe timing relies on the slow
-    // render outlasting the PATCH's close-gate + drain window, so we
-    // want the conversion to take at least ~500ms.
+    // Start a slow conversion against the main listener so the gate has an
+    // in-flight request to drain.
     let client_slow = reqwest::Client::new();
     let main_url_slow = main_url.clone();
     let slow_task = tokio::spawn(async move {
@@ -92,8 +69,8 @@ async fn test_drain_blocks_new_requests_with_503_retry_after() {
     // Give the slow request a moment to be admitted (gate + handler start).
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    // Kick off the PATCH — default_theme requires rebuild, so the handler
-    // closes the gate and waits for the slow request to complete.
+    // `default_theme` requires rebuild, so the PATCH closes the gate and
+    // waits for the slow request to complete.
     let client_patch = reqwest::Client::new();
     let admin_url_patch = admin_url.clone();
     let patch_task = tokio::spawn(async move {
@@ -105,11 +82,8 @@ async fn test_drain_blocks_new_requests_with_503_retry_after() {
             .map(|r| r.status())
     });
 
-    // Probe as soon as the PATCH has had a moment to close the gate but
-    // BEFORE the slow request completes — otherwise the drain finishes
-    // and the gate reopens before we observe the closed-gate response.
-    // A 20 ms window has been sufficient empirically for the PATCH to
-    // reach `close_gate()` without overlapping the rebuild's reopen.
+    // Probe after the PATCH has had a moment to close the gate and before the
+    // slow request is expected to complete.
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     // A probe request to the main listener while the PATCH is draining
@@ -249,8 +223,7 @@ async fn test_drain_timeout_returns_504_and_reverts_gate() {
     // Let the slow request finish.
     let _ = tokio::time::timeout(Duration::from_secs(15), slow_task).await;
 
-    // Gate should have been reopened — a new request on the main listener
-    // must succeed (200 via fast_spec or at least not 503).
+    // A new main-listener request should pass the reopened gate.
     let resp = reqwest::Client::new()
         .post(format!("{main_url}/vegalite/svg"))
         .json(&json!({"spec": fast_spec()}))
@@ -321,7 +294,7 @@ async fn test_back_to_back_patches_serialize() {
     );
 }
 
-/// Admission race regression — stress the gate middleware with many
+/// Admission race regression: stress the gate middleware with many
 /// concurrent POSTs while a PATCH closes the gate mid-burst. Every request
 /// must either admit cleanly (200/4xx), get rejected with 503, or get a
 /// non-deadlocking response. No task should hang, and the server must
@@ -351,7 +324,8 @@ async fn test_admission_race_regression() {
         }));
     }
 
-    // Kick the PATCH shortly after — it will race with the probes.
+    // Start the PATCH shortly after the probes so the gate-close races with
+    // admission.
     tokio::time::sleep(Duration::from_millis(20)).await;
     let patch_client = reqwest::Client::new();
     let admin_url_patch = admin_url.clone();
@@ -394,7 +368,7 @@ async fn test_admission_race_regression() {
         "lost probes; admitted={admitted} rejected={rejected} other={other}"
     );
 
-    // Server must be responsive after the PATCH — gate should be open.
+    // Server must be responsive after the PATCH.
     let resp = reqwest::Client::new()
         .post(format!("{main_url}/vegalite/svg"))
         .json(&json!({"spec": fast_spec()}))

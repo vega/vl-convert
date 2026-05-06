@@ -6,13 +6,6 @@
 //! parent-death, bind-failure producing no stdout, and the Windows
 //! parse-time rejection of `--unix-socket`.
 //!
-//! These tests are direct ports of v3's `test_uds_e2e.rs`; the two
-//! redundant tests (`test_double_bind_fails`,
-//! `test_admin_config_roundtrip_via_uds`) are intentionally NOT
-//! ported — their in-process equivalents already live in
-//! `vl-convert-server/tests/test_uds_cleanup.rs` and
-//! `vl-convert-server/tests/test_admin_config.rs`.
-
 mod common;
 
 #[cfg(unix)]
@@ -27,8 +20,7 @@ fn test_ready_json_parseable() {
     // Spawn with UDS + --ready-json; parse the single-line JSON object
     // and assert every required field from the schema.
     let tmp = tempfile::tempdir().unwrap();
-    // Keep the path short — Linux's UDS path limit is 108 bytes,
-    // macOS's is 104. `m.sock` is the shortest meaningful name.
+    // Keep the path short for platform UDS path limits.
     let sock = tmp.path().join("m.sock");
 
     let mut child = spawn_serve_piped(&[

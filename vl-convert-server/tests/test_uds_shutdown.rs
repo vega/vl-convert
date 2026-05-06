@@ -1,8 +1,6 @@
 #![cfg(unix)]
-//! UDS analogue of `test_shutdown.rs` — verifies `serve()` drains its
-//! background tasks when given a `BoundListener::Uds` + a caller-driven
-//! shutdown future. If the drain wiring regressed on the UDS arm, the
-//! serve task would hang past the 5s deadline instead of returning.
+//! UDS variant of the shutdown-drain test. `serve()` must drain background
+//! tasks when given a `BoundListener::Uds` and a caller-driven shutdown future.
 
 use std::time::Duration;
 use vl_convert_rs::converter::VlcConfig;

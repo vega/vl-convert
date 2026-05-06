@@ -1,23 +1,9 @@
-//! Integration tests for the `/admin/config` surface (Task 13).
+//! Integration tests for the `/admin/config` surface.
 //!
-//! These tests exercise the full admin config pipeline end-to-end through
-//! a running server — GET, PATCH, PUT, DELETE, and POST /admin/config/fonts/
-//! directories — asserting:
-//!
-//! * The natural JSON ↔ Option mapping (null on Option<T> → None, null on
-//!   non-nullable → 400).
-//! * Serde-level rejections (NonZero zero, missing required fields in PUT).
-//! * 422 validation failures (below-minimum heap size).
-//! * Hot-apply vs rebuild classification (generation bumps only on rebuild).
-//! * Identity short-circuit (PUT of current config → 200, no counter bump).
-//! * /infoz never exposes the generation counter.
-//! * Font-directory POST dedup + error paths.
-//!
-//! All servers are started with a free admin port via
-//! `common::start_admin_config_server`; they share the ambient library
-//! `VlConverter` / font configuration, so the tests avoid touching
-//! `set_font_directories` / `apply_hot_font_cache` via the library directly
-//! — all state changes flow through the admin surface.
+//! The suite drives a running server through GET, PATCH, PUT, DELETE, and
+//! `/admin/config/fonts/*` endpoints, covering JSON null semantics, parse and
+//! validation errors, generation changes, reset behavior, and font registry
+//! updates through the admin API.
 
 mod common;
 
@@ -159,8 +145,6 @@ async fn put_font_cache_size(server: &BudgetServer, body: Value) -> (reqwest::St
     (status, body)
 }
 
-// ---------- GET ----------
-
 #[tokio::test]
 async fn test_admin_config_get_baseline_and_live() {
     let server = default_admin_server();
@@ -180,8 +164,6 @@ async fn test_admin_config_get_baseline_and_live() {
     assert!(body["effective"]["num_workers"].is_number());
 }
 
-// ---------- PATCH happy path ----------
-
 #[tokio::test]
 async fn test_admin_config_patch_default_theme_applies_and_rerenders() {
     let server = default_admin_server();
@@ -190,8 +172,7 @@ async fn test_admin_config_patch_default_theme_applies_and_rerenders() {
     let (_, before) = get_config(&server).await;
     assert!(before["effective"]["default_theme"].is_null());
 
-    // PATCH to "dark" — this is a rebuild-required field per the design's
-    // §4 classification.
+    // `default_theme` changes require a rebuild.
     let (status, body) = patch_config(&server, json!({"default_theme": "dark"})).await;
     assert_eq!(status, 200, "body: {body:?}");
 
@@ -215,8 +196,6 @@ async fn test_admin_config_patch_default_theme_applies_and_rerenders() {
     assert_eq!(resp.status(), 200, "post-patch conversion should succeed");
 }
 
-// ---------- PATCH null semantics ----------
-
 #[tokio::test]
 async fn test_admin_config_patch_null_sets_option_fields_to_none() {
     // PATCH null on an Option<T> field clears it; null on a
@@ -235,29 +214,25 @@ async fn test_admin_config_patch_null_sets_option_fields_to_none() {
 
 #[tokio::test]
 async fn test_admin_config_patch_null_on_non_nullable_field_400() {
-    // Design §2.5 / §2.5.1: null on a non-nullable field (Vec<T>, bool, etc.)
-    // must be rejected at serde parse time with 400.
+    // Null on non-nullable fields is rejected at serde parse time with 400.
     let server = default_admin_server();
 
-    // allowed_base_urls: Vec<String> — non-nullable.
+    // allowed_base_urls: Vec<String>, non-nullable.
     let (status, _) = patch_config(&server, json!({"allowed_base_urls": Value::Null})).await;
     assert_eq!(status, 400, "null on Vec<String> must be 400 at parse time");
 
-    // auto_google_fonts: bool — non-nullable.
+    // auto_google_fonts: bool, non-nullable.
     let (status, _) = patch_config(&server, json!({"auto_google_fonts": Value::Null})).await;
     assert_eq!(status, 400, "null on bool must be 400 at parse time");
 
-    // num_workers: NonZeroUsize — non-nullable.
+    // num_workers: NonZeroUsize, non-nullable.
     let (status, _) = patch_config(&server, json!({"num_workers": Value::Null})).await;
     assert_eq!(status, 400, "null on NonZeroUsize must be 400");
 }
 
-// ---------- PATCH validation (serde + normalize) ----------
-
 #[tokio::test]
 async fn test_admin_config_patch_zero_on_nonzero_type_rejected_400() {
-    // NonZeroUsize / NonZeroU64 reject 0 at parse time — serde returns
-    // 400, not 422 (which is for post-parse validation).
+    // NonZeroUsize / NonZeroU64 reject 0 at parse time with 400.
     let server = default_admin_server();
 
     let (status, _) = patch_config(&server, json!({"num_workers": 0})).await;
@@ -288,8 +263,7 @@ async fn test_admin_config_patch_invalid_value_422() {
 
 #[tokio::test]
 async fn test_admin_config_patch_rejects_google_fonts_cache_size_mb() {
-    // `google_fonts_cache_size_mb` is no longer a writable VlcConfig
-    // field — it's process-global, mutated via
+    // `google_fonts_cache_size_mb` is process-global state managed by
     // `PUT /admin/config/fonts/cache_size`.
     let server = default_admin_server();
     let (status, _) = patch_config(&server, json!({"google_fonts_cache_size_mb": 64})).await;
@@ -301,8 +275,8 @@ async fn test_admin_config_patch_rejects_google_fonts_cache_size_mb() {
 
 #[tokio::test]
 async fn test_admin_config_patch_rejects_font_directories() {
-    // `font_directories` is no longer part of the writable `VlcConfig`
-    // DTO. PATCH /admin/config must reject it via deny_unknown_fields.
+    // `font_directories` is process-global state and not a writable
+    // `VlcConfig` DTO field.
     let tmp = tempfile::tempdir().unwrap();
     let server = default_admin_server();
 
@@ -314,9 +288,7 @@ async fn test_admin_config_patch_rejects_font_directories() {
     );
 }
 
-// ---------- PUT full replacement ----------
-
-/// Helper — produce a JSON body that fully replaces every VlcConfig field
+/// Produce a JSON body that fully replaces every VlcConfig field
 /// with the library defaults (`VlcConfig::default()`). Used by identity-PUT
 /// tests where the body must match what `GET /admin/config` returns at
 /// startup against a server initialised with `VlcConfig::default()`.
@@ -350,7 +322,7 @@ fn default_config_put_body() -> Value {
 async fn test_admin_config_put_full_replacement() {
     let server = default_admin_server();
 
-    // PUT the default body with one divergent field — default_theme.
+    // PUT the default body with one divergent field.
     let mut body = default_config_put_body();
     body["default_theme"] = Value::String("dark".to_string());
 
@@ -388,11 +360,8 @@ async fn test_admin_config_put_identity_short_circuit() {
 async fn test_admin_config_put_missing_field_422() {
     let server = default_admin_server();
 
-    // Omit num_workers (and others). ConfigReplace has no `#[serde(default)]`,
-    // so missing-field is rejected by serde at parse time — which is a 400
-    // per the server's json_rejection_response. (Task prompt mentioned 422 in
-    // one place and 400 in another; the implementation funnels through
-    // JsonRejection -> 400. We assert the observed contract.)
+    // ConfigReplace has no `#[serde(default)]`, so missing fields are rejected
+    // during request parsing.
     let body = json!({"num_workers": 1}); // incomplete
     let (status, _) = put_config(&server, body).await;
     assert!(
@@ -400,8 +369,6 @@ async fn test_admin_config_put_missing_field_422() {
         "missing PUT field must be 400 (serde) or 422; got {status}"
     );
 }
-
-// ---------- DELETE ----------
 
 #[tokio::test]
 async fn test_admin_config_delete_resets_to_baseline() {
@@ -431,8 +398,6 @@ async fn test_admin_config_delete_resets_to_baseline() {
     );
 }
 
-// ---------- Back-to-back PATCHes ----------
-
 #[tokio::test]
 async fn test_admin_config_back_to_back_patches_serialize() {
     let server = default_admin_server();
@@ -440,7 +405,7 @@ async fn test_admin_config_back_to_back_patches_serialize() {
     let (_, before) = get_config(&server).await;
     let gen_before = before["generation"].as_u64().unwrap();
 
-    // Two sequential PATCHes — both rebuild-required fields.
+    // Two sequential rebuild-required PATCHes.
     let (s, _) = patch_config(&server, json!({"default_theme": "dark"})).await;
     assert_eq!(s, 200);
     let (s, _) = patch_config(&server, json!({"auto_google_fonts": true})).await;
@@ -452,12 +417,9 @@ async fn test_admin_config_back_to_back_patches_serialize() {
     assert_eq!(after["effective"]["auto_google_fonts"], true);
 }
 
-// ---------- /infoz negative assertion ----------
-
 #[tokio::test]
 async fn test_admin_config_generation_not_exposed_on_infoz() {
-    // Even after a PATCH bumps generation, /infoz body must NOT include a
-    // `generation` key. Design §2.8 / §4: generation is admin-only.
+    // Generation is admin-only and must not appear on /infoz.
     let server = default_admin_server();
     let (s, _) = patch_config(&server, json!({"default_theme": "dark"})).await;
     assert_eq!(s, 200);
@@ -480,8 +442,6 @@ async fn test_admin_config_generation_not_exposed_on_infoz() {
     assert!(body.get("version").is_some());
     assert!(body.get("vegalite_versions").is_some());
 }
-
-// ---------- POST /admin/config/fonts/directories ----------
 
 fn dirs_from_get(value: &Value) -> Vec<String> {
     value
@@ -523,7 +483,7 @@ async fn test_admin_config_font_dir_put_replaces() {
     let (_, after1) = get_font_dirs(&server).await;
     assert_eq!(dirs_from_get(&after1), vec![path_a.clone()]);
 
-    // Replace with just path_b. path_a must be gone.
+    // Replace with only path_b. path_a must be gone.
     let (s, _) = put_font_dirs(&server, json!({"paths": [path_b.clone()]})).await;
     assert_eq!(s, 200);
     let (_, after2) = get_font_dirs(&server).await;
@@ -558,7 +518,7 @@ async fn test_admin_config_font_dir_post_idempotent() {
     let (_, listing_first) = get_font_dirs(&server).await;
     let dirs_first = dirs_from_get(&listing_first);
 
-    // Second POST of the same path — registry idempotent.
+    // Second POST of the same path is idempotent.
     let (s, _) = post_font_dir(&server, json!({"path": path.clone()})).await;
     assert_eq!(s, 200);
     let (_, listing_second) = get_font_dirs(&server).await;
@@ -579,8 +539,6 @@ async fn test_admin_config_font_dir_nonexistent_400() {
     let (status, _) = put_font_dirs(&server, json!({"paths": [bogus]})).await;
     assert_eq!(status, 400, "PUT containing nonexistent path must 400");
 }
-
-// ---------- /admin/config/fonts/cache_size ----------
 
 #[tokio::test]
 async fn test_admin_config_cache_size_get_returns_resolved_cap() {
@@ -623,13 +581,11 @@ async fn test_admin_config_cache_size_put_null_resets_to_default() {
 
 #[tokio::test]
 async fn test_admin_config_cache_size_put_rejects_zero() {
-    // NonZeroU64 rejects 0 at parse time → 400.
+    // NonZeroU64 rejects 0 at parse time.
     let server = default_admin_server();
     let (status, _) = put_font_cache_size(&server, json!({"max_size_mb": 0})).await;
     assert_eq!(status, 400);
 }
-
-// ---------- Helper — opaque-errors server variant doesn't change core semantics ----------
 
 #[tokio::test]
 async fn test_admin_config_patch_opaque_errors_body_shape() {
@@ -642,8 +598,8 @@ async fn test_admin_config_patch_opaque_errors_body_shape() {
 
     let (status, body) = patch_config(&server, json!({"max_v8_heap_size_mb": 3})).await;
     assert_eq!(status, 422);
-    // Either empty object or null — the key assertion is that the status
-    // still signals validation failure.
+    // Opaque mode may decode as null or an empty object; the status still
+    // signals validation failure.
     assert!(
         body == Value::Null || body == json!({}),
         "opaque 422 body should be empty; got {body:?}"

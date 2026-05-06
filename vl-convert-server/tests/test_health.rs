@@ -90,12 +90,9 @@ async fn test_infoz_surface_unchanged() {
 }
 
 /// `/readyz` must return 503 while an admin reconfig is draining/rebuilding.
-/// We drive this indirectly by opening a main-listener TCP server with an
-/// admin listener, firing a PATCH that requires a rebuild, and probing
-/// `/readyz` during the drain. Because this test is sensitive to timing
-/// (the drain + rebuild completes quickly on the default config), we use
-/// a slow conversion to hold the in-flight count > 0 and extend the drain
-/// window.
+/// The test opens a main-listener TCP server with an admin listener, starts a
+/// slow conversion to keep the in-flight count above zero, fires a rebuild
+/// PATCH, and probes `/readyz` during the drain.
 #[tokio::test]
 async fn test_readyz_503_during_reconfig_in_progress() {
     use serde_json::json;
@@ -108,7 +105,7 @@ async fn test_readyz_503_during_reconfig_in_progress() {
     let main_url = server.handle.base_url.clone();
     let admin_url = server.admin_base_url.clone();
 
-    // In-flight slow conversion — keeps inflight > 0 so drain waits.
+    // In-flight slow conversion keeps inflight > 0 so drain waits.
     let slow_values: Vec<Value> = (0..5000)
         .map(|i| json!({"x": i as f64 * 0.01, "y": (i as f64).sin()}))
         .collect();
@@ -146,12 +143,8 @@ async fn test_readyz_503_during_reconfig_in_progress() {
             .await
     });
 
-    // Probe `/readyz` during the drain. Narrow window: the PATCH handler
-    // sets `reconfig_in_progress` ~10 ms after it hits the admin listener
-    // and clears it once `with_config` + `warm_up` complete (~50 ms of
-    // sync CPU on a fast machine). To observe the flag reliably we fire
-    // a single probe just after the PATCH starts — while the drain loop
-    // is still awaiting the slow request's inflight guard to drop.
+    // Probe `/readyz` during the drain, while the slow request still holds an
+    // in-flight guard.
     tokio::time::sleep(Duration::from_millis(20)).await;
     let probe = reqwest::Client::new()
         .get(format!("{main_url}/readyz"))

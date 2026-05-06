@@ -40,14 +40,15 @@ pub(crate) fn build_router(
     opaque_errors: bool,
     trust_proxy: bool,
 ) -> Router {
-    // Health endpoints: registered via OpenApiRouter for docs, but bypass auth/budget middleware
+    // Health endpoints are registered in the OpenAPI spec and bypass
+    // auth/budget middleware.
     let (health_router, health_api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(health::healthz))
         .routes(routes!(health::readyz))
         .routes(routes!(health::infoz))
         .split_for_parts();
 
-    // API routes with OpenAPI documentation
+    // API routes with OpenAPI documentation.
     let (api_router, mut api) = OpenApiRouter::new()
         .routes(routes!(themes::list_themes))
         .routes(routes!(themes::get_theme))
@@ -75,16 +76,16 @@ pub(crate) fn build_router(
         .routes(routes!(bundling::bundle_snippet))
         .split_for_parts();
 
-    // Merge health endpoint paths into the API OpenAPI spec
+    // Merge health endpoint paths into the API OpenAPI spec.
     for (path, item) in health_api.paths.paths {
         api.paths.paths.insert(path, item);
     }
 
-    // Serve Swagger UI and OpenAPI spec
+    // Serve Swagger UI and the OpenAPI spec.
     let mut api_router =
         api_router.merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", api));
 
-    // Budget tracking middleware (optional)
+    // Optional budget tracking middleware.
     if let Some(tracker) = tracker {
         api_router =
             api_router.layer(axum::middleware::from_fn(
@@ -97,7 +98,7 @@ pub(crate) fn build_router(
             ));
     }
 
-    // Auth and UA middleware only on API routes — health endpoints are exempt.
+    // Auth and UA middleware only on API routes; health endpoints are exempt.
     // The reconfig gate is installed *last* so it runs *outermost* on the
     // API router (axum `.layer()` is applied bottom-up → last call wraps
     // first). A gate-closed 503 skips budget / auth / UA; the gate is a
@@ -122,9 +123,9 @@ pub(crate) fn build_router(
 /// Record UDS peer credentials onto `span` when the request originated
 /// from a UDS listener and the `peer_cred()` syscall succeeded. No-op
 /// for TCP requests (no `UdsConnectInfo` in extensions) and for UDS
-/// requests on sandboxed kernels where `peer_cred()` failed —
-/// credentials are observability-only, so their absence degrades the
-/// span rather than dropping the request.
+/// requests where `peer_cred()` failed. Peer credentials are
+/// observability-only; missing values are omitted from the span and the
+/// request continues.
 ///
 /// Spans declare `peer_uid` / `peer_gid` / `peer_pid` as
 /// `tracing::field::Empty` up front; this function fills them in only

@@ -10,10 +10,9 @@ use crate::AppState;
 ///
 /// Mirrors `auth_middleware` but reads `admin_api_key` from `AdminState`,
 /// which carries `opaque_errors` for response shape. When the admin key
-/// is `None` the middleware is a no-op — admin is still gated by the
+/// is `None` the middleware is a no-op; admin access is gated by the
 /// listener's placement (UDS `0o600` or TCP loopback;
-/// `validate_serve_config` in `src/config.rs` hard-bails on the
-/// non-loopback-TCP case before `bind_listener` runs).
+/// `validate_serve_config` rejects non-loopback TCP admin without a key).
 pub(crate) async fn admin_auth_middleware(
     axum::extract::State(state): axum::extract::State<Arc<AdminState>>,
     req: axum::http::Request<axum::body::Body>,
@@ -89,17 +88,15 @@ pub(crate) async fn auth_middleware(
 /// Admission gate for the main API router. When an admin reconfig has
 /// closed the gate, new requests are rejected with 503 + `Retry-After: 5`.
 ///
-/// Uses the increment-first-recheck-after handshake: we bump `inflight`
-/// before checking `gate_closed` so the drain loop and the middleware
-/// cannot race into a "gate seen open, then counter read as zero" window.
-/// On rejection we decrement and wake drain waiters so the drain loop
-/// re-evaluates. On admission we carry an `InflightGuard` through the
-/// response future so every exit path (normal return, panic caught by
-/// `CatchPanicLayer`, client disconnect, `TimeoutLayer` cancellation)
-/// decrements.
+/// Uses the increment-first/recheck-after handshake: `inflight` is incremented
+/// before checking `gate_closed` so the drain loop cannot observe zero while
+/// a request is being admitted.
+/// On rejection, the middleware decrements and wakes drain waiters. On
+/// admission, an `InflightGuard` stays alive through the response future so
+/// every exit path decrements.
 ///
-/// Installed on the API router **only** — health endpoints
-/// (`/healthz`, `/readyz`, `/infoz`) bypass the gate per design §2.2.
+/// Installed on the API router only. Health endpoints (`/healthz`, `/readyz`,
+/// `/infoz`) bypass the gate.
 pub(crate) async fn reconfig_gate_middleware(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     req: axum::http::Request<axum::body::Body>,
@@ -154,7 +151,7 @@ pub(crate) fn is_private_or_loopback(ip: &std::net::IpAddr) -> bool {
                 || v4.is_private()
                 || v4.is_link_local()
                 || v4.is_unspecified()
-                // CGNAT 100.64.0.0/10 (RFC 6598) — used by Railway's
+                // CGNAT 100.64.0.0/10 (RFC 6598), used by Railway's
                 // internal network, AWS NAT, mobile carriers, etc.
                 || (a == 100 && (64..=127).contains(&b))
         }
@@ -173,32 +170,26 @@ pub(crate) fn is_private_or_loopback(ip: &std::net::IpAddr) -> bool {
 /// Extract client IP.
 ///
 /// When `trust_proxy` is true, prefers (in order):
-/// 1. `X-Envoy-External-Address` — single trusted client IP on
+/// 1. `X-Envoy-External-Address`: single trusted client IP on
 ///    Envoy-based proxies (Railway's edge, Google Cloud Run, etc.).
-/// 2. `X-Forwarded-For` — walked **right-to-left** (appending proxies
+/// 2. `X-Forwarded-For`: walked **right-to-left** (appending proxies
 ///    place the client hop toward the right); skips private/loopback
 ///    entries until a public address is found. If every parseable
 ///    entry is private, returns the rightmost parseable one.
-/// 3. `X-Real-IP` — nginx convention.
+/// 3. `X-Real-IP`: nginx convention.
 /// 4. Peer socket address.
 ///
 /// When `trust_proxy` is false, always uses the peer socket address.
 ///
-/// Taking the leftmost XFF entry is **unsafe** on any appending proxy
-/// (Railway, nginx, envoy, ALB): an attacker can spoof the client hop
-/// by sending their own `X-Forwarded-For`. This implementation walks
-/// right-to-left to land on the first trusted hop.
+/// Appending proxies add their own hop to the right side of XFF, so this
+/// implementation walks right-to-left to find the first trusted hop.
 ///
 /// Returning `None` is legitimate in two cases: (1) the request came in
 /// over a UDS listener (no peer IP exists at the socket layer); (2) the
 /// request was built directly via `Request::builder()` in a test
-/// harness that didn't inject `ConnectInfo<SocketAddr>`. Callers
-/// MUST NOT fall back to `Ipv4Addr::UNSPECIFIED` / `0.0.0.0` on
-/// `None` — doing so would collapse every non-IP caller into a single
-/// shared per-IP bucket. The budget middleware threads
-/// `Option<IpAddr>` through `reserve` / `apply_adjustment`; `None`
-/// correctly skips the per-IP dimension while the global dimension
-/// still applies.
+/// harness that didn't inject `ConnectInfo<SocketAddr>`. Callers pass `None`
+/// through to budget accounting rather than substituting a synthetic address;
+/// `None` skips the per-IP dimension while the global dimension still applies.
 pub(crate) fn extract_client_ip(
     req: &axum::http::Request<axum::body::Body>,
     trust_proxy: bool,
@@ -225,7 +216,7 @@ pub(crate) fn extract_client_ip(
                 if let Some(last) = parsed.last() {
                     return Some(*last);
                 }
-                // Header was present but had no parseable entries — fall
+                // Header was present but had no parseable entries; fall
                 // through to X-Real-IP / peer rather than returning None.
             }
         }
@@ -294,9 +285,8 @@ mod tests {
 
     #[test]
     fn test_extract_ip_trust_proxy_true_xff_attacker_prepended() {
-        // Security regression: an attacker sends X-Forwarded-For: 9.9.9.9
-        // and Railway's edge appends its hop — the leftmost entry is
-        // attacker-controlled, the rightmost public entry is the truth.
+        // Attacker-prepended entries must not outrank the proxy-appended
+        // public hop on the right.
         let req = make_request(&[("x-forwarded-for", "9.9.9.9, 203.0.113.7")]);
         let ip = extract_client_ip(&req, true);
         assert_eq!(
@@ -308,8 +298,8 @@ mod tests {
 
     #[test]
     fn test_extract_ip_trust_proxy_true_xff_mixed_private_public() {
-        // Skip CGNAT (100.64/10 — Railway's internal range), RFC1918,
-        // and return the rightmost non-private hop.
+        // Skip CGNAT (100.64/10), RFC1918, and return the rightmost
+        // non-private hop.
         let req = make_request(&[("x-forwarded-for", "8.8.8.8, 10.0.0.1, 100.64.5.7")]);
         let ip = extract_client_ip(&req, true);
         assert_eq!(
@@ -476,14 +466,8 @@ mod tests {
         }
     }
 
-    // --- reconfig_gate_middleware tests ---
-    //
-    // These exercise the admit-handshake end-to-end through a minimal
-    // axum router so we cover: (a) gate-closed returns 503 + Retry-After,
-    // (b) gate-open increments and decrements inflight via the drop-guard,
-    // (c) the `state.opaque_errors` flag is honored in the 503 body shape.
-    // Full-router integration (gate-closed-bypasses-budget, health-
-    // endpoints-bypass-gate) lives in the integration test suite.
+    // Reconfig gate middleware tests use a minimal router to cover gate-open,
+    // gate-closed, and opaque-error behavior.
 
     use crate::reconfig::ReconfigCoordinator;
     use crate::RuntimeSnapshot;
@@ -498,9 +482,8 @@ mod tests {
     use tower::ServiceExt;
 
     fn gate_test_router(coord: Arc<ReconfigCoordinator>, opaque_errors: bool) -> Router {
-        // Build a tiny AppState with just the fields reconfig_gate_middleware
-        // touches. The runtime ArcSwap is a throwaway; we never dereference
-        // it in the test path (middleware doesn't touch it).
+        // The runtime snapshot is present to satisfy AppState; this middleware
+        // test does not dereference it.
         let runtime: Arc<ArcSwap<RuntimeSnapshot>> =
             Arc::new(ArcSwap::from_pointee(RuntimeSnapshot {
                 converter: vl_convert_rs::converter::VlConverter::new(),
@@ -562,8 +545,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_gate_closed_opaque_errors_honors_flag() {
-        // With opaque_errors=true the body is empty JSON-less — only the
-        // status carries signal. Retry-After must still be set.
+        // Opaque errors preserve status and Retry-After.
         let coord = ReconfigCoordinator::new(CancellationToken::new(), Duration::from_secs(5));
         coord.close_gate();
         let app = gate_test_router(coord.clone(), /* opaque_errors */ true);

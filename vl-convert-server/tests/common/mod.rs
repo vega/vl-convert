@@ -137,10 +137,7 @@ pub fn start_budget_server(
 }
 
 /// Start a server suitable for admin-config integration tests. Picks a free
-/// TCP port for the admin listener, clones `serve_config`, and wires the
-/// admin listener at `127.0.0.1:<port>`. Reuses the `BudgetServer` struct
-/// because the shape (main handle + admin URL) is identical — admin-config
-/// tests aren't budget-specific.
+/// TCP port for the admin listener and returns the shared test-server shape.
 pub fn start_admin_config_server(config: VlcConfig, mut serve_config: ServeConfig) -> BudgetServer {
     let admin_port = find_free_port();
     serve_config.admin = Some(ListenAddr::Tcp {
@@ -190,7 +187,7 @@ pub fn simple_svg() -> &'static str {
 /// sockets in a per-test tempdir. The returned `ServerHandle.base_url`
 /// is a `unix:///absolute/path` URL; use [`uds_get`] / [`uds_post_json`]
 /// to issue HTTP requests against it (the workspace-pinned reqwest
-/// has no UDS transport, so we drive raw hyper + UnixStream directly).
+/// has no UDS transport, so tests drive raw hyper + UnixStream directly).
 ///
 /// Both listeners share one tempdir so the server stays alive as long
 /// as the tempdir does.
@@ -242,15 +239,15 @@ pub fn start_uds_server_sync(
 
     ServerHandle {
         base_url: format!("unix://{}", main_path.display()),
-        client: reqwest::Client::new(), // unused for UDS — use uds_* helpers
+        client: reqwest::Client::new(), // unused for UDS; use uds_* helpers
         _tempdir: Some(tmp),
     }
 }
 
 /// UDS HTTP GET helper. Returns `(status, body_bytes, headers)`.
 ///
-/// reqwest has no UDS transport at workspace pin 0.11 — this uses raw
-/// hyper + hyper-util + `tokio::net::UnixStream` instead.
+/// Uses raw hyper over `tokio::net::UnixStream` because reqwest 0.11 has no
+/// UDS transport.
 #[cfg(unix)]
 pub async fn uds_get(
     sock_path: &std::path::Path,

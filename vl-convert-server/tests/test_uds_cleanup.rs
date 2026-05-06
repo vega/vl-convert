@@ -1,7 +1,6 @@
 #![cfg(unix)]
-//! Socket-file lifecycle: probe-then-unlink on bind, Drop-based unlink
-//! on clean shutdown, refusal to stomp live sockets, preservation of
-//! non-socket files at the target path.
+//! Socket-file lifecycle: probe-then-unlink on bind, Drop-based unlink on
+//! clean shutdown, live-socket refusal, and preservation of non-socket files.
 
 mod common;
 
@@ -11,8 +10,8 @@ use vl_convert_server::{BoundListener, ListenAddr, ServeConfig};
 
 #[tokio::test]
 async fn test_stale_socket_probe_and_unlink() {
-    // Pre-create a stale socket file (simulating a crashed previous
-    // run). Bind should probe, see ECONNREFUSED, unlink, then succeed.
+    // Pre-create a stale socket file. Bind should probe, see ECONNREFUSED,
+    // unlink, then succeed.
     let tmp = tempfile::tempdir().unwrap();
     let sock_path = tmp.path().join("stale.sock");
 
@@ -21,14 +20,10 @@ async fn test_stale_socket_probe_and_unlink() {
     // socket-level. Easiest way: bind then drop.
     {
         let _pre = std::os::unix::net::UnixListener::bind(&sock_path).unwrap();
-        // Leak: don't unlink so the file remains after drop simulates
-        // a crashed run.
+        // Leave the socket file behind after the listener drops.
     }
-    // The listener dropped; the socket file may still exist depending
-    // on the std behavior. If it's gone, create a regular file to
-    // simulate a truly stale state — bind will then fail with
-    // AddrInUse rather than ECONNREFUSED. Re-bind-and-leak to make it
-    // look like a socket file.
+    // If the listener drop removed the socket file, bind and leak another
+    // listener so the path still contains a socket file.
     if !sock_path.exists() {
         let _pre = std::os::unix::net::UnixListener::bind(&sock_path).unwrap();
         std::mem::forget(_pre);
@@ -38,9 +33,8 @@ async fn test_stale_socket_probe_and_unlink() {
         "pre-bind sentinel should have left a file"
     );
 
-    // Now call bind_listener — it should probe, decide the file is
-    // stale (ECONNREFUSED since nothing is listening anymore), unlink
-    // it, and bind successfully.
+    // bind_listener should probe the stale socket, unlink it, and bind
+    // successfully.
     let spec = ListenAddr::Uds {
         path: sock_path.clone(),
     };
@@ -57,9 +51,8 @@ async fn test_stale_socket_probe_and_unlink() {
 }
 
 #[tokio::test]
-async fn test_live_socket_refuses_to_stomp() {
-    // Spawn a live server holding a UDS. A second bind_listener call
-    // on the same path must fail (not silently clobber).
+async fn test_live_socket_refuses_replacement() {
+    // A second bind_listener call on a live socket must fail.
     let tmp = tempfile::tempdir().unwrap();
     let sock_path = tmp.path().join("live.sock");
     let spec = ListenAddr::Uds {
@@ -91,7 +84,7 @@ async fn test_live_socket_refuses_to_stomp() {
     // Second bind should fail.
     let result = vl_convert_server::bind_listener(&spec, 0o600).await;
     let err = match result {
-        Ok(_) => panic!("second bind should refuse to stomp the live socket"),
+        Ok(_) => panic!("second bind should refuse the live socket"),
         Err(e) => e,
     };
     let msg = format!("{err:#}");
@@ -116,11 +109,8 @@ async fn test_shutdown_removes_socket_file() {
     let sock_path = std::path::PathBuf::from(server.base_url.strip_prefix("unix://").unwrap());
     assert!(sock_path.exists(), "socket should be bound");
 
-    // Drop the server handle — this drops the tempdir, which for the
-    // `start_uds_server_sync` harness also keeps the file alive.
-    // Explicit clean: drop the server, which kills the thread's
-    // runtime, which drops the BoundListener::Uds, which triggers
-    // UdsCleanup::Drop.
+    // Dropping the tempdir-owned harness tears down the UDS server and socket
+    // file.
     let tmp = server._tempdir.expect("UDS server must own a tempdir");
     drop(tmp);
     // After tempdir drops, everything under it is gone.
@@ -132,9 +122,7 @@ async fn test_shutdown_removes_socket_file() {
 
 #[tokio::test]
 async fn test_non_socket_file_not_unlinked() {
-    // If the target path is a regular file (not a socket), the probe
-    // returns an error kind that isn't ECONNREFUSED. The helper must
-    // NOT unlink it — data-preservation over bind-success.
+    // Regular files at the target path are preserved.
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("not-a-socket.txt");
     std::fs::write(&path, b"important data, do not delete").unwrap();

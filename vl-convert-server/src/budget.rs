@@ -25,10 +25,7 @@ struct IpBudgetEntry {
 /// or refunded in full by `Drop` on abnormal exit paths (handler
 /// panic, request timeout, client disconnect).
 pub struct BudgetReservation {
-    /// Back-reference used to apply settlement / refund on `complete`
-    /// and `Drop`. `Arc` because reservations outlive the request
-    /// handler — the tracker is shared across all concurrent
-    /// reservations and the background refill task.
+    /// Shared tracker for reservation settlement and refunds.
     tracker: Arc<BudgetTracker>,
     /// Peer IP the reservation is keyed by. `None` on UDS and in
     /// test harnesses that don't inject `ConnectInfo<SocketAddr>`:
@@ -36,10 +33,9 @@ pub struct BudgetReservation {
     /// touches the global compute-budget dimension. TCP requests
     /// with a known peer IP pass `Some(addr)`.
     ip: Option<IpAddr>,
-    /// Tentative charge in milliseconds — the amount deducted from
-    /// both dimensions at reservation time. Settlement refunds the
-    /// difference between this and the actual elapsed time; `Drop`
-    /// on an unreleased reservation refunds the full amount.
+    /// Tentative charge in milliseconds. Settlement refunds the difference
+    /// between this estimate and the actual elapsed time; `Drop` on an
+    /// unreleased reservation refunds the full amount.
     reserved_ms: i64,
     /// Flips to `true` inside `complete` so `Drop` knows a normal
     /// settlement ran and must not double-refund. Stays `false` on
@@ -54,8 +50,7 @@ pub struct BudgetReservation {
 /// tracker.
 #[derive(Debug, Clone, Copy)]
 pub struct BudgetSettlement {
-    /// Budget actually consumed in ms. Matches `actual_ms` passed to
-    /// `complete`.
+    /// Budget consumed in ms. Matches `actual_ms` passed to `complete`.
     pub charged_ms: i64,
     /// Global remaining ms after settlement, or `None` if the global
     /// dimension is disabled.
@@ -116,17 +111,13 @@ impl BudgetTracker {
     /// `ip` is `Option<IpAddr>`: `Some(addr)` for TCP requests with a
     /// known peer; `None` for UDS requests (no peer IP exists at the
     /// socket layer) and for test harnesses that don't inject
-    /// `ConnectInfo`. The `None` path skips the per-IP bucket entirely
-    /// — only the global compute-budget dimension applies. Callers
-    /// must never substitute a placeholder like `Ipv4Addr::UNSPECIFIED`
-    /// for the missing case, as that would collapse every non-IP
-    /// caller into a single shared bucket.
+    /// `ConnectInfo`. The `None` path skips per-IP accounting and applies
+    /// only the global budget. Callers pass missing peers through as `None`
+    /// rather than substituting an address such as `Ipv4Addr::UNSPECIFIED`.
     ///
-    /// Note: there is a small race window between `fetch_sub` and the
-    /// conditional `fetch_add` rollback. During this window, a concurrent
-    /// request may observe a temporarily over-decremented budget and be
-    /// rejected even though budget will be restored momentarily. This is
-    /// acceptable for rate-limiting — it errs on the side of caution.
+    /// A concurrent request can briefly observe a reservation that is about
+    /// to be rolled back after an exhausted-budget check. This can cause an
+    /// extra rejection, but never an over-admission.
     pub fn reserve(
         self: &Arc<Self>,
         ip: Option<IpAddr>,
@@ -143,8 +134,8 @@ impl BudgetTracker {
             }
         }
 
-        // Check per-IP budget only when we have an IP. `None` bypasses
-        // the per-IP dimension; only the global bucket above applies.
+        // Check per-IP budget only when an IP is available. `None` bypasses
+        // the per-IP dimension.
         let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);
         if let Some(ip) = ip {
             if ip_limit > 0 {
@@ -191,8 +182,7 @@ impl BudgetTracker {
             }
         }
 
-        // Skip per-IP refund on the `None` path — the reservation never
-        // touched ip_entries so there's nothing to refund.
+        // `None` reservations never touch per-IP entries.
         if let Some(ip) = ip {
             let ip_limit = self.per_ip_budget_ms.load(Ordering::Relaxed);
             if ip_limit > 0 {
@@ -268,12 +258,12 @@ impl BudgetTracker {
                 .lock()
                 .unwrap_or_else(|poison| poison.into_inner()) = 0;
             if old == 0 && new_ip > 0 {
-                // Enabling from disabled — reset all IP balances to the new limit
+                // Initialize existing IP entries at the new limit.
                 for entry in self.ip_entries.iter_mut() {
                     entry.remaining.store(new_ip, Ordering::Release);
                 }
             } else if new_ip < old {
-                // Clamp existing IP balances to new max
+                // Clamp existing IP balances to the new limit.
                 for entry in self.ip_entries.iter_mut() {
                     let current = entry.remaining.load(Ordering::Relaxed);
                     if current > new_ip {
@@ -290,10 +280,10 @@ impl BudgetTracker {
                 .unwrap_or_else(|poison| poison.into_inner()) = 0;
             let current = self.global_remaining.load(Ordering::Relaxed);
             if current > new_global {
-                // Clamp down
+                // Clamp global remaining to the new limit.
                 self.global_remaining.store(new_global, Ordering::Release);
             } else if old == 0 && new_global > 0 {
-                // Enabling from disabled — initialize remaining to the new limit
+                // Initialize global remaining at the new limit.
                 self.global_remaining.store(new_global, Ordering::Release);
             }
         }
@@ -358,7 +348,7 @@ impl BudgetTracker {
         refill
     }
 
-    /// Get current status for the admin API.
+    /// Current budget status for the admin API.
     pub fn status(&self) -> BudgetStatus {
         BudgetStatus {
             per_ip_budget_ms: self.per_ip_budget_ms.load(Ordering::Relaxed),
@@ -449,8 +439,8 @@ pub(crate) async fn middleware(
     };
 
     // Optimistic pre-record: if the inner future is cancelled (request
-    // timeout, handler panic, client disconnect) we never reach the
-    // post-await overwrite, and `reservation`'s Drop refunds the full
+    // timeout, handler panic, client disconnect) the post-await overwrite is
+    // skipped, and `reservation`'s Drop refunds the full
     // reservation. These values stay on the span and appear on the
     // TraceLayer response log line as the signal of abnormal termination.
     let hold_ms = tracker.hold_ms();

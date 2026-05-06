@@ -57,7 +57,7 @@ async fn test_serve_drains_background_tasks_on_shutdown() {
 /// the server must exit within `drain_timeout_secs + slack`.
 ///
 /// This test uses the external shutdown future (the `shutdown: impl
-/// Future` argument `serve()` accepts) rather than a real SIGTERM —
+/// Future` argument `serve()` accepts) rather than a real SIGTERM.
 /// `serve()` converts that future into a `CancellationToken::cancel()`
 /// call on the shared token, which is the exact path a SIGTERM handler
 /// in `main.rs` would take. See `src/lib.rs::serve` for the cancellation
@@ -77,8 +77,8 @@ async fn test_sigterm_mid_reconfig_wins() {
             host: "127.0.0.1".to_string(),
             port: admin_port,
         }),
-        // Long reconfig drain window — gives the PATCH time to enter the
-        // drain loop before we cancel.
+        // Long reconfig drain window gives the PATCH time to enter drain
+        // before cancellation.
         reconfig_drain_timeout_secs: 60,
         ..ServeConfig::default()
     };
@@ -128,8 +128,7 @@ async fn test_sigterm_mid_reconfig_wins() {
     });
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    // Fire the PATCH — it enters the drain loop with the slow request still
-    // in-flight.
+    // Start the PATCH while the slow request is still in-flight.
     let patch_start = Instant::now();
     let admin_patch = admin_url.clone();
     let patch_task = tokio::spawn(async move {
@@ -139,11 +138,7 @@ async fn test_sigterm_mid_reconfig_wins() {
             .send()
             .await
     });
-    // Give the PATCH a chance to close the gate and enter drain, but fire
-    // SIGTERM quickly enough that we hit the `biased` select arm in
-    // `ReconfigCoordinator::drain` while it's still awaiting the slow
-    // request's inflight guard to drop — rebuild + warm_up on a fast
-    // machine completes in ~200 ms.
+    // Cancel while the PATCH is waiting in the drain loop.
     tokio::time::sleep(Duration::from_millis(30)).await;
 
     // Fire SIGTERM-equivalent: serve()'s `shutdown` future resolves, and
@@ -151,8 +146,8 @@ async fn test_sigterm_mid_reconfig_wins() {
     // which the reconfig coordinator is observing via select!.
     let _ = tx.send(());
 
-    // PATCH should complete with a 503 "server shutting down" — drain was
-    // cancelled before it could drain. Accept any non-200 status because
+    // PATCH should complete with a 503 "server shutting down". Accept any
+    // non-200 status because
     // the exact status depends on whether the admin listener responded
     // before or after the cancel propagated (503 is the contract, but the
     // admin listener may also get torn down and the client may see a
@@ -169,7 +164,7 @@ async fn test_sigterm_mid_reconfig_wins() {
         }
         Ok(Ok(Err(_transport_err))) => {
             // Admin listener was torn down before the PATCH got its
-            // response — also acceptable (the server won the race).
+            // response; also acceptable because the server exited first.
         }
         Ok(Err(join_err)) => panic!("PATCH task panicked: {join_err}"),
         Err(_) => panic!("PATCH did not complete within 10s after shutdown"),
@@ -187,7 +182,6 @@ async fn test_sigterm_mid_reconfig_wins() {
         .expect("serve task panicked")
         .expect("serve returned err");
 
-    // Slow task may have completed with an error or succeeded; either is
-    // acceptable — we just drain it.
+    // Slow task may have completed with an error or succeeded.
     let _ = tokio::time::timeout(Duration::from_secs(2), slow_task).await;
 }

@@ -40,13 +40,13 @@ use tower_http::trace::TraceLayer;
 use vl_convert_rs::anyhow;
 use vl_convert_rs::converter::VlcConfig;
 
-/// Serve a [`BuiltApp`] on a pre-bound listener, spawning its background
-/// tasks (budget refill, admin listener) on the current runtime and
-/// draining when `shutdown` resolves. All three (main serve, admin
-/// serve, refill loop) receive the shutdown signal in parallel, and
-/// `serve` only returns after every spawned task has exited — callers
-/// get a deterministic "fully done" signal. Signal handling and
-/// drain-timeout escalation are the caller's responsibility.
+/// Serve a [`BuiltApp`] on a pre-bound listener.
+///
+/// Runs the main listener, optional admin listener, and budget refill loop
+/// on the current runtime. When `shutdown` resolves, all listeners receive
+/// the shared shutdown token and this function returns after every spawned
+/// task exits. Signal handling and drain-timeout escalation are the caller's
+/// responsibility.
 pub async fn serve(
     listener: BoundListener,
     built: BuiltApp,
@@ -54,7 +54,7 @@ pub async fn serve(
 ) -> Result<(), anyhow::Error> {
     // The shutdown token is constructed in `build_app` and shared with
     // the reconfig coordinator so mid-reconfig cancellations abort cleanly.
-    // `serve` just fires the same token when its shutdown future resolves.
+    // `serve` fires the same token when its shutdown future resolves.
     let token = built.shutdown_token.clone();
     let mut tasks: JoinSet<()> = JoinSet::new();
 
@@ -146,17 +146,10 @@ pub async fn build_app(
     converter.warm_up()?;
     log::info!("Workers initialized");
 
-    // Seed the admin baseline and initial `RuntimeSnapshot.config` from the
-    // **normalized** view of the startup config — i.e. what the workers
-    // actually run. `VlConverter::with_config` rewrites the input before
-    // the workers see it (inlines file-backed `vega_plugins` source,
-    // auto-populates `plugin_import_domains` from URL plugins, resolves
-    // locale aliases, etc.). Seeding from the pre-normalized input would
-    // make `GET /admin/config` report a stale `effective` view and let a
-    // later identity PUT/DELETE unintentionally replay the unresolved
-    // values. Taking `converter.config()` here guarantees
-    // baseline == initial effective == what the workers are running,
-    // which is the contract `DELETE /admin/config` resets to.
+    // Seed the admin baseline and initial runtime snapshot from the normalized
+    // config returned by `VlConverter::with_config` (resolved plugins, locale
+    // aliases, and derived import domains). `DELETE /admin/config` resets to
+    // this same startup baseline.
     let normalized = converter.config();
     let baseline = Arc::new(normalized.clone());
 
@@ -199,10 +192,8 @@ pub async fn build_app(
         // flag could be added if asymmetric permissions are ever needed.
         let bound: BoundListener = bind_listener(admin_addr, serve_config.socket_mode).await?;
         let addr = bound.endpoint_label();
-        // Assemble AdminState from the shared Arc'd handles. `runtime`,
-        // `coordinator`, and `readiness` are intentionally the SAME Arcs
-        // as on `AppState`, so admin-side reconfig commits are observed
-        // by the main listener atomically.
+        // AdminState shares the runtime, coordinator, and readiness handles
+        // with AppState so admin commits are visible to the main listener.
         let admin_state = Arc::new(admin::AdminState {
             runtime: runtime.clone(),
             baseline: baseline.clone(),

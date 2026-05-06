@@ -166,9 +166,8 @@ async fn test_budget_admin_hold_update() {
 
 #[tokio::test]
 async fn test_trust_proxy_true_isolates_ips() {
-    // With trust_proxy=true, different X-Forwarded-For IPs get independent budgets.
-    // per_ip_budget_ms=1 and hold_ms=2000 means every request is immediately rejected.
-    // But each unique XFF IP is tracked separately — proving isolation.
+    // Different X-Forwarded-For IPs get independent per-IP buckets when
+    // trust_proxy=true.
     let BudgetServer { handle: server, .. } = start_budget_server(Some(1), None, 2000, true);
 
     let resp1 = server
@@ -198,7 +197,7 @@ async fn test_trust_proxy_true_isolates_ips() {
 
 #[tokio::test]
 async fn test_trust_proxy_false_ignores_xff() {
-    // With trust_proxy=false, X-Forwarded-For is ignored — all requests use socket IP.
+    // With trust_proxy=false, X-Forwarded-For is ignored.
     let BudgetServer { handle: server, .. } = start_budget_server(Some(1), None, 2000, false);
 
     let resp = server
@@ -209,6 +208,6 @@ async fn test_trust_proxy_false_ignores_xff() {
         .send()
         .await
         .unwrap();
-    // Still 429 — XFF is ignored, socket IP (127.0.0.1) is used, same budget
+    // XFF is ignored, so the socket IP consumes the same tight budget.
     assert_eq!(resp.status(), 429);
 }

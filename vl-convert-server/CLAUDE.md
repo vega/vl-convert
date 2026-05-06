@@ -160,7 +160,7 @@ Calling raw `UnixListener::bind()` would leave the socket file with
 umask-derived permissions until some subsequent chmod, widening the
 umask race window. Keeping main, admin, and any future listeners on
 one code path avoids reintroducing subtle lifecycle bugs (umask race,
-stale-file stomping).
+stale-file replacement).
 
 Force-exit via the drain watchdog bypasses `Drop`; the next launch's
 probe-then-unlink clears any stale file left behind.
@@ -172,9 +172,9 @@ The `Connected<&UnixStream> for UdsConnectInfo` impl uses
 observability-only: filesystem permissions are the auth trust
 boundary on UDS (the default `0600` socket mode ensures same-uid-only
 access; an attacker at a different uid cannot even `connect(2)`).
-Missing credentials should degrade the tracing span (skip the
-`peer_uid`/`gid`/`pid` fields, emit a debug log) rather than drop
-the request.
+Missing credentials are omitted from the tracing span
+(`peer_uid`/`gid`/`pid` fields stay empty, debug log emitted) and the
+request continues.
 
 `.ok()` keeps the extractor safe against sandboxed kernels and future
 tokio versions that may probe new `UCred` fields failing in
@@ -404,10 +404,10 @@ touch `VlcConfig` / `ConfigPatch` / `ConfigReplace` / `ConfigView`.
 
 The crate ships no binary — these are invariants any downstream binary
 should honor when composing `bind_listener` + `build_app` + `serve`.
-The canonical reference implementation in this repo is
-`vl-convert/src/serve.rs` (the `vl-convert serve` subcommand) — that
-file shows the lifecycle wiring (signals, ready-JSON, drain watchdog,
-stdin-EOF watcher) end-to-end.
+The reference implementation in this repo is `vl-convert/src/serve.rs`
+(the `vl-convert serve` subcommand); that file shows the lifecycle
+wiring (signals, ready-JSON, drain watchdog, stdin-EOF watcher)
+end-to-end.
 
 - **Signal handling**: when honoring SIGTERM for graceful shutdown,
   call `tokio::signal::unix::signal(SignalKind::terminate())` **in

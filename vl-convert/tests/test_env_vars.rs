@@ -6,7 +6,7 @@
 //!
 //! * **Here (subprocess)**: the port-precedence ladder
 //!   (`--port` > `VLC_PORT` > `PORT` (PaaS) > `3000`), env-driven
-//!   `--log-level=error` actually filtering Vega warnings off stderr,
+//!   `--log-level=error` filtering Vega warnings off stderr,
 //!   and `VLC_AUTO_GOOGLE_FONTS=true` round-tripping through
 //!   `parse_boolish_arg` end-to-end.
 //! * **In-process** (`vl-convert/src/cli_types.rs::tests`): Vec
@@ -17,13 +17,11 @@
 //!   `net` / `all`), and `VLC_DRAIN_TIMEOUT_SECS` overriding the
 //!   `default_value_t = 30` on `serve`'s `u64` field.
 //!
-//! Subprocess tests are unix-only because they spawn `vl-convert serve`
-//! and exercise SIGTERM-driven shutdown — matching the gating on
-//! `tests/test_serve_subprocess.rs`.
+//! Subprocess tests are Unix-only because they spawn `vl-convert serve`
+//! and exercise SIGTERM-driven shutdown.
 //!
-//! All tests must run single-threaded — `cargo test -p vl-convert
-//! --test test_env_vars -- --test-threads=1` — to avoid port collisions
-//! and to keep each subprocess's exit isolated from the next.
+//! Run with `--test-threads=1` to avoid port collisions and keep each
+//! subprocess's exit isolated from the next.
 
 #![cfg(unix)]
 #![allow(dead_code)]
@@ -36,10 +34,6 @@ use std::net::TcpListener;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-// =============================================================================
-// helpers
-// =============================================================================
-
 /// Build a `vl-convert` binary command with a clean environment plus
 /// the supplied overrides. `env_clear()` is critical for the
 /// port-precedence ladder: any inherited `VLC_PORT` or `PORT` from the
@@ -47,10 +41,8 @@ use std::time::Duration;
 fn vl_convert_cmd_with_env(env: &[(&str, &str)]) -> Command {
     let mut cmd = Command::cargo_bin("vl-convert").expect("vl-convert binary not built");
     cmd.env_clear();
-    // Cargo, rustc, and the linker all need PATH (and on macOS we need
-    // DYLD_FALLBACK_LIBRARY_PATH for some toolchains). Re-export the
-    // load-bearing entries explicitly so `env_clear()` doesn't break
-    // dynamic linking on the spawned binary.
+    // Preserve the environment entries required to spawn and dynamically link
+    // the binary after `env_clear()`.
     for key in &[
         "PATH",
         "HOME",
@@ -80,11 +72,10 @@ fn spawn_serve_with_env(env: &[(&str, &str)], args: &[&str]) -> Child {
     cmd.spawn().expect("failed to spawn `vl-convert serve`")
 }
 
-/// Pick a free TCP port on `127.0.0.1` and return it. We bind, query
-/// the OS-assigned port, and drop the listener — there is a brief
-/// TOCTOU window before the spawned `vl-convert serve` re-binds it,
-/// but for `--test-threads=1` runs on a developer machine that window
-/// is empirically reliable.
+/// Pick a free TCP port on `127.0.0.1` and return it.
+///
+/// The caller immediately uses the port in a single-threaded subprocess test,
+/// which keeps the bind/rebind race small enough for this suite.
 fn pick_free_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").expect("failed to bind ephemeral TCP port");
     let port = listener
@@ -124,13 +115,7 @@ fn spawn_and_read_port(env: &[(&str, &str)], extra_args: &[&str]) -> u16 {
     port
 }
 
-// =============================================================================
-// 1. port precedence ladder (4 sub-tests)
-//
-// Documented ladder: --port > VLC_PORT > PORT (PaaS) > 3000.
-// Each rung is exercised with picked-free ports per case so test runs
-// don't collide with real services or each other.
-// =============================================================================
+// Port precedence ladder: --port > VLC_PORT > PORT (PaaS) > 3000.
 
 #[test]
 fn test_port_precedence_cli_flag_wins_over_vlc_port_and_port() {
@@ -184,9 +169,8 @@ fn test_port_precedence_port_paas_fallback() {
 fn test_port_precedence_default_3000_when_nothing_set() {
     // Final rung: with no `--port`, no `VLC_PORT`, no `PORT`, the
     // default is `3000` (baked into `From<&ServeArgs> for ServeConfig`).
-    // We cannot avoid binding 3000 here without changing the contract,
-    // so the test best-efforts skips when 3000 is already in use on
-    // the host (e.g. the developer is running a local app on it).
+    // The default-port contract requires binding 3000, so skip when the host
+    // already has something listening there.
     let probe = TcpListener::bind("127.0.0.1:3000");
     if probe.is_err() {
         eprintln!(
@@ -204,9 +188,7 @@ fn test_port_precedence_default_3000_when_nothing_set() {
     );
 }
 
-// =============================================================================
-// 6. VLC_LOG_LEVEL value-enum through env (mirrors test_log_level_error_hides_warnings)
-// =============================================================================
+// VLC_LOG_LEVEL value-enum through env.
 
 /// Tiny Vega-Lite spec that triggers a "Log scale" warning on stderr
 /// when run with `--log-level=warn` (the default). Reused from
@@ -254,17 +236,12 @@ fn test_vlc_log_level_error_suppresses_warnings() {
     );
 }
 
-// =============================================================================
-// 7. VLC_AUTO_GOOGLE_FONTS=true — boolish parser running on env values
-// =============================================================================
+// VLC_AUTO_GOOGLE_FONTS=true exercises the env path through the boolish parser.
 
 #[test]
 fn test_vlc_auto_google_fonts_true_succeeds() {
-    // Sanity check that `value_parser = parse_boolish_arg` runs on
-    // env-resolved values (not just CLI flag values). The boolish
-    // parser would reject any unrecognized value at parse time, so a
-    // successful conversion is sufficient evidence that `=true` was
-    // accepted on the env path.
+    // `value_parser = parse_boolish_arg` must run on env-resolved values, not
+    // only CLI flag values.
     use std::io::Write as _;
     let mut cmd = vl_convert_cmd_with_env(&[("VLC_AUTO_GOOGLE_FONTS", "true")]);
     let mut child = cmd
@@ -277,9 +254,8 @@ fn test_vlc_auto_google_fonts_true_succeeds() {
         .spawn()
         .expect("failed to spawn vl-convert");
 
-    // Use a minimal spec that doesn't require any Google Fonts so
-    // we don't actually hit the network — we're only checking that
-    // the env var parsed without rejection.
+    // Use a minimal spec that does not require Google Fonts; the assertion is
+    // that the env var parsed without rejection.
     let spec = r#"{
         "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
         "data": {"values": [{"a": 1}]},
@@ -298,19 +274,12 @@ fn test_vlc_auto_google_fonts_true_succeeds() {
     );
 }
 
-// =============================================================================
-// 8. --vega-plugin inline-ESM rejection at parse time
-//
-// Phase 2 rationalization: making `;` a safe delimiter for
-// `--vega-plugin` required dropping inline-ESM CLI support. The flag's
-// `value_parser` rejects strings that don't look like a path or URL.
-// =============================================================================
+// --vega-plugin accepts paths and URLs; inline ESM is rejected at parse time.
 
 #[test]
 fn test_vega_plugin_inline_esm_rejected_at_parse_time() {
-    // Inline ESM is no longer accepted on the CLI flag; the
-    // actionable error message points operators at `--vlc-config`
-    // for inline plugins.
+    // Inline ESM is rejected on the CLI flag; the error message points
+    // operators at `--vlc-config` for inline plugins.
     let mut cmd = vl_convert_cmd_with_env(&[]);
     let output = cmd
         .arg("vl2svg")
@@ -337,13 +306,5 @@ fn test_vega_plugin_inline_esm_rejected_at_parse_time() {
     );
 }
 
-// =============================================================================
-// `VLC_DRAIN_TIMEOUT_SECS=60` overriding `default_value_t = 30` is
-// covered by an in-process parse test in `vl-convert/src/cli_types.rs::
-// tests::vlc_drain_timeout_secs_overrides_default`. We verify that
-// path in-process rather than via subprocess because the
-// "Starting graceful drain" log line only fires if `serve()` is still
-// running when the watchdog wakes up (it returns immediately when no
-// requests are in-flight), which leaves no observable on stderr in
-// the empty-server case.
-// =============================================================================
+// `VLC_DRAIN_TIMEOUT_SECS=60` is covered by the in-process parse test because
+// the empty subprocess case exits before the drain watchdog logs.

@@ -23,18 +23,12 @@ use crate::types::{
 };
 
 /// OpenAPI doc for the admin surface. Published at `/admin/api-doc/openapi.json`;
-/// Swagger UI at `/admin/docs`. **Separate from the main spec** — the main
-/// `/api-doc/openapi.json` does not include any `/admin/*` path (guarded by
-/// `test_openapi.rs::admin_paths_not_in_main_spec`). Wrappers that need to
-/// codegen against the admin surface fetch this spec.
+/// Swagger UI at `/admin/docs`. The main `/api-doc/openapi.json` does not
+/// include `/admin/*` paths.
 ///
-/// Admin endpoint body schemas are intentionally omitted from this spec for
-/// now — the admin DTOs reference library types (`BaseUrlSetting`,
-/// `MissingFontsPolicy`, etc.) without `ToSchema` derives, and `ConfigPatch`
-/// uses an `Option<Option<T>>` tri-state pattern that doesn't reduce to a
-/// clean OpenAPI schema. The spec publishes path + method + tag + response
-/// status codes; wrappers should consult the request/response DTOs in
-/// `types.rs` for precise body contracts.
+/// Admin body schemas are omitted because the DTOs wrap library types and
+/// tri-state patch fields that are not represented as OpenAPI schemas here.
+/// The spec publishes paths, methods, tags, and response status codes.
 #[derive(OpenApi)]
 #[openapi(tags(
     (name = "Admin", description = "Admin-only endpoints (config + budget)"),
@@ -44,20 +38,10 @@ struct AdminApiDoc;
 /// Composite state for the admin router. One `Arc<AdminState>` is cloned
 /// into `.with_state(...)` for admin routes.
 ///
-/// The `runtime` / `coordinator` / `readiness` handles are **shared by
-/// Arc identity** with `AppState` — a successful commit here is
-/// immediately visible to the main listener's handlers, and the gate
-/// middleware on the main router participates in the same drain domain
-/// as any admin-side reconfig. See `test_admin_state_composition`.
-///
-/// Design note — `/admin/budget` handlers take `State<Arc<AdminState>>`
-/// rather than `State<Arc<BudgetTracker>>`. A `FromRef<Arc<AdminState>>
-/// for Arc<BudgetTracker>` projection would preserve the previous
-/// handler signatures, but Rust's orphan rule forbids it: neither
-/// `FromRef` (axum), `Arc` (std), nor `Arc<BudgetTracker>` as a Self
-/// type carries a local marker at the impl site (`Arc` isn't
-/// `#[fundamental]`). Accepting the signature change keeps the state
-/// plumbing single-sourced and avoids a local newtype wrapper.
+/// The `runtime`, `coordinator`, and `readiness` handles are shared by
+/// Arc identity with `AppState`. Reconfig commits are visible to main
+/// handlers, and the main router's gate middleware participates in the
+/// same drain domain.
 pub(crate) struct AdminState {
     /// Atomic holder for the current converter + config. Shared with
     /// `AppState.runtime` by Arc identity.
@@ -72,14 +56,11 @@ pub(crate) struct AdminState {
     /// Shared with `AppState.readiness` by Arc identity.
     pub readiness: Arc<ReadinessState>,
     /// Optional bearer-token credential for admin-scope auth. `None`
-    /// disables admin auth — the admin listener is expected to be
-    /// loopback-only or UDS-perm-guarded in that case.
+    /// leaves access to the listener trust boundary: loopback TCP or UDS
+    /// filesystem permissions.
     pub admin_api_key: Option<ApiKey>,
-    /// Budget tracker — same `Arc` the main router's budget middleware
-    /// uses, so `POST /admin/budget` mutations are observed by the
-    /// main listener without a second plumbing path. Accessed by the
-    /// budget handlers as `admin.tracker` (see the orphan-rule note
-    /// above for why there's no `FromRef` projection).
+    /// Budget tracker shared with the main router's budget middleware.
+    /// `/admin/budget` updates are observed by request admission.
     pub tracker: Arc<BudgetTracker>,
     /// Error-opacity toggle. When `true` admin responses omit internal
     /// detail, matching the main listener's `opaque_errors` setting.
@@ -102,12 +83,9 @@ pub(crate) fn admin_router(admin_state: Arc<AdminState>) -> Router {
         .split_for_parts();
 
     admin_routes
-        // Serve the admin OpenAPI spec at `/admin/api-doc/openapi.json` +
-        // Swagger UI at `/admin/docs`. The path is intentionally distinct
-        // from the main `/api-doc/openapi.json` so the two surfaces are
-        // addressable independently.
+        // Serve admin docs separately from the public API docs.
         .merge(SwaggerUi::new("/admin/docs").url("/admin/api-doc/openapi.json", admin_api))
-        // Admin auth is outermost on the admin router — every admin
+        // Admin auth is outermost on the admin router. Every admin
         // request (including GETs + the spec endpoint) passes through it.
         // When `admin_api_key` is `None` the middleware is a no-op;
         // listener placement (UDS or TCP loopback) is the trust boundary
@@ -126,10 +104,7 @@ pub(crate) fn admin_router(admin_state: Arc<AdminState>) -> Router {
     tag = "Admin",
 )]
 async fn get_budget(State(admin): State<Arc<AdminState>>) -> Json<BudgetStatus> {
-    // Admin-budget handlers read `tracker` off the composite state. The
-    // `Arc<BudgetTracker>` on `AdminState` is shared with the main
-    // router's budget middleware by Arc identity, so mutations here are
-    // observed by request admission without a second plumbing path.
+    // Mutations here are observed by the main router's budget middleware.
     Json(admin.tracker.status())
 }
 
@@ -213,9 +188,8 @@ fn validation_error_from_anyhow(err: &vl_convert_rs::anyhow::Error) -> ConfigVal
     ConfigValidationError {
         error: msg.clone(),
         field_errors: vec![FieldError {
-            // Per-field path attribution would require parsing the
-            // anyhow message; for now attribute to the root so the
-            // response stays structurally well-formed.
+            // Cross-field errors are attributed to the root so the response
+            // stays structurally well-formed.
             path: "".to_string(),
             code: FieldErrorCode::CrossFieldInvariant,
             message: msg,
@@ -266,7 +240,7 @@ fn json_rejection_response(rej: JsonRejection, opaque: bool) -> Response {
     simple_error_response(StatusCode::BAD_REQUEST, &rej.body_text(), opaque)
 }
 
-/// GET /admin/config — returns the baseline, current effective config,
+/// GET /admin/config: returns the baseline, current effective config,
 /// and the monotonic generation counter.
 #[utoipa::path(
     get,
@@ -284,7 +258,7 @@ async fn get_config(State(admin): State<Arc<AdminState>>) -> Response {
     (StatusCode::OK, Json(view)).into_response()
 }
 
-/// PATCH /admin/config — merge a partial patch onto the current config.
+/// PATCH /admin/config: merge a partial patch onto the current config.
 #[utoipa::path(
     patch,
     path = "/admin/config",
@@ -306,15 +280,12 @@ async fn patch_config(
         Err(rej) => return json_rejection_response(rej, admin.opaque_errors),
     };
 
-    // Snapshot current config *before* acquiring the lock — it's fine if it
-    // changes under us; we re-snapshot after the lock anyway.
     let coordinator = admin.coordinator.clone();
     let readiness = admin.readiness.clone();
 
     // Serialize against other admin-mutating requests. The lock guard is
     // held for the whole flow so PUT / DELETE / POST /fonts/directories
-    // all see a consistent "my write committed or rolled back before the
-    // next starts" ordering.
+    // commits cannot interleave.
     let _lock_guard = coordinator.lock().await;
     let mut scope = ReconfigScopeGuard::new(&coordinator, &readiness);
 
@@ -336,8 +307,7 @@ async fn patch_config(
     run_commit(&admin, &current, new_config, &mut scope).await
 }
 
-/// PUT /admin/config — full replacement. Identical to patch_config past the
-/// body-parsing stage.
+/// PUT /admin/config: full replacement.
 #[utoipa::path(
     put,
     path = "/admin/config",
@@ -368,7 +338,7 @@ async fn put_config(
     run_commit(&admin, &current, new_config, &mut scope).await
 }
 
-/// DELETE /admin/config — reset to the startup baseline.
+/// DELETE /admin/config: reset to the startup baseline.
 #[utoipa::path(
     delete,
     path = "/admin/config",
@@ -393,11 +363,10 @@ async fn delete_config(State(admin): State<Arc<AdminState>>) -> Response {
 /// Common post-apply commit pipeline: validate, identity short-circuit,
 /// drain + rebuild, swap the snapshot, return the resulting ConfigView.
 ///
-/// `VlcConfig` no longer carries any hot-applyable fields (process-
-/// global state lives outside the DTO under
-/// `/admin/config/fonts/{directories,cache_size}`), so every non-identity
-/// commit drains and rebuilds. `generation` moves
-/// forward by 1 on every successful commit.
+/// Process-global state lives outside the DTO under
+/// `/admin/config/fonts/{directories,cache_size}`, so every non-identity
+/// `VlcConfig` commit drains and rebuilds. `generation` moves forward by 1 on
+/// every successful commit.
 async fn run_commit<'a>(
     admin: &AdminState,
     current: &Arc<RuntimeSnapshot>,
@@ -478,14 +447,10 @@ async fn run_commit<'a>(
 // /admin/config/fonts/directories
 // =============================================================================
 //
-// Font directories are process-global state (`vl_convert_rs`'s
-// `register_font_directory` / `set_font_directories` / `current_font_directories`)
-// and are deliberately not part of the writable `VlcConfig` DTO. The
-// dedicated endpoints below are the only admin-API surface for them;
-// they serialize against `coordinator.lock()` so they can't interleave
-// with `/admin/config` PATCH/PUT/DELETE.
+// Font directories are process-global state, not writable `VlcConfig`
+// fields. These endpoints serialize against config mutations.
 
-/// GET — return the currently-registered font directories.
+/// Return the currently-registered font directories.
 #[utoipa::path(
     get,
     path = "/admin/config/fonts/directories",
@@ -500,8 +465,7 @@ async fn get_font_dirs(State(_admin): State<Arc<AdminState>>) -> Response {
     (StatusCode::OK, Json(dirs)).into_response()
 }
 
-/// PUT — replace the list wholesale. Equivalent to
-/// `vl_convert_rs::set_font_directories(...)`. Pass `{"paths": []}` to clear.
+/// Replace the full font-directory list. Pass `{"paths": []}` to clear.
 #[utoipa::path(
     put,
     path = "/admin/config/fonts/directories",
@@ -548,9 +512,8 @@ async fn put_font_dirs(
     (StatusCode::OK, Json(dirs)).into_response()
 }
 
-/// POST — append a single font directory. Equivalent to
-/// `vl_convert_rs::register_font_directory(path)`. Idempotent on
-/// already-registered paths.
+/// Append a single font directory. Idempotent for already-registered
+/// paths.
 #[utoipa::path(
     post,
     path = "/admin/config/fonts/directories",
@@ -580,9 +543,8 @@ async fn post_font_dir(
 
     let _lock = admin.coordinator.lock().await;
 
-    // Library-level `register_font_directory` is unconditionally append
-    // (not a set), so dedup here so POST'ing the same path twice is a
-    // no-op rather than duplicating it in the registry.
+    // Keep the endpoint idempotent even though the lower-level registry
+    // API appends.
     if !vl_convert_rs::current_font_directories().contains(&req.path) {
         let path_str = req.path.to_string_lossy();
         if let Err(err) = vl_convert_rs::text::register_font_directory(&path_str) {
@@ -605,19 +567,16 @@ async fn post_font_dir(
 // /admin/config/fonts/cache_size
 // =============================================================================
 //
-// Process-global Google Fonts LRU cache cap. Settable via
-// `vl_convert_rs::set_google_fonts_cache_size_mb` and not part of the
-// writable `VlcConfig` DTO. Same shape as the directories endpoints:
-// dedicated GET/PUT under `/admin/config/fonts/cache_size`,
-// serialized against `coordinator.lock()`, no gate close, no drain.
+// Process-global Google Fonts LRU cache cap. This is not a writable
+// `VlcConfig` field and does not require drain/rebuild.
 
-/// GET — return the currently-active Google Fonts cache cap (MB).
+/// Return the currently-active Google Fonts cache cap in MB.
 #[utoipa::path(
     get,
     path = "/admin/config/fonts/cache_size",
     responses((
         status = 200,
-        description = "{\"max_size_mb\": <number>} — the resolved cap"
+        description = "{\"max_size_mb\": <number>}; the resolved cap"
     )),
     tag = "Admin",
 )]
@@ -626,7 +585,7 @@ async fn get_font_cache_size(State(_admin): State<Arc<AdminState>>) -> Response 
     (StatusCode::OK, Json(json!({ "max_size_mb": mb }))).into_response()
 }
 
-/// PUT — set the Google Fonts cache cap. `{"max_size_mb": null}` resets
+/// Set the Google Fonts cache cap. `{"max_size_mb": null}` resets
 /// to the library default.
 #[utoipa::path(
     put,
@@ -667,13 +626,8 @@ mod tests {
     use std::time::Duration;
     use tokio_util::sync::CancellationToken;
 
-    /// Asserts the Arc-identity invariants between `AppState` and
-    /// `AdminState`: the three shared handles (`runtime`, `coordinator`,
-    /// `readiness`) must point at the same allocations so a reconfig
-    /// commit driven from the admin handlers is observed atomically by
-    /// the main listener's request path — and vice versa for the gate
-    /// middleware / admission accounting. Mirrors the composition
-    /// `build_app` performs in `lib.rs`.
+    /// Asserts that `AppState` and `AdminState` share the runtime,
+    /// coordinator, and readiness handles by Arc identity.
     #[test]
     fn test_admin_state_composition() {
         let runtime = Arc::new(ArcSwap::from_pointee(RuntimeSnapshot {

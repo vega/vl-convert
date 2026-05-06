@@ -1,6 +1,6 @@
 #![cfg(unix)]
-//! The admin listener's transport is configured independently from
-//! the main listener — each can be TCP or UDS without constraint.
+//! The admin listener's transport is configured independently from the main
+//! listener. Each can be TCP or UDS.
 //! These tests exercise every combination end-to-end.
 
 mod common;
@@ -49,8 +49,7 @@ async fn test_main_uds_admin_tcp() {
 
 #[tokio::test]
 async fn test_main_tcp_admin_uds() {
-    // Inverse — main on TCP, admin on UDS. Reflects the "independent
-    // transports" decision.
+    // Main on TCP, admin on UDS.
     let tmp = tempfile::tempdir().unwrap();
     let admin_sock = tmp.path().join("admin.sock");
     let tcp_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

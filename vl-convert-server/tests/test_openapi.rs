@@ -84,9 +84,8 @@ async fn test_admin_openapi_includes_admin_paths() {
     let body: serde_json::Value = resp.json().await.unwrap();
     let paths = body["paths"].as_object().expect("paths must be an object");
 
-    // Assert each of the expected admin paths appears. We don't assert
-    // method counts because utoipa-axum groups GET/PATCH/PUT/DELETE on
-    // the same path under one object with method-keyed operations.
+    // Expected admin paths should appear; method counts are grouped under
+    // one path object by utoipa-axum.
     let expected = [
         "/admin/budget",
         "/admin/config",

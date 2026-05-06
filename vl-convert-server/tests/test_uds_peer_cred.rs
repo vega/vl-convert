@@ -1,12 +1,10 @@
 #![cfg(unix)]
-//! Verify that the `UdsConnectInfo` extractor runs cleanly on a real
-//! UDS connection — that is, `peer_cred()` doesn't panic and the
-//! router serves the request.
+//! Verify that the `UdsConnectInfo` extractor runs cleanly on a real UDS
+//! connection and the router serves the request.
 //!
 //! The actual uid/gid/pid values in tracing spans are validated
-//! end-to-end in the subprocess e2e suite, which can capture stderr
-//! and parse span events. Here we're only confirming the extractor
-//! path doesn't blow up.
+//! end-to-end in the subprocess suite, which can capture stderr and parse span
+//! events. This file only checks that the extractor path completes.
 
 mod common;
 
@@ -14,10 +12,8 @@ use common::*;
 
 #[tokio::test]
 async fn test_peer_cred_uid_gid_observable() {
-    // If the Connected impl weren't wired up or peer_cred() panicked,
-    // this request would fail. peer_cred is observability-only, so a
-    // missing value would still return 200 — we're asserting the
-    // extractor path executes without aborting the accept loop.
+    // The request should succeed whether peer credentials are present or
+    // omitted from the span.
     let server = start_uds_server_sync(default_serve_config(), "main.sock", None);
     let sock_path = std::path::PathBuf::from(server.base_url.strip_prefix("unix://").unwrap());
 

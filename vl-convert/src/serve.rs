@@ -1,15 +1,12 @@
 //! `vl-convert serve` subcommand: lifecycle wiring.
 //!
 //! This module defines [`ServeArgs`] (a [`clap::Args`] struct holding
-//! all serve-local flags) and [`run_serve`], a near-verbatim port of
-//! v3's `main.rs` wired through the conversion CLI's globals.
+//! all serve-local flags) and [`run_serve`], which turns resolved CLI
+//! config into a running `vl-convert-server` instance.
 //!
-//! The lifecycle ordering is load-bearing — see the comments inside
-//! `run_serve` for the SIGTERM-pre-spawn invariant, the ready-JSON
-//! single-writer invariant, and the drain-watchdog escalation path.
-//! Notes for downstream binary authors live at the bottom of
-//! `vl-convert-server/CLAUDE.md`; this module is the canonical
-//! reference implementation those notes point to.
+//! `run_serve` owns process-level behavior that the library crate
+//! intentionally leaves to callers: signal registration, the ready-JSON
+//! stdout contract, parent-close detection, and drain-timeout escalation.
 use std::io::Write as _;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::PathBuf;
@@ -27,10 +24,6 @@ use crate::cli_types::Cli;
 use crate::io_utils::parse_boolish_arg;
 
 /// Rejection message emitted by [`parse_socket_path_arg`] on Windows.
-/// Inlined verbatim from v3's `vl-convert-server/src/listen.rs::WINDOWS_UDS_REJECTION`
-/// (which is `pub(crate)` and `#[cfg(windows)]`-only, so it can't be
-/// imported across crate boundaries today). Keep these strings in sync
-/// if either changes.
 #[cfg(windows)]
 pub(crate) const WINDOWS_UDS_REJECTION: &str =
     "--unix-socket PATH listeners are not supported on Windows. \
@@ -38,11 +31,9 @@ pub(crate) const WINDOWS_UDS_REJECTION: &str =
 
 /// Value parser for `--unix-socket` / `--admin-unix-socket`.
 ///
-/// Ported from v3 `parse_socket_path_arg`:
 /// * Trims and tilde-expands the input.
-/// * Rejects empty paths and relative paths (with an actionable message).
-/// * On `cfg(windows)`, rejects every invocation with the v3 message
-///   pointing the user at `--port`.
+/// * Rejects empty and relative paths.
+/// * Rejects every invocation on Windows.
 pub(crate) fn parse_socket_path_arg(raw: &str) -> Result<PathBuf, String> {
     #[cfg(windows)]
     {
@@ -68,9 +59,8 @@ pub(crate) fn parse_socket_path_arg(raw: &str) -> Result<PathBuf, String> {
 
 /// Value parser for `--socket-mode`.
 ///
-/// Ported from v3 `parse_socket_mode_arg`. Accepts a 3-or-4 digit
-/// octal literal (with an optional `0o`/`0O` prefix), parses via
-/// `u32::from_str_radix(_, 8)`, and rejects:
+/// Accepts a 3-or-4 digit octal literal with an optional `0o`/`0O`
+/// prefix, then rejects:
 ///
 /// * the all-zero mode (`0o000`),
 /// * any value with `other` bits set (`mode & 0o007 != 0`),
@@ -109,7 +99,7 @@ pub(crate) fn parse_socket_mode_arg(raw: &str) -> Result<u32, String> {
 }
 
 /// Value parser for `--workers`: positive-integer → `NonZeroUsize`.
-/// Ported from v3 `parse_non_zero_usize_arg`. Rejects `0` at parse time.
+/// Rejects `0` at parse time.
 pub(crate) fn parse_non_zero_usize_arg(raw: &str) -> Result<NonZeroUsize, String> {
     let parsed: usize = raw
         .trim()
@@ -151,7 +141,7 @@ pub(crate) fn parse_budget_ms_arg(raw: &str) -> Result<i64, String> {
 /// listener/auth/budget/lifecycle/per-request-gate concerns that have
 /// no meaning outside an HTTP server.
 ///
-/// Listener arg-group conflicts mirror v3:
+/// Listener arg groups make TCP and UDS binding mutually exclusive:
 ///
 /// * `--unix-socket` is in `ArgGroup("main_listener")` and conflicts
 ///   with `--host`/`--port`.
@@ -478,9 +468,6 @@ impl From<&ServeArgs> for ServeConfig {
 
 /// Serialized into the single `--ready-json` line emitted to stdout.
 ///
-/// Schema is byte-identical to v3 so subprocess parents written
-/// against the v3 binary continue to parse correctly:
-///
 /// ```text
 /// {
 ///   "ready":        true,
@@ -507,8 +494,8 @@ struct ReadyJson<'a> {
 ///
 /// - TCP non-loopback + no API key → warn (the listener is reachable
 ///   to any network client).
-/// - UDS `0600` + no API key → silent (the intended safe default;
-///   filesystem permissions are the trust boundary).
+/// - UDS `0600` + no API key → silent; filesystem permissions are the
+///   trust boundary.
 /// - UDS with any group-permission bit set + no API key → warn
 ///   recommending an API key, since the socket grants access beyond
 ///   the owning uid.
@@ -548,17 +535,11 @@ fn advise_listener_security(main: &BoundListener, serve_config: &ServeConfig) {
 /// Security advisory for the admin listener:
 ///
 /// - No admin listener configured → no-op.
-/// - UDS admin without `--admin-api-key` → silent (filesystem 0o600 is the
-///   trust boundary; matches the "UDS default is safe" rule from
-///   [`advise_listener_security`]).
-/// - TCP loopback admin without `--admin-api-key` → warn advisory (same
-///   treatment as loopback main-listener without `--api-key`).
-/// - Non-loopback TCP admin without `--admin-api-key` → soft warn here
-///   only. The hard `bail!` lives in
-///   [`vl_convert_server::build_app`]'s `validate_serve_config` and
-///   already fired by the time we reach this advisory; the additional
-///   log line gives operators a clearer message in the unlikely case
-///   the validator's wording changes.
+/// - UDS admin without `--admin-api-key` → silent; filesystem
+///   permissions are the trust boundary.
+/// - TCP loopback admin without `--admin-api-key` → warn.
+/// - Non-loopback TCP admin without `--admin-api-key` → warn here if
+///   reached; `build_app` validation rejects this configuration first.
 fn advise_admin_security(
     admin: Option<EndpointInfo>,
     serve_config: &ServeConfig,
@@ -583,7 +564,7 @@ fn advise_admin_security(
                      --admin-api-key as a redundant guard."
                 );
             } else {
-                // Dead in practice — `validate_serve_config` bails first.
+                // `validate_serve_config` rejects this before bind.
                 log::warn!(
                     "Admin listener at {url} is non-loopback and has no \
                      --admin-api-key set."
@@ -636,17 +617,12 @@ fn emit_ready_json_if_enabled(
     };
     let line = serde_json::to_string(&payload)
         .map_err(|e| anyhow::anyhow!("failed to serialize ready-JSON: {e}"))?;
-    // The `vl-convert serve` subcommand reserves stdout for this
-    // one-shot readiness line. Logs go to stderr (enforced by
-    // `init_tracing`'s `.with_writer(std::io::stderr)`). Do not add
-    // another stdout writer to this module.
+    // stdout is reserved for the ready-JSON line. Logs go to stderr.
     //
     // allow-ready-json-emitter
     println!("{line}");
-    // Explicit flush — stdout is block-buffered when piped to a parent
-    // (the subprocess use case). Without this, a parent blocked on
-    // read_line() could wait for the buffer to fill before ever
-    // seeing the readiness signal.
+    // Flush so a parent blocked on `read_line()` sees readiness
+    // immediately through a block-buffered pipe.
     std::io::stdout()
         .flush()
         .map_err(|e| anyhow::anyhow!("failed to flush ready-JSON: {e}"))?;
@@ -659,29 +635,25 @@ fn emit_ready_json_if_enabled(
 /// watcher (e.g., first-read-is-EOF on an auto-enabled invocation with
 /// `/dev/null`-redirected stdin).
 ///
-/// `explicit = true` means the user set `--exit-on-parent-close`. In
-/// that case we honor their intent even on a first-read-EOF.
-/// `explicit = false` means we auto-enabled because a listener is
-/// UDS — there we degrade gracefully when stdin is already gone
-/// (common under shell-backgrounded launches).
+/// `explicit = true` treats EOF as shutdown for every stdin file type.
+/// In auto mode (`explicit = false`), a first-read EOF only shuts down
+/// when stdin is a FIFO or socket.
 ///
 /// First-read EOF is interpreted by stdin's file type:
 /// - **pipe (FIFO) or socket**: real IPC channel from a parent
 ///   process. EOF means the parent closed it (typically because it
-///   exited) — fire shutdown so an orphaned UDS server doesn't
+///   exited); fire shutdown so an orphaned UDS server doesn't
 ///   linger.
 /// - **anything else** (tty, `/dev/null`, regular file, character
-///   device): no parent is feeding bytes, so degrade silently when
-///   `!explicit` to avoid the shell-backgrounded launch trap.
+///   device): first-read EOF disables the auto watcher.
 ///
 /// Once the watcher has read at least one byte, every subsequent EOF
 /// is treated as parent-closed regardless of file type.
 async fn watch_stdin_eof(explicit: bool) -> Option<&'static str> {
     use tokio::io::AsyncReadExt;
 
-    // Probe stdin's file type once at startup. When `explicit` is true
-    // the user has opted in to "EOF means shutdown" unconditionally,
-    // so the probe is irrelevant.
+    // In explicit mode every EOF is a shutdown signal, so the file-type
+    // probe is only needed for auto mode.
     let stdin_is_parent_pipe = !explicit && stdin_is_pipe_or_socket();
 
     let mut stdin = tokio::io::stdin();
@@ -699,7 +671,7 @@ async fn watch_stdin_eof(explicit: bool) -> Option<&'static str> {
             }
             Ok(0) => return Some("parent closed stdin"),
             Ok(_) => {
-                // Discard bytes — we don't interpret stdin content, only EOF.
+                // Discard bytes; stdin content is ignored and only EOF matters.
                 first_read = false;
             }
             Err(e) => {
@@ -710,16 +682,13 @@ async fn watch_stdin_eof(explicit: bool) -> Option<&'static str> {
     }
 }
 
-/// On Unix, return `true` when fd 0 is a FIFO (pipe) or a socket —
+/// On Unix, return `true` when fd 0 is a FIFO (pipe) or a socket:
 /// the two file types that indicate "parent process is using stdin
 /// as an IPC channel". A tty, regular file, character device, or
 /// `/dev/null` returns `false`.
 ///
-/// We probe via `/dev/stdin` rather than fstat(2) to avoid pulling
-/// `libc` into the CLI dep graph for one call site. `/dev/stdin`
-/// exists on Linux (symlink → `/proc/self/fd/0`) and macOS (symlink
-/// → `fd/0`); `metadata()` follows the symlink and reports the
-/// underlying file's type.
+/// `/dev/stdin` resolves to fd 0 on Linux and macOS; `metadata()`
+/// follows that link and reports the underlying file type.
 #[cfg(unix)]
 fn stdin_is_pipe_or_socket() -> bool {
     use std::os::unix::fs::FileTypeExt;
@@ -736,23 +705,15 @@ fn stdin_is_pipe_or_socket() -> bool {
     false
 }
 
-/// Entry point for `vl-convert serve`. Near-verbatim port of v3's
-/// `main.rs`, adapted to take a pre-built `VlcConfig` from the global
-/// flag pipeline and a parsed `ServeArgs` from clap.
+/// Entry point for `vl-convert serve`.
 ///
 /// Lifecycle:
 ///
 /// 1. Apply per-request converter gates onto `base_config`.
 /// 2. Apply the optional `--workers` override.
-/// 3. Eagerly install the SIGTERM handler **before** any
-///    `tokio::spawn` so an early signal can't take the process's
-///    default disposition (terminate without cleanup). See
-///    `vl-convert-server/CLAUDE.md` "Notes for downstream binary
-///    authors".
-/// 4. `build_app` validates `ServeConfig` (admin loopback) and warms
-///    the worker pool.
-/// 5. `bind_listener` applies the UDS lifecycle (probe-then-unlink,
-///    chmod, cleanup-guard) for the main listener.
+/// 3. Install SIGTERM handling before spawning tasks.
+/// 4. Build and warm the server before binding the main listener.
+/// 5. Bind the main listener.
 /// 6. Security advisories on stderr.
 /// 7. `eprintln!` + `log::info!` the listening endpoint.
 /// 8. Emit the optional `--ready-json` line on stdout (single
@@ -767,8 +728,7 @@ pub(crate) async fn run_serve(
     mut base_config: VlcConfig,
     args: ServeArgs,
 ) -> anyhow::Result<()> {
-    // Per-request gates only mean something inside serve, so the main
-    // CLI plumbing leaves them unset and we apply them here.
+    // Per-request gates only apply in serve mode, so they are injected here.
     if let Some(v) = args.allow_google_fonts {
         base_config.allow_google_fonts = v;
     }
@@ -791,7 +751,7 @@ pub(crate) async fn run_serve(
             NonZeroU64::new(n_u64).expect("NonZeroUsize.get() is always >= 1");
     }
 
-    // Must be installed before any `tokio::spawn` — `signal()`
+    // Must be installed before any `tokio::spawn`; `signal()`
     // registers the kernel handler synchronously, and deferring it
     // leaves early SIGTERMs with the default disposition.
     #[cfg(unix)]
@@ -805,7 +765,7 @@ pub(crate) async fn run_serve(
     // Capture before `base_config` moves into `build_app`.
     let allowed_base_urls_is_library_default = base_config.allowed_base_urls == ["http:", "https:"];
 
-    // Validate + warm before we expose a public socket.
+    // Validate and warm before binding a public socket.
     let built = build_app(base_config, &serve_config).await?;
     let listener: BoundListener =
         bind_listener(&serve_config.main, serve_config.socket_mode).await?;
@@ -868,9 +828,7 @@ pub(crate) async fn run_serve(
         });
     }
 
-    // Stdin-EOF watcher (conditional). Preserves v3's first-read-EOF
-    // auto-disable behavior (covers shell-backgrounded launches with
-    // /dev/null redirect).
+    // Stdin-EOF watcher (conditional).
     if watcher_enabled {
         let tx = shutdown_trigger_tx.clone();
         let is_explicit = watcher_explicit == Some(true);
@@ -885,9 +843,8 @@ pub(crate) async fn run_serve(
     // forever after every spawned sender exits).
     drop(shutdown_trigger_tx);
 
-    // Aggregator: first trigger wins. Logs the reason, fires the
-    // oneshot to wake the watchdog (which now starts its drain
-    // sleep), then returns so `serve()` observes the shutdown
+    // Aggregator: first trigger wins. Logs the reason, fires the oneshot to
+    // wake the watchdog, then returns so `serve()` observes the shutdown
     // future resolving and begins its own graceful drain.
     let shutdown = async move {
         if let Some(reason) = shutdown_trigger_rx.recv().await {
@@ -899,7 +856,7 @@ pub(crate) async fn run_serve(
     // Drain watchdog. Sleeps `drain_timeout_secs` after the first
     // shutdown trigger; if `serve()` hasn't returned by then, force
     // exit. `std::process::exit` skips Drop guards (UDS cleanup
-    // etc.) — the next launch's probe-then-unlink in
+    // etc.); the next launch's probe-then-unlink in
     // `bind_listener` clears any stale file left behind.
     let watchdog = async move {
         if signal_rx.await.is_ok() {
@@ -910,10 +867,9 @@ pub(crate) async fn run_serve(
         }
     };
 
-    // The watchdog arm normally never returns — `std::process::exit(1)`
-    // fires on drain-timeout. If the signal sender drops without
-    // firing (caught aggregator panic), log and exit cleanly rather
-    // than panic from a stale `unreachable!()`.
+    // The watchdog exits the process on drain timeout. If its signal
+    // channel closes without a shutdown trigger, return an error log
+    // instead of panicking.
     tokio::select! {
         result = serve_app(listener, built, shutdown) => result,
         _ = watchdog => {

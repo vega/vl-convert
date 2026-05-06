@@ -20,14 +20,11 @@ pub enum LogFormat {
 }
 
 pub fn init_tracing(filter: &str, format: LogFormat) {
-    // `tracing-subscriber`'s `init()` enables the `tracing-log`
-    // compat layer by default, so `log::*` records from upstream
-    // crates (e.g. `vl-convert-rs`) flow into this subscriber.
+    // `tracing-log` routes upstream `log::*` records through this
+    // subscriber.
     let filter: EnvFilter = filter.parse().expect("valid tracing filter directives");
 
-    // Explicit stderr: tracing_subscriber::fmt() defaults to stdout,
-    // which would collide with the --ready-json emitter's exclusive
-    // ownership of stdout. Logs always go to stderr.
+    // stdout is reserved by `vl-convert serve --ready-json`; logs use stderr.
     match format {
         LogFormat::Json => {
             tracing_subscriber::fmt()
@@ -65,7 +62,7 @@ pub struct ServeConfig {
     /// `api_key`. When `Some`, `admin_auth_middleware` rejects every
     /// admin request lacking the correct Bearer. When `None`, the admin
     /// surface is listener-gated only (UDS `0o600` or TCP loopback).
-    /// Non-loopback TCP admin with no key bails at startup.
+    /// Non-loopback TCP admin with no key is rejected at startup.
     pub admin_api_key: Option<String>,
     /// CORS `Access-Control-Allow-Origin` override. When `None`, the
     /// default predicate accepts only loopback origins (safe for local
@@ -81,18 +78,15 @@ pub struct ServeConfig {
     /// Maximum request body size in MB. Larger bodies are rejected
     /// with 413. Applied via axum's `DefaultBodyLimit`.
     pub max_body_size_mb: usize,
-    /// When `true`, error responses omit internal detail (exception
-    /// messages, stack traces, internal paths) so they're safe to
-    /// surface to untrusted callers. Intended for production
-    /// deployments; development should keep this `false`.
+    /// When `true`, error responses omit exception messages, stack traces,
+    /// and internal paths.
     pub opaque_errors: bool,
     /// When `true`, `user_agent_middleware` rejects requests without
     /// a `User-Agent` header with 400. Useful for filtering unkeyed
     /// crawlers / health probes in shared environments.
     pub require_user_agent: bool,
     /// Log event format: human-readable `Text` or structured `Json`.
-    /// Writer target is always stderr (stdout is reserved for the
-    /// `--ready-json` emitter — see `init_tracing`).
+    /// Writer target is always stderr.
     pub log_format: LogFormat,
     /// Per-peer-IP budget for rate limiting (milliseconds). `None`
     /// disables the per-IP dimension; the global dimension still
@@ -104,10 +98,8 @@ pub struct ServeConfig {
     /// disables the global dimension. Useful as a host-CPU defense
     /// that applies regardless of transport.
     pub global_budget_ms: Option<i64>,
-    /// Reservation size each request tentatively charges against both
-    /// budget dimensions before settlement. Small values allow more
-    /// concurrency; large values protect against request-duration
-    /// outliers. Default 1000 (1s).
+    /// Reservation size each request tentatively charges against enabled
+    /// budget dimensions before settlement. Default 1000 (1s).
     pub budget_hold_ms: i64,
     /// When `true`, `extract_client_ip` honors `X-Forwarded-For` /
     /// `X-Envoy-External-Address` headers from upstream proxies
@@ -154,15 +146,10 @@ impl Default for ServeConfig {
     }
 }
 
-/// Immutable point-in-time view of the converter + effective config.
+/// Immutable point-in-time view of the converter and effective config.
 ///
-/// Handlers call `state.runtime.load_full()` exactly once at entry and use the
-/// returned `Arc<RuntimeSnapshot>` for the rest of the request. This gives each
-/// request a stable view that cannot be swapped out from under it mid-flight,
-/// which is important for multi-step conversions that might otherwise observe
-/// two different `VlcConfig` values. The admin reconfig path replaces the
-/// snapshot atomically via `ArcSwap::store`; in-flight requests keep their
-/// old `Arc` alive until the next yield point.
+/// Handlers load one snapshot at entry and keep it for the request. Admin
+/// reconfiguration replaces future snapshots atomically via `ArcSwap::store`.
 pub(crate) struct RuntimeSnapshot {
     pub converter: VlConverter,
     pub config: Arc<VlcConfig>,
@@ -218,23 +205,17 @@ pub struct BuiltApp {
 }
 
 impl BuiltApp {
-    /// Endpoint label of the admin listener, if one was bound. Matches
-    /// [`crate::BoundListener::endpoint_label`] output — canonical URL
-    /// form for log lines.
+    /// Endpoint label of the admin listener, if one was bound.
     pub fn admin_endpoint(&self) -> Option<&str> {
         self.admin.as_ref().map(|a| a.addr.as_str())
     }
 
     /// Structured descriptor of the admin listener, if one was bound.
-    /// Intended for readiness JSON emission so wrappers receive parsed
-    /// `host`/`port` (TCP) or `path` (UDS) fields alongside the URL.
     pub fn admin_endpoint_info(&self) -> Option<crate::EndpointInfo> {
         self.admin.as_ref().map(|a| a.listener.endpoint_info())
     }
 
-    /// The converter handle currently backing the server. Freshly loaded
-    /// from the runtime snapshot on every call — callers that expect a
-    /// stable view across multiple reads should retain the returned clone.
+    /// The converter handle currently backing the server.
     pub fn current_converter(&self) -> VlConverter {
         self.runtime.load_full().converter.clone()
     }
@@ -275,11 +256,8 @@ pub(crate) fn validate_serve_config(serve_config: &ServeConfig) -> Result<(), an
         anyhow::bail!("admin_api_key must not be empty or whitespace-only");
     }
 
-    // Refuse to bind a non-loopback TCP admin listener without an
-    // admin bearer key. Without the key, `admin_auth_middleware` is a
-    // no-op and `/admin/config` mutation would be reachable from
-    // anywhere the listener is exposed. UDS admin without a key is
-    // allowed because filesystem permissions are the trust boundary.
+    // A non-loopback TCP admin listener requires bearer auth. UDS admin
+    // may rely on filesystem permissions.
     if let Some(admin_addr) = &serve_config.admin {
         if serve_config.admin_api_key.is_none() && !admin_addr.is_loopback_or_uds() {
             anyhow::bail!(

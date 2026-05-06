@@ -1,5 +1,5 @@
 #![cfg(unix)]
-//! Basic UDS smoke tests — healthz + a conversion round-trip over a
+//! Basic UDS smoke tests: healthz + a conversion round-trip over a
 //! pathname AF_UNIX SOCK_STREAM socket.
 
 mod common;

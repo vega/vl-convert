@@ -1,18 +1,9 @@
 //! UDS HTTP helpers + subprocess lifecycle helpers for the
 //! `test_serve_subprocess.rs` end-to-end suite.
 //!
-//! `uds_get` / `uds_post_json` / `uds_request` are duplicated verbatim
-//! from `vl-convert-server/tests/common/mod.rs:255-338`. The duplicate
-//! placement is deliberate per the design doc (option a-i): keep
-//! `vl-convert-server`'s public API SemVer-clean, and use the
-//! `CARGO_BIN_EXE_vl_convert` env var that's auto-set when compiling
-//! tests under `vl-convert/tests/`.
-//!
-//! `spawn_serve_piped` / `read_ready_json` / `send_sigterm` /
-//! `wait_with_timeout` are subprocess-lifecycle helpers ported from
-//! v3's `vl-convert-server/tests/test_uds_e2e.rs` with `spawn_server_piped`
-//! → `spawn_serve_piped` (binary is now `vl-convert`, subcommand is
-//! `serve`).
+//! The UDS HTTP helpers live in this crate's tests so subprocess tests can
+//! drive the `vl-convert` binary without exposing test-only helpers from
+//! `vl-convert-server`.
 
 #![allow(dead_code)]
 
@@ -21,15 +12,14 @@ use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::Duration;
 
-/// Wall-clock cap for "should become ready quickly" polls. The
-/// binary warms up Deno workers during build_app which dominates the
-/// startup time budget. Matches v3's `READY_TIMEOUT`.
+/// Wall-clock cap for subprocess readiness. Startup includes Deno worker
+/// warm-up.
 pub const READY_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// UDS HTTP GET helper. Returns `(status, body_bytes, headers)`.
 ///
-/// reqwest has no UDS transport at workspace pin 0.11 — this uses raw
-/// hyper + hyper-util + `tokio::net::UnixStream` instead.
+/// Uses raw hyper over `tokio::net::UnixStream` because reqwest 0.11 has no
+/// UDS transport.
 pub async fn uds_get(
     sock_path: &std::path::Path,
     path: &str,
@@ -113,9 +103,8 @@ pub async fn uds_request(
     (parts.status, body, parts.headers)
 }
 
-/// Spawn `vl-convert serve <args...>` with stdin/stdout/stderr piped
-/// so we can both read the ready-JSON line and trigger EOF-based
-/// shutdown later.
+/// Spawn `vl-convert serve <args...>` with piped stdin/stdout/stderr for
+/// ready-JSON reads and EOF-based shutdown.
 pub fn spawn_serve_piped(args: &[&str]) -> Child {
     let mut cmd = Command::cargo_bin("vl-convert").expect("vl-convert binary not built");
     cmd.arg("serve")
@@ -145,7 +134,7 @@ pub fn read_ready_json(child: &mut Child) -> serde_json::Value {
         .recv_timeout(READY_TIMEOUT)
         .expect("ready-JSON line did not appear within timeout");
     serde_json::from_str(line.trim())
-        .unwrap_or_else(|e| panic!("ready-JSON was not valid JSON: {e} — raw: {line:?}"))
+        .unwrap_or_else(|e| panic!("ready-JSON was not valid JSON: {e}; raw: {line:?}"))
 }
 
 /// Send SIGTERM to a child process. Unix-only. Uses a minimal `kill(2)`
@@ -173,8 +162,7 @@ pub fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Option<ExitSta
 }
 
 mod signals {
-    // Minimal FFI: avoids pulling the full libc crate into dev-deps
-    // just to send SIGTERM.
+    // Minimal FFI for sending SIGTERM without adding a libc dev-dependency.
     pub const SIGTERM: i32 = 15;
     extern "C" {
         pub fn kill(pid: i32, sig: i32) -> i32;

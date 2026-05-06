@@ -1,19 +1,13 @@
 //! Admin reconfig coordination primitives.
 //!
-//! Drain semantics invariant: "drain complete" is signalled by
-//! [`InflightGuard::drop`] decrementing [`ReconfigCoordinator::inflight`]
-//! to zero while [`ReconfigCoordinator::gate_closed`] is `true`. It is
-//! **not** inferred from any reference-count on shared state (e.g.
-//! `Arc::strong_count`). Long-lived clones of `Arc<RuntimeSnapshot>`,
-//! `Arc<AppState>`, or any middleware-internal state are therefore safe —
-//! they do not block drain. In-flight requests are by definition those
-//! that entered the gate middleware, were admitted, and have not yet
-//! released their `InflightGuard`.
+//! Drain completion is based only on admitted requests releasing their
+//! [`InflightGuard`] while [`ReconfigCoordinator::gate_closed`] is `true`.
+//! Long-lived clones of shared state such as `Arc<RuntimeSnapshot>` or
+//! `Arc<AppState>` do not block drain.
 //!
-//! The admission gate uses an **increment-first, recheck-after** handshake
-//! so there is no race between a request checking `gate_closed` and the
-//! drain loop observing `inflight == 0`. See [`ReconfigCoordinator::drain`]
-//! for the detailed algorithm + race analysis.
+//! The admission gate increments `inflight` before rechecking `gate_closed`,
+//! ensuring the drain loop cannot observe zero while a request is being
+//! admitted.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -128,35 +122,19 @@ impl ReconfigCoordinator {
         })
     }
 
-    /// Close the gate and wait for all in-flight admitted requests to
-    /// finish, or for an error condition.
+    /// Close the gate and wait for admitted requests to finish.
     ///
-    /// **Algorithm** (race-free per design §2.2):
-    ///
-    /// 1. Store `true` to `gate_closed` (SeqCst). From this point on the
-    ///    middleware's recheck-after-increment will fail any new admit.
-    /// 2. Compute a single absolute deadline.
-    /// 3. Loop:
-    ///    - Register the next `Notify::notified()` future **before**
-    ///      loading the counter. Any decrement that happens after this
-    ///      registration is guaranteed to wake us.
-    ///    - If `inflight == 0`, success.
-    ///    - Otherwise `select!` biased over shutdown / notify / deadline.
-    ///      Shutdown → `Cancelled`. Notify → re-check. Deadline →
-    ///      `Timeout { inflight: <current count> }`.
-    ///
-    /// On `Ok`, the gate remains closed; the caller is responsible for
-    /// reopening it (typically via `ReconfigScopeGuard::drop`). On `Err`,
-    /// the gate also remains closed — the caller unwinds (guard drop
-    /// reopens).
+    /// Registers for drain notifications before loading `inflight`, so a
+    /// request finishing between checks cannot be missed. The gate remains
+    /// closed on both success and error; callers reopen it via
+    /// [`ReconfigScopeGuard`].
     pub(crate) async fn drain(&self) -> Result<(), DrainError> {
         self.close_gate();
         let deadline = tokio::time::Instant::now() + self.drain_timeout;
 
         loop {
-            // Registering `notified` BEFORE the inflight load is critical —
-            // otherwise a decrement between the load and the notify
-            // registration is missed and we hang until the deadline.
+            // Register before loading `inflight` so a concurrent decrement
+            // cannot be missed.
             let notified = self.drained.notified();
             tokio::pin!(notified);
 
@@ -178,10 +156,8 @@ impl ReconfigCoordinator {
     }
 }
 
-/// Drop-guard that decrements [`ReconfigCoordinator::inflight`] and wakes
-/// the drain loop. Install on the request task after admission so every
-/// exit path — normal return, handler panic caught by `CatchPanicLayer`,
-/// client disconnect, `TimeoutLayer` cancellation — decrements.
+/// Drop guard that decrements [`ReconfigCoordinator::inflight`] and wakes the
+/// drain loop when an admitted request exits.
 pub(crate) struct InflightGuard {
     coord: Arc<ReconfigCoordinator>,
 }
@@ -193,14 +169,10 @@ impl Drop for InflightGuard {
     }
 }
 
-/// Drop-safe scope guard for the admin reconfig handler.
+/// Scope guard for admin reconfig handlers.
 ///
-/// Installed after the handler acquires the reconfig lock. On any exit
-/// path (explicit return, `?`, handler panic, admin-caller disconnect)
-/// the guard's drop:
-///
-/// 1. Reopens the admission gate (if the handler closed it).
-/// 2. Clears `readiness.reconfig_in_progress`.
+/// If the handler marks the gate closed, `Drop` reopens the gate and clears
+/// `readiness.reconfig_in_progress` on every exit path.
 pub(crate) struct ReconfigScopeGuard<'a> {
     coord: &'a Arc<ReconfigCoordinator>,
     readiness: &'a Arc<ReadinessState>,
@@ -252,29 +224,26 @@ pub(crate) enum PatchRejection {
     /// One or more non-nullable fields received an explicit `null` in the
     /// patch body. Parse-level rejection: the wire shape is illegal.
     NonNullable(ConfigValidationError),
-    /// Semantic validation failure (cross-field invariant, etc.). Reserved
-    /// for future use; `apply_patch` itself never returns this variant —
-    /// `normalize_converter_config` is the only current producer.
+    /// Semantic validation failure from the normalize/rebuild pipeline.
     #[allow(dead_code)]
     Invalid(ConfigValidationError),
 }
 
 /// Merge a [`ConfigPatch`] onto a current [`VlcConfig`] snapshot.
 ///
-/// Semantics per design §2.5 ("natural JSON ↔ Option"):
+/// Patch semantics:
 /// * Field absent from the patch (outer `None`) → preserve current value.
 /// * Field present (`Some(inner)`) → replace current with `inner`.
 ///
 /// For VlcConfig fields whose library type is `Option<T>`, the inner
 /// `Option` is stored as-is (so `null` → `None`). For non-optional
 /// VlcConfig fields, `null` on the wire is illegal: the corresponding
-/// `Option<Option<T>>` arrives as `Some(None)` and we reject with a
+/// `Option<Option<T>>` arrives as `Some(None)` and becomes a
 /// `PatchRejection::NonNullable` (the admin handler maps it to 400).
 ///
-/// Cross-field invariants (e.g. `allow_google_fonts` requires
-/// `auto_google_fonts`) are *not* checked here — that's the job of
-/// `normalize_converter_config` further down the pipeline, which returns
-/// a 422 `ConfigValidationError`.
+/// Cross-field invariants are checked later by
+/// `normalize_converter_config`, which returns a 422
+/// `ConfigValidationError`.
 pub(crate) fn apply_patch(
     current: &VlcConfig,
     patch: &ConfigPatch,
@@ -415,7 +384,7 @@ mod tests {
         // try_admit should now fail because gate_closed is set.
         assert!(coord.try_admit().is_err());
 
-        // Drop the guard — drain should complete Ok.
+        // Dropping the guard lets drain complete.
         drop(guard);
         assert!(matches!(drain_handle.await.unwrap(), Ok(())));
         assert_eq!(coord.inflight(), 0);
@@ -485,12 +454,12 @@ mod tests {
             let a = accepted.clone();
             let r = rejected.clone();
             handles.push(tokio::spawn(async move {
-                // Sleep a variable tiny amount so admits don't all fire together.
+                // Stagger admission attempts slightly.
                 tokio::task::yield_now().await;
                 match c.try_admit() {
                     Ok(_guard) => {
                         a.fetch_add(1, Ordering::SeqCst);
-                        // Hold briefly — this is a released-by-drop guard.
+                        // The guard releases on task exit.
                     }
                     Err(()) => {
                         r.fetch_add(1, Ordering::SeqCst);
@@ -499,7 +468,7 @@ mod tests {
             }));
         }
 
-        // Drain in parallel — picks an arbitrary moment to close the gate.
+        // Drain closes the gate while admission attempts are in flight.
         let drain_handle = {
             let c = coord.clone();
             tokio::spawn(async move { c.drain().await })
@@ -516,7 +485,7 @@ mod tests {
             "unexpected drain result: {drain_result:?}"
         );
 
-        // Every task must have either admitted or been rejected — no lost tasks.
+        // Every task must have either admitted or been rejected.
         let total = accepted.load(Ordering::SeqCst) + rejected.load(Ordering::SeqCst);
         assert_eq!(total as usize, TASKS, "lost admit/reject accounting");
 
@@ -589,7 +558,7 @@ mod tests {
     #[test]
     fn apply_patch_null_on_non_nullable_is_rejected() {
         let cur = VlcConfig::default();
-        // `allowed_base_urls: null` — library field is `Vec<String>`, so
+        // `allowed_base_urls: null`: library field is `Vec<String>`, so
         // null is illegal.
         let patch = ConfigPatch {
             allowed_base_urls: Some(None),

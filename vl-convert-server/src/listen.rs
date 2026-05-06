@@ -1,6 +1,6 @@
-//! Canonical internal form for "where does a listener bind."
+//! Internal form for listener bind targets.
 //!
-//! The CLI surface exposes two parallel flag families per listener —
+//! The CLI surface exposes two parallel flag families per listener:
 //! TCP (`--host`/`--port`/`--admin-port`) and UDS
 //! (`--unix-socket`/`--admin-unix-socket`). The resolve layer
 //! synthesises one of these variants into a [`ListenAddr`] so the rest
@@ -11,11 +11,6 @@
 //! `--ready-json` and tracing spans emit: `http://HOST:PORT` for TCP
 //! and `unix:///ABS/PATH` for UDS.
 //!
-//! Lives at the library crate root — not under `settings/` — because
-//! `ServeConfig` in `config.rs` holds a `ListenAddr` field and
-//! `settings/` is a binary-only module tree unreachable from the
-//! library. The settings layer re-imports via `crate::ListenAddr`.
-
 use std::fmt;
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -45,16 +40,15 @@ impl ListenAddr {
         }
     }
 
-    /// True when the bind target is locally-only — UDS (filesystem-permission
-    /// gated) or a TCP host that resolves to a loopback address. Used by
+    /// True when the bind target is local-only: UDS or a TCP IP literal
+    /// that is loopback. Used by
     /// `validate_serve_config` to enforce the admin-without-key rule and
-    /// by `--ready-json` callers that want a quick "trust boundary" hint.
+    /// by callers that need a transport-level trust-boundary check.
     ///
     /// The TCP arm parses `host` as an `IpAddr` and asks the OS view of
     /// loopback status. Hostnames (e.g. `localhost`) deliberately read as
-    /// non-loopback because we cannot resolve them synchronously here
-    /// without a runtime; callers who want to trust a hostname should
-    /// pre-resolve to `127.0.0.1` / `::1` at the CLI/env layer.
+    /// non-loopback because this type does not resolve DNS; callers
+    /// should pass `127.0.0.1` or `::1` when loopback semantics matter.
     pub fn is_loopback_or_uds(&self) -> bool {
         match self {
             Self::Tcp { host, .. } => host
@@ -140,8 +134,7 @@ mod tests {
 
     #[test]
     fn is_loopback_or_uds_tcp_table() {
-        // `localhost` is intentionally non-loopback — we cannot resolve
-        // hostnames synchronously here. Callers must pre-resolve.
+        // Hostnames are not resolved by this type.
         for (host, expected) in [
             ("127.0.0.1", true),
             ("::1", true),

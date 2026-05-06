@@ -10,20 +10,12 @@ use vl_convert_rs::DEFAULT_VL_VERSION;
 
 use crate::util::CommonOptsInput;
 
-/// `double_option` helper: deserialize an absent field as `None`, an explicit
-/// `null` as `Some(None)`, and any present value as `Some(Some(v))`. Required
-/// for the `ConfigPatch` tri-state where "absent" and "null" must be
-/// distinguished — the former means "preserve current" and the latter means
-/// "clear the field" (or 400 for non-nullable fields, rejected by
-/// `apply_patch`).
+/// Serde helper for `ConfigPatch` tri-state fields: absent field => `None`,
+/// explicit `null` => `Some(None)`, present value => `Some(Some(v))`.
 ///
-/// Implementation note: `Option::<Option<T>>::deserialize(d)` collapses a JSON
-/// `null` onto the *outer* `None`, which is indistinguishable from the
-/// `#[serde(default)]` substitution for an absent field. Instead, deserialize
-/// `Option::<T>` (whose `null`-handling does the right thing for the inner
-/// layer) and wrap `Some` around the result — serde only invokes this
-/// function when the field is present in the input, so the outer `Some`
-/// unambiguously means "present".
+/// Serde only calls this helper when the field is present, so wrapping
+/// `Option::<T>::deserialize` in an outer `Some` preserves the
+/// absent/null/value distinction.
 pub(crate) mod double_option {
     use serde::{Deserialize, Deserializer};
 
@@ -41,15 +33,10 @@ pub(crate) mod double_option {
 /// `Disabled`, any string → `Custom(s)`) so `GET /admin/config`
 /// round-trips losslessly through `PUT` / `PATCH`.
 ///
-/// Strings are **always** mapped to `BaseUrlSetting::Custom(s)` — we do NOT
-/// reinterpret `"default"` / `"disabled"` as enum shorthands even though
-/// the library's own `BaseUrlSetting::Deserialize` does. Rationale: the
-/// view serializer emits `true` / `false` for the enum variants and emits
-/// a string only for `Custom(_)`, so a user round-tripping a `Custom("default")`
-/// through GET → PUT would see their path silently remapped to
-/// `BaseUrlSetting::Default` if the adapter honored the string shorthand.
-/// Keeping the bool/string shapes disjoint eliminates that footgun; users
-/// who want the enum variants can always send the boolean shorthand.
+/// Strings always map to `BaseUrlSetting::Custom(s)`. The boolean shapes
+/// represent `Default` and `Disabled`; keeping strings reserved for custom
+/// URLs makes GET -> PUT/PATCH round-trips preserve `Custom("default")` and
+/// `Custom("disabled")`.
 pub(crate) fn deserialize_base_url_view<'de, D>(deserializer: D) -> Result<BaseUrlSetting, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -381,16 +368,10 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-// =============================================================================
-// Admin /config DTOs
-// =============================================================================
+// Admin `/config` DTOs.
 //
-// Tri-state semantics: for each patch field, the outer `Option`
-// distinguishes "absent in the JSON body" (`None`) from "present with value"
-// (`Some(_)`). The inner `Option` (when present on VlcConfig fields whose
-// type is `Option<T>`) maps a JSON `null` to `Some(None)`. Non-optional
-// VlcConfig fields use a single-layer `Option<T>`: null-on-non-nullable is
-// rejected at serde parse time (400) and absence means "preserve current".
+// Patch fields use `Option<Option<T>>` where null must be distinct from
+// absence. Non-nullable `VlcConfig` fields reject explicit nulls with 400.
 
 /// PATCH /admin/config body: a partial update where every field is optional.
 ///
@@ -403,7 +384,7 @@ pub struct ErrorResponse {
 ///       with 400 (the single-layer `Option<T>` has no way to represent the
 ///       cleared state).
 ///
-/// `deny_unknown_fields` makes typos fail loudly rather than silently succeed.
+/// `deny_unknown_fields` rejects unknown request fields.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ConfigPatch {
@@ -478,13 +459,11 @@ pub(crate) struct ConfigPatch {
 
 /// PUT /admin/config body: full replacement. Every VlcConfig field must be
 /// present in the body (no `#[serde(default)]`); omission is a 400 parse
-/// error. `null` follows natural JSON↔Option mapping — `null` on an
+/// error. `null` follows natural JSON↔Option mapping: `null` on an
 /// `Option<T>` field → `None`, `null` on a non-optional field → 400.
 ///
-/// Intentionally a dedicated struct rather than a `ConfigReplace(VlcConfig)`
-/// wrapper: `VlcConfig` uses `#[serde(default)]` at the container level so
-/// `{}` would round-trip into a `VlcConfig::default()`; a PUT must reject
-/// missing fields.
+/// This is a dedicated struct so missing fields are rejected instead of using
+/// `VlcConfig` container defaults.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ConfigReplace {
@@ -558,9 +537,8 @@ pub(crate) struct ConfigView {
     pub generation: u64,
 }
 
-/// Request body for `POST /admin/config/fonts/directories`. Single-path
-/// append — callers wanting replace-semantics use
-/// `PUT /admin/config/fonts/directories` with the full list.
+/// Request body for `POST /admin/config/fonts/directories`. Appends one path;
+/// use `PUT /admin/config/fonts/directories` to replace the full list.
 #[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct FontDirRequest {
@@ -659,9 +637,7 @@ mod tests {
 
     #[test]
     fn base_url_view_string_default_is_custom() {
-        // Strings always map to Custom — we do NOT honor the library's
-        // string-shorthand ambiguity for "default"/"disabled", to keep
-        // the admin wire contract round-trip-safe.
+        // Strings always map to Custom, including "default" and "disabled".
         assert_eq!(
             parse_base_url(r#""default""#),
             BaseUrlSetting::Custom("default".to_string())
@@ -713,10 +689,8 @@ mod tests {
         );
     }
 
-    /// Build a complete `ConfigReplace` body, optionally overriding /
-    /// adding fields. Accepts the GET-shape that `VlcConfigView`
-    /// emits, so tests for round-trips and acceptance of read-only
-    /// extras can express only the field(s) they care about.
+    /// Build a complete `ConfigReplace` body, optionally overriding or adding
+    /// fields.
     fn put_body(extra: &[(&str, serde_json::Value)]) -> serde_json::Value {
         let mut body = serde_json::json!({
             "num_workers": 1,
@@ -840,8 +814,8 @@ mod tests {
         });
         let err = serde_json::from_value::<ConfigPatch>(body)
             .expect_err("unknown style must surface as a serde error");
-        // Serde's `unknown variant` form mentions the rejected value
-        // and the accepted ones — that's enough.
+        // Serde's `unknown variant` message includes the rejected value and
+        // accepted variants.
         let msg = err.to_string();
         assert!(
             msg.contains("oblique") && msg.contains("normal") && msg.contains("italic"),
@@ -852,9 +826,7 @@ mod tests {
     #[test]
     fn vlc_config_serialize_does_not_emit_google_fonts_cache_dir() {
         // `google_fonts_cache_dir` is read-only system state surfaced on
-        // `/infoz`, not on `VlcConfig`. Regression guard: do not regress
-        // this back into a flattened union of writable + read-only
-        // fields.
+        // `/infoz`, not on `VlcConfig`.
         let value: serde_json::Value = serde_json::to_value(VlcConfig::default()).expect("ser");
         assert!(
             !value

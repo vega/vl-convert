@@ -103,13 +103,8 @@ pub(crate) fn run_budget_request(
                 .uri(uri)
                 .body(axum::body::Body::empty())
                 .unwrap();
-            // Inject ConnectInfo<SocketAddr> so the budget middleware's
-            // extract_client_ip sees a real peer address, matching TCP
-            // production behavior. Without this injection the middleware
-            // gets None and skips per-IP accounting — which would make
-            // budget tests stop exercising the per-IP code path. Use a
-            // sentinel loopback port so tests are deterministic across
-            // runs.
+            // Inject ConnectInfo<SocketAddr> so budget tests exercise the
+            // per-IP path used by TCP requests.
             req.extensions_mut()
                 .insert(axum::extract::ConnectInfo::<std::net::SocketAddr>(
                     "127.0.0.1:12345".parse().unwrap(),

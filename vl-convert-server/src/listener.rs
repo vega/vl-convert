@@ -1,13 +1,11 @@
-//! Runtime listener abstractions — the post-bind counterpart to
+//! Runtime listener abstractions: the post-bind counterpart to
 //! [`crate::ListenAddr`]. The CLI/config layer works with `ListenAddr`
-//! (a spec: "bind there"); once bound, we hold a [`BoundListener`] and
-//! dispatch on its variant inside [`crate::serve`]. Keeping pre-bind
-//! (`ListenAddr`) and post-bind (`BoundListener`) separate avoids
-//! having to worry about pathname-vs-fd lifecycle at the config layer.
+//! (where to bind); once bound, the server holds a [`BoundListener`].
+//! Keeping pre-bind and post-bind types separate keeps UDS cleanup
+//! ownership out of the config layer.
 //!
 //! Everything UDS-related is `#[cfg(unix)]`-gated end-to-end; on
-//! Windows the `Uds` variant does not exist at all, so the `match`
-//! arms reduce to one case (TCP) and clippy won't complain.
+//! Windows the `Uds` variant does not exist.
 
 use std::future::Future;
 
@@ -49,9 +47,9 @@ impl BoundListener {
         }
     }
 
-    /// Structured endpoint descriptor for readiness JSON. Gives wrappers
+    /// Structured endpoint descriptor for readiness JSON. Includes
     /// direct `host`/`port` (TCP) or `path` (UDS) fields alongside the
-    /// URL string, so they don't have to URL-parse `endpoint_label`.
+    /// URL string.
     pub fn endpoint_info(&self) -> EndpointInfo {
         match self {
             Self::Tcp(l) => {
@@ -109,8 +107,7 @@ pub enum EndpointInfo {
 }
 
 /// Drop guard that unlinks a pathname UDS file when the listener is
-/// dropped. The `AtomicBool` gives a one-shot semantic so a manual
-/// cleanup followed by `Drop` doesn't log spurious errors.
+/// dropped. The `AtomicBool` prevents duplicate cleanup.
 ///
 /// Force-exit (e.g., drain watchdog calling `std::process::exit`)
 /// bypasses `Drop` entirely; the next launch's probe-then-unlink in
@@ -149,12 +146,10 @@ impl Drop for UdsCleanup {
 /// `axum::extract::Extension<axum::extract::ConnectInfo<UdsConnectInfo>>`
 /// when the request originates from a UDS listener.
 ///
-/// `peer_cred` is `Option<UCred>` (not `UCred`) because the syscall is
-/// observability-only — filesystem permissions already enforce uid
-/// access at bind time. A missing `UCred` degrades the tracing span
-/// rather than dropping the request, which keeps the extractor safe
-/// against sandboxed kernels or future tokio versions that may probe
-/// fields unavailable in restricted environments.
+/// `peer_cred` is `Option<UCred>` because credentials are
+/// observability-only; filesystem permissions enforce access at bind
+/// time. When credentials are unavailable, tracing omits peer uid/gid/pid
+/// fields and the request continues.
 #[cfg(unix)]
 #[derive(Clone, Debug)]
 pub(crate) struct UdsConnectInfo {
@@ -176,10 +171,8 @@ impl axum::extract::connect_info::Connected<&tokio::net::UnixStream> for UdsConn
     }
 }
 
-/// Manual accept loop for UDS listeners. axum 0.7 has no generic
-/// `Listener` trait (that landed in 0.8), so `axum::serve` can't take a
-/// `UnixListener` directly. This helper mirrors the canonical
-/// axum-v0.7.9 `unix-domain-socket` example, adapted to:
+/// Manual accept loop for UDS listeners. axum 0.7's `serve` accepts
+/// TCP listeners only, so UDS uses a small Hyper accept loop that:
 ///
 /// - Track in-flight connections in a [`tokio::task::JoinSet`] so
 ///   graceful shutdown drains properly (mirrors the TCP path in
@@ -242,9 +235,7 @@ pub(crate) async fn serve_uds(
     }
 
     // Drop the listener before draining in-flight connections so the
-    // pathname socket stops accepting immediately. Otherwise a slow
-    // handler keeps drain blocked, and arriving clients succeed at
-    // `connect(2)` but never get accepted.
+    // pathname socket stops accepting immediately.
     drop(listener);
 
     while conn_tasks.join_next().await.is_some() {}
@@ -270,14 +261,14 @@ fn unwrap_infallible<T>(r: Result<T, std::convert::Infallible>) -> T {
 ///   (no await between bind and chmod), register a [`UdsCleanup`]
 ///   guard for unlink-on-drop.
 ///
-/// Used by both `main.rs` (main listener) and `lib::build_app` (admin
-/// listener) so the lifecycle semantics are identical.
+/// Used by both the main and admin listeners so lifecycle semantics are
+/// identical.
 ///
-/// The probe→unlink→bind sequence is **not** atomic — a competing
-/// process could win between unlink and bind, returning `EADDRINUSE`.
-/// That's surfaced as the returned error; retrying would only widen
-/// the race window. Force-exit via the drain watchdog skips the `Drop`
-/// guard; the next launch's probe handles the stale file.
+/// The probe-unlink-bind sequence is not atomic; a competing process can win
+/// between unlink and bind, returning `EADDRINUSE`.
+/// That error is returned to the caller. Force-exit via the drain
+/// watchdog skips the `Drop` guard; the next launch's probe handles the
+/// stale file.
 pub async fn bind_listener(
     spec: &crate::ListenAddr,
     #[cfg_attr(not(unix), allow(unused_variables))] mode: u32,
@@ -300,9 +291,8 @@ pub async fn bind_listener(
             probe_then_unlink(path).await?;
             let l = tokio::net::UnixListener::bind(path)
                 .map_err(|e| anyhow!("Failed to bind UDS {}: {e}", path.display()))?;
-            // Chmod synchronously after bind — no await between or the
-            // umask-race window widens. `PermissionsExt::set_mode` is a
-            // sync syscall.
+            // Chmod synchronously after bind; do not insert an await
+            // between bind and chmod.
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))
                 .map_err(|e| anyhow!("Failed to set mode on UDS {}: {e}", path.display()))?;
@@ -315,16 +305,13 @@ pub async fn bind_listener(
 /// Probe the socket path to distinguish "live server" / "stale file" /
 /// "no file." Called before `bind` on every UDS listener setup.
 ///
-/// - `Ok(Ok(_))` within timeout → a live server answered; refuse to
-///   stomp. Exit non-zero.
+/// - `Ok(Ok(_))` within timeout → a live server answered; fail without
+///   replacing the socket.
 /// - `Ok(Err(ECONNREFUSED))` → the file exists but nothing's listening;
-///   it's a stale leftover from a crashed previous run. Remove it so
-///   `bind` can succeed.
+///   remove it so `bind` can succeed.
 /// - `Ok(Err(ENOENT))` → the path doesn't exist yet; straight to bind.
-/// - Any other `Err` → surface as a bind failure (don't unlink —
-///   preserves non-socket files at the path).
-/// - Timeout → treat as "can't tell"; fail the bind rather than risk
-///   clobbering a slow live peer.
+/// - Any other `Err` → surface as a bind failure and preserve the path.
+/// - Timeout → fail the bind rather than replace a possibly live peer.
 #[cfg(unix)]
 async fn probe_then_unlink(path: &std::path::Path) -> Result<(), vl_convert_rs::anyhow::Error> {
     use vl_convert_rs::anyhow::{anyhow, bail};
@@ -336,11 +323,11 @@ async fn probe_then_unlink(path: &std::path::Path) -> Result<(), vl_convert_rs::
     .await;
     match probe {
         Ok(Ok(_)) => bail!(
-            "UDS socket {} is in use by another process; refusing to stomp",
+            "UDS socket {} is in use by another process; refusing to replace it",
             path.display()
         ),
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-            // Stale socket file from a previous run. Safe to remove.
+            // Stale socket file.
             std::fs::remove_file(path)
                 .map_err(|e| anyhow!("Failed to remove stale UDS {}: {e}", path.display()))?;
             Ok(())
@@ -383,9 +370,7 @@ mod tests {
         let guard = UdsCleanup::new(path.clone());
         drop(guard);
         assert!(!path.exists());
-        // Second drop would be a no-op — create a second path, write a
-        // file, then construct+drop another guard to confirm the
-        // Ordering::SeqCst swap works correctly in isolation.
+        // A second guard should still unlink its own path.
         let path2 = dir.path().join("u.sock");
         std::fs::write(&path2, b"stand-in").unwrap();
         let guard2 = UdsCleanup::new(path2.clone());
@@ -394,7 +379,7 @@ mod tests {
     }
 
     /// Once shutdown is signaled, `serve_uds` must drop its listener
-    /// before awaiting the drain — otherwise a client arriving while
+    /// before awaiting the drain; otherwise a client arriving while
     /// a slow handler is still in flight can `connect(2)` successfully
     /// and then sit in the kernel's accept queue forever, since the
     /// accept loop has already exited. This test gates the drain on a
@@ -411,10 +396,7 @@ mod tests {
         let sock = dir.path().join("t.sock");
         let listener = tokio::net::UnixListener::bind(&sock).unwrap();
 
-        // Handler waits on a Notify so we control exactly when the
-        // request completes. While the handler is blocked, the conn
-        // task is alive and drain blocks — that's the window where the
-        // bug used to allow new connects to succeed.
+        // Handler waits on a Notify so the in-flight request blocks drain.
         let release = Arc::new(Notify::new());
         let release_h = release.clone();
         let router = axum::Router::new().route(
@@ -445,9 +427,8 @@ mod tests {
         // Wait for the request to land in the handler.
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-        // Trigger shutdown. The handler is still blocked on `release`,
-        // so drain cannot complete. With the fix, `drop(listener)`
-        // runs before drain awaits, and a fresh connect must fail.
+        // Trigger shutdown while the handler is blocked; the listener should
+        // drop before drain awaits, so a fresh connect must fail.
         shutdown_tx.send(()).unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
