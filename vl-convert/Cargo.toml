@@ -21,6 +21,7 @@ jsonc-parser = { workspace = true }
 shellexpand = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
+signal-hook = "0.3"
 tracing = "0.1"
 
 [dev-dependencies]

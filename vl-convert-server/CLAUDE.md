@@ -409,14 +409,11 @@ The reference implementation in this repo is `vl-convert/src/serve.rs`
 wiring (signals, ready-JSON, drain watchdog, stdin-EOF watcher)
 end-to-end.
 
-- **Signal handling**: when honoring SIGTERM for graceful shutdown,
-  call `tokio::signal::unix::signal(SignalKind::terminate())` **in
-  the main function body**, not inside a `tokio::spawn` block. The
-  `signal()` call registers the kernel handler synchronously at
-  construction; deferring it to the first poll of a spawned task
-  creates a race where an early signal takes the process's default
-  disposition (terminate without cleanup). Pass the returned `Signal`
-  into the consumer task by move.
+- **Signal handling**: when honoring SIGTERM/SIGINT for graceful
+  shutdown, install the OS signal handlers before emitting readiness.
+  The reference CLI uses `signal-hook` to forward Unix signals from a
+  small thread into the same shutdown channel as stdin EOF, avoiding
+  runtime-specific signal delivery issues in the server subprocess.
 - **Shutdown aggregation**: when multiple independent sources (SIGINT,
   SIGTERM, stdin-EOF, readiness-file sentinel, etc.) can all trigger
   graceful shutdown, spawn each as its own task writing to a shared

@@ -143,7 +143,12 @@ pub fn send_sigterm(child: &Child) {
     // SAFETY: `kill(2)` with a valid pid and a standard signal number
     // is a straightforward syscall with no memory-safety concerns.
     unsafe {
-        signals::kill(child.id() as i32, signals::SIGTERM);
+        assert_eq!(
+            signals::kill(child.id() as i32, signals::SIGTERM),
+            0,
+            "kill(SIGTERM) failed for child pid {}",
+            child.id()
+        );
     }
 }
 

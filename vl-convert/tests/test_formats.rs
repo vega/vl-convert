@@ -16,6 +16,129 @@ fn check_no_command() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+const FORMAT_LOCALE_JSON: &str =
+    r#"{"decimal":"d","thousands":"t","grouping":[3],"currency":["X",""]}"#;
+
+const TIME_FORMAT_LOCALE_JSON: &str = r#"{
+  "dateTime": "%x, %X",
+  "date": "%m/%d/%Y",
+  "time": "%H:%M:%S",
+  "periods": ["AM", "PM"],
+  "days": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+  "shortDays": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+  "months": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+  "shortMonths": ["Jnx", "Fbx", "Mrx", "Apx", "May", "Jux", "Jlx", "Agx", "Spx", "Ocx", "Nvx", "Dcx"]
+}"#;
+
+const FORMAT_TEXT_SPEC: &str = r#"{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": 120,
+  "height": 40,
+  "data": {"values": [{"value": 1234.5}]},
+  "mark": {"type": "text", "align": "left", "baseline": "top"},
+  "encoding": {
+    "x": {"value": 0},
+    "y": {"value": 0},
+    "text": {"field": "value", "type": "quantitative", "format": "$,.1f"}
+  }
+}"#;
+
+const TIME_TEXT_SPEC: &str = r#"{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "width": 120,
+  "height": 40,
+  "data": {"values": [{"date": "2020-01-01T00:00:00"}]},
+  "mark": {"type": "text", "align": "left", "baseline": "top"},
+  "encoding": {
+    "x": {"value": 0},
+    "y": {"value": 0},
+    "text": {"field": "date", "type": "temporal", "format": "%b"}
+  }
+}"#;
+
+fn write_temp_json(contents: &str) -> Result<NamedTempFile, Box<dyn std::error::Error>> {
+    let mut file = tempfile::Builder::new().suffix(".json").tempfile()?;
+    file.write_all(contents.as_bytes())?;
+    Ok(file)
+}
+
+fn vl2svg_stdout(
+    spec: &NamedTempFile,
+    locale_flag: &str,
+    locale_value: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let mut cmd = vl_convert_cmd()?;
+    let out = cmd
+        .arg("--vlc-config")
+        .arg("disabled")
+        .arg(locale_flag)
+        .arg(locale_value)
+        .arg("vl2svg")
+        .arg("-i")
+        .arg(spec.path())
+        .output()?;
+
+    assert!(
+        out.status.success(),
+        "vl2svg failed with status {:?}; stderr:\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    Ok(String::from_utf8(out.stdout)?)
+}
+
+#[test]
+fn default_format_locale_accepts_inline_json_and_file() -> Result<(), Box<dyn std::error::Error>> {
+    let spec = write_temp_json(FORMAT_TEXT_SPEC)?;
+
+    let inline_svg = vl2svg_stdout(&spec, "--default-format-locale", FORMAT_LOCALE_JSON)?;
+    assert!(
+        inline_svg.contains("X1t234d5"),
+        "inline default format locale was not applied; SVG:\n{inline_svg}"
+    );
+
+    let locale_file = write_temp_json(FORMAT_LOCALE_JSON)?;
+    let file_svg = vl2svg_stdout(
+        &spec,
+        "--default-format-locale",
+        locale_file.path().to_str().unwrap(),
+    )?;
+    assert!(
+        file_svg.contains("X1t234d5"),
+        "file default format locale was not applied; SVG:\n{file_svg}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn default_time_locale_accepts_inline_json_and_file() -> Result<(), Box<dyn std::error::Error>> {
+    let spec = write_temp_json(TIME_TEXT_SPEC)?;
+
+    let inline_svg = vl2svg_stdout(
+        &spec,
+        "--default-time-format-locale",
+        TIME_FORMAT_LOCALE_JSON,
+    )?;
+    assert!(
+        inline_svg.contains("Jnx"),
+        "inline default time-format locale was not applied; SVG:\n{inline_svg}"
+    );
+
+    let locale_file = write_temp_json(TIME_FORMAT_LOCALE_JSON)?;
+    let file_svg = vl2svg_stdout(
+        &spec,
+        "--default-time-format-locale",
+        locale_file.path().to_str().unwrap(),
+    )?;
+    assert!(
+        file_svg.contains("Jnx"),
+        "file default time-format locale was not applied; SVG:\n{file_svg}"
+    );
+
+    Ok(())
+}
+
 #[rustfmt::skip]
 mod test_vl2vg {
     use std::fs;

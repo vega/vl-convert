@@ -10440,6 +10440,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shellexpand",
+ "signal-hook",
  "tempfile",
  "tokio",
  "tracing",

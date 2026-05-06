@@ -2,7 +2,7 @@
 //!
 //! Each test spawns the actual `vl-convert` binary via `assert_cmd`
 //! and exercises the serve subcommand's CLI + lifecycle contracts:
-//! `--ready-json` stdout schema, UDS cleanup on signal, stdin-EOF
+//! `--ready-json` stdout schema, UDS cleanup on SIGTERM and stdin EOF,
 //! parent-death, bind-failure producing no stdout, and the Windows
 //! parse-time rejection of `--unix-socket`.
 //!
@@ -13,6 +13,33 @@ use common::uds::*;
 
 #[cfg(unix)]
 use std::time::Duration;
+
+#[cfg(unix)]
+fn assert_socket_removed_after_exit(
+    sock: &std::path::Path,
+    child: &mut std::process::Child,
+    exit: std::process::ExitStatus,
+    context: &str,
+) {
+    for _ in 0..200 {
+        if !sock.exists() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    if sock.exists() {
+        use std::io::Read as _;
+        let mut stderr_buf = String::new();
+        if let Some(mut s) = child.stderr.take() {
+            let _ = s.read_to_string(&mut stderr_buf);
+        }
+        panic!(
+            "{context}: socket file still at {} after exit (status {:?}); server stderr:\n{stderr_buf}",
+            sock.display(),
+            exit
+        );
+    }
+}
 
 #[cfg(unix)]
 #[test]
@@ -79,7 +106,31 @@ fn test_ready_json_parseable() {
 
 #[cfg(unix)]
 #[test]
-fn test_cleanup_on_clean_exit() {
+fn test_cleanup_on_sigterm() {
+    let tmp = tempfile::tempdir().unwrap();
+    let sock = tmp.path().join("m.sock");
+
+    let mut child = spawn_serve_piped(&[
+        "--unix-socket",
+        sock.to_str().unwrap(),
+        "--ready-json",
+        "--drain-timeout-secs",
+        "2",
+        "--exit-on-parent-close=false",
+    ]);
+    let _ = read_ready_json(&mut child);
+    assert!(sock.exists(), "socket must exist while server is running");
+
+    send_sigterm(&child);
+    let exit = wait_with_timeout(&mut child, Duration::from_secs(10))
+        .expect("server did not exit within 10s after SIGTERM");
+
+    assert_socket_removed_after_exit(&sock, &mut child, exit, "SIGTERM cleanup");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_auto_parent_death_stdin_eof_for_uds() {
     let tmp = tempfile::tempdir().unwrap();
     let sock = tmp.path().join("m.sock");
 
@@ -91,43 +142,21 @@ fn test_cleanup_on_clean_exit() {
         "2",
     ]);
     let _ = read_ready_json(&mut child);
-    assert!(sock.exists(), "socket must exist while server is running");
+    assert!(sock.exists());
 
-    // Close stdin so the auto-enabled parent-close watcher takes the
-    // "first-read EOF + not explicit" branch and disables itself.
-    // That leaves SIGTERM as the only active shutdown trigger, which
-    // is the path this test exercises.
+    // In UDS mode, the parent-close watcher is auto-enabled. Dropping
+    // the piped stdin handle produces first-read EOF and must shut down.
     drop(child.stdin.take());
 
-    send_sigterm(&child);
     let exit = wait_with_timeout(&mut child, Duration::from_secs(10))
-        .expect("server did not exit within 10s after SIGTERM");
+        .expect("child should have exited within 10s of auto stdin EOF");
 
-    // Drop runs synchronously, but give macOS's stat cache a moment
-    // to surface the unlink.
-    for _ in 0..200 {
-        if !sock.exists() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    if sock.exists() {
-        use std::io::Read as _;
-        let mut stderr_buf = String::new();
-        if let Some(mut s) = child.stderr.take() {
-            let _ = s.read_to_string(&mut stderr_buf);
-        }
-        panic!(
-            "socket file still at {} after exit (status {:?}); server stderr:\n{stderr_buf}",
-            sock.display(),
-            exit
-        );
-    }
+    assert_socket_removed_after_exit(&sock, &mut child, exit, "auto stdin-EOF cleanup");
 }
 
 #[cfg(unix)]
 #[test]
-fn test_parent_death_stdin_eof() {
+fn test_explicit_parent_death_stdin_eof() {
     let tmp = tempfile::tempdir().unwrap();
     let sock = tmp.path().join("m.sock");
 
@@ -145,20 +174,8 @@ fn test_parent_death_stdin_eof() {
 
     let exit = wait_with_timeout(&mut child, Duration::from_secs(10))
         .expect("child should have exited within 10s of stdin EOF");
-    let _ = exit;
 
-    // Allow filesystem stat cache a moment to settle (matches the
-    // SIGTERM cleanup test).
-    for _ in 0..200 {
-        if !sock.exists() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    assert!(
-        !sock.exists(),
-        "socket must be unlinked after stdin-EOF-triggered shutdown"
-    );
+    assert_socket_removed_after_exit(&sock, &mut child, exit, "explicit stdin-EOF cleanup");
 }
 
 #[cfg(unix)]

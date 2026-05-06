@@ -629,6 +629,42 @@ fn emit_ready_json_if_enabled(
     Ok(())
 }
 
+#[cfg(unix)]
+fn spawn_signal_forwarder(
+    tx: tokio::sync::mpsc::Sender<&'static str>,
+) -> Result<(), anyhow::Error> {
+    use signal_hook::consts::signal::{SIGINT, SIGTERM};
+    use signal_hook::iterator::Signals;
+
+    let mut signals = Signals::new([SIGINT, SIGTERM])
+        .map_err(|e| anyhow::anyhow!("failed to install signal handlers: {e}"))?;
+    std::thread::Builder::new()
+        .name("vl-convert-signal-forwarder".to_string())
+        .spawn(move || {
+            if let Some(signal) = signals.forever().next() {
+                let reason = match signal {
+                    SIGINT => "SIGINT",
+                    SIGTERM => "SIGTERM",
+                    _ => "signal",
+                };
+                let _ = tx.blocking_send(reason);
+            }
+        })
+        .map_err(|e| anyhow::anyhow!("failed to spawn signal forwarder: {e}"))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn spawn_signal_forwarder(
+    tx: tokio::sync::mpsc::Sender<&'static str>,
+) -> Result<(), anyhow::Error> {
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        let _ = tx.send("Ctrl-C").await;
+    });
+    Ok(())
+}
+
 /// Watch inherited stdin for EOF. Returns `Some(reason)` when the
 /// parent closes stdin (cleanly or by dying), signaling the caller to
 /// trigger graceful shutdown. Returns `None` to silently disable the
@@ -711,7 +747,7 @@ fn stdin_is_pipe_or_socket() -> bool {
 ///
 /// 1. Apply per-request converter gates onto `base_config`.
 /// 2. Apply the optional `--workers` override.
-/// 3. Install SIGTERM handling before spawning tasks.
+/// 3. Install SIGINT/SIGTERM handling before spawning runtime tasks.
 /// 4. Build and warm the server before binding the main listener.
 /// 5. Bind the main listener.
 /// 6. Security advisories on stderr.
@@ -751,14 +787,6 @@ pub(crate) async fn run_serve(
             NonZeroU64::new(n_u64).expect("NonZeroUsize.get() is always >= 1");
     }
 
-    // Must be installed before any `tokio::spawn`; `signal()`
-    // registers the kernel handler synchronously, and deferring it
-    // leaves early SIGTERMs with the default disposition.
-    #[cfg(unix)]
-    let mut sigterm_recv =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .map_err(|e| anyhow::anyhow!("failed to install SIGTERM handler: {e}"))?;
-
     let mut serve_config: ServeConfig = (&args).into();
     serve_config.log_format = cli.log_format;
 
@@ -777,6 +805,17 @@ pub(crate) async fn run_serve(
 
     eprintln!("Listening on {endpoint}");
     log::info!("Listening on {endpoint}");
+
+    // Shared shutdown channel. Up to three producers can fire it
+    // (SIGINT, SIGTERM on Unix, stdin-EOF watcher); one consumer
+    // (the aggregator below).
+    let (shutdown_trigger_tx, mut shutdown_trigger_rx) =
+        tokio::sync::mpsc::channel::<&'static str>(4);
+
+    // Signal producer: forward OS signals into the same shutdown channel
+    // used by stdin EOF. Install before ready JSON so parent processes can
+    // signal immediately after readiness without losing cleanup.
+    spawn_signal_forwarder(shutdown_trigger_tx.clone())?;
 
     // Must fire before any subsequent await that could cancel, so a
     // parent blocked on `read_line()` unblocks promptly.
@@ -801,32 +840,6 @@ pub(crate) async fn run_serve(
         Some(v) => v,
         None => main_is_uds || admin_is_uds,
     };
-
-    // Shared shutdown channel. Up to three producers can fire it
-    // (SIGINT, SIGTERM on Unix, stdin-EOF watcher); one consumer
-    // (the aggregator below).
-    let (shutdown_trigger_tx, mut shutdown_trigger_rx) =
-        tokio::sync::mpsc::channel::<&'static str>(4);
-
-    // Signal task: select between Ctrl-C and SIGTERM (Unix only).
-    {
-        let tx = shutdown_trigger_tx.clone();
-        tokio::spawn(async move {
-            let ctrl_c = tokio::signal::ctrl_c();
-            #[cfg(unix)]
-            {
-                tokio::select! {
-                    _ = ctrl_c => { let _ = tx.send("SIGINT").await; }
-                    _ = sigterm_recv.recv() => { let _ = tx.send("SIGTERM").await; }
-                }
-            }
-            #[cfg(not(unix))]
-            {
-                let _ = ctrl_c.await;
-                let _ = tx.send("Ctrl-C").await;
-            }
-        });
-    }
 
     // Stdin-EOF watcher (conditional).
     if watcher_enabled {
