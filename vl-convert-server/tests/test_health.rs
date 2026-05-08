@@ -4,8 +4,9 @@ use common::*;
 use serde_json::Value;
 
 #[tokio::test]
-async fn test_healthz() {
+async fn test_health_endpoints() {
     let server = &*DEFAULT_SERVER;
+
     let resp = server
         .client
         .get(format!("{}/healthz", server.base_url))
@@ -15,11 +16,7 @@ async fn test_healthz() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["status"], "ok");
-}
 
-#[tokio::test]
-async fn test_readyz() {
-    let server = &*DEFAULT_SERVER;
     let resp = server
         .client
         .get(format!("{}/readyz", server.base_url))
@@ -29,11 +26,7 @@ async fn test_readyz() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["status"], "ready");
-}
 
-#[tokio::test]
-async fn test_infoz() {
-    let server = &*DEFAULT_SERVER;
     let resp = server
         .client
         .get(format!("{}/infoz", server.base_url))
@@ -91,12 +84,13 @@ async fn test_infoz_surface_unchanged() {
 
 /// `/readyz` must return 503 while an admin reconfig is draining/rebuilding.
 /// The test opens a main-listener TCP server with an admin listener, starts a
-/// slow conversion to keep the in-flight count above zero, fires a rebuild
-/// PATCH, and probes `/readyz` during the drain.
+/// request whose body is deliberately held open, fires a rebuild PATCH, and
+/// probes `/readyz` during the drain.
 #[tokio::test]
 async fn test_readyz_503_during_reconfig_in_progress() {
     use serde_json::json;
     use std::time::Duration;
+    use tokio::io::AsyncWriteExt;
 
     let mut serve_config = default_serve_config();
     serve_config.reconfig_drain_timeout_secs = 10;
@@ -105,33 +99,25 @@ async fn test_readyz_503_during_reconfig_in_progress() {
     let main_url = server.handle.base_url.clone();
     let admin_url = server.admin_base_url.clone();
 
-    // In-flight slow conversion keeps inflight > 0 so drain waits.
-    let slow_values: Vec<Value> = (0..5000)
-        .map(|i| json!({"x": i as f64 * 0.01, "y": (i as f64).sin()}))
-        .collect();
-    let slow_spec = json!({
-        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-        "data": {"values": slow_values},
-        "transform": [
-            {"calculate": "datum.y * datum.x", "as": "prod"},
-            {"bin": true, "field": "x", "as": "bin_x"}
-        ],
-        "mark": "bar",
-        "encoding": {
-            "x": {"field": "bin_x", "type": "quantitative"},
-            "y": {"aggregate": "mean", "field": "prod", "type": "quantitative"}
-        }
-    });
-
-    let main_slow = main_url.clone();
-    let slow_task = tokio::spawn(async move {
-        reqwest::Client::new()
-            .post(format!("{main_slow}/vegalite/svg"))
-            .json(&json!({"spec": slow_spec}))
-            .send()
-            .await
-    });
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    let main_addr = main_url
+        .strip_prefix("http://")
+        .expect("test server must use http URL");
+    let mut held_body = tokio::net::TcpStream::connect(main_addr)
+        .await
+        .expect("connect held request");
+    held_body
+        .write_all(
+            b"POST /vegalite/svg HTTP/1.1\r\n\
+              Host: localhost\r\n\
+              Content-Type: application/json\r\n\
+              Content-Length: 1000000\r\n\
+              \r\n\
+              {\"spec\":",
+        )
+        .await
+        .expect("write held request headers");
+    held_body.flush().await.expect("flush held request");
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Fire the PATCH.
     let admin_patch = admin_url.clone();
@@ -143,22 +129,27 @@ async fn test_readyz_503_during_reconfig_in_progress() {
             .await
     });
 
-    // Probe `/readyz` during the drain, while the slow request still holds an
-    // in-flight guard.
-    tokio::time::sleep(Duration::from_millis(20)).await;
-    let probe = reqwest::Client::new()
-        .get(format!("{main_url}/readyz"))
-        .send()
-        .await
-        .expect("readyz probe failed at transport layer");
-    let probe_status = probe.status();
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let mut saw_reconfiguring = false;
+    while std::time::Instant::now() < deadline {
+        let probe = reqwest::Client::new()
+            .get(format!("{main_url}/readyz"))
+            .send()
+            .await
+            .expect("readyz probe failed at transport layer");
+        if probe.status() == 503 {
+            saw_reconfiguring = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
 
-    let _ = tokio::time::timeout(Duration::from_secs(30), slow_task).await;
+    drop(held_body);
     let _ = tokio::time::timeout(Duration::from_secs(30), patch_task).await;
 
-    assert_eq!(
-        probe_status, 503,
-        "/readyz during reconfig drain must return 503; got {probe_status}"
+    assert!(
+        saw_reconfiguring,
+        "/readyz must return 503 while reconfig waits for an admitted request to finish"
     );
 
     // After the patch completes, /readyz should return 200 again.

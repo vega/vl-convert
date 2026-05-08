@@ -3,7 +3,7 @@ mod common;
 use common::*;
 
 #[tokio::test]
-async fn test_openapi_json() {
+async fn test_public_docs_available() {
     let server = &*DEFAULT_SERVER;
     let resp = server
         .client
@@ -18,11 +18,7 @@ async fn test_openapi_json() {
         "expected openapi version field"
     );
     assert!(body["paths"].is_object(), "expected paths object");
-}
 
-#[tokio::test]
-async fn test_swagger_ui() {
-    let server = &*DEFAULT_SERVER;
     let resp = server
         .client
         .get(format!("{}/docs/", server.base_url))

@@ -19,33 +19,20 @@ async fn test_auth_healthz_no_key_needed() {
 }
 
 #[tokio::test]
-async fn test_auth_api_rejected_without_key() {
+async fn test_auth_api_rejected_without_valid_key() {
     let server = &*AUTH_SERVER;
-    let resp = server
-        .client
-        .get(format!("{}/themes", server.base_url))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), 401, "expected 401 without API key");
-    let www_auth = resp.headers().get("www-authenticate");
-    assert!(
-        www_auth.is_some(),
-        "expected WWW-Authenticate header on 401"
-    );
-}
-
-#[tokio::test]
-async fn test_auth_api_rejected_wrong_key() {
-    let server = &*AUTH_SERVER;
-    let resp = server
-        .client
-        .get(format!("{}/themes", server.base_url))
-        .header("authorization", "Bearer wrong-key")
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(resp.status(), 401, "expected 401 with wrong API key");
+    for auth_header in [None, Some("Bearer wrong-key")] {
+        let mut req = server.client.get(format!("{}/themes", server.base_url));
+        if let Some(auth_header) = auth_header {
+            req = req.header("authorization", auth_header);
+        }
+        let resp = req.send().await.unwrap();
+        assert_eq!(resp.status(), 401, "auth_header={auth_header:?}");
+        assert!(
+            resp.headers().get("www-authenticate").is_some(),
+            "expected WWW-Authenticate header on 401; auth_header={auth_header:?}"
+        );
+    }
 }
 
 #[tokio::test]

@@ -539,6 +539,26 @@ mod tests {
     }
 
     #[test]
+    fn test_per_ip_buckets_are_independent() {
+        let tracker = BudgetTracker::new(10, 0, 10);
+        let ip_a: IpAddr = "203.0.113.10".parse().unwrap();
+        let ip_b: IpAddr = "203.0.113.11".parse().unwrap();
+
+        let reservation_a = tracker.reserve(Some(ip_a)).unwrap();
+        assert!(
+            matches!(tracker.reserve(Some(ip_a)), Err(BudgetExhausted::PerIp)),
+            "same IP should be rejected while its full reservation is live"
+        );
+
+        let reservation_b = tracker.reserve(Some(ip_b)).unwrap();
+        assert_eq!(tracker.ip_remaining_ms(ip_a), Some(0));
+        assert_eq!(tracker.ip_remaining_ms(ip_b), Some(0));
+
+        drop(reservation_a);
+        drop(reservation_b);
+    }
+
+    #[test]
     fn test_global_refill_exact_for_low_budget() {
         let tracker = BudgetTracker::new(0, 1, 1);
         tracker.global_remaining.store(0, Ordering::Release);

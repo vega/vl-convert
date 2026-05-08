@@ -11,6 +11,8 @@ use common::*;
 use serde_json::{json, Value};
 use vl_convert_rs::converter::VlcConfig;
 
+static SYSTEM_FONT_CONFIG_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn default_admin_server() -> BudgetServer {
     start_admin_config_server(VlcConfig::default(), default_serve_config())
 }
@@ -454,6 +456,7 @@ fn dirs_from_get(value: &Value) -> Vec<String> {
 
 #[tokio::test]
 async fn test_admin_config_font_dir_post_register_and_get() {
+    let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let tmp = tempfile::tempdir().unwrap();
     let server = default_admin_server();
 
@@ -470,6 +473,7 @@ async fn test_admin_config_font_dir_post_register_and_get() {
 
 #[tokio::test]
 async fn test_admin_config_font_dir_put_replaces() {
+    let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     // PUT replaces the global registry wholesale.
     let tmp_a = tempfile::tempdir().unwrap();
     let tmp_b = tempfile::tempdir().unwrap();
@@ -492,6 +496,7 @@ async fn test_admin_config_font_dir_put_replaces() {
 
 #[tokio::test]
 async fn test_admin_config_font_dir_put_clears_with_empty_list() {
+    let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let tmp = tempfile::tempdir().unwrap();
     let server = default_admin_server();
     let path = tmp.path().to_string_lossy().to_string();
@@ -509,6 +514,7 @@ async fn test_admin_config_font_dir_put_clears_with_empty_list() {
 
 #[tokio::test]
 async fn test_admin_config_font_dir_post_idempotent() {
+    let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let tmp = tempfile::tempdir().unwrap();
     let server = default_admin_server();
     let path = tmp.path().to_string_lossy().to_string();
@@ -532,6 +538,7 @@ async fn test_admin_config_font_dir_post_idempotent() {
 
 #[tokio::test]
 async fn test_admin_config_font_dir_nonexistent_400() {
+    let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let server = default_admin_server();
     let bogus = "/this/path/does/not/exist/vlc/font_directories";
     let (status, _) = post_font_dir(&server, json!({"path": bogus})).await;
@@ -542,6 +549,7 @@ async fn test_admin_config_font_dir_nonexistent_400() {
 
 #[tokio::test]
 async fn test_admin_config_cache_size_get_returns_resolved_cap() {
+    let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let server = default_admin_server();
     let (status, body) = get_font_cache_size(&server).await;
     assert_eq!(status, 200);
@@ -553,6 +561,7 @@ async fn test_admin_config_cache_size_get_returns_resolved_cap() {
 
 #[tokio::test]
 async fn test_admin_config_cache_size_put_sets_and_get_reflects() {
+    let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let server = default_admin_server();
 
     let (status, body) = put_font_cache_size(&server, json!({"max_size_mb": 64})).await;
@@ -565,6 +574,7 @@ async fn test_admin_config_cache_size_put_sets_and_get_reflects() {
 
 #[tokio::test]
 async fn test_admin_config_cache_size_put_null_resets_to_default() {
+    let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let server = default_admin_server();
 
     // Set to a small non-default value first.
@@ -581,6 +591,7 @@ async fn test_admin_config_cache_size_put_null_resets_to_default() {
 
 #[tokio::test]
 async fn test_admin_config_cache_size_put_rejects_zero() {
+    let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     // NonZeroU64 rejects 0 at parse time.
     let server = default_admin_server();
     let (status, _) = put_font_cache_size(&server, json!({"max_size_mb": 0})).await;

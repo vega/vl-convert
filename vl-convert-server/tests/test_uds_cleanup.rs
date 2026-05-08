@@ -2,11 +2,8 @@
 //! Socket-file lifecycle: probe-then-unlink on bind, Drop-based unlink on
 //! clean shutdown, live-socket refusal, and preservation of non-socket files.
 
-mod common;
-
-use common::*;
 use std::os::unix::fs::PermissionsExt;
-use vl_convert_server::{BoundListener, ListenAddr, ServeConfig};
+use vl_convert_server::{BoundListener, ListenAddr};
 
 #[tokio::test]
 async fn test_stale_socket_probe_and_unlink() {
@@ -102,25 +99,6 @@ async fn test_live_socket_refuses_replacement() {
 }
 
 #[tokio::test]
-async fn test_shutdown_removes_socket_file() {
-    // Start a server, verify socket exists, drop the server (via
-    // tempdir + implicit thread exit), verify socket gone.
-    let server = start_uds_server_sync(default_serve_config(), "cleanup.sock", None);
-    let sock_path = std::path::PathBuf::from(server.base_url.strip_prefix("unix://").unwrap());
-    assert!(sock_path.exists(), "socket should be bound");
-
-    // Dropping the tempdir-owned harness tears down the UDS server and socket
-    // file.
-    let tmp = server._tempdir.expect("UDS server must own a tempdir");
-    drop(tmp);
-    // After tempdir drops, everything under it is gone.
-    assert!(
-        !sock_path.exists(),
-        "socket file should be unlinked after tempdir drops"
-    );
-}
-
-#[tokio::test]
 async fn test_non_socket_file_not_unlinked() {
     // Regular files at the target path are preserved.
     let tmp = tempfile::tempdir().unwrap();
@@ -142,7 +120,4 @@ async fn test_non_socket_file_not_unlinked() {
         "important data, do not delete",
         "file contents must be untouched"
     );
-
-    // Cleanup helper for ServeConfig unused-warning.
-    let _ = ServeConfig::default();
 }

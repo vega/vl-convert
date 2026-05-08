@@ -361,23 +361,6 @@ mod tests {
         assert!(!path.exists(), "UdsCleanup::Drop should have unlinked");
     }
 
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn uds_cleanup_is_one_shot() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("t.sock");
-        std::fs::write(&path, b"stand-in").unwrap();
-        let guard = UdsCleanup::new(path.clone());
-        drop(guard);
-        assert!(!path.exists());
-        // A second guard should still unlink its own path.
-        let path2 = dir.path().join("u.sock");
-        std::fs::write(&path2, b"stand-in").unwrap();
-        let guard2 = UdsCleanup::new(path2.clone());
-        drop(guard2);
-        assert!(!path2.exists());
-    }
-
     /// Once shutdown is signaled, `serve_uds` must drop its listener
     /// before awaiting the drain; otherwise a client arriving while
     /// a slow handler is still in flight can `connect(2)` successfully
