@@ -34,22 +34,15 @@ use crate::{
 ))]
 struct ApiDoc;
 
-pub(crate) fn build_router(
-    state: Arc<AppState>,
-    tracker: Option<Arc<budget::BudgetTracker>>,
-    opaque_errors: bool,
-    trust_proxy: bool,
-) -> Router {
-    // Health endpoints are registered in the OpenAPI spec and bypass
-    // auth/budget middleware.
-    let (health_router, health_api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+fn health_openapi_router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(health::healthz))
         .routes(routes!(health::readyz))
         .routes(routes!(health::infoz))
-        .split_for_parts();
+}
 
-    // API routes with OpenAPI documentation.
-    let (api_router, mut api) = OpenApiRouter::new()
+fn api_openapi_router() -> OpenApiRouter<Arc<AppState>> {
+    OpenApiRouter::new()
         .routes(routes!(themes::list_themes))
         .routes(routes!(themes::get_theme))
         .routes(routes!(vegalite::vegalite_to_vega))
@@ -74,12 +67,38 @@ pub(crate) fn build_router(
         .routes(routes!(svg::svg_to_pdf))
         .routes(routes!(bundling::bundle))
         .routes(routes!(bundling::bundle_snippet))
-        .split_for_parts();
+}
 
-    // Merge health endpoint paths into the API OpenAPI spec.
+fn merge_health_paths(api: &mut utoipa::openapi::OpenApi, health_api: utoipa::openapi::OpenApi) {
     for (path, item) in health_api.paths.paths {
         api.paths.paths.insert(path, item);
     }
+}
+
+/// OpenAPI document for the public server surface served at
+/// `/api-doc/openapi.json`.
+pub fn public_openapi() -> utoipa::openapi::OpenApi {
+    let (_, health_api) = health_openapi_router().split_for_parts();
+    let (_, mut api) = api_openapi_router().split_for_parts();
+    merge_health_paths(&mut api, health_api);
+    api
+}
+
+pub(crate) fn build_router(
+    state: Arc<AppState>,
+    tracker: Option<Arc<budget::BudgetTracker>>,
+    opaque_errors: bool,
+    trust_proxy: bool,
+) -> Router {
+    // Health endpoints are registered in the OpenAPI spec and bypass
+    // auth/budget middleware.
+    let (health_router, health_api) = health_openapi_router().split_for_parts();
+
+    // API routes with OpenAPI documentation.
+    let (api_router, mut api) = api_openapi_router().split_for_parts();
+
+    // Merge health endpoint paths into the API OpenAPI spec.
+    merge_health_paths(&mut api, health_api);
 
     // Serve Swagger UI and the OpenAPI spec.
     let mut api_router =

@@ -20,12 +20,14 @@ mod vegalite;
 #[cfg(test)]
 mod test_support;
 
+pub use admin::admin_openapi;
 pub use config::{init_tracing, BuiltApp, LogFormat, ServeConfig};
 pub(crate) use config::{validate_serve_config, AdminConfig, ApiKey, AppState, RuntimeSnapshot};
 pub use listen::ListenAddr;
 #[cfg(unix)]
 pub use listener::UdsCleanup;
 pub use listener::{bind_listener, BoundListener, EndpointInfo};
+pub use router::public_openapi;
 pub(crate) use router::{build_middleware_stack, build_router};
 
 use std::future::Future;

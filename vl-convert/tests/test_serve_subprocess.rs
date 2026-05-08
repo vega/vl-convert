@@ -41,6 +41,98 @@ fn assert_socket_removed_after_exit(
     }
 }
 
+#[test]
+fn test_dump_public_openapi_stdout_and_exits() {
+    use assert_cmd::prelude::*;
+    use std::process::Command;
+
+    let out = Command::cargo_bin("vl-convert")
+        .unwrap()
+        .args([
+            "--vlc-config",
+            "/definitely/not/a/vlc-config.json",
+            "serve",
+            "--dump-openapi",
+        ])
+        .output()
+        .expect("failed to run `vl-convert serve --dump-openapi`");
+
+    assert!(
+        out.status.success(),
+        "dump should exit successfully without loading --vlc-config; stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).is_empty(),
+        "dump should not start the server or log to stderr"
+    );
+
+    let body: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("stdout must be OpenAPI JSON");
+    assert!(
+        body["openapi"].is_string(),
+        "expected openapi version field"
+    );
+    let paths = body["paths"].as_object().expect("paths must be an object");
+    for path in ["/healthz", "/vegalite/svg", "/bundling/bundle"] {
+        assert!(
+            paths.contains_key(path),
+            "public spec missing expected path {path}; got keys: {:?}",
+            paths.keys().collect::<Vec<_>>()
+        );
+    }
+    assert!(
+        paths.keys().all(|path| !path.starts_with("/admin")),
+        "public spec must not include admin paths"
+    );
+}
+
+#[test]
+fn test_dump_admin_openapi_stdout_and_exits() {
+    use assert_cmd::prelude::*;
+    use std::process::Command;
+
+    let out = Command::cargo_bin("vl-convert")
+        .unwrap()
+        .args(["serve", "--dump-openapi=admin"])
+        .output()
+        .expect("failed to run `vl-convert serve --dump-openapi=admin`");
+
+    assert!(
+        out.status.success(),
+        "admin dump should exit successfully; stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).is_empty(),
+        "dump should not start the server or log to stderr"
+    );
+
+    let body: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("stdout must be OpenAPI JSON");
+    assert!(
+        body["openapi"].is_string(),
+        "expected openapi version field"
+    );
+    let paths = body["paths"].as_object().expect("paths must be an object");
+    for path in [
+        "/admin/budget",
+        "/admin/config",
+        "/admin/config/fonts/directories",
+        "/admin/config/fonts/cache_size",
+    ] {
+        assert!(
+            paths.contains_key(path),
+            "admin spec missing expected path {path}; got keys: {:?}",
+            paths.keys().collect::<Vec<_>>()
+        );
+    }
+    assert!(
+        paths.keys().all(|path| !path.starts_with("/vegalite")),
+        "admin spec must not include public conversion paths"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn test_ready_json_parseable() {

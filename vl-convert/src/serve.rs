@@ -12,7 +12,7 @@ use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use clap::{ArgGroup, Args};
+use clap::{ArgGroup, Args, ValueEnum};
 use vl_convert_rs::anyhow::{self};
 use vl_convert_rs::converter::VlcConfig;
 use vl_convert_server::{
@@ -22,6 +22,13 @@ use vl_convert_server::{
 
 use crate::cli_types::Cli;
 use crate::io_utils::parse_boolish_arg;
+
+/// Server OpenAPI surface to print for `--dump-openapi`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub(crate) enum OpenApiSurface {
+    Public,
+    Admin,
+}
 
 /// Rejection message emitted by [`parse_socket_path_arg`] on Windows.
 #[cfg(windows)]
@@ -207,6 +214,18 @@ pub(crate) struct ServeArgs {
     #[arg(long, value_name = "KEY", env = "VLC_ADMIN_API_KEY")]
     pub(crate) admin_api_key: Option<String>,
 
+    /// Print an OpenAPI JSON document to stdout and exit. Defaults to
+    /// the public API; pass `--dump-openapi=admin` for the admin API.
+    #[arg(
+        long,
+        value_name = "SPEC",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "public",
+        value_enum,
+    )]
+    pub(crate) dump_openapi: Option<OpenApiSurface>,
+
     /// API key for Bearer-token authentication on the main listener.
     #[arg(long, value_name = "KEY", env = "VLC_API_KEY")]
     pub(crate) api_key: Option<String>,
@@ -362,6 +381,24 @@ pub(crate) struct ServeArgs {
         value_delimiter = ';'
     )]
     pub(crate) per_request_plugin_import_domains: Vec<String>,
+}
+
+impl ServeArgs {
+    pub(crate) fn openapi_dump_surface(&self) -> Option<OpenApiSurface> {
+        self.dump_openapi
+    }
+}
+
+pub(crate) fn dump_openapi(surface: OpenApiSurface) -> anyhow::Result<()> {
+    let spec = match surface {
+        OpenApiSurface::Public => vl_convert_server::public_openapi(),
+        OpenApiSurface::Admin => vl_convert_server::admin_openapi(),
+    };
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    serde_json::to_writer_pretty(&mut handle, &spec)?;
+    writeln!(handle)?;
+    Ok(())
 }
 
 /// Build a [`ServeConfig`] from parsed CLI args.
@@ -764,6 +801,10 @@ pub(crate) async fn run_serve(
     mut base_config: VlcConfig,
     args: ServeArgs,
 ) -> anyhow::Result<()> {
+    if let Some(surface) = args.openapi_dump_surface() {
+        return dump_openapi(surface);
+    }
+
     // Per-request gates only apply in serve mode, so they are injected here.
     if let Some(v) = args.allow_google_fonts {
         base_config.allow_google_fonts = v;
@@ -908,6 +949,7 @@ mod tests {
             admin_port: None,
             admin_unix_socket: None,
             admin_api_key: None,
+            dump_openapi: None,
             api_key: None,
             workers: None,
             max_concurrent_requests: None,

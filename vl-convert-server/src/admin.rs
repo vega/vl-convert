@@ -67,8 +67,8 @@ pub(crate) struct AdminState {
     pub opaque_errors: bool,
 }
 
-pub(crate) fn admin_router(admin_state: Arc<AdminState>) -> Router {
-    let (admin_routes, admin_api) = OpenApiRouter::with_openapi(AdminApiDoc::openapi())
+fn admin_openapi_router() -> OpenApiRouter<Arc<AdminState>> {
+    OpenApiRouter::with_openapi(AdminApiDoc::openapi())
         .routes(routes!(get_budget))
         .routes(routes!(update_budget))
         .routes(routes!(get_config))
@@ -80,7 +80,16 @@ pub(crate) fn admin_router(admin_state: Arc<AdminState>) -> Router {
         .routes(routes!(post_font_dir))
         .routes(routes!(get_font_cache_size))
         .routes(routes!(put_font_cache_size))
-        .split_for_parts();
+}
+
+/// OpenAPI document for the admin server surface served at
+/// `/admin/api-doc/openapi.json`.
+pub fn admin_openapi() -> utoipa::openapi::OpenApi {
+    admin_openapi_router().into_openapi()
+}
+
+pub(crate) fn admin_router(admin_state: Arc<AdminState>) -> Router {
+    let (admin_routes, admin_api) = admin_openapi_router().split_for_parts();
 
     admin_routes
         // Serve admin docs separately from the public API docs.

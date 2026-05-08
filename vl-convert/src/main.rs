@@ -43,6 +43,12 @@ async fn main() -> Result<(), anyhow::Error> {
         return Ok(());
     }
 
+    if let Commands::Serve(args) = &cli.command {
+        if let Some(surface) = args.openapi_dump_surface() {
+            return serve::dump_openapi(surface);
+        }
+    }
+
     let google_font_families = cli.google_font.clone();
     let plugin_import_domains = flatten_plugin_domains(&cli.plugin_import_domains);
     let vega_plugins = if cli.vega_plugin.is_empty() {
