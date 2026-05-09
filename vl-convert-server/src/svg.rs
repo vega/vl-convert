@@ -8,7 +8,9 @@ use vl_convert_rs::converter::{JpegOpts, PdfOpts, PngOpts};
 
 use crate::config::AppState;
 use crate::types::{ErrorResponse, SvgJpegRequest, SvgPdfRequest, SvgPngRequest};
-use crate::util::{append_vlc_logs_header, error_response, format_log_entries};
+use crate::util::{
+    append_vlc_logs_header, attach_google_font_stats, conversion_error_response, format_log_entries,
+};
 
 #[utoipa::path(
     post,
@@ -35,16 +37,19 @@ pub async fn svg_to_png(
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            (
+            let mut response = (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/png")],
                 output.data,
             )
-                .into_response()
+                .into_response();
+            attach_google_font_stats(&mut response, output.font_stats);
+            response
         }
-        Err(e) => error_response(
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("SVG to PNG conversion failed: {e}"),
+            "SVG to PNG conversion failed",
+            &e,
             state.opaque_errors,
         ),
     }
@@ -75,16 +80,19 @@ pub async fn svg_to_jpeg(
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            (
+            let mut response = (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
                 output.data,
             )
-                .into_response()
+                .into_response();
+            attach_google_font_stats(&mut response, output.font_stats);
+            response
         }
-        Err(e) => error_response(
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("SVG to JPEG conversion failed: {e}"),
+            "SVG to JPEG conversion failed",
+            &e,
             state.opaque_errors,
         ),
     }
@@ -114,16 +122,19 @@ pub async fn svg_to_pdf(
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            (
+            let mut response = (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "application/pdf")],
                 output.data,
             )
-                .into_response()
+                .into_response();
+            attach_google_font_stats(&mut response, output.font_stats);
+            response
         }
-        Err(e) => error_response(
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("SVG to PDF conversion failed: {e}"),
+            "SVG to PDF conversion failed",
+            &e,
             state.opaque_errors,
         ),
     }

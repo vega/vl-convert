@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Duration;
 
 use vl_convert_google_fonts::{
-    ClientConfig, FontStyle, GoogleFontsClient, GoogleFontsError, VariantRequest,
+    ClientConfig, FontLoadRequest, FontStyle, GoogleFontsClient, GoogleFontsError, VariantRequest,
 };
 
 #[cfg(feature = "fontdb")]
@@ -19,6 +19,17 @@ const REGULAR_TTF: &[u8] =
 const BOLD_TTF: &[u8] = include_bytes!("../../vl-convert-rs/tests/fonts/matter/Matter-Bold.ttf");
 const ITALIC_TTF: &[u8] =
     include_bytes!("../../vl-convert-rs/tests/fonts/matter/Matter-RegularItalic.ttf");
+
+fn load_request<'a>(
+    family: &'a str,
+    variants: Option<&'a [VariantRequest]>,
+) -> FontLoadRequest<'a> {
+    FontLoadRequest {
+        family,
+        variants,
+        max_variants: None,
+    }
+}
 
 /// Routes for the test server: exact path matches + CSS2 family-based matches.
 struct Routes {
@@ -194,7 +205,7 @@ impl TestServer {
     /// Count all CSS2 hits for any request containing the given family name.
     fn css2_hit_count(&self, family: &str) -> usize {
         let prefix = format!("/css2?family={}:", family);
-        // Also check for is_known_font probe format: /css2?family={family}:wght@400
+        // Also check the probe-family format: /css2?family={family}:wght@400
         let probe_prefix = format!("/css2?family={}:", family.to_lowercase());
         self.hits
             .lock()
@@ -306,8 +317,11 @@ fn test_empty_variants_returns_error_blocking() {
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
-    let err = client.load_blocking("Roboto", Some(&[])).unwrap_err();
-    assert!(matches!(err, GoogleFontsError::NoVariantsRequested));
+    let err = client
+        .load_blocking(load_request("Roboto", Some(&[])))
+        .unwrap_err();
+    assert!(matches!(err.error, GoogleFontsError::NoVariantsRequested));
+    assert_eq!(err.stats.cache_misses(), 0);
 }
 
 #[test]
@@ -322,7 +336,10 @@ fn test_variant_weight_fallback_blocking() {
         style: FontStyle::Italic,
     }];
 
-    let batch = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let batch = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
 
     // Falls back to 400 italic (closest weight with matching style)
     assert_eq!(batch.loaded_variants.len(), 1);
@@ -331,12 +348,51 @@ fn test_variant_weight_fallback_blocking() {
 }
 
 #[test]
+fn test_variant_limit_failure_includes_stats_and_skips_network() {
+    let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
+    let temp = tempfile::tempdir().unwrap();
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
+
+    let requested = [
+        VariantRequest {
+            weight: 400,
+            style: FontStyle::Normal,
+        },
+        VariantRequest {
+            weight: 700,
+            style: FontStyle::Normal,
+        },
+    ];
+    let err = client
+        .load_blocking(FontLoadRequest {
+            family: "Roboto",
+            variants: Some(&requested),
+            max_variants: Some(1),
+        })
+        .unwrap_err();
+
+    assert!(matches!(
+        err.error,
+        GoogleFontsError::TooManyVariants {
+            resolved: 2,
+            max: 1
+        }
+    ));
+    assert_eq!(err.stats.resolved_variants, 2);
+    assert_eq!(err.stats.cache_misses(), 0);
+    assert_eq!(server.css2_hit_count("Roboto"), 0);
+}
+
+#[test]
 fn test_none_variants_loads_all_available() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
-    let batch = client.load_blocking("Roboto", None).unwrap();
+    let batch = client
+        .load_blocking(load_request("Roboto", None))
+        .unwrap()
+        .batch;
 
     // CSS2 returns 3 @font-face blocks: 400 normal, 700 normal, 400 italic
     // Each maps 1:1 to a TTF file (no subset dimension)
@@ -370,7 +426,10 @@ fn test_register_batch_returns_ids_and_per_source_ids() {
         style: FontStyle::Normal,
     }];
 
-    let batch = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let batch = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
 
     let mut db = fontdb::Database::new();
     let registration = db.register_google_fonts_batch(batch);
@@ -394,8 +453,14 @@ fn test_append_only_duplicate_register_returns_distinct_ids() {
         style: FontStyle::Normal,
     }];
 
-    let first_batch = client.load_blocking("Roboto", Some(&requested)).unwrap();
-    let second_batch = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let first_batch = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
+    let second_batch = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
 
     let mut db = fontdb::Database::new();
     let first = db.register_google_fonts_batch(first_batch);
@@ -422,14 +487,19 @@ async fn test_async_and_blocking_parity() {
         style: FontStyle::Normal,
     }];
 
-    let async_result = async_client.load("Roboto", Some(&requested)).await.unwrap();
+    let async_result = async_client
+        .load(load_request("Roboto", Some(&requested)))
+        .await
+        .unwrap()
+        .batch;
     let requested_vec = requested.to_vec();
     let blocking_result = tokio::task::spawn_blocking(move || {
-        blocking_client.load_blocking("Roboto", Some(&requested_vec))
+        blocking_client.load_blocking(load_request("Roboto", Some(&requested_vec)))
     })
     .await
     .unwrap()
-    .unwrap();
+    .unwrap()
+    .batch;
 
     assert_eq!(async_result.font_id, blocking_result.font_id);
     assert_eq!(
@@ -458,11 +528,17 @@ fn test_cache_hit_avoids_ttf_refetch() {
         style: FontStyle::Normal,
     }];
 
-    let _first = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let _first = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
 
     let regular_hits = server.hit_count("/s/roboto/v30/regular.ttf");
 
-    let _second = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let _second = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
 
     // TTF files should be served from cache, not re-downloaded
     assert_eq!(
@@ -478,12 +554,18 @@ fn test_css2_cached_across_loads() {
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
-    let _first = client.load_blocking("Roboto", None).unwrap();
+    let _first = client
+        .load_blocking(load_request("Roboto", None))
+        .unwrap()
+        .batch;
     let first_css2_hits = server.css2_hit_count("Roboto");
     assert_eq!(first_css2_hits, 1);
 
     // Second load should use cached CSS — no additional network request
-    let _second = client.load_blocking("Roboto", None).unwrap();
+    let _second = client
+        .load_blocking(load_request("Roboto", None))
+        .unwrap()
+        .batch;
     let second_css2_hits = server.css2_hit_count("Roboto");
     assert_eq!(
         second_css2_hits, 1,
@@ -507,13 +589,21 @@ async fn test_in_process_dedupe_same_file_concurrent_loads() {
     let client_a = Arc::clone(&client);
     let req_a = requested.clone();
     let task_a = tokio::spawn(async move {
-        client_a.load("Roboto", Some(&req_a)).await.unwrap();
+        client_a
+            .load(load_request("Roboto", Some(&req_a)))
+            .await
+            .unwrap()
+            .batch;
     });
 
     let client_b = Arc::clone(&client);
     let req_b = requested.clone();
     let task_b = tokio::spawn(async move {
-        client_b.load("Roboto", Some(&req_b)).await.unwrap();
+        client_b
+            .load(load_request("Roboto", Some(&req_b)))
+            .await
+            .unwrap()
+            .batch;
     });
 
     task_a.await.unwrap();
@@ -535,7 +625,11 @@ async fn test_parallel_download_bounded() {
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 2, u64::MAX);
 
-    let _ = client.load("Roboto", None).await.unwrap();
+    let _ = client
+        .load(load_request("Roboto", None))
+        .await
+        .unwrap()
+        .batch;
 
     let max = server.max_inflight_ttf();
     assert!(
@@ -560,7 +654,10 @@ fn test_unregister_batch_removes_faces_and_is_idempotent() {
         style: FontStyle::Normal,
     }];
 
-    let batch = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let batch = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
 
     let mut db = fontdb::Database::new();
     let registration = db.register_google_fonts_batch(batch);
@@ -579,7 +676,10 @@ fn test_unregister_batch_removes_faces_and_is_idempotent() {
 
     db.unregister_google_fonts_batch(second_unregister);
 
-    let batch = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let batch = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
     let partial = db.register_google_fonts_batch(batch);
     if let Some(first_id) = partial.face_ids().first().copied() {
         db.remove_face(first_id);
@@ -619,11 +719,17 @@ fn test_eviction_keeps_current_font() {
     let max_cache = REGULAR_TTF.len() as u64 + 16;
     let client = make_client(cache_dir, server.base_url(), 8, max_cache);
 
-    let _ = client.load_blocking("Roboto", None).unwrap();
+    let _ = client
+        .load_blocking(load_request("Roboto", None))
+        .unwrap()
+        .batch;
 
     thread::sleep(Duration::from_millis(20));
 
-    let _ = client.load_blocking("Lato", None).unwrap();
+    let _ = client
+        .load_blocking(load_request("Lato", None))
+        .unwrap()
+        .batch;
 
     let roboto_hits = server.hit_count("/s/roboto/v30/r400.ttf");
     let lato_hits = server.hit_count("/s/lato/v30/l400.ttf");
@@ -631,11 +737,17 @@ fn test_eviction_keeps_current_font() {
     assert_eq!(lato_hits, 1);
 
     // Current font files should be exempt from eviction.
-    let _ = client.load_blocking("Lato", None).unwrap();
+    let _ = client
+        .load_blocking(load_request("Lato", None))
+        .unwrap()
+        .batch;
     assert_eq!(server.hit_count("/s/lato/v30/l400.ttf"), lato_hits);
 
     // Earlier font should have been evicted under the tight size budget.
-    let _ = client.load_blocking("Roboto", None).unwrap();
+    let _ = client
+        .load_blocking(load_request("Roboto", None))
+        .unwrap()
+        .batch;
     assert_eq!(server.hit_count("/s/roboto/v30/r400.ttf"), roboto_hits + 1);
 
     // At least one font file should exist for the currently-loaded font.
@@ -665,7 +777,10 @@ fn test_corrupt_font_fallbacks_to_network() {
         style: FontStyle::Normal,
     }];
 
-    let _ = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let _ = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
 
     let fonts_dir = temp.path().join("fonts");
     let mut fonts: Vec<_> = std::fs::read_dir(&fonts_dir)
@@ -688,7 +803,10 @@ fn test_corrupt_font_fallbacks_to_network() {
     std::fs::create_dir_all(&corrupt_path).unwrap();
 
     let hits_before = server.hit_count("/s/roboto/v30/regular.ttf");
-    let _ = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let _ = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
     let hits_after = server.hit_count("/s/roboto/v30/regular.ttf");
 
     assert_eq!(hits_after, hits_before + 1);
@@ -705,13 +823,19 @@ fn test_no_cache_dir_always_downloads() {
         style: FontStyle::Normal,
     }];
 
-    let first = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let first = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
     assert_eq!(first.ttf_file_count, 1);
 
     let regular_hits = server.hit_count("/s/roboto/v30/regular.ttf");
 
     // Without a cache dir, every load re-downloads font files.
-    let second = client.load_blocking("Roboto", Some(&requested)).unwrap();
+    let second = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .batch;
     assert_eq!(second.ttf_file_count, 1);
     assert_eq!(
         server.hit_count("/s/roboto/v30/regular.ttf"),
@@ -720,16 +844,16 @@ fn test_no_cache_dir_always_downloads() {
 }
 
 #[tokio::test]
-async fn test_is_known_font_returns_true() {
+async fn test_probe_family_returns_true() {
     let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
-    assert!(client.is_known_font("Roboto").await.unwrap());
+    assert!(client.probe_family("Roboto").await.unwrap().known);
 }
 
 #[tokio::test]
-async fn test_is_known_font_returns_false_for_unknown() {
+async fn test_probe_family_returns_false_for_unknown() {
     let server = TestServer::new(
         |_| Routes {
             exact: HashMap::new(),
@@ -741,17 +865,17 @@ async fn test_is_known_font_returns_false_for_unknown() {
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
-    // Server returns 404 → HttpStatus 404 → is_known_font returns error (not 400)
+    // Server returns 404 → HttpStatus 404 → probe_family returns error (not 400)
     // or FontNotFound. Either way, the font is not known.
-    let result = client.is_known_font("Nonexistent").await;
+    let result = client.probe_family("Nonexistent").await;
     match result {
-        Ok(found) => assert!(!found),
-        Err(_) => {} // HTTP error for unknown font is also acceptable
+        Ok(probe) => assert!(!probe.known),
+        Err(err) => assert_eq!(err.stats.css_cache_misses, 1),
     }
 }
 
 #[tokio::test]
-async fn test_is_known_font_empty_css_response() {
+async fn test_probe_family_empty_css_response() {
     // Server returns 200 with no @font-face blocks
     let server = TestServer::new(
         |_| {
@@ -768,8 +892,9 @@ async fn test_is_known_font_empty_css_response() {
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
-    let result = client.is_known_font("EmptyFont").await.unwrap();
-    assert!(!result);
+    let result = client.probe_family("EmptyFont").await.unwrap();
+    assert!(!result.known);
+    assert_eq!(result.stats.css_cache_misses, 1);
 }
 
 #[test]
@@ -785,14 +910,17 @@ fn test_font_not_found_returns_error() {
     let temp = tempfile::tempdir().unwrap();
     let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
 
-    let err = client.load_blocking("Nonexistent", None).unwrap_err();
+    let err = client
+        .load_blocking(load_request("Nonexistent", None))
+        .unwrap_err();
     // Server returns 404 for unknown family, client interprets as error
     assert!(
         matches!(
-            err,
+            err.error,
             GoogleFontsError::FontNotFound(_) | GoogleFontsError::HttpStatus { .. }
         ),
         "Expected FontNotFound or HttpStatus error, got: {:?}",
         err
     );
+    assert_eq!(err.stats.css_cache_misses, 1);
 }

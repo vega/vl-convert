@@ -89,6 +89,7 @@ pub(crate) fn build_router(
     tracker: Option<Arc<budget::BudgetTracker>>,
     opaque_errors: bool,
     trust_proxy: bool,
+    google_font_cache_miss_penalty_ms: i64,
 ) -> Router {
     // Health endpoints are registered in the OpenAPI spec and bypass
     // auth/budget middleware.
@@ -106,15 +107,22 @@ pub(crate) fn build_router(
 
     // Optional budget tracking middleware.
     if let Some(tracker) = tracker {
-        api_router =
-            api_router.layer(axum::middleware::from_fn(
-                move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
-                    let tracker = tracker.clone();
-                    async move {
-                        budget::middleware(tracker, opaque_errors, trust_proxy, req, next).await
-                    }
-                },
-            ));
+        api_router = api_router.layer(axum::middleware::from_fn(
+            move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
+                let tracker = tracker.clone();
+                async move {
+                    budget::middleware(
+                        tracker,
+                        opaque_errors,
+                        trust_proxy,
+                        google_font_cache_miss_penalty_ms,
+                        req,
+                        next,
+                    )
+                    .await
+                }
+            },
+        ));
     }
 
     // Auth and UA middleware only on API routes; health endpoints are exempt.
@@ -182,6 +190,12 @@ fn make_span_text(req: &axum::http::Request<axum::body::Body>) -> tracing::Span 
         uri = %req.uri(),
         budget_outcome = tracing::field::Empty,
         budget_charged_ms = tracing::field::Empty,
+        budget_elapsed_ms = tracing::field::Empty,
+        budget_font_cache_miss_penalty_ms = tracing::field::Empty,
+        google_font_css_cache_misses = tracing::field::Empty,
+        google_font_file_cache_misses = tracing::field::Empty,
+        google_font_downloaded_bytes = tracing::field::Empty,
+        google_font_resolved_variants = tracing::field::Empty,
         budget_global_remaining_ms = tracing::field::Empty,
         budget_ip_remaining_ms = tracing::field::Empty,
         budget_client_ip = tracing::field::Empty,
@@ -217,6 +231,12 @@ fn make_span_json(req: &axum::http::Request<axum::body::Body>) -> tracing::Span 
         span_id = %span_id,
         budget_outcome = tracing::field::Empty,
         budget_charged_ms = tracing::field::Empty,
+        budget_elapsed_ms = tracing::field::Empty,
+        budget_font_cache_miss_penalty_ms = tracing::field::Empty,
+        google_font_css_cache_misses = tracing::field::Empty,
+        google_font_file_cache_misses = tracing::field::Empty,
+        google_font_downloaded_bytes = tracing::field::Empty,
+        google_font_resolved_variants = tracing::field::Empty,
         budget_global_remaining_ms = tracing::field::Empty,
         budget_ip_remaining_ms = tracing::field::Empty,
         budget_client_ip = tracing::field::Empty,

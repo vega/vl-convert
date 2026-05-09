@@ -4,6 +4,7 @@ use deno_core::anyhow::anyhow;
 use deno_core::error::AnyError;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use vl_convert_google_fonts::GoogleFontStats;
 
 #[derive(Debug, Clone, Default)]
 pub struct VgOpts {
@@ -266,6 +267,10 @@ pub struct LogEntry {
     pub message: String,
 }
 
+pub trait WithFontStats {
+    fn add_font_stats(&mut self, stats: GoogleFontStats);
+}
+
 /// Output from a Vega-Lite -> Vega compilation.
 #[derive(Debug)]
 pub struct VegaOutput {
@@ -278,6 +283,7 @@ pub struct VegaOutput {
 pub struct SvgOutput {
     pub svg: String,
     pub logs: Vec<LogEntry>,
+    pub font_stats: GoogleFontStats,
 }
 
 /// Output from a PNG conversion.
@@ -285,6 +291,7 @@ pub struct SvgOutput {
 pub struct PngOutput {
     pub data: Vec<u8>,
     pub logs: Vec<LogEntry>,
+    pub font_stats: GoogleFontStats,
 }
 
 /// Output from a JPEG conversion.
@@ -292,6 +299,7 @@ pub struct PngOutput {
 pub struct JpegOutput {
     pub data: Vec<u8>,
     pub logs: Vec<LogEntry>,
+    pub font_stats: GoogleFontStats,
 }
 
 /// Output from a PDF conversion.
@@ -299,6 +307,7 @@ pub struct JpegOutput {
 pub struct PdfOutput {
     pub data: Vec<u8>,
     pub logs: Vec<LogEntry>,
+    pub font_stats: GoogleFontStats,
 }
 
 /// Output from an HTML conversion.
@@ -306,6 +315,7 @@ pub struct PdfOutput {
 pub struct HtmlOutput {
     pub html: String,
     pub logs: Vec<LogEntry>,
+    pub font_stats: GoogleFontStats,
 }
 
 /// Output from a scenegraph extraction.
@@ -313,6 +323,7 @@ pub struct HtmlOutput {
 pub struct ScenegraphOutput {
     pub scenegraph: serde_json::Value,
     pub logs: Vec<LogEntry>,
+    pub font_stats: GoogleFontStats,
 }
 
 /// Output from a scenegraph msgpack extraction.
@@ -320,7 +331,30 @@ pub struct ScenegraphOutput {
 pub struct ScenegraphMsgpackOutput {
     pub data: Vec<u8>,
     pub logs: Vec<LogEntry>,
+    pub font_stats: GoogleFontStats,
 }
+
+macro_rules! impl_with_font_stats {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl WithFontStats for $ty {
+                fn add_font_stats(&mut self, stats: GoogleFontStats) {
+                    self.font_stats.add_assign(stats);
+                }
+            }
+        )+
+    };
+}
+
+impl_with_font_stats!(
+    SvgOutput,
+    PngOutput,
+    JpegOutput,
+    PdfOutput,
+    HtmlOutput,
+    ScenegraphOutput,
+    ScenegraphMsgpackOutput,
+);
 
 /// V8 memory usage for a single worker.
 #[derive(Debug, Clone)]

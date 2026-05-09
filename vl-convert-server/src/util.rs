@@ -1,7 +1,7 @@
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use vl_convert_rs::converter::{
-    FormatLocale, GoogleFontRequest, LogEntry, TimeFormatLocale, VlcConfig,
+    FormatLocale, GoogleFontRequest, GoogleFontStats, LogEntry, TimeFormatLocale, VlcConfig,
 };
 
 use crate::types::ErrorResponse;
@@ -33,6 +33,20 @@ pub(crate) fn error_response(status: StatusCode, message: &str, opaque: bool) ->
     }
 }
 
+pub(crate) fn conversion_error_response(
+    status: StatusCode,
+    context: &str,
+    error: &vl_convert_rs::anyhow::Error,
+    opaque: bool,
+) -> Response {
+    let mut response = error_response(status, &format!("{context}: {error}"), opaque);
+    attach_google_font_stats(
+        &mut response,
+        vl_convert_rs::converter::google_font_stats_from_error(error),
+    );
+    response
+}
+
 pub(crate) fn append_vlc_logs_header(headers: &mut HeaderMap, logs: &[String]) {
     let truncated: Vec<&str> = logs.iter().take(50).map(|s| s.as_str()).collect();
     let json = serde_json::to_string(&truncated).unwrap_or_else(|_| "[]".to_string());
@@ -48,6 +62,12 @@ pub(crate) fn append_vlc_logs_header(headers: &mut HeaderMap, logs: &[String]) {
         } else {
             headers.insert("x-vlc-logs", HeaderValue::from_static("[]"));
         }
+    }
+}
+
+pub(crate) fn attach_google_font_stats(response: &mut Response, stats: GoogleFontStats) {
+    if stats.cache_misses() > 0 || stats.downloaded_bytes > 0 || stats.resolved_variants > 0 {
+        response.extensions_mut().insert(stats);
     }
 }
 

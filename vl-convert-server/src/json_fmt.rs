@@ -24,9 +24,15 @@ fn remap_span_key(key: &str) -> Option<&'static str> {
         "span_id" => Some("span_id"),
         "budget_outcome" => Some("budget.outcome"),
         "budget_charged_ms" => Some("budget.charged_ms"),
+        "budget_elapsed_ms" => Some("budget.elapsed_ms"),
+        "budget_font_cache_miss_penalty_ms" => Some("budget.font_cache_miss_penalty_ms"),
         "budget_global_remaining_ms" => Some("budget.global_remaining_ms"),
         "budget_ip_remaining_ms" => Some("budget.ip_remaining_ms"),
         "budget_client_ip" => Some("budget.client_ip"),
+        "google_font_css_cache_misses" => Some("google_font.css_cache_misses"),
+        "google_font_file_cache_misses" => Some("google_font.file_cache_misses"),
+        "google_font_downloaded_bytes" => Some("google_font.downloaded_bytes"),
+        "google_font_resolved_variants" => Some("google_font.resolved_variants"),
         _ => None,
     }
 }

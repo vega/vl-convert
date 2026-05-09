@@ -227,6 +227,7 @@ pub async fn build_app(
         tracker.clone(),
         serve_config.opaque_errors,
         serve_config.trust_proxy,
+        serve_config.google_font_cache_miss_penalty_ms,
     );
     let app = build_middleware_stack(router, serve_config);
 

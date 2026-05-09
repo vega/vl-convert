@@ -6,9 +6,11 @@ use crate::text::{GOOGLE_FONTS_CLIENT, USVG_OPTIONS};
 use deno_core::anyhow::anyhow;
 use deno_core::error::AnyError;
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fmt;
 use vl_convert_google_fonts::{family_to_id, RegisteredFontBatch};
 
 use super::config::MissingFontsPolicy;
+pub use vl_convert_google_fonts::GoogleFontStats;
 use vl_convert_google_fonts::VariantRequest;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -16,6 +18,66 @@ pub struct GoogleFontRequest {
     pub family: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variants: Option<Vec<VariantRequest>>,
+}
+
+#[derive(Default)]
+pub(crate) struct FontRequestAnalysis {
+    pub(crate) requests: Vec<GoogleFontRequest>,
+    pub(crate) stats: GoogleFontStats,
+}
+
+#[derive(Default)]
+pub(crate) struct GoogleFontCatalogMatches {
+    pub(crate) matches: HashSet<String>,
+    pub(crate) stats: GoogleFontStats,
+}
+
+#[derive(Default)]
+pub(crate) struct ClassifiedFontAnalysis {
+    pub(crate) fonts: Vec<ClassifiedFont>,
+    pub(crate) stats: GoogleFontStats,
+}
+
+#[derive(Debug)]
+struct GoogleFontStatsError {
+    stats: GoogleFontStats,
+    source: AnyError,
+}
+
+impl fmt::Display for GoogleFontStatsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.source.fmt(f)
+    }
+}
+
+impl std::error::Error for GoogleFontStatsError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.source.as_ref())
+    }
+}
+
+pub(crate) fn error_with_google_font_stats(error: AnyError, stats: GoogleFontStats) -> AnyError {
+    if stats == GoogleFontStats::default() {
+        error
+    } else {
+        AnyError::new(GoogleFontStatsError {
+            stats,
+            source: error,
+        })
+    }
+}
+
+pub fn google_font_stats_from_error(error: &AnyError) -> GoogleFontStats {
+    let mut stats = GoogleFontStats::default();
+    for cause in error.chain() {
+        if let Some(err) = cause.downcast_ref::<GoogleFontStatsError>() {
+            stats.add_assign(err.stats);
+        }
+        if let Some(err) = cause.downcast_ref::<vl_convert_google_fonts::GoogleFontsFailure>() {
+            stats.add_assign(err.stats);
+        }
+    }
+    stats
 }
 
 pub(crate) struct WorkerFontState {
@@ -68,23 +130,27 @@ pub(crate) fn google_font_request_key(request: &GoogleFontRequest) -> String {
 /// even if locally available so the render uses the same face the HTML output
 /// will reference. When false (SVG/PNG/PDF path), only fonts not already in
 /// `fontdb` are requested.
-pub(crate) async fn classify_and_request_fonts(
+pub(crate) async fn classify_and_request_fonts_with_stats(
     font_strings: HashSet<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     prefer_cdn: bool,
-) -> Result<Vec<GoogleFontRequest>, AnyError> {
+) -> Result<FontRequestAnalysis, AnyError> {
     if font_strings.is_empty() {
-        return Ok(Vec::new());
+        return Ok(FontRequestAnalysis::default());
     }
 
     let available = available_font_families()?;
 
     let font_string_vec: Vec<String> = font_strings.into_iter().collect();
 
+    let mut stats = GoogleFontStats::default();
     let google_fonts_set: HashSet<String> = if auto_google_fonts {
         let candidates = auto_google_probe_candidates(&font_string_vec, &available, prefer_cdn);
-        google_font_catalog_matches(candidates.iter(), missing_fonts).await?
+        let catalog =
+            google_font_catalog_matches_with_stats(candidates.iter(), missing_fonts).await?;
+        stats.add_assign(catalog.stats);
+        catalog.matches
     } else {
         HashSet::new()
     };
@@ -120,10 +186,14 @@ pub(crate) async fn classify_and_request_fonts(
         &unavailable_details,
         auto_google_fonts,
         missing_fonts,
-    )?;
+    )
+    .map_err(|err| error_with_google_font_stats(err, stats))?;
 
     if !auto_google_fonts {
-        return Ok(Vec::new());
+        return Ok(FontRequestAnalysis {
+            requests: Vec::new(),
+            stats,
+        });
     }
 
     // Collect downloadable fonts as requests for the caller to add to VgOpts
@@ -137,24 +207,25 @@ pub(crate) async fn classify_and_request_fonts(
         }
     }
 
-    Ok(requests)
+    Ok(FontRequestAnalysis { requests, stats })
 }
 
 /// Preprocess fonts from a compiled Vega specification.
 ///
 /// Extracts font-family strings from the spec, then classifies and requests
-/// fonts via [`classify_and_request_fonts`].
-pub(crate) async fn preprocess_fonts(
+/// fonts via [`classify_and_request_fonts_with_stats`].
+pub(crate) async fn preprocess_fonts_with_stats(
     vega_spec: &serde_json::Value,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
-) -> Result<Vec<GoogleFontRequest>, AnyError> {
+) -> Result<FontRequestAnalysis, AnyError> {
     if !auto_google_fonts && missing_fonts == MissingFontsPolicy::Fallback {
-        return Ok(Vec::new());
+        return Ok(FontRequestAnalysis::default());
     }
 
     let font_strings = extract_fonts_from_vega(vega_spec);
-    classify_and_request_fonts(font_strings, auto_google_fonts, missing_fonts, false).await
+    classify_and_request_fonts_with_stats(font_strings, auto_google_fonts, missing_fonts, false)
+        .await
 }
 
 /// Return all font family names currently available in fontdb.
@@ -211,27 +282,35 @@ pub(crate) fn scenegraph_google_probe_candidates(
 /// Probe the Google Fonts API for each family and return the set that
 /// exists in the catalog. API errors are collected and reported according
 /// to `missing_fonts` policy.
-pub(crate) async fn google_font_catalog_matches<'a>(
+pub(crate) async fn google_font_catalog_matches_with_stats<'a>(
     families: impl IntoIterator<Item = &'a String>,
     missing_fonts: MissingFontsPolicy,
-) -> Result<HashSet<String>, AnyError> {
+) -> Result<GoogleFontCatalogMatches, AnyError> {
     let mut google_fonts_set: HashSet<String> = HashSet::new();
+    let mut stats = GoogleFontStats::default();
     let mut api_errors: Vec<(String, String)> = Vec::new();
 
     for family in families {
-        match GOOGLE_FONTS_CLIENT.is_known_font(family).await {
-            Ok(true) => {
-                google_fonts_set.insert(family.clone());
+        match GOOGLE_FONTS_CLIENT.probe_family(family).await {
+            Ok(probe) => {
+                stats.add_assign(probe.stats);
+                if probe.known {
+                    google_fonts_set.insert(family.clone());
+                }
             }
-            Ok(false) => {}
             Err(e) => {
+                stats.add_assign(e.stats);
                 api_errors.push((family.clone(), e.to_string()));
             }
         }
     }
 
-    report_google_catalog_errors(&api_errors, missing_fonts)?;
-    Ok(google_fonts_set)
+    report_google_catalog_errors(&api_errors, missing_fonts)
+        .map_err(|err| error_with_google_font_stats(err, stats))?;
+    Ok(GoogleFontCatalogMatches {
+        matches: google_fonts_set,
+        stats,
+    })
 }
 
 /// Report Google Fonts API errors according to `missing_fonts` policy.
@@ -330,27 +409,31 @@ pub(crate) fn classify_as_google_font(family: &str) -> Option<ClassifiedFont> {
 /// portability (CDN links work on any machine). Remaining fonts are classified
 /// as Local when `embed_local_fonts` is true and the font is available
 /// in fontdb.
-pub(crate) async fn classify_scenegraph_fonts(
+pub(crate) async fn classify_scenegraph_fonts_with_stats(
     families: &BTreeSet<String>,
     auto_google_fonts: bool,
     embed_local_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     explicit_google_families: &HashSet<String>,
-) -> Result<Vec<ClassifiedFont>, AnyError> {
+) -> Result<ClassifiedFontAnalysis, AnyError> {
     if families.is_empty()
         || (!auto_google_fonts
             && !embed_local_fonts
             && missing_fonts == MissingFontsPolicy::Fallback
             && explicit_google_families.is_empty())
     {
-        return Ok(Vec::new());
+        return Ok(ClassifiedFontAnalysis::default());
     }
 
     let available = available_font_families()?;
 
+    let mut stats = GoogleFontStats::default();
     let google_fonts_set: HashSet<String> = if auto_google_fonts {
         let candidates = scenegraph_google_probe_candidates(families, explicit_google_families);
-        google_font_catalog_matches(candidates.iter(), missing_fonts).await?
+        let catalog =
+            google_font_catalog_matches_with_stats(candidates.iter(), missing_fonts).await?;
+        stats.add_assign(catalog.stats);
+        catalog.matches
     } else {
         HashSet::new()
     };
@@ -393,9 +476,13 @@ pub(crate) async fn classify_scenegraph_fonts(
         &unavailable_details,
         auto_google_fonts,
         missing_fonts,
-    )?;
+    )
+    .map_err(|err| error_with_google_font_stats(err, stats))?;
 
-    Ok(classified_fonts)
+    Ok(ClassifiedFontAnalysis {
+        fonts: classified_fonts,
+        stats,
+    })
 }
 
 /// Result of analyzing a rendered Vega scenegraph for font embedding.
@@ -406,6 +493,8 @@ pub(crate) struct FontAnalysis {
     pub(crate) chars_by_key: HashMap<FontKey, BTreeSet<char>>,
     /// (weight, style) variants per family -- for CDN URLs.
     pub(crate) family_variants: HashMap<String, BTreeSet<(String, String)>>,
+    /// Google Fonts cache miss and download stats collected during analysis.
+    pub(crate) font_stats: GoogleFontStats,
 }
 
 #[cfg(test)]
@@ -450,7 +539,7 @@ mod tests {
         assert!(is_available(&alt_family, &available));
 
         let families = BTreeSet::from([alt_family.clone()]);
-        let result = classify_scenegraph_fonts(
+        let result = classify_scenegraph_fonts_with_stats(
             &families,
             false,
             true,
@@ -460,8 +549,43 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0].family, alt_family);
-        assert!(matches!(result[0].source, FontSource::Local));
+        assert_eq!(result.fonts.len(), 1);
+        assert_eq!(result.fonts[0].family, alt_family);
+        assert!(matches!(result.fonts[0].source, FontSource::Local));
+    }
+
+    #[test]
+    fn test_google_font_stats_from_error_combines_local_and_source_stats() {
+        let source_stats = GoogleFontStats {
+            css_cache_misses: 1,
+            font_file_cache_misses: 2,
+            downloaded_bytes: 100,
+            resolved_variants: 3,
+        };
+        let local_stats = GoogleFontStats {
+            css_cache_misses: 4,
+            font_file_cache_misses: 5,
+            downloaded_bytes: 200,
+            resolved_variants: 6,
+        };
+        let source = AnyError::new(vl_convert_google_fonts::GoogleFontsFailure {
+            error: vl_convert_google_fonts::GoogleFontsError::TooManyVariants {
+                resolved: 3,
+                max: 2,
+            },
+            stats: source_stats,
+        });
+        let error = error_with_google_font_stats(source, local_stats);
+
+        let stats = google_font_stats_from_error(&error);
+        assert_eq!(
+            stats,
+            GoogleFontStats {
+                css_cache_misses: 5,
+                font_file_cache_misses: 7,
+                downloaded_bytes: 300,
+                resolved_variants: 9,
+            }
+        );
     }
 }

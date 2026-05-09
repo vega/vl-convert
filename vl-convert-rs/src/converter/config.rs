@@ -156,6 +156,10 @@ pub struct VlcConfig {
     /// registered per-request via the overlay mechanism. Empty = no
     /// configured fonts (the natural "unset" state).
     pub google_fonts: Vec<GoogleFontRequest>,
+    /// Maximum unique Google Font `(family, weight, style)` variants that a
+    /// single conversion may resolve. `None` preserves existing unbounded
+    /// behavior.
+    pub max_google_font_variants_per_request: Option<NonZeroU64>,
     /// Maximum V8 heap size in megabytes per worker. `None` = no cap;
     /// `Some(n)` = explicit cap.
     pub max_v8_heap_size_mb: Option<NonZeroU64>,
@@ -251,6 +255,7 @@ impl Default for VlcConfig {
             subset_fonts: true,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: Vec::new(),
+            max_google_font_variants_per_request: None,
             max_v8_heap_size_mb: None,
             max_v8_execution_time_secs: None,
             gc_after_conversion: false,
@@ -588,6 +593,7 @@ mod tests {
             "max_ephemeral_workers default is Some(NZ(2))"
         );
         assert_eq!(cfg.max_v8_execution_time_secs, None);
+        assert_eq!(cfg.max_google_font_variants_per_request, None);
         assert!(cfg.google_fonts.is_empty());
         assert!(cfg.vega_plugins.is_empty());
         assert!(cfg.themes.is_empty());

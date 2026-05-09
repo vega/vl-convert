@@ -331,6 +331,10 @@ pub(crate) struct ServeArgs {
     #[arg(long, value_parser = parse_positive_i64_arg, value_name = "MS", env = "VLC_BUDGET_HOLD_MS")]
     pub(crate) budget_hold_ms: Option<i64>,
 
+    /// Budget milliseconds charged for each Google Fonts cache miss.
+    #[arg(long, value_parser = parse_budget_ms_arg, value_name = "MS", env = "VLC_GOOGLE_FONT_CACHE_MISS_PENALTY_MS")]
+    pub(crate) google_font_cache_miss_penalty_ms: Option<i64>,
+
     /// Emit one JSON readiness line on stdout after all listeners
     /// bind. Useful for orchestrators / process supervisors.
     #[arg(
@@ -517,6 +521,9 @@ impl From<&ServeArgs> for ServeConfig {
         }
         if let Some(v) = args.budget_hold_ms {
             cfg.budget_hold_ms = v;
+        }
+        if let Some(v) = args.google_font_cache_miss_penalty_ms {
+            cfg.google_font_cache_miss_penalty_ms = v;
         }
         cfg.socket_mode = socket_mode;
         cfg.reconfig_drain_timeout_secs = reconfig_drain_timeout_secs;
@@ -995,6 +1002,7 @@ mod tests {
             per_ip_budget_ms: None,
             global_budget_ms: None,
             budget_hold_ms: None,
+            google_font_cache_miss_penalty_ms: None,
             ready_json: false,
             exit_on_parent_close: None,
             allow_google_fonts: None,
@@ -1027,10 +1035,12 @@ mod tests {
         let mut args = default_args();
         args.per_ip_budget_ms = Some(0);
         args.global_budget_ms = Some(i64::MAX);
+        args.google_font_cache_miss_penalty_ms = Some(250);
 
         let config = ServeConfig::from(&args);
         assert_eq!(config.per_ip_budget_ms, Some(0));
         assert_eq!(config.global_budget_ms, Some(i64::MAX));
+        assert_eq!(config.google_font_cache_miss_penalty_ms, 250);
     }
 
     #[test]

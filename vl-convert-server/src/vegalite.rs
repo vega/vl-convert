@@ -18,7 +18,8 @@ use crate::types::{
     VegaliteUrlRequest, VegaliteVegaRequest,
 };
 use crate::util::{
-    append_vlc_logs_header, error_response, format_log_entries, validate_common_opts,
+    append_vlc_logs_header, attach_google_font_stats, conversion_error_response, error_response,
+    format_log_entries, validate_common_opts,
 };
 
 fn build_vl_opts(req: &VegaliteCommon, config: &VlcConfig) -> Result<VlOpts, String> {
@@ -87,9 +88,10 @@ pub async fn vegalite_to_vega(
             )
                 .into_response()
         }
-        Err(e) => error_response(
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("Vega-Lite compilation failed: {e}"),
+            "Vega-Lite compilation failed",
+            &e,
             state.opaque_errors,
         ),
     }
@@ -126,16 +128,19 @@ pub async fn vegalite_to_svg(
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            (
+            let mut response = (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
                 output.svg,
             )
-                .into_response()
+                .into_response();
+            attach_google_font_stats(&mut response, output.font_stats);
+            response
         }
-        Err(e) => error_response(
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("Vega-Lite to SVG conversion failed: {e}"),
+            "Vega-Lite to SVG conversion failed",
+            &e,
             state.opaque_errors,
         ),
     }
@@ -175,16 +180,19 @@ pub async fn vegalite_to_png(
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            (
+            let mut response = (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/png")],
                 output.data,
             )
-                .into_response()
+                .into_response();
+            attach_google_font_stats(&mut response, output.font_stats);
+            response
         }
-        Err(e) => error_response(
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("Vega-Lite to PNG conversion failed: {e}"),
+            "Vega-Lite to PNG conversion failed",
+            &e,
             state.opaque_errors,
         ),
     }
@@ -224,16 +232,19 @@ pub async fn vegalite_to_jpeg(
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            (
+            let mut response = (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "image/jpeg")],
                 output.data,
             )
-                .into_response()
+                .into_response();
+            attach_google_font_stats(&mut response, output.font_stats);
+            response
         }
-        Err(e) => error_response(
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("Vega-Lite to JPEG conversion failed: {e}"),
+            "Vega-Lite to JPEG conversion failed",
+            &e,
             state.opaque_errors,
         ),
     }
@@ -269,16 +280,19 @@ pub async fn vegalite_to_pdf(
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            (
+            let mut response = (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "application/pdf")],
                 output.data,
             )
-                .into_response()
+                .into_response();
+            attach_google_font_stats(&mut response, output.font_stats);
+            response
         }
-        Err(e) => error_response(
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("Vega-Lite to PDF conversion failed: {e}"),
+            "Vega-Lite to PDF conversion failed",
+            &e,
             state.opaque_errors,
         ),
     }
@@ -329,16 +343,19 @@ pub async fn vegalite_to_html(
         Ok(output) => {
             let mut headers = HeaderMap::new();
             append_vlc_logs_header(&mut headers, &format_log_entries(&output.logs));
-            (
+            let mut response = (
                 headers,
                 [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
                 output.html,
             )
-                .into_response()
+                .into_response();
+            attach_google_font_stats(&mut response, output.font_stats);
+            response
         }
-        Err(e) => error_response(
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("Vega-Lite to HTML conversion failed: {e}"),
+            "Vega-Lite to HTML conversion failed",
+            &e,
             state.opaque_errors,
         ),
     }
@@ -407,16 +424,19 @@ pub async fn vegalite_scenegraph(
             Ok(output) => {
                 let mut resp_headers = HeaderMap::new();
                 append_vlc_logs_header(&mut resp_headers, &format_log_entries(&output.logs));
-                (
+                let mut response = (
                     resp_headers,
                     [(axum::http::header::CONTENT_TYPE, "application/msgpack")],
                     output.data,
                 )
-                    .into_response()
+                    .into_response();
+                attach_google_font_stats(&mut response, output.font_stats);
+                response
             }
-            Err(e) => error_response(
+            Err(e) => conversion_error_response(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                &format!("Vega-Lite scenegraph extraction failed: {e}"),
+                "Vega-Lite scenegraph extraction failed",
+                &e,
                 state.opaque_errors,
             ),
         }
@@ -428,14 +448,16 @@ pub async fn vegalite_scenegraph(
                 let body = match serde_json::to_string(&output.scenegraph) {
                     Ok(json) => json,
                     Err(e) => {
-                        return error_response(
+                        let mut response = error_response(
                             StatusCode::INTERNAL_SERVER_ERROR,
                             &format!("Failed to serialize scenegraph: {e}"),
                             state.opaque_errors,
-                        )
+                        );
+                        attach_google_font_stats(&mut response, output.font_stats);
+                        return response;
                     }
                 };
-                (
+                let mut response = (
                     resp_headers,
                     [(
                         axum::http::header::CONTENT_TYPE,
@@ -443,11 +465,14 @@ pub async fn vegalite_scenegraph(
                     )],
                     body,
                 )
-                    .into_response()
+                    .into_response();
+                attach_google_font_stats(&mut response, output.font_stats);
+                response
             }
-            Err(e) => error_response(
+            Err(e) => conversion_error_response(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                &format!("Vega-Lite scenegraph extraction failed: {e}"),
+                "Vega-Lite scenegraph extraction failed",
+                &e,
                 state.opaque_errors,
             ),
         }
@@ -478,7 +503,7 @@ pub async fn vegalite_fonts(
 
     match snap
         .converter
-        .vegalite_fonts(
+        .vegalite_fonts_with_stats(
             spec,
             vl_opts,
             snap.config.auto_google_fonts,
@@ -488,10 +513,15 @@ pub async fn vegalite_fonts(
         )
         .await
     {
-        Ok(fonts) => Json(fonts).into_response(),
-        Err(e) => error_response(
+        Ok((fonts, font_stats)) => {
+            let mut response = Json(fonts).into_response();
+            attach_google_font_stats(&mut response, font_stats);
+            response
+        }
+        Err(e) => conversion_error_response(
             StatusCode::UNPROCESSABLE_ENTITY,
-            &format!("Vega-Lite font analysis failed: {e}"),
+            "Vega-Lite font analysis failed",
+            &e,
             state.opaque_errors,
         ),
     }

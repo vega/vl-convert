@@ -1,5 +1,37 @@
 use thiserror::Error;
 
+use crate::types::GoogleFontStats;
+
+pub type GoogleFontsResult<T> = Result<T, GoogleFontsFailure>;
+
+#[derive(Debug)]
+pub struct GoogleFontsFailure {
+    pub error: GoogleFontsError,
+    pub stats: GoogleFontStats,
+}
+
+impl GoogleFontsFailure {
+    pub(crate) fn new(error: GoogleFontsError, stats: GoogleFontStats) -> Self {
+        Self { error, stats }
+    }
+
+    pub fn into_error(self) -> GoogleFontsError {
+        self.error
+    }
+}
+
+impl std::fmt::Display for GoogleFontsFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.error.fmt(f)
+    }
+}
+
+impl std::error::Error for GoogleFontsFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum GoogleFontsError {
     #[error("Font not found: \"{0}\"")]
@@ -16,6 +48,11 @@ pub enum GoogleFontsError {
 
     #[error("No variants requested (empty list)")]
     NoVariantsRequested,
+
+    #[error(
+        "Google Fonts request resolved {resolved} variants, exceeding max_google_font_variants_per_request={max}"
+    )]
+    TooManyVariants { resolved: usize, max: usize },
 
     #[error("HTTP request failed: {0}")]
     Http(String),
@@ -37,6 +74,10 @@ pub enum GoogleFontsError {
 }
 
 impl GoogleFontsError {
+    pub(crate) fn with_stats(self, stats: GoogleFontStats) -> GoogleFontsFailure {
+        GoogleFontsFailure::new(self, stats)
+    }
+
     pub(crate) fn is_retryable(&self) -> bool {
         match self {
             Self::Http(_) => true,

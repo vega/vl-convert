@@ -1,23 +1,42 @@
 use crate::cache;
 use crate::config::ClientConfig;
-use crate::error::GoogleFontsError;
+use crate::error::{GoogleFontsError, GoogleFontsResult};
 use crate::resolve::{
-    build_css2_url_all_variants, resolve_from_css2, ResolvedDownloadPlan, ResolvedTtfFile,
+    build_css2_url_all_variants, dedupe_variants, resolve_from_css2, ResolvedDownloadPlan,
+    ResolvedTtfFile,
 };
-use crate::types::{family_to_id, LoadedFontBatch, VariantRequest};
+use crate::types::{
+    family_to_id, FontLoadRequest, FontLoadResult, FontProbeResult, GoogleFontStats,
+    LoadedFontBatch, VariantRequest, VariantResolutionResult,
+};
 use backon::{BlockingRetryable, ExponentialBuilder, Retryable};
 use dashmap::DashMap;
 use futures_util::stream::{self, StreamExt};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+const KNOWN_FONT_CACHE_TTL: Duration = Duration::from_secs(300);
+const KNOWN_FONT_CACHE_MAX_ENTRIES: usize = 4096;
 
 /// Result of downloading/loading font files from cache or network.
 struct EnsureFontsResult {
     font_data: Vec<Arc<Vec<u8>>>,
     font_keys: HashSet<String>,
-    downloaded_any: bool,
+    stats: GoogleFontStats,
+}
+
+struct LoadedFontFile {
+    bytes: Vec<u8>,
+    key: String,
+    stats: GoogleFontStats,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct KnownFontCacheEntry {
+    known: bool,
+    checked_at: Instant,
 }
 
 /// Per-font-key mutex that serializes concurrent download/load of the same font file
@@ -60,6 +79,7 @@ pub struct GoogleFontsClient {
     blocking_client: Mutex<Option<reqwest::blocking::Client>>,
     max_font_cache_bytes: AtomicU64,
     download_gates: DashMap<String, Arc<DownloadGate>>,
+    known_font_cache: DashMap<String, KnownFontCacheEntry>,
 }
 
 impl GoogleFontsClient {
@@ -88,6 +108,7 @@ impl GoogleFontsClient {
             async_client,
             blocking_client: Mutex::new(None),
             download_gates: DashMap::new(),
+            known_font_cache: DashMap::new(),
         })
     }
 
@@ -100,49 +121,111 @@ impl GoogleFontsClient {
     }
 
     /// Load a font family from Google Fonts (async).
-    pub async fn load(
-        &self,
-        family: &str,
-        variants: Option<&[VariantRequest]>,
-    ) -> Result<LoadedFontBatch, GoogleFontsError> {
-        let font_id = Self::validate_load_request(family, variants)?;
-        let (css, from_cache) = self.fetch_css_async(&font_id, family).await?;
-        let plan = resolve_from_css2(&font_id, &css, variants)?;
+    pub async fn load(&self, request: FontLoadRequest<'_>) -> GoogleFontsResult<FontLoadResult> {
+        let mut stats = GoogleFontStats::default();
+        let font_id = Self::validate_load_request(request.family, request.variants)
+            .map_err(|e| e.with_stats(stats))?;
+        let explicit_variant_count = request.variants.map(|v| dedupe_variants(v).len());
+        if let (Some(count), Some(max)) = (explicit_variant_count, request.max_variants) {
+            stats.resolved_variants = count as u64;
+            Self::validate_variant_limit(count, max).map_err(|e| e.with_stats(stats))?;
+        }
+
+        let (css, from_cache) = self
+            .fetch_css_async_with_stats(&font_id, request.family, &mut stats)
+            .await
+            .map_err(|e| e.with_stats(stats))?;
+        let plan =
+            resolve_from_css2(&font_id, &css, request.variants).map_err(|e| e.with_stats(stats))?;
+        Self::record_and_validate_variant_count(
+            &mut stats,
+            explicit_variant_count,
+            plan.files.len(),
+            request.max_variants,
+        )?;
 
         match self.ensure_fonts_async(&plan.files).await {
-            Ok(fonts) => self.finish_load(&font_id, &plan, fonts),
-            Err(e) if from_cache && e.is_retryable() => {
-                // Stale CSS may contain dead URLs; invalidate and retry.
+            Ok(fonts) => self.finish_load_with_stats(&font_id, &plan, fonts, stats),
+            Err(failure) if from_cache && failure.error.is_retryable() => {
+                stats.add_assign(failure.stats);
                 self.invalidate_css_cache(&font_id);
-                let (css, _) = self.fetch_css_async(&font_id, family).await?;
-                let plan = resolve_from_css2(&font_id, &css, variants)?;
-                let fonts = self.ensure_fonts_async(&plan.files).await?;
-                self.finish_load(&font_id, &plan, fonts)
+                let (css, _) = self
+                    .fetch_css_async_with_stats(&font_id, request.family, &mut stats)
+                    .await
+                    .map_err(|e| e.with_stats(stats))?;
+                let plan = resolve_from_css2(&font_id, &css, request.variants)
+                    .map_err(|e| e.with_stats(stats))?;
+                Self::record_and_validate_variant_count(
+                    &mut stats,
+                    explicit_variant_count,
+                    plan.files.len(),
+                    request.max_variants,
+                )?;
+                let fonts = self
+                    .ensure_fonts_async(&plan.files)
+                    .await
+                    .map_err(|failure| {
+                        stats.add_assign(failure.stats);
+                        failure.error.with_stats(stats)
+                    })?;
+                self.finish_load_with_stats(&font_id, &plan, fonts, stats)
             }
-            Err(e) => Err(e),
+            Err(failure) => {
+                stats.add_assign(failure.stats);
+                Err(failure.error.with_stats(stats))
+            }
         }
     }
 
     /// Load a font family from Google Fonts (blocking).
-    pub fn load_blocking(
-        &self,
-        family: &str,
-        variants: Option<&[VariantRequest]>,
-    ) -> Result<LoadedFontBatch, GoogleFontsError> {
-        let font_id = Self::validate_load_request(family, variants)?;
-        let (css, from_cache) = self.fetch_css_blocking(&font_id, family)?;
-        let plan = resolve_from_css2(&font_id, &css, variants)?;
+    pub fn load_blocking(&self, request: FontLoadRequest<'_>) -> GoogleFontsResult<FontLoadResult> {
+        let mut stats = GoogleFontStats::default();
+        let font_id = Self::validate_load_request(request.family, request.variants)
+            .map_err(|e| e.with_stats(stats))?;
+        let explicit_variant_count = request.variants.map(|v| dedupe_variants(v).len());
+        if let (Some(count), Some(max)) = (explicit_variant_count, request.max_variants) {
+            stats.resolved_variants = count as u64;
+            Self::validate_variant_limit(count, max).map_err(|e| e.with_stats(stats))?;
+        }
+
+        let (css, from_cache) = self
+            .fetch_css_blocking_with_stats(&font_id, request.family, &mut stats)
+            .map_err(|e| e.with_stats(stats))?;
+        let plan =
+            resolve_from_css2(&font_id, &css, request.variants).map_err(|e| e.with_stats(stats))?;
+        Self::record_and_validate_variant_count(
+            &mut stats,
+            explicit_variant_count,
+            plan.files.len(),
+            request.max_variants,
+        )?;
 
         match self.ensure_fonts_blocking(&plan.files) {
-            Ok(fonts) => self.finish_load(&font_id, &plan, fonts),
-            Err(e) if from_cache && e.is_retryable() => {
+            Ok(fonts) => self.finish_load_with_stats(&font_id, &plan, fonts, stats),
+            Err(failure) if from_cache && failure.error.is_retryable() => {
+                stats.add_assign(failure.stats);
                 self.invalidate_css_cache(&font_id);
-                let (css, _) = self.fetch_css_blocking(&font_id, family)?;
-                let plan = resolve_from_css2(&font_id, &css, variants)?;
-                let fonts = self.ensure_fonts_blocking(&plan.files)?;
-                self.finish_load(&font_id, &plan, fonts)
+                let (css, _) = self
+                    .fetch_css_blocking_with_stats(&font_id, request.family, &mut stats)
+                    .map_err(|e| e.with_stats(stats))?;
+                let plan = resolve_from_css2(&font_id, &css, request.variants)
+                    .map_err(|e| e.with_stats(stats))?;
+                Self::record_and_validate_variant_count(
+                    &mut stats,
+                    explicit_variant_count,
+                    plan.files.len(),
+                    request.max_variants,
+                )?;
+                let fonts = self.ensure_fonts_blocking(&plan.files).map_err(|failure| {
+                    stats.add_assign(failure.stats);
+                    failure.error.with_stats(stats)
+                })?;
+                self.finish_load_with_stats(&font_id, &plan, fonts, stats)
             }
-            Err(e) => Err(e),
+            Err(failure) => {
+                stats.add_assign(failure.stats);
+                Err(failure.error.with_stats(stats))
+            }
         }
     }
 
@@ -152,7 +235,7 @@ impl GoogleFontsClient {
         plan: &ResolvedDownloadPlan,
         fonts: EnsureFontsResult,
     ) -> Result<LoadedFontBatch, GoogleFontsError> {
-        if fonts.downloaded_any {
+        if fonts.stats.font_file_cache_misses > 0 {
             self.evict_if_needed(&fonts.font_keys)?;
         }
 
@@ -173,6 +256,20 @@ impl GoogleFontsClient {
         ))
     }
 
+    fn finish_load_with_stats(
+        &self,
+        font_id: &str,
+        plan: &ResolvedDownloadPlan,
+        fonts: EnsureFontsResult,
+        mut stats: GoogleFontStats,
+    ) -> GoogleFontsResult<FontLoadResult> {
+        stats.add_assign(fonts.stats);
+        let batch = self
+            .finish_load(font_id, plan, fonts)
+            .map_err(|e| e.with_stats(stats))?;
+        Ok(FontLoadResult { batch, stats })
+    }
+
     fn invalidate_css_cache(&self, font_id: &str) {
         if let Some(ref css_dir) = self.config.css_dir() {
             cache::invalidate_css(font_id, css_dir);
@@ -185,17 +282,131 @@ impl GoogleFontsClient {
     /// combinations) so that fonts available only at non-400 weights (e.g. Buda
     /// at 300) are still detected.  `family` should be the display name
     /// (e.g., "Kalam", not "kalam") since the CSS2 API is case-sensitive.
-    pub async fn is_known_font(&self, family: &str) -> Result<bool, GoogleFontsError> {
+    pub async fn probe_family(&self, family: &str) -> GoogleFontsResult<FontProbeResult> {
         let font_id = match family_to_id(family) {
             Some(id) => id,
-            None => return Ok(false),
+            None => {
+                return Ok(FontProbeResult {
+                    known: false,
+                    stats: GoogleFontStats::default(),
+                });
+            }
         };
-        match self.fetch_css_async(&font_id, family).await {
-            Ok(_) => Ok(true),
-            Err(GoogleFontsError::FontNotFound(_)) => Ok(false),
-            Err(GoogleFontsError::HttpStatus { status: 400, .. }) => Ok(false),
-            Err(e) => Err(e),
+
+        let now = Instant::now();
+        if let Some(entry) = self.known_font_cache.get(&font_id) {
+            if now.duration_since(entry.checked_at) <= KNOWN_FONT_CACHE_TTL {
+                return Ok(FontProbeResult {
+                    known: entry.known,
+                    stats: GoogleFontStats::default(),
+                });
+            }
         }
+
+        if let Some(ref css_dir) = self.config.css_dir() {
+            if cache::read_css(&font_id, css_dir)
+                .map_err(|e| e.with_stats(GoogleFontStats::default()))?
+                .is_some()
+            {
+                self.cache_known_font_result(font_id, true, now);
+                return Ok(FontProbeResult {
+                    known: true,
+                    stats: GoogleFontStats::default(),
+                });
+            }
+        }
+
+        let stats = GoogleFontStats {
+            css_cache_misses: 1,
+            ..Default::default()
+        };
+        match self.fetch_css_from_network_async(family, &font_id).await {
+            Ok(css) => {
+                if let Some(ref css_dir) = self.config.css_dir() {
+                    cache::write_css_if_absent(&font_id, css_dir, &css)
+                        .map_err(|e| e.with_stats(stats))?;
+                }
+                self.cache_known_font_result(font_id, true, now);
+                Ok(FontProbeResult { known: true, stats })
+            }
+            Err(GoogleFontsError::FontNotFound(_))
+            | Err(GoogleFontsError::HttpStatus { status: 400, .. }) => {
+                self.cache_known_font_result(font_id, false, now);
+                Ok(FontProbeResult {
+                    known: false,
+                    stats,
+                })
+            }
+            Err(e) => Err(e.with_stats(stats)),
+        }
+    }
+
+    /// Check whether a font exists on Google Fonts without downloading font files (blocking).
+    pub fn probe_family_blocking(&self, family: &str) -> GoogleFontsResult<FontProbeResult> {
+        let font_id = match family_to_id(family) {
+            Some(id) => id,
+            None => {
+                return Ok(FontProbeResult {
+                    known: false,
+                    stats: GoogleFontStats::default(),
+                });
+            }
+        };
+
+        let now = Instant::now();
+        if let Some(entry) = self.known_font_cache.get(&font_id) {
+            if now.duration_since(entry.checked_at) <= KNOWN_FONT_CACHE_TTL {
+                return Ok(FontProbeResult {
+                    known: entry.known,
+                    stats: GoogleFontStats::default(),
+                });
+            }
+        }
+
+        if let Some(ref css_dir) = self.config.css_dir() {
+            if cache::read_css(&font_id, css_dir)
+                .map_err(|e| e.with_stats(GoogleFontStats::default()))?
+                .is_some()
+            {
+                self.cache_known_font_result(font_id, true, now);
+                return Ok(FontProbeResult {
+                    known: true,
+                    stats: GoogleFontStats::default(),
+                });
+            }
+        }
+
+        let stats = GoogleFontStats {
+            css_cache_misses: 1,
+            ..Default::default()
+        };
+        match self.fetch_css_from_network_blocking(family, &font_id) {
+            Ok(css) => {
+                if let Some(ref css_dir) = self.config.css_dir() {
+                    cache::write_css_if_absent(&font_id, css_dir, &css)
+                        .map_err(|e| e.with_stats(stats))?;
+                }
+                self.cache_known_font_result(font_id, true, now);
+                Ok(FontProbeResult { known: true, stats })
+            }
+            Err(GoogleFontsError::FontNotFound(_))
+            | Err(GoogleFontsError::HttpStatus { status: 400, .. }) => {
+                self.cache_known_font_result(font_id, false, now);
+                Ok(FontProbeResult {
+                    known: false,
+                    stats,
+                })
+            }
+            Err(e) => Err(e.with_stats(stats)),
+        }
+    }
+
+    fn cache_known_font_result(&self, font_id: String, known: bool, checked_at: Instant) {
+        if self.known_font_cache.len() >= KNOWN_FONT_CACHE_MAX_ENTRIES {
+            self.known_font_cache.clear();
+        }
+        self.known_font_cache
+            .insert(font_id, KnownFontCacheEntry { known, checked_at });
     }
 
     /// Resolve requested variants against what a font actually provides.
@@ -209,29 +420,66 @@ impl GoogleFontsClient {
         &self,
         family: &str,
         requested: &[VariantRequest],
-    ) -> Result<Vec<VariantRequest>, GoogleFontsError> {
+    ) -> GoogleFontsResult<VariantResolutionResult> {
+        let mut stats = GoogleFontStats::default();
         let font_id = match family_to_id(family) {
             Some(id) => id,
-            None => return Err(GoogleFontsError::FontNotFound(family.to_string())),
+            None => {
+                return Err(GoogleFontsError::FontNotFound(family.to_string()).with_stats(stats));
+            }
         };
-        let (css, _from_cache) = self.fetch_css_async(&font_id, family).await?;
-        let plan = resolve_from_css2(&font_id, &css, Some(requested))?;
-        Ok(plan
+        let (css, _) = self
+            .fetch_css_async_with_stats(&font_id, family, &mut stats)
+            .await
+            .map_err(|e| e.with_stats(stats))?;
+        let plan =
+            resolve_from_css2(&font_id, &css, Some(requested)).map_err(|e| e.with_stats(stats))?;
+        stats.resolved_variants = dedupe_variants(requested).len() as u64;
+        let variants = plan
             .files
             .into_iter()
             .map(|f| VariantRequest {
                 weight: f.weight,
                 style: f.style,
             })
-            .collect())
+            .collect();
+        Ok(VariantResolutionResult { variants, stats })
     }
 
-    /// Fetch the all-variants CSS2 response for a font, using the cache when available.
-    /// Returns `(css, from_cache)`.
-    async fn fetch_css_async(
+    pub fn resolve_available_variants_blocking(
+        &self,
+        family: &str,
+        requested: &[VariantRequest],
+    ) -> GoogleFontsResult<VariantResolutionResult> {
+        let mut stats = GoogleFontStats::default();
+        let font_id = match family_to_id(family) {
+            Some(id) => id,
+            None => {
+                return Err(GoogleFontsError::FontNotFound(family.to_string()).with_stats(stats));
+            }
+        };
+        let (css, _) = self
+            .fetch_css_blocking_with_stats(&font_id, family, &mut stats)
+            .map_err(|e| e.with_stats(stats))?;
+        let plan =
+            resolve_from_css2(&font_id, &css, Some(requested)).map_err(|e| e.with_stats(stats))?;
+        stats.resolved_variants = dedupe_variants(requested).len() as u64;
+        let variants = plan
+            .files
+            .into_iter()
+            .map(|f| VariantRequest {
+                weight: f.weight,
+                style: f.style,
+            })
+            .collect();
+        Ok(VariantResolutionResult { variants, stats })
+    }
+
+    async fn fetch_css_async_with_stats(
         &self,
         font_id: &str,
         family: &str,
+        stats: &mut GoogleFontStats,
     ) -> Result<(String, bool), GoogleFontsError> {
         if let Some(ref css_dir) = self.config.css_dir() {
             if let Some(css) = cache::read_css(font_id, css_dir)? {
@@ -239,6 +487,7 @@ impl GoogleFontsClient {
             }
         }
 
+        stats.css_cache_misses = stats.css_cache_misses.saturating_add(1);
         let css = self.fetch_css_from_network_async(family, font_id).await?;
 
         if let Some(ref css_dir) = self.config.css_dir() {
@@ -248,12 +497,11 @@ impl GoogleFontsClient {
         Ok((css, false))
     }
 
-    /// Fetch the all-variants CSS2 response for a font, using the cache when available (blocking).
-    /// Returns `(css, from_cache)`.
-    fn fetch_css_blocking(
+    fn fetch_css_blocking_with_stats(
         &self,
         font_id: &str,
         family: &str,
+        stats: &mut GoogleFontStats,
     ) -> Result<(String, bool), GoogleFontsError> {
         if let Some(ref css_dir) = self.config.css_dir() {
             if let Some(css) = cache::read_css(font_id, css_dir)? {
@@ -261,6 +509,7 @@ impl GoogleFontsClient {
             }
         }
 
+        stats.css_cache_misses = stats.css_cache_misses.saturating_add(1);
         let css = self.fetch_css_from_network_blocking(family, font_id)?;
 
         if let Some(ref css_dir) = self.config.css_dir() {
@@ -315,6 +564,28 @@ impl GoogleFontsClient {
         Ok(font_id)
     }
 
+    fn validate_variant_limit(resolved: usize, max: usize) -> Result<(), GoogleFontsError> {
+        if resolved > max {
+            Err(GoogleFontsError::TooManyVariants { resolved, max })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn record_and_validate_variant_count(
+        stats: &mut GoogleFontStats,
+        explicit_variant_count: Option<usize>,
+        resolved_file_count: usize,
+        max_variants: Option<usize>,
+    ) -> GoogleFontsResult<()> {
+        let variant_count = explicit_variant_count.unwrap_or(resolved_file_count);
+        stats.resolved_variants = variant_count as u64;
+        if let Some(max) = max_variants {
+            Self::validate_variant_limit(variant_count, max).map_err(|e| e.with_stats(*stats))?;
+        }
+        Ok(())
+    }
+
     /// Try to read a font from the cache, touching its mtime on hit.
     fn try_read_cached_font(
         url: &str,
@@ -350,14 +621,14 @@ impl GoogleFontsClient {
     async fn ensure_fonts_async(
         &self,
         files: &[ResolvedTtfFile],
-    ) -> Result<EnsureFontsResult, GoogleFontsError> {
+    ) -> GoogleFontsResult<EnsureFontsResult> {
         let limit = self.config.max_parallel_downloads.max(1);
 
         let results = stream::iter(files.iter().cloned().enumerate().map(
             |(index, file)| async move {
                 self.ensure_font_async(&file)
                     .await
-                    .map(|(bytes, key, was_downloaded)| (index, bytes, key, was_downloaded))
+                    .map(|loaded| (index, loaded))
             },
         ))
         .buffer_unordered(limit)
@@ -365,46 +636,66 @@ impl GoogleFontsClient {
         .await;
 
         let mut result_vec = Vec::with_capacity(results.len());
+        let mut failure_error = None;
+        let mut aggregate_stats = GoogleFontStats::default();
         for result in results {
-            result_vec.push(result?);
+            match result {
+                Ok((index, loaded)) => {
+                    aggregate_stats.add_assign(loaded.stats);
+                    result_vec.push((index, loaded));
+                }
+                Err(failure) => {
+                    aggregate_stats.add_assign(failure.stats);
+                    failure_error.get_or_insert(failure.error);
+                }
+            }
         }
-        result_vec.sort_by_key(|(idx, _, _, _)| *idx);
+
+        if let Some(error) = failure_error {
+            return Err(error.with_stats(aggregate_stats));
+        }
+        result_vec.sort_by_key(|(idx, _)| *idx);
 
         let mut font_data = Vec::with_capacity(files.len());
         let mut font_keys = HashSet::new();
-        let mut downloaded_any = false;
 
-        for (_, bytes, key, was_downloaded) in result_vec {
-            font_data.push(Arc::new(bytes));
-            font_keys.insert(key);
-            downloaded_any |= was_downloaded;
+        for (_, loaded) in result_vec {
+            font_data.push(Arc::new(loaded.bytes));
+            font_keys.insert(loaded.key);
         }
 
         Ok(EnsureFontsResult {
             font_data,
             font_keys,
-            downloaded_any,
+            stats: aggregate_stats,
         })
     }
 
     /// Return a single font from cache or download it, using a gate for dedup (async).
-    async fn ensure_font_async(
-        &self,
-        file: &ResolvedTtfFile,
-    ) -> Result<(Vec<u8>, String, bool), GoogleFontsError> {
+    async fn ensure_font_async(&self, file: &ResolvedTtfFile) -> GoogleFontsResult<LoadedFontFile> {
         let key = cache::font_key(&file.url);
         let fonts_dir = self.config.fonts_dir();
+        let mut stats = GoogleFontStats::default();
 
-        if let Some(bytes) = Self::try_read_cached_font(&file.url, &fonts_dir)? {
-            return Ok((bytes, key, false));
+        if let Some(bytes) =
+            Self::try_read_cached_font(&file.url, &fonts_dir).map_err(|e| e.with_stats(stats))?
+        {
+            return Ok(LoadedFontFile { bytes, key, stats });
         }
 
         // Without a cache dir, the gate can't deduplicate (waiters would just
         // re-download anyway), so skip it and download directly.
         if fonts_dir.is_none() {
-            let bytes = self.get_bytes_with_retry_async(&file.url).await?;
-            Self::validate_font_bytes(&file.url, &bytes)?;
-            return Ok((bytes, key, true));
+            stats.font_file_cache_misses = stats.font_file_cache_misses.saturating_add(1);
+            let bytes = self
+                .get_bytes_with_retry_async(&file.url)
+                .await
+                .map_err(|e| e.with_stats(stats))?;
+            stats.downloaded_bytes = stats
+                .downloaded_bytes
+                .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+            Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_stats(stats))?;
+            return Ok(LoadedFontFile { bytes, key, stats });
         }
 
         let gate_guard = DownloadGateGuard {
@@ -414,26 +705,35 @@ impl GoogleFontsClient {
         };
         let _lock = gate_guard.gate.mutex.lock().await;
 
-        if let Some(bytes) = Self::try_read_cached_font(&file.url, &fonts_dir)? {
-            return Ok((bytes, key, false));
+        if let Some(bytes) =
+            Self::try_read_cached_font(&file.url, &fonts_dir).map_err(|e| e.with_stats(stats))?
+        {
+            return Ok(LoadedFontFile { bytes, key, stats });
         }
 
-        let bytes = self.get_bytes_with_retry_async(&file.url).await?;
-        Self::validate_font_bytes(&file.url, &bytes)?;
-        Self::cache_font(&file.url, &fonts_dir, &bytes)?;
-        Ok((bytes, key, true))
+        stats.font_file_cache_misses = stats.font_file_cache_misses.saturating_add(1);
+        let bytes = self
+            .get_bytes_with_retry_async(&file.url)
+            .await
+            .map_err(|e| e.with_stats(stats))?;
+        stats.downloaded_bytes = stats
+            .downloaded_bytes
+            .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+        Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_stats(stats))?;
+        Self::cache_font(&file.url, &fonts_dir, &bytes).map_err(|e| e.with_stats(stats))?;
+        Ok(LoadedFontFile { bytes, key, stats })
     }
 
     /// Download or retrieve from cache all resolved TTF files in parallel (blocking).
     fn ensure_fonts_blocking(
         &self,
         files: &[ResolvedTtfFile],
-    ) -> Result<EnsureFontsResult, GoogleFontsError> {
+    ) -> GoogleFontsResult<EnsureFontsResult> {
         if files.is_empty() {
             return Ok(EnsureFontsResult {
                 font_data: Vec::new(),
                 font_keys: HashSet::new(),
-                downloaded_any: false,
+                stats: GoogleFontStats::default(),
             });
         }
 
@@ -456,6 +756,7 @@ impl GoogleFontsClient {
                 .map(|h| {
                     h.join().map_err(|_| {
                         GoogleFontsError::Internal("Font download thread panicked".to_string())
+                            .with_stats(GoogleFontStats::default())
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()
@@ -463,42 +764,60 @@ impl GoogleFontsClient {
 
         let mut font_data = Vec::with_capacity(files.len());
         let mut font_keys = HashSet::new();
-        let mut downloaded_any = false;
+        let mut aggregate_stats = GoogleFontStats::default();
+        let mut failure_error = None;
 
         for chunk in thread_results {
             for result in chunk {
-                let (bytes, key, was_downloaded) = result?;
-                font_data.push(Arc::new(bytes));
-                font_keys.insert(key);
-                downloaded_any |= was_downloaded;
+                match result {
+                    Ok(loaded) => {
+                        aggregate_stats.add_assign(loaded.stats);
+                        font_data.push(Arc::new(loaded.bytes));
+                        font_keys.insert(loaded.key);
+                    }
+                    Err(failure) => {
+                        aggregate_stats.add_assign(failure.stats);
+                        failure_error.get_or_insert(failure.error);
+                    }
+                }
             }
+        }
+
+        if let Some(error) = failure_error {
+            return Err(error.with_stats(aggregate_stats));
         }
 
         Ok(EnsureFontsResult {
             font_data,
             font_keys,
-            downloaded_any,
+            stats: aggregate_stats,
         })
     }
 
     /// Return a single font from cache or download it, using a gate for dedup (blocking).
-    fn ensure_font_blocking(
-        &self,
-        file: &ResolvedTtfFile,
-    ) -> Result<(Vec<u8>, String, bool), GoogleFontsError> {
+    fn ensure_font_blocking(&self, file: &ResolvedTtfFile) -> GoogleFontsResult<LoadedFontFile> {
         let key = cache::font_key(&file.url);
         let fonts_dir = self.config.fonts_dir();
+        let mut stats = GoogleFontStats::default();
 
-        if let Some(bytes) = Self::try_read_cached_font(&file.url, &fonts_dir)? {
-            return Ok((bytes, key, false));
+        if let Some(bytes) =
+            Self::try_read_cached_font(&file.url, &fonts_dir).map_err(|e| e.with_stats(stats))?
+        {
+            return Ok(LoadedFontFile { bytes, key, stats });
         }
 
         // Without a cache dir, the gate can't deduplicate (waiters would just
         // re-download anyway), so skip it and download directly.
         if fonts_dir.is_none() {
-            let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
-            Self::validate_font_bytes(&file.url, &bytes)?;
-            return Ok((bytes, key, true));
+            stats.font_file_cache_misses = stats.font_file_cache_misses.saturating_add(1);
+            let bytes = self
+                .get_bytes_with_retry_blocking(&file.url)
+                .map_err(|e| e.with_stats(stats))?;
+            stats.downloaded_bytes = stats
+                .downloaded_bytes
+                .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+            Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_stats(stats))?;
+            return Ok(LoadedFontFile { bytes, key, stats });
         }
 
         let gate_guard = DownloadGateGuard {
@@ -516,14 +835,22 @@ impl GoogleFontsClient {
         );
         let _lock = gate_guard.gate.mutex.blocking_lock();
 
-        if let Some(bytes) = Self::try_read_cached_font(&file.url, &fonts_dir)? {
-            return Ok((bytes, key, false));
+        if let Some(bytes) =
+            Self::try_read_cached_font(&file.url, &fonts_dir).map_err(|e| e.with_stats(stats))?
+        {
+            return Ok(LoadedFontFile { bytes, key, stats });
         }
 
-        let bytes = self.get_bytes_with_retry_blocking(&file.url)?;
-        Self::validate_font_bytes(&file.url, &bytes)?;
-        Self::cache_font(&file.url, &fonts_dir, &bytes)?;
-        Ok((bytes, key, true))
+        stats.font_file_cache_misses = stats.font_file_cache_misses.saturating_add(1);
+        let bytes = self
+            .get_bytes_with_retry_blocking(&file.url)
+            .map_err(|e| e.with_stats(stats))?;
+        stats.downloaded_bytes = stats
+            .downloaded_bytes
+            .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+        Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_stats(stats))?;
+        Self::cache_font(&file.url, &fonts_dir, &bytes).map_err(|e| e.with_stats(stats))?;
+        Ok(LoadedFontFile { bytes, key, stats })
     }
 
     /// Acquire (or create) a per-key download gate for in-process dedup.
@@ -732,21 +1059,27 @@ impl Default for GoogleFontsClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
 
-    fn make_test_client(temp_root: &std::path::Path) -> GoogleFontsClient {
+    fn make_gate_test_client() -> GoogleFontsClient {
         let config = ClientConfig {
-            cache_dir: Some(temp_root.to_path_buf()),
+            cache_dir: None,
             google_fonts_css2_url: "http://127.0.0.1:1/css2".to_string(),
             ..ClientConfig::default()
         };
-        GoogleFontsClient::new(config).unwrap()
+        let async_client = reqwest::Client::builder().no_proxy().build().unwrap();
+        GoogleFontsClient {
+            max_font_cache_bytes: AtomicU64::new(config.max_font_cache_bytes),
+            config,
+            async_client,
+            blocking_client: Mutex::new(None),
+            download_gates: DashMap::new(),
+            known_font_cache: DashMap::new(),
+        }
     }
 
     #[test]
     fn test_download_gate_pruned_when_last_user_released() {
-        let temp = tempdir().unwrap();
-        let client = make_test_client(temp.path());
+        let client = make_gate_test_client();
         let key = "roboto--KFOmCnqEu92Fr1Mu4mxK.ttf";
 
         let gate = client.acquire_download_gate(key);
@@ -759,8 +1092,7 @@ mod tests {
 
     #[test]
     fn test_download_gate_retained_while_other_users_exist() {
-        let temp = tempdir().unwrap();
-        let client = make_test_client(temp.path());
+        let client = make_gate_test_client();
         let key = "roboto--KFOmCnqEu92Fr1Mu4mxK.ttf";
 
         let gate_a = client.acquire_download_gate(key);
@@ -776,8 +1108,7 @@ mod tests {
 
     #[test]
     fn test_download_gate_guard_releases_on_drop() {
-        let temp = tempdir().unwrap();
-        let client = make_test_client(temp.path());
+        let client = make_gate_test_client();
         let key = "roboto--KFOmCnqEu92Fr1Mu4mxK.ttf";
 
         {
@@ -795,8 +1126,7 @@ mod tests {
 
     #[test]
     fn test_download_gate_not_pruned_when_map_points_to_different_gate() {
-        let temp = tempdir().unwrap();
-        let client = make_test_client(temp.path());
+        let client = make_gate_test_client();
         let key = "roboto--KFOmCnqEu92Fr1Mu4mxK.ttf";
 
         let old_gate = client.acquire_download_gate(key);
@@ -814,6 +1144,32 @@ mod tests {
 
         client.release_download_gate(key, &replacement);
         assert!(!client.download_gates.contains_key(key));
+    }
+
+    #[test]
+    fn test_variant_limit_rejects_deduped_explicit_variants_before_network() {
+        let variants = vec![
+            VariantRequest {
+                weight: 400,
+                style: crate::types::FontStyle::Normal,
+            },
+            VariantRequest {
+                weight: 700,
+                style: crate::types::FontStyle::Normal,
+            },
+        ];
+        let count = dedupe_variants(&variants).len();
+
+        let err = GoogleFontsClient::validate_variant_limit(count, 1)
+            .expect_err("variant cap should reject before network access");
+
+        assert!(matches!(
+            err,
+            GoogleFontsError::TooManyVariants {
+                resolved: 2,
+                max: 1
+            }
+        ));
     }
 
     #[test]

@@ -48,6 +48,7 @@ pub struct ConverterConfigOverrides {
     pub subset_fonts: Option<bool>,
     pub missing_fonts: Option<MissingFontsPolicy>,
     pub google_fonts: Option<Vec<GoogleFontRequest>>,
+    pub max_google_font_variants_per_request: Option<Option<NonZeroU64>>,
     pub max_v8_heap_size_mb: Option<Option<NonZeroU64>>,
     pub max_v8_execution_time_secs: Option<Option<NonZeroU64>>,
     pub gc_after_conversion: Option<bool>,
@@ -201,6 +202,15 @@ pub fn parse_config_overrides(
                         )
                     })?;
                     overrides.google_fonts = Some(parsed.unwrap_or_default());
+                }
+            }
+            "max_google_font_variants_per_request" => {
+                if value.is_none() {
+                    overrides.max_google_font_variants_per_request =
+                        Some(default.max_google_font_variants_per_request);
+                } else {
+                    let n = extract_positive_u64("max_google_font_variants_per_request", &value)?;
+                    overrides.max_google_font_variants_per_request = Some(Some(n));
                 }
             }
             "max_v8_heap_size_mb" => {
@@ -401,6 +411,11 @@ pub fn apply_config_overrides(
     if let Some(google_fonts) = overrides.google_fonts {
         config.google_fonts = google_fonts;
     }
+    if let Some(max_google_font_variants_per_request) =
+        overrides.max_google_font_variants_per_request
+    {
+        config.max_google_font_variants_per_request = max_google_font_variants_per_request;
+    }
     if let Some(max_v8_heap_size_mb) = overrides.max_v8_heap_size_mb {
         config.max_v8_heap_size_mb = max_v8_heap_size_mb;
     }
@@ -520,6 +535,10 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
 ///     optionally ``"variants"`` (list of ``(weight, style)`` tuples). Each
 ///     call **replaces** the full configured list. ``None`` (or ``[]``)
 ///     resets to the library default (empty list).
+/// max_google_font_variants_per_request : int, optional
+///     Maximum Google Font variants resolved by a single conversion. Must be
+///     >= 1 if provided. ``None`` resets to the library default (no cap).
+///     Passing ``0`` raises ``ValueError``.
 /// max_v8_heap_size_mb : int, optional
 ///     Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
 ///     ``None`` resets to the library default (no cap). Passing ``0`` raises

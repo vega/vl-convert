@@ -2,7 +2,7 @@ use criterion::{
     black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput,
 };
 use serde_json::json;
-use vl_convert_rs::converter::{VgOpts, VlConverter};
+use vl_convert_rs::converter::{PngOpts, SvgOpts, VgOpts, VlConverter};
 use vl_convert_rs::serde_json::Value;
 
 const LARGE_SCATTER_POINTS: usize = 50_000;
@@ -73,20 +73,20 @@ fn bench_vega_to_scenegraph_large_scatter(c: &mut Criterion) {
         .enable_all()
         .build()
         .expect("failed to construct benchmark runtime");
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     let warmup = runtime
         .block_on(converter.vega_to_scenegraph(vg_spec.clone(), VgOpts::default()))
         .expect("warmup scenegraph conversion failed");
     assert!(
-        warmup.get("scenegraph").is_some(),
+        warmup.scenegraph.get("scenegraph").is_some(),
         "scenegraph conversion did not return a scenegraph object"
     );
     let warmup_msgpack = runtime
         .block_on(converter.vega_to_scenegraph_msgpack(vg_spec.clone(), VgOpts::default()))
         .expect("warmup scenegraph msgpack conversion failed");
-    let warmup_msgpack_decoded: Value =
-        rmp_serde::from_slice(&warmup_msgpack).expect("warmup scenegraph msgpack decode failed");
+    let warmup_msgpack_decoded: Value = rmp_serde::from_slice(&warmup_msgpack.data)
+        .expect("warmup scenegraph msgpack decode failed");
     assert!(
         warmup_msgpack_decoded.get("scenegraph").is_some(),
         "scenegraph msgpack conversion did not return a scenegraph object"
@@ -137,7 +137,7 @@ fn bench_vega_to_scenegraph_large_scatter(c: &mut Criterion) {
         |b| {
             b.iter(|| {
                 black_box(
-                    rmp_serde::from_slice::<Value>(black_box(&warmup_msgpack))
+                    rmp_serde::from_slice::<Value>(black_box(&warmup_msgpack.data))
                         .expect("scenegraph msgpack decode failed"),
                 )
             });
@@ -154,13 +154,13 @@ fn bench_vega_to_svg_large_scatter(c: &mut Criterion) {
         .enable_all()
         .build()
         .expect("failed to construct benchmark runtime");
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     let warmup_svg = runtime
-        .block_on(converter.vega_to_svg(vg_spec.clone(), VgOpts::default()))
+        .block_on(converter.vega_to_svg(vg_spec.clone(), VgOpts::default(), SvgOpts::default()))
         .expect("warmup SVG conversion failed");
     assert!(
-        warmup_svg.contains("<svg"),
+        warmup_svg.svg.contains("<svg"),
         "warmup SVG conversion did not return SVG"
     );
 
@@ -175,7 +175,11 @@ fn bench_vega_to_svg_large_scatter(c: &mut Criterion) {
                 |spec| {
                     black_box(
                         runtime
-                            .block_on(converter.vega_to_svg(black_box(spec), VgOpts::default()))
+                            .block_on(converter.vega_to_svg(
+                                black_box(spec),
+                                VgOpts::default(),
+                                SvgOpts::default(),
+                            ))
                             .expect("SVG conversion failed"),
                     )
                 },
@@ -194,13 +198,13 @@ fn bench_vega_to_png_large_scatter(c: &mut Criterion) {
         .enable_all()
         .build()
         .expect("failed to construct benchmark runtime");
-    let mut converter = VlConverter::new();
+    let converter = VlConverter::new();
 
     let warmup_png = runtime
-        .block_on(converter.vega_to_png(vg_spec.clone(), VgOpts::default(), None, None))
+        .block_on(converter.vega_to_png(vg_spec.clone(), VgOpts::default(), PngOpts::default()))
         .expect("warmup PNG conversion failed");
     assert!(
-        warmup_png.starts_with(PNG_SIGNATURE),
+        warmup_png.data.starts_with(PNG_SIGNATURE),
         "warmup PNG conversion did not return a PNG payload"
     );
 
@@ -218,8 +222,7 @@ fn bench_vega_to_png_large_scatter(c: &mut Criterion) {
                             .block_on(converter.vega_to_png(
                                 black_box(spec),
                                 VgOpts::default(),
-                                None,
-                                None,
+                                PngOpts::default(),
                             ))
                             .expect("PNG conversion failed"),
                     )

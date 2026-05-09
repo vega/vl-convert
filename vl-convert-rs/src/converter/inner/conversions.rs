@@ -130,7 +130,11 @@ vegaLiteToSvg_{ver_name:?}(
         }
         let svg = self.execute_script_to_string("svg").await?;
         let logs = std::mem::take(&mut self.last_log_entries);
-        Ok(SvgOutput { svg, logs })
+        Ok(SvgOutput {
+            svg,
+            logs,
+            font_stats: Default::default(),
+        })
     }
 
     pub async fn vegalite_to_scenegraph_msgpack(
@@ -212,7 +216,11 @@ vegaLiteToScenegraph_{ver_name:?}(
         }
         let data = result.take_result()?;
         let logs = std::mem::take(&mut self.last_log_entries);
-        Ok(ScenegraphMsgpackOutput { data, logs })
+        Ok(ScenegraphMsgpackOutput {
+            data,
+            logs,
+            font_stats: Default::default(),
+        })
     }
 
     pub async fn vegalite_to_scenegraph(
@@ -228,6 +236,7 @@ vegaLiteToScenegraph_{ver_name:?}(
         Ok(ScenegraphOutput {
             scenegraph,
             logs: sg_output.logs,
+            font_stats: sg_output.font_stats,
         })
     }
 
@@ -303,7 +312,11 @@ vegaToSvg(
         }
         let svg = self.execute_script_to_string("svg").await?;
         let logs = std::mem::take(&mut self.last_log_entries);
-        Ok(SvgOutput { svg, logs })
+        Ok(SvgOutput {
+            svg,
+            logs,
+            font_stats: Default::default(),
+        })
     }
 
     pub async fn vega_to_scenegraph_msgpack(
@@ -376,7 +389,11 @@ vegaToScenegraph(
         }
         let data = result.take_result()?;
         let logs = std::mem::take(&mut self.last_log_entries);
-        Ok(ScenegraphMsgpackOutput { data, logs })
+        Ok(ScenegraphMsgpackOutput {
+            data,
+            logs,
+            font_stats: Default::default(),
+        })
     }
 
     pub async fn vega_to_scenegraph(
@@ -390,6 +407,7 @@ vegaToScenegraph(
         Ok(ScenegraphOutput {
             scenegraph,
             logs: sg_output.logs,
+            font_stats: sg_output.font_stats,
         })
     }
 

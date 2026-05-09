@@ -101,6 +101,9 @@ pub struct ServeConfig {
     /// Reservation size each request tentatively charges against enabled
     /// budget dimensions before settlement. Default 1000 (1s).
     pub budget_hold_ms: i64,
+    /// Additional budget milliseconds charged per Google Fonts CSS or font-file
+    /// cache miss. Default 0 disables the surcharge.
+    pub google_font_cache_miss_penalty_ms: i64,
     /// When `true`, `extract_client_ip` honors `X-Forwarded-For` /
     /// `X-Envoy-External-Address` headers from upstream proxies
     /// (walking XFF right-to-left to land on the first trusted hop).
@@ -139,6 +142,7 @@ impl Default for ServeConfig {
             per_ip_budget_ms: None,
             global_budget_ms: None,
             budget_hold_ms: 1000,
+            google_font_cache_miss_penalty_ms: 0,
             trust_proxy: false,
             socket_mode: 0o600,
             reconfig_drain_timeout_secs: 30,
@@ -240,6 +244,9 @@ pub(crate) fn validate_serve_config(serve_config: &ServeConfig) -> Result<(), an
     if serve_config.budget_hold_ms <= 0 {
         anyhow::bail!("budget_hold_ms must be positive");
     }
+    if serve_config.google_font_cache_miss_penalty_ms < 0 {
+        anyhow::bail!("google_font_cache_miss_penalty_ms must be non-negative");
+    }
 
     if serve_config
         .api_key
@@ -269,4 +276,24 @@ pub(crate) fn validate_serve_config(serve_config: &ServeConfig) -> Result<(), an
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_serve_config_rejects_negative_google_font_penalty() {
+        let serve_config = ServeConfig {
+            google_font_cache_miss_penalty_ms: -1,
+            ..ServeConfig::default()
+        };
+
+        let err = validate_serve_config(&serve_config).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("google_font_cache_miss_penalty_ms must be non-negative"),
+            "unexpected error: {err}"
+        );
+    }
 }

@@ -79,7 +79,7 @@ pub(crate) fn run_budget_request(
         .layer(axum::middleware::from_fn(
             move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
                 let tracker = tracker.clone();
-                async move { budget::middleware(tracker, false, false, req, next).await }
+                async move { budget::middleware(tracker, false, false, 0, req, next).await }
             },
         ));
 

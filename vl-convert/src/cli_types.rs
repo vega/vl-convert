@@ -97,6 +97,16 @@ pub(crate) struct Cli {
     )]
     pub(crate) google_font: Vec<String>,
 
+    /// Maximum unique Google Font family/weight/style variants per conversion.
+    /// `0` disables the cap.
+    #[arg(
+        long,
+        global = true,
+        value_name = "N",
+        env = "VLC_MAX_GOOGLE_FONT_VARIANTS_PER_REQUEST"
+    )]
+    pub(crate) max_google_font_variants_per_request: Option<u64>,
+
     /// Automatically download missing fonts from Google Fonts (default: false).
     #[arg(
         long,

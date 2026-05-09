@@ -3,6 +3,67 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoogleFontStats {
+    pub css_cache_misses: u64,
+    pub font_file_cache_misses: u64,
+    pub downloaded_bytes: u64,
+    pub resolved_variants: u64,
+}
+
+impl GoogleFontStats {
+    pub fn cache_misses(&self) -> u64 {
+        self.css_cache_misses
+            .saturating_add(self.font_file_cache_misses)
+    }
+
+    pub fn add_assign(&mut self, other: Self) {
+        self.css_cache_misses = self.css_cache_misses.saturating_add(other.css_cache_misses);
+        self.font_file_cache_misses = self
+            .font_file_cache_misses
+            .saturating_add(other.font_file_cache_misses);
+        self.downloaded_bytes = self.downloaded_bytes.saturating_add(other.downloaded_bytes);
+        self.resolved_variants = self
+            .resolved_variants
+            .saturating_add(other.resolved_variants);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FontLoadRequest<'a> {
+    pub family: &'a str,
+    pub variants: Option<&'a [VariantRequest]>,
+    pub max_variants: Option<usize>,
+}
+
+impl<'a> FontLoadRequest<'a> {
+    pub fn new(family: &'a str) -> Self {
+        Self {
+            family,
+            variants: None,
+            max_variants: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FontLoadResult {
+    pub batch: LoadedFontBatch,
+    pub stats: GoogleFontStats,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FontProbeResult {
+    pub known: bool,
+    pub stats: GoogleFontStats,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VariantResolutionResult {
+    pub variants: Vec<VariantRequest>,
+    pub stats: GoogleFontStats,
+}
+
 /// CSS font style encoded as lowercase `"normal"` / `"italic"` across serde,
 /// `Display`, `FromStr`, Python, and server-admin JSON.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

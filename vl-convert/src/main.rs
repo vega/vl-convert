@@ -99,6 +99,9 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(google_fonts) = parse_google_font_requests(&google_font_families)? {
         base_config.google_fonts = google_fonts;
     }
+    if let Some(max) = cli.max_google_font_variants_per_request {
+        base_config.max_google_font_variants_per_request = NonZeroU64::new(max);
+    }
     // Theme, locale, and themes globals use `Option<String>` from clap to
     // distinguish absent flags from explicit overrides. The literal string
     // `null` clears the field during parsing.

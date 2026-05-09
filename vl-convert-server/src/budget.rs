@@ -391,6 +391,7 @@ pub(crate) async fn middleware(
     tracker: Arc<BudgetTracker>,
     opaque_errors: bool,
     trust_proxy: bool,
+    google_font_cache_miss_penalty_ms: i64,
     req: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
@@ -450,10 +451,34 @@ pub(crate) async fn middleware(
     let start = Instant::now();
     let response = next.run(req).await;
     let actual_ms = start.elapsed().as_millis() as i64;
+    let font_stats = response
+        .extensions()
+        .get::<vl_convert_rs::converter::GoogleFontStats>()
+        .copied()
+        .unwrap_or_default();
+    let font_cache_misses = i64::try_from(font_stats.cache_misses()).unwrap_or(i64::MAX);
+    let font_penalty_ms = if google_font_cache_miss_penalty_ms > 0 && font_cache_misses > 0 {
+        font_cache_misses.saturating_mul(google_font_cache_miss_penalty_ms)
+    } else {
+        0
+    };
+    let charged_ms = actual_ms.saturating_add(font_penalty_ms);
 
-    let settlement = reservation.complete(actual_ms);
+    let settlement = reservation.complete(charged_ms);
     span.record("budget_outcome", "accepted");
     span.record("budget_charged_ms", settlement.charged_ms);
+    span.record("budget_elapsed_ms", actual_ms);
+    span.record("budget_font_cache_miss_penalty_ms", font_penalty_ms);
+    span.record("google_font_css_cache_misses", font_stats.css_cache_misses);
+    span.record(
+        "google_font_file_cache_misses",
+        font_stats.font_file_cache_misses,
+    );
+    span.record("google_font_downloaded_bytes", font_stats.downloaded_bytes);
+    span.record(
+        "google_font_resolved_variants",
+        font_stats.resolved_variants,
+    );
     if let Some(g) = settlement.global_remaining_ms {
         span.record("budget_global_remaining_ms", g);
     }
@@ -472,7 +497,9 @@ mod tests {
         capture_json_subscriber, default_serve_config, find_response_event, run_budget_request,
         BufferWriter,
     };
+    use crate::LogFormat;
     use axum::http::StatusCode;
+    use axum::response::IntoResponse;
     use axum::routing::get;
     use axum::Router;
     use std::net::{IpAddr, Ipv4Addr};
@@ -617,7 +644,7 @@ mod tests {
             .layer(axum::middleware::from_fn(
                 move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
                     let tracker = tracker.clone();
-                    async move { super::middleware(tracker, false, false, req, next).await }
+                    async move { super::middleware(tracker, false, false, 0, req, next).await }
                 },
             ));
 
@@ -677,6 +704,148 @@ mod tests {
         assert!(event["budget.global_remaining_ms"].as_i64().is_some());
         assert!(event["budget.ip_remaining_ms"].as_i64().is_some());
         assert!(event["budget.client_ip"].as_str().is_some());
+    }
+
+    #[test]
+    fn test_budget_logging_charges_google_font_cache_miss_penalty() {
+        async fn font_stats_handler() -> axum::response::Response {
+            let mut response = "ok".into_response();
+            response
+                .extensions_mut()
+                .insert(vl_convert_rs::converter::GoogleFontStats {
+                    css_cache_misses: 1,
+                    font_file_cache_misses: 2,
+                    downloaded_bytes: 1234,
+                    resolved_variants: 3,
+                });
+            response
+        }
+
+        let tracker = BudgetTracker::new(1_000, 10_000, 50);
+        let router =
+            Router::new()
+                .route("/t", get(font_stats_handler))
+                .layer(axum::middleware::from_fn(
+                    move |req: axum::http::Request<axum::body::Body>,
+                          next: axum::middleware::Next| {
+                        let tracker = tracker.clone();
+                        async move { super::middleware(tracker, false, false, 10, req, next).await }
+                    },
+                ));
+
+        let mut serve_config = default_serve_config();
+        serve_config.log_format = LogFormat::Json;
+        let mut app = build_middleware_stack(router, &serve_config);
+
+        let buf = BufferWriter::default();
+        let subscriber = capture_json_subscriber(buf.clone());
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let response = tracing::subscriber::with_default(subscriber, || {
+            rt.block_on(async move {
+                let mut req = axum::http::Request::builder()
+                    .method("GET")
+                    .uri("/t")
+                    .body(axum::body::Body::empty())
+                    .unwrap();
+                req.extensions_mut()
+                    .insert(axum::extract::ConnectInfo::<std::net::SocketAddr>(
+                        "127.0.0.1:12345".parse().unwrap(),
+                    ));
+                Service::call(&mut app, req).await.unwrap()
+            })
+        });
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let event = find_response_event(&buf);
+        assert_eq!(event["budget.font_cache_miss_penalty_ms"], 30);
+        assert_eq!(event["google_font.css_cache_misses"], 1);
+        assert_eq!(event["google_font.file_cache_misses"], 2);
+        assert_eq!(event["google_font.downloaded_bytes"], 1234);
+        assert_eq!(event["google_font.resolved_variants"], 3);
+        assert!(
+            event["budget.charged_ms"].as_i64().is_some_and(|v| v >= 30),
+            "charged_ms should include font penalty. captured: {}",
+            buf.snapshot()
+        );
+    }
+
+    #[test]
+    fn test_budget_logging_charges_google_font_stats_on_error_response() {
+        async fn font_stats_error_handler() -> axum::response::Response {
+            let stats = vl_convert_rs::converter::GoogleFontStats {
+                css_cache_misses: 2,
+                font_file_cache_misses: 1,
+                downloaded_bytes: 2048,
+                resolved_variants: 12,
+            };
+            let error =
+                vl_convert_rs::anyhow::Error::new(vl_convert_google_fonts::GoogleFontsFailure {
+                    error: vl_convert_google_fonts::GoogleFontsError::TooManyVariants {
+                        resolved: 12,
+                        max: 8,
+                    },
+                    stats,
+                });
+            crate::util::conversion_error_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "conversion failed",
+                &error,
+                false,
+            )
+        }
+
+        let tracker = BudgetTracker::new(1_000, 10_000, 50);
+        let router = Router::new()
+            .route("/t", get(font_stats_error_handler))
+            .layer(axum::middleware::from_fn(
+                move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
+                    let tracker = tracker.clone();
+                    async move { super::middleware(tracker, false, false, 10, req, next).await }
+                },
+            ));
+
+        let mut serve_config = default_serve_config();
+        serve_config.log_format = LogFormat::Json;
+        let mut app = build_middleware_stack(router, &serve_config);
+
+        let buf = BufferWriter::default();
+        let subscriber = capture_json_subscriber(buf.clone());
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let response = tracing::subscriber::with_default(subscriber, || {
+            rt.block_on(async move {
+                let mut req = axum::http::Request::builder()
+                    .method("GET")
+                    .uri("/t")
+                    .body(axum::body::Body::empty())
+                    .unwrap();
+                req.extensions_mut()
+                    .insert(axum::extract::ConnectInfo::<std::net::SocketAddr>(
+                        "127.0.0.1:12345".parse().unwrap(),
+                    ));
+                Service::call(&mut app, req).await.unwrap()
+            })
+        });
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        let event = find_response_event(&buf);
+        assert_eq!(event["budget.font_cache_miss_penalty_ms"], 30);
+        assert_eq!(event["google_font.css_cache_misses"], 2);
+        assert_eq!(event["google_font.file_cache_misses"], 1);
+        assert_eq!(event["google_font.downloaded_bytes"], 2048);
+        assert_eq!(event["google_font.resolved_variants"], 12);
+        assert!(
+            event["budget.charged_ms"].as_i64().is_some_and(|v| v >= 30),
+            "charged_ms should include font penalty. captured: {}",
+            buf.snapshot()
+        );
     }
 
     #[test]

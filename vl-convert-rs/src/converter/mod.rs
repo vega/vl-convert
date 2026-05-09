@@ -10,8 +10,8 @@ mod value_or_string;
 mod worker_pool;
 
 pub use config::*;
-pub use fonts::GoogleFontRequest;
 pub(crate) use fonts::*;
+pub use fonts::{google_font_stats_from_error, GoogleFontRequest, GoogleFontStats};
 pub(crate) use inner::InnerVlConverter;
 pub(crate) use inner::VlConverterInner;
 pub(crate) use permissions::*;
@@ -479,13 +479,13 @@ impl VlConverter {
 
     /// If font preprocessing is enabled, compile VL→Vega and process referenced fonts.
     ///
-    /// Returns `Some((vega_spec, vg_opts))` with the compiled Vega spec and options
-    /// for the caller to render directly, or `None` when both font options are disabled.
+    /// Returns the compiled Vega spec, options, compile logs, and Google Fonts
+    /// stats for the caller to render directly.
     async fn maybe_compile_vl_with_preprocessed_fonts(
         &self,
         vl_spec: &ValueOrString,
         vl_opts: &VlOpts,
-    ) -> Result<Option<(serde_json::Value, VgOpts, Vec<LogEntry>)>, AnyError> {
+    ) -> Result<Option<(serde_json::Value, VgOpts, Vec<LogEntry>, GoogleFontStats)>, AnyError> {
         if !self.should_preprocess_fonts() {
             return Ok(None);
         }
@@ -504,19 +504,24 @@ impl VlConverter {
             .await?;
         let vega_spec = vega_output.spec;
         let compile_logs = vega_output.logs;
-        let auto_requests = preprocess_fonts(
+        let font_analysis = preprocess_fonts_with_stats(
             &vega_spec,
             self.inner.config().auto_google_fonts,
             self.inner.config().missing_fonts,
         )
         .await?;
-        if !auto_requests.is_empty() {
+        if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
                 .get_or_insert_with(Vec::new)
-                .extend(auto_requests);
+                .extend(font_analysis.requests);
         }
-        Ok(Some((vega_spec, vg_opts, compile_logs)))
+        Ok(Some((
+            vega_spec,
+            vg_opts,
+            compile_logs,
+            font_analysis.stats,
+        )))
     }
 
     /// If font preprocessing is enabled, parse the Vega spec and process missing fonts.
@@ -528,36 +533,34 @@ impl VlConverter {
     async fn maybe_preprocess_vega_fonts(
         &self,
         spec: &ValueOrString,
-    ) -> Result<Vec<GoogleFontRequest>, AnyError> {
+    ) -> Result<FontRequestAnalysis, AnyError> {
         if self.should_preprocess_fonts() {
             let spec_value: serde_json::Value = match spec {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
                 ValueOrString::Value(v) => v.clone(),
             };
-            preprocess_fonts(
+            preprocess_fonts_with_stats(
                 &spec_value,
                 self.inner.config().auto_google_fonts,
                 self.inner.config().missing_fonts,
             )
             .await
         } else {
-            Ok(Vec::new())
+            Ok(FontRequestAnalysis::default())
         }
     }
 
-    /// If font preprocessing is enabled, extract fonts from the SVG and resolve
-    /// them via Google Fonts. Returns loaded font batches ready for overlay.
-    /// Extract font requests from an SVG for worker-side resolution.
+    /// Extract font requests from an SVG and collect Google Fonts catalog stats.
     async fn preprocess_svg_font_requests(
         &self,
         svg: &str,
-    ) -> Result<Option<Vec<GoogleFontRequest>>, AnyError> {
+    ) -> Result<FontRequestAnalysis, AnyError> {
         if !self.should_preprocess_fonts() {
-            return Ok(None);
+            return Ok(FontRequestAnalysis::default());
         }
 
         let font_strings = crate::extract::extract_fonts_from_svg(svg);
-        let auto_requests = classify_and_request_fonts(
+        let font_analysis = classify_and_request_fonts_with_stats(
             font_strings,
             self.inner.config().auto_google_fonts,
             self.inner.config().missing_fonts,
@@ -565,11 +568,7 @@ impl VlConverter {
         )
         .await?;
 
-        if auto_requests.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(auto_requests))
-        }
+        Ok(font_analysis)
     }
 
     /// Apply config-level defaults to VlOpts where the per-request value is None.
@@ -624,15 +623,15 @@ impl VlConverter {
             .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
             .unwrap_or_default();
 
-        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
-        if !auto_requests.is_empty() {
+        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
                 .get_or_insert_with(Vec::new)
-                .extend(auto_requests);
+                .extend(font_analysis.requests);
         }
 
-        let mut output = if let Some(plugin_source) = plugin {
+        let output_result = if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
@@ -640,7 +639,7 @@ impl VlConverter {
                     with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
                 })
             })
-            .await?
+            .await
         } else {
             self.run_on_worker(move |inner| {
                 let gf = vg_opts.google_fonts.take();
@@ -649,12 +648,18 @@ impl VlConverter {
                     with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
                 })
             })
-            .await?
+            .await
         };
+        let mut output =
+            output_result.map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
+        output.font_stats.add_assign(font_analysis.stats);
 
-        output.svg = self
+        let (svg, postprocess_font_stats) = self
             .postprocess_svg(output.svg, &svg_opts, explicit_google_families)
-            .await?;
+            .await
+            .map_err(|err| error_with_google_font_stats(err, output.font_stats))?;
+        output.svg = svg;
+        output.font_stats.add_assign(postprocess_font_stats);
         Ok(output)
     }
 
@@ -668,7 +673,7 @@ impl VlConverter {
         svg: String,
         svg_opts: &SvgOpts,
         explicit_google_families: HashSet<String>,
-    ) -> Result<String, AnyError> {
+    ) -> Result<(String, GoogleFontStats), AnyError> {
         let config = self.config();
         let image_policy = self.image_access_policy();
         let resources_dir = if config.base_url.is_filesystem() {
@@ -696,7 +701,7 @@ impl VlConverter {
             analysis.families.iter().cloned().collect();
 
         // Classify fonts once with proper explicit families
-        let classified_fonts = classify_scenegraph_fonts(
+        let classified = classify_scenegraph_fonts_with_stats(
             &families,
             config.auto_google_fonts,
             config.embed_local_fonts,
@@ -704,6 +709,8 @@ impl VlConverter {
             &explicit_google_families,
         )
         .await?;
+        let classified_fonts = classified.fonts;
+        let mut font_stats = classified.stats;
 
         // Compute variants once before building Google font requests
         let family_variants = crate::font_embed::variants_by_family(&analysis.chars_by_key);
@@ -735,13 +742,17 @@ impl VlConverter {
         let loaded_batches = if google_font_requests.is_empty() {
             Vec::new()
         } else {
-            self.run_on_worker(move |inner: &mut InnerVlConverter| {
-                Box::pin(inner.resolve_google_fonts(Some(google_font_requests)))
-            })
-            .await?
+            let resolved = self
+                .run_on_worker(move |inner: &mut InnerVlConverter| {
+                    Box::pin(inner.resolve_google_fonts(Some(google_font_requests)))
+                })
+                .await
+                .map_err(|err| error_with_google_font_stats(err, font_stats))?;
+            font_stats.add_assign(resolved.stats);
+            resolved.batches
         };
 
-        crate::svg_font::process_svg(
+        let (svg, process_stats) = crate::svg_font::process_svg(
             svg,
             svg_opts,
             &analysis,
@@ -754,6 +765,9 @@ impl VlConverter {
             resources_dir.as_deref(),
         )
         .await
+        .map_err(|err| error_with_google_font_stats(err, font_stats))?;
+        font_stats.add_assign(process_stats);
+        Ok((svg, font_stats))
     }
 
     pub async fn vega_to_scenegraph(
@@ -763,21 +777,25 @@ impl VlConverter {
     ) -> Result<ScenegraphOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
-        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
-        if !auto_requests.is_empty() {
+        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
                 .get_or_insert_with(Vec::new)
-                .extend(auto_requests);
+                .extend(font_analysis.requests);
         }
-        self.run_on_worker(move |inner| {
-            let gf = vg_opts.google_fonts.take();
-            let inner = &mut *inner;
-            Box::pin(async move {
-                with_font_overlay!(inner, gf, inner.vega_to_scenegraph(vg_spec, vg_opts).await)
+        let mut output = self
+            .run_on_worker(move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(inner, gf, inner.vega_to_scenegraph(vg_spec, vg_opts).await)
+                })
             })
-        })
-        .await
+            .await
+            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
+        output.font_stats.add_assign(font_analysis.stats);
+        Ok(output)
     }
 
     pub async fn vega_to_scenegraph_msgpack(
@@ -787,25 +805,29 @@ impl VlConverter {
     ) -> Result<ScenegraphMsgpackOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
-        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
-        if !auto_requests.is_empty() {
+        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
                 .get_or_insert_with(Vec::new)
-                .extend(auto_requests);
+                .extend(font_analysis.requests);
         }
-        self.run_on_worker(move |inner| {
-            let gf = vg_opts.google_fonts.take();
-            let inner = &mut *inner;
-            Box::pin(async move {
-                with_font_overlay!(
-                    inner,
-                    gf,
-                    inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
-                )
+        let mut output = self
+            .run_on_worker(move |inner| {
+                let gf = vg_opts.google_fonts.take();
+                let inner = &mut *inner;
+                Box::pin(async move {
+                    with_font_overlay!(
+                        inner,
+                        gf,
+                        inner.vega_to_scenegraph_msgpack(vg_spec, vg_opts).await
+                    )
+                })
             })
-        })
-        .await
+            .await
+            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
+        output.font_stats.add_assign(font_analysis.stats);
+        Ok(output)
     }
 
     pub async fn vegalite_to_svg(
@@ -824,57 +846,64 @@ impl VlConverter {
             .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
             .unwrap_or_default();
 
-        let mut output = if let Some((vega_spec, mut vg_opts, compile_logs)) = self
-            .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
-            .await?
-        {
-            let vg_spec: ValueOrString = vega_spec.into();
-            let mut output = if let Some(plugin_source) = plugin {
+        let mut output =
+            if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
+                .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
+                .await?
+            {
+                let vg_spec: ValueOrString = vega_spec.into();
+                let output_result = if let Some(plugin_source) = plugin {
+                    self.run_on_ephemeral_worker(plugin_source, move |inner| {
+                        let gf = vg_opts.google_fonts.take();
+                        let inner = &mut *inner;
+                        Box::pin(async move {
+                            with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                        })
+                    })
+                    .await
+                } else {
+                    self.run_on_worker(move |inner| {
+                        let gf = vg_opts.google_fonts.take();
+                        let inner = &mut *inner;
+                        Box::pin(async move {
+                            with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                        })
+                    })
+                    .await
+                };
+                let mut output = output_result
+                    .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
+                let mut all_logs = compile_logs;
+                all_logs.extend(output.logs);
+                output.logs = all_logs;
+                output.font_stats.add_assign(preprocess_font_stats);
+                output
+            } else if let Some(plugin_source) = plugin {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                    let gf = vg_opts.google_fonts.take();
+                    let gf = vl_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                        with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
                     })
                 })
                 .await?
             } else {
                 self.run_on_worker(move |inner| {
-                    let gf = vg_opts.google_fonts.take();
+                    let gf = vl_opts.google_fonts.take();
                     let inner = &mut *inner;
                     Box::pin(async move {
-                        with_font_overlay!(inner, gf, inner.vega_to_svg(vg_spec, vg_opts).await)
+                        with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
                     })
                 })
                 .await?
             };
-            let mut all_logs = compile_logs;
-            all_logs.extend(output.logs);
-            output.logs = all_logs;
-            output
-        } else if let Some(plugin_source) = plugin {
-            self.run_on_ephemeral_worker(plugin_source, move |inner| {
-                let gf = vl_opts.google_fonts.take();
-                let inner = &mut *inner;
-                Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
-                })
-            })
-            .await?
-        } else {
-            self.run_on_worker(move |inner| {
-                let gf = vl_opts.google_fonts.take();
-                let inner = &mut *inner;
-                Box::pin(async move {
-                    with_font_overlay!(inner, gf, inner.vegalite_to_svg(vl_spec, vl_opts).await)
-                })
-            })
-            .await?
-        };
 
-        output.svg = self
+        let (svg, postprocess_font_stats) = self
             .postprocess_svg(output.svg, &svg_opts, explicit_google_families)
-            .await?;
+            .await
+            .map_err(|err| error_with_google_font_stats(err, output.font_stats))?;
+        output.svg = svg;
+        output.font_stats.add_assign(postprocess_font_stats);
         Ok(output)
     }
 
@@ -886,7 +915,7 @@ impl VlConverter {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -903,10 +932,12 @@ impl VlConverter {
                         )
                     })
                 })
-                .await?;
+                .await
+                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
+            output.font_stats.add_assign(preprocess_font_stats);
             Ok(output)
         } else {
             self.run_on_worker(move |inner| {
@@ -932,7 +963,7 @@ impl VlConverter {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -949,10 +980,12 @@ impl VlConverter {
                         )
                     })
                 })
-                .await?;
+                .await
+                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
+            output.font_stats.add_assign(preprocess_font_stats);
             Ok(output)
         } else {
             self.run_on_worker(move |inner| {
@@ -983,15 +1016,15 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
         let plugin = vg_opts.vega_plugin.take();
 
-        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
-        if !auto_requests.is_empty() {
+        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
                 .get_or_insert_with(Vec::new)
-                .extend(auto_requests);
+                .extend(font_analysis.requests);
         }
 
-        if let Some(plugin_source) = plugin {
+        let output_result = if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
@@ -1019,7 +1052,11 @@ impl VlConverter {
                 })
             })
             .await
-        }
+        };
+        let mut output =
+            output_result.map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
+        output.font_stats.add_assign(font_analysis.stats);
+        Ok(output)
     }
 
     pub async fn vegalite_to_png(
@@ -1035,12 +1072,12 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
         let plugin = vl_opts.vega_plugin.take();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            let mut output = if let Some(plugin_source) = plugin {
+            let output_result = if let Some(plugin_source) = plugin {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
@@ -1053,7 +1090,7 @@ impl VlConverter {
                         })
                     })
                 })
-                .await?
+                .await
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -1067,11 +1104,14 @@ impl VlConverter {
                         })
                     })
                 })
-                .await?
+                .await
             };
+            let mut output = output_result
+                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
+            output.font_stats.add_assign(preprocess_font_stats);
             Ok(output)
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
@@ -1116,16 +1156,16 @@ impl VlConverter {
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
-        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
-        if !auto_requests.is_empty() {
+        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
                 .get_or_insert_with(Vec::new)
-                .extend(auto_requests);
+                .extend(font_analysis.requests);
         }
         let image_policy = self.image_access_policy();
 
-        if let Some(plugin_source) = plugin {
+        let output_result = if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
@@ -1155,7 +1195,11 @@ impl VlConverter {
                 })
             })
             .await
-        }
+        };
+        let mut output =
+            output_result.map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
+        output.font_stats.add_assign(font_analysis.stats);
+        Ok(output)
     }
 
     pub async fn vegalite_to_jpeg(
@@ -1171,12 +1215,12 @@ impl VlConverter {
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            let mut output = if let Some(plugin_source) = plugin {
+            let output_result = if let Some(plugin_source) = plugin {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
@@ -1190,7 +1234,7 @@ impl VlConverter {
                         )
                     })
                 })
-                .await?
+                .await
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -1205,11 +1249,14 @@ impl VlConverter {
                         )
                     })
                 })
-                .await?
+                .await
             };
+            let mut output = output_result
+                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
+            output.font_stats.add_assign(preprocess_font_stats);
             Ok(output)
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
@@ -1254,16 +1301,16 @@ impl VlConverter {
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
-        let auto_requests = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
-        if !auto_requests.is_empty() {
+        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
                 .get_or_insert_with(Vec::new)
-                .extend(auto_requests);
+                .extend(font_analysis.requests);
         }
         let image_policy = self.image_access_policy();
 
-        if let Some(plugin_source) = plugin {
+        let output_result = if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
                 let gf = vg_opts.google_fonts.take();
                 let inner = &mut *inner;
@@ -1289,7 +1336,11 @@ impl VlConverter {
                 })
             })
             .await
-        }
+        };
+        let mut output =
+            output_result.map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
+        output.font_stats.add_assign(font_analysis.stats);
+        Ok(output)
     }
 
     pub async fn vegalite_to_pdf(
@@ -1303,12 +1354,12 @@ impl VlConverter {
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
             let vg_spec: ValueOrString = vega_spec.into();
-            let mut output = if let Some(plugin_source) = plugin {
+            let output_result = if let Some(plugin_source) = plugin {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
                     let gf = vg_opts.google_fonts.take();
                     let inner = &mut *inner;
@@ -1320,7 +1371,7 @@ impl VlConverter {
                         )
                     })
                 })
-                .await?
+                .await
             } else {
                 self.run_on_worker(move |inner| {
                     let gf = vg_opts.google_fonts.take();
@@ -1333,11 +1384,14 @@ impl VlConverter {
                         )
                     })
                 })
-                .await?
+                .await
             };
+            let mut output = output_result
+                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
+            output.font_stats.add_assign(preprocess_font_stats);
             Ok(output)
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
@@ -1372,24 +1426,30 @@ impl VlConverter {
         let scale = png_opts.scale.unwrap_or(1.0);
         let ppi = png_opts.ppi;
         let image_policy = self.image_access_policy();
-        let google_fonts = self.preprocess_svg_font_requests(svg).await?;
+        let font_analysis = self.preprocess_svg_font_requests(svg).await?;
+        let google_fonts = (!font_analysis.requests.is_empty()).then_some(font_analysis.requests);
         let svg = svg.to_string();
-        let data = self
+        let mut output = self
             .run_on_worker(move |inner| {
                 let inner = &mut *inner;
                 Box::pin(async move {
                     with_font_overlay!(
                         inner,
                         google_fonts,
-                        inner.svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
+                        inner
+                            .svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
+                            .map(|data| PngOutput {
+                                data,
+                                logs: Vec::new(),
+                                font_stats: Default::default(),
+                            })
                     )
                 })
             })
-            .await?;
-        Ok(PngOutput {
-            data,
-            logs: Vec::new(),
-        })
+            .await
+            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
+        output.font_stats.add_assign(font_analysis.stats);
+        Ok(output)
     }
 
     pub async fn svg_to_jpeg(
@@ -1400,46 +1460,58 @@ impl VlConverter {
         let scale = jpeg_opts.scale.unwrap_or(1.0);
         let quality = jpeg_opts.quality;
         let image_policy = self.image_access_policy();
-        let google_fonts = self.preprocess_svg_font_requests(svg).await?;
+        let font_analysis = self.preprocess_svg_font_requests(svg).await?;
+        let google_fonts = (!font_analysis.requests.is_empty()).then_some(font_analysis.requests);
         let svg = svg.to_string();
-        let data = self
+        let mut output = self
             .run_on_worker(move |inner| {
                 let inner = &mut *inner;
                 Box::pin(async move {
                     with_font_overlay!(
                         inner,
                         google_fonts,
-                        inner.svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
+                        inner
+                            .svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
+                            .map(|data| JpegOutput {
+                                data,
+                                logs: Vec::new(),
+                                font_stats: Default::default(),
+                            })
                     )
                 })
             })
-            .await?;
-        Ok(JpegOutput {
-            data,
-            logs: Vec::new(),
-        })
+            .await
+            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
+        output.font_stats.add_assign(font_analysis.stats);
+        Ok(output)
     }
 
     pub async fn svg_to_pdf(&self, svg: &str, _pdf_opts: PdfOpts) -> Result<PdfOutput, AnyError> {
         let image_policy = self.image_access_policy();
-        let google_fonts = self.preprocess_svg_font_requests(svg).await?;
+        let font_analysis = self.preprocess_svg_font_requests(svg).await?;
+        let google_fonts = (!font_analysis.requests.is_empty()).then_some(font_analysis.requests);
         let svg = svg.to_string();
-        let data = self
+        let mut output = self
             .run_on_worker(move |inner| {
                 let inner = &mut *inner;
                 Box::pin(async move {
                     with_font_overlay!(
                         inner,
                         google_fonts,
-                        inner.svg_to_pdf_with_worker_options(&svg, &image_policy)
+                        inner
+                            .svg_to_pdf_with_worker_options(&svg, &image_policy)
+                            .map(|data| PdfOutput {
+                                data,
+                                logs: Vec::new(),
+                                font_stats: Default::default(),
+                            })
                     )
                 })
             })
-            .await?;
-        Ok(PdfOutput {
-            data,
-            logs: Vec::new(),
-        })
+            .await
+            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
+        output.font_stats.add_assign(font_analysis.stats);
+        Ok(output)
     }
 
     pub async fn get_vegaembed_bundle(&self, vl_version: VlVersion) -> Result<String, AnyError> {
