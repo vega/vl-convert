@@ -43,6 +43,24 @@ serve(listener, built, async {
 # }
 ```
 
+## Embedding checklist
+
+When embedding the server library in another binary, keep the lifecycle
+policy explicit:
+
+- Use `bind_listener` rather than binding sockets directly. It handles stale
+  Unix sockets, socket permissions, and cleanup.
+- Use `build_app` before `serve`. It validates unsafe admin-listener
+  combinations and warms the converter pool.
+- Install signal handlers before advertising readiness.
+- Keep logs on stderr if stdout is reserved for a readiness message or other
+  machine-readable output.
+- Pass a shutdown future to `serve` that aggregates all shutdown triggers your
+  binary supports, such as SIGTERM, SIGINT, or parent-process EOF.
+- Harden `VlcConfig` before calling `build_app` when serving untrusted input:
+  set data-access policy, V8 heap and execution limits, and any Google Fonts
+  controls required by the deployment.
+
 ## Configuration
 
 When running through `vl-convert serve`, every serve flag has a matching

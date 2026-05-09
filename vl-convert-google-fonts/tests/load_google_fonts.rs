@@ -813,6 +813,21 @@ async fn test_probe_family_returns_true() {
 }
 
 #[tokio::test]
+async fn test_probe_family_positive_uses_css_cache_not_memory_cache() {
+    let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
+    let client = make_cacheless_client(server.base_url());
+
+    let first = client.probe_family("Roboto").await.unwrap();
+    let second = client.probe_family("Roboto").await.unwrap();
+
+    assert!(first.known);
+    assert!(second.known);
+    assert_eq!(first.stats.css_cache_misses, 1);
+    assert_eq!(second.stats.css_cache_misses, 1);
+    assert_eq!(server.css2_hit_count("Roboto"), 2);
+}
+
+#[tokio::test]
 async fn test_probe_family_returns_false_for_unknown() {
     let server = TestServer::new(
         |_| Routes {
@@ -855,6 +870,60 @@ async fn test_probe_family_empty_css_response() {
     let result = client.probe_family("EmptyFont").await.unwrap();
     assert!(!result.known);
     assert_eq!(result.stats.css_cache_misses, 1);
+}
+
+#[tokio::test]
+async fn test_probe_family_missing_result_cached() {
+    let server = TestServer::new(
+        |_| {
+            let mut css2_families = HashMap::new();
+            css2_families.insert("emptyfont".to_string(), b"/* no fonts */".to_vec());
+            Routes {
+                exact: HashMap::new(),
+                css2_families,
+            }
+        },
+        HashSet::new(),
+        0,
+    );
+    let temp = tempfile::tempdir().unwrap();
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
+
+    let first = client.probe_family("EmptyFont").await.unwrap();
+    let second = client.probe_family("EmptyFont").await.unwrap();
+
+    assert!(!first.known);
+    assert!(!second.known);
+    assert_eq!(first.stats.css_cache_misses, 1);
+    assert_eq!(second.stats.css_cache_misses, 0);
+    assert_eq!(server.css2_hit_count("EmptyFont"), 1);
+}
+
+#[test]
+fn test_probe_family_missing_result_cached_blocking() {
+    let server = TestServer::new(
+        |_| {
+            let mut css2_families = HashMap::new();
+            css2_families.insert("emptyfont".to_string(), b"/* no fonts */".to_vec());
+            Routes {
+                exact: HashMap::new(),
+                css2_families,
+            }
+        },
+        HashSet::new(),
+        0,
+    );
+    let temp = tempfile::tempdir().unwrap();
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
+
+    let first = client.probe_family_blocking("EmptyFont").unwrap();
+    let second = client.probe_family_blocking("EmptyFont").unwrap();
+
+    assert!(!first.known);
+    assert!(!second.known);
+    assert_eq!(first.stats.css_cache_misses, 1);
+    assert_eq!(second.stats.css_cache_misses, 0);
+    assert_eq!(server.css2_hit_count("EmptyFont"), 1);
 }
 
 #[test]

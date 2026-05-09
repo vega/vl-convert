@@ -1,166 +1,98 @@
-# vl-convert (CLI)
+# vl-convert CLI
 
-Command-line interface wrapping vl-convert-rs. Built with Clap.
+Command-line wrapper around `vl-convert-rs`, built with clap. Public
+option inventory belongs in `vl-convert --help` and `README.md`; keep
+this file focused on implementation rules that are easy for agents to
+break.
 
-## Subcommands
+## Boundaries
 
-**Vega-Lite**: vl2vg, vl2svg, vl2png, vl2jpeg, vl2pdf, vl2url, vl2html
-**Vega**: vg2svg, vg2png, vg2jpeg, vg2pdf, vg2url, vg2html
-**SVG**: svg2png, svg2jpeg, svg2pdf
-**Utility**: ls-themes, cat-theme, config-path
-**Server**: serve (HTTP server backed by `vl-convert-server`; see
-`vl-convert-server/CLAUDE.md` for protocol invariants and the
-`Notes for downstream binary authors` section. The lifecycle wiring
-(SIGTERM, ready-JSON, drain watchdog, stdin-EOF watcher) lives in
-`vl-convert/src/serve.rs`.)
+- `serve` is the reference binary for `vl-convert-server`. Lifecycle
+  wiring lives in `src/serve.rs`: signal handling, ready JSON, drain
+  watchdog, stdin EOF parent watcher, and OpenAPI dumping.
+- Protocol and server-library invariants live in
+  `../vl-convert-server/CLAUDE.md`. Public embedding guidance lives in
+  `../vl-convert-server/README.md`.
+- Do not duplicate full flag lists here. They drift quickly; reference
+  clap help and the README instead.
 
-## Common Arguments
+## Config and Env Fallback
 
-```
--i, --input       Input file (required)
--o, --output      Output file (required)
--v, --vl-version  Vega-Lite version (default: 5.21)
--t, --theme       Theme name
--c, --config      Config JSON path
---scale           Scale factor (default: 1.0)
---ppi             Pixels per inch (default: 72.0)
-```
+Configuration-bearing globals and serve-local runtime flags use clap
+`env` fallback. Effective precedence is:
 
-## Global config flags (typed values)
-
-Typed `=BOOL` values on every boolean and a single
-`--allowed-base-urls=<value>` flag for URL access control.
-
-```
---vlc-config=<value>          # absolute path to JSONC config file, or `disabled` to skip
-
---base-url=<value>            # default | disabled | URL with scheme | absolute path
---allowed-base-urls=<value>   # none | net | all | URL_PREFIX[;URL_PREFIX...]
-
---auto-google-fonts=BOOL      # default: false
---embed-local-fonts=BOOL      # default: false
---subset-fonts=BOOL           # default: true
---gc-after-conversion=BOOL    # default: false
---missing-fonts <fallback|warn|error>
---font-dir <PATH>             # repeatable; `:`-separated on Unix, `;` on Windows (PATH convention)
---google-font <Family[:variants][;Family[:variants]...]>
---google-fonts-cache-size-mb <MB>   # 0 = library default
---default-theme <THEME|null>            # null clears the value
---default-format-locale <LOCALE|JSON|FILE.json|null>
---default-time-format-locale <LOCALE|JSON|FILE.json|null>
---themes <JSON|FILE.json|null>    # custom named themes map
---max-v8-heap-size-mb <n>     # 0 = no cap
---max-v8-execution-time-secs <n>   # 0 = no cap
---vega-plugin <path|URL[;path|URL...]>   # inline ESM not accepted on the CLI; use --vlc-config
---plugin-import-domains <DOMAIN[;DOMAIN...]>
---log-level <error|warn|info|debug>
---log-format <text|json>      # default: text
---log-filter <DIRECTIVE>      # raw EnvFilter directive; wins over --log-level
+```text
+CLI flag > VLC_* env var > --vlc-config > library default
 ```
 
-All globals accept clap's `global = true` placement, so they may be
-passed before *or* after the subcommand keyword. `--font-dir` calls
+Special cases:
+
+- `--port` resolves as `--port > VLC_PORT > PORT > 3000`.
+- `--vlc-config` uses `VLC_CONFIG`, not `VLC_VLC_CONFIG`.
+- Boolean options accept typed values such as `true`, `false`, `1`, `0`,
+  `yes`, `no`, `on`, and `off`; bare boolean flags resolve to `true`.
+- All globals use clap `global = true`, so they may appear before or
+  after the subcommand keyword.
+
+Vec-shaped env/list values split on `;`:
+
+- `--allowed-base-urls`
+- `--google-font`
+- `--vega-plugin`
+- `--plugin-import-domains`
+- `--per-request-plugin-import-domains`
+
+The only delimiter exception is `--font-dir`, which uses the OS PATH
+separator (`:` on Unix, `;` on Windows) and calls
 `vl_convert_rs::set_font_directories` once at startup with replace
-semantics; the entire list is authoritative.
+semantics.
+
+## Parser Gotchas
+
+`--allowed-base-urls` reserved literals (`none`, `net`, `all`) expand
+only when they are the sole value. Mixed values such as
+`none;https://example.com/` are treated as literal CSP patterns.
+
+`--vega-plugin` accepts file paths and URLs only. Inline ESM belongs in
+JSONC config, the Rust/Python APIs, or HTTP request bodies, where it is
+not ambiguous with CLI list delimiters.
 
 `--default-theme`, `--default-format-locale`,
 `--default-time-format-locale`, and `--themes` accept the literal string
-`null` (any case) to clear a value loaded from `--vlc-config`. The
-distinction "flag not passed" vs "flag passed with `null`" is preserved
-by parsing the `null` literal at consumption time in `io_utils.rs`
-(see `parse_nullable_string_arg`, `parse_themes_json`, and the
-`null`-literal branches in `parse_format_locale_option` /
-`parse_time_format_locale_option`). The CLI fields stay flat
-`Option<String>` because clap 4's custom value parsers panic at
-runtime on `Option<Option<T>>` field types.
+`null` to clear config-loaded values. Keep these CLI fields as flat
+`Option<String>` and parse the `null` literal at consumption time in
+`io_utils.rs`; clap 4 custom value parsers panic at runtime on
+`Option<Option<T>>` field types.
 
-## Env-var fallback
+## Stdout and Logging
 
-Every flag has a `VLC_<SCREAMING_SNAKE_CASE>`
-env-var fallback via `clap`'s `env` attribute. Precedence ladder:
+All tracing output must go to stderr. Stdout is reserved for conversion
+output and for the single ready JSON line emitted by
+`vl-convert serve --ready-json`.
 
-```
-CLI flag > VLC_<NAME> > config-file (--vlc-config) > library default
-```
+Logging is initialized through `vl_convert_server::init_tracing`; do
+not reintroduce `env_logger` in this crate. `--log-filter` is the raw
+`tracing_subscriber::EnvFilter` escape hatch and takes precedence over
+`--log-level`.
 
-For `--port` specifically: `--port > VLC_PORT > PORT (PaaS) > 3000`.
-The PaaS `PORT` fallback is baked into the `From<&ServeArgs>` impl.
+## Tests
 
-**Naming exceptions**:
-- `--vlc-config` uses `VLC_CONFIG` (not `VLC_VLC_CONFIG`).
-- `--font-dir` uses `value_delimiter = ':'` on Unix and `';'` on Windows so
-  PATH-style env values split correctly.
-
-**List-value delimiter**: every Vec-shaped flag splits its value on `;`
-(`--allowed-base-urls`, `--google-font`, `--vega-plugin`,
-`--plugin-import-domains`, `--per-request-plugin-import-domains`). The
-sole carve-out is `--font-dir`, which follows the OS PATH convention
-(`:` Unix, `;` Windows). The `;`-everywhere rule lets a single `VLC_*`
-env value carry a multi-entry list, e.g.
-`VLC_GOOGLE_FONT="Roboto:400,700italic;Inter:400"` registers two
-families (commas inside variants survive because they're not the
-delimiter); `VLC_ALLOWED_BASE_URLS="https://x.com/;https://y.com/"`
-yields two prefixes.
-
-**`--vega-plugin` value shape**: the flag accepts a file path or URL
-only. Inline-ESM plugins go in `--vlc-config` JSONC or via the
-HTTP/library API.
-
-**`--allowed-base-urls` reserved literals only fire on a single-value
-invocation**: `none`, `net`, and `all` expand to reserved allowlists
-(`[]`, `["http:", "https:"]`, `["*"]`) only when they're the sole
-value. Mixed invocations like `--allowed-base-urls="none;https://x.com/"`
-treat each entry as a literal CSP pattern.
-
-See `tests/test_env_vars.rs` and `src/cli_types.rs::tests` for
-verification (port precedence, `;`-delimiter splitting, reserved-literal
-expansion, value-parser passage, and inline-ESM rejection).
-
-## Logging stack
-
-Logging routes through `tracing-subscriber` (configured by
-`vl_convert_server::init_tracing`) for every subcommand. There is no
-`env_logger` dependency. All log lines go to stderr; stdout is
-reserved for `serve --ready-json` (single JSON line) and conversion
-output. Output format differs from the v1.x `env_logger` line shape
-(`[INFO  vl_convert] msg` → `<timestamp> INFO vl_convert: msg`); see
-the v2.x changelog.
-
-`=BOOL` accepts `true|false|1|0|yes|no|on|off` (case-insensitive). Bare
-boolean flags (e.g. `--auto-google-fonts`) resolve to `true`.
-
-`--allowed-base-urls` reserved values: `none` (block all), `net`
-(HTTP/HTTPS only, no filesystem), `all` (`["*"]`, allow everything
-incl. filesystem). Otherwise a `;`-separated list of CSP-style
-patterns (`"https:"`, `"https://example.com/"`, `"/data/"`). Long
-allowlists belong in `--vlc-config` JSONC.
-
-To disable all external data access: `--allowed-base-urls=none`. To
-allow only specific prefixes:
-`--allowed-base-urls="https://cdn.example.com/;https://other.example.com/"`.
-
-## Testing
+Run CLI tests with:
 
 ```bash
 pixi run test-cli
 ```
 
-Tests live in `tests/test_formats.rs` (image-comparison conversions),
-`tests/test_logging.rs` (log-level filtering), `tests/test_stdin_stdout.rs`
-(streaming I/O), and `tests/test_serve_subprocess.rs` (binary lifecycle:
-ready-JSON, SIGTERM cleanup, stdin-EOF watcher, bind-failure ordering;
-unix-only). Common helpers are in `tests/common/mod.rs`; UDS HTTP
-helpers (raw hyper + `tokio::net::UnixStream`) are duplicated from
-`vl-convert-server/tests/common/mod.rs` into `tests/common/uds.rs` to
-avoid graduating them into the published `vl-convert-server` API.
+Relevant coverage:
 
-Test crates: `assert_cmd` (subprocess spawning), `rstest`
-(parameterized), `dssim` (image comparison, threshold 0.0001),
-`hyper`/`hyper-util`/`http-body-util`/`bytes` (UDS HTTP for
-subprocess tests), `tempfile` (per-test sockets/configs).
+- `tests/test_formats.rs`: image-comparison conversions.
+- `tests/test_logging.rs`: log filtering and stderr/stdout behavior.
+- `tests/test_stdin_stdout.rs`: streaming I/O.
+- `tests/test_serve_subprocess.rs`: binary lifecycle, ready JSON,
+  SIGTERM cleanup, stdin EOF watcher, and bind-failure ordering.
+- `tests/test_env_vars.rs` and `src/cli_types.rs::tests`: env fallback,
+  delimiter splitting, reserved literals, and parser edge cases.
 
-## Key Patterns
-
-- Error handling: `anyhow::Error` with `bail!()`
-- Config fallback: `~/.config/vl-convert/config.json`
-- Version parsing: Accepts "5.21" or "v5_21"
+UDS HTTP helpers are duplicated into `tests/common/uds.rs` from the
+server test harness to avoid adding transport helpers to the published
+`vl-convert-server` API.

@@ -17,8 +17,8 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-const KNOWN_FONT_CACHE_TTL: Duration = Duration::from_secs(300);
-const KNOWN_FONT_CACHE_MAX_ENTRIES: usize = 4096;
+const MISSING_FONT_CACHE_TTL: Duration = Duration::from_secs(300);
+const MISSING_FONT_CACHE_MAX_ENTRIES: usize = 4096;
 
 /// Result of downloading/loading font files from cache or network.
 struct EnsureFontsResult {
@@ -31,12 +31,6 @@ struct LoadedFontFile {
     bytes: Vec<u8>,
     key: String,
     stats: GoogleFontStats,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct KnownFontCacheEntry {
-    known: bool,
-    checked_at: Instant,
 }
 
 /// Per-font-key mutex that serializes concurrent download/load of the same font file
@@ -79,7 +73,7 @@ pub struct GoogleFontsClient {
     blocking_client: Mutex<Option<reqwest::blocking::Client>>,
     max_font_cache_bytes: AtomicU64,
     download_gates: DashMap<String, Arc<DownloadGate>>,
-    known_font_cache: DashMap<String, KnownFontCacheEntry>,
+    missing_font_cache: DashMap<String, Instant>,
 }
 
 impl GoogleFontsClient {
@@ -108,7 +102,7 @@ impl GoogleFontsClient {
             async_client,
             blocking_client: Mutex::new(None),
             download_gates: DashMap::new(),
-            known_font_cache: DashMap::new(),
+            missing_font_cache: DashMap::new(),
         })
     }
 
@@ -264,13 +258,11 @@ impl GoogleFontsClient {
         };
 
         let now = Instant::now();
-        if let Some(entry) = self.known_font_cache.get(&font_id) {
-            if now.duration_since(entry.checked_at) <= KNOWN_FONT_CACHE_TTL {
-                return Ok(FontProbeResult {
-                    known: entry.known,
-                    stats: GoogleFontStats::default(),
-                });
-            }
+        if self.is_recent_missing_font(&font_id, now) {
+            return Ok(FontProbeResult {
+                known: false,
+                stats: GoogleFontStats::default(),
+            });
         }
 
         if let Some(ref css_dir) = self.config.css_dir() {
@@ -278,7 +270,6 @@ impl GoogleFontsClient {
                 .map_err(|e| e.with_stats(GoogleFontStats::default()))?
                 .is_some()
             {
-                self.cache_known_font_result(font_id, true, now);
                 return Ok(FontProbeResult {
                     known: true,
                     stats: GoogleFontStats::default(),
@@ -296,12 +287,11 @@ impl GoogleFontsClient {
                     cache::write_css_if_absent(&font_id, css_dir, &css)
                         .map_err(|e| e.with_stats(stats))?;
                 }
-                self.cache_known_font_result(font_id, true, now);
                 Ok(FontProbeResult { known: true, stats })
             }
             Err(GoogleFontsError::FontNotFound(_))
             | Err(GoogleFontsError::HttpStatus { status: 400, .. }) => {
-                self.cache_known_font_result(font_id, false, now);
+                self.cache_missing_font(font_id, now);
                 Ok(FontProbeResult {
                     known: false,
                     stats,
@@ -324,13 +314,11 @@ impl GoogleFontsClient {
         };
 
         let now = Instant::now();
-        if let Some(entry) = self.known_font_cache.get(&font_id) {
-            if now.duration_since(entry.checked_at) <= KNOWN_FONT_CACHE_TTL {
-                return Ok(FontProbeResult {
-                    known: entry.known,
-                    stats: GoogleFontStats::default(),
-                });
-            }
+        if self.is_recent_missing_font(&font_id, now) {
+            return Ok(FontProbeResult {
+                known: false,
+                stats: GoogleFontStats::default(),
+            });
         }
 
         if let Some(ref css_dir) = self.config.css_dir() {
@@ -338,7 +326,6 @@ impl GoogleFontsClient {
                 .map_err(|e| e.with_stats(GoogleFontStats::default()))?
                 .is_some()
             {
-                self.cache_known_font_result(font_id, true, now);
                 return Ok(FontProbeResult {
                     known: true,
                     stats: GoogleFontStats::default(),
@@ -356,12 +343,11 @@ impl GoogleFontsClient {
                     cache::write_css_if_absent(&font_id, css_dir, &css)
                         .map_err(|e| e.with_stats(stats))?;
                 }
-                self.cache_known_font_result(font_id, true, now);
                 Ok(FontProbeResult { known: true, stats })
             }
             Err(GoogleFontsError::FontNotFound(_))
             | Err(GoogleFontsError::HttpStatus { status: 400, .. }) => {
-                self.cache_known_font_result(font_id, false, now);
+                self.cache_missing_font(font_id, now);
                 Ok(FontProbeResult {
                     known: false,
                     stats,
@@ -371,12 +357,23 @@ impl GoogleFontsClient {
         }
     }
 
-    fn cache_known_font_result(&self, font_id: String, known: bool, checked_at: Instant) {
-        if self.known_font_cache.len() >= KNOWN_FONT_CACHE_MAX_ENTRIES {
-            self.known_font_cache.clear();
+    fn is_recent_missing_font(&self, font_id: &str, now: Instant) -> bool {
+        let fresh = self
+            .missing_font_cache
+            .get(font_id)
+            .map(|checked_at| now.duration_since(*checked_at) <= MISSING_FONT_CACHE_TTL)
+            .unwrap_or(false);
+        if !fresh {
+            self.missing_font_cache.remove(font_id);
         }
-        self.known_font_cache
-            .insert(font_id, KnownFontCacheEntry { known, checked_at });
+        fresh
+    }
+
+    fn cache_missing_font(&self, font_id: String, checked_at: Instant) {
+        if self.missing_font_cache.len() >= MISSING_FONT_CACHE_MAX_ENTRIES {
+            self.missing_font_cache.clear();
+        }
+        self.missing_font_cache.insert(font_id, checked_at);
     }
 
     /// Resolve requested variants against what a font actually provides.
@@ -1021,7 +1018,7 @@ mod tests {
             async_client,
             blocking_client: Mutex::new(None),
             download_gates: DashMap::new(),
-            known_font_cache: DashMap::new(),
+            missing_font_cache: DashMap::new(),
         }
     }
 
