@@ -49,11 +49,6 @@ pub enum GoogleFontsError {
     #[error("No variants requested (empty list)")]
     NoVariantsRequested,
 
-    #[error(
-        "Google Fonts request resolved {resolved} variants, exceeding max_google_font_variants_per_request={max}"
-    )]
-    TooManyVariants { resolved: usize, max: usize },
-
     #[error("HTTP request failed: {0}")]
     Http(String),
 

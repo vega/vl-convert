@@ -255,8 +255,8 @@ pub(crate) fn apply_patch(
     if let Some(v) = patch.max_v8_heap_size_mb.as_ref() {
         new.max_v8_heap_size_mb = *v;
     }
-    if let Some(v) = patch.max_google_font_variants_per_request.as_ref() {
-        new.max_google_font_variants_per_request = *v;
+    if let Some(v) = patch.google_font_variant_threshold.as_ref() {
+        new.google_font_variant_threshold = *v;
     }
     if let Some(v) = patch.max_v8_execution_time_secs.as_ref() {
         new.max_v8_execution_time_secs = *v;

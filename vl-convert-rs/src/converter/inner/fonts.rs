@@ -1,7 +1,8 @@
 use super::InnerVlConverter;
 use crate::text::{get_font_baseline_snapshot, FONT_CONFIG_VERSION, GOOGLE_FONTS_CLIENT};
+use deno_core::anyhow::anyhow;
 use deno_core::error::AnyError;
-use std::collections::BTreeMap;
+use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use vl_convert_google_fonts::{
@@ -83,8 +84,9 @@ impl InnerVlConverter {
 
     /// Resolve Google Fonts requests on the worker thread using the async API.
     ///
-    /// Merges per-request fonts with `config.google_fonts`, deduplicates, and
-    /// downloads each unique font via `GOOGLE_FONTS_CLIENT.load()`.
+    /// Merges per-request fonts with `config.google_fonts`, deduplicates while
+    /// preserving request order, and stops admitting new families once the
+    /// configured variant threshold has been reached.
     pub(crate) async fn resolve_google_fonts(
         &self,
         request_fonts: Option<Vec<GoogleFontRequest>>,
@@ -97,27 +99,33 @@ impl InnerVlConverter {
             return Ok(ResolvedGoogleFonts::default());
         }
 
-        let mut unique: BTreeMap<String, GoogleFontRequest> = BTreeMap::new();
-        for request in merged {
-            let key = google_font_request_key(&request);
-            unique.entry(key).or_insert(request);
-        }
+        let unique = unique_google_font_requests(merged);
 
         let mut batches = Vec::new();
         let mut stats = GoogleFontStats::default();
-        let max_variants = self
+        let variant_threshold = self
             .ctx
             .config
-            .max_google_font_variants_per_request
+            .google_font_variant_threshold
             .map(|n| usize::try_from(n.get()).unwrap_or(usize::MAX));
         let mut used_variants = 0usize;
-        for request in unique.into_values() {
-            let remaining = max_variants.map(|max| max.saturating_sub(used_variants));
+        for request in unique {
+            if let Some(threshold) = variant_threshold {
+                if used_variants >= threshold {
+                    return Err(error_with_google_font_stats(
+                        anyhow!(
+                            "Google Font variant threshold {threshold} reached after resolving \
+                             {used_variants} variants; refusing to load family '{}'",
+                            request.family
+                        ),
+                        stats,
+                    ));
+                }
+            }
             let loaded = match GOOGLE_FONTS_CLIENT
                 .load(FontLoadRequest {
                     family: &request.family,
                     variants: request.variants.as_deref(),
-                    max_variants: remaining,
                 })
                 .await
             {
@@ -130,7 +138,9 @@ impl InnerVlConverter {
                     return Err(error_with_google_font_stats(error, stats));
                 }
             };
-            used_variants = used_variants.saturating_add(loaded.stats.resolved_variants as usize);
+            used_variants = used_variants.saturating_add(
+                usize::try_from(loaded.stats.resolved_variants).unwrap_or(usize::MAX),
+            );
             stats.add_assign(loaded.stats);
             batches.push(loaded.batch);
         }
@@ -142,4 +152,56 @@ impl InnerVlConverter {
 pub(crate) struct ResolvedGoogleFonts {
     pub(crate) batches: Vec<LoadedFontBatch>,
     pub(crate) stats: GoogleFontStats,
+}
+
+fn unique_google_font_requests(requests: Vec<GoogleFontRequest>) -> Vec<GoogleFontRequest> {
+    let mut seen = HashSet::new();
+    let mut unique = Vec::new();
+    for request in requests {
+        let key = google_font_request_key(&request);
+        if seen.insert(key) {
+            unique.push(request);
+        }
+    }
+    unique
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vl_convert_google_fonts::{FontStyle, VariantRequest};
+
+    #[test]
+    fn unique_google_font_requests_preserves_first_seen_order() {
+        let requests = vec![
+            GoogleFontRequest {
+                family: "Roboto".to_string(),
+                variants: None,
+            },
+            GoogleFontRequest {
+                family: "Inter".to_string(),
+                variants: None,
+            },
+            GoogleFontRequest {
+                family: "roboto".to_string(),
+                variants: None,
+            },
+            GoogleFontRequest {
+                family: "Roboto".to_string(),
+                variants: Some(vec![VariantRequest {
+                    weight: 700,
+                    style: FontStyle::Normal,
+                }]),
+            },
+        ];
+
+        let unique = unique_google_font_requests(requests);
+
+        assert_eq!(unique.len(), 3);
+        assert_eq!(unique[0].family, "Roboto");
+        assert!(unique[0].variants.is_none());
+        assert_eq!(unique[1].family, "Inter");
+        assert_eq!(unique[2].family, "Roboto");
+        assert_eq!(unique[2].variants.as_ref().unwrap()[0].weight, 700);
+    }
 }

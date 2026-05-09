@@ -784,10 +784,9 @@ mod tests {
             };
             let error =
                 vl_convert_rs::anyhow::Error::new(vl_convert_google_fonts::GoogleFontsFailure {
-                    error: vl_convert_google_fonts::GoogleFontsError::TooManyVariants {
-                        resolved: 12,
-                        max: 8,
-                    },
+                    error: vl_convert_google_fonts::GoogleFontsError::FontNotFound(
+                        "missing".to_string(),
+                    ),
                     stats,
                 });
             crate::util::conversion_error_response(

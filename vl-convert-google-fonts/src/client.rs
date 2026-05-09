@@ -125,11 +125,6 @@ impl GoogleFontsClient {
         let mut stats = GoogleFontStats::default();
         let font_id = Self::validate_load_request(request.family, request.variants)
             .map_err(|e| e.with_stats(stats))?;
-        let explicit_variant_count = request.variants.map(|v| dedupe_variants(v).len());
-        if let (Some(count), Some(max)) = (explicit_variant_count, request.max_variants) {
-            stats.resolved_variants = count as u64;
-            Self::validate_variant_limit(count, max).map_err(|e| e.with_stats(stats))?;
-        }
 
         let (css, from_cache) = self
             .fetch_css_async_with_stats(&font_id, request.family, &mut stats)
@@ -137,12 +132,7 @@ impl GoogleFontsClient {
             .map_err(|e| e.with_stats(stats))?;
         let plan =
             resolve_from_css2(&font_id, &css, request.variants).map_err(|e| e.with_stats(stats))?;
-        Self::record_and_validate_variant_count(
-            &mut stats,
-            explicit_variant_count,
-            plan.files.len(),
-            request.max_variants,
-        )?;
+        stats.resolved_variants = plan.files.len() as u64;
 
         match self.ensure_fonts_async(&plan.files).await {
             Ok(fonts) => self.finish_load_with_stats(&font_id, &plan, fonts, stats),
@@ -155,12 +145,7 @@ impl GoogleFontsClient {
                     .map_err(|e| e.with_stats(stats))?;
                 let plan = resolve_from_css2(&font_id, &css, request.variants)
                     .map_err(|e| e.with_stats(stats))?;
-                Self::record_and_validate_variant_count(
-                    &mut stats,
-                    explicit_variant_count,
-                    plan.files.len(),
-                    request.max_variants,
-                )?;
+                stats.resolved_variants = plan.files.len() as u64;
                 let fonts = self
                     .ensure_fonts_async(&plan.files)
                     .await
@@ -182,23 +167,13 @@ impl GoogleFontsClient {
         let mut stats = GoogleFontStats::default();
         let font_id = Self::validate_load_request(request.family, request.variants)
             .map_err(|e| e.with_stats(stats))?;
-        let explicit_variant_count = request.variants.map(|v| dedupe_variants(v).len());
-        if let (Some(count), Some(max)) = (explicit_variant_count, request.max_variants) {
-            stats.resolved_variants = count as u64;
-            Self::validate_variant_limit(count, max).map_err(|e| e.with_stats(stats))?;
-        }
 
         let (css, from_cache) = self
             .fetch_css_blocking_with_stats(&font_id, request.family, &mut stats)
             .map_err(|e| e.with_stats(stats))?;
         let plan =
             resolve_from_css2(&font_id, &css, request.variants).map_err(|e| e.with_stats(stats))?;
-        Self::record_and_validate_variant_count(
-            &mut stats,
-            explicit_variant_count,
-            plan.files.len(),
-            request.max_variants,
-        )?;
+        stats.resolved_variants = plan.files.len() as u64;
 
         match self.ensure_fonts_blocking(&plan.files) {
             Ok(fonts) => self.finish_load_with_stats(&font_id, &plan, fonts, stats),
@@ -210,12 +185,7 @@ impl GoogleFontsClient {
                     .map_err(|e| e.with_stats(stats))?;
                 let plan = resolve_from_css2(&font_id, &css, request.variants)
                     .map_err(|e| e.with_stats(stats))?;
-                Self::record_and_validate_variant_count(
-                    &mut stats,
-                    explicit_variant_count,
-                    plan.files.len(),
-                    request.max_variants,
-                )?;
+                stats.resolved_variants = plan.files.len() as u64;
                 let fonts = self.ensure_fonts_blocking(&plan.files).map_err(|failure| {
                     stats.add_assign(failure.stats);
                     failure.error.with_stats(stats)
@@ -562,28 +532,6 @@ impl GoogleFontsClient {
             }
         }
         Ok(font_id)
-    }
-
-    fn validate_variant_limit(resolved: usize, max: usize) -> Result<(), GoogleFontsError> {
-        if resolved > max {
-            Err(GoogleFontsError::TooManyVariants { resolved, max })
-        } else {
-            Ok(())
-        }
-    }
-
-    fn record_and_validate_variant_count(
-        stats: &mut GoogleFontStats,
-        explicit_variant_count: Option<usize>,
-        resolved_file_count: usize,
-        max_variants: Option<usize>,
-    ) -> GoogleFontsResult<()> {
-        let variant_count = explicit_variant_count.unwrap_or(resolved_file_count);
-        stats.resolved_variants = variant_count as u64;
-        if let Some(max) = max_variants {
-            Self::validate_variant_limit(variant_count, max).map_err(|e| e.with_stats(*stats))?;
-        }
-        Ok(())
     }
 
     /// Try to read a font from the cache, touching its mtime on hit.
@@ -1144,32 +1092,6 @@ mod tests {
 
         client.release_download_gate(key, &replacement);
         assert!(!client.download_gates.contains_key(key));
-    }
-
-    #[test]
-    fn test_variant_limit_rejects_deduped_explicit_variants_before_network() {
-        let variants = vec![
-            VariantRequest {
-                weight: 400,
-                style: crate::types::FontStyle::Normal,
-            },
-            VariantRequest {
-                weight: 700,
-                style: crate::types::FontStyle::Normal,
-            },
-        ];
-        let count = dedupe_variants(&variants).len();
-
-        let err = GoogleFontsClient::validate_variant_limit(count, 1)
-            .expect_err("variant cap should reject before network access");
-
-        assert!(matches!(
-            err,
-            GoogleFontsError::TooManyVariants {
-                resolved: 2,
-                max: 1
-            }
-        ));
     }
 
     #[test]

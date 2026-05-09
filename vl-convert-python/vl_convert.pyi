@@ -163,7 +163,7 @@ if TYPE_CHECKING:
         subset_fonts: bool
         missing_fonts: Literal["fallback", "warn", "error"]
         google_fonts: list[GoogleFontSpec]
-        max_google_font_variants_per_request: int | None
+        google_font_variant_threshold: int | None
         max_v8_heap_size_mb: int | None
         max_v8_execution_time_secs: int | None
         gc_after_conversion: bool
@@ -421,7 +421,7 @@ def configure(
     subset_fonts: bool | None = None,
     missing_fonts: Literal["fallback", "warn", "error"] | None = None,
     google_fonts: list[str | GoogleFontSpec] | None = None,
-    max_google_font_variants_per_request: int | None = None,
+    google_font_variant_threshold: int | None = None,
     max_v8_heap_size_mb: int | None = None,
     max_v8_execution_time_secs: int | None = None,
     gc_after_conversion: bool | None = None,
@@ -477,10 +477,11 @@ def configure(
         **Replace semantics.** Each call to ``configure(google_fonts=[...])``
         **replaces** the full configured list. ``None`` (or ``[]``) resets to
         the library default (empty list).
-    max_google_font_variants_per_request
-        Maximum Google Font variants resolved by a single conversion. Must be
-        >= 1 if provided. ``None`` resets to the library default (no cap).
-        Passing ``0`` raises ``ValueError``.
+    google_font_variant_threshold
+        Stop admitting additional Google Font families after this many variants
+        have resolved. A single family may cross the threshold. Must be >= 1 if
+        provided. ``None`` resets to the library default (no threshold). Passing
+        ``0`` raises ``ValueError``.
     max_v8_heap_size_mb
         Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
         ``None`` resets to the library default (no cap). Passing ``0`` raises
@@ -1531,7 +1532,7 @@ if TYPE_CHECKING:
             subset_fonts: bool | None = None,
             missing_fonts: Literal["fallback", "warn", "error"] | None = None,
             google_fonts: list[str | GoogleFontSpec] | None = None,
-            max_google_font_variants_per_request: int | None = None,
+            google_font_variant_threshold: int | None = None,
             max_v8_heap_size_mb: int | None = None,
             max_v8_execution_time_secs: int | None = None,
             gc_after_conversion: bool | None = None,

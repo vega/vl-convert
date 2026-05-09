@@ -156,10 +156,10 @@ pub struct VlcConfig {
     /// registered per-request via the overlay mechanism. Empty = no
     /// configured fonts (the natural "unset" state).
     pub google_fonts: Vec<GoogleFontRequest>,
-    /// Maximum unique Google Font `(family, weight, style)` variants that a
-    /// single conversion may resolve. `None` preserves existing unbounded
-    /// behavior.
-    pub max_google_font_variants_per_request: Option<NonZeroU64>,
+    /// Stop admitting additional Google Font families after this many
+    /// variants have resolved. A single family may cross the threshold.
+    /// `None` preserves unbounded behavior.
+    pub google_font_variant_threshold: Option<NonZeroU64>,
     /// Maximum V8 heap size in megabytes per worker. `None` = no cap;
     /// `Some(n)` = explicit cap.
     pub max_v8_heap_size_mb: Option<NonZeroU64>,
@@ -255,7 +255,7 @@ impl Default for VlcConfig {
             subset_fonts: true,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: Vec::new(),
-            max_google_font_variants_per_request: None,
+            google_font_variant_threshold: None,
             max_v8_heap_size_mb: None,
             max_v8_execution_time_secs: None,
             gc_after_conversion: false,
@@ -472,6 +472,7 @@ mod tests {
             "num_workers": 2,
             "auto_google_fonts": true,
             "missing_fonts": "warn",
+            "google_font_variant_threshold": 16,
             "max_v8_heap_size_mb": 512,
             "default_theme": "dark",
             "themes": {
@@ -482,6 +483,7 @@ mod tests {
         assert_eq!(config.num_workers.get(), 2);
         assert!(config.auto_google_fonts);
         assert_eq!(config.missing_fonts, MissingFontsPolicy::Warn);
+        assert_eq!(config.google_font_variant_threshold, NonZeroU64::new(16));
         assert_eq!(config.max_v8_heap_size_mb, NonZeroU64::new(512));
         assert_eq!(config.default_theme, Some("dark".to_string()));
         assert!(!config.themes.is_empty());
@@ -593,7 +595,7 @@ mod tests {
             "max_ephemeral_workers default is Some(NZ(2))"
         );
         assert_eq!(cfg.max_v8_execution_time_secs, None);
-        assert_eq!(cfg.max_google_font_variants_per_request, None);
+        assert_eq!(cfg.google_font_variant_threshold, None);
         assert!(cfg.google_fonts.is_empty());
         assert!(cfg.vega_plugins.is_empty());
         assert!(cfg.themes.is_empty());

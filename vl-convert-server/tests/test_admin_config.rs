@@ -246,40 +246,32 @@ async fn test_admin_config_patch_zero_on_nonzero_type_rejected_400() {
         "max_v8_heap_size_mb=0 must be rejected at parse"
     );
 
-    let (status, _) =
-        patch_config(&server, json!({"max_google_font_variants_per_request": 0})).await;
+    let (status, _) = patch_config(&server, json!({"google_font_variant_threshold": 0})).await;
     assert_eq!(
         status, 400,
-        "max_google_font_variants_per_request=0 must be rejected at parse"
+        "google_font_variant_threshold=0 must be rejected at parse"
     );
 }
 
 #[tokio::test]
-async fn test_admin_config_patch_google_font_variant_limit_round_trip() {
+async fn test_admin_config_patch_google_font_variant_threshold_round_trip() {
     let server = default_admin_server();
 
-    let (status, body) = patch_config(
-        &server,
-        json!({"max_google_font_variants_per_request": 100}),
-    )
-    .await;
+    let (status, body) = patch_config(&server, json!({"google_font_variant_threshold": 100})).await;
     assert_eq!(status, 200, "body: {body:?}");
 
     let (_, after_set) = get_config(&server).await;
-    assert_eq!(
-        after_set["effective"]["max_google_font_variants_per_request"],
-        100
-    );
+    assert_eq!(after_set["effective"]["google_font_variant_threshold"], 100);
 
     let (status, body) = patch_config(
         &server,
-        json!({"max_google_font_variants_per_request": Value::Null}),
+        json!({"google_font_variant_threshold": Value::Null}),
     )
     .await;
     assert_eq!(status, 200, "body: {body:?}");
 
     let (_, after_clear) = get_config(&server).await;
-    assert!(after_clear["effective"]["max_google_font_variants_per_request"].is_null());
+    assert!(after_clear["effective"]["google_font_variant_threshold"].is_null());
 }
 
 #[tokio::test]
@@ -339,7 +331,7 @@ fn default_config_put_body() -> Value {
         "subset_fonts": true,
         "missing_fonts": "fallback",
         "google_fonts": [],
-        "max_google_font_variants_per_request": Value::Null,
+        "google_font_variant_threshold": Value::Null,
         "max_v8_heap_size_mb": Value::Null,
         "max_v8_execution_time_secs": Value::Null,
         "gc_after_conversion": false,

@@ -97,15 +97,16 @@ pub(crate) struct Cli {
     )]
     pub(crate) google_font: Vec<String>,
 
-    /// Maximum unique Google Font family/weight/style variants per conversion.
-    /// `0` disables the cap.
+    /// Stop admitting additional Google Font families after this many
+    /// variants have resolved. A single family may cross the threshold;
+    /// `0` disables the threshold.
     #[arg(
         long,
         global = true,
         value_name = "N",
-        env = "VLC_MAX_GOOGLE_FONT_VARIANTS_PER_REQUEST"
+        env = "VLC_GOOGLE_FONT_VARIANT_THRESHOLD"
     )]
-    pub(crate) max_google_font_variants_per_request: Option<u64>,
+    pub(crate) google_font_variant_threshold: Option<u64>,
 
     /// Automatically download missing fonts from Google Fonts (default: false).
     #[arg(
@@ -397,6 +398,14 @@ mod tests {
             vec!["Roboto:400,700italic".to_string(), "Inter:400".to_string()],
             "VLC_GOOGLE_FONT must split on `;` into 2 entries; commas inside variants survive"
         );
+    }
+
+    #[test]
+    fn vlc_google_font_variant_threshold_reads_env() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _scrub = EnvScrub(&["VLC_GOOGLE_FONT_VARIANT_THRESHOLD"]);
+        let cli = parse_with_env(&[("VLC_GOOGLE_FONT_VARIANT_THRESHOLD", "12")]);
+        assert_eq!(cli.google_font_variant_threshold, Some(12));
     }
 
     #[test]

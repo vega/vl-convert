@@ -569,10 +569,7 @@ mod tests {
             resolved_variants: 6,
         };
         let source = AnyError::new(vl_convert_google_fonts::GoogleFontsFailure {
-            error: vl_convert_google_fonts::GoogleFontsError::TooManyVariants {
-                resolved: 3,
-                max: 2,
-            },
+            error: vl_convert_google_fonts::GoogleFontsError::FontNotFound("missing".to_string()),
             stats: source_stats,
         });
         let error = error_with_google_font_stats(source, local_stats);

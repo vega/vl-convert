@@ -33,7 +33,6 @@ impl GoogleFontStats {
 pub struct FontLoadRequest<'a> {
     pub family: &'a str,
     pub variants: Option<&'a [VariantRequest]>,
-    pub max_variants: Option<usize>,
 }
 
 impl<'a> FontLoadRequest<'a> {
@@ -41,7 +40,6 @@ impl<'a> FontLoadRequest<'a> {
         Self {
             family,
             variants: None,
-            max_variants: None,
         }
     }
 }

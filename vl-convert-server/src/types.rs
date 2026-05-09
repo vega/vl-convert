@@ -418,7 +418,7 @@ pub(crate) struct ConfigPatch {
     pub google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable)]
-    pub max_google_font_variants_per_request: Option<Option<NonZeroU64>>,
+    pub google_font_variant_threshold: Option<Option<NonZeroU64>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable)]
     pub max_v8_heap_size_mb: Option<Option<NonZeroU64>>,
@@ -484,7 +484,7 @@ pub(crate) struct ConfigReplace {
     #[schema(value_type = Vec<Object>)]
     pub google_fonts: Vec<GoogleFontRequest>,
     #[schema(value_type = Option<u64>, nullable)]
-    pub max_google_font_variants_per_request: Option<NonZeroU64>,
+    pub google_font_variant_threshold: Option<NonZeroU64>,
     #[schema(value_type = Option<u64>, nullable)]
     pub max_v8_heap_size_mb: Option<NonZeroU64>,
     #[schema(value_type = Option<u64>, nullable)]
@@ -517,7 +517,7 @@ impl From<ConfigReplace> for VlcConfig {
             subset_fonts: r.subset_fonts,
             missing_fonts: r.missing_fonts,
             google_fonts: r.google_fonts,
-            max_google_font_variants_per_request: r.max_google_font_variants_per_request,
+            google_font_variant_threshold: r.google_font_variant_threshold,
             max_v8_heap_size_mb: r.max_v8_heap_size_mb,
             max_v8_execution_time_secs: r.max_v8_execution_time_secs,
             gc_after_conversion: r.gc_after_conversion,
@@ -707,7 +707,7 @@ mod tests {
             "subset_fonts": true,
             "missing_fonts": "fallback",
             "google_fonts": [],
-            "max_google_font_variants_per_request": null,
+            "google_font_variant_threshold": null,
             "max_v8_heap_size_mb": null,
             "max_v8_execution_time_secs": null,
             "gc_after_conversion": false,

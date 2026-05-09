@@ -24,11 +24,7 @@ fn load_request<'a>(
     family: &'a str,
     variants: Option<&'a [VariantRequest]>,
 ) -> FontLoadRequest<'a> {
-    FontLoadRequest {
-        family,
-        variants,
-        max_variants: None,
-    }
+    FontLoadRequest { family, variants }
 }
 
 /// Routes for the test server: exact path matches + CSS2 family-based matches.
@@ -345,42 +341,6 @@ fn test_variant_weight_fallback_blocking() {
     assert_eq!(batch.loaded_variants.len(), 1);
     assert_eq!(batch.loaded_variants[0].weight, 400);
     assert_eq!(batch.loaded_variants[0].style, FontStyle::Italic);
-}
-
-#[test]
-fn test_variant_limit_failure_includes_stats_and_skips_network() {
-    let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
-    let temp = tempfile::tempdir().unwrap();
-    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
-
-    let requested = [
-        VariantRequest {
-            weight: 400,
-            style: FontStyle::Normal,
-        },
-        VariantRequest {
-            weight: 700,
-            style: FontStyle::Normal,
-        },
-    ];
-    let err = client
-        .load_blocking(FontLoadRequest {
-            family: "Roboto",
-            variants: Some(&requested),
-            max_variants: Some(1),
-        })
-        .unwrap_err();
-
-    assert!(matches!(
-        err.error,
-        GoogleFontsError::TooManyVariants {
-            resolved: 2,
-            max: 1
-        }
-    ));
-    assert_eq!(err.stats.resolved_variants, 2);
-    assert_eq!(err.stats.cache_misses(), 0);
-    assert_eq!(server.css2_hit_count("Roboto"), 0);
 }
 
 #[test]
