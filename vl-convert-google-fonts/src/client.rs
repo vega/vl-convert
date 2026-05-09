@@ -250,7 +250,7 @@ impl GoogleFontsClient {
         fonts: EnsureFontsResult,
         mut usage: GoogleFontUsage,
     ) -> GoogleFontsResult<FontLoadResult> {
-        usage.add_stats(&fonts.stats);
+        usage.add_stats(fonts.stats);
         let batch = self
             .finish_load(font_id, plan, fonts)
             .map_err(|e| e.with_usage(usage.clone()))?;
@@ -619,7 +619,7 @@ impl GoogleFontsClient {
         for result in results {
             match result {
                 Ok((index, loaded)) => {
-                    aggregate_stats.add_assign(&loaded.stats);
+                    aggregate_stats.add_assign(loaded.stats);
                     result_vec.push((index, loaded));
                 }
                 Err(failure) => {
@@ -655,8 +655,8 @@ impl GoogleFontsClient {
         let fonts_dir = self.config.fonts_dir();
         let mut stats = GoogleFontStats::default();
 
-        if let Some(bytes) = Self::try_read_cached_font(&file.url, &fonts_dir)
-            .map_err(|e| e.with_usage(stats.clone()))?
+        if let Some(bytes) =
+            Self::try_read_cached_font(&file.url, &fonts_dir).map_err(|e| e.with_usage(stats))?
         {
             return Ok(LoadedFontFile { bytes, key, stats });
         }
@@ -668,12 +668,11 @@ impl GoogleFontsClient {
             let bytes = self
                 .get_bytes_with_retry_async(&file.url)
                 .await
-                .map_err(|e| e.with_usage(stats.clone()))?;
+                .map_err(|e| e.with_usage(stats))?;
             stats.downloaded_bytes = stats
                 .downloaded_bytes
                 .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
-            Self::validate_font_bytes(&file.url, &bytes)
-                .map_err(|e| e.with_usage(stats.clone()))?;
+            Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_usage(stats))?;
             return Ok(LoadedFontFile { bytes, key, stats });
         }
 
@@ -684,8 +683,8 @@ impl GoogleFontsClient {
         };
         let _lock = gate_guard.gate.mutex.lock().await;
 
-        if let Some(bytes) = Self::try_read_cached_font(&file.url, &fonts_dir)
-            .map_err(|e| e.with_usage(stats.clone()))?
+        if let Some(bytes) =
+            Self::try_read_cached_font(&file.url, &fonts_dir).map_err(|e| e.with_usage(stats))?
         {
             return Ok(LoadedFontFile { bytes, key, stats });
         }
@@ -694,12 +693,12 @@ impl GoogleFontsClient {
         let bytes = self
             .get_bytes_with_retry_async(&file.url)
             .await
-            .map_err(|e| e.with_usage(stats.clone()))?;
+            .map_err(|e| e.with_usage(stats))?;
         stats.downloaded_bytes = stats
             .downloaded_bytes
             .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
-        Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_usage(stats.clone()))?;
-        Self::cache_font(&file.url, &fonts_dir, &bytes).map_err(|e| e.with_usage(stats.clone()))?;
+        Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_usage(stats))?;
+        Self::cache_font(&file.url, &fonts_dir, &bytes).map_err(|e| e.with_usage(stats))?;
         Ok(LoadedFontFile { bytes, key, stats })
     }
 
@@ -750,7 +749,7 @@ impl GoogleFontsClient {
             for result in chunk {
                 match result {
                     Ok(loaded) => {
-                        aggregate_stats.add_assign(&loaded.stats);
+                        aggregate_stats.add_assign(loaded.stats);
                         font_data.push(Arc::new(loaded.bytes));
                         font_keys.insert(loaded.key);
                     }
@@ -779,8 +778,8 @@ impl GoogleFontsClient {
         let fonts_dir = self.config.fonts_dir();
         let mut stats = GoogleFontStats::default();
 
-        if let Some(bytes) = Self::try_read_cached_font(&file.url, &fonts_dir)
-            .map_err(|e| e.with_usage(stats.clone()))?
+        if let Some(bytes) =
+            Self::try_read_cached_font(&file.url, &fonts_dir).map_err(|e| e.with_usage(stats))?
         {
             return Ok(LoadedFontFile { bytes, key, stats });
         }
@@ -791,12 +790,11 @@ impl GoogleFontsClient {
             stats.font_file_cache_misses = stats.font_file_cache_misses.saturating_add(1);
             let bytes = self
                 .get_bytes_with_retry_blocking(&file.url)
-                .map_err(|e| e.with_usage(stats.clone()))?;
+                .map_err(|e| e.with_usage(stats))?;
             stats.downloaded_bytes = stats
                 .downloaded_bytes
                 .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
-            Self::validate_font_bytes(&file.url, &bytes)
-                .map_err(|e| e.with_usage(stats.clone()))?;
+            Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_usage(stats))?;
             return Ok(LoadedFontFile { bytes, key, stats });
         }
 
@@ -815,8 +813,8 @@ impl GoogleFontsClient {
         );
         let _lock = gate_guard.gate.mutex.blocking_lock();
 
-        if let Some(bytes) = Self::try_read_cached_font(&file.url, &fonts_dir)
-            .map_err(|e| e.with_usage(stats.clone()))?
+        if let Some(bytes) =
+            Self::try_read_cached_font(&file.url, &fonts_dir).map_err(|e| e.with_usage(stats))?
         {
             return Ok(LoadedFontFile { bytes, key, stats });
         }
@@ -824,12 +822,12 @@ impl GoogleFontsClient {
         stats.font_file_cache_misses = stats.font_file_cache_misses.saturating_add(1);
         let bytes = self
             .get_bytes_with_retry_blocking(&file.url)
-            .map_err(|e| e.with_usage(stats.clone()))?;
+            .map_err(|e| e.with_usage(stats))?;
         stats.downloaded_bytes = stats
             .downloaded_bytes
             .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
-        Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_usage(stats.clone()))?;
-        Self::cache_font(&file.url, &fonts_dir, &bytes).map_err(|e| e.with_usage(stats.clone()))?;
+        Self::validate_font_bytes(&file.url, &bytes).map_err(|e| e.with_usage(stats))?;
+        Self::cache_font(&file.url, &fonts_dir, &bytes).map_err(|e| e.with_usage(stats))?;
         Ok(LoadedFontFile { bytes, key, stats })
     }
 
