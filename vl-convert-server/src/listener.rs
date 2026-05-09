@@ -14,22 +14,23 @@ use std::path::PathBuf;
 #[cfg(unix)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Pre-bound listener ready to hand to [`crate::serve`].
+/// Bound listener ready to hand to [`crate::serve`].
 ///
 /// The UDS variant carries a [`UdsCleanup`] guard so the socket file
-/// is unlinked when the listener drops. Force-exit via the drain
-/// watchdog bypasses `Drop`; [`bind_listener`]'s probe-then-unlink on
-/// the next launch clears any stale file left behind.
+/// is unlinked when the listener drops. If the process exits without
+/// running `Drop`, a later [`bind_listener`] call can clear the stale
+/// socket file.
 pub enum BoundListener {
+    /// TCP listener.
     Tcp(tokio::net::TcpListener),
+    /// Unix-domain socket listener plus unlink-on-drop cleanup guard.
     #[cfg(unix)]
     Uds(tokio::net::UnixListener, UdsCleanup),
 }
 
 impl BoundListener {
-    /// Human-readable endpoint for log lines / readiness JSON.
-    /// Matches [`crate::ListenAddr::Display`] so callers can round-trip
-    /// the value into `--ready-json` without a second formatter.
+    /// Human-readable endpoint for log lines and readiness payloads.
+    /// Matches [`ListenAddr`](crate::ListenAddr)'s `Display` form.
     pub fn endpoint_label(&self) -> String {
         match self {
             Self::Tcp(l) => l
@@ -47,9 +48,7 @@ impl BoundListener {
         }
     }
 
-    /// Structured endpoint descriptor for readiness JSON. Includes
-    /// direct `host`/`port` (TCP) or `path` (UDS) fields alongside the
-    /// URL string.
+    /// Structured endpoint descriptor for readiness payloads.
     pub fn endpoint_info(&self) -> EndpointInfo {
         match self {
             Self::Tcp(l) => {
@@ -90,36 +89,46 @@ impl BoundListener {
     }
 }
 
-/// Structured form of [`BoundListener`] for wire emission (ready-JSON).
-/// Serialized with an internal `transport` tag: TCP entries get
-/// `{transport:"tcp", url, host, port}`, UDS entries get
-/// `{transport:"unix", url, path}`.
+/// Structured bound-listener endpoint.
+///
+/// Serialized with an internal `transport` tag.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "transport", rename_all = "lowercase")]
 pub enum EndpointInfo {
+    /// TCP endpoint.
     Tcp {
+        /// Full endpoint URL.
         url: String,
+        /// Bound host or IP address.
         host: String,
+        /// Bound TCP port.
         port: u16,
     },
+    /// Unix-domain socket endpoint.
     #[cfg(unix)]
-    Unix { url: String, path: String },
+    Unix {
+        /// Full endpoint URL using the `unix://` scheme.
+        url: String,
+        /// Socket pathname.
+        path: String,
+    },
 }
 
 /// Drop guard that unlinks a pathname UDS file when the listener is
 /// dropped. The `AtomicBool` prevents duplicate cleanup.
 ///
-/// Force-exit (e.g., drain watchdog calling `std::process::exit`)
-/// bypasses `Drop` entirely; the next launch's probe-then-unlink in
-/// [`bind_listener`] handles any stale file left behind.
+/// Process exits that bypass `Drop` can leave the path behind; the next
+/// [`bind_listener`] call handles stale socket files.
 #[cfg(unix)]
 pub struct UdsCleanup {
+    /// Socket pathname to unlink on drop.
     pub path: PathBuf,
     active: AtomicBool,
 }
 
 #[cfg(unix)]
 impl UdsCleanup {
+    /// Create a cleanup guard for a bound Unix-domain socket path.
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
@@ -171,16 +180,15 @@ impl axum::extract::connect_info::Connected<&tokio::net::UnixStream> for UdsConn
     }
 }
 
-/// Manual accept loop for UDS listeners. axum 0.7's `serve` accepts
-/// TCP listeners only, so UDS uses a small Hyper accept loop that:
+/// Manual accept loop for UDS listeners. The TCP path can use `axum::serve`,
+/// but UDS needs a small Hyper accept loop that:
 ///
-/// - Track in-flight connections in a [`tokio::task::JoinSet`] so
-///   graceful shutdown drains properly (mirrors the TCP path in
-///   [`crate::serve`]).
-/// - Accept an arbitrary `shutdown` future, matching `axum::serve`'s
+/// - Tracks per-connection tasks in a [`tokio::task::JoinSet`] so shutdown
+///   can stop accepting, signal active connections, and wait for them to finish.
+/// - Accepts an arbitrary `shutdown` future, matching `axum::serve`'s
 ///   `.with_graceful_shutdown(..)` contract.
-/// - Use `UdsConnectInfo` so downstream middleware/handlers can access
-///   peer credentials when needed.
+/// - Injects `ConnectInfo<UdsConnectInfo>` so request tracing can record
+///   peer credentials when they are available.
 #[cfg(unix)]
 pub(crate) async fn serve_uds(
     listener: tokio::net::UnixListener,
@@ -250,7 +258,7 @@ fn unwrap_infallible<T>(r: Result<T, std::convert::Infallible>) -> T {
     }
 }
 
-/// Bind a listener according to a [`ListenAddr`] spec, applying the
+/// Bind a listener according to a [`ListenAddr`](crate::ListenAddr) spec, applying the
 /// full lifecycle contract:
 ///
 /// - **TCP**: `tokio::net::TcpListener::bind(host:port)`. No cleanup

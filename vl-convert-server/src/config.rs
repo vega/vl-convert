@@ -12,13 +12,21 @@ use crate::listen::ListenAddr;
 use crate::reconfig::ReconfigCoordinator;
 use crate::{health, json_fmt};
 
+/// Output format for server log events.
 #[derive(Debug, Clone, Copy, clap::ValueEnum, Default, PartialEq, Eq)]
 pub enum LogFormat {
+    /// Human-readable text logs.
     #[default]
     Text,
+    /// Flat structured JSON logs.
     Json,
 }
 
+/// Install the crate's tracing subscriber.
+///
+/// `filter` is parsed as a `tracing_subscriber::EnvFilter` directive. Logs are
+/// written to stderr in either [`LogFormat::Text`] or [`LogFormat::Json`]
+/// form. Call this at most once per process, before serving requests.
 pub fn init_tracing(filter: &str, format: LogFormat) {
     // `tracing-log` routes upstream `log::*` records through this
     // subscriber.
@@ -44,14 +52,18 @@ pub fn init_tracing(filter: &str, format: LogFormat) {
     }
 }
 
+/// HTTP server configuration.
+///
+/// This config controls listener addresses, auth, CORS, request limits,
+/// request budgets, logging format, and admin-server behavior. It does not
+/// parse environment variables or CLI flags; embedders map their own
+/// configuration source onto this struct.
 #[derive(Debug, Clone)]
 pub struct ServeConfig {
-    /// Main HTTP listener binding. TCP by default;
-    /// `--unix-socket`/`VLC_UNIX_SOCKET` synthesizes the UDS variant.
+    /// Main HTTP listener binding.
     pub main: ListenAddr,
     /// Admin HTTP listener binding. `None` disables the admin
-    /// router entirely. TCP (loopback) is the default when enabled;
-    /// `--admin-unix-socket`/`VLC_ADMIN_UNIX_SOCKET` synthesizes UDS.
+    /// router entirely.
     pub admin: Option<ListenAddr>,
     /// Optional bearer token. When `Some`, `auth_middleware` rejects
     /// requests lacking `Authorization: Bearer <key>` with 401. `None`
@@ -115,10 +127,9 @@ pub struct ServeConfig {
     /// immediately after bind. Ignored on TCP-only listeners and on
     /// Windows (where UDS is absent). Default `0o600`.
     pub socket_mode: u32,
-    /// Per-reconfig drain timeout in seconds. Defaults to match the binary
-    /// `--drain-timeout-secs` at resolve time. Distinct from the binary's
-    /// shutdown drain because reconfig is admin-initiated and typically
-    /// tolerates a longer wait than pod-eviction grace.
+    /// Per-reconfiguration drain timeout in seconds. This bounds how long an
+    /// admin config replacement waits for in-flight requests to finish before
+    /// returning a 503.
     pub reconfig_drain_timeout_secs: u64,
 }
 

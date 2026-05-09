@@ -15,17 +15,22 @@ use std::fmt;
 #[cfg(unix)]
 use std::path::PathBuf;
 
-/// A pre-resolved listener binding target. TCP is cross-platform;
-/// `Uds` is `#[cfg(unix)]`-gated end-to-end and does not exist at all
-/// on Windows (so every match needs at most one arm there).
+/// Listener binding target.
+///
+/// TCP is cross-platform. The UDS variant is available only on Unix.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ListenAddr {
+    /// TCP listener on `host:port`.
     Tcp {
+        /// Host or IP address to bind.
         host: String,
+        /// TCP port to bind.
         port: u16,
     },
+    /// Unix-domain socket listener.
     #[cfg(unix)]
     Uds {
+        /// Absolute socket pathname.
         path: PathBuf,
     },
 }

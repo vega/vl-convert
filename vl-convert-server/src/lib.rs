@@ -1,3 +1,10 @@
+//! Library crate for serving Vega-Lite and Vega conversion endpoints over HTTP.
+//!
+//! The crate exposes construction and serving primitives used by the
+//! `vl-convert serve` CLI, and can also be embedded in another Rust binary.
+//! Callers provide process lifecycle policy such as signal handling, readiness
+//! output, and forced shutdown deadlines.
+
 mod accept;
 mod admin;
 mod budget;
@@ -42,7 +49,7 @@ use tower_http::trace::TraceLayer;
 use vl_convert_rs::anyhow;
 use vl_convert_rs::converter::VlcConfig;
 
-/// Serve a [`BuiltApp`] on a pre-bound listener.
+/// Serve a [`BuiltApp`] on a bound main listener.
 ///
 /// Runs the main listener, optional admin listener, and budget refill loop
 /// on the current runtime. When `shutdown` resolves, all listeners receive
@@ -121,8 +128,11 @@ pub async fn serve(
     Ok(())
 }
 
-/// Build a [`BuiltApp`] from the given configuration: warms up
-/// converter workers and binds the admin listener when configured.
+/// Build a [`BuiltApp`] from converter and server configuration.
+///
+/// This validates the server config, initializes and warms the converter
+/// worker pool, builds the main router, and binds the optional admin listener.
+/// The main listener is bound separately with [`bind_listener`].
 pub async fn build_app(
     config: VlcConfig,
     serve_config: &ServeConfig,
