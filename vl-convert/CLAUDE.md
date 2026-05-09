@@ -76,7 +76,7 @@ runtime on `Option<Option<T>>` field types.
 
 ## Env-var fallback
 
-Every flag (22 globals + 27 serve-local) has a `VLC_<SCREAMING_SNAKE_CASE>`
+Every flag has a `VLC_<SCREAMING_SNAKE_CASE>`
 env-var fallback via `clap`'s `env` attribute. Precedence ladder:
 
 ```

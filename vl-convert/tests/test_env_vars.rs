@@ -308,3 +308,83 @@ fn test_vega_plugin_inline_esm_rejected_at_parse_time() {
 
 // `VLC_DRAIN_TIMEOUT_SECS=60` is covered by the in-process parse test because
 // the empty subprocess case exits before the drain watchdog logs.
+
+// `--admin-host` non-loopback success and failure paths. The clap-error
+// case (missing --admin-port) is covered in the in-process
+// `cli_types::tests` suite to keep the subprocess-spawn count small.
+
+#[test]
+fn test_admin_host_env_var_binds_non_loopback() {
+    use std::io::Read;
+
+    // `0.0.0.0` is bindable on every test platform and is non-loopback,
+    // so it exercises both the propagation path and the validate_serve_config
+    // "non-loopback admin requires admin_api_key" rule.
+    let main_port = pick_free_port();
+    let admin_port = pick_free_port();
+    let mut child = spawn_serve_with_env(
+        &[
+            ("VLC_ADMIN_HOST", "0.0.0.0"),
+            ("VLC_ADMIN_PORT", &admin_port.to_string()),
+            ("VLC_ADMIN_API_KEY", "secret"),
+        ],
+        &[
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &main_port.to_string(),
+            "--ready-json",
+            "--drain-timeout-secs",
+            "1",
+        ],
+    );
+    let v = read_ready_json(&mut child);
+
+    let admin_host = v["admin_listen"]["host"]
+        .as_str()
+        .unwrap_or_else(|| panic!("admin_listen.host missing or non-string in ready-JSON: {v}"));
+    assert_eq!(
+        admin_host, "0.0.0.0",
+        "VLC_ADMIN_HOST=0.0.0.0 must propagate to admin_listen.host"
+    );
+
+    send_sigterm(&child);
+    drop(child.stdin.take());
+    let _ = wait_with_timeout(&mut child, Duration::from_secs(10));
+    // Drain stderr so the child's pipe doesn't block on close.
+    let mut buf = Vec::new();
+    if let Some(mut err) = child.stderr.take() {
+        let _ = err.read_to_end(&mut buf);
+    }
+}
+
+#[test]
+fn test_admin_host_without_admin_api_key_fails_fast() {
+    let admin_port = pick_free_port();
+    let output = vl_convert_cmd_with_env(&[
+        ("VLC_ADMIN_HOST", "0.0.0.0"),
+        ("VLC_ADMIN_PORT", &admin_port.to_string()),
+    ])
+    .arg("serve")
+    .arg("--host")
+    .arg("127.0.0.1")
+    .arg("--port")
+    .arg(pick_free_port().to_string())
+    .arg("--drain-timeout-secs")
+    .arg("1")
+    .output()
+    .expect("failed to run vl-convert serve");
+
+    assert!(
+        !output.status.success(),
+        "non-loopback admin without admin_api_key must fail fast; \
+         stdout: {}, stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("admin listener bound to non-loopback"),
+        "stderr should carry the validate_serve_config bail message; got: {stderr}"
+    );
+}

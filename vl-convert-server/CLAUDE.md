@@ -333,6 +333,10 @@ misconfigured empty env var (`VLC_ADMIN_API_KEY=""`) from satisfying
 the non-loopback admin guard while leaving the bearer effectively
 guessable.
 
+The reference CLI exposes the admin host knob via `--admin-host` /
+`VLC_ADMIN_HOST` (mirroring `--host`); the validator's non-loopback
+rule applies identically regardless of how the host is set.
+
 ### SIGTERM wins over in-progress reconfig
 
 The `ReconfigCoordinator.shutdown_token` is the **same** token

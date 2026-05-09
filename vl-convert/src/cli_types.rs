@@ -497,6 +497,41 @@ mod tests {
     }
 
     #[test]
+    fn vlc_admin_host_env_var_round_trips() {
+        // VLC_ADMIN_HOST resolves through the env path; --admin-port is
+        // required by clap (the admin listener is opt-in), so we pass
+        // it on the CLI.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _scrub = EnvScrub(&["VLC_ADMIN_HOST"]);
+        std::env::set_var("VLC_ADMIN_HOST", "0.0.0.0");
+        let cli = Cli::try_parse_from(["vl-convert", "serve", "--admin-port", "9000"])
+            .expect("Cli::try_parse_from must succeed");
+        let Commands::Serve(args) = cli.command else {
+            panic!("expected Commands::Serve");
+        };
+        assert_eq!(
+            args.admin_host.as_deref(),
+            Some("0.0.0.0"),
+            "VLC_ADMIN_HOST=0.0.0.0 must populate args.admin_host"
+        );
+    }
+
+    #[test]
+    fn admin_host_without_admin_port_is_clap_error() {
+        // `requires = "admin_port"` on --admin-host means passing the
+        // host alone is rejected by clap before parsing finishes.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _scrub = EnvScrub(&["VLC_ADMIN_HOST", "VLC_ADMIN_PORT"]);
+        let err = Cli::try_parse_from(["vl-convert", "serve", "--admin-host", "127.0.0.1"])
+            .expect_err("--admin-host without --admin-port must be a clap error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("--admin-port") || msg.contains("admin_port"),
+            "error should call out the missing --admin-port; got: {msg}"
+        );
+    }
+
+    #[test]
     fn cli_flag_overrides_vlc_env_var() {
         // CLI flags override their `VLC_*` env fallback.
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());

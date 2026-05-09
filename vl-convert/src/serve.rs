@@ -185,8 +185,9 @@ pub(crate) struct ServeArgs {
     #[arg(long, value_name = "OCTAL", value_parser = parse_socket_mode_arg, env = "VLC_SOCKET_MODE")]
     pub(crate) socket_mode: Option<u32>,
 
-    /// Bind an admin listener on `127.0.0.1:<port>` for runtime
-    /// reconfiguration. Mutually exclusive with `--admin-unix-socket`.
+    /// Bind an admin listener on `<--admin-host>:<port>` for runtime
+    /// reconfiguration (default host `127.0.0.1`). Mutually exclusive
+    /// with `--admin-unix-socket`.
     #[arg(
         long,
         group = "admin_listener",
@@ -194,6 +195,20 @@ pub(crate) struct ServeArgs {
         env = "VLC_ADMIN_PORT"
     )]
     pub(crate) admin_port: Option<u16>,
+
+    /// Bind address for the admin HTTP listener (TCP). Defaults to
+    /// `127.0.0.1` and requires `--admin-port` (the admin listener is
+    /// opt-in; setting only the host has no effect). Non-loopback
+    /// values require `--admin-api-key`; the library's
+    /// `validate_serve_config` rejects the configuration otherwise.
+    #[arg(
+        long,
+        group = "admin_listener",
+        value_name = "HOST",
+        requires = "admin_port",
+        env = "VLC_ADMIN_HOST"
+    )]
+    pub(crate) admin_host: Option<String>,
 
     /// Bind the admin HTTP listener on a UDS path instead of TCP
     /// (Unix only). Mutually exclusive with `--admin-port`.
@@ -443,14 +458,22 @@ impl From<&ServeArgs> for ServeConfig {
             }
         };
 
-        // Admin listener: --admin-unix-socket wins; otherwise a
-        // loopback-TCP listener if --admin-port is set; otherwise None.
+        // Admin listener: --admin-unix-socket wins; otherwise build a TCP
+        // target from --admin-host / --admin-port. Defaults to 127.0.0.1
+        // when only --admin-port is set; non-loopback hosts require
+        // --admin-api-key (enforced by validate_serve_config in build_app).
         let admin: Option<ListenAddr> = match &args.admin_unix_socket {
             #[cfg(unix)]
             Some(path) => Some(ListenAddr::Uds { path: path.clone() }),
             #[cfg(not(unix))]
             Some(_) => unreachable!("parse_socket_path_arg rejects on Windows"),
-            None => args.admin_port.map(ListenAddr::loopback_tcp),
+            None => args.admin_port.map(|port| {
+                let host = args
+                    .admin_host
+                    .clone()
+                    .unwrap_or_else(|| "127.0.0.1".to_string());
+                ListenAddr::Tcp { host, port }
+            }),
         };
 
         let socket_mode = args
@@ -572,11 +595,14 @@ fn advise_listener_security(main: &BoundListener, serve_config: &ServeConfig) {
 /// Security advisory for the admin listener:
 ///
 /// - No admin listener configured → no-op.
-/// - UDS admin without `--admin-api-key` → silent; filesystem
-///   permissions are the trust boundary.
-/// - TCP loopback admin without `--admin-api-key` → warn.
-/// - Non-loopback TCP admin without `--admin-api-key` → warn here if
-///   reached; `build_app` validation rejects this configuration first.
+/// - UDS admin → silent; filesystem permissions are the trust
+///   boundary.
+/// - TCP loopback admin without `--admin-api-key` → warn (loopback
+///   is still the trust boundary; recommend a redundant key).
+/// - TCP non-loopback admin with `--admin-api-key` → warn (admin
+///   surface reachable beyond loopback; recommend network-layer ACLs).
+/// - TCP non-loopback admin without `--admin-api-key` → warn here if
+///   reached; `validate_serve_config` rejects this before bind.
 fn advise_admin_security(
     admin: Option<EndpointInfo>,
     serve_config: &ServeConfig,
@@ -584,9 +610,6 @@ fn advise_admin_security(
     let Some(info) = admin else {
         return Ok(());
     };
-    if serve_config.admin_api_key.is_some() {
-        return Ok(());
-    }
     match info {
         #[cfg(unix)]
         EndpointInfo::Unix { .. } => Ok(()),
@@ -594,18 +617,25 @@ fn advise_admin_security(
             let parsed_ip = host.parse::<std::net::IpAddr>().ok();
             let is_loopback = matches!(host.as_str(), "localhost")
                 || parsed_ip.is_some_and(|ip| ip.is_loopback());
-            if is_loopback {
-                log::warn!(
-                    "Admin listener binding to {url} with no admin API key — \
-                     loopback is still the trust boundary. Set \
+            match (is_loopback, serve_config.admin_api_key.is_some()) {
+                (true, true) => {}
+                (true, false) => log::warn!(
+                    "Admin listener binding to {url} with no admin API \
+                     key — loopback is still the trust boundary. Set \
                      --admin-api-key as a redundant guard."
-                );
-            } else {
-                // `validate_serve_config` rejects this before bind.
-                log::warn!(
+                ),
+                (false, true) => log::warn!(
+                    "Admin listener at {url} is reachable beyond loopback. \
+                     The /admin/config surface can reconfigure live workers; \
+                     ensure --admin-api-key is rotated and access is \
+                     restricted at the network layer (firewall / private \
+                     network / reverse proxy ACL)."
+                ),
+                (false, false) => log::warn!(
+                    // validate_serve_config rejects this before bind.
                     "Admin listener at {url} is non-loopback and has no \
                      --admin-api-key set."
-                );
+                ),
             }
             Ok(())
         }
@@ -947,6 +977,7 @@ mod tests {
             unix_socket: None,
             socket_mode: None,
             admin_port: None,
+            admin_host: None,
             admin_unix_socket: None,
             admin_api_key: None,
             dump_openapi: None,
@@ -1000,5 +1031,36 @@ mod tests {
         let config = ServeConfig::from(&args);
         assert_eq!(config.per_ip_budget_ms, Some(0));
         assert_eq!(config.global_budget_ms, Some(i64::MAX));
+    }
+
+    #[test]
+    fn serve_config_from_args_admin_host_defaults_to_loopback() {
+        let mut args = default_args();
+        args.admin_port = Some(9000);
+
+        let config = ServeConfig::from(&args);
+        match config.admin {
+            Some(ListenAddr::Tcp { host, port }) => {
+                assert_eq!(host, "127.0.0.1");
+                assert_eq!(port, 9000);
+            }
+            other => panic!("expected Tcp 127.0.0.1:9000, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn serve_config_from_args_uses_admin_host_when_set() {
+        let mut args = default_args();
+        args.admin_host = Some("0.0.0.0".to_string());
+        args.admin_port = Some(9000);
+
+        let config = ServeConfig::from(&args);
+        match config.admin {
+            Some(ListenAddr::Tcp { host, port }) => {
+                assert_eq!(host, "0.0.0.0");
+                assert_eq!(port, 9000);
+            }
+            other => panic!("expected Tcp 0.0.0.0:9000, got {other:?}"),
+        }
     }
 }
