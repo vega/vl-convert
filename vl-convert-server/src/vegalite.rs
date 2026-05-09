@@ -18,7 +18,7 @@ use crate::types::{
     VegaliteUrlRequest, VegaliteVegaRequest,
 };
 use crate::util::{
-    append_vlc_logs_header, attach_google_font_stats, conversion_error_response, error_response,
+    append_vlc_logs_header, attach_google_font_usage, conversion_error_response, error_response,
     format_log_entries, validate_common_opts,
 };
 
@@ -134,7 +134,7 @@ pub async fn vegalite_to_svg(
                 output.svg,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -186,7 +186,7 @@ pub async fn vegalite_to_png(
                 output.data,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -238,7 +238,7 @@ pub async fn vegalite_to_jpeg(
                 output.data,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -286,7 +286,7 @@ pub async fn vegalite_to_pdf(
                 output.data,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -349,7 +349,7 @@ pub async fn vegalite_to_html(
                 output.html,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -430,7 +430,7 @@ pub async fn vegalite_scenegraph(
                     output.data,
                 )
                     .into_response();
-                attach_google_font_stats(&mut response, output.font_stats);
+                attach_google_font_usage(&mut response, output.google_fonts);
                 response
             }
             Err(e) => conversion_error_response(
@@ -453,7 +453,7 @@ pub async fn vegalite_scenegraph(
                             &format!("Failed to serialize scenegraph: {e}"),
                             state.opaque_errors,
                         );
-                        attach_google_font_stats(&mut response, output.font_stats);
+                        attach_google_font_usage(&mut response, output.google_fonts);
                         return response;
                     }
                 };
@@ -466,7 +466,7 @@ pub async fn vegalite_scenegraph(
                     body,
                 )
                     .into_response();
-                attach_google_font_stats(&mut response, output.font_stats);
+                attach_google_font_usage(&mut response, output.google_fonts);
                 response
             }
             Err(e) => conversion_error_response(
@@ -503,7 +503,7 @@ pub async fn vegalite_fonts(
 
     match snap
         .converter
-        .vegalite_fonts_with_stats(
+        .vegalite_fonts_with_google_font_usage(
             spec,
             vl_opts,
             snap.config.auto_google_fonts,
@@ -513,9 +513,9 @@ pub async fn vegalite_fonts(
         )
         .await
     {
-        Ok((fonts, font_stats)) => {
+        Ok((fonts, google_fonts)) => {
             let mut response = Json(fonts).into_response();
-            attach_google_font_stats(&mut response, font_stats);
+            attach_google_font_usage(&mut response, google_fonts);
             response
         }
         Err(e) => conversion_error_response(

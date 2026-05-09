@@ -8,7 +8,8 @@ use std::thread;
 use std::time::Duration;
 
 use vl_convert_google_fonts::{
-    ClientConfig, FontLoadRequest, FontStyle, GoogleFontsClient, GoogleFontsError, VariantRequest,
+    ClientConfig, FontLoadRequest, FontStyle, GoogleFontsClient, GoogleFontsError,
+    UsedGoogleFontVariant, VariantRequest,
 };
 
 #[cfg(feature = "fontdb")]
@@ -317,7 +318,7 @@ fn test_empty_variants_returns_error_blocking() {
         .load_blocking(load_request("Roboto", Some(&[])))
         .unwrap_err();
     assert!(matches!(err.error, GoogleFontsError::NoVariantsRequested));
-    assert_eq!(err.stats.cache_misses(), 0);
+    assert_eq!(err.usage.stats.cache_misses(), 0);
 }
 
 #[test]
@@ -341,6 +342,46 @@ fn test_variant_weight_fallback_blocking() {
     assert_eq!(batch.loaded_variants.len(), 1);
     assert_eq!(batch.loaded_variants[0].weight, 400);
     assert_eq!(batch.loaded_variants[0].style, FontStyle::Italic);
+}
+
+#[test]
+fn test_load_usage_reports_used_variants() {
+    let server = TestServer::new(build_roboto_routes, HashSet::new(), 0);
+    let temp = tempfile::tempdir().unwrap();
+    let client = make_client(temp.path(), server.base_url(), 8, u64::MAX);
+
+    let requested = [
+        VariantRequest {
+            weight: 400,
+            style: FontStyle::Normal,
+        },
+        VariantRequest {
+            weight: 900,
+            style: FontStyle::Italic,
+        },
+    ];
+
+    let usage = client
+        .load_blocking(load_request("Roboto", Some(&requested)))
+        .unwrap()
+        .usage;
+
+    assert_eq!(usage.stats.resolved_variants, 2);
+    assert_eq!(
+        usage.used_variants,
+        vec![
+            UsedGoogleFontVariant {
+                family: "Roboto".to_string(),
+                weight: 400,
+                style: FontStyle::Normal,
+            },
+            UsedGoogleFontVariant {
+                family: "Roboto".to_string(),
+                weight: 400,
+                style: FontStyle::Italic,
+            },
+        ]
+    );
 }
 
 #[test]
@@ -822,8 +863,8 @@ async fn test_probe_family_positive_uses_css_cache_not_memory_cache() {
 
     assert!(first.known);
     assert!(second.known);
-    assert_eq!(first.stats.css_cache_misses, 1);
-    assert_eq!(second.stats.css_cache_misses, 1);
+    assert_eq!(first.usage.stats.css_cache_misses, 1);
+    assert_eq!(second.usage.stats.css_cache_misses, 1);
     assert_eq!(server.css2_hit_count("Roboto"), 2);
 }
 
@@ -845,7 +886,7 @@ async fn test_probe_family_returns_false_for_unknown() {
     let result = client.probe_family("Nonexistent").await;
     match result {
         Ok(probe) => assert!(!probe.known),
-        Err(err) => assert_eq!(err.stats.css_cache_misses, 1),
+        Err(err) => assert_eq!(err.usage.stats.css_cache_misses, 1),
     }
 }
 
@@ -869,7 +910,7 @@ async fn test_probe_family_empty_css_response() {
 
     let result = client.probe_family("EmptyFont").await.unwrap();
     assert!(!result.known);
-    assert_eq!(result.stats.css_cache_misses, 1);
+    assert_eq!(result.usage.stats.css_cache_misses, 1);
 }
 
 #[tokio::test]
@@ -894,8 +935,8 @@ async fn test_probe_family_missing_result_cached() {
 
     assert!(!first.known);
     assert!(!second.known);
-    assert_eq!(first.stats.css_cache_misses, 1);
-    assert_eq!(second.stats.css_cache_misses, 0);
+    assert_eq!(first.usage.stats.css_cache_misses, 1);
+    assert_eq!(second.usage.stats.css_cache_misses, 0);
     assert_eq!(server.css2_hit_count("EmptyFont"), 1);
 }
 
@@ -921,8 +962,8 @@ fn test_probe_family_missing_result_cached_blocking() {
 
     assert!(!first.known);
     assert!(!second.known);
-    assert_eq!(first.stats.css_cache_misses, 1);
-    assert_eq!(second.stats.css_cache_misses, 0);
+    assert_eq!(first.usage.stats.css_cache_misses, 1);
+    assert_eq!(second.usage.stats.css_cache_misses, 0);
     assert_eq!(server.css2_hit_count("EmptyFont"), 1);
 }
 
@@ -951,5 +992,5 @@ fn test_font_not_found_returns_error() {
         "Expected FontNotFound or HttpStatus error, got: {:?}",
         err
     );
-    assert_eq!(err.stats.css_cache_misses, 1);
+    assert_eq!(err.usage.stats.css_cache_misses, 1);
 }

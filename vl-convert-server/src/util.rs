@@ -1,7 +1,7 @@
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use vl_convert_rs::converter::{
-    FormatLocale, GoogleFontRequest, GoogleFontStats, LogEntry, TimeFormatLocale, VlcConfig,
+    FormatLocale, GoogleFontRequest, GoogleFontUsage, LogEntry, TimeFormatLocale, VlcConfig,
 };
 
 use crate::types::ErrorResponse;
@@ -40,9 +40,9 @@ pub(crate) fn conversion_error_response(
     opaque: bool,
 ) -> Response {
     let mut response = error_response(status, &format!("{context}: {error}"), opaque);
-    attach_google_font_stats(
+    attach_google_font_usage(
         &mut response,
-        vl_convert_rs::converter::google_font_stats_from_error(error),
+        vl_convert_rs::converter::google_font_usage_from_error(error),
     );
     response
 }
@@ -65,9 +65,9 @@ pub(crate) fn append_vlc_logs_header(headers: &mut HeaderMap, logs: &[String]) {
     }
 }
 
-pub(crate) fn attach_google_font_stats(response: &mut Response, stats: GoogleFontStats) {
-    if stats.cache_misses() > 0 || stats.downloaded_bytes > 0 || stats.resolved_variants > 0 {
-        response.extensions_mut().insert(stats);
+pub(crate) fn attach_google_font_usage(response: &mut Response, usage: GoogleFontUsage) {
+    if !usage.is_empty() {
+        response.extensions_mut().insert(usage);
     }
 }
 

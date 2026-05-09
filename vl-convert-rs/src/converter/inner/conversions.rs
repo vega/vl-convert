@@ -133,7 +133,7 @@ vegaLiteToSvg_{ver_name:?}(
         Ok(SvgOutput {
             svg,
             logs,
-            font_stats: Default::default(),
+            google_fonts: Default::default(),
         })
     }
 
@@ -219,7 +219,7 @@ vegaLiteToScenegraph_{ver_name:?}(
         Ok(ScenegraphMsgpackOutput {
             data,
             logs,
-            font_stats: Default::default(),
+            google_fonts: Default::default(),
         })
     }
 
@@ -236,7 +236,7 @@ vegaLiteToScenegraph_{ver_name:?}(
         Ok(ScenegraphOutput {
             scenegraph,
             logs: sg_output.logs,
-            font_stats: sg_output.font_stats,
+            google_fonts: sg_output.google_fonts,
         })
     }
 
@@ -315,7 +315,7 @@ vegaToSvg(
         Ok(SvgOutput {
             svg,
             logs,
-            font_stats: Default::default(),
+            google_fonts: Default::default(),
         })
     }
 
@@ -392,7 +392,7 @@ vegaToScenegraph(
         Ok(ScenegraphMsgpackOutput {
             data,
             logs,
-            font_stats: Default::default(),
+            google_fonts: Default::default(),
         })
     }
 
@@ -407,7 +407,7 @@ vegaToScenegraph(
         Ok(ScenegraphOutput {
             scenegraph,
             logs: sg_output.logs,
-            font_stats: sg_output.font_stats,
+            google_fonts: sg_output.google_fonts,
         })
     }
 

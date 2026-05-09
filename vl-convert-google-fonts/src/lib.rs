@@ -16,5 +16,6 @@ pub use fontdb_ext::{GoogleFontsDatabaseExt, RegisteredFontBatch};
 
 pub use types::{
     family_to_id, find_closest_variant, FontLoadRequest, FontLoadResult, FontProbeResult,
-    FontStyle, GoogleFontStats, LoadedFontBatch, VariantRequest, VariantResolutionResult,
+    FontStyle, GoogleFontStats, GoogleFontUsage, LoadedFontBatch, UsedGoogleFontVariant,
+    VariantRequest, VariantResolutionResult,
 };

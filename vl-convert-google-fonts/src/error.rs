@@ -1,18 +1,18 @@
 use thiserror::Error;
 
-use crate::types::GoogleFontStats;
+use crate::types::GoogleFontUsage;
 
 pub type GoogleFontsResult<T> = Result<T, GoogleFontsFailure>;
 
 #[derive(Debug)]
 pub struct GoogleFontsFailure {
     pub error: GoogleFontsError,
-    pub stats: GoogleFontStats,
+    pub usage: GoogleFontUsage,
 }
 
 impl GoogleFontsFailure {
-    pub(crate) fn new(error: GoogleFontsError, stats: GoogleFontStats) -> Self {
-        Self { error, stats }
+    pub(crate) fn new(error: GoogleFontsError, usage: GoogleFontUsage) -> Self {
+        Self { error, usage }
     }
 
     pub fn into_error(self) -> GoogleFontsError {
@@ -69,8 +69,8 @@ pub enum GoogleFontsError {
 }
 
 impl GoogleFontsError {
-    pub(crate) fn with_stats(self, stats: GoogleFontStats) -> GoogleFontsFailure {
-        GoogleFontsFailure::new(self, stats)
+    pub(crate) fn with_usage(self, usage: impl Into<GoogleFontUsage>) -> GoogleFontsFailure {
+        GoogleFontsFailure::new(self, usage.into())
     }
 
     pub(crate) fn is_retryable(&self) -> bool {

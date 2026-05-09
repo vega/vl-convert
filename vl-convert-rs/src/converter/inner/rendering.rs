@@ -93,7 +93,7 @@ vegaToCanvas(
         Ok(PngOutput {
             data,
             logs,
-            font_stats: Default::default(),
+            google_fonts: Default::default(),
         })
     }
 
@@ -176,7 +176,7 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(PngOutput {
             data,
             logs,
-            font_stats: Default::default(),
+            google_fonts: Default::default(),
         })
     }
 
@@ -259,7 +259,7 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(JpegOutput {
             data,
             logs: svg_output.logs,
-            font_stats: svg_output.font_stats,
+            google_fonts: svg_output.google_fonts,
         })
     }
 
@@ -277,7 +277,7 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(JpegOutput {
             data,
             logs: svg_output.logs,
-            font_stats: svg_output.font_stats,
+            google_fonts: svg_output.google_fonts,
         })
     }
 
@@ -292,7 +292,7 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(PdfOutput {
             data,
             logs: svg_output.logs,
-            font_stats: svg_output.font_stats,
+            google_fonts: svg_output.google_fonts,
         })
     }
 
@@ -307,7 +307,7 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(PdfOutput {
             data,
             logs: svg_output.logs,
-            font_stats: svg_output.font_stats,
+            google_fonts: svg_output.google_fonts,
         })
     }
 }

@@ -9,7 +9,7 @@ use vl_convert_rs::converter::{JpegOpts, PdfOpts, PngOpts};
 use crate::config::AppState;
 use crate::types::{ErrorResponse, SvgJpegRequest, SvgPdfRequest, SvgPngRequest};
 use crate::util::{
-    append_vlc_logs_header, attach_google_font_stats, conversion_error_response, format_log_entries,
+    append_vlc_logs_header, attach_google_font_usage, conversion_error_response, format_log_entries,
 };
 
 #[utoipa::path(
@@ -43,7 +43,7 @@ pub async fn svg_to_png(
                 output.data,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -86,7 +86,7 @@ pub async fn svg_to_jpeg(
                 output.data,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -128,7 +128,7 @@ pub async fn svg_to_pdf(
                 output.data,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(

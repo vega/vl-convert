@@ -6,11 +6,11 @@ use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use vl_convert_google_fonts::{
-    FontLoadRequest, GoogleFontStats, GoogleFontsDatabaseExt, LoadedFontBatch,
+    FontLoadRequest, GoogleFontUsage, GoogleFontsDatabaseExt, LoadedFontBatch,
 };
 
 use super::super::fonts::{
-    error_with_google_font_stats, google_font_request_key, GoogleFontRequest, WorkerFontState,
+    error_with_google_font_usage, google_font_request_key, GoogleFontRequest, WorkerFontState,
 };
 
 impl InnerVlConverter {
@@ -74,12 +74,12 @@ impl InnerVlConverter {
     pub(crate) async fn apply_font_overlay_if_needed(
         &mut self,
         google_fonts: Option<Vec<GoogleFontRequest>>,
-    ) -> Result<GoogleFontStats, AnyError> {
+    ) -> Result<GoogleFontUsage, AnyError> {
         let resolved = self.resolve_google_fonts(google_fonts).await?;
         if !resolved.batches.is_empty() {
             self.apply_google_fonts_overlay(resolved.batches);
         }
-        Ok(resolved.stats)
+        Ok(resolved.google_fonts)
     }
 
     /// Resolve Google Fonts requests on the worker thread using the async API.
@@ -102,7 +102,7 @@ impl InnerVlConverter {
         let unique = unique_google_font_requests(merged);
 
         let mut batches = Vec::new();
-        let mut stats = GoogleFontStats::default();
+        let mut google_fonts = GoogleFontUsage::default();
         let variant_threshold = self
             .ctx
             .config
@@ -112,13 +112,13 @@ impl InnerVlConverter {
         for request in unique {
             if let Some(threshold) = variant_threshold {
                 if used_variants >= threshold {
-                    return Err(error_with_google_font_stats(
+                    return Err(error_with_google_font_usage(
                         anyhow!(
                             "Google Font variant threshold {threshold} reached after resolving \
                              {used_variants} variants; refusing to load family '{}'",
                             request.family
                         ),
-                        stats,
+                        google_fonts,
                     ));
                 }
             }
@@ -135,23 +135,26 @@ impl InnerVlConverter {
                         "Failed to load request font '{}' from Google Fonts",
                         request.family
                     ));
-                    return Err(error_with_google_font_stats(error, stats));
+                    return Err(error_with_google_font_usage(error, google_fonts));
                 }
             };
             used_variants = used_variants.saturating_add(
-                usize::try_from(loaded.stats.resolved_variants).unwrap_or(usize::MAX),
+                usize::try_from(loaded.usage.stats.resolved_variants).unwrap_or(usize::MAX),
             );
-            stats.add_assign(loaded.stats);
+            google_fonts.add_assign(loaded.usage);
             batches.push(loaded.batch);
         }
-        Ok(ResolvedGoogleFonts { batches, stats })
+        Ok(ResolvedGoogleFonts {
+            batches,
+            google_fonts,
+        })
     }
 }
 
 #[derive(Default)]
 pub(crate) struct ResolvedGoogleFonts {
     pub(crate) batches: Vec<LoadedFontBatch>,
-    pub(crate) stats: GoogleFontStats,
+    pub(crate) google_fonts: GoogleFontUsage,
 }
 
 fn unique_google_font_requests(requests: Vec<GoogleFontRequest>) -> Vec<GoogleFontRequest> {

@@ -11,7 +11,10 @@ mod worker_pool;
 
 pub use config::*;
 pub(crate) use fonts::*;
-pub use fonts::{google_font_stats_from_error, GoogleFontRequest, GoogleFontStats};
+pub use fonts::{
+    google_font_usage_from_error, GoogleFontRequest, GoogleFontStats, GoogleFontUsage,
+    UsedGoogleFontVariant,
+};
 pub(crate) use inner::InnerVlConverter;
 pub(crate) use inner::VlConverterInner;
 pub(crate) use permissions::*;
@@ -480,12 +483,12 @@ impl VlConverter {
     /// If font preprocessing is enabled, compile VL→Vega and process referenced fonts.
     ///
     /// Returns the compiled Vega spec, options, compile logs, and Google Fonts
-    /// stats for the caller to render directly.
+    /// usage for the caller to render directly.
     async fn maybe_compile_vl_with_preprocessed_fonts(
         &self,
         vl_spec: &ValueOrString,
         vl_opts: &VlOpts,
-    ) -> Result<Option<(serde_json::Value, VgOpts, Vec<LogEntry>, GoogleFontStats)>, AnyError> {
+    ) -> Result<Option<(serde_json::Value, VgOpts, Vec<LogEntry>, GoogleFontUsage)>, AnyError> {
         if !self.should_preprocess_fonts() {
             return Ok(None);
         }
@@ -504,7 +507,7 @@ impl VlConverter {
             .await?;
         let vega_spec = vega_output.spec;
         let compile_logs = vega_output.logs;
-        let font_analysis = preprocess_fonts_with_stats(
+        let font_analysis = preprocess_fonts(
             &vega_spec,
             self.inner.config().auto_google_fonts,
             self.inner.config().missing_fonts,
@@ -520,7 +523,7 @@ impl VlConverter {
             vega_spec,
             vg_opts,
             compile_logs,
-            font_analysis.stats,
+            font_analysis.google_fonts,
         )))
     }
 
@@ -539,7 +542,7 @@ impl VlConverter {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
                 ValueOrString::Value(v) => v.clone(),
             };
-            preprocess_fonts_with_stats(
+            preprocess_fonts(
                 &spec_value,
                 self.inner.config().auto_google_fonts,
                 self.inner.config().missing_fonts,
@@ -550,7 +553,7 @@ impl VlConverter {
         }
     }
 
-    /// Extract font requests from an SVG and collect Google Fonts catalog stats.
+    /// Extract font requests from an SVG and collect Google Fonts usage.
     async fn preprocess_svg_font_requests(
         &self,
         svg: &str,
@@ -560,7 +563,7 @@ impl VlConverter {
         }
 
         let font_strings = crate::extract::extract_fonts_from_svg(svg);
-        let font_analysis = classify_and_request_fonts_with_stats(
+        let font_analysis = classify_and_request_fonts(
             font_strings,
             self.inner.config().auto_google_fonts,
             self.inner.config().missing_fonts,
@@ -650,16 +653,16 @@ impl VlConverter {
             })
             .await
         };
-        let mut output =
-            output_result.map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
-        output.font_stats.add_assign(font_analysis.stats);
+        let mut output = output_result
+            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
+        output.google_fonts.add_assign(font_analysis.google_fonts);
 
-        let (svg, postprocess_font_stats) = self
+        let (svg, postprocess_google_fonts) = self
             .postprocess_svg(output.svg, &svg_opts, explicit_google_families)
             .await
-            .map_err(|err| error_with_google_font_stats(err, output.font_stats))?;
+            .map_err(|err| error_with_google_font_usage(err, output.google_fonts.clone()))?;
         output.svg = svg;
-        output.font_stats.add_assign(postprocess_font_stats);
+        output.google_fonts.add_assign(postprocess_google_fonts);
         Ok(output)
     }
 
@@ -673,7 +676,7 @@ impl VlConverter {
         svg: String,
         svg_opts: &SvgOpts,
         explicit_google_families: HashSet<String>,
-    ) -> Result<(String, GoogleFontStats), AnyError> {
+    ) -> Result<(String, GoogleFontUsage), AnyError> {
         let config = self.config();
         let image_policy = self.image_access_policy();
         let resources_dir = if config.base_url.is_filesystem() {
@@ -701,7 +704,7 @@ impl VlConverter {
             analysis.families.iter().cloned().collect();
 
         // Classify fonts once with proper explicit families
-        let classified = classify_scenegraph_fonts_with_stats(
+        let classified = classify_scenegraph_fonts(
             &families,
             config.auto_google_fonts,
             config.embed_local_fonts,
@@ -710,7 +713,7 @@ impl VlConverter {
         )
         .await?;
         let classified_fonts = classified.fonts;
-        let mut font_stats = classified.stats;
+        let mut google_fonts = classified.google_fonts;
 
         // Compute variants once before building Google font requests
         let family_variants = crate::font_embed::variants_by_family(&analysis.chars_by_key);
@@ -747,12 +750,12 @@ impl VlConverter {
                     Box::pin(inner.resolve_google_fonts(Some(google_font_requests)))
                 })
                 .await
-                .map_err(|err| error_with_google_font_stats(err, font_stats))?;
-            font_stats.add_assign(resolved.stats);
+                .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+            google_fonts.add_assign(resolved.google_fonts);
             resolved.batches
         };
 
-        let (svg, process_stats) = crate::svg_font::process_svg(
+        let (svg, process_google_fonts) = crate::svg_font::process_svg(
             svg,
             svg_opts,
             &analysis,
@@ -765,9 +768,9 @@ impl VlConverter {
             resources_dir.as_deref(),
         )
         .await
-        .map_err(|err| error_with_google_font_stats(err, font_stats))?;
-        font_stats.add_assign(process_stats);
-        Ok((svg, font_stats))
+        .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+        google_fonts.add_assign(process_google_fonts);
+        Ok((svg, google_fonts))
     }
 
     pub async fn vega_to_scenegraph(
@@ -793,8 +796,8 @@ impl VlConverter {
                 })
             })
             .await
-            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
-        output.font_stats.add_assign(font_analysis.stats);
+            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
+        output.google_fonts.add_assign(font_analysis.google_fonts);
         Ok(output)
     }
 
@@ -825,8 +828,8 @@ impl VlConverter {
                 })
             })
             .await
-            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
-        output.font_stats.add_assign(font_analysis.stats);
+            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
+        output.google_fonts.add_assign(font_analysis.google_fonts);
         Ok(output)
     }
 
@@ -847,7 +850,7 @@ impl VlConverter {
             .unwrap_or_default();
 
         let mut output =
-            if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
+            if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_google_fonts)) = self
                 .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
                 .await?
             {
@@ -871,12 +874,13 @@ impl VlConverter {
                     })
                     .await
                 };
-                let mut output = output_result
-                    .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
+                let mut output = output_result.map_err(|err| {
+                    error_with_google_font_usage(err, preprocess_google_fonts.clone())
+                })?;
                 let mut all_logs = compile_logs;
                 all_logs.extend(output.logs);
                 output.logs = all_logs;
-                output.font_stats.add_assign(preprocess_font_stats);
+                output.google_fonts.add_assign(preprocess_google_fonts);
                 output
             } else if let Some(plugin_source) = plugin {
                 self.run_on_ephemeral_worker(plugin_source, move |inner| {
@@ -898,12 +902,12 @@ impl VlConverter {
                 .await?
             };
 
-        let (svg, postprocess_font_stats) = self
+        let (svg, postprocess_google_fonts) = self
             .postprocess_svg(output.svg, &svg_opts, explicit_google_families)
             .await
-            .map_err(|err| error_with_google_font_stats(err, output.font_stats))?;
+            .map_err(|err| error_with_google_font_usage(err, output.google_fonts.clone()))?;
         output.svg = svg;
-        output.font_stats.add_assign(postprocess_font_stats);
+        output.google_fonts.add_assign(postprocess_google_fonts);
         Ok(output)
     }
 
@@ -915,7 +919,7 @@ impl VlConverter {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_google_fonts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -933,11 +937,13 @@ impl VlConverter {
                     })
                 })
                 .await
-                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
+                .map_err(|err| {
+                    error_with_google_font_usage(err, preprocess_google_fonts.clone())
+                })?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
-            output.font_stats.add_assign(preprocess_font_stats);
+            output.google_fonts.add_assign(preprocess_google_fonts);
             Ok(output)
         } else {
             self.run_on_worker(move |inner| {
@@ -963,7 +969,7 @@ impl VlConverter {
         self.apply_vl_defaults(&mut vl_opts);
         let vl_spec = vl_spec.into();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_google_fonts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -981,11 +987,13 @@ impl VlConverter {
                     })
                 })
                 .await
-                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
+                .map_err(|err| {
+                    error_with_google_font_usage(err, preprocess_google_fonts.clone())
+                })?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
-            output.font_stats.add_assign(preprocess_font_stats);
+            output.google_fonts.add_assign(preprocess_google_fonts);
             Ok(output)
         } else {
             self.run_on_worker(move |inner| {
@@ -1053,9 +1061,9 @@ impl VlConverter {
             })
             .await
         };
-        let mut output =
-            output_result.map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
-        output.font_stats.add_assign(font_analysis.stats);
+        let mut output = output_result
+            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
+        output.google_fonts.add_assign(font_analysis.google_fonts);
         Ok(output)
     }
 
@@ -1072,7 +1080,7 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
         let plugin = vl_opts.vega_plugin.take();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_google_fonts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -1106,12 +1114,13 @@ impl VlConverter {
                 })
                 .await
             };
-            let mut output = output_result
-                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
+            let mut output = output_result.map_err(|err| {
+                error_with_google_font_usage(err, preprocess_google_fonts.clone())
+            })?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
-            output.font_stats.add_assign(preprocess_font_stats);
+            output.google_fonts.add_assign(preprocess_google_fonts);
             Ok(output)
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
@@ -1196,9 +1205,9 @@ impl VlConverter {
             })
             .await
         };
-        let mut output =
-            output_result.map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
-        output.font_stats.add_assign(font_analysis.stats);
+        let mut output = output_result
+            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
+        output.google_fonts.add_assign(font_analysis.google_fonts);
         Ok(output)
     }
 
@@ -1215,7 +1224,7 @@ impl VlConverter {
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_google_fonts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -1251,12 +1260,13 @@ impl VlConverter {
                 })
                 .await
             };
-            let mut output = output_result
-                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
+            let mut output = output_result.map_err(|err| {
+                error_with_google_font_usage(err, preprocess_google_fonts.clone())
+            })?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
-            output.font_stats.add_assign(preprocess_font_stats);
+            output.google_fonts.add_assign(preprocess_google_fonts);
             Ok(output)
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
@@ -1337,9 +1347,9 @@ impl VlConverter {
             })
             .await
         };
-        let mut output =
-            output_result.map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
-        output.font_stats.add_assign(font_analysis.stats);
+        let mut output = output_result
+            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
+        output.google_fonts.add_assign(font_analysis.google_fonts);
         Ok(output)
     }
 
@@ -1354,7 +1364,7 @@ impl VlConverter {
         let plugin = vl_opts.vega_plugin.take();
         let image_policy = self.image_access_policy();
 
-        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_font_stats)) = self
+        if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_google_fonts)) = self
             .maybe_compile_vl_with_preprocessed_fonts(&vl_spec, &vl_opts)
             .await?
         {
@@ -1386,12 +1396,13 @@ impl VlConverter {
                 })
                 .await
             };
-            let mut output = output_result
-                .map_err(|err| error_with_google_font_stats(err, preprocess_font_stats))?;
+            let mut output = output_result.map_err(|err| {
+                error_with_google_font_usage(err, preprocess_google_fonts.clone())
+            })?;
             let mut all_logs = compile_logs;
             all_logs.extend(output.logs);
             output.logs = all_logs;
-            output.font_stats.add_assign(preprocess_font_stats);
+            output.google_fonts.add_assign(preprocess_google_fonts);
             Ok(output)
         } else if let Some(plugin_source) = plugin {
             self.run_on_ephemeral_worker(plugin_source, move |inner| {
@@ -1441,14 +1452,14 @@ impl VlConverter {
                             .map(|data| PngOutput {
                                 data,
                                 logs: Vec::new(),
-                                font_stats: Default::default(),
+                                google_fonts: Default::default(),
                             })
                     )
                 })
             })
             .await
-            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
-        output.font_stats.add_assign(font_analysis.stats);
+            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
+        output.google_fonts.add_assign(font_analysis.google_fonts);
         Ok(output)
     }
 
@@ -1475,14 +1486,14 @@ impl VlConverter {
                             .map(|data| JpegOutput {
                                 data,
                                 logs: Vec::new(),
-                                font_stats: Default::default(),
+                                google_fonts: Default::default(),
                             })
                     )
                 })
             })
             .await
-            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
-        output.font_stats.add_assign(font_analysis.stats);
+            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
+        output.google_fonts.add_assign(font_analysis.google_fonts);
         Ok(output)
     }
 
@@ -1503,14 +1514,14 @@ impl VlConverter {
                             .map(|data| PdfOutput {
                                 data,
                                 logs: Vec::new(),
-                                font_stats: Default::default(),
+                                google_fonts: Default::default(),
                             })
                     )
                 })
             })
             .await
-            .map_err(|err| error_with_google_font_stats(err, font_analysis.stats))?;
-        output.font_stats.add_assign(font_analysis.stats);
+            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
+        output.google_fonts.add_assign(font_analysis.google_fonts);
         Ok(output)
     }
 

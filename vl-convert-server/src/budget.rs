@@ -451,11 +451,12 @@ pub(crate) async fn middleware(
     let start = Instant::now();
     let response = next.run(req).await;
     let actual_ms = start.elapsed().as_millis() as i64;
-    let font_stats = response
+    let google_fonts = response
         .extensions()
-        .get::<vl_convert_rs::converter::GoogleFontStats>()
-        .copied()
+        .get::<vl_convert_rs::converter::GoogleFontUsage>()
+        .cloned()
         .unwrap_or_default();
+    let font_stats = google_fonts.stats;
     let font_cache_misses = i64::try_from(font_stats.cache_misses()).unwrap_or(i64::MAX);
     let font_penalty_ms = if google_font_cache_miss_penalty_ms > 0 && font_cache_misses > 0 {
         font_cache_misses.saturating_mul(google_font_cache_miss_penalty_ms)
@@ -712,11 +713,14 @@ mod tests {
             let mut response = "ok".into_response();
             response
                 .extensions_mut()
-                .insert(vl_convert_rs::converter::GoogleFontStats {
-                    css_cache_misses: 1,
-                    font_file_cache_misses: 2,
-                    downloaded_bytes: 1234,
-                    resolved_variants: 3,
+                .insert(vl_convert_rs::converter::GoogleFontUsage {
+                    stats: vl_convert_rs::converter::GoogleFontStats {
+                        css_cache_misses: 1,
+                        font_file_cache_misses: 2,
+                        downloaded_bytes: 1234,
+                        resolved_variants: 3,
+                    },
+                    ..Default::default()
                 });
             response
         }
@@ -787,7 +791,10 @@ mod tests {
                     error: vl_convert_google_fonts::GoogleFontsError::FontNotFound(
                         "missing".to_string(),
                     ),
-                    stats,
+                    usage: vl_convert_rs::converter::GoogleFontUsage {
+                        stats,
+                        ..Default::default()
+                    },
                 });
             crate::util::conversion_error_response(
                 StatusCode::UNPROCESSABLE_ENTITY,

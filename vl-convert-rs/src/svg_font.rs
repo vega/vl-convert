@@ -7,10 +7,10 @@
 //! that the SVG is parsed only once (in `postprocess_svg`).
 
 use crate::converter::{
-    error_with_google_font_stats, GoogleFontStats, MissingFontsPolicy, SvgOpts, VlcConfig,
+    error_with_google_font_usage, GoogleFontUsage, MissingFontsPolicy, SvgOpts, VlcConfig,
 };
 use crate::extract::{ClassifiedFont, FontKey, FontSource, SvgAnalysis};
-use crate::font_embed::{generate_font_face_css, resolve_cdn_variants_with_stats};
+use crate::font_embed::{generate_font_face_css, resolve_cdn_variants_with_google_font_usage};
 use crate::html::font_import_rule;
 use crate::image_loading::{
     fetch_and_encode_image_http, resolve_and_read_local_image, ImageAccessPolicy,
@@ -181,7 +181,7 @@ fn build_svg_font_css(
 /// 3. Inlines images (if bundle=true)
 /// 4. Applies all edits in reverse order
 ///
-/// Returns the modified SVG string and Google Fonts stats.
+/// Returns the modified SVG string and Google Fonts usage.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn process_svg(
     svg: String,
@@ -194,14 +194,14 @@ pub(crate) async fn process_svg(
     loaded_batches: &[vl_convert_google_fonts::LoadedFontBatch],
     image_policy: &ImageAccessPolicy,
     resources_dir: Option<&Path>,
-) -> Result<(String, GoogleFontStats), AnyError> {
-    let mut font_stats = GoogleFontStats::default();
+) -> Result<(String, GoogleFontUsage), AnyError> {
+    let mut google_fonts = GoogleFontUsage::default();
 
     // 1. Resolve CDN variants for @import rules (non-bundle mode)
     let cdn_variants = if !svg_opts.bundle {
-        let (cdn_variants, stats) =
-            resolve_cdn_variants_with_stats(classified_fonts, family_variants).await;
-        font_stats.add_assign(stats);
+        let (cdn_variants, cdn_google_fonts) =
+            resolve_cdn_variants_with_google_font_usage(classified_fonts, family_variants).await;
+        google_fonts.add_assign(cdn_google_fonts);
         cdn_variants
     } else {
         HashMap::new()
@@ -218,7 +218,7 @@ pub(crate) async fn process_svg(
         fontdb,
         loaded_batches,
     )
-    .map_err(|err| error_with_google_font_stats(err, font_stats))?;
+    .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
 
     // 3. Collect edits
     let mut edits: Vec<SvgEdit> = Vec::new();
@@ -240,14 +240,14 @@ pub(crate) async fn process_svg(
                 || image_ref.href.starts_with("https://")
             {
                 fetch_and_encode_image_http(&image_ref.href, &image_policy.allowed_base_urls)
-                    .map_err(|err| error_with_google_font_stats(err, font_stats))?
+                    .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?
             } else {
                 resolve_and_read_local_image(
                     &image_ref.href,
                     image_policy.filesystem_root.as_deref(),
                     resources_dir,
                 )
-                .map_err(|err| error_with_google_font_stats(err, font_stats))?
+                .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?
             };
 
             let data_uri = format!("data:{mime};base64,{b64}");
@@ -260,9 +260,9 @@ pub(crate) async fn process_svg(
 
     // 4. Apply edits or return unchanged
     if edits.is_empty() {
-        Ok((svg, font_stats))
+        Ok((svg, google_fonts))
     } else {
-        Ok((apply_edits(svg, edits), font_stats))
+        Ok((apply_edits(svg, edits), google_fonts))
     }
 }
 

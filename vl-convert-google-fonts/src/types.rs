@@ -1,13 +1,28 @@
 use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct UsedGoogleFontVariant {
+    /// Requested/display family name.
+    pub family: String,
+    /// CSS font-weight value.
+    pub weight: u16,
+    /// CSS font-style value.
+    pub style: FontStyle,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoogleFontStats {
+    /// CSS2 stylesheet requests that missed the local cache.
     pub css_cache_misses: u64,
+    /// Font file requests that missed the local cache.
     pub font_file_cache_misses: u64,
+    /// Bytes downloaded from Google Fonts.
     pub downloaded_bytes: u64,
+    /// Number of variants resolved across Google Fonts operations.
     pub resolved_variants: u64,
 }
 
@@ -17,7 +32,8 @@ impl GoogleFontStats {
             .saturating_add(self.font_file_cache_misses)
     }
 
-    pub fn add_assign(&mut self, other: Self) {
+    pub fn add_assign(&mut self, other: impl Borrow<Self>) {
+        let other = other.borrow();
         self.css_cache_misses = self.css_cache_misses.saturating_add(other.css_cache_misses);
         self.font_file_cache_misses = self
             .font_file_cache_misses
@@ -26,6 +42,64 @@ impl GoogleFontStats {
         self.resolved_variants = self
             .resolved_variants
             .saturating_add(other.resolved_variants);
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoogleFontUsage {
+    /// Numeric counters for Google Fonts work.
+    pub stats: GoogleFontStats,
+    /// Deduplicated variants resolved by Google Fonts operations.
+    #[serde(default)]
+    pub used_variants: Vec<UsedGoogleFontVariant>,
+}
+
+impl GoogleFontUsage {
+    pub fn cache_misses(&self) -> u64 {
+        self.stats.cache_misses()
+    }
+
+    pub fn add_assign(&mut self, other: impl Borrow<Self>) {
+        let other = other.borrow();
+        self.stats.add_assign(other.stats);
+        for variant in &other.used_variants {
+            if !self.used_variants.contains(variant) {
+                self.used_variants.push(variant.clone());
+            }
+        }
+    }
+
+    pub fn add_stats(&mut self, stats: impl Borrow<GoogleFontStats>) {
+        self.stats.add_assign(*stats.borrow());
+    }
+
+    pub fn set_used_variants(
+        &mut self,
+        family: &str,
+        variants: impl IntoIterator<Item = VariantRequest>,
+    ) {
+        self.used_variants = variants
+            .into_iter()
+            .map(|variant| UsedGoogleFontVariant {
+                family: family.to_string(),
+                weight: variant.weight,
+                style: variant.style,
+            })
+            .collect();
+        self.stats.resolved_variants = u64::try_from(self.used_variants.len()).unwrap_or(u64::MAX);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.stats == GoogleFontStats::default() && self.used_variants.is_empty()
+    }
+}
+
+impl From<GoogleFontStats> for GoogleFontUsage {
+    fn from(stats: GoogleFontStats) -> Self {
+        Self {
+            stats,
+            ..Default::default()
+        }
     }
 }
 
@@ -47,19 +121,19 @@ impl<'a> FontLoadRequest<'a> {
 #[derive(Debug)]
 pub struct FontLoadResult {
     pub batch: LoadedFontBatch,
-    pub stats: GoogleFontStats,
+    pub usage: GoogleFontUsage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FontProbeResult {
     pub known: bool,
-    pub stats: GoogleFontStats,
+    pub usage: GoogleFontUsage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariantResolutionResult {
     pub variants: Vec<VariantRequest>,
-    pub stats: GoogleFontStats,
+    pub usage: GoogleFontUsage,
 }
 
 /// CSS font style encoded as lowercase `"normal"` / `"italic"` across serde,
@@ -213,5 +287,59 @@ mod tests {
         assert_eq!(family_to_id("  Roboto  "), Some("roboto".to_string()));
         assert_eq!(family_to_id(""), None);
         assert_eq!(family_to_id("-invalid"), None);
+    }
+
+    #[test]
+    fn test_google_font_usage_add_assign_dedupes_used_variants() {
+        let mut usage = GoogleFontUsage::default();
+        usage.set_used_variants(
+            "Roboto",
+            [VariantRequest {
+                weight: 400,
+                style: FontStyle::Normal,
+            }],
+        );
+
+        let mut other = GoogleFontUsage {
+            stats: GoogleFontStats {
+                css_cache_misses: 1,
+                resolved_variants: 2,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        other.set_used_variants(
+            "Roboto",
+            [
+                VariantRequest {
+                    weight: 400,
+                    style: FontStyle::Normal,
+                },
+                VariantRequest {
+                    weight: 700,
+                    style: FontStyle::Normal,
+                },
+            ],
+        );
+
+        usage.add_assign(other);
+
+        assert_eq!(usage.stats.css_cache_misses, 1);
+        assert_eq!(usage.stats.resolved_variants, 3);
+        assert_eq!(
+            usage.used_variants,
+            vec![
+                UsedGoogleFontVariant {
+                    family: "Roboto".to_string(),
+                    weight: 400,
+                    style: FontStyle::Normal,
+                },
+                UsedGoogleFontVariant {
+                    family: "Roboto".to_string(),
+                    weight: 700,
+                    style: FontStyle::Normal,
+                },
+            ]
+        );
     }
 }

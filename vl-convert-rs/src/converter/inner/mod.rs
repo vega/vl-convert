@@ -109,16 +109,17 @@ pub(crate) struct InnerVlConverter {
 #[macro_export]
 macro_rules! with_font_overlay {
     ($inner:expr, $google_fonts:expr, $work:expr) => {{
-        let font_stats = $inner.apply_font_overlay_if_needed($google_fonts).await?;
+        let google_fonts = $inner.apply_font_overlay_if_needed($google_fonts).await?;
         let result = $work;
         $inner.clear_google_fonts_overlay();
         match result {
             Ok(mut output) => {
-                $crate::converter::WithFontStats::add_font_stats(&mut output, font_stats);
+                $crate::converter::WithGoogleFonts::add_google_fonts(&mut output, google_fonts);
                 Ok(output)
             }
-            Err(err) => Err($crate::converter::error_with_google_font_stats(
-                err, font_stats,
+            Err(err) => Err($crate::converter::error_with_google_font_usage(
+                err,
+                google_fonts,
             )),
         }
     }};

@@ -16,7 +16,7 @@ use crate::types::{
     VegaPngRequest, VegaScenegraphRequest, VegaSvgRequest, VegaUrlRequest,
 };
 use crate::util::{
-    append_vlc_logs_header, attach_google_font_stats, conversion_error_response, error_response,
+    append_vlc_logs_header, attach_google_font_usage, conversion_error_response, error_response,
     format_log_entries, validate_common_opts,
 };
 
@@ -68,7 +68,7 @@ pub async fn vega_to_svg(
                 output.svg,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -116,7 +116,7 @@ pub async fn vega_to_png(
                 output.data,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -164,7 +164,7 @@ pub async fn vega_to_jpeg(
                 output.data,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -212,7 +212,7 @@ pub async fn vega_to_pdf(
                 output.data,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -271,7 +271,7 @@ pub async fn vega_to_html(
                 output.html,
             )
                 .into_response();
-            attach_google_font_stats(&mut response, output.font_stats);
+            attach_google_font_usage(&mut response, output.google_fonts);
             response
         }
         Err(e) => conversion_error_response(
@@ -352,7 +352,7 @@ pub async fn vega_scenegraph(
                     output.data,
                 )
                     .into_response();
-                attach_google_font_stats(&mut response, output.font_stats);
+                attach_google_font_usage(&mut response, output.google_fonts);
                 response
             }
             Err(e) => conversion_error_response(
@@ -375,7 +375,7 @@ pub async fn vega_scenegraph(
                             &format!("Failed to serialize scenegraph: {e}"),
                             state.opaque_errors,
                         );
-                        attach_google_font_stats(&mut response, output.font_stats);
+                        attach_google_font_usage(&mut response, output.google_fonts);
                         return response;
                     }
                 };
@@ -388,7 +388,7 @@ pub async fn vega_scenegraph(
                     body,
                 )
                     .into_response();
-                attach_google_font_stats(&mut response, output.font_stats);
+                attach_google_font_usage(&mut response, output.google_fonts);
                 response
             }
             Err(e) => conversion_error_response(
@@ -425,7 +425,7 @@ pub async fn vega_fonts(
 
     match snap
         .converter
-        .vega_fonts_with_stats(
+        .vega_fonts_with_google_font_usage(
             spec,
             vg_opts,
             snap.config.auto_google_fonts,
@@ -435,9 +435,9 @@ pub async fn vega_fonts(
         )
         .await
     {
-        Ok((fonts, font_stats)) => {
+        Ok((fonts, google_fonts)) => {
             let mut response = Json(fonts).into_response();
-            attach_google_font_stats(&mut response, font_stats);
+            attach_google_font_usage(&mut response, google_fonts);
             response
         }
         Err(e) => conversion_error_response(
