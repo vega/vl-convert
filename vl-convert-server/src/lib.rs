@@ -123,8 +123,6 @@ pub async fn serve(
 
 /// Build a [`BuiltApp`] from the given configuration: warms up
 /// converter workers and binds the admin listener when configured.
-/// For `tower::ServiceExt::oneshot`-style tests, `built.router` can
-/// be exercised directly without calling [`serve`].
 pub async fn build_app(
     config: VlcConfig,
     serve_config: &ServeConfig,

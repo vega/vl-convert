@@ -187,11 +187,11 @@ impl ApiKey {
 }
 
 /// A fully-constructed server returned from [`crate::build_app`]. Pass to
-/// [`crate::serve`] to run it, or call `router.oneshot(req)` directly for
-/// `tower::ServiceExt`-style tests.
+/// [`crate::serve`] to run it.
 pub struct BuiltApp {
-    /// The main app router with all middleware applied.
-    pub router: Router,
+    /// The main app router with all middleware applied. Kept crate-private so
+    /// the public API exposes the server lifecycle rather than router internals.
+    pub(crate) router: Router,
     /// Atomic holder for the current converter + config. Cloned into
     /// `AppState` for the router; exposed through
     /// [`Self::current_converter`] / [`Self::current_config`] for callers

@@ -38,10 +38,9 @@ resources must set `allowed_base_urls`, `max_v8_heap_size_mb`, and
 execution; use `max_v8_execution_time_secs` when runaway specs must be
 terminated.
 
-`BuiltApp.router` is a standalone `tower::Service`, so tests may call
-`router.oneshot(req)` without `serve()`. `BuiltApp.admin` travels with the
-main app into `serve()`, which spawns the admin listener beside the main
-listener.
+`BuiltApp` carries the main router, optional admin listener, budget tracker, and
+shutdown token into `serve()`. Keep those internals hidden behind the
+`build_app` / `serve` lifecycle unless a test needs a narrowly scoped helper.
 
 ## Handler Rules
 
