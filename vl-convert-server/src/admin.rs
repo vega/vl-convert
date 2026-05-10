@@ -1,0 +1,629 @@
+use arc_swap::ArcSwap;
+use axum::extract::rejection::JsonRejection;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Json, Response};
+use axum::Router;
+use serde_json::json;
+use std::sync::Arc;
+use utoipa::OpenApi;
+use utoipa_axum::{router::OpenApiRouter, routes};
+use utoipa_swagger_ui::SwaggerUi;
+use vl_convert_rs::converter::{normalize_converter_config, VlcConfig};
+
+use crate::budget::{BudgetStatus, BudgetTracker};
+use crate::config::{ApiKey, RuntimeSnapshot};
+use crate::health::ReadinessState;
+use crate::reconfig::{
+    apply_patch, DrainError, PatchRejection, ReconfigCoordinator, ReconfigScopeGuard,
+};
+use crate::types::{
+    ConfigPatch, ConfigReplace, ConfigValidationError, ConfigView, ErrorResponse, FieldError,
+    FieldErrorCode, FontDirRequest,
+};
+
+/// OpenAPI doc for the admin surface. Published at `/admin/api-doc/openapi.json`;
+/// Swagger UI at `/admin/docs`. The main `/api-doc/openapi.json` does not
+/// include `/admin/*` paths.
+///
+/// Admin body schemas are omitted because the DTOs wrap library types and
+/// tri-state patch fields that are not represented as OpenAPI schemas here.
+/// The spec publishes paths, methods, tags, and response status codes.
+#[derive(OpenApi)]
+#[openapi(tags(
+    (name = "Admin", description = "Admin-only endpoints (config + budget)"),
+))]
+struct AdminApiDoc;
+
+/// Composite state for the admin router. One `Arc<AdminState>` is cloned
+/// into `.with_state(...)` for admin routes.
+///
+/// The `runtime`, `coordinator`, and `readiness` handles are shared by
+/// Arc identity with `AppState`. Reconfig commits are visible to main
+/// handlers, and the main router's gate middleware participates in the
+/// same drain domain.
+pub(crate) struct AdminState {
+    /// Atomic holder for the current converter + config. Shared with
+    /// `AppState.runtime` by Arc identity.
+    pub runtime: Arc<ArcSwap<RuntimeSnapshot>>,
+    /// Snapshot-clone of the resolved startup `VlcConfig`. `DELETE
+    /// /admin/config` restores this. Immutable for the process lifetime.
+    pub baseline: Arc<VlcConfig>,
+    /// Reconfig coordinator shared with the gate middleware. Shared
+    /// with `AppState.coordinator` by Arc identity.
+    pub coordinator: Arc<ReconfigCoordinator>,
+    /// Readiness handle shared with `/readyz` on the main listener.
+    /// Shared with `AppState.readiness` by Arc identity.
+    pub readiness: Arc<ReadinessState>,
+    /// Optional bearer-token credential for admin-scope auth. `None`
+    /// leaves access to the listener trust boundary: loopback TCP or UDS
+    /// filesystem permissions.
+    pub admin_api_key: Option<ApiKey>,
+    /// Budget tracker shared with the main router's budget middleware.
+    /// `/admin/budget` updates are observed by request admission.
+    pub tracker: Arc<BudgetTracker>,
+    /// Error-opacity toggle. When `true` admin responses omit internal
+    /// detail, matching the main listener's `opaque_errors` setting.
+    pub opaque_errors: bool,
+}
+
+fn admin_openapi_router() -> OpenApiRouter<Arc<AdminState>> {
+    OpenApiRouter::with_openapi(AdminApiDoc::openapi())
+        .routes(routes!(get_budget))
+        .routes(routes!(update_budget))
+        .routes(routes!(get_config))
+        .routes(routes!(patch_config))
+        .routes(routes!(put_config))
+        .routes(routes!(delete_config))
+        .routes(routes!(get_font_dirs))
+        .routes(routes!(put_font_dirs))
+        .routes(routes!(post_font_dir))
+        .routes(routes!(get_font_cache_size))
+        .routes(routes!(put_font_cache_size))
+}
+
+/// OpenAPI document for the admin server surface served at
+/// `/admin/api-doc/openapi.json`.
+pub fn admin_openapi() -> utoipa::openapi::OpenApi {
+    admin_openapi_router().into_openapi()
+}
+
+pub(crate) fn admin_router(admin_state: Arc<AdminState>) -> Router {
+    let (admin_routes, admin_api) = admin_openapi_router().split_for_parts();
+
+    admin_routes
+        // Serve admin docs separately from the public API docs.
+        .merge(SwaggerUi::new("/admin/docs").url("/admin/api-doc/openapi.json", admin_api))
+        // Admin auth is outermost on the admin router. Every admin
+        // request (including GETs + the spec endpoint) passes through it.
+        // When `admin_api_key` is `None` the middleware is a no-op;
+        // listener placement (UDS or TCP loopback) is the trust boundary
+        // in that case.
+        .layer(axum::middleware::from_fn_with_state(
+            admin_state.clone(),
+            crate::middleware::admin_auth_middleware,
+        ))
+        .with_state(admin_state)
+}
+
+#[utoipa::path(
+    get,
+    path = "/admin/budget",
+    responses((status = 200, description = "Current budget status")),
+    tag = "Admin",
+)]
+async fn get_budget(State(admin): State<Arc<AdminState>>) -> Json<BudgetStatus> {
+    // Mutations here are observed by the main router's budget middleware.
+    Json(admin.tracker.status())
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+struct BudgetUpdate {
+    per_ip_budget_ms: Option<i64>,
+    global_budget_ms: Option<i64>,
+    hold_ms: Option<i64>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/admin/budget",
+    responses(
+        (status = 200, description = "Budget updated; response is fresh BudgetStatus"),
+        (status = 400, description = "Invalid update body"),
+    ),
+    tag = "Admin",
+)]
+async fn update_budget(
+    State(admin): State<Arc<AdminState>>,
+    Json(update): Json<BudgetUpdate>,
+) -> Response {
+    let tracker = &admin.tracker;
+    if let Some(est) = update.hold_ms {
+        if est <= 0 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "hold_ms must be positive".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    }
+    if let Some(per_ip) = update.per_ip_budget_ms {
+        if per_ip < 0 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "per_ip_budget_ms must be non-negative".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    }
+    if let Some(global) = update.global_budget_ms {
+        if global < 0 {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "global_budget_ms must be non-negative".to_string(),
+                }),
+            )
+                .into_response();
+        }
+    }
+
+    tracker.update_config(update.per_ip_budget_ms, update.global_budget_ms);
+    if let Some(est) = update.hold_ms {
+        tracker.update_estimate(est);
+    }
+    Json(tracker.status()).into_response()
+}
+
+// =============================================================================
+// /admin/config handlers
+// =============================================================================
+
+/// Build the ConfigView response payload from a snapshot + admin state.
+fn build_config_view(snapshot: &RuntimeSnapshot, admin: &AdminState) -> ConfigView {
+    ConfigView {
+        baseline: (*admin.baseline).clone(),
+        effective: (*snapshot.config).clone(),
+        generation: snapshot.generation,
+    }
+}
+
+fn validation_error_from_anyhow(err: &vl_convert_rs::anyhow::Error) -> ConfigValidationError {
+    let msg = err.to_string();
+    ConfigValidationError {
+        error: msg.clone(),
+        field_errors: vec![FieldError {
+            // Cross-field errors are attributed to the root so the response
+            // stays structurally well-formed.
+            path: "".to_string(),
+            code: FieldErrorCode::CrossFieldInvariant,
+            message: msg,
+        }],
+    }
+}
+
+/// Render a ConfigValidationError as a 422 response, respecting `opaque_errors`.
+fn validation_error_response(err: ConfigValidationError, opaque: bool) -> Response {
+    if opaque {
+        // Drop specifics but keep the 422 status so the client can still
+        // distinguish validation errors from 5xx failures.
+        (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({}))).into_response()
+    } else {
+        (StatusCode::UNPROCESSABLE_ENTITY, Json(err)).into_response()
+    }
+}
+
+/// Render a non-nullable-field rejection as a 400 response. Shares the
+/// ConfigValidationError payload shape with 422 responses so clients can
+/// parse field-level errors uniformly.
+fn non_nullable_error_response(err: ConfigValidationError, opaque: bool) -> Response {
+    if opaque {
+        (StatusCode::BAD_REQUEST, Json(json!({}))).into_response()
+    } else {
+        (StatusCode::BAD_REQUEST, Json(err)).into_response()
+    }
+}
+
+fn simple_error_response(status: StatusCode, message: &str, opaque: bool) -> Response {
+    if opaque {
+        status.into_response()
+    } else {
+        (
+            status,
+            Json(ErrorResponse {
+                error: message.to_string(),
+            }),
+        )
+            .into_response()
+    }
+}
+
+/// Convert an axum `JsonRejection` into a 400 response. serde failures for
+/// unknown fields, bad types, null-on-non-nullable, or NonZero zero values
+/// all funnel through here.
+fn json_rejection_response(rej: JsonRejection, opaque: bool) -> Response {
+    simple_error_response(StatusCode::BAD_REQUEST, &rej.body_text(), opaque)
+}
+
+/// GET /admin/config: returns the baseline, current effective config,
+/// and the monotonic generation counter.
+#[utoipa::path(
+    get,
+    path = "/admin/config",
+    responses((
+        status = 200,
+        description = "ConfigView { baseline, effective, generation }. \
+                       Schema mirrors the Python get_config() shape."
+    )),
+    tag = "Admin",
+)]
+async fn get_config(State(admin): State<Arc<AdminState>>) -> Response {
+    let snap = admin.runtime.load_full();
+    let view = build_config_view(&snap, &admin);
+    (StatusCode::OK, Json(view)).into_response()
+}
+
+/// PATCH /admin/config: merge a partial patch onto the current config.
+#[utoipa::path(
+    patch,
+    path = "/admin/config",
+    responses(
+        (status = 200, description = "Commit succeeded; response is fresh ConfigView"),
+        (status = 400, description = "Malformed body / unknown field / null on non-nullable / NonZero zero"),
+        (status = 422, description = "Config validation failed; response is ConfigValidationError with field_errors"),
+        (status = 503, description = "Rebuild failure OR server shutting down during drain"),
+        (status = 504, description = "Drain timed out; response includes in_flight count"),
+    ),
+    tag = "Admin",
+)]
+async fn patch_config(
+    State(admin): State<Arc<AdminState>>,
+    body: Result<Json<ConfigPatch>, JsonRejection>,
+) -> Response {
+    let Json(patch) = match body {
+        Ok(b) => b,
+        Err(rej) => return json_rejection_response(rej, admin.opaque_errors),
+    };
+
+    let coordinator = admin.coordinator.clone();
+    let readiness = admin.readiness.clone();
+
+    // Serialize against other admin-mutating requests. The lock guard is
+    // held for the whole flow so PUT / DELETE / POST /fonts/directories
+    // commits cannot interleave.
+    let _lock_guard = coordinator.lock().await;
+    let mut scope = ReconfigScopeGuard::new(&coordinator, &readiness);
+
+    let current = admin.runtime.load_full();
+
+    let new_config = match apply_patch(&current.config, &patch) {
+        Ok(c) => c,
+        Err(PatchRejection::NonNullable(err)) => {
+            // Parse-level rejection: a non-nullable field received explicit
+            // `null`. Surface as 400 alongside the other body-shape errors
+            // produced by serde (unknown field, NonZero zero, etc.).
+            return non_nullable_error_response(err, admin.opaque_errors);
+        }
+        Err(PatchRejection::Invalid(err)) => {
+            return validation_error_response(err, admin.opaque_errors);
+        }
+    };
+
+    run_commit(&admin, &current, new_config, &mut scope).await
+}
+
+/// PUT /admin/config: full replacement.
+#[utoipa::path(
+    put,
+    path = "/admin/config",
+    responses(
+        (status = 200, description = "Commit succeeded; response is fresh ConfigView"),
+        (status = 400, description = "Malformed body / missing required field / unknown field / null on non-nullable / NonZero zero"),
+        (status = 422, description = "Config validation failed; response is ConfigValidationError"),
+        (status = 503, description = "Rebuild failure OR server shutting down"),
+        (status = 504, description = "Drain timed out"),
+    ),
+    tag = "Admin",
+)]
+async fn put_config(
+    State(admin): State<Arc<AdminState>>,
+    body: Result<Json<ConfigReplace>, JsonRejection>,
+) -> Response {
+    let Json(replace) = match body {
+        Ok(b) => b,
+        Err(rej) => return json_rejection_response(rej, admin.opaque_errors),
+    };
+    let new_config: VlcConfig = replace.into();
+
+    let coordinator = admin.coordinator.clone();
+    let readiness = admin.readiness.clone();
+    let _lock_guard = coordinator.lock().await;
+    let mut scope = ReconfigScopeGuard::new(&coordinator, &readiness);
+    let current = admin.runtime.load_full();
+    run_commit(&admin, &current, new_config, &mut scope).await
+}
+
+/// DELETE /admin/config: reset to the startup baseline.
+#[utoipa::path(
+    delete,
+    path = "/admin/config",
+    responses(
+        (status = 200, description = "Reset to baseline; response is fresh ConfigView with effective == baseline"),
+        (status = 422, description = "Baseline rejected normalize_converter_config (should be impossible absent a library regression)"),
+        (status = 503, description = "Rebuild failure OR server shutting down"),
+        (status = 504, description = "Drain timed out"),
+    ),
+    tag = "Admin",
+)]
+async fn delete_config(State(admin): State<Arc<AdminState>>) -> Response {
+    let coordinator = admin.coordinator.clone();
+    let readiness = admin.readiness.clone();
+    let _lock_guard = coordinator.lock().await;
+    let mut scope = ReconfigScopeGuard::new(&coordinator, &readiness);
+    let current = admin.runtime.load_full();
+    let new_config = (*admin.baseline).clone();
+    run_commit(&admin, &current, new_config, &mut scope).await
+}
+
+/// Common post-apply commit pipeline: validate, identity short-circuit,
+/// drain + rebuild, swap the snapshot, return the resulting ConfigView.
+///
+/// Process-global state lives outside the DTO under
+/// `/admin/config/fonts/{directories,cache_size}`, so every non-identity
+/// `VlcConfig` commit drains and rebuilds. `generation` moves forward by 1 on
+/// every successful commit.
+async fn run_commit<'a>(
+    admin: &AdminState,
+    current: &Arc<RuntimeSnapshot>,
+    new_config: VlcConfig,
+    scope: &mut ReconfigScopeGuard<'a>,
+) -> Response {
+    // Normalize: validates URLs, V8 heap minimum, resolves plugin files,
+    // etc. Any error here is a 422 validation failure.
+    let new_config = match normalize_converter_config(new_config) {
+        Ok(c) => c,
+        Err(err) => {
+            return validation_error_response(
+                validation_error_from_anyhow(&err),
+                admin.opaque_errors,
+            );
+        }
+    };
+
+    if new_config == *current.config {
+        let view = build_config_view(current, admin);
+        return (StatusCode::OK, Json(view)).into_response();
+    }
+
+    let coordinator = admin.coordinator.clone();
+    coordinator.close_gate();
+    scope.mark_gate_closed();
+    match coordinator.drain().await {
+        Ok(()) => {}
+        Err(DrainError::Cancelled) => {
+            return simple_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "server shutting down",
+                admin.opaque_errors,
+            );
+        }
+        Err(DrainError::Timeout { inflight }) => {
+            if admin.opaque_errors {
+                return StatusCode::GATEWAY_TIMEOUT.into_response();
+            }
+            return (
+                StatusCode::GATEWAY_TIMEOUT,
+                Json(json!({
+                    "error": "drain timeout",
+                    "in_flight": inflight,
+                })),
+            )
+                .into_response();
+        }
+    }
+
+    let new_converter = match current.converter.clone().reconfigure(new_config.clone()) {
+        Ok(c) => c,
+        Err(err) => {
+            return validation_error_response(
+                validation_error_from_anyhow(&err),
+                admin.opaque_errors,
+            );
+        }
+    };
+
+    if let Err(err) = new_converter.warm_up() {
+        let msg = format!("warm-up failed: {err}; config not committed");
+        return simple_error_response(StatusCode::SERVICE_UNAVAILABLE, &msg, admin.opaque_errors);
+    }
+
+    let new_snapshot = Arc::new(RuntimeSnapshot {
+        converter: new_converter,
+        config: Arc::new(new_config),
+        generation: current.generation + 1,
+    });
+    admin.runtime.store(new_snapshot.clone());
+
+    let view = build_config_view(&new_snapshot, admin);
+    (StatusCode::OK, Json(view)).into_response()
+}
+
+// =============================================================================
+// /admin/config/fonts/directories
+// =============================================================================
+//
+// Font directories are process-global state, not writable `VlcConfig`
+// fields. These endpoints serialize against config mutations.
+
+/// Return the currently-registered font directories.
+#[utoipa::path(
+    get,
+    path = "/admin/config/fonts/directories",
+    responses((status = 200, description = "Array of absolute filesystem paths")),
+    tag = "Admin",
+)]
+async fn get_font_dirs(State(_admin): State<Arc<AdminState>>) -> Response {
+    let dirs: Vec<String> = vl_convert_rs::current_font_directories()
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    (StatusCode::OK, Json(dirs)).into_response()
+}
+
+/// Replace the full font-directory list. Pass `{"paths": []}` to clear.
+#[utoipa::path(
+    put,
+    path = "/admin/config/fonts/directories",
+    responses(
+        (status = 200, description = "Replacement applied; response is the new list"),
+        (status = 400, description = "Malformed body or any path is not an existing directory"),
+        (status = 503, description = "Library-level set_font_directories failed; registry NOT updated"),
+    ),
+    tag = "Admin",
+)]
+async fn put_font_dirs(
+    State(admin): State<Arc<AdminState>>,
+    body: Result<Json<crate::types::FontDirReplace>, JsonRejection>,
+) -> Response {
+    let Json(req) = match body {
+        Ok(b) => b,
+        Err(rej) => return json_rejection_response(rej, admin.opaque_errors),
+    };
+
+    for path in &req.paths {
+        if !path.is_dir() {
+            return simple_error_response(
+                StatusCode::BAD_REQUEST,
+                &format!("path not found or not a directory: {}", path.display()),
+                admin.opaque_errors,
+            );
+        }
+    }
+
+    let _lock = admin.coordinator.lock().await;
+    if let Err(err) = vl_convert_rs::set_font_directories(&req.paths) {
+        return simple_error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            &format!("failed to set font directories: {err}"),
+            admin.opaque_errors,
+        );
+    }
+
+    let dirs: Vec<String> = req
+        .paths
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    (StatusCode::OK, Json(dirs)).into_response()
+}
+
+/// Append a single font directory. Idempotent for already-registered
+/// paths.
+#[utoipa::path(
+    post,
+    path = "/admin/config/fonts/directories",
+    responses(
+        (status = 200, description = "Font directory appended (or already present); response is the new list"),
+        (status = 400, description = "Missing path or path not found / not a directory"),
+        (status = 503, description = "Library-level register_font_directory failed; registry NOT updated"),
+    ),
+    tag = "Admin",
+)]
+async fn post_font_dir(
+    State(admin): State<Arc<AdminState>>,
+    body: Result<Json<FontDirRequest>, JsonRejection>,
+) -> Response {
+    let req = match body {
+        Ok(Json(r)) => r,
+        Err(rej) => return json_rejection_response(rej, admin.opaque_errors),
+    };
+
+    if !req.path.is_dir() {
+        return simple_error_response(
+            StatusCode::BAD_REQUEST,
+            &format!("path not found or not a directory: {}", req.path.display()),
+            admin.opaque_errors,
+        );
+    }
+
+    let _lock = admin.coordinator.lock().await;
+
+    // Keep the endpoint idempotent even though the lower-level registry
+    // API appends.
+    if !vl_convert_rs::current_font_directories().contains(&req.path) {
+        let path_str = req.path.to_string_lossy();
+        if let Err(err) = vl_convert_rs::text::register_font_directory(&path_str) {
+            return simple_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                &format!("failed to register font directory: {err}"),
+                admin.opaque_errors,
+            );
+        }
+    }
+
+    let dirs: Vec<String> = vl_convert_rs::current_font_directories()
+        .into_iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    (StatusCode::OK, Json(dirs)).into_response()
+}
+
+// =============================================================================
+// /admin/config/fonts/cache_size
+// =============================================================================
+//
+// Process-global Google Fonts LRU cache cap. This is not a writable
+// `VlcConfig` field and does not require drain/rebuild.
+
+/// Return the currently-active Google Fonts cache cap in MB.
+#[utoipa::path(
+    get,
+    path = "/admin/config/fonts/cache_size",
+    responses((
+        status = 200,
+        description = "{\"max_size_mb\": <number>}; the resolved cap"
+    )),
+    tag = "Admin",
+)]
+async fn get_font_cache_size(State(_admin): State<Arc<AdminState>>) -> Response {
+    let mb = vl_convert_rs::current_google_fonts_cache_size_mb().get();
+    (StatusCode::OK, Json(json!({ "max_size_mb": mb }))).into_response()
+}
+
+/// Set the Google Fonts cache cap. `{"max_size_mb": null}` resets
+/// to the library default.
+#[utoipa::path(
+    put,
+    path = "/admin/config/fonts/cache_size",
+    responses(
+        (status = 200, description = "Cap updated; response is the new resolved cap"),
+        (status = 400, description = "Malformed body"),
+        (status = 503, description = "Library-level set_google_fonts_cache_size_mb failed"),
+    ),
+    tag = "Admin",
+)]
+async fn put_font_cache_size(
+    State(admin): State<Arc<AdminState>>,
+    body: Result<Json<crate::types::CacheSizeReplace>, JsonRejection>,
+) -> Response {
+    let Json(req) = match body {
+        Ok(b) => b,
+        Err(rej) => return json_rejection_response(rej, admin.opaque_errors),
+    };
+
+    let _lock = admin.coordinator.lock().await;
+    if let Err(err) = vl_convert_rs::set_google_fonts_cache_size_mb(req.max_size_mb) {
+        return simple_error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            &format!("failed to set google_fonts_cache_size_mb: {err}"),
+            admin.opaque_errors,
+        );
+    }
+
+    let mb = vl_convert_rs::current_google_fonts_cache_size_mb().get();
+    (StatusCode::OK, Json(json!({ "max_size_mb": mb }))).into_response()
+}

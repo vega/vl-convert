@@ -33,6 +33,11 @@ def test_configure_rejects_zero_num_workers():
         vlc.configure(num_workers=0)
 
 
+def test_configure_rejects_zero_google_font_variant_threshold():
+    with pytest.raises(ValueError):
+        vlc.configure(google_font_variant_threshold=0)
+
+
 def test_configure_accepts_empty_allowed_base_urls():
     vlc.configure(allowed_base_urls=[])
     config = vlc.get_config()
@@ -92,12 +97,17 @@ def test_configure_round_trip(tmp_path):
         num_workers=2,
         base_url=str(root),
         allowed_base_urls=[str(root) + "/"],
+        google_font_variant_threshold=100,
     )
 
     config = vlc.get_config()
     assert config["num_workers"] == 2
     assert config["base_url"] == str(root)
     assert config["allowed_base_urls"] == [str(root) + "/"]
+    assert config["google_font_variant_threshold"] == 100
+
+    vlc.configure(google_font_variant_threshold=None)
+    assert vlc.get_config()["google_font_variant_threshold"] is None
 
 
 def test_configure_num_workers_preserves_access_policy(tmp_path):

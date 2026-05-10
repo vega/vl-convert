@@ -90,7 +90,11 @@ vegaToCanvas(
         }
         let data = self.execute_script_to_bytes("canvasPngData").await?;
         let logs = std::mem::take(&mut self.last_log_entries);
-        Ok(PngOutput { data, logs })
+        Ok(PngOutput {
+            data,
+            logs,
+            google_fonts: Default::default(),
+        })
     }
 
     pub async fn vegalite_to_png(
@@ -169,7 +173,11 @@ vegaLiteToCanvas_{ver_name:?}(
         }
         let data = self.execute_script_to_bytes("canvasPngData").await?;
         let logs = std::mem::take(&mut self.last_log_entries);
-        Ok(PngOutput { data, logs })
+        Ok(PngOutput {
+            data,
+            logs,
+            google_fonts: Default::default(),
+        })
     }
 
     pub(crate) fn parse_svg_with_worker_options(
@@ -251,6 +259,7 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(JpegOutput {
             data,
             logs: svg_output.logs,
+            google_fonts: svg_output.google_fonts,
         })
     }
 
@@ -268,6 +277,7 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(JpegOutput {
             data,
             logs: svg_output.logs,
+            google_fonts: svg_output.google_fonts,
         })
     }
 
@@ -282,6 +292,7 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(PdfOutput {
             data,
             logs: svg_output.logs,
+            google_fonts: svg_output.google_fonts,
         })
     }
 
@@ -296,6 +307,7 @@ vegaLiteToCanvas_{ver_name:?}(
         Ok(PdfOutput {
             data,
             logs: svg_output.logs,
+            google_fonts: svg_output.google_fonts,
         })
     }
 }

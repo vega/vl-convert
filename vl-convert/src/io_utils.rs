@@ -1,4 +1,6 @@
+use std::collections::HashMap;
 use std::io::{self, IsTerminal, Read, Write};
+use std::num::NonZeroU64;
 use std::str::FromStr;
 use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
@@ -7,13 +9,80 @@ use vl_convert_rs::converter::{
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
-/// Register a `--font-dir` value with the library so subsequent conversions
-/// can resolve fonts from that directory.
-pub(crate) fn register_font_dir(dir: Option<String>) -> anyhow::Result<()> {
-    if let Some(dir) = dir {
-        vl_convert_rs::register_font_directory(&dir)?;
+use crate::cli_types::{Cli, LogLevel};
+
+fn is_null_literal(raw: &str) -> bool {
+    raw.trim().eq_ignore_ascii_case("null")
+}
+
+/// Map the literal string `null` (any case) to `None`, anything else to
+/// `Some(raw)`. Used at consumption time on theme/locale/themes globals
+/// to distinguish "flag passed with `null`" (clear) from "flag passed
+/// with a real value" (override). The "flag not passed" case is handled
+/// at the call site via the CLI field's outer `Option`.
+pub(crate) fn parse_nullable_string_arg(raw: &str) -> Option<String> {
+    if is_null_literal(raw) {
+        None
+    } else {
+        Some(raw.to_string())
     }
-    Ok(())
+}
+
+/// Apply the global `--font-dir` list to the process-global font registry.
+/// The CLI list is authoritative; no-op when the user did not pass
+/// `--font-dir`.
+pub(crate) fn apply_global_font_dirs(cli: &Cli) -> anyhow::Result<()> {
+    if cli.font_dir.is_empty() {
+        return Ok(());
+    }
+    vl_convert_rs::set_font_directories(&cli.font_dir)
+}
+
+/// Apply the global `--google-fonts-cache-size-mb` to the process-global
+/// LRU cache cap via
+/// [`vl_convert_rs::set_google_fonts_cache_size_mb`]. `0` resolves to the
+/// library default (`Option<NonZeroU64>::None`).
+pub(crate) fn apply_global_google_fonts_cache(cli: &Cli) -> anyhow::Result<()> {
+    let Some(mb) = cli.google_fonts_cache_size_mb else {
+        return Ok(());
+    };
+    vl_convert_rs::set_google_fonts_cache_size_mb(NonZeroU64::new(mb))
+}
+
+/// Parse a `--themes` value (inline JSON object, path to a `.json` /
+/// `.jsonc` file, or the literal string `null`) into an optional themes
+/// map. File contents are parsed as JSONC (comments and trailing commas
+/// allowed); inline values must be valid JSON.
+pub(crate) fn parse_themes_json(
+    raw: &str,
+) -> Result<Option<HashMap<String, serde_json::Value>>, anyhow::Error> {
+    if is_null_literal(raw) {
+        return Ok(None);
+    }
+    let value = read_inline_or_jsonc_file(raw, "--themes")?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "--themes must be an inline JSON object, a path to a .json or \
+             .jsonc file, or the literal string `null`"
+        )
+    })?;
+    if value.is_null() {
+        return Ok(None);
+    }
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(|err| anyhow::anyhow!("--themes must be a JSON object: {err}"))
+}
+
+/// Build a `tracing-subscriber` `EnvFilter` directive from the CLI's
+/// logging globals. Explicit `--log-filter` wins; otherwise this creates a
+/// multi-target directive scoped to `vl_convert`,
+/// `vl_convert_server`, and `tower_http`.
+pub(crate) fn synthesize_log_filter(level: LogLevel, explicit: Option<&str>) -> String {
+    if let Some(filter) = explicit {
+        return filter.to_string();
+    }
+    let lvl = level.as_directive_str();
+    format!("vl_convert={lvl},vl_convert_server={lvl},tower_http={lvl}")
 }
 
 /// `=BOOL` value parser for clap flags. Mirrors the server CLI's
@@ -24,6 +93,30 @@ pub(crate) fn parse_boolish_arg(raw: &str) -> Result<bool, String> {
         "false" | "0" | "no" | "off" => Ok(false),
         _ => Err("expected one of: true, false, 1, 0, yes, no, on, off".to_string()),
     }
+}
+
+/// Value parser for `--vega-plugin`. Accepts a file path or URL with scheme;
+/// rejects inline ESM strings.
+pub(crate) fn parse_vega_plugin_arg(raw: &str) -> Result<String, String> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return Err("--vega-plugin must not be empty".into());
+    }
+    if s.contains("://")
+        || s.starts_with('/')
+        || s.starts_with('~')
+        || s.starts_with("./")
+        || s.starts_with("../")
+        || s.ends_with(".js")
+        || s.ends_with(".mjs")
+    {
+        return Ok(s.to_string());
+    }
+    Err(format!(
+        "--vega-plugin '{s}' must be a file path or URL with scheme. \
+         Inline ESM strings are no longer accepted on the CLI flag — \
+         put inline plugins in `--vlc-config` JSONC instead."
+    ))
 }
 
 /// Parse a `--base-url` value into a `BaseUrlSetting`. Reserved values
@@ -54,47 +147,21 @@ pub(crate) fn parse_base_url_arg(raw: &str) -> Result<BaseUrlSetting, anyhow::Er
     Ok(BaseUrlSetting::Custom(expanded))
 }
 
-/// Parse a `--allowed-base-urls` value into a `Vec<String>`. Accepts:
-/// reserved values `none` / `net` / `all`, a JSON-array literal
-/// (e.g. `["http:","https:"]`), or `@<path>` referencing a file
-/// containing the JSON array.
-pub(crate) fn parse_allowed_base_urls(raw: &str) -> Result<Vec<String>, anyhow::Error> {
-    match raw.trim() {
-        "none" => return Ok(Vec::new()),
-        "net" => return Ok(vec!["http:".to_string(), "https:".to_string()]),
-        "all" => return Ok(vec!["*".to_string()]),
-        _ => {}
+/// Expand a `;`-delimited `--allowed-base-urls` Vec into the final
+/// allowlist. A single-element Vec matching a reserved literal
+/// (`none` / `net` / `all`) is replaced by its reserved expansion. Any other
+/// shape is taken verbatim after trimming each entry. Reserved literals inside
+/// a multi-element Vec are treated as literal CSP patterns.
+pub(crate) fn expand_allowed_base_urls(values: &[String]) -> Vec<String> {
+    if values.len() == 1 {
+        match values[0].trim() {
+            "none" => return Vec::new(),
+            "net" => return vec!["http:".to_string(), "https:".to_string()],
+            "all" => return vec!["*".to_string()],
+            _ => {}
+        }
     }
-    let json_text = if let Some(path_str) = raw.strip_prefix('@') {
-        let expanded = shellexpand::tilde(path_str.trim()).to_string();
-        std::fs::read_to_string(&expanded).map_err(|err| {
-            anyhow::anyhow!("failed to read --allowed-base-urls @ {}: {err}", expanded)
-        })?
-    } else if raw.trim_start().starts_with('[') {
-        raw.to_string()
-    } else {
-        bail!(
-            "--allowed-base-urls must be one of: 'none', 'net', 'all', a JSON \
-             array literal like '[\"https:\"]', or '@<path>' to read the JSON \
-             from a file. Got: '{raw}'"
-        );
-    };
-    let value: serde_json::Value = serde_json::from_str(&json_text)
-        .map_err(|err| anyhow::anyhow!("--allowed-base-urls must be a JSON array: {err}"))?;
-    match value {
-        serde_json::Value::Array(values) => values
-            .into_iter()
-            .map(|v| match v {
-                serde_json::Value::String(s) => Ok(s),
-                _ => Err(anyhow::anyhow!(
-                    "--allowed-base-urls must be a JSON array of strings"
-                )),
-            })
-            .collect(),
-        _ => Err(anyhow::anyhow!(
-            "--allowed-base-urls must be a JSON array of strings"
-        )),
-    }
+    values.iter().map(|s| s.trim().to_string()).collect()
 }
 
 /// Parse a `--google-font` value like `"Roboto"` or `"Roboto:400,700italic"`
@@ -184,20 +251,6 @@ pub(crate) fn read_input_string(input: Option<&str>) -> Result<String, anyhow::E
     }
 }
 
-/// Read a file that is always a filesystem path (never stdin).
-///
-/// This function is used for reading configuration files (locale, time format)
-/// that should not come from stdin. For reading input specifications that may
-/// come from stdin or a file, use `read_input_string()` instead.
-fn read_file_string(path: &str) -> Result<String, anyhow::Error> {
-    match std::fs::read_to_string(path) {
-        Ok(contents) => Ok(contents),
-        Err(err) => {
-            bail!("Failed to read file: {}\n{}", path, err);
-        }
-    }
-}
-
 pub(crate) fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow::Error> {
     match serde_json::from_str::<serde_json::Value>(input_str) {
         Ok(input_json) => Ok(input_json),
@@ -208,35 +261,91 @@ pub(crate) fn parse_as_json(input_str: &str) -> Result<serde_json::Value, anyhow
 }
 
 fn format_locale_from_str(s: &str) -> Result<FormatLocale, anyhow::Error> {
-    if s.ends_with(".json") {
-        let s = read_file_string(s)?;
-        Ok(FormatLocale::Object(parse_as_json(&s)?))
+    if let Some(json) = read_inline_or_jsonc_file(s, "--format-locale")? {
+        Ok(FormatLocale::Object(json))
     } else {
         Ok(FormatLocale::Name(s.to_string()))
     }
 }
 
+/// Parse the CLI `--format-locale` family of values into an optional
+/// [`FormatLocale`].
+///
+/// `None` ("flag not passed") returns `Ok(None)` unchanged. The literal
+/// string `null` (any case) also resolves to `Ok(None)`. Any other value is
+/// parsed as a locale name or JSON/JSONC object source.
 pub(crate) fn parse_format_locale_option(
     format_locale: Option<&str>,
 ) -> Result<Option<FormatLocale>, anyhow::Error> {
-    format_locale.map(format_locale_from_str).transpose()
+    match format_locale {
+        None => Ok(None),
+        Some(raw) if is_null_literal(raw) => Ok(None),
+        Some(raw) => format_locale_from_str(raw).map(Some),
+    }
 }
 
 fn time_format_locale_from_str(s: &str) -> Result<TimeFormatLocale, anyhow::Error> {
-    if s.ends_with(".json") {
-        let s = read_file_string(s)?;
-        Ok(TimeFormatLocale::Object(parse_as_json(&s)?))
+    if let Some(json) = read_inline_or_jsonc_file(s, "--time-format-locale")? {
+        Ok(TimeFormatLocale::Object(json))
     } else {
         Ok(TimeFormatLocale::Name(s.to_string()))
     }
 }
 
+fn looks_like_json_file_path(s: &str) -> bool {
+    let lower = s.trim().to_ascii_lowercase();
+    lower.ends_with(".json") || lower.ends_with(".jsonc")
+}
+
+fn parse_jsonc_value(text: &str, flag: &str) -> Result<serde_json::Value, anyhow::Error> {
+    let value: Option<serde_json::Value> = jsonc_parser::parse_to_serde_value(
+        text,
+        &jsonc_parser::ParseOptions {
+            allow_comments: true,
+            allow_trailing_commas: true,
+            allow_loose_object_property_names: false,
+            allow_missing_commas: false,
+            allow_single_quoted_strings: false,
+            allow_hexadecimal_numbers: false,
+            allow_unary_plus_numbers: false,
+        },
+    )
+    .map_err(|err| anyhow::anyhow!("{flag} JSON parse error: {err}"))?;
+    value.ok_or_else(|| anyhow::anyhow!("{flag} value is empty"))
+}
+
+/// If `raw` is an inline JSON object (starts with `{`) or a path ending
+/// in `.json` / `.jsonc`, parse it (JSONC) and return `Some(value)`.
+/// Otherwise returns `None` so callers can fall through to a locale-name
+/// branch.
+fn read_inline_or_jsonc_file(
+    raw: &str,
+    flag: &str,
+) -> Result<Option<serde_json::Value>, anyhow::Error> {
+    let trimmed = raw.trim_start();
+    if trimmed.starts_with('{') {
+        return Ok(Some(parse_jsonc_value(raw, flag)?));
+    }
+    if looks_like_json_file_path(raw) {
+        let path = shellexpand::tilde(raw.trim()).to_string();
+        let body = std::fs::read_to_string(&path)
+            .map_err(|err| anyhow::anyhow!("failed to read {flag} file {path}: {err}"))?;
+        return Ok(Some(parse_jsonc_value(&body, flag)?));
+    }
+    Ok(None)
+}
+
+/// Parse the CLI `--time-format-locale` family of values into an optional
+/// [`TimeFormatLocale`]. Same `null`-literal handling as
+/// [`parse_format_locale_option`].
 pub(crate) fn parse_time_format_locale_option(
     time_format_locale: Option<&str>,
 ) -> Result<Option<TimeFormatLocale>, anyhow::Error> {
-    time_format_locale
-        .map(time_format_locale_from_str)
-        .transpose()
+    match time_format_locale {
+        None => Ok(None),
+        Some(raw) if is_null_literal(raw) => Ok(None),
+        Some(raw) => time_format_locale_from_str(raw).map(Some),
+    }
 }
 
 pub(crate) fn write_output_string(
@@ -462,5 +571,158 @@ pub(crate) fn read_config_json(
             let config_json: serde_json::Value = serde_json::from_str(&config_str)?;
             Ok(Some(config_json))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_themes_json_null_literal() {
+        assert!(parse_themes_json("null").unwrap().is_none());
+        assert!(parse_themes_json("NULL").unwrap().is_none());
+        assert!(parse_themes_json("  null  ").unwrap().is_none());
+    }
+
+    #[test]
+    fn parse_themes_json_explicit_null_value() {
+        // JSON `null` literal (not the reserved string) also clears.
+        let parsed = parse_themes_json("null").unwrap();
+        assert!(parsed.is_none());
+    }
+
+    #[test]
+    fn parse_themes_json_empty_object() {
+        let parsed = parse_themes_json("{}").unwrap();
+        assert_eq!(parsed.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn parse_themes_json_object_literal() {
+        let raw = r##"{"mytheme": {"background": "#fff"}}"##;
+        let parsed = parsed_or_panic(raw);
+        assert_eq!(parsed.len(), 1);
+        assert!(parsed.contains_key("mytheme"));
+    }
+
+    #[test]
+    fn parse_themes_json_rejects_array() {
+        // A bare `[1, 2]` doesn't look like an inline object literal
+        // (no leading `{`) and isn't a .json/.jsonc path, so it's
+        // rejected up-front with the same error as any other unrecognized
+        // value form.
+        let err = parse_themes_json("[1, 2]").unwrap_err();
+        assert!(
+            err.to_string().contains(".json or .jsonc"),
+            "error should point at the supported value forms; got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_themes_json_rejects_invalid_json() {
+        // `{not json}` looks like an inline object literal (leading `{`)
+        // so it routes to the JSONC parser, which surfaces a parse error.
+        let err = parse_themes_json("{not json}").unwrap_err();
+        assert!(
+            err.to_string().contains("--themes JSON parse error"),
+            "error should be a JSONC parse error; got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_themes_json_dotjson_file_missing() {
+        let err = parse_themes_json("/this/path/does/not/exist.json").unwrap_err();
+        assert!(err.to_string().contains("failed to read --themes"));
+    }
+
+    #[test]
+    fn parse_themes_json_rejects_bare_string() {
+        let err = parse_themes_json("mytheme").unwrap_err();
+        assert!(
+            err.to_string().contains(".json or .jsonc"),
+            "error should point at the supported value forms; got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_themes_json_jsonc_file_with_comments() {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        write!(
+            tmp,
+            r##"{{
+                // theme map with a JSONC comment and a trailing comma
+                "mytheme": {{ "background": "#fff" }},
+            }}"##
+        )
+        .unwrap();
+        let arg = tmp.path().display().to_string();
+        let parsed = parsed_or_panic(&arg);
+        assert_eq!(parsed.len(), 1);
+        assert!(parsed.contains_key("mytheme"));
+    }
+
+    fn parsed_or_panic(raw: &str) -> std::collections::HashMap<String, serde_json::Value> {
+        parse_themes_json(raw)
+            .expect("parse_themes_json should succeed")
+            .expect("themes should be Some, not null")
+    }
+
+    #[test]
+    fn parse_format_locale_handles_inline_json_object() {
+        let raw = r#"{"decimal":",","thousands":".","grouping":[3]}"#;
+        let parsed = parse_format_locale_option(Some(raw))
+            .expect("inline JSON should parse")
+            .expect("not null");
+        assert!(matches!(parsed, FormatLocale::Object(_)));
+    }
+
+    #[test]
+    fn parse_format_locale_handles_dotjson_file() {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::with_suffix(".json").unwrap();
+        writeln!(tmp, r#"{{"decimal":".","thousands":",","grouping":[3]}}"#).unwrap();
+        let arg = tmp.path().display().to_string();
+        let parsed = parse_format_locale_option(Some(&arg))
+            .expect(".json file should parse")
+            .expect("not null");
+        assert!(matches!(parsed, FormatLocale::Object(_)));
+    }
+
+    #[test]
+    fn parse_format_locale_handles_dotjsonc_file_with_comments() {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::with_suffix(".jsonc").unwrap();
+        write!(
+            tmp,
+            r#"{{
+                // d3-format locale with a JSONC comment
+                "decimal": ".", "thousands": ",", "grouping": [3],
+            }}"#
+        )
+        .unwrap();
+        let arg = tmp.path().display().to_string();
+        let parsed = parse_format_locale_option(Some(&arg))
+            .expect(".jsonc file should parse")
+            .expect("not null");
+        assert!(matches!(parsed, FormatLocale::Object(_)));
+    }
+
+    #[test]
+    fn parse_format_locale_built_in_name_unchanged() {
+        let parsed = parse_format_locale_option(Some("de-DE"))
+            .expect("locale name should parse")
+            .expect("not null");
+        assert!(matches!(parsed, FormatLocale::Name(s) if s == "de-DE"));
+    }
+
+    #[test]
+    fn parse_time_format_locale_handles_inline_json_object() {
+        let raw = r#"{"days":["…"],"months":["…"]}"#;
+        let parsed = parse_time_format_locale_option(Some(raw))
+            .expect("inline JSON should parse")
+            .expect("not null");
+        assert!(matches!(parsed, TimeFormatLocale::Object(_)));
     }
 }

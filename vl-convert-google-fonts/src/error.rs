@@ -1,5 +1,37 @@
 use thiserror::Error;
 
+use crate::types::GoogleFontUsage;
+
+pub type GoogleFontsResult<T> = Result<T, GoogleFontsFailure>;
+
+#[derive(Debug)]
+pub struct GoogleFontsFailure {
+    pub error: GoogleFontsError,
+    pub usage: GoogleFontUsage,
+}
+
+impl GoogleFontsFailure {
+    pub(crate) fn new(error: GoogleFontsError, usage: GoogleFontUsage) -> Self {
+        Self { error, usage }
+    }
+
+    pub fn into_error(self) -> GoogleFontsError {
+        self.error
+    }
+}
+
+impl std::fmt::Display for GoogleFontsFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.error.fmt(f)
+    }
+}
+
+impl std::error::Error for GoogleFontsFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum GoogleFontsError {
     #[error("Font not found: \"{0}\"")]
@@ -37,6 +69,10 @@ pub enum GoogleFontsError {
 }
 
 impl GoogleFontsError {
+    pub(crate) fn with_usage(self, usage: impl Into<GoogleFontUsage>) -> GoogleFontsFailure {
+        GoogleFontsFailure::new(self, usage.into())
+    }
+
     pub(crate) fn is_retryable(&self) -> bool {
         match self {
             Self::Http(_) => true,

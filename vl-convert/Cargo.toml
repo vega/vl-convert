@@ -12,13 +12,17 @@ keywords = ["Visualization", "Vega", "Vega-Lite"]
 [dependencies]
 vl-convert-rs = { path = "../vl-convert-rs", version = "2.0.0-rc1" }
 vl-convert-google-fonts = { path = "../vl-convert-google-fonts", version = "2.0.0-rc1" }
+vl-convert-server = { path = "../vl-convert-server", version = "2.0.0-rc1" }
 tokio = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 clap = { workspace = true }
+jsonc-parser = { workspace = true }
 shellexpand = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
-env_logger = { workspace = true }
+signal-hook = "0.3"
+tracing = "0.1"
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
@@ -26,3 +30,7 @@ predicates = { workspace = true }
 rstest = { workspace = true }
 tempfile = { workspace = true }
 dssim = { workspace = true }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client", "tokio"] }
+http-body-util = "0.1"
+bytes = "1"

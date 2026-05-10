@@ -4,6 +4,7 @@ use font_subset::FontReader;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
+use crate::converter::GoogleFontUsage;
 use crate::converter::MissingFontsPolicy;
 use crate::extract::{ClassifiedFont, FontKey, FontSource};
 use crate::text::GOOGLE_FONTS_CLIENT;
@@ -174,7 +175,17 @@ pub async fn resolve_cdn_variants(
     classified_fonts: &[ClassifiedFont],
     family_variants: &HashMap<String, BTreeSet<(String, String)>>,
 ) -> HashMap<String, BTreeSet<(String, String)>> {
+    resolve_cdn_variants_with_google_font_usage(classified_fonts, family_variants)
+        .await
+        .0
+}
+
+pub async fn resolve_cdn_variants_with_google_font_usage(
+    classified_fonts: &[ClassifiedFont],
+    family_variants: &HashMap<String, BTreeSet<(String, String)>>,
+) -> (HashMap<String, BTreeSet<(String, String)>>, GoogleFontUsage) {
     let mut cdn_map = HashMap::new();
+    let mut stats = GoogleFontUsage::default();
     for f in classified_fonts {
         if let FontSource::Google { .. } = &f.source {
             if let Some(vs) = family_variants.get(&f.family) {
@@ -189,14 +200,17 @@ pub async fn resolve_cdn_variants(
                     .resolve_available_variants(&f.family, &requested)
                     .await
                 {
-                    Ok(resolved) => {
-                        let set: BTreeSet<(String, String)> = resolved
+                    Ok(result) => {
+                        stats.add_assign(result.usage);
+                        let set: BTreeSet<(String, String)> = result
+                            .variants
                             .into_iter()
                             .map(|v| (v.weight.to_string(), v.style.as_str().to_string()))
                             .collect();
                         cdn_map.insert(f.family.clone(), set);
                     }
                     Err(e) => {
+                        stats.add_assign(&e.usage);
                         vl_warn!(
                             "Failed to resolve variants for '{}': {e}, skipping CDN URL",
                             f.family
@@ -206,7 +220,7 @@ pub async fn resolve_cdn_variants(
             }
         }
     }
-    cdn_map
+    (cdn_map, stats)
 }
 
 /// Generate `@font-face` CSS blocks with subsetted WOFF2 fonts, indexed by

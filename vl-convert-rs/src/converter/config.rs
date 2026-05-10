@@ -17,7 +17,7 @@ use super::worker_pool::MIN_V8_HEAP_SIZE_MB;
 /// checked (e.g. for `"Roboto, Arial, sans-serif"` only `Roboto` is examined).
 /// This matches Vega's rendering behavior, which tries the first font and falls
 /// back to system generics.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MissingFontsPolicy {
     /// Silently fall back to the default font (no validation).
@@ -56,11 +56,28 @@ impl<'de> serde::Deserialize<'de> for BaseUrlSetting {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
-        match s.as_str() {
-            "default" => Ok(BaseUrlSetting::Default),
-            "disabled" => Ok(BaseUrlSetting::Disabled),
-            _ => Ok(BaseUrlSetting::Custom(s)),
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::Bool(true) => Ok(BaseUrlSetting::Default),
+            serde_json::Value::Bool(false) => Ok(BaseUrlSetting::Disabled),
+            serde_json::Value::String(s) => match s.as_str() {
+                "default" => Ok(BaseUrlSetting::Default),
+                "disabled" => Ok(BaseUrlSetting::Disabled),
+                _ => Ok(BaseUrlSetting::Custom(s)),
+            },
+            _ => Err(serde::de::Error::custom(
+                "base_url must be true, false, or a string",
+            )),
+        }
+    }
+}
+
+impl serde::Serialize for BaseUrlSetting {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            BaseUrlSetting::Default => s.serialize_bool(true),
+            BaseUrlSetting::Disabled => s.serialize_bool(false),
+            BaseUrlSetting::Custom(url) => s.serialize_str(url),
         }
     }
 }
@@ -109,7 +126,7 @@ impl BaseUrlSetting {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct VlcConfig {
     /// Number of persistent worker V8 isolates. Must be at least 1.
@@ -139,6 +156,10 @@ pub struct VlcConfig {
     /// registered per-request via the overlay mechanism. Empty = no
     /// configured fonts (the natural "unset" state).
     pub google_fonts: Vec<GoogleFontRequest>,
+    /// Stop admitting additional Google Font families after this many
+    /// variants have resolved. A single family may cross the threshold.
+    /// `None` preserves unbounded behavior.
+    pub google_font_variant_threshold: Option<NonZeroU64>,
     /// Maximum V8 heap size in megabytes per worker. `None` = no cap;
     /// `Some(n)` = explicit cap.
     pub max_v8_heap_size_mb: Option<NonZeroU64>,
@@ -193,11 +214,6 @@ pub struct VlcConfig {
     /// vega-themes. Custom themes take priority if names collide. Empty =
     /// no custom themes.
     pub themes: HashMap<String, serde_json::Value>,
-    /// Capacity (MB) of the on-disk Google Fonts LRU cache. `None` → library
-    /// default. Backed by the process-global `GOOGLE_FONTS_CLIENT` via
-    /// `apply_hot_font_cache`. Hot-applyable: `VlConverter::with_config`
-    /// calls through on construction.
-    pub google_fonts_cache_size_mb: Option<NonZeroU64>,
 }
 
 /// Shared context passed to all workers.
@@ -219,16 +235,16 @@ pub type VlConverterConfig = VlcConfig;
 
 impl Default for VlcConfig {
     fn default() -> Self {
-        // Sane profile for library, CLI, and server callers.
+        // Default profile for library, CLI, and server callers.
         //
-        // - `allowed_base_urls = ["http:", "https:"]` — any HTTP/HTTPS URL is
+        // - `allowed_base_urls = ["http:", "https:"]`: any HTTP/HTTPS URL is
         //   allowed; no filesystem access. Pass `Vec::new()` to block all
         //   network data; `["*"]` to allow everything (including
         //   filesystem reads).
-        // - `max_v8_heap_size_mb = None` — no per-worker heap cap. Server
+        // - `max_v8_heap_size_mb = None`: no per-worker heap cap. Server
         //   deployments should set an explicit cap; local/embedded callers
         //   typically don't need one.
-        // - `max_ephemeral_workers = Some(NZ(2))` — bounds ephemeral-worker
+        // - `max_ephemeral_workers = Some(NZ(2))`: bounds ephemeral-worker
         //   concurrency (harmless when per-request plugins are disabled).
         Self {
             num_workers: NonZeroU64::new(1).expect("1 is non-zero"),
@@ -239,6 +255,7 @@ impl Default for VlcConfig {
             subset_fonts: true,
             missing_fonts: MissingFontsPolicy::Fallback,
             google_fonts: Vec::new(),
+            google_font_variant_threshold: None,
             max_v8_heap_size_mb: None,
             max_v8_execution_time_secs: None,
             gc_after_conversion: false,
@@ -252,7 +269,6 @@ impl Default for VlcConfig {
             default_format_locale: None,
             default_time_format_locale: None,
             themes: HashMap::new(),
-            google_fonts_cache_size_mb: None,
         }
     }
 }
@@ -397,6 +413,18 @@ mod tests {
     }
 
     #[test]
+    fn test_base_url_setting_default_bool() {
+        let config: VlcConfig = serde_json::from_str(r#"{"base_url": true}"#).unwrap();
+        assert_eq!(config.base_url, BaseUrlSetting::Default);
+    }
+
+    #[test]
+    fn test_base_url_setting_disabled_bool() {
+        let config: VlcConfig = serde_json::from_str(r#"{"base_url": false}"#).unwrap();
+        assert_eq!(config.base_url, BaseUrlSetting::Disabled);
+    }
+
+    #[test]
     fn test_base_url_setting_custom() {
         let config: VlcConfig =
             serde_json::from_str(r#"{"base_url": "https://example.com/"}"#).unwrap();
@@ -444,6 +472,7 @@ mod tests {
             "num_workers": 2,
             "auto_google_fonts": true,
             "missing_fonts": "warn",
+            "google_font_variant_threshold": 16,
             "max_v8_heap_size_mb": 512,
             "default_theme": "dark",
             "themes": {
@@ -454,6 +483,7 @@ mod tests {
         assert_eq!(config.num_workers.get(), 2);
         assert!(config.auto_google_fonts);
         assert_eq!(config.missing_fonts, MissingFontsPolicy::Warn);
+        assert_eq!(config.google_font_variant_threshold, NonZeroU64::new(16));
         assert_eq!(config.max_v8_heap_size_mb, NonZeroU64::new(512));
         assert_eq!(config.default_theme, Some("dark".to_string()));
         assert!(!config.themes.is_empty());
@@ -565,10 +595,17 @@ mod tests {
             "max_ephemeral_workers default is Some(NZ(2))"
         );
         assert_eq!(cfg.max_v8_execution_time_secs, None);
+        assert_eq!(cfg.google_font_variant_threshold, None);
         assert!(cfg.google_fonts.is_empty());
         assert!(cfg.vega_plugins.is_empty());
         assert!(cfg.themes.is_empty());
-        assert_eq!(cfg.google_fonts_cache_size_mb, None);
+    }
+
+    #[test]
+    fn test_default_config_round_trips_through_json_value() {
+        let value = serde_json::to_value(VlcConfig::default()).unwrap();
+        let round_trip: VlcConfig = serde_json::from_value(value).unwrap();
+        assert_eq!(round_trip, VlcConfig::default());
     }
 
     #[test]

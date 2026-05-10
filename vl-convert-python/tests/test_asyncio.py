@@ -58,6 +58,10 @@ SYNC_FUNCTIONS_IN_ASYNCIO = {
     "get_vega_embed_version",
     "get_vegalite_versions",
     "get_config_path",
+    "current_font_directories",
+    "google_fonts_cache_dir",
+    "google_fonts_cache_size_mb",
+    "set_google_fonts_cache_size_mb",
 }
 
 

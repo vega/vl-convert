@@ -1,14 +1,18 @@
 use crate::converter::{
-    apply_spec_overrides, classify_and_request_fonts, classify_scenegraph_fonts, FontAnalysis,
-    GoogleFontRequest, HtmlOpts, HtmlOutput, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin,
-    ValueOrString, VgOpts, VlConverter, VlOpts,
+    apply_spec_overrides, classify_and_request_fonts, classify_scenegraph_fonts,
+    error_with_google_font_usage, FontAnalysis, GoogleFontRequest, GoogleFontUsage, HtmlOpts,
+    HtmlOutput, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin, ValueOrString, VgOpts,
+    VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{
     extract_fonts_from_vega, extract_text_by_font, ClassifiedFont, FontInfo, FontKey, FontSource,
     FontVariant,
 };
-use crate::font_embed::{generate_font_face_css, inject_locale_chars, variants_by_family};
+use crate::font_embed::{
+    generate_font_face_css, inject_locale_chars, resolve_cdn_variants_with_google_font_usage,
+    variants_by_family,
+};
 use crate::module_loader::import_map::{DEBOUNCE_PATH, JSDELIVR_URL, VEGA_EMBED_PATH, VEGA_PATH};
 use crate::module_loader::VlConvertBundleLoader;
 use crate::text::USVG_OPTIONS;
@@ -333,18 +337,20 @@ impl VlConverter {
         vega_spec: serde_json::Value,
         mut vg_opts: VgOpts,
         auto_google_fonts: bool,
-    ) -> Result<serde_json::Value, AnyError> {
-        let missing = self.inner.config.missing_fonts;
+    ) -> Result<(serde_json::Value, GoogleFontUsage), AnyError> {
+        let missing = self.inner.config().missing_fonts;
+        let mut google_fonts = GoogleFontUsage::default();
 
         if auto_google_fonts || missing != MissingFontsPolicy::Fallback {
             let font_strings = extract_fonts_from_vega(&vega_spec);
-            let auto_requests =
+            let analysis =
                 classify_and_request_fonts(font_strings, auto_google_fonts, missing, true).await?;
-            if !auto_requests.is_empty() {
+            google_fonts.add_assign(analysis.google_fonts);
+            if !analysis.requests.is_empty() {
                 vg_opts
                     .google_fonts
                     .get_or_insert_with(Vec::new)
-                    .extend(auto_requests);
+                    .extend(analysis.requests);
             }
         }
 
@@ -361,9 +367,13 @@ impl VlConverter {
                     )
                 })
             })
-            .await?;
-        let sg: serde_json::Value = rmp_serde::from_slice(&sg_output.data)?;
-        Ok(sg)
+            .await
+            .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+        google_fonts.add_assign(sg_output.google_fonts);
+        let sg: serde_json::Value = rmp_serde::from_slice(&sg_output.data).map_err(|err| {
+            error_with_google_font_usage(AnyError::new(err), google_fonts.clone())
+        })?;
+        Ok((sg, google_fonts))
     }
 
     /// Render the Vega scenegraph, walk it in Rust to extract text-by-font
@@ -379,7 +389,7 @@ impl VlConverter {
         auto_google_fonts: bool,
         embed_local_fonts: bool,
     ) -> Result<FontAnalysis, AnyError> {
-        let missing = self.inner.config.missing_fonts;
+        let missing = self.inner.config().missing_fonts;
 
         let explicit_requests = vg_opts.google_fonts.clone();
         let format_locale_value = vg_opts
@@ -391,7 +401,7 @@ impl VlConverter {
             .as_ref()
             .and_then(|l| l.as_object().ok());
 
-        let sg = self
+        let (sg, mut google_fonts) = self
             .render_scenegraph_for_html(vega_spec, vg_opts, auto_google_fonts)
             .await?;
         let sg_root = sg.get("scenegraph").unwrap_or(&sg);
@@ -411,14 +421,17 @@ impl VlConverter {
             .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
             .unwrap_or_default();
 
-        let mut classified_fonts = classify_scenegraph_fonts(
+        let classified = classify_scenegraph_fonts(
             &families,
             auto_google_fonts,
             embed_local_fonts,
             missing,
             &explicit_google_families,
         )
-        .await?;
+        .await
+        .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+        google_fonts.add_assign(classified.google_fonts);
+        let mut classified_fonts = classified.fonts;
 
         let mut family_variants = variants_by_family(&chars_by_key);
 
@@ -447,6 +460,7 @@ impl VlConverter {
             classified_fonts,
             chars_by_key,
             family_variants,
+            google_fonts,
         })
     }
 
@@ -464,6 +478,28 @@ impl VlConverter {
         include_font_face: bool,
         subset_fonts: bool,
     ) -> Result<Vec<FontInfo>, AnyError> {
+        Ok(self
+            .vega_fonts_with_google_font_usage(
+                vg_spec,
+                vg_opts,
+                auto_google_fonts,
+                embed_local_fonts,
+                include_font_face,
+                subset_fonts,
+            )
+            .await?
+            .0)
+    }
+
+    pub async fn vega_fonts_with_google_font_usage(
+        &self,
+        vg_spec: impl Into<ValueOrString>,
+        vg_opts: VgOpts,
+        auto_google_fonts: bool,
+        embed_local_fonts: bool,
+        include_font_face: bool,
+        subset_fonts: bool,
+    ) -> Result<(Vec<FontInfo>, GoogleFontUsage), AnyError> {
         let vg_spec = vg_spec.into();
         let spec_value: serde_json::Value = match &vg_spec {
             ValueOrString::JsonString(s) => serde_json::from_str(s)?,
@@ -489,13 +525,15 @@ impl VlConverter {
         analysis: FontAnalysis,
         include_font_face: bool,
         subset_fonts: bool,
-    ) -> Result<Vec<FontInfo>, AnyError> {
+    ) -> Result<(Vec<FontInfo>, GoogleFontUsage), AnyError> {
         let FontAnalysis {
             classified_fonts,
             chars_by_key,
             family_variants,
+            google_fonts,
         } = analysis;
 
+        let mut google_fonts = google_fonts;
         let font_face_index: HashMap<FontKey, String> =
             if include_font_face && !classified_fonts.is_empty() {
                 let google_font_requests: Vec<GoogleFontRequest> = classified_fonts
@@ -521,16 +559,25 @@ impl VlConverter {
                 let batches = if google_font_requests.is_empty() {
                     Vec::new()
                 } else {
-                    self.run_on_worker(move |inner: &mut InnerVlConverter| {
-                        Box::pin(inner.resolve_google_fonts(Some(google_font_requests)))
-                    })
-                    .await?
+                    let resolved = self
+                        .run_on_worker(move |inner: &mut InnerVlConverter| {
+                            Box::pin(inner.resolve_google_fonts(Some(google_font_requests)))
+                        })
+                        .await
+                        .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+                    google_fonts.add_assign(resolved.google_fonts);
+                    resolved.batches
                 };
 
-                let missing = self.inner.config.missing_fonts;
+                let missing = self.inner.config().missing_fonts;
                 let fontdb = USVG_OPTIONS
                     .lock()
-                    .map_err(|e| anyhow!("failed to lock USVG_OPTIONS: {e}"))?
+                    .map_err(|e| {
+                        error_with_google_font_usage(
+                            anyhow!("failed to lock USVG_OPTIONS: {e}"),
+                            google_fonts.clone(),
+                        )
+                    })?
                     .fontdb
                     .clone();
                 generate_font_face_css(
@@ -540,13 +587,15 @@ impl VlConverter {
                     &fontdb,
                     &batches,
                     subset_fonts,
-                )?
+                )
+                .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?
             } else {
                 HashMap::new()
             };
 
-        let cdn_variants =
-            crate::font_embed::resolve_cdn_variants(&classified_fonts, &family_variants).await;
+        let (cdn_variants, cdn_google_fonts) =
+            resolve_cdn_variants_with_google_font_usage(&classified_fonts, &family_variants).await;
+        google_fonts.add_assign(cdn_google_fonts);
 
         let family_chars: HashMap<String, BTreeSet<char>> = if subset_fonts {
             let mut map: HashMap<String, BTreeSet<char>> = HashMap::new();
@@ -613,7 +662,7 @@ impl VlConverter {
             })
             .collect();
 
-        Ok(results)
+        Ok((results, google_fonts))
     }
 
     /// Return font information for a Vega-Lite spec.
@@ -628,6 +677,28 @@ impl VlConverter {
         include_font_face: bool,
         subset_fonts: bool,
     ) -> Result<Vec<FontInfo>, AnyError> {
+        Ok(self
+            .vegalite_fonts_with_google_font_usage(
+                vl_spec,
+                vl_opts,
+                auto_google_fonts,
+                embed_local_fonts,
+                include_font_face,
+                subset_fonts,
+            )
+            .await?
+            .0)
+    }
+
+    pub async fn vegalite_fonts_with_google_font_usage(
+        &self,
+        vl_spec: impl Into<ValueOrString>,
+        vl_opts: VlOpts,
+        auto_google_fonts: bool,
+        embed_local_fonts: bool,
+        include_font_face: bool,
+        subset_fonts: bool,
+    ) -> Result<(Vec<FontInfo>, GoogleFontUsage), AnyError> {
         let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?.spec;
         let vg_opts = VgOpts {
             format_locale: vl_opts.format_locale,
@@ -635,7 +706,7 @@ impl VlConverter {
             google_fonts: vl_opts.google_fonts,
             ..Default::default()
         };
-        self.vega_fonts(
+        self.vega_fonts_with_google_font_usage(
             vega_spec,
             vg_opts,
             auto_google_fonts,
@@ -648,8 +719,8 @@ impl VlConverter {
 
     /// Build font `<link>` and/or `<style>` tags for HTML `<head>` injection.
     ///
-    /// Uses `vega_fonts` internally so the public API is exercised by every
-    /// HTML export.
+    /// Uses the same font-analysis path as `vega_fonts` so HTML exports and
+    /// font metadata endpoints classify fonts consistently.
     async fn build_font_head_html(
         &self,
         vega_spec: serde_json::Value,
@@ -657,18 +728,14 @@ impl VlConverter {
         bundle: bool,
         auto_install: bool,
         embed_local: bool,
-    ) -> Result<String, AnyError> {
+    ) -> Result<(String, GoogleFontUsage), AnyError> {
         let include_font_face = bundle || embed_local;
-        let subset_fonts = self.inner.config.subset_fonts;
-        let fonts = self
-            .vega_fonts(
-                vega_spec,
-                vg_opts,
-                auto_install,
-                embed_local,
-                include_font_face,
-                subset_fonts,
-            )
+        let subset_fonts = self.inner.config().subset_fonts;
+        let analysis = self
+            .analyze_classified_fonts(vega_spec, vg_opts, auto_install, embed_local)
+            .await?;
+        let (fonts, google_fonts) = self
+            .build_font_info(analysis, include_font_face, subset_fonts)
             .await?;
 
         if bundle {
@@ -678,10 +745,10 @@ impl VlConverter {
                 .filter_map(|v| v.font_face.as_deref())
                 .collect();
             if blocks.is_empty() {
-                Ok(String::new())
+                Ok((String::new(), google_fonts))
             } else {
                 let css = blocks.join("\n");
-                Ok(format!("    <style>\n{css}\n    </style>\n"))
+                Ok((format!("    <style>\n{css}\n    </style>\n"), google_fonts))
             }
         } else {
             let mut parts = Vec::new();
@@ -705,7 +772,7 @@ impl VlConverter {
                 }
             }
 
-            Ok(parts.join(""))
+            Ok((parts.join(""), google_fonts))
         }
     }
 
@@ -732,11 +799,12 @@ impl VlConverter {
         let vl_version = vl_opts.vl_version;
         let vl_spec = vl_spec.into();
 
-        let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = self.inner.config.embed_local_fonts;
+        let auto_install = self.inner.config().auto_google_fonts;
+        let embed_local = self.inner.config().embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vl_opts.google_fonts.is_some();
         let mut logs = Vec::new();
+        let mut google_fonts = GoogleFontUsage::default();
         let font_head_html = if has_font_work {
             let vega_output = self
                 .vegalite_to_vega(vl_spec.clone(), vl_opts.clone())
@@ -748,15 +816,19 @@ impl VlConverter {
                 google_fonts: vl_opts.google_fonts.clone(),
                 ..Default::default()
             };
-            self.build_font_head_html(vega_output.spec, vg_opts, bundle, auto_install, embed_local)
-                .await?
+            let (font_head_html, head_google_fonts) = self
+                .build_font_head_html(vega_output.spec, vg_opts, bundle, auto_install, embed_local)
+                .await?;
+            google_fonts.add_assign(head_google_fonts);
+            font_head_html
         } else {
             String::new()
         };
 
         // Ensure plugins are resolved (triggers pool spawn if not yet started)
-        if !self.inner.config.vega_plugins.is_empty() {
-            self.warm_up()?;
+        if !self.inner.config().vega_plugins.is_empty() {
+            self.warm_up()
+                .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
         }
         let mut resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();
         // Append per-request plugin overlay if present
@@ -773,17 +845,22 @@ impl VlConverter {
         };
         let has_plugins = resolved_plugins.is_some();
         let vl_spec =
-            apply_spec_overrides(vl_spec, &vl_opts.background, vl_opts.width, vl_opts.height)?;
-        let code = get_vega_or_vegalite_script(
-            vl_spec,
-            vl_opts.to_embed_opts(renderer)?,
-            resolved_plugins,
-            bundle,
-        )?;
+            apply_spec_overrides(vl_spec, &vl_opts.background, vl_opts.width, vl_opts.height)
+                .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+        let embed_opts = vl_opts
+            .to_embed_opts(renderer)
+            .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+        let code = get_vega_or_vegalite_script(vl_spec, embed_opts, resolved_plugins, bundle)
+            .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
         let html = self
             .build_html(&code, vl_version, bundle, &font_head_html, has_plugins)
-            .await?;
-        Ok(HtmlOutput { html, logs })
+            .await
+            .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+        Ok(HtmlOutput {
+            html,
+            logs,
+            google_fonts,
+        })
     }
 
     /// Convert a Vega spec to a self-contained HTML page.
@@ -808,30 +885,35 @@ impl VlConverter {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
 
-        let auto_install = self.inner.config.auto_google_fonts;
-        let embed_local = self.inner.config.embed_local_fonts;
+        let auto_install = self.inner.config().auto_google_fonts;
+        let embed_local = self.inner.config().embed_local_fonts;
 
         let has_font_work = auto_install || embed_local || vg_opts.google_fonts.is_some();
+        let mut google_fonts = GoogleFontUsage::default();
         let font_head_html = if has_font_work {
             let spec_value: serde_json::Value = match &vg_spec {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
                 ValueOrString::Value(v) => v.clone(),
             };
-            self.build_font_head_html(
-                spec_value,
-                vg_opts.clone(),
-                bundle,
-                auto_install,
-                embed_local,
-            )
-            .await?
+            let (font_head_html, head_google_fonts) = self
+                .build_font_head_html(
+                    spec_value,
+                    vg_opts.clone(),
+                    bundle,
+                    auto_install,
+                    embed_local,
+                )
+                .await?;
+            google_fonts.add_assign(head_google_fonts);
+            font_head_html
         } else {
             String::new()
         };
 
         // Ensure plugins are resolved (triggers pool spawn if not yet started)
-        if !self.inner.config.vega_plugins.is_empty() {
-            self.warm_up()?;
+        if !self.inner.config().vega_plugins.is_empty() {
+            self.warm_up()
+                .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
         }
         let mut resolved_plugins_owned = self.inner.resolved_plugins.lock().unwrap().clone();
         // Append per-request plugin overlay if present
@@ -848,13 +930,13 @@ impl VlConverter {
         };
         let has_plugins = resolved_plugins.is_some();
         let vg_spec =
-            apply_spec_overrides(vg_spec, &vg_opts.background, vg_opts.width, vg_opts.height)?;
-        let code = get_vega_or_vegalite_script(
-            vg_spec,
-            vg_opts.to_embed_opts(renderer)?,
-            resolved_plugins,
-            bundle,
-        )?;
+            apply_spec_overrides(vg_spec, &vg_opts.background, vg_opts.width, vg_opts.height)
+                .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+        let embed_opts = vg_opts
+            .to_embed_opts(renderer)
+            .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
+        let code = get_vega_or_vegalite_script(vg_spec, embed_opts, resolved_plugins, bundle)
+            .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
         let html = self
             .build_html(
                 &code,
@@ -863,10 +945,12 @@ impl VlConverter {
                 &font_head_html,
                 has_plugins,
             )
-            .await?;
+            .await
+            .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?;
         Ok(HtmlOutput {
             html,
             logs: Vec::new(),
+            google_fonts,
         })
     }
 }
