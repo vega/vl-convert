@@ -179,6 +179,7 @@ pub(crate) struct AppState {
     pub opaque_errors: bool,
     pub require_user_agent: bool,
     pub readiness: Arc<health::ReadinessState>,
+    pub local_tz: Option<String>,
     /// Shared with the gate middleware (main router) and admin handlers so
     /// every drain-participating actor works against the same coordinator.
     pub coordinator: Arc<ReconfigCoordinator>,

@@ -10436,6 +10436,7 @@ dependencies = [
  "jsonc-parser 0.32.1",
  "log",
  "predicates",
+ "rmp-serde",
  "rstest",
  "serde",
  "serde_json",

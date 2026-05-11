@@ -106,7 +106,7 @@ pub async fn readyz(State(state): State<Arc<AppState>>) -> Response {
     ),
     tag = "Health"
 )]
-pub async fn infoz() -> Json<Value> {
+pub async fn infoz(State(state): State<Arc<AppState>>) -> Json<Value> {
     Json(json!({
         "version": env!("CARGO_PKG_VERSION"),
         "vega_version": import_map::VEGA_VERSION,
@@ -115,5 +115,6 @@ pub async fn infoz() -> Json<Value> {
         "vegalite_versions": crate::util::vegalite_versions(),
         "google_fonts_cache_dir": vl_convert_rs::google_fonts_cache_dir()
             .map(|p| p.to_string_lossy().into_owned()),
+        "local_tz": state.local_tz.clone(),
     }))
 }

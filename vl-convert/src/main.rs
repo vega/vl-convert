@@ -19,8 +19,8 @@ use vl_convert_rs::{anyhow, anyhow::bail};
 use cli_types::Cli;
 use commands::Commands;
 use handlers::{
-    cat_theme, list_themes, vg_2_jpeg, vg_2_pdf, vg_2_png, vg_2_svg, vl_2_jpeg, vl_2_pdf, vl_2_png,
-    vl_2_svg, vl_2_vg,
+    cat_theme, javascript_bundle, list_themes, vg_2_jpeg, vg_2_pdf, vg_2_png, vg_2_scenegraph,
+    vg_2_svg, vl_2_jpeg, vl_2_pdf, vl_2_png, vl_2_scenegraph, vl_2_svg, vl_2_vg,
 };
 use io_utils::{
     apply_global_font_dirs, apply_global_google_fonts_cache, expand_allowed_base_urls,
@@ -165,6 +165,7 @@ async fn run_command(
             theme,
             config,
             pretty,
+            render,
         } => {
             vl_2_vg(
                 input_vegalite_file.as_deref(),
@@ -173,6 +174,7 @@ async fn run_command(
                 theme,
                 config,
                 pretty,
+                render,
                 base_config,
             )
             .await?
@@ -186,6 +188,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
             bundle,
+            render,
         } => {
             let svg_opts = SvgOpts { bundle };
             vl_2_svg(
@@ -197,6 +200,7 @@ async fn run_command(
                 format_locale,
                 time_format_locale,
                 svg_opts,
+                render,
                 base_config,
             )
             .await?
@@ -211,6 +215,7 @@ async fn run_command(
             ppi,
             format_locale,
             time_format_locale,
+            render,
         } => {
             vl_2_png(
                 input.as_deref(),
@@ -222,6 +227,7 @@ async fn run_command(
                 ppi,
                 format_locale,
                 time_format_locale,
+                render,
                 base_config,
             )
             .await?
@@ -236,6 +242,7 @@ async fn run_command(
             quality,
             format_locale,
             time_format_locale,
+            render,
         } => {
             vl_2_jpeg(
                 input.as_deref(),
@@ -247,6 +254,7 @@ async fn run_command(
                 quality,
                 format_locale,
                 time_format_locale,
+                render,
                 base_config,
             )
             .await?
@@ -259,6 +267,7 @@ async fn run_command(
             config,
             format_locale,
             time_format_locale,
+            render,
         } => {
             vl_2_pdf(
                 input.as_deref(),
@@ -268,6 +277,7 @@ async fn run_command(
                 config,
                 format_locale,
                 time_format_locale,
+                render,
                 base_config,
             )
             .await?
@@ -292,6 +302,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
             renderer,
+            render,
         } => {
             let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vl_str = read_input_string(input.as_deref())?;
@@ -314,6 +325,9 @@ async fn run_command(
                         format_locale,
                         time_format_locale,
                         google_fonts,
+                        background: render.background,
+                        width: render.width,
+                        height: render.height,
                         ..Default::default()
                     },
                     HtmlOpts {
@@ -334,6 +348,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
             pretty,
+            render,
         } => {
             let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vl_str = read_input_string(input.as_deref())?;
@@ -358,6 +373,9 @@ async fn run_command(
                         format_locale,
                         time_format_locale,
                         google_fonts,
+                        background: render.background,
+                        width: render.width,
+                        height: render.height,
                         ..Default::default()
                     },
                     auto_google_fonts,
@@ -373,12 +391,40 @@ async fn run_command(
             };
             write_output_string(output.as_deref(), &json)?;
         }
+        Vl2scenegraph {
+            input,
+            output,
+            vl_version,
+            theme,
+            config,
+            format_locale,
+            time_format_locale,
+            format,
+            pretty,
+            render,
+        } => {
+            vl_2_scenegraph(
+                input.as_deref(),
+                output.as_deref(),
+                &vl_version,
+                theme,
+                config,
+                format_locale,
+                time_format_locale,
+                format,
+                pretty,
+                render,
+                base_config,
+            )
+            .await?
+        }
         Vg2svg {
             input,
             output,
             format_locale,
             bundle,
             time_format_locale,
+            render,
         } => {
             let svg_opts = SvgOpts { bundle };
             vg_2_svg(
@@ -387,6 +433,7 @@ async fn run_command(
                 format_locale,
                 time_format_locale,
                 svg_opts,
+                render,
                 base_config,
             )
             .await?
@@ -398,6 +445,7 @@ async fn run_command(
             ppi,
             format_locale,
             time_format_locale,
+            render,
         } => {
             vg_2_png(
                 input.as_deref(),
@@ -406,6 +454,7 @@ async fn run_command(
                 ppi,
                 format_locale,
                 time_format_locale,
+                render,
                 base_config,
             )
             .await?
@@ -417,6 +466,7 @@ async fn run_command(
             quality,
             format_locale,
             time_format_locale,
+            render,
         } => {
             vg_2_jpeg(
                 input.as_deref(),
@@ -425,6 +475,7 @@ async fn run_command(
                 quality,
                 format_locale,
                 time_format_locale,
+                render,
                 base_config,
             )
             .await?
@@ -434,12 +485,14 @@ async fn run_command(
             output,
             format_locale,
             time_format_locale,
+            render,
         } => {
             vg_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
                 format_locale,
                 time_format_locale,
+                render,
                 base_config,
             )
             .await?
@@ -461,6 +514,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
             renderer,
+            render,
         } => {
             let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vg_str = read_input_string(input.as_deref())?;
@@ -480,6 +534,9 @@ async fn run_command(
                         format_locale,
                         time_format_locale,
                         google_fonts,
+                        background: render.background,
+                        width: render.width,
+                        height: render.height,
                         ..Default::default()
                     },
                     HtmlOpts {
@@ -497,6 +554,7 @@ async fn run_command(
             format_locale,
             time_format_locale,
             pretty,
+            render,
         } => {
             let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vg_str = read_input_string(input.as_deref())?;
@@ -516,6 +574,9 @@ async fn run_command(
                         google_fonts,
                         format_locale,
                         time_format_locale,
+                        background: render.background,
+                        width: render.width,
+                        height: render.height,
                         ..Default::default()
                     },
                     auto_google_fonts,
@@ -530,6 +591,40 @@ async fn run_command(
                 serde_json::to_string(&fonts)?
             };
             write_output_string(output.as_deref(), &json)?;
+        }
+        Vg2scenegraph {
+            input,
+            output,
+            format_locale,
+            time_format_locale,
+            format,
+            pretty,
+            render,
+        } => {
+            vg_2_scenegraph(
+                input.as_deref(),
+                output.as_deref(),
+                format_locale,
+                time_format_locale,
+                format,
+                pretty,
+                render,
+                base_config,
+            )
+            .await?
+        }
+        JavascriptBundle {
+            snippet,
+            output,
+            vl_version,
+        } => {
+            javascript_bundle(
+                output.as_deref(),
+                snippet.as_deref(),
+                &vl_version,
+                base_config,
+            )
+            .await?
         }
         Svg2png {
             input,

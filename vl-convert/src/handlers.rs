@@ -4,10 +4,23 @@ use vl_convert_rs::converter::{
 };
 use vl_convert_rs::{anyhow, anyhow::bail};
 
+use crate::commands::{RenderOverrides, ScenegraphFormat};
 use crate::io_utils::{
     parse_as_json, parse_format_locale_option, parse_time_format_locale_option, parse_vl_version,
     read_config_json, read_input_string, write_output_binary, write_output_string,
 };
+
+fn apply_vl_render_overrides(opts: &mut VlOpts, render: RenderOverrides) {
+    opts.background = render.background;
+    opts.width = render.width;
+    opts.height = render.height;
+}
+
+fn apply_vg_render_overrides(opts: &mut VgOpts, render: RenderOverrides) {
+    opts.background = render.background;
+    opts.width = render.width;
+    opts.height = render.height;
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn vl_2_vg(
@@ -17,6 +30,7 @@ pub(crate) async fn vl_2_vg(
     theme: Option<String>,
     config: Option<String>,
     pretty: bool,
+    render: RenderOverrides,
     converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
@@ -26,18 +40,15 @@ pub(crate) async fn vl_2_vg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let vega_output = match converter
-        .vegalite_to_vega(
-            vegalite_json,
-            VlOpts {
-                vl_version,
-                theme,
-                config,
-                ..Default::default()
-            },
-        )
-        .await
-    {
+    let mut vl_opts = VlOpts {
+        vl_version,
+        theme,
+        config,
+        ..Default::default()
+    };
+    apply_vl_render_overrides(&mut vl_opts, render);
+
+    let vega_output = match converter.vegalite_to_vega(vegalite_json, vl_opts).await {
         Ok(output) => output,
         Err(err) => {
             bail!("Vega-Lite to Vega conversion failed: {}", err);
@@ -66,6 +77,7 @@ pub(crate) async fn vg_2_svg(
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     svg_opts: SvgOpts,
+    render: RenderOverrides,
     converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
@@ -76,18 +88,14 @@ pub(crate) async fn vg_2_svg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let svg_output = match converter
-        .vega_to_svg(
-            vg_spec,
-            VgOpts {
-                format_locale,
-                time_format_locale,
-                ..Default::default()
-            },
-            svg_opts,
-        )
-        .await
-    {
+    let mut vg_opts = VgOpts {
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vg_render_overrides(&mut vg_opts, render);
+
+    let svg_output = match converter.vega_to_svg(vg_spec, vg_opts, svg_opts).await {
         Ok(output) => output,
         Err(err) => {
             bail!("Vega to SVG conversion failed: {}", err);
@@ -107,6 +115,7 @@ pub(crate) async fn vg_2_png(
     ppi: f32,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    render: RenderOverrides,
     converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
@@ -117,14 +126,17 @@ pub(crate) async fn vg_2_png(
 
     let converter = VlConverter::with_config(converter_config)?;
 
+    let mut vg_opts = VgOpts {
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vg_render_overrides(&mut vg_opts, render);
+
     let png_output = match converter
         .vega_to_png(
             vg_spec,
-            VgOpts {
-                format_locale,
-                time_format_locale,
-                ..Default::default()
-            },
+            vg_opts,
             PngOpts {
                 scale: Some(scale),
                 ppi: Some(ppi),
@@ -151,6 +163,7 @@ pub(crate) async fn vg_2_jpeg(
     quality: u8,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    render: RenderOverrides,
     converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
@@ -161,14 +174,17 @@ pub(crate) async fn vg_2_jpeg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
+    let mut vg_opts = VgOpts {
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vg_render_overrides(&mut vg_opts, render);
+
     let jpeg_output = match converter
         .vega_to_jpeg(
             vg_spec,
-            VgOpts {
-                format_locale,
-                time_format_locale,
-                ..Default::default()
-            },
+            vg_opts,
             JpegOpts {
                 scale: Some(scale),
                 quality: Some(quality),
@@ -192,6 +208,7 @@ pub(crate) async fn vg_2_pdf(
     output: Option<&str>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    render: RenderOverrides,
     converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
@@ -202,16 +219,15 @@ pub(crate) async fn vg_2_pdf(
 
     let converter = VlConverter::with_config(converter_config)?;
 
+    let mut vg_opts = VgOpts {
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vg_render_overrides(&mut vg_opts, render);
+
     let pdf_output = match converter
-        .vega_to_pdf(
-            vg_spec,
-            VgOpts {
-                format_locale,
-                time_format_locale,
-                ..Default::default()
-            },
-            PdfOpts::default(),
-        )
+        .vega_to_pdf(vg_spec, vg_opts, PdfOpts::default())
         .await
     {
         Ok(output) => output,
@@ -235,6 +251,7 @@ pub(crate) async fn vl_2_svg(
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     svg_opts: SvgOpts,
+    render: RenderOverrides,
     converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
@@ -247,21 +264,17 @@ pub(crate) async fn vl_2_svg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
-    let svg_output = match converter
-        .vegalite_to_svg(
-            vl_spec,
-            VlOpts {
-                vl_version,
-                config,
-                theme,
-                format_locale,
-                time_format_locale,
-                ..Default::default()
-            },
-            svg_opts,
-        )
-        .await
-    {
+    let mut vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vl_render_overrides(&mut vl_opts, render);
+
+    let svg_output = match converter.vegalite_to_svg(vl_spec, vl_opts, svg_opts).await {
         Ok(output) => output,
         Err(err) => {
             bail!("Vega-Lite to SVG conversion failed: {}", err);
@@ -284,6 +297,7 @@ pub(crate) async fn vl_2_png(
     ppi: f32,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    render: RenderOverrides,
     converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
@@ -296,17 +310,20 @@ pub(crate) async fn vl_2_png(
 
     let converter = VlConverter::with_config(converter_config)?;
 
+    let mut vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vl_render_overrides(&mut vl_opts, render);
+
     let png_output = match converter
         .vegalite_to_png(
             vl_spec,
-            VlOpts {
-                vl_version,
-                config,
-                theme,
-                format_locale,
-                time_format_locale,
-                ..Default::default()
-            },
+            vl_opts,
             PngOpts {
                 scale: Some(scale),
                 ppi: Some(ppi),
@@ -336,6 +353,7 @@ pub(crate) async fn vl_2_jpeg(
     quality: u8,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    render: RenderOverrides,
     converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
@@ -348,17 +366,20 @@ pub(crate) async fn vl_2_jpeg(
 
     let converter = VlConverter::with_config(converter_config)?;
 
+    let mut vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vl_render_overrides(&mut vl_opts, render);
+
     let jpeg_output = match converter
         .vegalite_to_jpeg(
             vl_spec,
-            VlOpts {
-                vl_version,
-                config,
-                theme,
-                format_locale,
-                time_format_locale,
-                ..Default::default()
-            },
+            vl_opts,
             JpegOpts {
                 scale: Some(scale),
                 quality: Some(quality),
@@ -386,6 +407,7 @@ pub(crate) async fn vl_2_pdf(
     config: Option<String>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
+    render: RenderOverrides,
     converter_config: VlcConfig,
 ) -> Result<(), anyhow::Error> {
     let vl_version = parse_vl_version(vl_version)?;
@@ -398,19 +420,18 @@ pub(crate) async fn vl_2_pdf(
 
     let converter = VlConverter::with_config(converter_config)?;
 
+    let mut vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vl_render_overrides(&mut vl_opts, render);
+
     let pdf_output = match converter
-        .vegalite_to_pdf(
-            vl_spec,
-            VlOpts {
-                vl_version,
-                config,
-                theme,
-                format_locale,
-                time_format_locale,
-                ..Default::default()
-            },
-            PdfOpts::default(),
-        )
+        .vegalite_to_pdf(vl_spec, vl_opts, PdfOpts::default())
         .await
     {
         Ok(output) => output,
@@ -421,6 +442,132 @@ pub(crate) async fn vl_2_pdf(
 
     write_output_binary(output, &pdf_output.data, "PDF")?;
 
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn vl_2_scenegraph(
+    input: Option<&str>,
+    output: Option<&str>,
+    vl_version: &str,
+    theme: Option<String>,
+    config: Option<String>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
+    format: ScenegraphFormat,
+    pretty: bool,
+    render: RenderOverrides,
+    converter_config: VlcConfig,
+) -> Result<(), anyhow::Error> {
+    if pretty && matches!(format, ScenegraphFormat::Msgpack) {
+        bail!("--pretty is only valid with --format json");
+    }
+
+    let vl_version = parse_vl_version(vl_version)?;
+    let vegalite_str = read_input_string(input)?;
+    let vl_spec = parse_as_json(&vegalite_str)?;
+    let config = read_config_json(config)?;
+
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
+
+    let mut vl_opts = VlOpts {
+        vl_version,
+        config,
+        theme,
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vl_render_overrides(&mut vl_opts, render);
+
+    let converter = VlConverter::with_config(converter_config)?;
+    match format {
+        ScenegraphFormat::Json => {
+            let scenegraph_output = converter.vegalite_to_scenegraph(vl_spec, vl_opts).await?;
+            let json = if pretty {
+                serde_json::to_string_pretty(&scenegraph_output.scenegraph)?
+            } else {
+                serde_json::to_string(&scenegraph_output.scenegraph)?
+            };
+            write_output_string(output, &json)?;
+        }
+        ScenegraphFormat::Msgpack => {
+            let scenegraph_output = converter
+                .vegalite_to_scenegraph_msgpack(vl_spec, vl_opts)
+                .await?;
+            write_output_binary(output, &scenegraph_output.data, "MessagePack")?;
+        }
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn vg_2_scenegraph(
+    input: Option<&str>,
+    output: Option<&str>,
+    format_locale: Option<String>,
+    time_format_locale: Option<String>,
+    format: ScenegraphFormat,
+    pretty: bool,
+    render: RenderOverrides,
+    converter_config: VlcConfig,
+) -> Result<(), anyhow::Error> {
+    if pretty && matches!(format, ScenegraphFormat::Msgpack) {
+        bail!("--pretty is only valid with --format json");
+    }
+
+    let vega_str = read_input_string(input)?;
+    let vg_spec = parse_as_json(&vega_str)?;
+
+    let format_locale = parse_format_locale_option(format_locale.as_deref())?;
+    let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
+
+    let mut vg_opts = VgOpts {
+        format_locale,
+        time_format_locale,
+        ..Default::default()
+    };
+    apply_vg_render_overrides(&mut vg_opts, render);
+
+    let converter = VlConverter::with_config(converter_config)?;
+    match format {
+        ScenegraphFormat::Json => {
+            let scenegraph_output = converter.vega_to_scenegraph(vg_spec, vg_opts).await?;
+            let json = if pretty {
+                serde_json::to_string_pretty(&scenegraph_output.scenegraph)?
+            } else {
+                serde_json::to_string(&scenegraph_output.scenegraph)?
+            };
+            write_output_string(output, &json)?;
+        }
+        ScenegraphFormat::Msgpack => {
+            let scenegraph_output = converter
+                .vega_to_scenegraph_msgpack(vg_spec, vg_opts)
+                .await?;
+            write_output_binary(output, &scenegraph_output.data, "MessagePack")?;
+        }
+    }
+
+    Ok(())
+}
+
+pub(crate) async fn javascript_bundle(
+    output: Option<&str>,
+    snippet: Option<&str>,
+    vl_version: &str,
+    converter_config: VlcConfig,
+) -> Result<(), anyhow::Error> {
+    let vl_version = parse_vl_version(vl_version)?;
+    let converter = VlConverter::with_config(converter_config)?;
+    let bundle = if let Some(path) = snippet {
+        let snippet = read_input_string(Some(path))?;
+        converter.bundle_vega_snippet(snippet, vl_version).await?
+    } else {
+        converter.get_vegaembed_bundle(vl_version).await?
+    };
+    write_output_string(output, &bundle)?;
     Ok(())
 }
 

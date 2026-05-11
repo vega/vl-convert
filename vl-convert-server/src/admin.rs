@@ -4,6 +4,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use axum::Router;
+use serde::Serialize;
 use serde_json::json;
 use std::sync::Arc;
 use utoipa::OpenApi;
@@ -71,6 +72,7 @@ fn admin_openapi_router() -> OpenApiRouter<Arc<AdminState>> {
     OpenApiRouter::with_openapi(AdminApiDoc::openapi())
         .routes(routes!(get_budget))
         .routes(routes!(update_budget))
+        .routes(routes!(get_worker_diagnostics))
         .routes(routes!(get_config))
         .routes(routes!(patch_config))
         .routes(routes!(put_config))
@@ -122,6 +124,21 @@ struct BudgetUpdate {
     per_ip_budget_ms: Option<i64>,
     global_budget_ms: Option<i64>,
     hold_ms: Option<i64>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct WorkerMemoryUsageView {
+    worker_index: usize,
+    used_heap_size: usize,
+    total_heap_size: usize,
+    heap_size_limit: usize,
+    external_memory: usize,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct WorkerDiagnosticsView {
+    generation: u64,
+    workers: Vec<WorkerMemoryUsageView>,
 }
 
 #[utoipa::path(
@@ -177,6 +194,47 @@ async fn update_budget(
         tracker.update_estimate(est);
     }
     Json(tracker.status()).into_response()
+}
+
+#[utoipa::path(
+    get,
+    path = "/admin/diagnostics/workers",
+    responses(
+        (status = 200, description = "Worker memory usage"),
+        (status = 503, description = "Worker diagnostics unavailable"),
+    ),
+    tag = "Admin",
+)]
+async fn get_worker_diagnostics(State(admin): State<Arc<AdminState>>) -> Response {
+    let snap = admin.runtime.load_full();
+    let generation = snap.generation;
+    match snap.converter.get_worker_memory_usage().await {
+        Ok(workers) => {
+            let workers = workers
+                .into_iter()
+                .map(|worker| WorkerMemoryUsageView {
+                    worker_index: worker.worker_index,
+                    used_heap_size: worker.used_heap_size,
+                    total_heap_size: worker.total_heap_size,
+                    heap_size_limit: worker.heap_size_limit,
+                    external_memory: worker.external_memory,
+                })
+                .collect();
+            (
+                StatusCode::OK,
+                Json(WorkerDiagnosticsView {
+                    generation,
+                    workers,
+                }),
+            )
+                .into_response()
+        }
+        Err(err) => simple_error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            &format!("worker diagnostics unavailable: {err}"),
+            admin.opaque_errors,
+        ),
+    }
 }
 
 // =============================================================================

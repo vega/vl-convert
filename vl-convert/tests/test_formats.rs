@@ -56,6 +56,16 @@ const TIME_TEXT_SPEC: &str = r#"{
   }
 }"#;
 
+const SIMPLE_VL_SPEC: &str = r#"{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "data": {"values": [{"category": "A", "value": 1}]},
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "category", "type": "nominal"},
+    "y": {"field": "value", "type": "quantitative"}
+  }
+}"#;
+
 fn write_temp_json(contents: &str) -> Result<NamedTempFile, Box<dyn std::error::Error>> {
     let mut file = tempfile::Builder::new().suffix(".json").tempfile()?;
     file.write_all(contents.as_bytes())?;
@@ -136,6 +146,39 @@ fn default_time_locale_accepts_inline_json_and_file() -> Result<(), Box<dyn std:
         "file default time-format locale was not applied; SVG:\n{file_svg}"
     );
 
+    Ok(())
+}
+
+#[test]
+fn vl2vg_render_overrides_set_top_level_properties() -> Result<(), Box<dyn std::error::Error>> {
+    initialize();
+
+    let spec = write_temp_json(SIMPLE_VL_SPEC)?;
+    let mut cmd = vl_convert_cmd()?;
+    let output = cmd
+        .arg("--vlc-config")
+        .arg("disabled")
+        .arg("vl2vg")
+        .arg("-i")
+        .arg(spec.path())
+        .arg("--width")
+        .arg("321")
+        .arg("--height")
+        .arg("123")
+        .arg("--background")
+        .arg("#abcdef")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "vl2vg failed with status {:?}; stderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let spec: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(spec["width"], 321);
+    assert_eq!(spec["height"], 123);
+    assert_eq!(spec["background"], "#abcdef");
     Ok(())
 }
 
