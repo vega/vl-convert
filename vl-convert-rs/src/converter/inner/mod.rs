@@ -353,9 +353,11 @@ pub(super) mod tests {
 
     impl TestHttpServer {
         pub(in crate::converter) fn new(routes: Vec<(&str, TestHttpResponse)>) -> Self {
-            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-            listener.set_nonblocking(true).unwrap();
-            let addr = listener.local_addr().unwrap();
+            let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+            let addr = match server.server_addr() {
+                tiny_http::ListenAddr::IP(addr) => addr,
+                tiny_http::ListenAddr::Unix(_) => unreachable!("test server binds TCP"),
+            };
 
             let routes = Arc::new(
                 routes
@@ -369,13 +371,9 @@ pub(super) mod tests {
 
             let handle = std::thread::spawn(move || {
                 while running_clone.load(std::sync::atomic::Ordering::SeqCst) {
-                    match listener.accept() {
-                        Ok((stream, _)) => {
-                            handle_test_http_connection(stream, &routes_clone);
-                        }
-                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                            std::thread::sleep(std::time::Duration::from_millis(5));
-                        }
+                    match server.recv_timeout(std::time::Duration::from_millis(100)) {
+                        Ok(Some(request)) => handle_test_http_request(request, &routes_clone),
+                        Ok(None) => continue,
                         Err(_) => break,
                     }
                 }
@@ -413,34 +411,15 @@ pub(super) mod tests {
         }
     }
 
-    fn handle_test_http_connection(
-        mut stream: std::net::TcpStream,
+    fn handle_test_http_request(
+        request: tiny_http::Request,
         routes: &std::collections::HashMap<String, TestHttpResponse>,
     ) {
-        use std::io::{BufRead, BufReader, Write};
-
-        let Ok(reader_stream) = stream.try_clone() else {
-            return;
-        };
-        let mut reader = BufReader::new(reader_stream);
-
-        let mut request_line = String::new();
-        if reader.read_line(&mut request_line).is_err() {
-            return;
-        }
-        let request_target = request_line.split_whitespace().nth(1).unwrap_or("/");
-        let request_path = request_target.split('?').next().unwrap_or(request_target);
-
-        loop {
-            let mut header_line = String::new();
-            if reader.read_line(&mut header_line).is_err() {
-                return;
-            }
-            if header_line == "\r\n" || header_line == "\n" || header_line.is_empty() {
-                break;
-            }
-        }
-
+        let request_path = request
+            .url()
+            .split('?')
+            .next()
+            .unwrap_or_else(|| request.url());
         let response = routes
             .get(request_path)
             .cloned()
@@ -450,60 +429,14 @@ pub(super) mod tests {
                 body: b"not found".to_vec(),
             });
 
-        let mut headers = response.headers;
-        if !headers
-            .iter()
-            .any(|(name, _)| name.eq_ignore_ascii_case("content-length"))
-        {
-            headers.push((
-                "Content-Length".to_string(),
-                response.body.len().to_string(),
-            ));
+        let mut tiny_response = tiny_http::Response::from_data(response.body)
+            .with_status_code(tiny_http::StatusCode(response.status));
+        for (name, value) in response.headers {
+            let header = tiny_http::Header::from_bytes(name.as_bytes(), value.as_bytes())
+                .unwrap_or_else(|_| panic!("invalid test response header {name}: {value}"));
+            tiny_response.add_header(header);
         }
-        if !headers
-            .iter()
-            .any(|(name, _)| name.eq_ignore_ascii_case("connection"))
-        {
-            headers.push(("Connection".to_string(), "close".to_string()));
-        }
-
-        let mut response_head = format!(
-            "HTTP/1.1 {} {}\r\n",
-            response.status,
-            http_reason_phrase(response.status)
-        );
-        for (name, value) in headers {
-            response_head.push_str(&format!("{name}: {value}\r\n"));
-        }
-        response_head.push_str("\r\n");
-
-        let _ = stream.write_all(response_head.as_bytes());
-        let _ = stream.write_all(&response.body);
-        let _ = stream.flush();
-
-        let _ = stream.shutdown(std::net::Shutdown::Write);
-        let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(500)));
-        let mut drain_buf = [0u8; 256];
-        loop {
-            use std::io::Read;
-            match stream.read(&mut drain_buf) {
-                Ok(0) | Err(_) => break,
-                Ok(_) => continue,
-            }
-        }
-    }
-
-    fn http_reason_phrase(status: u16) -> &'static str {
-        match status {
-            200 => "OK",
-            301 => "Moved Permanently",
-            302 => "Found",
-            303 => "See Other",
-            307 => "Temporary Redirect",
-            308 => "Permanent Redirect",
-            404 => "Not Found",
-            _ => "Status",
-        }
+        let _ = request.respond(tiny_response);
     }
 
     #[tokio::test]
