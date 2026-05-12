@@ -154,6 +154,13 @@ pub async fn build_app(
     log::info!("Initializing converter with {num_workers} worker(s)...");
     let converter = vl_convert_rs::converter::VlConverter::with_config(config)?;
     converter.warm_up()?;
+    let local_tz = match converter.get_local_tz().await {
+        Ok(tz) => tz,
+        Err(err) => {
+            log::warn!("Failed to determine local timezone for /infoz: {err}");
+            None
+        }
+    };
     log::info!("Workers initialized");
 
     // Seed the admin baseline and initial runtime snapshot from the normalized
@@ -180,6 +187,7 @@ pub async fn build_app(
         opaque_errors: serve_config.opaque_errors,
         require_user_agent: serve_config.require_user_agent,
         readiness: readiness.clone(),
+        local_tz,
         coordinator: coordinator.clone(),
     });
 

@@ -471,6 +471,31 @@ async fn test_admin_config_generation_not_exposed_on_infoz() {
     // Existing infoz surface must still include the established keys.
     assert!(body.get("version").is_some());
     assert!(body.get("vegalite_versions").is_some());
+    assert!(body.get("local_tz").is_some());
+}
+
+#[tokio::test]
+async fn test_admin_worker_diagnostics() {
+    let server = default_admin_server();
+    let resp = server
+        .handle
+        .client
+        .get(format!(
+            "{}/admin/diagnostics/workers",
+            server.admin_base_url
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["generation"], 0);
+    let workers = body["workers"]
+        .as_array()
+        .expect("workers must be an array");
+    assert!(!workers.is_empty(), "expected at least one worker");
+    assert!(workers[0]["worker_index"].is_number());
+    assert!(workers[0]["used_heap_size"].is_number());
 }
 
 fn dirs_from_get(value: &Value) -> Vec<String> {

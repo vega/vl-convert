@@ -142,7 +142,7 @@ Related `vl-convert serve` controls that affect conversion behavior include:
 | --- | --- |
 | `/healthz` | Liveness endpoint returning `{"status":"ok"}`. |
 | `/readyz` | Readiness endpoint. Returns 503 during admin reconfiguration or when a worker health probe fails. |
-| `/infoz` | Version metadata, supported Vega-Lite versions, and the resolved Google Fonts cache directory. |
+| `/infoz` | Version metadata, supported Vega-Lite versions, local timezone, and the resolved Google Fonts cache directory. |
 
 ## Admin API
 
@@ -156,6 +156,7 @@ Admin routes include:
 - `GET` / `POST` / `PUT /admin/config/fonts/directories` for process font
   directory state.
 - `GET` / `PUT /admin/config/fonts/cache_size` for the Google Fonts cache cap.
+- `GET /admin/diagnostics/workers` for per-worker V8 heap statistics.
 - `/admin/docs` and `/admin/api-doc/openapi.json` for the admin OpenAPI
   surface.
 

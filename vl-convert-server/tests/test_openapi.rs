@@ -86,6 +86,7 @@ async fn test_admin_openapi_includes_admin_paths() {
         "/admin/budget",
         "/admin/config",
         "/admin/config/fonts/directories",
+        "/admin/diagnostics/workers",
     ];
     for path in expected {
         assert!(

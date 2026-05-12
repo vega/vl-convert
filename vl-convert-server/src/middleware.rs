@@ -496,6 +496,7 @@ mod tests {
             opaque_errors,
             require_user_agent: false,
             readiness: Arc::new(crate::health::ReadinessState::default()),
+            local_tz: None,
             coordinator: coord,
         });
 

@@ -27,17 +27,26 @@ Commands:
   vl2pdf     Convert a Vega-Lite specification to a PDF image
   vl2url     Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
   vl2html    Convert a Vega-Lite specification to an HTML file
+  vl2fonts   Return font metadata for a rendered Vega-Lite specification
+  vl2sg      Convert a Vega-Lite specification to a Vega scenegraph
   vg2svg     Convert a Vega specification to an SVG image
   vg2png     Convert a Vega specification to an PNG image
   vg2jpeg    Convert a Vega specification to an JPEG image
   vg2pdf     Convert a Vega specification to an PDF image
   vg2url     Convert a Vega specification to a URL that opens the chart in the Vega editor
   vg2html    Convert a Vega specification to an HTML file
+  vg2fonts   Return font metadata for a rendered Vega specification
+  vg2sg      Convert a Vega specification to a Vega scenegraph
+  bundle-js
+             Produce the JavaScript bundle used by Vega Embed integrations
   svg2png    Convert an SVG image to a PNG image
   svg2jpeg   Convert an SVG image to a JPEG image
   svg2pdf    Convert an SVG image to a PDF image
   ls-themes  List available themes
   cat-theme  Print the config JSON for a theme
+  config-path
+             Print the default vlc-config file path
+  serve      Run the HTTP conversion server
   help       Print this message or the help of the given subcommand(s)
 
 Options:
@@ -126,5 +135,3 @@ A directory containing additional font files can registered with the VlConvert P
 
 ### Built-in Datasets
 The [Vega Editor](https://vega.github.io/editor/) supports referring to built-in datasets as if the exist under a `data/` directory (e.g. `data/cars.json`). This is not currently supporte by VlConvert. Instead an absolute URL must be used (e.g. `https://raw.githubusercontent.com/vega/vega-datasets/next/data/cars.json`).
-
-
