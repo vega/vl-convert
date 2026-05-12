@@ -32,6 +32,14 @@ clippy = "cargo clippy"
 build-rs = "cargo build -p vl-convert-rs"
 build-cli = "cargo build -p vl-convert"
 build-py = "maturin build -m vl-convert-python/Cargo.toml --sdist --release"
+docs-generate = "python docs/tools/generate_interface_pages.py"
+docs-openapi = { cmd = "python docs/tools/dump_openapi.py", depends-on = ["build-cli"] }
+docs-build = { cmd = "sphinx-build -b html docs/source docs/build/html && touch docs/build/html/.nojekyll", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
+docs-build-strict = { cmd = "sphinx-build -W --keep-going -b html docs/source docs/build/html && touch docs/build/html/.nojekyll", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
+docs-clean = "rm -rf docs/build docs/source/_generated/openapi-public.json docs/source/python docs/source/cli docs/source/rust docs/source/server"
+docs-rebuild = { depends-on = ["docs-clean", "docs-build"] }
+docs-serve = { cmd = "sphinx-autobuild docs/source docs/build/html", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
+docs-linkcheck = { cmd = "sphinx-build -b linkcheck docs/source docs/build/linkcheck", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
 
 vendor = "cargo run -p vl-convert-vendor"
 bundle-licenses = """
@@ -54,6 +62,15 @@ protobuf = ">=4.25.3,<5"
 ruff = ">=0.8,<1"
 pip = ">=24.2,<25"
 deno = ">=2.3,<3"  # For vendoring JavaScript dependencies
+sphinx = ">=8,<9"
+myst-parser = ">=5,<6"
+pydata-sphinx-theme = ">=0.16,<0.17"
+sphinx-design = ">=0.6,<1"
+sphinx-copybutton = ">=0.5,<1"
+sphinx-autobuild = ">=2024"
+sphinx-autodoc2 = ">=0.5,<0.6"
+sphinxcontrib-programoutput = ">=0.19,<1"
+sphinxcontrib-openapi = ">=0.8,<1"
 
 # macOS 15.4 tightened the dynamic-loader rules and now rejects binaries
 # with duplicate LC_RPATH entries.  Older conda-forge builds of OpenBLAS /

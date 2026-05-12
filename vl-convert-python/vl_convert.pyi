@@ -229,14 +229,11 @@ def get_format_locale(name: FormatLocaleName) -> dict[str, Any]:
 
     See https://github.com/d3/d3-format/tree/main/locale for available names
 
-    Parameters
-    ----------
-    name
-        d3-format locale name (e.g. 'it-IT')
+    Args:
+        name: d3-format locale name (e.g. 'it-IT')
 
-    Returns
-    -------
-    d3-format locale dict
+    Returns:
+        d3-format locale dict
     """
     ...
 
@@ -244,10 +241,9 @@ def get_local_tz() -> str | None:
     """
     Get the named local timezone that Vega uses to perform timezone calculations.
 
-    Returns
-    -------
-    Named local timezone (e.g. "America/New_York"), or None if the local timezone
-    cannot be determined.
+    Returns:
+        Named local timezone (e.g. "America/New_York"), or None if the local timezone
+        cannot be determined.
     """
     ...
 
@@ -255,9 +251,8 @@ def get_themes() -> dict[VegaThemes, dict[str, Any]]:
     """
     Get the config dict for each built-in theme.
 
-    Returns
-    -------
-    dict from theme name to config object.
+    Returns:
+        dict from theme name to config object.
     """
     ...
 
@@ -267,14 +262,11 @@ def get_time_format_locale(name: TimeFormatLocaleName) -> dict[str, Any]:
 
     See https://github.com/d3/d3-time-format/tree/main/locale for available names
 
-    Parameters
-    ----------
-    name
-        d3-time-format locale name (e.g. 'it-IT')
+    Args:
+        name: d3-time-format locale name (e.g. 'it-IT')
 
-    Returns
-    -------
-    d3-time-format locale dict.
+    Returns:
+        d3-time-format locale dict.
     """
     ...
 
@@ -293,16 +285,12 @@ def javascript_bundle(snippet: str | None = None, vl_version: str | None = None)
     The default snippet assigns `vegaEmbed`, `vegaLite`, and `vega` to the global
     window object, making them available globally to other script tags.
 
-    Parameters
-    ----------
-    snippet
-        An ES6 JavaScript snippet which includes no imports
-    vl_version
-        Vega-Lite library version string (e.g. 'v5.15') (default to latest)
+    Args:
+        snippet: An ES6 JavaScript snippet which includes no imports
+        vl_version: Vega-Lite library version string (e.g. 'v5.15') (default to latest)
 
-    Returns
-    -------
-    Bundled snippet with all dependencies.
+    Returns:
+        Bundled snippet with all dependencies.
     """
     ...
 
@@ -310,14 +298,8 @@ def register_font_directory(font_dir: str) -> None:
     """
     Register a directory of fonts for use in subsequent conversions.
 
-    Parameters
-    ----------
-    font_dir
-        Absolute path to a directory containing font files
-
-    Returns
-    -------
-    None
+    Args:
+        font_dir: Absolute path to a directory containing font files
     """
     ...
 
@@ -329,14 +311,8 @@ def set_font_directories(font_dirs: list[str]) -> None:
     ``font_dirs`` are removed from the global registry and from subsequent
     font resolution. Pass an empty list to clear all registrations.
 
-    Parameters
-    ----------
-    font_dirs
-        Absolute paths to directories containing font files
-
-    Returns
-    -------
-    None
+    Args:
+        font_dirs: Absolute paths to directories containing font files
     """
     ...
 
@@ -350,9 +326,7 @@ def current_font_directories() -> list[str]:
     - ``register_font_directory(path)``: append one path.
     - ``set_font_directories(paths)``: replace the full list.
 
-    Returns
-    -------
-    list[str]
+    Returns:
         Absolute paths to the registered font directories.
     """
     ...
@@ -372,9 +346,7 @@ def google_fonts_cache_dir() -> str | None:
     The value is fixed for the lifetime of the process; there is no
     runtime setter.
 
-    Returns
-    -------
-    Optional[str]
+    Returns:
         Absolute path to the Google Fonts cache directory, or ``None``
         if caching is disabled.
     """
@@ -388,9 +360,7 @@ def google_fonts_cache_size_mb() -> int:
     this is the library default (512 MB); subsequent
     ``set_google_fonts_cache_size_mb`` calls overwrite it.
 
-    Returns
-    -------
-    int
+    Returns:
         Active cap in megabytes (always positive).
     """
     ...
@@ -403,11 +373,9 @@ def set_google_fonts_cache_size_mb(max_size_mb: int | None) -> None:
     limit are evicted immediately. Process-global; affects every
     converter in the process.
 
-    Parameters
-    ----------
-    max_size_mb
-        New cap in megabytes; must be >= 1 or ``None``. Passing ``0``
-        raises ``ValueError``.
+    Args:
+        max_size_mb: New cap in megabytes; must be >= 1 or ``None``. Passing ``0``
+            raises ``ValueError``.
     """
     ...
 
@@ -439,105 +407,82 @@ def configure(
     """
     Configure converter worker/access settings used by subsequent conversions.
 
-    Parameters
-    ----------
-    num_workers
-        Worker count (must be >= 1). ``None`` resets to the library default (1).
-        Passing ``0`` raises ``ValueError``.
-    base_url
-        Base URL for resolving relative data paths in Vega specs.
-        ``None`` or ``True`` resets to the default (vega-datasets CDN).
-        ``False`` disables relative path resolution.
-        A string sets a custom base URL or filesystem path.
-    allowed_base_urls
-        CSP-style allowlist for data access (HTTP URLs, filesystem paths).
-        Examples: ``"https:"`` (scheme), ``"https://example.com/"`` (prefix),
-        ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
-        the library default (``["http:", "https:"]``); ``[]`` blocks all
-        network data.
-    auto_google_fonts
-        Automatically download missing fonts from Google Fonts.
-        ``None`` resets to the library default (``False``).
-    embed_local_fonts
-        Embed locally available fonts as base64-encoded data URIs in SVG and HTML
-        output. Does not apply to PDF/PNG/JPEG (which always embed fonts via fontdb).
-        ``None`` resets to the library default (``False``).
-    subset_fonts
-        Subset fonts to only the characters used in the chart. Applies to SVG
-        and HTML output. ``None`` resets to the library default (``True``).
-    missing_fonts
-        Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
-        ``None`` resets to the library default (``"fallback"``).
-    google_fonts
-        Google Fonts to register for all subsequent conversions. Each entry is
-        a family-name string or a dict with ``"family"`` (required) and
-        optionally ``"variants"`` (list of ``(weight, style)`` tuples). Fonts
-        are downloaded and registered on each conversion call.
+    Args:
+        num_workers: Worker count (must be >= 1). ``None`` resets to the library default (1).
+            Passing ``0`` raises ``ValueError``.
+        base_url: Base URL for resolving relative data paths in Vega specs.
+            ``None`` or ``True`` resets to the default (vega-datasets CDN).
+            ``False`` disables relative path resolution.
+            A string sets a custom base URL or filesystem path.
+        allowed_base_urls: CSP-style allowlist for data access (HTTP URLs, filesystem paths).
+            Examples: ``"https:"`` (scheme), ``"https://example.com/"`` (prefix),
+            ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
+            the library default (``["http:", "https:"]``); ``[]`` blocks all
+            network data.
+        auto_google_fonts: Automatically download missing fonts from Google Fonts.
+            ``None`` resets to the library default (``False``).
+        embed_local_fonts: Embed locally available fonts as base64-encoded data URIs in SVG and HTML
+            output. Does not apply to PDF/PNG/JPEG (which always embed fonts via fontdb).
+            ``None`` resets to the library default (``False``).
+        subset_fonts: Subset fonts to only the characters used in the chart. Applies to SVG
+            and HTML output. ``None`` resets to the library default (``True``).
+        missing_fonts: Missing-font behavior: ``"fallback"`` (silent), ``"warn"``, or ``"error"``.
+            ``None`` resets to the library default (``"fallback"``).
+        google_fonts: Google Fonts to register for all subsequent conversions. Each entry is
+            a family-name string or a dict with ``"family"`` (required) and
+            optionally ``"variants"`` (list of ``(weight, style)`` tuples). Fonts
+            are downloaded and registered on each conversion call.
 
-        **Replace semantics.** Each call to ``configure(google_fonts=[...])``
-        **replaces** the full configured list. ``None`` (or ``[]``) resets to
-        the library default (empty list).
-    google_font_variant_threshold
-        Stop admitting additional Google Font families after this many variants
-        have resolved. A single family may cross the threshold. Must be >= 1 if
-        provided. ``None`` resets to the library default (no threshold). Passing
-        ``0`` raises ``ValueError``.
-    max_v8_heap_size_mb
-        Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
-        ``None`` resets to the library default (no cap). Passing ``0`` raises
-        ``ValueError``.
-    max_v8_execution_time_secs
-        Maximum V8 execution time in seconds. Must be >= 1 if provided. When
-        exceeded, V8 execution is terminated and an error is returned.
-        ``None`` resets to the library default (no cap). Passing ``0`` raises
-        ``ValueError``.
-    gc_after_conversion
-        Whether to run V8 garbage collection after each conversion to release
-        memory back to the OS. ``None`` resets to the library default (``False``).
-    vega_plugins
-        List of Vega plugins to load. Each entry is a file path (``.js``/``.mjs``),
-        URL (``https://...``), or inline ESM string. Plugins must be single-entry
-        ESM modules with a default export function accepting a ``vega`` object.
-        Multi-file plugins should be pre-bundled with esbuild or Rollup.
-        URL plugins auto-allow their domain for imports. ``None`` (or ``[]``)
-        resets to the library default (empty list).
-    plugin_import_domains
-        Domain patterns allowed for HTTP imports inside config-level plugins.
-        Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
-        ``None`` (or ``[]``) resets to the library default (empty list;
-        HTTP imports disabled).
-    allow_per_request_plugins
-        Whether to accept per-request plugins via the ``vega_plugin`` parameter
-        on conversion functions. ``None`` resets to the library default (``False``).
-    max_ephemeral_workers
-        Maximum concurrent ephemeral V8 isolates for per-request plugins. Must
-        be >= 1 if provided. ``None`` resets to the library default (2).
-        Passing ``0`` raises ``ValueError``.
-    allow_google_fonts
-        Whether to accept per-request ``google_fonts`` / ``auto_google_fonts``
-        overrides on conversion calls. ``None`` resets to the library default
-        (``False``).
-    per_request_plugin_import_domains
-        Domain patterns allowed for HTTP imports inside per-request plugins.
-        Separate from ``plugin_import_domains``. ``None`` (or ``[]``) resets
-        to the library default (empty list; HTTP imports disabled).
-    default_theme
-        Default named theme (e.g. ``"dark"``) applied to all Vega-Lite conversions.
-        Per-request ``theme`` overrides this if set. ``None`` resets to the
-        library default (no theme).
-    default_format_locale
-        Default d3-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
-        Per-request ``format_locale`` overrides this if set. ``None`` resets
-        to the library default (no locale).
-    default_time_format_locale
-        Default d3-time-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
-        Per-request ``time_format_locale`` overrides this if set. ``None``
-        resets to the library default (no locale).
-    themes
-        Custom named themes mapping names to Vega config objects.
-        Registered alongside built-in vega-themes. Custom themes take
-        priority over built-in themes if names collide. ``None`` (or ``{}``)
-        resets to the library default (empty map).
+            **Replace semantics.** Each call to ``configure(google_fonts=[...])``
+            **replaces** the full configured list. ``None`` (or ``[]``) resets to
+            the library default (empty list).
+        google_font_variant_threshold: Stop admitting additional Google Font families after this many variants
+            have resolved. A single family may cross the threshold. Must be >= 1 if
+            provided. ``None`` resets to the library default (no threshold). Passing
+            ``0`` raises ``ValueError``.
+        max_v8_heap_size_mb: Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
+            ``None`` resets to the library default (no cap). Passing ``0`` raises
+            ``ValueError``.
+        max_v8_execution_time_secs: Maximum V8 execution time in seconds. Must be >= 1 if provided. When
+            exceeded, V8 execution is terminated and an error is returned.
+            ``None`` resets to the library default (no cap). Passing ``0`` raises
+            ``ValueError``.
+        gc_after_conversion: Whether to run V8 garbage collection after each conversion to release
+            memory back to the OS. ``None`` resets to the library default (``False``).
+        vega_plugins: List of Vega plugins to load. Each entry is a file path (``.js``/``.mjs``),
+            URL (``https://...``), or inline ESM string. Plugins must be single-entry
+            ESM modules with a default export function accepting a ``vega`` object.
+            Multi-file plugins should be pre-bundled with esbuild or Rollup.
+            URL plugins auto-allow their domain for imports. ``None`` (or ``[]``)
+            resets to the library default (empty list).
+        plugin_import_domains: Domain patterns allowed for HTTP imports inside config-level plugins.
+            Use ``["*"]`` for any domain, or ``["esm.sh", "*.jsdelivr.net"]``.
+            ``None`` (or ``[]``) resets to the library default (empty list;
+            HTTP imports disabled).
+        allow_per_request_plugins: Whether to accept per-request plugins via the ``vega_plugin`` parameter
+            on conversion functions. ``None`` resets to the library default (``False``).
+        max_ephemeral_workers: Maximum concurrent ephemeral V8 isolates for per-request plugins. Must
+            be >= 1 if provided. ``None`` resets to the library default (2).
+            Passing ``0`` raises ``ValueError``.
+        allow_google_fonts: Whether to accept per-request ``google_fonts`` / ``auto_google_fonts``
+            overrides on conversion calls. ``None`` resets to the library default
+            (``False``).
+        per_request_plugin_import_domains: Domain patterns allowed for HTTP imports inside per-request plugins.
+            Separate from ``plugin_import_domains``. ``None`` (or ``[]``) resets
+            to the library default (empty list; HTTP imports disabled).
+        default_theme: Default named theme (e.g. ``"dark"``) applied to all Vega-Lite conversions.
+            Per-request ``theme`` overrides this if set. ``None`` resets to the
+            library default (no theme).
+        default_format_locale: Default d3-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
+            Per-request ``format_locale`` overrides this if set. ``None`` resets
+            to the library default (no locale).
+        default_time_format_locale: Default d3-time-format locale name (e.g. ``"fr-FR"``) applied to all conversions.
+            Per-request ``time_format_locale`` overrides this if set. ``None``
+            resets to the library default (no locale).
+        themes: Custom named themes mapping names to Vega config objects.
+            Registered alongside built-in vega-themes. Custom themes take
+            priority over built-in themes if names collide. ``None`` (or ``{}``)
+            resets to the library default (empty map).
     """
     ...
 
@@ -549,17 +494,13 @@ def load_config(path: str | None = None) -> None:
     resets all settings to their defaults and then applies the file. Call
     ``configure()`` after ``load_config()`` to override specific fields in code.
 
-    Parameters
-    ----------
-    path
-        Path to the JSONC config file. When omitted, loads from the standard
-        location returned by ``get_config_path()``. If that file does not
-        exist, resets to built-in defaults.
+    Args:
+        path: Path to the JSONC config file. When omitted, loads from the standard
+            location returned by ``get_config_path()``. If that file does not
+            exist, resets to built-in defaults.
 
-    Raises
-    ------
-    ValueError
-        If ``path`` is provided but the file cannot be read or parsed.
+    Raises:
+        ValueError: If ``path`` is provided but the file cannot be read or parsed.
     """
     ...
 
@@ -571,9 +512,7 @@ def get_config_path() -> str:
     and the same path printed by ``vl-convert config-path`` on the CLI.
     The file may not exist.
 
-    Returns
-    -------
-    str
+    Returns:
         Absolute path to the standard JSONC config file.
     """
     ...
@@ -582,9 +521,8 @@ def get_config() -> ConverterConfig:
     """
     Get the active converter worker/access configuration.
 
-    Returns
-    -------
-    Converter configuration dictionary.
+    Returns:
+        Converter configuration dictionary.
     """
     ...
 
@@ -607,9 +545,7 @@ def get_worker_memory_usage() -> list[WorkerMemoryUsage]:
     """
     Get V8 memory usage for each worker in the converter pool.
 
-    Returns
-    -------
-    list[WorkerMemoryUsage]
+    Returns:
         List of dicts with ``worker_index``, ``used_heap_size``,
         ``total_heap_size``, ``heap_size_limit``, and ``external_memory``
         (all sizes in bytes).
@@ -622,18 +558,13 @@ def svg_to_jpeg(
     """
     Convert an SVG image string to JPEG image data.
 
-    Parameters
-    ----------
-    svg
-        SVG image string
-    scale
-        Image scale factor (default 1.0)
-    quality
-        JPEG Quality between 0 (worst) and 100 (best). Default 90
+    Args:
+        svg: SVG image string
+        scale: Image scale factor (default 1.0)
+        quality: JPEG Quality between 0 (worst) and 100 (best). Default 90
 
-    Returns
-    -------
-    JPEG image data.
+    Returns:
+        JPEG image data.
     """
     ...
 
@@ -641,14 +572,11 @@ def svg_to_pdf(svg: str) -> bytes:
     """
     Convert an SVG image string to PDF document data.
 
-    Parameters
-    ----------
-    svg
-        SVG image string
+    Args:
+        svg: SVG image string
 
-    Returns
-    -------
-    PDF document data.
+    Returns:
+        PDF document data.
     """
     ...
 
@@ -658,18 +586,13 @@ def svg_to_png(
     """
     Convert an SVG image string to PNG image data.
 
-    Parameters
-    ----------
-    svg
-        SVG image string
-    scale
-        Image scale factor (default 1.0)
-    ppi
-        Pixels per inch (default 72)
+    Args:
+        svg: SVG image string
+        scale: Image scale factor (default 1.0)
+        ppi: Pixels per inch (default 72)
 
-    Returns
-    -------
-    PNG image data.
+    Returns:
+        PNG image data.
     """
     ...
 
@@ -690,37 +613,25 @@ def vega_to_html(
     """
     Convert a Vega spec to an HTML document, optionally bundling dependencies.
 
-    Parameters
-    ----------
-    vg_spec
-        Vega JSON specification string or dict
-    bundle
-        If True, bundle all dependencies in HTML file.
-        If False (default), HTML file will load dependencies from only CDN
-    google_fonts
-        Google Fonts to use for this conversion. Each entry is a family name
-        string or a dict with ``"family"`` and optional ``"variants"``.
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    renderer
-        Vega renderer. One of 'svg' (default), 'canvas',
-        or 'hybrid' (where text is svg and other marks are canvas)
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    config
-        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    HTML document.
+    Args:
+        vg_spec: Vega JSON specification string or dict
+        bundle: If True, bundle all dependencies in HTML file.
+            If False (default), HTML file will load dependencies from only CDN
+        google_fonts: Google Fonts to use for this conversion. Each entry is a family name
+            string or a dict with ``"family"`` and optional ``"variants"``.
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        renderer: Vega renderer. One of 'svg' (default), 'canvas',
+            or 'hybrid' (where text is svg and other marks are canvas)
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        config: Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        HTML document.
     """
     ...
 
@@ -741,34 +652,22 @@ def vega_to_jpeg(
     """
     Convert a Vega spec to JPEG image data.
 
-    Parameters
-    ----------
-    vg_spec
-        Vega JSON specification string or dict
-    scale
-        Image scale factor (default 1.0)
-    quality
-        JPEG Quality between 0 (worst) and 100 (best). Default 90
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    google_fonts
-        Google Fonts to register for this conversion.
-    config
-        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    JPEG image data.
+    Args:
+        vg_spec: Vega JSON specification string or dict
+        scale: Image scale factor (default 1.0)
+        quality: JPEG Quality between 0 (worst) and 100 (best). Default 90
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        google_fonts: Google Fonts to register for this conversion.
+        config: Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        JPEG image data.
     """
     ...
 
@@ -787,30 +686,20 @@ def vega_to_pdf(
     """
     Convert a Vega spec to PDF format.
 
-    Parameters
-    ----------
-    vg_spec
-        Vega JSON specification string or dict
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    google_fonts
-        Google Fonts to register for this conversion.
-    config
-        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    PDF file bytes.
+    Args:
+        vg_spec: Vega JSON specification string or dict
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        google_fonts: Google Fonts to register for this conversion.
+        config: Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        PDF file bytes.
     """
     ...
 
@@ -831,34 +720,22 @@ def vega_to_png(
     """
     Convert a Vega spec to PNG image data.
 
-    Parameters
-    ----------
-    vg_spec
-        Vega JSON specification string or dict
-    scale
-        Image scale factor (default 1.0)
-    ppi
-        Pixels per inch (default 72)
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    google_fonts
-        Google Fonts to register for this conversion.
-    config
-        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    PNG image data.
+    Args:
+        vg_spec: Vega JSON specification string or dict
+        scale: Image scale factor (default 1.0)
+        ppi: Pixels per inch (default 72)
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        google_fonts: Google Fonts to register for this conversion.
+        config: Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        PNG image data.
     """
     ...
 
@@ -878,33 +755,22 @@ def vega_to_scenegraph(
     """
     Convert a Vega spec to a Vega Scenegraph.
 
-    Parameters
-    ----------
-    vg_spec
-        Vega JSON specification string or dict
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    format
-        Output format: "dict" returns a Python dictionary (default),
-        "msgpack" returns raw MessagePack bytes
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    google_fonts
-        Google Fonts to register for this conversion.
-    config
-        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
+    Args:
+        vg_spec: Vega JSON specification string or dict
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        format: Output format: "dict" returns a Python dictionary (default),
+            "msgpack" returns raw MessagePack bytes
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        google_fonts: Google Fonts to register for this conversion.
+        config: Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
     """
     ...
 
@@ -924,35 +790,24 @@ def vega_to_svg(
     """
     Convert a Vega spec to an SVG image string.
 
-    Parameters
-    ----------
-    vg_spec
-        Vega JSON specification string or dict
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    bundle
-        If True, embed fonts and images as self-contained data URIs.
-        If False (default), use ``@import`` references for Google Fonts.
-    google_fonts
-        Google Fonts to register for this conversion. Each entry is
-        a family-name string or a dict with ``"family"`` (required) and
-        optionally ``"variants"``.
-    config
-        Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    SVG image string.
+    Args:
+        vg_spec: Vega JSON specification string or dict
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        bundle: If True, embed fonts and images as self-contained data URIs.
+            If False (default), use ``@import`` references for Google Fonts.
+        google_fonts: Google Fonts to register for this conversion. Each entry is
+            a family-name string or a dict with ``"family"`` (required) and
+            optionally ``"variants"``.
+        config: Vega config object merged via ``vega.mergeConfig(spec.config, config)``.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        SVG image string.
     """
     ...
 
@@ -960,16 +815,12 @@ def vega_to_url(vg_spec: VlSpec, *, fullscreen: bool | None = None) -> str:
     """
     Convert a Vega spec to a URL that opens the chart in the Vega editor.
 
-    Parameters
-    ----------
-    vg_spec
-        Vega JSON specification string or dict
-    fullscreen
-        Whether to open the chart in full screen in the editor
+    Args:
+        vg_spec: Vega JSON specification string or dict
+        fullscreen: Whether to open the chart in full screen in the editor
 
-    Returns
-    -------
-    URL string.
+    Returns:
+        URL string.
     """
     ...
 
@@ -987,34 +838,23 @@ def vegalite_fonts(
     """
     Return structured font metadata for a rendered Vega-Lite spec.
 
-    Parameters
-    ----------
-    vl_spec
-        Vega-Lite JSON specification string or dict
-    vl_version
-        Vega-Lite library version string (e.g. 'v5.15')
-        (default to latest)
-    config
-        Chart configuration object to apply during conversion
-    theme
-        Named theme (e.g. "dark") to apply during conversion
-    auto_google_fonts
-        Override auto-download from Google Fonts
-        (default: use converter config)
-    include_font_face
-        Whether to run the font subsetting pipeline and populate
-        the ``font_face`` field on each variant (default False)
-    google_fonts
-        Google Fonts to use for this conversion. Each entry is a family name
-        string or a dict with ``"family"`` and optional ``"variants"``.
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
+    Args:
+        vl_spec: Vega-Lite JSON specification string or dict
+        vl_version: Vega-Lite library version string (e.g. 'v5.15')
+            (default to latest)
+        config: Chart configuration object to apply during conversion
+        theme: Named theme (e.g. "dark") to apply during conversion
+        auto_google_fonts: Override auto-download from Google Fonts
+            (default: use converter config)
+        include_font_face: Whether to run the font subsetting pipeline and populate
+            the ``font_face`` field on each variant (default False)
+        google_fonts: Google Fonts to use for this conversion. Each entry is a family name
+            string or a dict with ``"family"`` and optional ``"variants"``.
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
 
-    Returns
-    -------
-    Structured font metadata for each font used by the chart.
+    Returns:
+        Structured font metadata for each font used by the chart.
     """
     ...
 
@@ -1029,27 +869,19 @@ def vega_fonts(
     """
     Return structured font metadata for a rendered Vega spec.
 
-    Parameters
-    ----------
-    vg_spec
-        Vega JSON specification string or dict
-    auto_google_fonts
-        Override auto-download from Google Fonts
-        (default: use converter config)
-    include_font_face
-        Whether to run the font subsetting pipeline and populate
-        the ``font_face`` field on each variant (default False)
-    google_fonts
-        Google Fonts to use for this conversion. Each entry is a family name
-        string or a dict with ``"family"`` and optional ``"variants"``.
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
+    Args:
+        vg_spec: Vega JSON specification string or dict
+        auto_google_fonts: Override auto-download from Google Fonts
+            (default: use converter config)
+        include_font_face: Whether to run the font subsetting pipeline and populate
+            the ``font_face`` field on each variant (default False)
+        google_fonts: Google Fonts to use for this conversion. Each entry is a family name
+            string or a dict with ``"family"`` and optional ``"variants"``.
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
 
-    Returns
-    -------
-    Structured font metadata for each font used by the chart.
+    Returns:
+        Structured font metadata for each font used by the chart.
     """
     ...
 
@@ -1072,42 +904,28 @@ def vegalite_to_html(
     """
     Convert a Vega-Lite spec to an HTML document, optionally bundling dependencies.
 
-    Parameters
-    ----------
-    vl_spec
-        Vega-Lite JSON specification string or dict
-    vl_version
-        Vega-Lite library version string (e.g. 'v5.15')
-        (default to latest)
-    bundle
-        If True, bundle all dependencies in HTML file.
-        If False (default), HTML file will load dependencies from only CDN
-    google_fonts
-        Google Fonts to use for this conversion. Each entry is a family name
-        string or a dict with ``"family"`` and optional ``"variants"``.
-    config
-        Chart configuration object to apply during conversion
-    theme
-        Named theme (e.g. "dark") to apply during conversion
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    renderer
-        Vega renderer. One of 'svg' (default), 'canvas',
-        or 'hybrid' (where text is svg and other marks are canvas)
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    HTML document.
+    Args:
+        vl_spec: Vega-Lite JSON specification string or dict
+        vl_version: Vega-Lite library version string (e.g. 'v5.15')
+            (default to latest)
+        bundle: If True, bundle all dependencies in HTML file.
+            If False (default), HTML file will load dependencies from only CDN
+        google_fonts: Google Fonts to use for this conversion. Each entry is a family name
+            string or a dict with ``"family"`` and optional ``"variants"``.
+        config: Chart configuration object to apply during conversion
+        theme: Named theme (e.g. "dark") to apply during conversion
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        renderer: Vega renderer. One of 'svg' (default), 'canvas',
+            or 'hybrid' (where text is svg and other marks are canvas)
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        HTML document.
     """
     ...
 
@@ -1131,41 +949,26 @@ def vegalite_to_jpeg(
     """
     Convert a Vega-Lite spec to JPEG image data using a particular version of the Vega-Lite JavaScript library.
 
-    Parameters
-    ----------
-    vl_spec
-        Vega-Lite JSON specification string or dict
-    vl_version
-        Vega-Lite library version string (e.g. 'v5.15')
-        (default to latest)
-    scale
-        Image scale factor (default 1.0)
-    quality
-        JPEG Quality between 0 (worst) and 100 (best). Default 90
-    config
-        Chart configuration object to apply during conversion
-    theme
-        Named theme (e.g. "dark") to apply during conversion
-    show_warnings
-        Whether to print Vega-Lite compilation warnings (default false)
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    google_fonts
-        Google Fonts to register for this conversion.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    PDF file bytes.
+    Args:
+        vl_spec: Vega-Lite JSON specification string or dict
+        vl_version: Vega-Lite library version string (e.g. 'v5.15')
+            (default to latest)
+        scale: Image scale factor (default 1.0)
+        quality: JPEG Quality between 0 (worst) and 100 (best). Default 90
+        config: Chart configuration object to apply during conversion
+        theme: Named theme (e.g. "dark") to apply during conversion
+        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        google_fonts: Google Fonts to register for this conversion.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        JPEG image data.
     """
     ...
 
@@ -1186,35 +989,23 @@ def vegalite_to_pdf(
     """
     Convert a Vega-Lite spec to PDF image data using a particular version of the Vega-Lite JavaScript library.
 
-    Parameters
-    ----------
-    vl_spec
-        Vega-Lite JSON specification string or dict
-    vl_version
-        Vega-Lite library version string (e.g. 'v5.15')
-        (default to latest)
-    config
-        Chart configuration object to apply during conversion
-    theme
-        Named theme (e.g. "dark") to apply during conversion
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    google_fonts
-        Google Fonts to register for this conversion.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    PDF image data.
+    Args:
+        vl_spec: Vega-Lite JSON specification string or dict
+        vl_version: Vega-Lite library version string (e.g. 'v5.15')
+            (default to latest)
+        config: Chart configuration object to apply during conversion
+        theme: Named theme (e.g. "dark") to apply during conversion
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        google_fonts: Google Fonts to register for this conversion.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        PDF image data.
     """
     ...
 
@@ -1238,41 +1029,26 @@ def vegalite_to_png(
     """
     Convert a Vega-Lite spec to PNG image data using a particular version of the Vega-Lite JavaScript library.
 
-    Parameters
-    ----------
-    vl_spec
-        Vega-Lite JSON specification string or dict
-    vl_version
-        Vega-Lite library version string (e.g. 'v5.15')
-        (default to latest)
-    scale
-        Image scale factor (default 1.0)
-    ppi
-        Pixels per inch (default 72)
-    config
-        Chart configuration object to apply during conversion
-    theme
-        Named theme (e.g. "dark") to apply during conversion
-    show_warnings
-        Whether to print Vega-Lite compilation warnings (default false)
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    google_fonts
-        Google Fonts to register for this conversion.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    PNG image data.
+    Args:
+        vl_spec: Vega-Lite JSON specification string or dict
+        vl_version: Vega-Lite library version string (e.g. 'v5.15')
+            (default to latest)
+        scale: Image scale factor (default 1.0)
+        ppi: Pixels per inch (default 72)
+        config: Chart configuration object to apply during conversion
+        theme: Named theme (e.g. "dark") to apply during conversion
+        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        google_fonts: Google Fonts to register for this conversion.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        PNG image data.
     """
     ...
 
@@ -1295,40 +1071,26 @@ def vegalite_to_scenegraph(
     """
     Convert a Vega-Lite spec to a Vega Scenegraph using a particular version of the Vega-Lite JavaScript library.
 
-    Parameters
-    ----------
-    vl_spec
-        Vega-Lite JSON specification string or dict
-    vl_version
-        Vega-Lite library version string (e.g. 'v5.15')
-        (default to latest)
-    config
-        Chart configuration object to apply during conversion
-    theme
-        Named theme (e.g. "dark") to apply during conversion
-    show_warnings
-        Whether to print Vega-Lite compilation warnings (default false)
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    format
-        Output format: "dict" returns a Python dictionary (default),
-        "msgpack" returns raw MessagePack bytes
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    google_fonts
-        Google Fonts to register for this conversion.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
+    Args:
+        vl_spec: Vega-Lite JSON specification string or dict
+        vl_version: Vega-Lite library version string (e.g. 'v5.15')
+            (default to latest)
+        config: Chart configuration object to apply during conversion
+        theme: Named theme (e.g. "dark") to apply during conversion
+        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        format: Output format: "dict" returns a Python dictionary (default),
+            "msgpack" returns raw MessagePack bytes
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        google_fonts: Google Fonts to register for this conversion.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        scenegraph as dict (format="dict") or msgpack bytes (format="msgpack")
     """
     ...
 
@@ -1351,40 +1113,26 @@ def vegalite_to_svg(
     """
     Convert a Vega-Lite spec to an SVG image string using a particular version of the Vega-Lite JavaScript library.
 
-    Parameters
-    ----------
-    vl_spec
-        Vega-Lite JSON specification string or dict
-    vl_version
-        Vega-Lite library version string (e.g. 'v5.15')
-        (default to latest)
-    config
-        Chart configuration object to apply during conversion
-    theme
-        Named theme (e.g. "dark") to apply during conversion
-    show_warnings
-        Whether to print Vega-Lite compilation warnings (default false)
-    format_locale
-        d3-format locale name or dictionary
-    time_format_locale
-        d3-time-format locale name or dictionary
-    vega_plugin
-        Per-request Vega plugin (inline ESM string or URL).
-        Requires ``allow_per_request_plugins=True`` in ``configure()``.
-    bundle
-        If True, embed fonts and images as self-contained data URIs.
-        If False (default), use ``@import`` references for Google Fonts.
-    google_fonts
-        Google Fonts to register for this conversion.
-    background
-        Override the spec's background color.
-    width
-        Override the spec's width.
-    height
-        Override the spec's height.
-    Returns
-    -------
-    SVG image string.
+    Args:
+        vl_spec: Vega-Lite JSON specification string or dict
+        vl_version: Vega-Lite library version string (e.g. 'v5.15')
+            (default to latest)
+        config: Chart configuration object to apply during conversion
+        theme: Named theme (e.g. "dark") to apply during conversion
+        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
+        format_locale: d3-format locale name or dictionary
+        time_format_locale: d3-time-format locale name or dictionary
+        vega_plugin: Per-request Vega plugin (inline ESM string or URL).
+            Requires ``allow_per_request_plugins=True`` in ``configure()``.
+        bundle: If True, embed fonts and images as self-contained data URIs.
+            If False (default), use ``@import`` references for Google Fonts.
+        google_fonts: Google Fonts to register for this conversion.
+        background: Override the spec's background color.
+        width: Override the spec's width.
+        height: Override the spec's height.
+
+    Returns:
+        SVG image string.
     """
     ...
 
@@ -1392,16 +1140,12 @@ def vegalite_to_url(vl_spec: VlSpec, *, fullscreen: bool | None = None) -> str:
     """
     Convert a Vega-Lite spec to a URL that opens the chart in the Vega editor.
 
-    Parameters
-    ----------
-    vl_spec
-        Vega-Lite JSON specification string or dict
-    fullscreen
-        Whether to open the chart in full screen in the editor
+    Args:
+        vl_spec: Vega-Lite JSON specification string or dict
+        fullscreen: Whether to open the chart in full screen in the editor
 
-    Returns
-    -------
-    URL string.
+    Returns:
+        URL string.
     """
     ...
 
@@ -1416,23 +1160,16 @@ def vegalite_to_vega(
     """
     Convert a Vega-Lite spec to a Vega spec using a particular version of the Vega-Lite JavaScript library.
 
-    Parameters
-    ----------
-    vl_spec
-        Vega-Lite JSON specification string or dict
-    vl_version
-        Vega-Lite library version string (e.g. 'v5.15')
-        (default to latest)
-    config
-        Chart configuration object to apply during conversion
-    theme
-        Named theme (e.g. "dark") to apply during conversion
-    show_warnings
-        Whether to print Vega-Lite compilation warnings (default false)
+    Args:
+        vl_spec: Vega-Lite JSON specification string or dict
+        vl_version: Vega-Lite library version string (e.g. 'v5.15')
+            (default to latest)
+        config: Chart configuration object to apply during conversion
+        theme: Named theme (e.g. "dark") to apply during conversion
+        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
 
-    Returns
-    -------
-    Vega JSON specification dict.
+    Returns:
+        Vega JSON specification dict.
     """
     ...
 
@@ -1440,9 +1177,8 @@ def get_vega_version() -> str:
     """
     Get the bundled version of Vega
 
-    Returns
-    -------
-    Vega version string (e.g. "5.30.0")
+    Returns:
+        Vega version string (e.g. "5.30.0")
     """
     ...
 
@@ -1450,9 +1186,8 @@ def get_vega_themes_version() -> str:
     """
     Get the bundled version of Vega-Themes
 
-    Returns
-    -------
-    Vega-Themes version string (e.g. "2.14.0")
+    Returns:
+        Vega-Themes version string (e.g. "2.14.0")
     """
     ...
 
@@ -1460,9 +1195,8 @@ def get_vega_embed_version() -> str:
     """
     Get the bundled version of Vega-Embed
 
-    Returns
-    -------
-    Vega-Embed version string (e.g. "6.26.0")
+    Returns:
+        Vega-Embed version string (e.g. "6.26.0")
     """
     ...
 
@@ -1470,9 +1204,8 @@ def get_vegalite_versions() -> list[str]:
     """
     Get the bundled versions of Vega-Lite
 
-    Returns
-    -------
-    Vega-Lite version strings (e.g. ["5.8", "5.9", ..., "5.21"])
+    Returns:
+        Vega-Lite version strings (e.g. ["5.8", "5.9", ..., "5.21"])
     """
     ...
 

@@ -69,9 +69,16 @@ fn api_openapi_router() -> OpenApiRouter<Arc<AppState>> {
         .routes(routes!(bundling::bundle_snippet))
 }
 
-fn merge_health_paths(api: &mut utoipa::openapi::OpenApi, health_api: utoipa::openapi::OpenApi) {
+fn merge_health_openapi(api: &mut utoipa::openapi::OpenApi, health_api: utoipa::openapi::OpenApi) {
     for (path, item) in health_api.paths.paths {
         api.paths.paths.insert(path, item);
+    }
+
+    if let Some(health_components) = health_api.components {
+        api.components
+            .get_or_insert_with(Default::default)
+            .schemas
+            .extend(health_components.schemas);
     }
 }
 
@@ -80,7 +87,7 @@ fn merge_health_paths(api: &mut utoipa::openapi::OpenApi, health_api: utoipa::op
 pub fn public_openapi() -> utoipa::openapi::OpenApi {
     let (_, health_api) = health_openapi_router().split_for_parts();
     let (_, mut api) = api_openapi_router().split_for_parts();
-    merge_health_paths(&mut api, health_api);
+    merge_health_openapi(&mut api, health_api);
     api
 }
 
@@ -99,7 +106,7 @@ pub(crate) fn build_router(
     let (api_router, mut api) = api_openapi_router().split_for_parts();
 
     // Merge health endpoint paths into the API OpenAPI spec.
-    merge_health_paths(&mut api, health_api);
+    merge_health_openapi(&mut api, health_api);
 
     // Serve Swagger UI and the OpenAPI spec.
     let mut api_router =

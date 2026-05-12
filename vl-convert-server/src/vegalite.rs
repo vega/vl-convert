@@ -13,9 +13,9 @@ use vl_convert_rs::module_loader::import_map::VlVersion;
 use crate::accept::{preferred_scenegraph_format, ScenegraphFormat};
 use crate::config::AppState;
 use crate::types::{
-    ErrorResponse, VegaliteCommon, VegaliteFontsRequest, VegaliteHtmlRequest, VegaliteJpegRequest,
-    VegalitePdfRequest, VegalitePngRequest, VegaliteScenegraphRequest, VegaliteSvgRequest,
-    VegaliteUrlRequest, VegaliteVegaRequest,
+    ErrorResponse, FontInfoResponse, VegaliteCommon, VegaliteFontsRequest, VegaliteHtmlRequest,
+    VegaliteJpegRequest, VegalitePdfRequest, VegalitePngRequest, VegaliteScenegraphRequest,
+    VegaliteSvgRequest, VegaliteUrlRequest, VegaliteVegaRequest,
 };
 use crate::util::{
     append_vlc_logs_header, attach_google_font_usage, conversion_error_response, error_response,
@@ -47,7 +47,16 @@ fn build_vl_opts(req: &VegaliteCommon, config: &VlcConfig) -> Result<VlOpts, Str
     path = "/vegalite/vega",
     request_body = VegaliteVegaRequest,
     responses(
-        (status = 200, content_type = "application/json", description = "Vega specification"),
+        (
+            status = 200,
+            body = serde_json::Value,
+            content_type = "application/json",
+            description = "Vega specification",
+            example = json!({
+                "$schema": "https://vega.github.io/schema/vega/v6.json",
+                "marks": []
+            })
+        ),
         (status = 400, body = ErrorResponse, description = "Invalid request"),
         (status = 422, body = ErrorResponse, description = "Conversion failed"),
     ),
@@ -484,7 +493,20 @@ pub async fn vegalite_scenegraph(
     path = "/vegalite/fonts",
     request_body = VegaliteFontsRequest,
     responses(
-        (status = 200, content_type = "application/json", description = "Font information"),
+        (
+            status = 200,
+            body = Vec<FontInfoResponse>,
+            content_type = "application/json",
+            description = "Font information",
+            example = json!([{
+                "name": "Inter",
+                "source": {"type": "google", "font_id": "inter"},
+                "variants": [{"weight": "400", "style": "normal", "font_face": null}],
+                "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400",
+                "link_tag": "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400\">",
+                "import_rule": "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400');"
+            }])
+        ),
         (status = 400, body = ErrorResponse, description = "Invalid request"),
         (status = 422, body = ErrorResponse, description = "Font analysis failed"),
     ),
