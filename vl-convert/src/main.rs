@@ -391,7 +391,7 @@ async fn run_command(
             };
             write_output_string(output.as_deref(), &json)?;
         }
-        Vl2scenegraph {
+        Vl2sg {
             input,
             output,
             vl_version,
@@ -592,7 +592,7 @@ async fn run_command(
             };
             write_output_string(output.as_deref(), &json)?;
         }
-        Vg2scenegraph {
+        Vg2sg {
             input,
             output,
             format_locale,

@@ -325,7 +325,7 @@ pub(crate) enum Commands {
     },
 
     /// Convert a Vega-Lite specification to a Vega scenegraph
-    Vl2scenegraph {
+    Vl2sg {
         /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
         input: Option<String>,
@@ -551,7 +551,7 @@ pub(crate) enum Commands {
     },
 
     /// Convert a Vega specification to a Vega scenegraph
-    Vg2scenegraph {
+    Vg2sg {
         /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
         input: Option<String>,

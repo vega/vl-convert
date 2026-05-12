@@ -29,16 +29,16 @@ fn run_with_stdin(
 }
 
 #[test]
-fn vl2scenegraph_outputs_json() -> Result<(), Box<dyn std::error::Error>> {
+fn vl2sg_outputs_json() -> Result<(), Box<dyn std::error::Error>> {
     initialize();
 
     let mut cmd = vl_convert_cmd()?;
-    cmd.arg("--vlc-config").arg("disabled").arg("vl2scenegraph");
+    cmd.arg("--vlc-config").arg("disabled").arg("vl2sg");
     let output = run_with_stdin(&mut cmd, SIMPLE_VL_SPEC)?;
 
     assert!(
         output.status.success(),
-        "vl2scenegraph failed with status {:?}; stderr:\n{}",
+        "vl2sg failed with status {:?}; stderr:\n{}",
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
@@ -48,14 +48,14 @@ fn vl2scenegraph_outputs_json() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn vg2scenegraph_outputs_msgpack() -> Result<(), Box<dyn std::error::Error>> {
+fn vg2sg_outputs_msgpack() -> Result<(), Box<dyn std::error::Error>> {
     initialize();
 
     let mut cmd = vl_convert_cmd()?;
     let output = cmd
         .arg("--vlc-config")
         .arg("disabled")
-        .arg("vg2scenegraph")
+        .arg("vg2sg")
         .arg("--format")
         .arg("msgpack")
         .arg("-i")
@@ -64,7 +64,7 @@ fn vg2scenegraph_outputs_msgpack() -> Result<(), Box<dyn std::error::Error>> {
 
     assert!(
         output.status.success(),
-        "vg2scenegraph --format msgpack failed with status {:?}; stderr:\n{}",
+        "vg2sg --format msgpack failed with status {:?}; stderr:\n{}",
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
@@ -80,7 +80,7 @@ fn scenegraph_pretty_rejects_msgpack() -> Result<(), Box<dyn std::error::Error>>
     let mut cmd = vl_convert_cmd()?;
     cmd.arg("--vlc-config")
         .arg("disabled")
-        .arg("vl2scenegraph")
+        .arg("vl2sg")
         .arg("--format")
         .arg("msgpack")
         .arg("--pretty");
