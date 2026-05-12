@@ -354,10 +354,7 @@ pub(super) mod tests {
     impl TestHttpServer {
         pub(in crate::converter) fn new(routes: Vec<(&str, TestHttpResponse)>) -> Self {
             let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
-            let addr = match server.server_addr() {
-                tiny_http::ListenAddr::IP(addr) => addr,
-                tiny_http::ListenAddr::Unix(_) => unreachable!("test server binds TCP"),
-            };
+            let addr = server.server_addr().to_ip().expect("test server binds TCP");
 
             let routes = Arc::new(
                 routes
