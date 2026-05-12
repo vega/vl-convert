@@ -12,8 +12,9 @@ use vl_convert_rs::converter::{
 use crate::accept::{preferred_scenegraph_format, ScenegraphFormat};
 use crate::config::AppState;
 use crate::types::{
-    ErrorResponse, VegaCommon, VegaFontsRequest, VegaHtmlRequest, VegaJpegRequest, VegaPdfRequest,
-    VegaPngRequest, VegaScenegraphRequest, VegaSvgRequest, VegaUrlRequest,
+    ErrorResponse, FontInfoResponse, VegaCommon, VegaFontsRequest, VegaHtmlRequest,
+    VegaJpegRequest, VegaPdfRequest, VegaPngRequest, VegaScenegraphRequest, VegaSvgRequest,
+    VegaUrlRequest,
 };
 use crate::util::{
     append_vlc_logs_header, attach_google_font_usage, conversion_error_response, error_response,
@@ -406,7 +407,20 @@ pub async fn vega_scenegraph(
     path = "/vega/fonts",
     request_body = VegaFontsRequest,
     responses(
-        (status = 200, content_type = "application/json", description = "Font information"),
+        (
+            status = 200,
+            body = Vec<FontInfoResponse>,
+            content_type = "application/json",
+            description = "Font information",
+            example = json!([{
+                "name": "Inter",
+                "source": {"type": "google", "font_id": "inter"},
+                "variants": [{"weight": "400", "style": "normal", "font_face": null}],
+                "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400",
+                "link_tag": "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400\">",
+                "import_rule": "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400');"
+            }])
+        ),
         (status = 400, body = ErrorResponse, description = "Invalid request"),
         (status = 422, body = ErrorResponse, description = "Font analysis failed"),
     ),

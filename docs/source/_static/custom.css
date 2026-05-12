@@ -1,0 +1,8 @@
+.bd-content div.highlight,
+.bd-content pre {
+  max-width: 100%;
+}
+
+.sd-card {
+  border-radius: 8px;
+}

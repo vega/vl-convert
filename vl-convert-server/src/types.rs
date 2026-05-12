@@ -343,6 +343,41 @@ pub struct VegaFontsRequest {
     pub include_font_face: bool,
 }
 
+#[derive(Debug, Serialize, ToSchema)]
+pub struct FontVariantResponse {
+    /// CSS font-weight, such as "400" or "700".
+    pub weight: String,
+    /// CSS font-style, usually "normal" or "italic".
+    pub style: String,
+    /// Embedded `@font-face` CSS when requested.
+    pub font_face: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct FontSourceResponse {
+    /// Source discriminator: "google" or "local".
+    #[serde(rename = "type")]
+    pub source_type: String,
+    /// Google Fonts font ID for Google-hosted fonts.
+    pub font_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct FontInfoResponse {
+    /// Font family name.
+    pub name: String,
+    /// Where the font data originates.
+    pub source: FontSourceResponse,
+    /// Weight/style variants used by the chart.
+    pub variants: Vec<FontVariantResponse>,
+    /// Google Fonts CSS2 stylesheet URL for Google-hosted fonts.
+    pub url: Option<String>,
+    /// HTML stylesheet link tag for Google-hosted fonts.
+    pub link_tag: Option<String>,
+    /// CSS import rule for Google-hosted fonts.
+    pub import_rule: Option<String>,
+}
+
 fn default_vl_version_bundle() -> String {
     DEFAULT_VL_VERSION.to_string()
 }
