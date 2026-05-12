@@ -93,6 +93,21 @@ def test_asyncio_smoke_and_sync_parity_shapes():
     run(scenario())
 
 
+def test_asyncio_pdf_rejects_scale_keyword():
+    async def scenario():
+        vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, vl_version="v5_16")
+        svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, vl_version="v5_16")
+
+        with pytest.raises(TypeError):
+            await vlca.vega_to_pdf(vega, scale=2)
+        with pytest.raises(TypeError):
+            await vlca.vegalite_to_pdf(SIMPLE_VL_SPEC, vl_version="v5_16", scale=2)
+        with pytest.raises(TypeError):
+            await vlca.svg_to_pdf(svg, scale=2)
+
+    run(scenario())
+
+
 def test_asyncio_parallel_gather_with_workers():
     async def scenario():
         await vlca.configure(num_workers=4)

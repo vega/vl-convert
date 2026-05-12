@@ -4,7 +4,7 @@ use crate::utils::{
     async_variant_doc, future_into_py_object, handle_show_warnings, parse_json_spec,
     parse_option_format_locale, parse_option_time_format_locale, parse_optional_config,
     parse_spec_to_value_or_string, prefixed_py_error, run_converter_future,
-    run_converter_future_async, warn_if_scale_not_one_for_pdf,
+    run_converter_future_async,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -830,7 +830,6 @@ pub fn vegalite_to_jpeg(
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
-///     scale (float): Image scale factor (default 1.0)
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 ///     vega_plugin (str): Per-request Vega plugin (inline ESM string or URL)
@@ -845,7 +844,6 @@ pub fn vegalite_to_jpeg(
 #[pyo3(signature = (
     vg_spec,
     *,
-    scale=None,
     format_locale=None,
     time_format_locale=None,
     vega_plugin=None,
@@ -857,7 +855,6 @@ pub fn vegalite_to_jpeg(
 ))]
 pub fn vega_to_pdf(
     vg_spec: PyObject,
-    scale: Option<f32>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -867,7 +864,6 @@ pub fn vega_to_pdf(
     width: Option<f32>,
     height: Option<f32>,
 ) -> PyResult<PyObject> {
-    warn_if_scale_not_one_for_pdf(scale)?;
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -907,7 +903,6 @@ pub fn vega_to_pdf(
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
 ///     vl_version (str): Vega-Lite library version string (e.g. 'v5.15')
 ///         (default to latest)
-///     scale (float): Image scale factor (default 1.0)
 ///     config (dict | None): Chart configuration object to apply during conversion
 ///     theme (str | None): Named theme (e.g. "dark") to apply during conversion
 ///     format_locale (str | dict): d3-format locale name or dictionary
@@ -924,7 +919,6 @@ pub fn vega_to_pdf(
     vl_spec,
     *,
     vl_version=None,
-    scale=None,
     config=None,
     theme=None,
     format_locale=None,
@@ -938,7 +932,6 @@ pub fn vega_to_pdf(
 pub fn vegalite_to_pdf(
     vl_spec: PyObject,
     vl_version: Option<&str>,
-    scale: Option<f32>,
     config: Option<PyObject>,
     theme: Option<String>,
     format_locale: Option<PyObject>,
@@ -949,7 +942,6 @@ pub fn vegalite_to_pdf(
     width: Option<f32>,
     height: Option<f32>,
 ) -> PyResult<PyObject> {
-    warn_if_scale_not_one_for_pdf(scale)?;
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -1246,13 +1238,11 @@ pub fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResu
 ///
 /// Args:
 ///     svg (str): SVG image string
-///     scale (float): Image scale factor (default 1.0)
 /// Returns:
 ///     bytes: PDF document data
 #[pyfunction]
-#[pyo3(signature = (svg, *, scale=None))]
-pub fn svg_to_pdf(svg: &str, scale: Option<f32>) -> PyResult<PyObject> {
-    warn_if_scale_not_one_for_pdf(scale)?;
+#[pyo3(signature = (svg))]
+pub fn svg_to_pdf(svg: &str) -> PyResult<PyObject> {
     let svg = svg.to_string();
     let pdf_data = run_converter_future(move |converter| async move {
         converter
@@ -1918,7 +1908,6 @@ pub fn vegalite_to_jpeg_asyncio<'py>(
 #[pyo3(signature = (
     vg_spec,
     *,
-    scale=None,
     format_locale=None,
     time_format_locale=None,
     vega_plugin=None,
@@ -1931,7 +1920,6 @@ pub fn vegalite_to_jpeg_asyncio<'py>(
 pub fn vega_to_pdf_asyncio<'py>(
     py: Python<'py>,
     vg_spec: PyObject,
-    scale: Option<f32>,
     format_locale: Option<PyObject>,
     time_format_locale: Option<PyObject>,
     vega_plugin: Option<String>,
@@ -1941,7 +1929,6 @@ pub fn vega_to_pdf_asyncio<'py>(
     width: Option<f32>,
     height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    warn_if_scale_not_one_for_pdf(scale)?;
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -1978,7 +1965,6 @@ pub fn vega_to_pdf_asyncio<'py>(
     vl_spec,
     *,
     vl_version=None,
-    scale=None,
     config=None,
     theme=None,
     format_locale=None,
@@ -1993,7 +1979,6 @@ pub fn vegalite_to_pdf_asyncio<'py>(
     py: Python<'py>,
     vl_spec: PyObject,
     vl_version: Option<&str>,
-    scale: Option<f32>,
     config: Option<PyObject>,
     theme: Option<String>,
     format_locale: Option<PyObject>,
@@ -2004,7 +1989,6 @@ pub fn vegalite_to_pdf_asyncio<'py>(
     width: Option<f32>,
     height: Option<f32>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    warn_if_scale_not_one_for_pdf(scale)?;
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -2297,13 +2281,8 @@ pub fn svg_to_jpeg_asyncio<'py>(
 
 #[doc = async_variant_doc!("svg_to_pdf")]
 #[pyfunction(name = "svg_to_pdf")]
-#[pyo3(signature = (svg, *, scale=None))]
-pub fn svg_to_pdf_asyncio<'py>(
-    py: Python<'py>,
-    svg: &str,
-    scale: Option<f32>,
-) -> PyResult<Bound<'py, PyAny>> {
-    warn_if_scale_not_one_for_pdf(scale)?;
+#[pyo3(signature = (svg))]
+pub fn svg_to_pdf_asyncio<'py>(py: Python<'py>, svg: &str) -> PyResult<Bound<'py, PyAny>> {
     let svg = svg.to_string();
     run_converter_future_async(
         py,

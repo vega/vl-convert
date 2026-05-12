@@ -335,7 +335,6 @@ mod test_vegalite_to_vega {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::VlOpts;
-    use vl_convert_rs::VlConverter;
 
     #[rstest]
     fn test(
@@ -380,7 +379,6 @@ mod test_vegalite_to_html_no_bundle {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::{HtmlOpts, Renderer, VlOpts};
-    use vl_convert_rs::VlConverter;
 
     #[rstest]
     fn test(
@@ -428,7 +426,6 @@ mod test_vegalite_to_html_bundle {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::{HtmlOpts, Renderer, VlOpts};
-    use vl_convert_rs::VlConverter;
 
     #[rstest]
     fn test(
@@ -475,7 +472,6 @@ mod test_svg {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::VlOpts;
-    use vl_convert_rs::VlConverter;
 
     #[rstest]
     fn test(
@@ -522,7 +518,6 @@ mod test_svg_allowed_base_url {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::{SvgOpts, VgOpts, VlOpts, VlcConfig};
-    use vl_convert_rs::VlConverter;
 
     #[rstest]
     fn test(#[values("circle_binned")] name: &str) {
@@ -609,7 +604,6 @@ mod test_scenegraph {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::VlOpts;
-    use vl_convert_rs::VlConverter;
 
     #[rstest]
     fn test(
@@ -651,7 +645,6 @@ mod test_png_no_theme {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::VlOpts;
-    use vl_convert_rs::VlConverter;
 
     #[rstest(name, scale, dssim_threshold,
         case("circle_binned", 1.0, DEFAULT_THRESHOLD),
@@ -715,7 +708,6 @@ mod test_png_google_fonts {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::{GoogleFontRequest, VlcConfig, VlOpts};
-    use vl_convert_rs::VlConverter;
 
     #[test]
     fn test() {
@@ -754,7 +746,6 @@ mod test_png_theme_config {
     use futures::executor::block_on;
     use serde_json::json;
     use vl_convert_rs::converter::VlOpts;
-    use vl_convert_rs::VlConverter;
 
     #[rstest(name, scale, theme,
     case("circle_binned", 1.0, "dark"),
@@ -910,7 +901,6 @@ mod test_jpeg {
     use crate::*;
     use futures::executor::block_on;
     use vl_convert_rs::converter::VlOpts;
-    use vl_convert_rs::VlConverter;
 
     #[rstest]
     fn test(
@@ -957,7 +947,6 @@ mod test_jpeg {
 mod test_vega_label_transform {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::VlConverter;
 
     #[rstest(name, scale,
         case("label_transform_test", 1.0),
