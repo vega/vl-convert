@@ -34,7 +34,7 @@ Commands:
   vg2html    Convert a Vega specification to an HTML file
   vg2fonts   Return font metadata for a rendered Vega specification
   vg2sg      Convert a Vega specification to a Vega scenegraph
-  javascript-bundle
+  bundle-js
              Produce the JavaScript bundle used by Vega Embed integrations
   svg2png    Convert an SVG image to a PNG image
   svg2jpeg   Convert an SVG image to a JPEG image

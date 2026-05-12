@@ -613,7 +613,7 @@ async fn run_command(
             )
             .await?
         }
-        JavascriptBundle {
+        BundleJs {
             snippet,
             output,
             vl_version,

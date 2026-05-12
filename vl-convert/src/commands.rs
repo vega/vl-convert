@@ -581,7 +581,7 @@ pub(crate) enum Commands {
     },
 
     /// Produce the JavaScript bundle used by Vega Embed integrations
-    JavascriptBundle {
+    BundleJs {
         /// Path to a JavaScript snippet to bundle. Reads from stdin if set to "-"
         #[arg(long)]
         snippet: Option<String>,

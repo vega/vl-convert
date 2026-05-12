@@ -10,12 +10,12 @@ fn javascript_bundle_outputs_default_bundle() -> Result<(), Box<dyn std::error::
     let output = cmd
         .arg("--vlc-config")
         .arg("disabled")
-        .arg("javascript-bundle")
+        .arg("bundle-js")
         .output()?;
 
     assert!(
         output.status.success(),
-        "javascript-bundle failed with status {:?}; stderr:\n{}",
+        "bundle-js failed with status {:?}; stderr:\n{}",
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
@@ -35,14 +35,14 @@ fn javascript_bundle_wraps_snippet() -> Result<(), Box<dyn std::error::Error>> {
     let output = cmd
         .arg("--vlc-config")
         .arg("disabled")
-        .arg("javascript-bundle")
+        .arg("bundle-js")
         .arg("--snippet")
         .arg(snippet.path())
         .output()?;
 
     assert!(
         output.status.success(),
-        "javascript-bundle --snippet failed with status {:?}; stderr:\n{}",
+        "bundle-js --snippet failed with status {:?}; stderr:\n{}",
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
