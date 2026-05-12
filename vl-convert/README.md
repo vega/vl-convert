@@ -190,8 +190,6 @@ Options:
           Named theme provided by the vegaThemes package (e.g. "dark")
   -c, --config <CONFIG>
           Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
-      --scale <SCALE>
-          Image scale factor [default: 1.0]
       --show-warnings
           Whether to show Vega-Lite compilation warnings
       --font-dir <FONT_DIR>
@@ -207,10 +205,10 @@ Options:
 
 ```
 
-For example, convert a Vega-Lite specification file named `in.vl.json` into a PNG file named `out.pdf` with a scale factor of 2.
+For example, convert a Vega-Lite specification file named `in.vl.json` into a PDF file named `out.pdf`.
 
 ```
-$ vl-convert vl2pdf -i ./in.vl.json -o ./out.pdf --scale 2
+$ vl-convert vl2pdf -i ./in.vl.json -o ./out.pdf
 ```
 
 ### vl2url
@@ -340,8 +338,6 @@ Options:
           Path to input Vega file
   -o, --output <OUTPUT>
           Path to output PDF file to be created
-  -s, --scale <SCALE>
-          Image scale factor [default: 1.0]
       --font-dir <FONT_DIR>
           Additional directory to search for fonts
   -a, --allowed-base-url <ALLOWED_BASE_URL>
@@ -354,10 +350,10 @@ Options:
           Print help
 ```
 
-For example, convert a Vega specification file named `in.vg.json` into a PDF file named `out.pdf` with a scale factor of 2.
+For example, convert a Vega specification file named `in.vg.json` into a PDF file named `out.pdf`.
 
 ```plain
-$ vl-convert vg2pdf -i ./in.vg.json -o ./out.pdf --scale 2
+$ vl-convert vg2pdf -i ./in.vg.json -o ./out.pdf
 ```
 
 ### vg2url
@@ -443,7 +439,6 @@ Usage: vl-convert svg2pdf [OPTIONS] --input <INPUT> --output <OUTPUT>
 Options:
   -i, --input <INPUT>        Path to input SVG file
   -o, --output <OUTPUT>      Path to output PDF file to be created
-      --scale <SCALE>        Image scale factor [default: 1.0]
       --font-dir <FONT_DIR>  Additional directory to search for fonts
   -h, --help                 Print help
 ```

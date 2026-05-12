@@ -637,7 +637,7 @@ def svg_to_jpeg(
     """
     ...
 
-def svg_to_pdf(svg: str, *, scale: float | None = None) -> bytes:
+def svg_to_pdf(svg: str) -> bytes:
     """
     Convert an SVG image string to PDF document data.
 
@@ -645,8 +645,6 @@ def svg_to_pdf(svg: str, *, scale: float | None = None) -> bytes:
     ----------
     svg
         SVG image string
-    scale
-        Image scale factor (default 1.0)
 
     Returns
     -------
@@ -777,7 +775,6 @@ def vega_to_jpeg(
 def vega_to_pdf(
     vg_spec: VlSpec,
     *,
-    scale: float | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
@@ -794,8 +791,6 @@ def vega_to_pdf(
     ----------
     vg_spec
         Vega JSON specification string or dict
-    scale
-        Image scale factor (default 1.0)
     format_locale
         d3-format locale name or dictionary
     time_format_locale
@@ -1170,7 +1165,7 @@ def vegalite_to_jpeg(
         Override the spec's height.
     Returns
     -------
-    JPEG image data.
+    PDF file bytes.
     """
     ...
 
@@ -1178,7 +1173,6 @@ def vegalite_to_pdf(
     vl_spec: VlSpec,
     *,
     vl_version: str | None = None,
-    scale: float | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     format_locale: FormatLocale | None = None,
@@ -1199,8 +1193,6 @@ def vegalite_to_pdf(
     vl_version
         Vega-Lite library version string (e.g. 'v5.15')
         (default to latest)
-    scale
-        Image scale factor (default 1.0)
     config
         Chart configuration object to apply during conversion
     theme
@@ -1566,7 +1558,7 @@ if TYPE_CHECKING:
         ) -> bytes:
             """Async version of ``svg_to_jpeg``. See sync function for full documentation."""
             ...
-        async def svg_to_pdf(self, svg: str, *, scale: float | None = None) -> bytes:
+        async def svg_to_pdf(self, svg: str) -> bytes:
             """Async version of ``svg_to_pdf``. See sync function for full documentation."""
             ...
         async def svg_to_png(
@@ -1612,7 +1604,6 @@ if TYPE_CHECKING:
             self,
             vg_spec: VlSpec,
             *,
-            scale: float | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
@@ -1747,7 +1738,6 @@ if TYPE_CHECKING:
             vl_spec: VlSpec,
             *,
             vl_version: str | None = None,
-            scale: float | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             format_locale: FormatLocale | None = None,

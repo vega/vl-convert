@@ -365,6 +365,20 @@ def test_pdf(name, tol, as_dict):
     check_png(png, expected_png, tol=tol, name=f"pdf_vegalite_{name}")
 
 
+def test_pdf_rejects_scale_keyword():
+    vl_version = "v5_8"
+    vl_spec = load_vl_spec("circle_binned")
+    vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
+    svg = vlc.vegalite_to_svg(vl_spec, vl_version=vl_version)
+
+    with pytest.raises(TypeError):
+        vlc.vega_to_pdf(vg_spec, scale=2)
+    with pytest.raises(TypeError):
+        vlc.vegalite_to_pdf(vl_spec, vl_version=vl_version, scale=2)
+    with pytest.raises(TypeError):
+        vlc.svg_to_pdf(svg, scale=2)
+
+
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="Font mismatch on windows")
 def test_locale():
     vl_version = "v5_8"

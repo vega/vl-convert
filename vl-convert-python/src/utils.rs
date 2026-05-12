@@ -221,19 +221,3 @@ pub fn parse_embedded_locale_json(raw: &str, kind: &str) -> PyResult<serde_json:
         PyValueError::new_err(format!("Failed to parse internal {kind} as JSON: {err}"))
     })
 }
-
-pub fn warn_if_scale_not_one_for_pdf(scale: Option<f32>) -> PyResult<()> {
-    if let Some(scale) = scale {
-        if scale != 1.0 {
-            Python::with_gil(|py| -> PyResult<()> {
-                let warnings = py.import("warnings")?;
-                warnings.call_method1(
-                    "warn",
-                    ("The scale argument is no longer supported for PDF export.",),
-                )?;
-                Ok(())
-            })?;
-        }
-    }
-    Ok(())
-}
