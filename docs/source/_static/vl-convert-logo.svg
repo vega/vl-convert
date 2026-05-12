@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">VlConvert logo</title>
+  <defs>
+    <linearGradient id="vlc-blue" x1="14" y1="54" x2="30" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4c78a8"/>
+      <stop offset="1" stop-color="#72b7b2"/>
+    </linearGradient>
+    <linearGradient id="vlc-gold" x1="34" y1="54" x2="56" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f58518"/>
+      <stop offset="1" stop-color="#eeca3b"/>
+    </linearGradient>
+  </defs>
+  <path d="M6 11c0-2.76 2.24-5 5-5h42c2.76 0 5 2.24 5 5v42c0 2.76-2.24 5-5 5H11c-2.76 0-5-2.24-5-5V11Z" fill="#121826"/>
+  <path d="M16 48V31c0-1.16.75-2.18 1.86-2.53L24 26.5V48h-8Z" fill="url(#vlc-blue)"/>
+  <path d="M28 48V22.5c0-1.16.75-2.18 1.86-2.53L36 18v30h-8Z" fill="#54a24b"/>
+  <path d="M40 48V37h8v11h-8Z" fill="url(#vlc-gold)"/>
+  <path d="M33 38 44 23l11 15H33Z" fill="url(#vlc-gold)"/>
+  <path d="M14 52h36" fill="none" stroke="#f8fafc" stroke-width="4" stroke-linecap="round" opacity=".82"/>
+</svg>

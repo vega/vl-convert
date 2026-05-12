@@ -6,3 +6,7 @@
 .sd-card {
   border-radius: 8px;
 }
+
+.navbar-brand.logo img.logo__image {
+  height: 2rem;
+}
