@@ -12,10 +12,11 @@ Server API
 ==========
 
 The public server reference is generated from ``vl-convert serve
---dump-openapi``.
+--dump-openapi=public``.
 
-Admin endpoints are documented on :doc:`/server/admin-api` because they use
-a separate listener and authentication posture.
+The :doc:`/server/admin-api` reference is generated from the admin OpenAPI
+document because those endpoints use a separate listener and authentication
+posture.
 
 .. openapi:: ../_generated/openapi-public.json
    :group:

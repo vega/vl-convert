@@ -27,6 +27,7 @@ CI.yaml
 .agent-ask-threads/
 /docs/build/
 /docs/source/_generated/openapi-public.json
+/docs/source/_generated/openapi-admin.json
 /docs/source/python/
 /docs/source/cli/
 /docs/source/rust/

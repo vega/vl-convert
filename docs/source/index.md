@@ -48,5 +48,5 @@ cli/index
 rust/index
 server/index
 how-it-works
-changelog
+Changelog <https://github.com/vega/vl-convert/releases>
 ```
