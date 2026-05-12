@@ -347,13 +347,14 @@ pub(super) mod tests {
 
     pub(in crate::converter) struct TestHttpServer {
         addr: std::net::SocketAddr,
+        server: Arc<tiny_http::Server>,
         running: Arc<std::sync::atomic::AtomicBool>,
         handle: Option<std::thread::JoinHandle<()>>,
     }
 
     impl TestHttpServer {
         pub(in crate::converter) fn new(routes: Vec<(&str, TestHttpResponse)>) -> Self {
-            let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+            let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").unwrap());
             let addr = server.server_addr().to_ip().expect("test server binds TCP");
 
             let routes = Arc::new(
@@ -365,10 +366,11 @@ pub(super) mod tests {
             let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
             let running_clone = running.clone();
             let routes_clone = routes.clone();
+            let server_clone = server.clone();
 
             let handle = std::thread::spawn(move || {
                 while running_clone.load(std::sync::atomic::Ordering::SeqCst) {
-                    match server.recv_timeout(std::time::Duration::from_millis(100)) {
+                    match server_clone.recv_timeout(std::time::Duration::from_millis(100)) {
                         Ok(Some(request)) => handle_test_http_request(request, &routes_clone),
                         Ok(None) => continue,
                         Err(_) => break,
@@ -378,6 +380,7 @@ pub(super) mod tests {
 
             Self {
                 addr,
+                server,
                 running,
                 handle: Some(handle),
             }
@@ -401,7 +404,7 @@ pub(super) mod tests {
         fn drop(&mut self) {
             self.running
                 .store(false, std::sync::atomic::Ordering::SeqCst);
-            let _ = std::net::TcpStream::connect(self.addr);
+            self.server.unblock();
             if let Some(handle) = self.handle.take() {
                 let _ = handle.join();
             }
