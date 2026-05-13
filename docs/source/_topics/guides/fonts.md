@@ -47,10 +47,13 @@ use vl_convert_rs::{GoogleFontRequest, VlcConfig, VlConverter};
 
 let converter = VlConverter::with_config(VlcConfig {
     auto_google_fonts: true,
-    google_font_variant_threshold: Some(16),
-    google_fonts: vec![GoogleFontRequest::family("Inter")],
+    google_font_variant_threshold: std::num::NonZeroU64::new(16),
+    google_fonts: vec![GoogleFontRequest {
+        family: "Inter".to_string(),
+        variants: None,
+    }],
     ..Default::default()
-});
+})?;
 ```
 ::::
 

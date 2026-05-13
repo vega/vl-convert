@@ -36,8 +36,9 @@ let html_opts = HtmlOpts { bundle: true, ..Default::default() };
 
 ::::{interface} server
 ```bash
-curl -X POST http://localhost:3000/vegalite/html \
+jq -c '{spec: ., bundle: true}' chart.vl.json |
+  curl -X POST http://localhost:3000/vegalite/html \
   -H 'Content-Type: application/json' \
-  --data-binary @chart.vl.json > chart.html
+  --data-binary @- > chart.html
 ```
 ::::

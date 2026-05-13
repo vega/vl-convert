@@ -27,16 +27,22 @@ vl-convert vg2sg --format msgpack --input chart.vg.json --output scenegraph.msgp
 
 
 ::::{interface} rust
+Rust exposes separate methods for JSON and MessagePack scenegraphs.
+
 ```rust
-let output = converter.vegalite_to_scenegraph(spec, Default::default()).await?;
+let json = converter.vegalite_to_scenegraph(spec.clone(), Default::default()).await?;
+let msgpack = converter
+    .vegalite_to_scenegraph_msgpack(spec, Default::default())
+    .await?;
 ```
 ::::
 
 
 ::::{interface} server
 ```bash
-curl -X POST http://localhost:3000/vegalite/scenegraph \
+jq -c '{spec: .}' chart.vl.json |
+  curl -X POST http://localhost:3000/vegalite/scenegraph \
   -H 'Content-Type: application/json' \
-  --data-binary @chart.vl.json > scenegraph.json
+  --data-binary @- > scenegraph.json
 ```
 ::::

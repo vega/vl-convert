@@ -30,13 +30,24 @@ vl-convert bundle-js --snippet snippet.js --output bundled-snippet.js
 
 ::::{interface} rust
 ```rust
-let bundle = converter.javascript_bundle(None, None).await?;
+use vl_convert_rs::{VlConverter, VlVersion};
+
+let converter = VlConverter::new();
+let bundle = converter.get_vegaembed_bundle(VlVersion::default()).await?;
+let bundle_with_snippet = converter
+    .bundle_vega_snippet("console.log(vegaEmbed)", VlVersion::default())
+    .await?;
 ```
 ::::
 
 
 ::::{interface} server
 ```bash
-curl http://localhost:3000/bundling/javascript > vega-embed.js
+curl http://localhost:3000/bundling/bundle > vega-embed.js
+
+curl -X POST http://localhost:3000/bundling/bundle-snippet \
+  -H 'Content-Type: application/json' \
+  --data '{"snippet": "console.log(vegaEmbed)", "vl_version": "6.4"}' \
+  > bundled-snippet.js
 ```
 ::::

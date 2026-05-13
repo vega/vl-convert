@@ -29,15 +29,25 @@ vl-convert vg2fonts --input chart.vg.json --output fonts.json
 
 ::::{interface} rust
 ```rust
-let fonts = converter.vegalite_fonts(spec, Default::default()).await?;
+let fonts = converter
+    .vegalite_fonts(
+        spec,
+        Default::default(),
+        false, // auto_google_fonts
+        false, // embed_local_fonts
+        false, // include_font_face
+        true,  // subset_fonts
+    )
+    .await?;
 ```
 ::::
 
 
 ::::{interface} server
 ```bash
-curl -X POST http://localhost:3000/vegalite/fonts \
+jq -c '{spec: .}' chart.vl.json |
+  curl -X POST http://localhost:3000/vegalite/fonts \
   -H 'Content-Type: application/json' \
-  --data-binary @chart.vl.json
+  --data-binary @-
 ```
 ::::

@@ -70,8 +70,9 @@ vl-convert serve --host 127.0.0.1 --port 3000
 ```
 
 ```bash
-curl -X POST http://127.0.0.1:3000/vegalite/png \
+jq -c '{spec: .}' chart.vl.json |
+  curl -X POST http://127.0.0.1:3000/vegalite/png \
   -H 'Content-Type: application/json' \
-  --data-binary @chart.vl.json > chart.png
+  --data-binary @- > chart.png
 ```
 ::::

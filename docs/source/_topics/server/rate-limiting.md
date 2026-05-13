@@ -29,5 +29,5 @@ vl-convert serve \
   --google-font-cache-miss-penalty-ms 250
 ```
 
-Enable `--trust-proxy=true` only behind a proxy that overwrites forwarded
-client IP headers.
+Enable `--trust-proxy=true` only behind a proxy that strips untrusted forwarded
+client IP headers from incoming requests and re-adds its own trusted header.

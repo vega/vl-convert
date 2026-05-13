@@ -41,8 +41,9 @@ let output = converter.vega_to_svg(spec, VgOpts::default(), Default::default()).
 
 ::::{interface} server
 ```bash
-curl -X POST http://localhost:3000/vega/png \
+jq -c '{spec: .}' chart.vg.json |
+  curl -X POST http://localhost:3000/vega/png \
   -H 'Content-Type: application/json' \
-  --data-binary @chart.vg.json > chart.png
+  --data-binary @- > chart.png
 ```
 ::::

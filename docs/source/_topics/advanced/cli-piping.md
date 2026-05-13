@@ -10,8 +10,9 @@ interfaces: [cli]
 
 # CLI Piping and Config Files
 
-CLI commands accept file paths and `-` for stdin/stdout where binary safety
-allows it.
+CLI conversion commands accept file paths and `-` for stdin/stdout. Binary
+outputs such as PNG, JPEG, PDF, and MessagePack can be written to stdout; in a
+terminal, redirect them to a file or another process.
 
 ```bash
 vl-convert vl2svg --input - --output chart.svg < chart.vl.json

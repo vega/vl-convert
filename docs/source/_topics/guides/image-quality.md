@@ -32,16 +32,23 @@ vl-convert vl2jpeg --quality 90 --input chart.vl.json --output chart.jpg
 ```rust
 use vl_convert_rs::{PngOpts, JpegOpts};
 
-let png_opts = PngOpts { scale: 2.0, ppi: 144.0, ..Default::default() };
-let jpeg_opts = JpegOpts { quality: 90, ..Default::default() };
+let png_opts = PngOpts {
+    scale: Some(2.0),
+    ppi: Some(144.0),
+};
+let jpeg_opts = JpegOpts {
+    scale: Some(2.0),
+    quality: Some(90),
+};
 ```
 ::::
 
 
 ::::{interface} server
 ```bash
-curl -X POST 'http://localhost:3000/vegalite/png?scale=2&ppi=144' \
+jq -c '{spec: ., scale: 2, ppi: 144}' chart.vl.json |
+  curl -X POST http://localhost:3000/vegalite/png \
   -H 'Content-Type: application/json' \
-  --data-binary @chart.vl.json > chart.png
+  --data-binary @- > chart.png
 ```
 ::::

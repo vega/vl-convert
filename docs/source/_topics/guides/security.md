@@ -23,8 +23,8 @@ vlc.configure(allowed_base_urls=["https://data.example.com/"])
 
 ::::{interface} cli
 ```bash
-vl-convert vl2png \
-  --allowed-base-url https://data.example.com/ \
+vl-convert --allowed-base-urls https://data.example.com/ \
+  vl2png \
   --input chart.vl.json --output chart.png
 ```
 ::::
@@ -37,7 +37,7 @@ use vl_convert_rs::{VlcConfig, VlConverter};
 let converter = VlConverter::with_config(VlcConfig {
     allowed_base_urls: vec!["https://data.example.com/".to_string()],
     ..Default::default()
-});
+})?;
 ```
 ::::
 

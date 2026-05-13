@@ -88,10 +88,10 @@ SVG input conversions skip Vega entirely. The SVG is parsed and rendered by
 Rust libraries, then encoded as PNG, JPEG, or PDF depending on the requested
 output.
 
-Scenegraph output is produced in JavaScript from a Vega view. For the binary
-mode, JavaScript serializes the scenegraph with MessagePack and Rust returns the
-resulting bytes. For JSON output, Rust decodes the MessagePack payload into
-JSON before returning it.
+Scenegraph output is produced in JavaScript from a Vega view. JSON scenegraph
+methods return the evaluated scenegraph as structured JSON. MessagePack
+scenegraph methods use a separate path where JavaScript serializes the
+scenegraph with MessagePack and Rust returns the resulting bytes.
 
 ## Canvas 2D
 

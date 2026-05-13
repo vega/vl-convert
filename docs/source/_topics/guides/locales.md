@@ -35,9 +35,11 @@ vl-convert vl2svg \
 
 ::::{interface} rust
 ```rust
+use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VlOpts};
+
 let opts = VlOpts {
-    format_locale: Some("de-DE".into()),
-    time_format_locale: Some("de-DE".into()),
+    format_locale: Some(FormatLocale::Name("de-DE".to_string())),
+    time_format_locale: Some(TimeFormatLocale::Name("de-DE".to_string())),
     ..Default::default()
 };
 ```
@@ -46,8 +48,9 @@ let opts = VlOpts {
 
 ::::{interface} server
 ```bash
-curl -X POST 'http://localhost:3000/vegalite/svg?format_locale=de-DE' \
+jq -c '{spec: ., format_locale: "de-DE", time_format_locale: "de-DE"}' chart.vl.json |
+  curl -X POST http://localhost:3000/vegalite/svg \
   -H 'Content-Type: application/json' \
-  --data-binary @chart.vl.json
+  --data-binary @-
 ```
 ::::

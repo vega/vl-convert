@@ -44,8 +44,9 @@ let png = converter.vegalite_to_png(spec, VlOpts::default(), Default::default())
 
 ::::{interface} server
 ```bash
-curl -X POST http://localhost:3000/vegalite/svg \
+jq -c '{spec: .}' chart.vl.json |
+  curl -X POST http://localhost:3000/vegalite/svg \
   -H 'Content-Type: application/json' \
-  --data-binary @chart.vl.json > chart.svg
+  --data-binary @- > chart.svg
 ```
 ::::

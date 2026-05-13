@@ -16,9 +16,9 @@ Create one `VlConverter` and reuse it for related conversion work.
 use vl_convert_rs::{VlcConfig, VlConverter};
 
 let converter = VlConverter::with_config(VlcConfig {
-    num_workers: 4,
+    num_workers: std::num::NonZeroU64::new(4).unwrap(),
     ..Default::default()
-});
+})?;
 ```
 
 `VlcConfig` controls worker count, data access, fonts, themes, plugins, and

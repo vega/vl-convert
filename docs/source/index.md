@@ -4,8 +4,7 @@ VlConvert converts Vega-Lite, Vega, and SVG inputs to static output formats
 through Python, CLI, Rust, and HTTP server interfaces.
 
 Choose the documentation root that matches the boundary where you use
-VlConvert. Pages are rendered independently for each interface, while shared
-concepts are authored once in the docs source.
+VlConvert.
 
 ::::{grid} 1 2 2 4
 :gutter: 2
