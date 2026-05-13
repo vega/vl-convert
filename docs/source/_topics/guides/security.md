@@ -11,7 +11,8 @@ interfaces: [python, cli, rust, server]
 # Security and Network Access
 
 Configure data access explicitly when specs come from users or untrusted
-systems.
+systems. `allowed_base_urls` applies to Vega data loading; plugin imports and
+Google Fonts downloads have separate controls.
 
 ::::{interface} python
 ```python
@@ -50,5 +51,6 @@ vl-convert serve \
 ```
 
 See {doc}`/server/authentication` and {doc}`/server/rate-limiting` for
-server-specific controls.
+server-specific controls. See {doc}`/server/guides/plugins` and
+{doc}`/server/guides/fonts` for plugin and Google Fonts controls.
 ::::

@@ -10,7 +10,9 @@ interfaces: [python, cli, rust, server]
 
 # Themes
 
-Use built-in Vega themes or register custom theme config.
+Themes are Vega config objects applied during Vega-Lite compilation. Built-in
+themes come from `vega-themes`; custom themes are registered by name and can
+override built-ins with the same name.
 
 ::::{interface} python
 ```python
@@ -18,6 +20,14 @@ import vl_convert as vlc
 
 themes = vlc.get_themes()
 svg = vlc.vegalite_to_svg(vl_spec, theme="dark")
+
+vlc.configure(themes={
+    "brand": {
+        "background": "white",
+        "axis": {"labelFont": "Inter", "titleFont": "Inter"},
+    }
+})
+svg = vlc.vegalite_to_svg(vl_spec, theme="brand")
 ```
 ::::
 
@@ -26,16 +36,31 @@ svg = vlc.vegalite_to_svg(vl_spec, theme="dark")
 vl-convert ls-themes
 vl-convert cat-theme dark
 vl-convert vl2svg --theme dark --input chart.vl.json --output chart.svg
+
+vl-convert --themes themes.jsonc \
+  vl2svg --theme brand --input chart.vl.json --output chart.svg
 ```
 ::::
 
 
 ::::{interface} rust
 ```rust
-use vl_convert_rs::{VlConverter, VlOpts};
+use std::collections::HashMap;
+use vl_convert_rs::{VlConverter, VlcConfig, VlOpts};
+
+let converter = VlConverter::with_config(VlcConfig {
+    themes: HashMap::from([(
+        "brand".to_string(),
+        serde_json::json!({
+            "background": "white",
+            "axis": {"labelFont": "Inter", "titleFont": "Inter"}
+        }),
+    )]),
+    ..Default::default()
+})?;
 
 let opts = VlOpts {
-    theme: Some("dark".to_string()),
+    theme: Some("brand".to_string()),
     ..Default::default()
 };
 ```
@@ -45,5 +70,26 @@ let opts = VlOpts {
 ::::{interface} server
 ```bash
 curl http://localhost:3000/themes
+
+curl http://localhost:3000/themes/dark
+
+vl-convert --themes themes.jsonc serve \
+  --host 127.0.0.1 \
+  --port 3000
 ```
 ::::
+
+`themes.jsonc` is a JSON object whose keys are theme names and whose values are
+Vega config objects:
+
+```json
+{
+  "brand": {
+    "background": "white",
+    "axis": {
+      "labelFont": "Inter",
+      "titleFont": "Inter"
+    }
+  }
+}
+```

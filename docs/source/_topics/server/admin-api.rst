@@ -32,6 +32,31 @@ socket. TCP admin listeners on non-loopback addresses require
 ``--admin-api-key``; loopback and Unix domain socket listeners can also use it
 as a redundant guard.
 
+Admin Config Schema
+-------------------
+
+``GET /admin/config`` returns the active converter configuration. ``PATCH
+/admin/config`` updates selected fields, and ``PUT /admin/config`` replaces the
+converter configuration.
+
+``PATCH`` uses three states:
+
+- Omitted field: keep the current value.
+- JSON value: set the field.
+- ``null``: clear nullable fields such as ``default_theme`` or
+  ``max_v8_heap_size_mb``. ``null`` is rejected for non-nullable fields such as
+  ``num_workers``, ``base_url``, ``allowed_base_urls``, and ``themes``.
+
+``PUT`` is a full replacement. Non-nullable fields must be present with valid
+values. Nullable fields may be ``null``.
+
+The config request bodies use the same field names as the JSONC config file.
+``base_url`` accepts ``true`` for the Vega datasets default, ``false`` to
+disable relative data loading, or a URL/path string. ``allowed_base_urls`` is a
+list of CSP-style allowlist patterns; use ``[]`` to block data fetches. The
+OpenAPI schema below lists ``ConfigPatch``, ``ConfigReplace``, and
+``ConfigView`` for the full field set.
+
 The reference below is generated from ``vl-convert serve --dump-openapi=admin``.
 
 .. openapi:: ../_generated/openapi-admin.json

@@ -10,8 +10,9 @@ interfaces: [python]
 
 # Python Async API
 
-The `vl_convert.asyncio` module mirrors the sync Python API with awaitable
-functions.
+The `vl_convert.asyncio` module mirrors conversion and converter-state
+functions with awaitable versions. Static metadata helpers such as bundled
+Vega and Vega-Lite version constants remain synchronous.
 
 ```python
 import asyncio

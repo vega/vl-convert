@@ -10,7 +10,8 @@ interfaces: [python, cli, rust, server]
 
 # Converting Vega
 
-Use Vega inputs when the specification is already compiled to Vega.
+Use Vega inputs when upstream code already compiled Vega-Lite or authored Vega
+directly. This skips the Vega-Lite compiler and renders the Vega spec as-is.
 
 ::::{interface} python
 ```python

@@ -22,5 +22,6 @@ let converter = VlConverter::with_config(VlcConfig {
 ```
 
 `VlcConfig` controls worker count, data access, fonts, themes, plugins, and
-V8 limits. Full Rust API documentation lives on
+V8 limits. See {doc}`/rust/advanced/configuration` for the shared config shape.
+Full Rust API documentation lives on
 [docs.rs](https://docs.rs/vl-convert-rs/latest/vl_convert_rs/).

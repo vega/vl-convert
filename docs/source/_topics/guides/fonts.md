@@ -10,8 +10,17 @@ interfaces: [python, cli, rust, server]
 
 # Fonts and Google Fonts
 
-VlConvert uses local system fonts by default and can fetch Google Fonts when
-configured to do so.
+vl-convert starts with its built-in font baseline plus registered font
+directories and system fonts. Configured Google Fonts are overlaid for the
+conversion that needs them, then removed from the worker's font database. When
+`auto_google_fonts` is enabled, vl-convert inspects the spec's first-choice font
+families and downloads matching Google Fonts as needed.
+
+If a first-choice family is not available locally and is not provided by Google
+Fonts, `missing_fonts` controls whether vl-convert falls back silently, logs a
+warning, or returns an error. `allowed_base_urls` controls data loading from
+Vega specs; Google Fonts downloads are controlled by the font options here and
+by the server budget controls.
 
 ::::{interface} python
 `register_font_directory()` and `configure()` update the Python process
@@ -71,3 +80,18 @@ vl-convert serve \
 
 See {doc}`/server/rate-limiting` for public server controls.
 ::::
+
+## Font Embedding
+
+HTML and SVG output can embed local fonts with `embed_local_fonts`. Embedded
+fonts are subset by default, so the output contains only the glyphs used by the
+chart. PNG, JPEG, and PDF rendering use the registered font database during
+rendering and do not need CSS `@font-face` output.
+
+## Public Server Controls
+
+For public endpoints that allow automatic Google Fonts, set both
+`google_font_variant_threshold` and `google_font_cache_miss_penalty_ms`. The
+variant threshold stops admitting additional font families after enough variants
+have been resolved; the cache-miss penalty charges request budget for work that
+misses the local Google Fonts cache, including missing-family probes.

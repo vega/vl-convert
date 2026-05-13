@@ -10,8 +10,9 @@ interfaces: [python, cli, rust, server]
 
 # Locales
 
-Pass d3-format and d3-time-format locale names or locale JSON where the
-surface accepts locale overrides.
+Locale overrides are passed to Vega and Vega-Lite's d3-format and
+d3-time-format hooks. Use built-in locale names, inline locale JSON, or JSONC
+locale files where the surface accepts them.
 
 ::::{interface} python
 ```python

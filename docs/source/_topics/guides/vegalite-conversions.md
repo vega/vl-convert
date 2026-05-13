@@ -10,7 +10,8 @@ interfaces: [python, cli, rust, server]
 
 # Converting Vega-Lite
 
-Use Vega-Lite inputs when the source specification uses the Vega-Lite schema.
+Start from Vega-Lite when you want vl-convert to run the Vega-Lite compiler and
+then render or evaluate the compiled Vega spec.
 
 ::::{interface} python
 ```python

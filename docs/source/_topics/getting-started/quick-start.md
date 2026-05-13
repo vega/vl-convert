@@ -63,7 +63,9 @@ std::fs::write("chart.png", output.data)?;
 
 
 ::::{interface} server
-The HTTP endpoint returns the rendered PNG bytes in the response body.
+The HTTP endpoint accepts a JSON request object with a `spec` field and returns
+the rendered PNG bytes in the response body. The examples use `jq` to wrap a
+plain Vega-Lite file in that request shape.
 
 ```bash
 vl-convert serve --host 127.0.0.1 --port 3000

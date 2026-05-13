@@ -10,8 +10,8 @@ interfaces: [python, cli, rust, server]
 
 # Converting SVG
 
-Use SVG inputs when Vega has already produced SVG or another tool owns SVG
-generation.
+SVG conversions skip Vega and V8. Use them for post-processing existing SVG or
+rendering SVG produced by another tool.
 
 ::::{interface} python
 ```python
