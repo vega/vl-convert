@@ -13,7 +13,7 @@ interfaces: [python, cli, rust, server]
 Convert a Vega-Lite specification to PNG.
 
 ::::{interface} python
-Conversion functions return bytes. Write the result to a file, send it in a
+`vegalite_to_png()` returns PNG bytes. Write the result to a file, send it in a
 response, or pass it to another Python library.
 
 ```python
@@ -32,6 +32,8 @@ png = vlc.vegalite_to_png(spec, scale=2)
 with open("chart.png", "wb") as f:
     f.write(png)
 ```
+
+For process-wide defaults, see {doc}`/python/advanced/configuration`.
 ::::
 
 ::::{interface} cli
@@ -45,6 +47,9 @@ vl-convert vl2png --input chart.vl.json --output chart.png --scale 2
 ```bash
 vl-convert vl2png --input - --output - < chart.vl.json > chart.png
 ```
+
+For config files, environment variables, and global flags, see
+{doc}`/cli/advanced/configuration`.
 ::::
 
 
@@ -59,6 +64,8 @@ let converter = VlConverter::new();
 let output = converter.vegalite_to_png(spec, VlOpts::default(), Default::default()).await?;
 std::fs::write("chart.png", output.data)?;
 ```
+
+For `VlcConfig` fields and defaults, see {doc}`/rust/advanced/configuration`.
 ::::
 
 
@@ -77,4 +84,7 @@ jq -c '{spec: .}' chart.vl.json |
   -H 'Content-Type: application/json' \
   --data-binary @- > chart.png
 ```
+
+For server startup config and runtime config updates, see
+{doc}`/server/advanced/configuration`.
 ::::

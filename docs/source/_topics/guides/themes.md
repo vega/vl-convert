@@ -14,6 +14,9 @@ Themes are Vega config objects applied during Vega-Lite compilation. Built-in
 themes come from `vega-themes`; custom themes are registered by name and can
 override built-ins with the same name.
 
+For persistent theme defaults and config-file loading, see
+{doc}`../advanced/configuration`.
+
 ::::{interface} python
 ```python
 import vl_convert as vlc
@@ -63,6 +66,8 @@ let opts = VlOpts {
     theme: Some("brand".to_string()),
     ..Default::default()
 };
+
+let output = converter.vegalite_to_svg(spec, opts, Default::default()).await?;
 ```
 ::::
 

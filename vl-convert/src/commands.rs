@@ -90,11 +90,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -136,11 +136,11 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -178,11 +178,11 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "90")]
         quality: u8,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -212,11 +212,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -266,11 +266,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -308,11 +308,11 @@ pub(crate) enum Commands {
         #[arg(long = "include-font-face")]
         include_font_face: bool,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -346,11 +346,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -376,11 +376,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -410,11 +410,11 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -440,11 +440,11 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "90")]
         quality: u8,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -462,11 +462,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -504,11 +504,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -534,11 +534,11 @@ pub(crate) enum Commands {
         #[arg(long = "include-font-face")]
         include_font_face: bool,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -560,11 +560,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 

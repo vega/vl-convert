@@ -14,6 +14,9 @@ Configure data access explicitly when specs come from users or untrusted
 systems. `allowed_base_urls` applies to Vega data loading; plugin imports and
 Google Fonts downloads have separate controls.
 
+For config-file and environment-variable forms of these settings, see
+{doc}`../advanced/configuration`.
+
 ::::{interface} python
 ```python
 import vl_convert as vlc

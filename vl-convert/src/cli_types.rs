@@ -242,7 +242,7 @@ pub(crate) struct Cli {
     #[arg(
         long,
         global = true,
-        value_name = "LOCALE|JSON|FILE.json|null",
+        value_name = "LOCALE|JSON|FILE.json|FILE.jsonc|null",
         env = "VLC_DEFAULT_FORMAT_LOCALE"
     )]
     pub(crate) default_format_locale: Option<String>,
@@ -254,7 +254,7 @@ pub(crate) struct Cli {
     #[arg(
         long,
         global = true,
-        value_name = "LOCALE|JSON|FILE.json|null",
+        value_name = "LOCALE|JSON|FILE.json|FILE.jsonc|null",
         env = "VLC_DEFAULT_TIME_FORMAT_LOCALE"
     )]
     pub(crate) default_time_format_locale: Option<String>,
@@ -265,7 +265,7 @@ pub(crate) struct Cli {
     #[arg(
         long,
         global = true,
-        value_name = "JSON|FILE.json|null",
+        value_name = "JSON|FILE.json|FILE.jsonc|null",
         env = "VLC_THEMES"
     )]
     pub(crate) themes: Option<String>,

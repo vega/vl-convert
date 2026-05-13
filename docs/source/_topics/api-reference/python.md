@@ -11,6 +11,13 @@ interfaces: [python]
 # Python API
 
 The Python reference is generated from `vl-convert-python/vl_convert.pyi`.
+Vega and Vega-Lite specs may be passed as JSON strings or Python dictionaries.
+PNG, JPEG, and PDF conversion functions return `bytes`; SVG, HTML, and URL
+functions return `str`. Scenegraph functions return a Python `dict` by default,
+or MessagePack `bytes` with `format="msgpack"`.
+
+Use `vl_convert.asyncio` for awaitable conversion, configuration, font, and
+diagnostics functions with the same parameter and return shapes.
 
 ## Vega-Lite Conversions
 

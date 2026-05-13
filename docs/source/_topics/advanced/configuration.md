@@ -97,11 +97,17 @@ vl-convert serve \
 `--vlc-config`, Python `load_config()`, and Rust-side config loading use the
 same JSONC shape. Comments and trailing commas are accepted.
 
+This example is a hardened application config, not a list of library defaults.
+In particular, the library default `base_url` is `true` and the default
+`allowed_base_urls` permits HTTP and HTTPS data URLs.
+
 ```json
 {
   // Worker and data-access defaults.
   "num_workers": 4,
+  // default: true; false disables relative data loading
   "base_url": false,
+  // default: ["http:", "https:"]; [] blocks data fetches
   "allowed_base_urls": [],
 
   // Font behavior.
@@ -140,6 +146,24 @@ relative data loading, or a URL/path string. `allowed_base_urls` is an allowlist
 of CSP-style patterns; use `[]` in JSONC to block data fetches and `["*"]` only
 for trusted inputs.
 
+CLI flags and environment variables use a compact Google Fonts shorthand:
+`Inter:400,700italic` is equivalent to a config entry with explicit variants:
+
+```json
+{
+  "family": "Inter",
+  "variants": [
+    {"weight": 400, "style": "normal"},
+    {"weight": 700, "style": "italic"}
+  ]
+}
+```
+
+The same variant information has surface-specific syntax: Python uses tuple
+variants such as `{"family": "Inter", "variants": [(400, "normal")]}`;
+JSONC config and the admin API use `{"weight": 400, "style": "normal"}`
+objects; CLI flags and environment variables use the compact string form above.
+
 ## Environment Variables
 
 Most CLI and server flags have `VLC_*` environment variable equivalents. The
@@ -162,13 +186,21 @@ most commonly useful converter variables are:
 | `VLC_PLUGIN_IMPORT_DOMAINS` | Semicolon-separated HTTP import domains for config-level plugins. |
 | `VLC_LOG_LEVEL`, `VLC_LOG_FORMAT`, `VLC_LOG_FILTER` | Logging defaults. |
 
-Server-only variables include `VLC_HOST`, `VLC_PORT`, `VLC_UNIX_SOCKET`,
-`VLC_API_KEY`, `VLC_ADMIN_HOST`, `VLC_ADMIN_PORT`, `VLC_ADMIN_API_KEY`,
-`VLC_MAX_CONCURRENT_REQUESTS`, `VLC_REQUEST_TIMEOUT_SECS`,
-`VLC_MAX_BODY_SIZE_MB`, `VLC_PER_IP_BUDGET_MS`, `VLC_GLOBAL_BUDGET_MS`,
-`VLC_GOOGLE_FONT_CACHE_MISS_PENALTY_MS`, `VLC_CORS_ORIGIN`, and
-`VLC_TRUST_PROXY`. `PORT` is also honored by common hosting platforms when the
-server port is otherwise unset.
+Common server-only variables are:
+
+| Variable | Purpose |
+| --- | --- |
+| `VLC_HOST`, `VLC_PORT`, `VLC_UNIX_SOCKET` | Main listener binding. |
+| `VLC_WORKERS` | Persistent converter worker count for `serve`. |
+| `VLC_API_KEY` | Bearer token for the main listener. |
+| `VLC_ADMIN_HOST`, `VLC_ADMIN_PORT`, `VLC_ADMIN_API_KEY` | Admin listener binding and bearer token. |
+| `VLC_MAX_CONCURRENT_REQUESTS`, `VLC_REQUEST_TIMEOUT_SECS`, `VLC_MAX_BODY_SIZE_MB` | Request admission and body limits. |
+| `VLC_DRAIN_TIMEOUT_SECS`, `VLC_RECONFIG_DRAIN_TIMEOUT_SECS` | Graceful shutdown and reconfiguration drain windows. |
+| `VLC_PER_IP_BUDGET_MS`, `VLC_GLOBAL_BUDGET_MS`, `VLC_GOOGLE_FONT_CACHE_MISS_PENALTY_MS` | Request budget controls. |
+| `VLC_CORS_ORIGIN`, `VLC_TRUST_PROXY` | Browser and reverse-proxy controls. |
+
+`PORT` is also honored by common hosting platforms when the server port is
+otherwise unset.
 
 `VL_CONVERT_FONT_CACHE_DIR` controls the Google Fonts cache directory at the
 Google Fonts crate layer; set it to `none` to disable that on-disk cache.

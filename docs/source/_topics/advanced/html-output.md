@@ -30,6 +30,9 @@ vl-convert vl2html --bundle --input chart.vl.json --output chart.html
 use vl_convert_rs::HtmlOpts;
 
 let html_opts = HtmlOpts { bundle: true, ..Default::default() };
+let output = converter
+    .vegalite_to_html(spec, Default::default(), html_opts)
+    .await?;
 ```
 ::::
 

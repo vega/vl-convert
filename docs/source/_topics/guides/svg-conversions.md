@@ -42,8 +42,9 @@ let output = converter.svg_to_png(svg, Default::default()).await?;
 
 ::::{interface} server
 ```bash
-curl -X POST http://localhost:3000/svg/png \
-  -H 'Content-Type: image/svg+xml' \
-  --data-binary @chart.svg > chart.png
+jq -Rs '{svg: .}' chart.svg |
+  curl -X POST http://localhost:3000/svg/png \
+  -H 'Content-Type: application/json' \
+  --data-binary @- > chart.png
 ```
 ::::

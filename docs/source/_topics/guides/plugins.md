@@ -24,6 +24,8 @@ scale.
 
 A plugin is a JavaScript ESM module with a default export. VlConvert calls that
 function with the Vega module object before parsing specs that use the plugin.
+For persistent plugin config, environment variables, and config files, see
+{doc}`../advanced/configuration`.
 
 ```javascript
 export default function registerPlugin(vega) {
@@ -142,18 +144,10 @@ vl-convert --vega-plugin ./acme-vega-plugin.js \
 ```
 
 ```bash
-python - <<'PY' > request.json
-import json
-
-with open("chart.vl.json") as f:
-    print(json.dumps({"spec": json.load(f)}))
-PY
-```
-
-```bash
+jq -c '{spec: .}' chart.vl.json |
 curl -X POST http://127.0.0.1:3000/vegalite/png \
   -H 'Content-Type: application/json' \
-  --data-binary @request.json > chart.png
+  --data-binary @- > chart.png
 ```
 ::::
 
@@ -394,18 +388,19 @@ vl-convert serve \
 ```
 
 ```bash
+jq -n '{
+  spec: {
+    "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+    data: {values: [{x: 1}]},
+    transform: [{calculate: "answer()", as: "y"}],
+    mark: "text",
+    encoding: {text: {field: "y", type: "quantitative"}}
+  },
+  vega_plugin: "export default function(vega) { vega.expressionFunction(\"answer\", () => 42); }"
+}' |
 curl -X POST http://127.0.0.1:3000/vegalite/svg \
   -H 'Content-Type: application/json' \
-  --data '{
-    "spec": {
-      "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-      "data": {"values": [{"x": 1}]},
-      "transform": [{"calculate": "answer()", "as": "y"}],
-      "mark": "text",
-      "encoding": {"text": {"field": "y", "type": "quantitative"}}
-    },
-    "vega_plugin": "export default function(vega) { vega.expressionFunction(\"answer\", () => 42); }"
-  }'
+  --data-binary @-
 ```
 
 If per-request plugins import from HTTP URLs, configure

@@ -178,6 +178,10 @@ inputs and outputs to their host environment:
 Because all surfaces share the same Rust converter, most behavior differences
 come from I/O shape rather than conversion semantics.
 
+The server does not cache rendered chart outputs. Put HTTP caching or an
+application cache in front of it when identical specs are rendered repeatedly;
+the built-in caches are for runtime assets such as Google Fonts.
+
 ## Notable Crates
 
 | Area | Crates | Role |

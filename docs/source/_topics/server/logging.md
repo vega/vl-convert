@@ -1,5 +1,5 @@
 ---
-title: Server Logging
+title: Request Log Fields
 path: logging
 section: Server
 order: 440
@@ -8,7 +8,7 @@ interfaces: [server]
 
 <!-- topic-body -->
 
-# Server Logging
+# Request Log Fields
 
 Use JSON logs for container and production deployments.
 

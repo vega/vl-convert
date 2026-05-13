@@ -22,6 +22,9 @@ warning, or returns an error. `allowed_base_urls` controls data loading from
 Vega specs; Google Fonts downloads are controlled by the font options here and
 by the server budget controls.
 
+For persistent config files, environment variables, and process-wide defaults,
+see {doc}`../advanced/configuration`.
+
 ::::{interface} python
 `register_font_directory()` and `configure()` update the Python process
 configuration used by later conversions.

@@ -22,6 +22,9 @@ need both larger pixels and non-default PPI metadata. JPEG uses `scale` and
 `quality`; `quality` is `0..100` and defaults to `90`. PDF output is vector
 output and does not use scale.
 
+For process-wide defaults and config files, see
+{doc}`../advanced/configuration`.
+
 ::::{interface} python
 ```python
 png = vlc.vegalite_to_png(vl_spec, scale=2, width=640, height=360)
@@ -57,6 +60,11 @@ let jpeg_opts = JpegOpts {
     scale: Some(2.0),
     quality: Some(90),
 };
+
+let png = converter
+    .vegalite_to_png(spec.clone(), vl_opts.clone(), png_opts)
+    .await?;
+let jpeg = converter.vegalite_to_jpeg(spec, vl_opts, jpeg_opts).await?;
 ```
 ::::
 
