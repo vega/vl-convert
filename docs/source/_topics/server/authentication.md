@@ -10,68 +10,89 @@ interfaces: [server]
 
 # Authentication
 
-The main listener and admin listener have independent bearer-token settings.
-Use `--api-key` for public conversion routes and `--admin-api-key` for admin
-routes.
+VlConvert supports one bearer token for the main listener and a separate token
+for the admin listener. This is suitable for service-to-service access. Put a
+gateway in front of VlConvert when you need user accounts, several credentials,
+permissions, or independent token rotation.
 
-## Main API Key
+Bearer tokens are not encrypted. Use TLS at the reverse proxy or platform edge
+whenever a token crosses a network.
 
-Set `--api-key` to require `Authorization: Bearer <key>` on conversion,
-theme, font, and bundling routes.
+## Protect the Main Listener
+
+Set `VLC_API_KEY` in the server process environment, preferably through a
+secret manager, or pass `--api-key`:
 
 ```bash
-vl-convert serve --api-key "$VLC_API_KEY"
+vl-convert serve --host 127.0.0.1 --port 3000
 ```
+
+When `VLC_API_KEY` is set, conversion, theme, font, and bundling routes require
+this header:
+
+```text
+Authorization: Bearer <key>
+```
+
+For example:
 
 ```bash
-curl -H "Authorization: Bearer $VLC_API_KEY" \
-  http://localhost:3000/themes
+curl http://127.0.0.1:3000/themes \
+  -H "Authorization: Bearer $VLC_API_KEY"
 ```
 
-Missing or incorrect credentials return `401 Unauthorized` with a
-`WWW-Authenticate: Bearer` header. Unless `--opaque-errors=true` is enabled,
-the response body is:
+A missing or incorrect token returns `401 Unauthorized` and a
+`WWW-Authenticate: Bearer` header. The normal JSON body is
+`{"error":"unauthorized"}`. With `--opaque-errors`, the body is empty.
 
-```json
-{"error":"unauthorized"}
-```
+The main token grants access to every protected route on that listener. It does
+not restrict which external resources a specification can load. Configure data,
+font, plugin, and resource policies separately.
 
-With opaque errors enabled, the response body is empty.
+## Unauthenticated Health Routes
 
-Health routes (`/healthz`, `/readyz`, and `/infoz`) stay unauthenticated so
-load balancers and process supervisors can check the server without knowing the
-API key. Do not use those routes to verify authentication.
+`/healthz`, `/readyz`, and `/infoz` remain unauthenticated so load balancers and
+process supervisors can reach them. Do not use those routes to test whether
+authentication is active.
 
-## Admin API Key
+`/infoz` includes component versions, the local timezone, and the Google Fonts
+cache path. A public reverse proxy can expose only `/healthz` and `/readyz` if
+those host details are not intended for clients.
 
-Admin routes are served from the separate admin listener. The admin key does
-not grant access to the main listener, and the main key does not grant access
-to admin routes.
+## Protect the Admin Listener
+
+The admin listener is optional and independent of the main listener. Set
+`VLC_ADMIN_API_KEY` through the deployment's secret manager, then enable the
+listener:
 
 ```bash
 vl-convert serve \
   --admin-host 127.0.0.1 \
-  --admin-port 3001 \
-  --admin-api-key "$ADMIN_API_KEY"
+  --admin-port 3001
 ```
 
 ```bash
-curl -H "Authorization: Bearer $ADMIN_API_KEY" \
-  http://127.0.0.1:3001/admin/diagnostics/workers
+curl http://127.0.0.1:3001/admin/diagnostics/workers \
+  -H "Authorization: Bearer $VLC_ADMIN_API_KEY"
 ```
 
-A non-loopback TCP admin listener requires `--admin-api-key` and fails startup
-without one. Loopback and Unix domain socket admin listeners may rely on
-listener placement or filesystem permissions, but a key is still useful as a
-second guard in shared environments.
+The main token does not grant admin access, and the admin token does not grant
+main-listener access.
 
-For subprocess sidecars, prefer an admin Unix domain socket with restrictive
-permissions:
+A non-loopback TCP admin listener will not start without an admin API key.
+Loopback and Unix domain socket listeners can run without one because listener
+placement or filesystem permissions can be the primary boundary. A key remains
+useful on shared hosts.
+
+For a local sidecar, a restrictive Unix domain socket is often the simplest
+boundary:
 
 ```bash
 vl-convert serve \
   --unix-socket /run/myapp/vl-convert.sock \
   --admin-unix-socket /run/myapp/vl-convert-admin.sock \
-  --socket-mode 0600 \
-  --admin-api-key "$ADMIN_API_KEY"
+  --socket-mode 0600
 ```
+
+Do not expose the admin listener through the same public route as conversion
+traffic. See {doc}`admin-api` for the operations it permits.

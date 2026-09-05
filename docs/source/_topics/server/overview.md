@@ -10,48 +10,66 @@ interfaces: [server]
 
 # Server Overview
 
-`vl-convert serve` runs the same conversion engine behind HTTP endpoints. Use
-it when another service, browser app, or non-Rust runtime needs conversion
-without embedding Rust bindings.
+`vl-convert serve` makes VlConvert available over HTTP. Use it when several
+applications need one rendering service, when a non-Python and non-Rust
+application needs conversion, or when rendering should run outside the caller's
+process.
+
+For a single script or an application that can embed the Python or Rust
+library, those interfaces usually require less operational work.
+
+## Start a Local Server
 
 ```bash
 vl-convert serve --host 127.0.0.1 --port 3000
 ```
 
-Public conversion routes live on the main listener. Admin routes use a
-separate listener when enabled.
+The main listener provides these endpoint groups:
 
-## Production Checklist
+| Path | Purpose |
+| --- | --- |
+| `/vegalite/*` | Compile and convert Vega-Lite input |
+| `/vega/*` | Convert Vega input |
+| `/svg/*` | Convert existing SVG |
+| `/themes` | List and inspect themes |
+| `/bundling/*` | Build browser JavaScript bundles |
+| `/healthz`, `/readyz`, `/infoz` | Process and readiness information |
 
-Before exposing the server to untrusted callers:
+See {doc}`getting-started/quick-start` for a complete request and
+{doc}`api-reference` for every endpoint.
 
-- Restrict data access with `--allowed-base-urls` and `--base-url`.
-- Require `--api-key` for service-to-service deployments, or run
-  unauthenticated with CORS, budgets, and `--opaque-errors=true` for
-  browser-facing public tools.
-- Set V8 limits with `--max-v8-heap-size-mb` and
-  `--max-v8-execution-time-secs`.
-- Set request limits and budgets: `--max-body-size-mb`,
-  `--max-concurrent-requests`, `--per-ip-budget-ms`, and
-  `--global-budget-ms`.
-- Use `--log-format=json`; see {doc}`/server/logging` for request log fields.
+The default server binds to loopback and is intended for local use. It does not
+require authentication, enforce render-time budgets, cap concurrent requests,
+or hide error details until those options are configured.
 
-See {doc}`/server/deployment`, {doc}`/server/authentication`, and
-{doc}`/server/rate-limiting` for the detailed profiles.
+## Main and Admin Listeners
 
-## What the Server Adds
+Conversion and health routes use the main listener. Optional runtime management
+routes use a separate admin listener. Keeping them separate lets a deployment
+expose rendering without exposing configuration, budget, font-cache, or worker
+controls.
 
-The server adds operational controls around the library:
+Do not publish the admin listener to the internet. Bind it to loopback, a
+private management network, or a Unix domain socket, and configure a separate
+admin API key.
 
-- HTTP routes and generated OpenAPI references for conversion, font, theme, and
-  bundling endpoints.
-- A shared worker pool so callers do not each create their own V8 isolates.
-- Request timeouts, body limits, concurrency limits, and per-IP/global budget
-  windows.
-- Optional API-key authentication, CORS, request IDs, and structured logs.
-- An admin API for live config replacement, budget inspection/reset, worker
-  diagnostics, and Google Fonts cache operations.
-- Unix domain socket listeners, readiness JSON, graceful drain, and
-  parent-close shutdown for subprocess sidecars.
+## Before Production
 
-See {doc}`/server/api-reference` for the generated public endpoint reference.
+For specifications that are not fully trusted:
+
+- restrict data and image access
+- keep caller-supplied plugins disabled
+- set JavaScript heap and execution-time limits
+- set request body, timeout, concurrency, and render-time limits
+- put the service behind TLS and an authentication layer when access is not
+  intentionally anonymous
+- return opaque errors to clients and retain detailed structured logs
+- enable proxy-derived client addresses only behind a proxy that rewrites those
+  headers
+
+CORS controls which browser origins can read responses. It is not
+authentication and does not stop non-browser clients.
+
+Use {doc}`deployment` for concrete deployment profiles,
+{doc}`authentication` for listener credentials, and
+{doc}`rate-limiting` for render-time budgets.

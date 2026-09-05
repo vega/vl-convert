@@ -10,72 +10,79 @@ interfaces: [server]
 
 # Deploying the Server
 
-Choose bind addresses, budgets, data access, and CORS for the deployment
-shape.
+Choose a profile from the trust boundary around the service. The examples are
+starting points. Tune worker count and limits with representative charts.
 
-## Production Hardening
+Put a reverse proxy or platform load balancer in front of a TCP deployment to
+provide TLS, connection controls, and application-specific identity. Keep the
+admin listener on a management-only address or Unix domain socket.
 
-For untrusted input, set resource and data-access controls explicitly. Local
-defaults are convenient for development, but public deployments should not rely
-on them.
+## Private Backend Service
 
-- Bind only the listeners you need. Keep the admin listener on loopback, a
-  private network, or a Unix domain socket; use `--admin-api-key` for shared
-  environments.
-- Set `--allowed-base-urls=none` unless charts need remote data. If they do,
-  allow only the schemes, domains, or filesystem roots the application owns.
-- Disable relative data loading with `--base-url=disabled` for user-supplied
-  specs unless the deployment intentionally serves a known data root.
-- Set `--max-v8-heap-size-mb` and `--max-v8-execution-time-secs` for public or
-  multi-tenant workloads.
-- Use `--per-ip-budget-ms`, `--global-budget-ms`, `--max-body-size-mb`, and
-  `--opaque-errors=true` on public endpoints.
-- Use `--log-format=json` in production so request IDs, budget fields, and
-  Google Fonts fields remain queryable.
-- Enable CORS only for browser clients that need direct access.
-- If user input can trigger Google Fonts, set
-  `--google-font-variant-threshold` and
-  `--google-font-cache-miss-penalty-ms`.
-- Enable `--trust-proxy` only behind a reverse proxy that strips untrusted
-  forwarded headers and writes its own.
-
-## Private Backend Worker
+Use a bearer token when known backend services call the converter. Supply
+`VLC_API_KEY` through the deployment's secret manager before starting this
+command:
 
 ```bash
-vl-convert serve \
+vl-convert \
+  --base-url disabled \
+  --allowed-base-urls https://data.example.com/ \
+  --max-v8-heap-size-mb 512 \
+  --max-v8-execution-time-secs 10 \
+  --log-format json \
+  serve \
   --host 127.0.0.1 \
   --port 3000 \
-  --api-key "$VLC_API_KEY" \
-  --allowed-base-urls=net \
-  --log-format=json
+  --workers 2 \
+  --max-concurrent-requests 4 \
+  --request-timeout-secs 15 \
+  --max-body-size-mb 8 \
+  --opaque-errors
 ```
 
-Use this profile when trusted backend code calls the server.
+Bind to a private network address instead of loopback when the reverse proxy or
+caller runs on another host. Do not expose this HTTP listener without TLS at
+the network edge.
 
-## Public Browser-Facing Converter
+## Intentionally Anonymous Browser Service
+
+A browser cannot keep a shared API key secret. If a tool must accept anonymous
+internet requests, use strict access and resource controls:
 
 ```bash
-vl-convert serve \
+vl-convert \
+  --base-url disabled \
+  --allowed-base-urls none \
+  --max-v8-heap-size-mb 512 \
+  --max-v8-execution-time-secs 10 \
+  --missing-fonts warn \
+  --log-format json \
+  serve \
   --host 0.0.0.0 \
   --port 3000 \
-  --allowed-base-urls=none \
-  --base-url=disabled \
-  --max-v8-heap-size-mb 1024 \
-  --max-v8-execution-time-secs 10 \
+  --workers 2 \
+  --max-concurrent-requests 4 \
+  --request-timeout-secs 15 \
+  --max-body-size-mb 4 \
   --per-ip-budget-ms 5000 \
   --global-budget-ms 30000 \
-  --max-body-size-mb 4 \
-  --auto-google-fonts=true \
-  --google-font-variant-threshold 16 \
-  --google-font-cache-miss-penalty-ms 250 \
-  --cors-origin=https://editor.example.com \
-  --opaque-errors=true \
-  --log-format=json
+  --cors-origin https://editor.example.com \
+  --opaque-errors
 ```
 
-Use this profile when arbitrary browsers or internet clients call the server.
+CORS only controls browser access to responses. Keep network-level rate
+limits, abuse monitoring, and egress restrictions in front of the process.
+Leave automatic Google Fonts and per-request plugins disabled unless the
+product requires them and has tighter controls for their cost and risk.
 
-## Subprocess Sidecar
+If a trusted reverse proxy supplies client IP headers, add `--trust-proxy`
+only after configuring the proxy to remove inbound forwarded headers and write
+its own.
+
+## Local Subprocess or Sidecar
+
+A Unix domain socket avoids opening a TCP port and can restrict access with
+filesystem permissions:
 
 ```bash
 vl-convert serve \
@@ -83,7 +90,26 @@ vl-convert serve \
   --admin-unix-socket /run/myapp/vl-convert-admin.sock \
   --socket-mode 0600 \
   --ready-json \
-  --exit-on-parent-close=true
+  --exit-on-parent-close
 ```
 
-Use this profile when another runtime owns startup and shutdown.
+`--ready-json` writes one machine-readable line after the listeners bind.
+`--exit-on-parent-close` lets a parent process stop the sidecar by closing its
+standard input. Per-IP budgets do not apply to Unix sockets because they have
+no client IP, so use a global budget when a sidecar has multiple callers.
+
+## Health and Shutdown
+
+Use `/healthz` for a basic liveness check and `/readyz` for readiness.
+Readiness performs a cached converter check and reports `503` during live
+reconfiguration. `/infoz` reports component versions, the local timezone, and
+the Google Fonts cache location. All three routes are unauthenticated on the
+main listener, so filter `/infoz` at the proxy if those host details should not
+be public.
+
+The server drains requests during normal shutdown. Set
+`--drain-timeout-secs` to bound how long shutdown waits. A separate
+`--reconfig-drain-timeout-secs` controls live configuration changes.
+
+See {doc}`authentication`, {doc}`rate-limiting`, and
+{doc}`guides/security` for the controls used by these profiles.

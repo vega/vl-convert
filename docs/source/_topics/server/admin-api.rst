@@ -11,9 +11,13 @@ interfaces: [server]
 Admin Server API
 ================
 
-The admin server API is served on the separate admin listener. Enable it when
-you need runtime budget updates, config updates, font cache controls, or worker
-diagnostics.
+The optional admin listener manages a running server. It can inspect and update
+render-time budgets, replace converter configuration, manage font directories
+and cache size, and report worker memory use.
+
+Do not expose this listener with public conversion traffic. Bind it to
+loopback, a private management network, or a Unix domain socket. Configure a
+separate admin bearer token on shared systems.
 
 .. code-block:: bash
 
@@ -24,40 +28,67 @@ diagnostics.
 
 .. code-block:: bash
 
-   curl -H "Authorization: Bearer $ADMIN_API_KEY" \
-     http://127.0.0.1:3001/admin/diagnostics/workers
+   curl http://127.0.0.1:3001/admin/diagnostics/workers \
+     -H "Authorization: Bearer $ADMIN_API_KEY"
 
-Keep the admin listener on loopback, a private network, or a Unix domain
-socket. TCP admin listeners on non-loopback addresses require
-``--admin-api-key``; loopback and Unix domain socket listeners can also use it
-as a redundant guard.
+A non-loopback TCP admin listener requires ``--admin-api-key``. Loopback and
+Unix domain socket listeners can run without a key, but filesystem or network
+placement must then provide the access boundary. See
+:doc:``/server/authentication``.
 
-Admin Config Schema
--------------------
+Live Configuration Changes
+--------------------------
 
-``GET /admin/config`` returns the active converter configuration. ``PATCH
-/admin/config`` updates selected fields, and ``PUT /admin/config`` replaces the
-converter configuration.
+``GET /admin/config`` returns the active converter settings. ``PATCH
+/admin/config`` changes selected fields. ``PUT /admin/config`` replaces the
+complete converter configuration. ``DELETE /admin/config`` restores the
+configuration that the server started with. The font-directory list and Google
+Fonts cache size have separate endpoints because they apply to the whole
+process.
 
-``PATCH`` uses three states:
+A configuration change follows this sequence:
 
-- Omitted field: keep the current value.
-- JSON value: set the field.
-- ``null``: clear nullable fields such as ``default_theme`` or
-  ``max_v8_heap_size_mb``. ``null`` is rejected for non-nullable fields such as
-  ``num_workers``, ``base_url``, ``allowed_base_urls``, and ``themes``.
+#. The server validates the proposed configuration.
+#. The main listener stops admitting conversion requests.
+#. In-flight requests receive time to finish.
+#. The server starts replacement workers and checks that they are ready.
+#. New requests begin using the replacement.
 
-``PUT`` is a full replacement. Non-nullable fields must be present with valid
-values. Nullable fields may be ``null``.
+During this sequence, ``/readyz`` returns ``503`` and newly admitted conversion
+requests receive ``503`` with ``Retry-After: 5``. If draining or warm-up fails,
+the previous configuration remains active. Use
+``--reconfig-drain-timeout-secs`` to bound the wait.
 
-The config request bodies use the same field names as the JSONC config file.
+Sending values identical to the active configuration does not rebuild workers.
+
+Patch and Replacement Bodies
+----------------------------
+
+A ``PATCH`` field has three possible states:
+
+- Omitted means keep the current value.
+- A JSON value means set the field.
+- ``null`` clears a nullable field such as ``default_theme`` or
+  ``max_v8_heap_size_mb``.
+
+``null`` is invalid for required fields such as ``num_workers``, ``base_url``,
+``allowed_base_urls``, and ``themes``.
+
+``PUT`` is a full replacement. Required fields must be present and valid.
+Nullable fields can be ``null``. The request uses the same field names as a
+JSONC converter config file.
+
 ``base_url`` accepts ``true`` for the Vega datasets default, ``false`` to
-disable relative data loading, or a URL/path string. ``allowed_base_urls`` is a
-list of CSP-style allowlist patterns; use ``[]`` to block data fetches. The
-OpenAPI schema below lists ``ConfigPatch``, ``ConfigReplace``, and
-``ConfigView`` for the full field set.
+reject relative data URLs, or a URL or filesystem path. ``allowed_base_urls``
+is a list of Content Security Policy-style patterns. An empty list blocks
+absolute data and image URLs.
 
-The reference below is generated from ``vl-convert serve --dump-openapi=admin``.
+Generated Endpoint Reference
+----------------------------
+
+The reference below is generated from
+``vl-convert serve --dump-openapi=admin`` and lists all request and response
+schemas.
 
 .. openapi:: ../_generated/openapi-admin.json
    :group:
