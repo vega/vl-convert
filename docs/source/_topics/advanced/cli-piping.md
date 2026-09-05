@@ -19,5 +19,5 @@ vl-convert vl2svg --input - --output chart.svg < chart.vl.json
 vl-convert config-path
 ```
 
-Use `--vlc-config <path>` to load a JSONC config file and `--no-vlc-config`
-to ignore the platform default config path.
+Use `--vlc-config <path>` to load a JSONC config file and
+`--vlc-config disabled` to ignore the platform default config path.
