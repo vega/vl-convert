@@ -199,8 +199,7 @@ pub(crate) struct ServeArgs {
     /// Bind address for the admin HTTP listener (TCP). Defaults to
     /// `127.0.0.1` and requires `--admin-port` (the admin listener is
     /// opt-in; setting only the host has no effect). Non-loopback
-    /// values require `--admin-api-key`; the library's
-    /// `validate_serve_config` rejects the configuration otherwise.
+    /// values require `--admin-api-key` and fail validation without it.
     #[arg(
         long,
         group = "admin_listener",
@@ -223,9 +222,9 @@ pub(crate) struct ServeArgs {
     pub(crate) admin_unix_socket: Option<PathBuf>,
 
     /// API key for Bearer-token authentication on the admin listener.
-    /// Independent of `--api-key`. When unset, the admin surface is
-    /// listener-gated only (UDS filesystem permissions, or TCP
-    /// loopback). Non-loopback TCP admin without a key fails startup.
+    /// Independent of `--api-key`. When unset, access depends on UDS
+    /// filesystem permissions or TCP loopback. A non-loopback TCP admin
+    /// listener without a key fails startup.
     #[arg(long, value_name = "KEY", env = "VLC_ADMIN_API_KEY")]
     pub(crate) admin_api_key: Option<String>,
 
@@ -246,8 +245,8 @@ pub(crate) struct ServeArgs {
     pub(crate) api_key: Option<String>,
 
     /// Number of converter worker threads (must be >= 1). Defaults to
-    /// the value loaded from `--vlc-config`, which itself defaults to
-    /// the library default (= 1).
+    /// the value loaded from `--vlc-config`, or 1 when the config does
+    /// not set it.
     #[arg(long, value_parser = parse_non_zero_usize_arg, value_name = "N", env = "VLC_WORKERS")]
     pub(crate) workers: Option<NonZeroUsize>,
 
@@ -577,8 +576,8 @@ fn advise_listener_security(main: &BoundListener, serve_config: &ServeConfig) {
             if !main.is_loopback() {
                 let endpoint = main.endpoint_label();
                 log::warn!(
-                    "Server binding to {endpoint} with no API key — accessible to any \
-                     network client. Set --api-key to restrict access."
+                    "Server binding to {endpoint} with no API key. Any network client \
+                     can connect. Set --api-key to restrict access."
                 );
             }
         }
@@ -628,13 +627,13 @@ fn advise_admin_security(
                 (true, true) => {}
                 (true, false) => log::warn!(
                     "Admin listener binding to {url} with no admin API \
-                     key — loopback is still the trust boundary. Set \
+                     key. Loopback is still the trust boundary. Set \
                      --admin-api-key as a redundant guard."
                 ),
                 (false, true) => log::warn!(
                     "Admin listener at {url} is reachable beyond loopback. \
-                     The /admin/config surface can reconfigure live workers; \
-                     ensure --admin-api-key is rotated and access is \
+                     The /admin/config endpoint can replace the live converter \
+                     configuration. Ensure --admin-api-key is rotated and access is \
                      restricted at the network layer (firewall / private \
                      network / reverse proxy ACL)."
                 ),

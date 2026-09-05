@@ -42,6 +42,7 @@ fn build_vl_opts(req: &VegaliteCommon, config: &VlcConfig) -> Result<VlOpts, Str
     })
 }
 
+/// Compile a Vega-Lite specification to Vega.
 #[utoipa::path(
     post,
     path = "/vegalite/vega",
@@ -106,6 +107,7 @@ pub async fn vegalite_to_vega(
     }
 }
 
+/// Convert a Vega-Lite specification to an SVG document.
 #[utoipa::path(
     post,
     path = "/vegalite/svg",
@@ -155,6 +157,7 @@ pub async fn vegalite_to_svg(
     }
 }
 
+/// Convert a Vega-Lite specification to a PNG image.
 #[utoipa::path(
     post,
     path = "/vegalite/png",
@@ -207,6 +210,7 @@ pub async fn vegalite_to_png(
     }
 }
 
+/// Convert a Vega-Lite specification to a JPEG image.
 #[utoipa::path(
     post,
     path = "/vegalite/jpeg",
@@ -259,6 +263,7 @@ pub async fn vegalite_to_jpeg(
     }
 }
 
+/// Convert a Vega-Lite specification to a PDF document.
 #[utoipa::path(
     post,
     path = "/vegalite/pdf",
@@ -307,6 +312,7 @@ pub async fn vegalite_to_pdf(
     }
 }
 
+/// Convert a Vega-Lite specification to an interactive HTML page.
 #[utoipa::path(
     post,
     path = "/vegalite/html",
@@ -370,6 +376,7 @@ pub async fn vegalite_to_html(
     }
 }
 
+/// Create a Vega Editor URL for a Vega-Lite specification.
 #[utoipa::path(
     post,
     path = "/vegalite/url",
@@ -397,6 +404,7 @@ pub async fn vegalite_to_url(
     }
 }
 
+/// Compile and evaluate a Vega-Lite specification, then return its scenegraph.
 #[utoipa::path(
     post,
     path = "/vegalite/scenegraph",
@@ -488,6 +496,7 @@ pub async fn vegalite_scenegraph(
     }
 }
 
+/// Return the fonts used by a Vega-Lite specification.
 #[utoipa::path(
     post,
     path = "/vegalite/fonts",

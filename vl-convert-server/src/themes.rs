@@ -8,6 +8,7 @@ use std::sync::Arc;
 use crate::config::AppState;
 use crate::util::{append_vlc_logs_header, error_response};
 
+/// List the available Vega themes.
 #[utoipa::path(
     get,
     path = "/themes",
@@ -47,6 +48,7 @@ pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
     }
 }
 
+/// Return one Vega theme configuration.
 #[utoipa::path(
     get,
     path = "/themes/{name}",

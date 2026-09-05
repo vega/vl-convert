@@ -30,7 +30,7 @@ use crate::types::{
 ///
 #[derive(OpenApi)]
 #[openapi(tags(
-    (name = "Admin", description = "Admin-only endpoints (config + budget)"),
+    (name = "Admin", description = "Manage live configuration, budgets, fonts, and worker diagnostics"),
 ))]
 struct AdminApiDoc;
 
@@ -106,6 +106,7 @@ pub(crate) fn admin_router(admin_state: Arc<AdminState>) -> Router {
         .with_state(admin_state)
 }
 
+/// Return the active request-budget settings and state.
 #[utoipa::path(
     get,
     path = "/admin/budget",
@@ -119,31 +120,42 @@ async fn get_budget(State(admin): State<Arc<AdminState>>) -> Json<BudgetStatus> 
 
 #[derive(serde::Deserialize, utoipa::ToSchema)]
 struct BudgetUpdate {
+    /// New per-IP capacity in milliseconds per minute. Omit to keep it.
     per_ip_budget_ms: Option<i64>,
+    /// New shared capacity in milliseconds per minute. Omit to keep it.
     global_budget_ms: Option<i64>,
+    /// New provisional reservation for each request. Omit to keep it.
     hold_ms: Option<i64>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct WorkerMemoryUsageView {
+    /// Zero-based worker number.
     worker_index: usize,
+    /// JavaScript heap bytes currently in use.
     used_heap_size: usize,
+    /// JavaScript heap bytes currently allocated.
     total_heap_size: usize,
+    /// Maximum JavaScript heap size in bytes.
     heap_size_limit: usize,
+    /// External memory in bytes as reported by the JavaScript engine.
     external_memory: usize,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct WorkerDiagnosticsView {
+    /// Active converter configuration generation.
     generation: u64,
+    /// Memory statistics for each persistent conversion worker.
     workers: Vec<WorkerMemoryUsageView>,
 }
 
+/// Update selected request-budget settings.
 #[utoipa::path(
     post,
     path = "/admin/budget",
     responses(
-        (status = 200, body = BudgetStatus, description = "Budget updated; response is fresh BudgetStatus"),
+        (status = 200, body = BudgetStatus, description = "Budget settings updated; response contains the current state"),
         (status = 400, body = ErrorResponse, description = "Invalid update body"),
     ),
     tag = "Admin",
@@ -194,6 +206,7 @@ async fn update_budget(
     Json(tracker.status()).into_response()
 }
 
+/// Return JavaScript memory statistics for each conversion worker.
 #[utoipa::path(
     get,
     path = "/admin/diagnostics/workers",
@@ -305,16 +318,15 @@ fn json_rejection_response(rej: JsonRejection, opaque: bool) -> Response {
     simple_error_response(StatusCode::BAD_REQUEST, &rej.body_text(), opaque)
 }
 
-/// GET /admin/config: returns the baseline, current effective config,
-/// and the monotonic generation counter.
+/// Return the startup configuration, active configuration, and generation
+/// number.
 #[utoipa::path(
     get,
     path = "/admin/config",
     responses((
         status = 200,
         body = ConfigView,
-        description = "ConfigView { baseline, effective, generation }. \
-                       Schema mirrors the Python get_config() shape."
+        description = "Startup and active converter configuration, plus the current generation number"
     )),
     tag = "Admin",
 )]
@@ -324,16 +336,16 @@ async fn get_config(State(admin): State<Arc<AdminState>>) -> Response {
     (StatusCode::OK, Json(view)).into_response()
 }
 
-/// PATCH /admin/config: merge a partial patch onto the current config.
+/// Update selected fields in the active converter configuration.
 #[utoipa::path(
     patch,
     path = "/admin/config",
     responses(
-        (status = 200, body = ConfigView, description = "Commit succeeded; response is fresh ConfigView"),
-        (status = 400, body = ConfigBadRequestResponse, description = "Malformed body / unknown field / null on non-nullable / NonZero zero"),
-        (status = 422, body = ConfigValidationError, description = "Config validation failed; response includes field_errors"),
-        (status = 503, body = ErrorResponse, description = "Rebuild failure OR server shutting down during drain"),
-        (status = 504, body = DrainTimeoutResponse, description = "Drain timed out; response includes in_flight count"),
+        (status = 200, body = ConfigView, description = "Configuration updated"),
+        (status = 400, body = ConfigBadRequestResponse, description = "Malformed body, unknown field, invalid null, or zero supplied for a positive field"),
+        (status = 422, body = ConfigValidationError, description = "Configuration validation failed"),
+        (status = 503, body = ErrorResponse, description = "Replacement workers could not start, or the server is shutting down"),
+        (status = 504, body = DrainTimeoutResponse, description = "In-flight requests did not finish before the reconfiguration timeout"),
     ),
     tag = "Admin",
 )]
@@ -373,16 +385,16 @@ async fn patch_config(
     run_commit(&admin, &current, new_config, &mut scope).await
 }
 
-/// PUT /admin/config: full replacement.
+/// Replace the complete active converter configuration.
 #[utoipa::path(
     put,
     path = "/admin/config",
     responses(
-        (status = 200, body = ConfigView, description = "Commit succeeded; response is fresh ConfigView"),
-        (status = 400, body = ConfigBadRequestResponse, description = "Malformed body / missing required field / unknown field / null on non-nullable / NonZero zero"),
-        (status = 422, body = ConfigValidationError, description = "Config validation failed"),
-        (status = 503, body = ErrorResponse, description = "Rebuild failure OR server shutting down"),
-        (status = 504, body = DrainTimeoutResponse, description = "Drain timed out"),
+        (status = 200, body = ConfigView, description = "Configuration replaced"),
+        (status = 400, body = ConfigBadRequestResponse, description = "Malformed body, missing or unknown field, invalid null, or zero supplied for a positive field"),
+        (status = 422, body = ConfigValidationError, description = "Configuration validation failed"),
+        (status = 503, body = ErrorResponse, description = "Replacement workers could not start, or the server is shutting down"),
+        (status = 504, body = DrainTimeoutResponse, description = "In-flight requests did not finish before the reconfiguration timeout"),
     ),
     tag = "Admin",
 )]
@@ -404,15 +416,15 @@ async fn put_config(
     run_commit(&admin, &current, new_config, &mut scope).await
 }
 
-/// DELETE /admin/config: reset to the startup baseline.
+/// Restore the converter configuration that the server started with.
 #[utoipa::path(
     delete,
     path = "/admin/config",
     responses(
-        (status = 200, body = ConfigView, description = "Reset to baseline; response is fresh ConfigView with effective == baseline"),
-        (status = 422, body = ConfigValidationError, description = "Baseline rejected normalize_converter_config (should be impossible absent a library regression)"),
-        (status = 503, body = ErrorResponse, description = "Rebuild failure OR server shutting down"),
-        (status = 504, body = DrainTimeoutResponse, description = "Drain timed out"),
+        (status = 200, body = ConfigView, description = "Startup configuration restored"),
+        (status = 422, body = ConfigValidationError, description = "Startup configuration failed validation"),
+        (status = 503, body = ErrorResponse, description = "Replacement workers could not start, or the server is shutting down"),
+        (status = 504, body = DrainTimeoutResponse, description = "In-flight requests did not finish before the reconfiguration timeout"),
     ),
     tag = "Admin",
 )]
@@ -536,9 +548,9 @@ async fn get_font_dirs(State(_admin): State<Arc<AdminState>>) -> Response {
     put,
     path = "/admin/config/fonts/directories",
     responses(
-        (status = 200, body = Vec<String>, description = "Replacement applied; response is the new list"),
-        (status = 400, body = ErrorResponse, description = "Malformed body or any path is not an existing directory"),
-        (status = 503, body = ErrorResponse, description = "Library-level set_font_directories failed; registry NOT updated"),
+        (status = 200, body = Vec<String>, description = "Font directory list replaced"),
+        (status = 400, body = ErrorResponse, description = "Malformed body or a path is not an existing directory"),
+        (status = 503, body = ErrorResponse, description = "Font directories could not be updated; the previous list remains active"),
     ),
     tag = "Admin",
 )]
@@ -584,9 +596,9 @@ async fn put_font_dirs(
     post,
     path = "/admin/config/fonts/directories",
     responses(
-        (status = 200, body = Vec<String>, description = "Font directory appended (or already present); response is the new list"),
-        (status = 400, body = ErrorResponse, description = "Missing path or path not found / not a directory"),
-        (status = 503, body = ErrorResponse, description = "Library-level register_font_directory failed; registry NOT updated"),
+        (status = 200, body = Vec<String>, description = "Font directory registered, or already present"),
+        (status = 400, body = ErrorResponse, description = "Path is missing, does not exist, or is not a directory"),
+        (status = 503, body = ErrorResponse, description = "Font directory could not be registered; the previous list remains active"),
     ),
     tag = "Admin",
 )]
@@ -636,14 +648,14 @@ async fn post_font_dir(
 // Process-global Google Fonts LRU cache cap. This is not a writable
 // `VlcConfig` field and does not require drain/rebuild.
 
-/// Return the currently-active Google Fonts cache cap in MB.
+/// Return the active Google Fonts cache capacity in megabytes.
 #[utoipa::path(
     get,
     path = "/admin/config/fonts/cache_size",
     responses((
         status = 200,
         body = FontCacheSizeView,
-        description = "{\"max_size_mb\": <number>}; the resolved cap"
+        description = "Active Google Fonts cache capacity"
     )),
     tag = "Admin",
 )]
@@ -652,15 +664,15 @@ async fn get_font_cache_size(State(_admin): State<Arc<AdminState>>) -> Response 
     (StatusCode::OK, Json(FontCacheSizeView { max_size_mb: mb })).into_response()
 }
 
-/// Set the Google Fonts cache cap. `{"max_size_mb": null}` resets
-/// to the library default.
+/// Set the Google Fonts cache capacity. `{"max_size_mb": null}` restores the
+/// default capacity.
 #[utoipa::path(
     put,
     path = "/admin/config/fonts/cache_size",
     responses(
-        (status = 200, body = FontCacheSizeView, description = "Cap updated; response is the new resolved cap"),
+        (status = 200, body = FontCacheSizeView, description = "Cache capacity updated"),
         (status = 400, body = ErrorResponse, description = "Malformed body"),
-        (status = 503, body = ErrorResponse, description = "Library-level set_google_fonts_cache_size_mb failed"),
+        (status = 503, body = ErrorResponse, description = "Google Fonts cache capacity could not be updated"),
     ),
     tag = "Admin",
 )]

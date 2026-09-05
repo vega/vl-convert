@@ -10,7 +10,17 @@ interfaces: [cli]
 
 # CLI Reference
 
-The command reference is generated from the local `vl-convert` binary.
+This reference is generated from the version 2 `vl-convert` executable used to
+build the documentation. Put global options before a subcommand, then put
+conversion-specific options after it:
+
+```text
+vl-convert [GLOBAL OPTIONS] <COMMAND> [COMMAND OPTIONS]
+```
+
+All conversion commands accept `--input -` and `--output -` for standard input
+and output. They also use those streams when the corresponding option is
+omitted.
 
 ## Top-Level Help
 
@@ -102,5 +112,4 @@ The command reference is generated from the local `vl-convert` binary.
 ## Server
 
 ```{program-output} python ../tools/run_vl_convert.py serve --help
-:ellipsis: 80
 ```

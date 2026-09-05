@@ -10,6 +10,7 @@ use crate::config::AppState;
 use crate::types::{BundleQuery, BundleSnippetRequest, ErrorResponse};
 use crate::util::error_response;
 
+/// Return a browser bundle containing Vega, Vega-Lite, and Vega Embed.
 #[utoipa::path(
     get,
     path = "/bundling/bundle",
@@ -61,6 +62,7 @@ pub async fn bundle(
     }
 }
 
+/// Bundle an application snippet with compatible visualization dependencies.
 #[utoipa::path(
     post,
     path = "/bundling/bundle-snippet",

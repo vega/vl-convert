@@ -36,6 +36,7 @@ fn build_vg_opts(req: &VegaCommon, config: &VlcConfig) -> Result<VgOpts, String>
     })
 }
 
+/// Convert a Vega specification to an SVG document.
 #[utoipa::path(
     post,
     path = "/vega/svg",
@@ -81,6 +82,7 @@ pub async fn vega_to_svg(
     }
 }
 
+/// Convert a Vega specification to a PNG image.
 #[utoipa::path(
     post,
     path = "/vega/png",
@@ -129,6 +131,7 @@ pub async fn vega_to_png(
     }
 }
 
+/// Convert a Vega specification to a JPEG image.
 #[utoipa::path(
     post,
     path = "/vega/jpeg",
@@ -177,6 +180,7 @@ pub async fn vega_to_jpeg(
     }
 }
 
+/// Convert a Vega specification to a PDF document.
 #[utoipa::path(
     post,
     path = "/vega/pdf",
@@ -225,6 +229,7 @@ pub async fn vega_to_pdf(
     }
 }
 
+/// Convert a Vega specification to an interactive HTML page.
 #[utoipa::path(
     post,
     path = "/vega/html",
@@ -284,6 +289,7 @@ pub async fn vega_to_html(
     }
 }
 
+/// Create a Vega Editor URL for a Vega specification.
 #[utoipa::path(
     post,
     path = "/vega/url",
@@ -311,6 +317,7 @@ pub async fn vega_to_url(
     }
 }
 
+/// Evaluate a Vega specification and return its scenegraph.
 #[utoipa::path(
     post,
     path = "/vega/scenegraph",
@@ -402,6 +409,7 @@ pub async fn vega_scenegraph(
     }
 }
 
+/// Return the fonts used by a Vega specification.
 #[utoipa::path(
     post,
     path = "/vega/fonts",

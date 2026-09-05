@@ -175,13 +175,13 @@ pub struct VegaliteCommon {
 pub struct VegaCommon {
     /// Vega specification as a JSON object.
     pub spec: serde_json::Value,
-    /// Vega config object merged via vega.mergeConfig.
+    /// Vega config object merged with the specification's config.
     pub config: Option<serde_json::Value>,
-    /// Background color (applied to spec.background).
+    /// Background color applied to the specification.
     pub background: Option<String>,
-    /// Override spec width.
+    /// Chart width override.
     pub width: Option<f32>,
-    /// Override spec height.
+    /// Chart height override.
     pub height: Option<f32>,
     /// d3-format locale (name or inline object).
     pub format_locale: Option<serde_json::Value>,
@@ -273,6 +273,7 @@ pub struct VegaliteUrlRequest {
 pub struct VegaSvgRequest {
     #[serde(flatten)]
     pub common: VegaCommon,
+    /// Bundle fonts and images into a self-contained SVG.
     #[serde(default)]
     pub bundle: bool,
 }
@@ -282,7 +283,9 @@ pub struct VegaSvgRequest {
 pub struct VegaPngRequest {
     #[serde(flatten)]
     pub common: VegaCommon,
+    /// Image scale factor.
     pub scale: Option<f32>,
+    /// Pixels per inch. Combines with scale as `scale * ppi / 72`.
     pub ppi: Option<f32>,
 }
 
@@ -291,7 +294,9 @@ pub struct VegaPngRequest {
 pub struct VegaJpegRequest {
     #[serde(flatten)]
     pub common: VegaCommon,
+    /// Image scale factor.
     pub scale: Option<f32>,
+    /// JPEG quality from 0 through 100.
     pub quality: Option<u8>,
 }
 
@@ -307,8 +312,10 @@ pub struct VegaPdfRequest {
 pub struct VegaHtmlRequest {
     #[serde(flatten)]
     pub common: VegaCommon,
+    /// Bundle browser JavaScript dependencies into the HTML document.
     #[serde(default)]
     pub bundle: bool,
+    /// Browser renderer: `svg`, `canvas`, or `hybrid`.
     pub renderer: Option<String>,
 }
 
@@ -322,7 +329,9 @@ pub struct VegaScenegraphRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct VegaUrlRequest {
+    /// Vega specification as a JSON object.
     pub spec: serde_json::Value,
+    /// Open the full-screen view in the Vega Editor.
     #[serde(default)]
     pub fullscreen: bool,
 }
@@ -332,21 +341,27 @@ pub struct VegaUrlRequest {
 pub struct SvgPngRequest {
     /// SVG markup string.
     pub svg: String,
+    /// Image scale factor.
     pub scale: Option<f32>,
+    /// Pixels per inch. Combines with scale as `scale * ppi / 72`.
     pub ppi: Option<f32>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SvgJpegRequest {
+    /// SVG markup string.
     pub svg: String,
+    /// Image scale factor.
     pub scale: Option<f32>,
+    /// JPEG quality from 0 through 100.
     pub quality: Option<u8>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SvgPdfRequest {
+    /// SVG markup string.
     pub svg: String,
 }
 
@@ -427,6 +442,7 @@ pub struct BundleSnippetRequest {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ErrorResponse {
+    /// Human-readable error message when detailed errors are enabled.
     pub error: String,
 }
 
@@ -435,18 +451,9 @@ pub struct ErrorResponse {
 // Patch fields use `Option<Option<T>>` where null must be distinct from
 // absence. Non-nullable `VlcConfig` fields reject explicit nulls with 400.
 
-/// PATCH /admin/config body: a partial update where every field is optional.
-///
-/// * Field absent (`None`) → preserve the current value.
-/// * Field present with a value → set the field to that value.
-/// * Field present with `null`:
-///     * For VlcConfig fields of type `Option<T>` → clear the field
-///       (`Some(None)`).
-///     * For non-optional VlcConfig fields → rejected at serde parse time
-///       with 400 (the single-layer `Option<T>` has no way to represent the
-///       cleared state).
-///
-/// `deny_unknown_fields` rejects unknown request fields.
+/// Partial converter configuration update. An omitted field keeps its current
+/// value. A supplied value replaces it. `null` clears a nullable field and is
+/// rejected for other fields. Unknown fields are rejected.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ConfigPatch {
@@ -454,124 +461,162 @@ pub(crate) struct ConfigPatch {
     // wired up via `double_option::deserialize`; utoipa collapses it to
     // `Option<T>` in the published schema. Absent → preserve current,
     // null → clear (or 400 for non-nullable fields), value → set.
+    /// Number of persistent conversion workers.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = u64, minimum = 1)]
     pub num_workers: Option<Option<NonZeroU64>>,
     #[serde(default, deserialize_with = "deserialize_base_url_view_double_option")]
     #[schema(schema_with = base_url_schema)]
     pub base_url: Option<Option<BaseUrlSetting>>,
+    /// URL and filesystem prefixes that chart data and images may load.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Vec<String>)]
     pub allowed_base_urls: Option<Option<Vec<String>>>,
+    /// Whether missing fonts can be downloaded automatically from Google Fonts.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = bool)]
     pub auto_google_fonts: Option<Option<bool>>,
+    /// Whether SVG and HTML output embeds locally available fonts.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = bool)]
     pub embed_local_fonts: Option<Option<bool>>,
+    /// Whether embedded fonts contain only the glyphs used by the output.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = bool)]
     pub subset_fonts: Option<Option<bool>>,
+    /// Action when a first-choice font is unavailable: ignore, warn, or error.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = String)]
     pub missing_fonts: Option<Option<MissingFontsPolicy>>,
+    /// Google Fonts families and variants to register for every conversion.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Vec<Object>)]
     pub google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
+    /// Variant count after which additional Google Font families are skipped.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub google_font_variant_threshold: Option<Option<NonZeroU64>>,
+    /// Maximum JavaScript heap size per persistent worker, in megabytes.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub max_v8_heap_size_mb: Option<Option<NonZeroU64>>,
+    /// Maximum JavaScript execution time per conversion, in seconds.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub max_v8_execution_time_secs: Option<Option<NonZeroU64>>,
+    /// Whether to request JavaScript garbage collection after each conversion.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = bool)]
     pub gc_after_conversion: Option<Option<bool>>,
+    /// Vega plugin modules loaded for every conversion.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Vec<String>)]
     pub vega_plugins: Option<Option<Vec<String>>>,
+    /// HTTP import domains allowed for configured plugins.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Vec<String>)]
     pub plugin_import_domains: Option<Option<Vec<String>>>,
+    /// Whether public conversion requests may provide a Vega plugin.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = bool)]
     pub allow_per_request_plugins: Option<Option<bool>>,
+    /// Maximum concurrent temporary workers for per-request plugins.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub max_ephemeral_workers: Option<Option<NonZeroU64>>,
+    /// Whether public requests may choose Google Fonts settings.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = bool)]
     pub allow_google_fonts: Option<Option<bool>>,
+    /// HTTP import domains allowed for per-request plugins.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Vec<String>)]
     pub per_request_plugin_import_domains: Option<Option<Vec<String>>>,
+    /// Default theme for Vega-Lite conversions.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<String>, nullable)]
     pub default_theme: Option<Option<String>>,
+    /// Default d3-format locale.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<Object>, nullable)]
     pub default_format_locale: Option<Option<FormatLocale>>,
+    /// Default d3-time-format locale.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<Object>, nullable)]
     pub default_time_format_locale: Option<Option<TimeFormatLocale>>,
+    /// Custom Vega themes keyed by theme name.
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Object)]
     pub themes: Option<Option<HashMap<String, serde_json::Value>>>,
 }
 
-/// PUT /admin/config body: full replacement. Every VlcConfig field must be
-/// present in the body (no `#[serde(default)]`); omission is a 400 parse
-/// error. `null` follows natural JSON↔Option mapping: `null` on an
-/// `Option<T>` field → `None`, `null` on a non-optional field → 400.
-///
-/// This is a dedicated struct so missing fields are rejected instead of using
-/// `VlcConfig` container defaults.
+/// Complete converter configuration replacement. Every field must be present.
+/// Nullable fields accept `null`. Unknown fields and `null` on other fields
+/// are rejected.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ConfigReplace {
+    /// Number of persistent conversion workers.
     #[schema(value_type = u64, minimum = 1)]
     pub num_workers: NonZeroU64,
     #[schema(schema_with = base_url_schema)]
     #[serde(deserialize_with = "deserialize_base_url_view")]
     pub base_url: BaseUrlSetting,
+    /// URL and filesystem prefixes that chart data and images may load.
     pub allowed_base_urls: Vec<String>,
+    /// Whether missing fonts can be downloaded automatically from Google Fonts.
     pub auto_google_fonts: bool,
+    /// Whether SVG and HTML output embeds locally available fonts.
     pub embed_local_fonts: bool,
+    /// Whether embedded fonts contain only the glyphs used by the output.
     pub subset_fonts: bool,
+    /// Action when a first-choice font is unavailable: ignore, warn, or error.
     #[schema(value_type = String)]
     pub missing_fonts: MissingFontsPolicy,
+    /// Google Fonts families and variants to register for every conversion.
     #[schema(value_type = Vec<Object>)]
     pub google_fonts: Vec<GoogleFontRequest>,
+    /// Variant count after which additional Google Font families are skipped.
     #[serde(deserialize_with = "required_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable, required = true, minimum = 1)]
     pub google_font_variant_threshold: Option<NonZeroU64>,
+    /// Maximum JavaScript heap size per persistent worker, in megabytes.
     #[serde(deserialize_with = "required_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable, required = true, minimum = 1)]
     pub max_v8_heap_size_mb: Option<NonZeroU64>,
+    /// Maximum JavaScript execution time per conversion, in seconds.
     #[serde(deserialize_with = "required_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable, required = true, minimum = 1)]
     pub max_v8_execution_time_secs: Option<NonZeroU64>,
+    /// Whether to request JavaScript garbage collection after each conversion.
     pub gc_after_conversion: bool,
+    /// Vega plugin modules loaded for every conversion.
     pub vega_plugins: Vec<String>,
+    /// HTTP import domains allowed for configured plugins.
     pub plugin_import_domains: Vec<String>,
+    /// Whether public conversion requests may provide a Vega plugin.
     pub allow_per_request_plugins: bool,
+    /// Maximum concurrent temporary workers for per-request plugins.
     #[serde(deserialize_with = "required_option::deserialize")]
     #[schema(value_type = Option<u64>, nullable, required = true, minimum = 1)]
     pub max_ephemeral_workers: Option<NonZeroU64>,
+    /// Whether public requests may choose Google Fonts settings.
     pub allow_google_fonts: bool,
+    /// HTTP import domains allowed for per-request plugins.
     pub per_request_plugin_import_domains: Vec<String>,
+    /// Default theme for Vega-Lite conversions.
     #[serde(deserialize_with = "required_option::deserialize")]
     #[schema(nullable, required = true)]
     pub default_theme: Option<String>,
+    /// Default d3-format locale.
     #[serde(deserialize_with = "required_option::deserialize")]
     #[schema(value_type = Option<Object>, nullable, required = true)]
     pub default_format_locale: Option<FormatLocale>,
+    /// Default d3-time-format locale.
     #[serde(deserialize_with = "required_option::deserialize")]
     #[schema(value_type = Option<Object>, nullable, required = true)]
     pub default_time_format_locale: Option<TimeFormatLocale>,
+    /// Custom Vega themes keyed by theme name.
     #[schema(value_type = Object)]
     pub themes: HashMap<String, serde_json::Value>,
 }
@@ -608,10 +653,13 @@ impl From<ConfigReplace> for VlcConfig {
 /// Successful GET / PATCH / PUT / DELETE response body for `/admin/config`.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct ConfigView {
+    /// Configuration in effect when the server started. DELETE restores it.
     #[schema(value_type = ConfigReplace)]
     pub baseline: VlcConfig,
+    /// Configuration used for new conversion requests.
     #[schema(value_type = ConfigReplace)]
     pub effective: VlcConfig,
+    /// Number that increases after each configuration change.
     pub generation: u64,
 }
 
@@ -625,9 +673,8 @@ pub(crate) struct FontDirRequest {
     pub path: std::path::PathBuf,
 }
 
-/// Request body for `PUT /admin/config/fonts/directories`. Replaces
-/// the global registry wholesale; pass `[]` to clear. Equivalent to
-/// `vl_convert_rs::set_font_directories(...)` at the library layer.
+/// Request body for `PUT /admin/config/fonts/directories`. Replaces the full
+/// directory list. Pass `[]` to clear it.
 #[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 pub(crate) struct FontDirReplace {
     /// Absolute filesystem paths to register, in order.
@@ -635,19 +682,16 @@ pub(crate) struct FontDirReplace {
     pub paths: Vec<std::path::PathBuf>,
 }
 
-/// Request body for `PUT /admin/config/fonts/cache_size`. `null` resets
-/// to the library default. Equivalent to
-/// `vl_convert_rs::set_google_fonts_cache_size_mb(...)` at the library
-/// layer.
+/// Request body for `PUT /admin/config/fonts/cache_size`. `null` restores the
+/// default capacity.
 #[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 pub(crate) struct CacheSizeReplace {
-    /// Cache cap in megabytes. `null` → library default.
+    /// Cache capacity in megabytes. `null` restores the default.
     #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub max_size_mb: Option<NonZeroU64>,
 }
 
-/// Error code for a single field-level validation failure. Static slice so
-/// it serializes cleanly and can be matched by callers.
+/// Machine-readable category for one field validation error.
 #[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, utoipa::ToSchema)]
 #[allow(dead_code)]
 pub(crate) enum FieldErrorCode {
@@ -664,21 +708,23 @@ pub(crate) enum FieldErrorCode {
 /// Single field-level validation error entry.
 #[derive(Debug, Serialize, Clone, utoipa::ToSchema)]
 pub(crate) struct FieldError {
+    /// JSON field path that failed validation.
     pub path: String,
     pub code: FieldErrorCode,
+    /// Human-readable explanation of the failure.
     pub message: String,
 }
 
-/// 422 response body for PATCH / PUT / DELETE `/admin/config` when the
-/// proposed config fails `apply_patch` or `normalize_converter_config` or
-/// `VlConverter::with_config`.
+/// Response body when a proposed converter configuration fails validation.
 #[derive(Debug, Serialize, Clone, utoipa::ToSchema)]
 pub(crate) struct ConfigValidationError {
+    /// Overall validation error message.
     pub error: String,
+    /// Validation failures grouped by configuration field.
     pub field_errors: Vec<FieldError>,
 }
 
-/// PATCH/PUT requests can fail either at JSON parsing or field validation.
+/// Response body for a malformed configuration request.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 #[serde(untagged)]
 #[allow(dead_code)]
@@ -689,12 +735,15 @@ pub(crate) enum ConfigBadRequestResponse {
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct DrainTimeoutResponse {
+    /// Human-readable timeout message.
     pub error: String,
+    /// Number of requests still running when the drain timed out.
     pub in_flight: usize,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct FontCacheSizeView {
+    /// Active Google Fonts cache capacity in megabytes.
     #[schema(minimum = 1)]
     pub max_size_mb: u64,
 }

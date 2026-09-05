@@ -48,7 +48,10 @@ impl LogLevel {
 
 #[derive(Debug, Parser)]
 #[command(version, name = "vl-convert")]
-#[command(about = "vl-convert: A utility for converting Vega-Lite specifications", long_about = None)]
+#[command(
+    about = "Convert Vega-Lite, Vega, and SVG files, or run the HTTP server",
+    long_about = None
+)]
 pub(crate) struct Cli {
     /// Converter config: an absolute path to a JSONC config file, or the
     /// reserved value `disabled` to skip config-file loading. When
@@ -200,11 +203,9 @@ pub(crate) struct Cli {
     )]
     pub(crate) plugin_import_domains: Vec<String>,
 
-    /// Additional directory to search for fonts. Repeatable: pass the
-    /// flag multiple times (`--font-dir /a --font-dir /b`) to register
-    /// multiple directories. Calls
-    /// `vl_convert_rs::set_font_directories` once at startup with the
-    /// combined list (replace semantics).
+    /// Additional directory to search for fonts. Repeat the flag to
+    /// register multiple directories (`--font-dir /a --font-dir /b`).
+    /// The combined list is registered when the process starts.
     #[arg(
         long,
         global = true,
@@ -214,8 +215,8 @@ pub(crate) struct Cli {
     )]
     pub(crate) font_dir: Vec<PathBuf>,
 
-    /// Capacity (MB) of the on-disk Google Fonts LRU cache. `0` resolves
-    /// to the library default (`Option<NonZeroU64>::None`).
+    /// Capacity of the on-disk Google Fonts cache, in megabytes.
+    /// `0` uses the default capacity of 512 MB.
     #[arg(
         long,
         global = true,
@@ -274,8 +275,8 @@ pub(crate) struct Cli {
     #[arg(long, global = true, value_enum, default_value_t = LogLevel::Warn, env = "VLC_LOG_LEVEL")]
     pub(crate) log_level: LogLevel,
 
-    /// Tracing-subscriber output format. `text` is human-readable;
-    /// `json` emits one structured line per event for log aggregators.
+    /// Log output format. `text` is human-readable; `json` emits one
+    /// structured line per event for log aggregators.
     #[arg(long, global = true, value_enum, default_value_t = LogFormat::Text, env = "VLC_LOG_FORMAT")]
     pub(crate) log_format: LogFormat,
 

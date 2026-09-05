@@ -11,21 +11,23 @@ interfaces: [server]
 Server API
 ==========
 
-The public server reference is generated from ``vl-convert serve
---dump-openapi=public``.
+The public reference below is generated from the version 2 executable with
+``vl-convert serve --dump-openapi=public``. Start with
+:doc:`/server/getting-started/quick-start` for a complete request.
 
 Vega and Vega-Lite conversion endpoints accept JSON request bodies shaped like
 ``{"spec": <spec>, ...overrides}``. Overrides use the same names as the
 Python/Rust options, such as ``scale``, ``ppi``, ``theme``,
-``format_locale``, ``width``, and ``height``. SVG conversion endpoints also use
-JSON request bodies, with the SVG markup in an ``svg`` string field and
-format-specific overrides such as ``scale`` and ``ppi``. Binary outputs are
-returned directly in the response body; SVG, HTML, JSON, and URL outputs use
-their natural text or JSON response types.
+``format_locale``, ``width``, and ``height``. Unknown request fields are
+rejected.
 
-The :doc:`/server/admin-api` reference is generated from the admin OpenAPI
-document because those endpoints use a separate listener and authentication
-posture.
+SVG conversion endpoints use JSON request bodies with the markup in an ``svg``
+string field. Binary results are returned directly in the response body. SVG,
+HTML, URL, and JSON results use their corresponding text or JSON content type.
+Vega diagnostic messages are available in the ``X-VLC-Logs`` response header.
+
+The :doc:`/server/admin-api` uses a separate listener and credential, so it has
+its own reference.
 
 .. openapi:: ../_generated/openapi-public.json
    :group:

@@ -16,6 +16,7 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct StatusResponse {
+    /// Probe result, such as `ok`, `ready`, or `not ready`.
     status: String,
 }
 
@@ -29,12 +30,19 @@ impl StatusResponse {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub(crate) struct InfoResponse {
+    /// VlConvert server version.
     version: String,
+    /// Bundled Vega version.
     vega_version: String,
+    /// Bundled vega-themes version.
     vega_themes_version: String,
+    /// Bundled Vega Embed version.
     vega_embed_version: String,
+    /// Bundled Vega-Lite versions accepted by conversion requests.
     vegalite_versions: Vec<String>,
+    /// Google Fonts cache directory, when available.
     google_fonts_cache_dir: Option<String>,
+    /// Time zone used to interpret local dates, when configured.
     local_tz: Option<String>,
 }
 
@@ -58,6 +66,7 @@ impl Default for ReadinessState {
     }
 }
 
+/// Report whether the server process is running.
 #[utoipa::path(
     get,
     path = "/healthz",
@@ -76,6 +85,7 @@ pub async fn healthz() -> Json<StatusResponse> {
     Json(StatusResponse::new("ok"))
 }
 
+/// Report whether the converter can accept requests.
 #[utoipa::path(
     get,
     path = "/readyz",
@@ -141,6 +151,7 @@ pub async fn readyz(State(state): State<Arc<AppState>>) -> Response {
     }
 }
 
+/// Return server and bundled visualization-library version information.
 #[utoipa::path(
     get,
     path = "/infoz",

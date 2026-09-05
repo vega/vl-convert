@@ -377,10 +377,15 @@ impl std::fmt::Display for BudgetExhausted {
 
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct BudgetStatus {
+    /// Per-IP capacity in milliseconds per minute. Zero means disabled.
     pub per_ip_budget_ms: i64,
+    /// Shared capacity in milliseconds per minute. Zero means disabled.
     pub global_budget_ms: i64,
+    /// Shared capacity currently available in milliseconds.
     pub global_remaining_ms: i64,
+    /// Provisional reservation made when a request enters, in milliseconds.
     pub hold_ms: i64,
+    /// Number of client IP addresses with current budget state.
     pub active_ips: usize,
 }
 

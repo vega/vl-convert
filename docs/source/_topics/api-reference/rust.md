@@ -8,16 +8,17 @@ interfaces: [rust]
 
 <!-- topic-body -->
 
-# Rust API
+# Rust API Reference
 
-Use the Rust crate through `vl_convert_rs`.
+The package is named `vl-convert-rs` on crates.io and is imported as
+`vl_convert_rs` in Rust code.
 
 ```rust
 use vl_convert_rs::{PngOpts, VlcConfig, VlConverter, VlOpts};
 ```
 
 Create one converter and reuse it for related work. `VlConverter::new()`
-uses the default config; `VlConverter::with_config(...)` validates the config
+uses the default config. `VlConverter::with_config(...)` validates the config
 and returns a `Result`.
 
 ```rust
@@ -54,16 +55,11 @@ Common output shapes:
 - `SvgOutput`: `svg`, `logs`, `google_fonts`.
 - `HtmlOutput`: `html`, `logs`, `google_fonts`.
 - `ScenegraphOutput`: `scenegraph`, `logs`, `google_fonts`.
+- `ScenegraphMsgpackOutput`: `data`, `logs`, `google_fonts`.
 - `VegaOutput`: `spec`, `logs`.
 
-Run these futures inside a Tokio runtime. Applications that already use Tokio
-can await the methods directly; synchronous callers should create a runtime at
-their own boundary.
+Applications that already use Tokio can await conversion methods directly. The
+quick start shows the required runtime setup for a new application.
 
-Reference entry points:
-
-- [`vl_convert_rs`](https://docs.rs/vl-convert-rs/latest/vl_convert_rs/)
-- [`converter` module](https://docs.rs/vl-convert-rs/latest/vl_convert_rs/converter/)
-
-The full generated API reference lives on
-[docs.rs](https://docs.rs/vl-convert-rs/latest/vl_convert_rs/).
+For item-by-item documentation, use the
+[`vl-convert-rs` API on docs.rs](https://docs.rs/vl-convert-rs).
