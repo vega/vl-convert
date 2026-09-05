@@ -10,7 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Quick Start
 
-Convert a Vega-Lite specification to PNG.
+This example renders a small Vega-Lite bar chart as `chart.png`.
 
 ::::{interface} python
 `vegalite_to_png()` returns PNG bytes. Write the result to a file, send it in a
@@ -29,62 +29,141 @@ spec = {
 }
 
 png = vlc.vegalite_to_png(spec, scale=2)
-with open("chart.png", "wb") as f:
-    f.write(png)
+with open("chart.png", "wb") as output_file:
+    output_file.write(png)
 ```
 
-For process-wide defaults, see {doc}`/python/advanced/configuration`.
+Run the script. The `scale=2` argument doubles the output's pixel dimensions.
+See {doc}`/python/guides/vegalite-conversions` for other output formats.
 ::::
 
 ::::{interface} cli
-CLI conversion commands write rendered output to `--output`. Use `--input -`
-and `--output -` when composing commands with stdin or stdout.
+Save this specification as `chart.vl.json`:
+
+```json
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "data": {
+    "values": [
+      {"category": "A", "value": 2},
+      {"category": "B", "value": 5}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "category", "type": "nominal"},
+    "y": {"field": "value", "type": "quantitative"}
+  }
+}
+```
+
+Render the file at twice its default pixel dimensions:
 
 ```bash
 vl-convert vl2png --input chart.vl.json --output chart.png --scale 2
 ```
 
+The command creates `chart.png`. CLI conversion commands also accept standard
+input and output. For example:
+
 ```bash
 vl-convert vl2png --input - --output - < chart.vl.json > chart.png
 ```
 
-For config files, environment variables, and global flags, see
-{doc}`/cli/advanced/configuration`.
+See {doc}`/cli/guides/vegalite-conversions` for other output formats and
+{doc}`/cli/advanced/cli-piping` for pipeline examples.
 ::::
-
 
 ::::{interface} rust
-Rust conversion methods return output structs. The rendered bytes are available
-on `output.data`.
+Add these dependencies to `Cargo.toml`:
 
-```rust
-use vl_convert_rs::{VlConverter, VlOpts};
-
-let converter = VlConverter::new();
-let output = converter.vegalite_to_png(spec, VlOpts::default(), Default::default()).await?;
-std::fs::write("chart.png", output.data)?;
+```toml
+[dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+vl-convert-rs = "2"
 ```
 
-For `VlcConfig` fields and defaults, see {doc}`/rust/advanced/configuration`.
+Use this complete `src/main.rs`:
+
+```rust
+use vl_convert_rs::{anyhow, serde_json, PngOpts, VlConverter, VlOpts};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let spec = serde_json::json!({
+        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+        "data": {
+            "values": [
+                {"category": "A", "value": 2},
+                {"category": "B", "value": 5}
+            ]
+        },
+        "mark": "bar",
+        "encoding": {
+            "x": {"field": "category", "type": "nominal"},
+            "y": {"field": "value", "type": "quantitative"}
+        }
+    });
+
+    let converter = VlConverter::new();
+    let output = converter
+        .vegalite_to_png(
+            spec,
+            VlOpts::default(),
+            PngOpts {
+                scale: Some(2.0),
+                ..Default::default()
+            },
+        )
+        .await?;
+    std::fs::write("chart.png", output.data)?;
+    Ok(())
+}
+```
+
+Run `cargo run`. Rust conversion methods return output structs, and `data`
+contains the rendered bytes. See {doc}`/rust/guides/vegalite-conversions` for
+other output formats.
 ::::
 
-
 ::::{interface} server
-The HTTP endpoint accepts a JSON request object with a `spec` field and returns
-the rendered PNG bytes in the response body. The examples use `jq` to wrap a
-plain Vega-Lite file in that request shape.
+Start the server in one terminal:
 
 ```bash
 vl-convert serve --host 127.0.0.1 --port 3000
 ```
 
-```bash
-jq -c '{spec: .}' chart.vl.json |
-  curl -X POST http://127.0.0.1:3000/vegalite/png \
-  -H 'Content-Type: application/json' \
-  --data-binary @- > chart.png
+Save this request body as `request.json`:
+
+```json
+{
+  "spec": {
+    "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+    "data": {
+      "values": [
+        {"category": "A", "value": 2},
+        {"category": "B", "value": 5}
+      ]
+    },
+    "mark": "bar",
+    "encoding": {
+      "x": {"field": "category", "type": "nominal"},
+      "y": {"field": "value", "type": "quantitative"}
+    }
+  },
+  "scale": 2
+}
 ```
 
-For server startup config and runtime config updates, see
-{doc}`/server/advanced/configuration`.
+Send the request from a second terminal:
+
+```bash
+curl http://127.0.0.1:3000/vegalite/png \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.png
+```
+
+The endpoint returns PNG bytes and `curl` writes them to `chart.png`. See
+{doc}`/server/guides/vegalite-conversions` for the other Vega-Lite endpoints.
 ::::

@@ -5,9 +5,9 @@ through Python, CLI, Rust, and HTTP server interfaces.
 
 ## Rendered Output Preview
 
-The illustrative Vega-Lite spec below is rendered by VlConvert as SVG, PNG,
-and PDF. The source spec and generated outputs are checked in together. On
-narrow screens, scroll the preview horizontally.
+This example starts with one Vega-Lite specification. VlConvert renders the
+same chart as SVG, PNG, and PDF. On narrow screens, scroll the preview
+horizontally.
 
 <!-- Regenerate the checked-in outputs with `pixi run docs-preview-chart`. -->
 
