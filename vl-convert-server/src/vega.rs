@@ -409,7 +409,7 @@ pub async fn vega_scenegraph(
     }
 }
 
-/// Return the fonts used by a Vega specification.
+/// Return the fonts that VlConvert resolves for a Vega specification.
 #[utoipa::path(
     post,
     path = "/vega/fonts",

@@ -496,7 +496,7 @@ pub async fn vegalite_scenegraph(
     }
 }
 
-/// Return the fonts used by a Vega-Lite specification.
+/// Return the fonts that VlConvert resolves for a Vega-Lite specification.
 #[utoipa::path(
     post,
     path = "/vegalite/fonts",

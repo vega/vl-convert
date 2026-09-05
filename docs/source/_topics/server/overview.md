@@ -17,7 +17,8 @@ process.
 
 ## Compare the Interfaces
 
-All four interfaces run the same conversion engine and produce the same output.
+All four interfaces run the same conversion engine. Given the same
+configuration, fonts, and external resources, they produce the same output.
 They differ in where rendering runs and what you have to operate.
 
 | Interface | Where rendering runs | Choose it when |

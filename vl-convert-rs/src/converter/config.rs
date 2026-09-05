@@ -134,8 +134,8 @@ pub struct VlcConfig {
     /// Base URL for resolving relative data and image paths in Vega specs.
     pub base_url: BaseUrlSetting,
     /// Allowlist for data and image access (HTTP URLs, filesystem paths).
-    /// Uses CSP-style patterns: "https:" (scheme), "<https://example.com/>" (prefix),
-    /// "/data/" (filesystem). Default is `["http:", "https:"]`: any
+    /// Uses CSP-style patterns: `https:` (scheme), `https://example.com/` (prefix),
+    /// `/data/` (filesystem). Default is `["http:", "https:"]`: any
     /// HTTP/HTTPS URL is allowed; no filesystem access. Pass `Vec::new()`
     /// to block all network data and images; `["*"]` to allow everything.
     pub allowed_base_urls: Vec<String>,

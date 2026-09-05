@@ -84,7 +84,8 @@ config file.
 ``base_url`` accepts ``true`` for the Vega datasets default, ``false`` to reject
 relative data URLs, or a URL or filesystem path. ``allowed_base_urls`` is a
 list of Content Security Policy-style patterns, and an empty list blocks every
-absolute data and image URL.
+HTTP or HTTPS data and image URL and every filesystem path. Inline ``data:``
+URLs remain allowed.
 
 Generated Endpoint Reference
 ----------------------------

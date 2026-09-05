@@ -24,9 +24,10 @@ and Rust options, such as ``scale``, ``ppi``, ``theme``, ``format_locale``,
 
 SVG conversion endpoints take the markup in an ``svg`` string field. Binary
 results are returned directly in the response body. SVG, HTML, URL, and JSON
-results use their corresponding text or JSON content type. Successful
-conversion responses carry Vega's diagnostic messages in the ``X-VLC-Logs``
-header.
+results use their corresponding text or JSON content type. Successful render,
+compilation, HTML, and scenegraph responses carry Vega's diagnostic messages
+in the ``X-VLC-Logs`` header. URL and font-inspection responses do not include
+this header.
 
 The :doc:`/server/admin-api` uses a separate listener and credential, so it has
 its own reference.

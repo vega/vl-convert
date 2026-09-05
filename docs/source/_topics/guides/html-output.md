@@ -26,6 +26,12 @@ plugins and the fonts VlConvert resolved for the chart. The page then opens
 offline, although data and images referenced by URL still need network access,
 as do fonts that were not embedded.
 
+HTML generation normally embeds the specification without evaluating it. When
+Google Font discovery, an explicit Google Font request, or local font embedding
+is enabled, VlConvert evaluates the chart to resolve fonts. That evaluation can
+load external data and images under VlConvert's access policy before the
+browser loads them again.
+
 ## Choose a Browser Renderer
 
 `renderer` selects how the browser draws the chart: `svg` (the default),

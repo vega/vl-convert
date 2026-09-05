@@ -860,7 +860,7 @@ def vegalite_fonts(
         time_format_locale: d3-time-format locale name or dictionary
 
     Returns:
-        Structured font metadata for each font used by the chart.
+        Structured metadata for each font that VlConvert resolves for the chart.
     """
     ...
 
@@ -887,7 +887,7 @@ def vega_fonts(
         time_format_locale: d3-time-format locale name or dictionary
 
     Returns:
-        Structured font metadata for each font used by the chart.
+        Structured metadata for each font that VlConvert resolves for the chart.
     """
     ...
 

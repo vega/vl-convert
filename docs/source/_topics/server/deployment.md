@@ -94,7 +94,7 @@ vl-convert serve \
 
 `--ready-json` writes one machine-readable line to standard output after the
 listeners bind. With a Unix socket listener, the server also exits when the
-parent process closes its standard input; `--exit-on-parent-close` turns that
+parent process closes its standard input. `--exit-on-parent-close` turns that
 behavior on or off explicitly. Per-IP budgets do not apply to Unix sockets,
 which have no client IP, so use a global budget when a sidecar has several
 callers.

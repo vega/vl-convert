@@ -64,7 +64,8 @@ Each entry in `allowed_base_urls` is one of these patterns:
 
 Prefix entries cannot contain credentials, a query string, or a fragment.
 Directory entries must exist when the converter starts, and on Windows they can
-use drive letters such as `C:\data\`. An empty list blocks every URL and file.
+use drive letters such as `C:\data\`. An empty list blocks every HTTP or HTTPS
+URL and filesystem path. Inline `data:` URLs remain allowed.
 
 ::::{interface} cli server
 `--allowed-base-urls` also accepts the shortcuts `none` for an empty list,
@@ -174,13 +175,14 @@ are always allowed, HTTP images must match `allowed_base_urls`, and a local
 image file must sit under an allowlisted directory. A relative image path in an
 SVG input document resolves against a filesystem `base_url` and fails without
 one. An SVG used as an image cannot pull in further images from files or
-hosts; only `data:` references inside it are honored. To keep such images,
+hosts. Only `data:` references inside it are honored. To keep such images,
 inline them as `data:` URLs or flatten the SVG before conversion.
 
 Which outputs load images follows the same pattern as data. PNG, JPEG, and PDF
 output, SVG input conversions, and SVG output with `bundle` load them during
-conversion. Plain SVG output keeps each image URL for the viewer to load, and
-HTML output leaves loading to the browser.
+conversion. Plain SVG output keeps each image URL for the viewer to load. HTML
+usually leaves image loading to the browser, but the font processing described
+below evaluates the chart and can load its images during conversion.
 
 Where images are loaded, a blocked image fails the conversion with a
 `VLC_ACCESS_DENIED` error. An image that is allowed but cannot be fetched, for
@@ -189,11 +191,15 @@ blank, except with `bundle`, which fails because it must inline the image.
 
 ## When Data Is Loaded
 
-Not every output fetches data. Compiling Vega-Lite to Vega, creating a Vega
-editor URL, and generating HTML embed the specification as written. Its data
-loads later, in the browser or the Vega editor, under that environment's rules
-rather than VlConvert's. Rendered outputs, the scenegraph, and font inspection
-evaluate the chart and load its data during conversion.
+Not every output fetches data. Compiling Vega-Lite to Vega and creating a Vega
+editor URL embed the specification as written. The data loads later under the
+browser's or Vega editor's rules rather than VlConvert's. HTML generation also
+defers data loading unless Google Font discovery, an explicit Google Font
+request, or local font embedding makes VlConvert evaluate the chart to resolve
+fonts. In that case, VlConvert can load the data while generating the file, and
+the browser loads it again when the page opens. Rendered outputs, scenegraph
+output, and font inspection evaluate the chart and load its data during
+conversion.
 
 ## Troubleshooting
 

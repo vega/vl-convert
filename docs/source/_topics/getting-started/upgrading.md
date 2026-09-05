@@ -46,8 +46,9 @@ chart's `width` and `height` if the page needs a different size.
 Fonts, plugins, and JavaScript limits. `vl_convert.asyncio` provides awaitable
 conversions. Conversion functions gained `width`, `height`, `background`,
 `google_fonts`, and `vega_plugin`, the Vega functions gained `config`, the SVG
-functions gained `bundle`, and the scenegraph functions accept
-`format="msgpack"`. See {doc}`../advanced/configuration` and
+output functions for Vega and Vega-Lite input gained `bundle`, and the
+scenegraph functions accept `format="msgpack"`. See
+{doc}`../advanced/configuration` and
 {doc}`../api-reference`.
 
 Python 3.7 and later are still supported, and `vl_version` still accepts both
@@ -169,9 +170,10 @@ serve` can replace it:
 - Converter settings such as the data allowlist, fonts, and JavaScript limits
   are global `vl-convert` options placed before `serve`, or fields in a JSONC
   config file. See {doc}`../advanced/configuration`.
-- Authentication, request limits, timeouts, render-time budgets, structured
-  logs, and health endpoints are built in, so a wrapper no longer needs to
-  provide them. See {doc}`../overview`.
+- The server can provide authentication, request limits, timeouts, render-time
+  budgets, structured logs, and health endpoints. A reverse proxy or platform
+  still handles TLS and can add network-level authentication and rate limits.
+  See {doc}`../overview`.
 
 Rust applications can also embed the `vl-convert-server` crate instead of
 running the executable.

@@ -3,8 +3,8 @@
 VlConvert converts Vega-Lite, Vega, and SVG inputs to SVG, PNG, JPEG, PDF, and
 HTML. It runs the official Vega and Vega-Lite JavaScript libraries in an
 embedded runtime, so it needs no browser or Node.js, and the bundled libraries
-need no network access. Only external data, images, fonts, and plugins that a
-chart references do.
+need no network access. Network requests occur only for remote data, images,
+fonts, or plugins that the input or configuration references.
 
 ## Rendered Output Preview
 

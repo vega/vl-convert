@@ -32,8 +32,9 @@ files for both data and images, and `base_url` resolves relative data and
 image URLs against the Vega datasets CDN. Tighten both before processing
 untrusted input.
 
-An empty `allowed_base_urls` list blocks every absolute URL and file path. To
-permit one service, list its URL prefix:
+An empty `allowed_base_urls` list blocks every HTTP or HTTPS URL and filesystem
+path. Inline `data:` URLs remain allowed. To permit one service, list its URL
+prefix:
 
 ::::{interface} python
 ```python
@@ -58,7 +59,8 @@ vl-convert \
   vl2png --input chart.vl.json --output chart.png
 ```
 
-`--allowed-base-urls none` blocks every absolute data and image URL.
+`--allowed-base-urls none` blocks every HTTP or HTTPS data and image URL and
+every filesystem path. Inline `data:` URLs remain allowed.
 ::::
 
 ::::{interface} rust

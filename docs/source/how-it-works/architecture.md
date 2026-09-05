@@ -77,9 +77,9 @@ conversion only.
 
 SVG output has a font step of its own. Depending on options, postprocessing
 emits Google Fonts `@import` rules, embeds fonts as `@font-face`, subsets them
-to the characters used, and inlines external images. Every output also carries
-statistics about the Google Fonts it used, which the server feeds into request
-budgets and logs.
+to the characters used, and inlines external images. Rendered, HTML, and
+scenegraph output structs also carry Google Fonts usage statistics, which the
+server feeds into request budgets and logs.
 
 ## Bundling
 
@@ -102,9 +102,9 @@ resolves relative references and grants no access on its own. The result is a
 single policy for a chart whether it renders on the canvas or through SVG.
 
 Plugin imports are governed separately by the plugin import allowlists, and
-Google Fonts downloads by the font settings. That separation is deliberate:
-data, images, fonts, and plugins are different kinds of external access, and
-enabling one never enables another.
+Google Fonts downloads by the font settings. Data and images form one resource
+category. Google Fonts and plugins form two more categories, and enabling one
+category never enables another.
 
 ## API Surfaces
 
@@ -120,7 +120,7 @@ outputs to their hosts:
 
 Because every surface shares the converter, they differ in how input and output
 are shaped, not in how charts are converted. The server does not cache rendered
-output; put an HTTP or application cache in front of it when identical
+output. Put an HTTP or application cache in front of it when identical
 specifications are rendered repeatedly.
 
 ## Notable Crates

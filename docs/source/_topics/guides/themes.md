@@ -13,7 +13,8 @@ interfaces: [python, cli, rust, server]
 A theme is a named Vega configuration object that Vega-Lite applies while
 compiling a specification. Themes set defaults for colors, marks, axes,
 legends, fonts, and other visual properties. They apply to Vega-Lite input
-only. A compiled Vega specification already contains its configuration.
+only because Vega input skips Vega-Lite compilation. For Vega input, pass a
+configuration object directly with `config` or `--config`.
 
 VlConvert bundles the themes from the `vega-themes` package. Select a theme per
 conversion, or set `default_theme` in the converter configuration.

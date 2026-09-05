@@ -74,6 +74,7 @@ If the header is absent, the server generates an ID. Either way the response
 carries the same `X-Request-Id`, so callers can attach it to their own logs.
 Browser clients can read it when CORS allows their origin.
 
-Successful conversion responses also carry `X-VLC-Logs`, a JSON array of up to
-50 Vega diagnostic messages. Inspect it when a chart renders but Vega reported
-warnings.
+Successful render, compilation, HTML, and scenegraph responses also carry
+`X-VLC-Logs`, a JSON array of up to 50 Vega diagnostic messages. Inspect it
+when a chart renders but Vega reported warnings. URL and font-inspection
+responses do not include this header.

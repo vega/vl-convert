@@ -79,7 +79,7 @@ pub fn parse_google_fonts_arg(
     })
 }
 
-/// Return font information for a rendered Vega-Lite spec
+/// Return information about the fonts that VlConvert resolves for a Vega-Lite spec
 ///
 /// Args:
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
@@ -95,7 +95,7 @@ pub fn parse_google_fonts_arg(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
-///     list[FontInfo]: Structured font metadata for each font used by the chart
+///     list[FontInfo]: Metadata for each font that VlConvert resolves for the chart
 #[pyfunction]
 #[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 pub fn vegalite_fonts(
@@ -155,7 +155,7 @@ pub fn vegalite_fonts(
         .map(|obj| obj.into())
 }
 
-/// Return font information for a rendered Vega spec
+/// Return information about the fonts that VlConvert resolves for a Vega spec
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
@@ -167,7 +167,7 @@ pub fn vegalite_fonts(
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
 /// Returns:
-///     list[FontInfo]: Structured font metadata for each font used by the chart
+///     list[FontInfo]: Metadata for each font that VlConvert resolves for the chart
 #[pyfunction]
 #[pyo3(signature = (vg_spec, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 pub fn vega_fonts(

@@ -64,10 +64,10 @@ VLC_* environment variables
 built-in defaults
 ```
 
-`--vlc-config` takes an absolute path to a JSONC file. When it is omitted, the
-CLI loads the platform-default file if it exists. Print that path with
-`vl-convert config-path`, or pass `--vlc-config disabled` to skip config files
-entirely.
+`--vlc-config` takes a path to a JSONC file. A relative path resolves from the
+current working directory. When the option is omitted, the CLI loads the
+platform-default file if it exists. Print that path with `vl-convert
+config-path`, or pass `--vlc-config disabled` to skip config files entirely.
 
 ```bash
 VLC_AUTO_GOOGLE_FONTS=true \
@@ -197,7 +197,7 @@ semicolons, except font directories, which use the platform path separator.
 
 | Variable | Purpose |
 | --- | --- |
-| `VLC_CONFIG` | Absolute JSONC config path or `disabled` |
+| `VLC_CONFIG` | JSONC config path or `disabled`; relative paths resolve from the working directory |
 | `VLC_BASE_URL` | Base for relative data and image URLs: a URL, a path, `default`, or `disabled` |
 | `VLC_ALLOWED_BASE_URLS` | Data and image URL allowlist, or the shortcut `none`, `net`, or `all` |
 | `VLC_FONT_DIR` | Additional font directories |

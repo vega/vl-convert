@@ -144,7 +144,7 @@ pub(crate) fn parse_budget_ms_arg(raw: &str) -> Result<i64, String> {
 /// Serve-local flags for the `vl-convert serve` subcommand.
 ///
 /// Globals (logging, font dirs, allowed-base-urls, etc.) live on
-/// [`Cli`](crate::cli_types::Cli). The flags here are
+/// [`Cli`]. The flags here are
 /// listener/auth/budget/lifecycle/per-request-gate concerns that have
 /// no meaning outside an HTTP server.
 ///

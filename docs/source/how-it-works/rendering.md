@@ -14,8 +14,8 @@ same input produces the same output from every interface.
 | SVG | Convert with Rust image and PDF libraries | Existing SVG images that need PNG, JPEG, or PDF output |
 
 VlConvert bundles several Vega-Lite versions. A conversion uses the version
-selected by `vl_version` or `--vl-version`, so specifications written for an
-older release still compile as their authors intended.
+selected by `vl_version` or `--vl-version`, so it uses that release's compiler
+behavior.
 
 ## Output Formats
 
@@ -41,13 +41,13 @@ by Rust image and PDF libraries. SVG input never runs Vega.
 ## Bundled JavaScript and Network Access
 
 Vega, the supported Vega-Lite versions, Vega Themes, and Vega Embed are bundled
-into VlConvert. A normal conversion downloads nothing.
+into VlConvert. Loading these libraries never uses the network.
 
-A conversion uses the network only when the input or configuration asks for an
-external resource:
+A conversion uses the network only when the input or configuration asks for a
+remote resource:
 
 - a specification with an HTTP data URL
-- an image referenced by a specification or SVG file
+- a remote image referenced by a specification or SVG file
 - a Google Font that is not already cached
 - a plugin loaded from a URL, or a plugin with HTTP imports
 
@@ -55,9 +55,10 @@ HTML output is a special case. Unless its dependencies are bundled into the
 file, the reader's browser loads Vega from a content delivery network (CDN)
 when the page opens.
 
-Each resource type has its own access control. Allowing data URLs does not
-allow plugin imports or Google Fonts. Read the security guide for your
-interface before accepting specifications from untrusted callers.
+Data and images share one access policy. Google Fonts and plugins have separate
+controls, so allowing data and images does not allow plugin imports or Google
+Fonts. Read the security guide for your interface before accepting
+specifications from untrusted callers.
 
 ## Fonts and Layout
 
