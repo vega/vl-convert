@@ -275,15 +275,15 @@ def javascript_bundle(snippet: str | None = None, vl_version: str | None = None)
     Create a JavaScript bundle containing the Vega Embed, Vega-Lite, and Vega libraries.
 
     Optionally, a JavaScript snippet may be provided that references Vega Embed
-    as `vegaEmbed`, Vega-Lite as `vegaLite`, Vega and `vega`, and the lodash.debounce
-    function as `lodashDebounce`.
+    as ``vegaEmbed``, Vega-Lite as ``vegaLite``, Vega as ``vega``, and the
+    lodash.debounce function as ``lodashDebounce``.
 
     The resulting string will include these JavaScript libraries and all of their
     dependencies.
     This bundle result is suitable for inclusion in an HTML <script> tag with
     no external dependencies required.
-    The default snippet assigns `vegaEmbed`, `vegaLite`, and `vega` to the global
-    window object, making them available globally to other script tags.
+    The default snippet assigns ``vegaEmbed``, ``vegaLite``, and ``vega`` to the
+    global window object, making them available to other script tags.
 
     Args:
         snippet: An ES6 JavaScript snippet which includes no imports
