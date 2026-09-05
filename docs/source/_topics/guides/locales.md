@@ -1,5 +1,5 @@
 ---
-title: Locales
+title: Number and Time Locales
 path: guides/locales
 section: Guides
 order: 260
@@ -8,19 +8,22 @@ interfaces: [python, cli, rust, server]
 
 <!-- topic-body -->
 
-# Locales
+# Number and Time Locales
 
-Locale overrides are passed to Vega and Vega-Lite's d3-format and
-d3-time-format hooks. Use built-in locale names, inline locale JSON, or JSONC
-locale files where the surface accepts them.
+Locales change how Vega and Vega-Lite format values. `format_locale` controls
+numbers, including decimal marks, grouping, and currency. `time_format_locale`
+controls names and patterns for dates and times.
 
-For persistent default locales and config-file loading, see
-{doc}`../advanced/configuration`.
+Use a built-in locale name for common regional formats. Use a locale object
+when the application needs custom rules. Locale settings change formatting,
+not the timezone or the underlying data values.
+
+## Use a Built-In Locale
 
 ::::{interface} python
 ```python
 svg = vlc.vegalite_to_svg(
-    vl_spec,
+    spec,
     format_locale="de-DE",
     time_format_locale="de-DE",
 )
@@ -30,41 +33,46 @@ svg = vlc.vegalite_to_svg(
 ::::{interface} cli
 ```bash
 vl-convert vl2svg \
+  --input chart.vl.json --output chart.svg \
   --format-locale de-DE \
-  --time-format-locale de-DE \
-  --input chart.vl.json --output chart.svg
+  --time-format-locale de-DE
 ```
 ::::
 
-
 ::::{interface} rust
 ```rust
-use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale, VlOpts};
+use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale};
+use vl_convert_rs::VlOpts;
 
-let opts = VlOpts {
+let options = VlOpts {
     format_locale: Some(FormatLocale::Name("de-DE".to_string())),
     time_format_locale: Some(TimeFormatLocale::Name("de-DE".to_string())),
     ..Default::default()
 };
 
-let output = converter.vegalite_to_svg(spec, opts, Default::default()).await?;
+let output = converter
+    .vegalite_to_svg(spec, options, Default::default())
+    .await?;
 ```
 ::::
-
 
 ::::{interface} server
-```bash
-jq -c '{spec: ., format_locale: "de-DE", time_format_locale: "de-DE"}' chart.vl.json |
-  curl -X POST http://localhost:3000/vegalite/svg \
-  -H 'Content-Type: application/json' \
-  --data-binary @-
+Put locale names beside `spec` in the request:
+
+```json
+{
+  "spec": {"mark": "text", "data": {"values": []}},
+  "format_locale": "de-DE",
+  "time_format_locale": "de-DE"
+}
 ```
 ::::
 
-## Locale Objects
+## Define Custom Number Rules
 
-Locale objects use the d3-format and d3-time-format locale shapes. For example,
-save this d3-format locale as `format-locale.json`:
+A number locale follows the
+[d3-format locale definition](https://d3js.org/d3-format#locale_format).
+Save this example as `format-locale.json`:
 
 ```json
 {
@@ -76,6 +84,8 @@ save this d3-format locale as `format-locale.json`:
 ```
 
 ::::{interface} python
+Pass the equivalent dictionary:
+
 ```python
 format_locale = {
     "decimal": ",",
@@ -84,11 +94,13 @@ format_locale = {
     "currency": ["", " EUR"],
 }
 
-svg = vlc.vegalite_to_svg(vl_spec, format_locale=format_locale)
+svg = vlc.vegalite_to_svg(spec, format_locale=format_locale)
 ```
 ::::
 
 ::::{interface} cli
+Pass a locale name, inline JSON object, or `.json` or `.jsonc` file:
+
 ```bash
 vl-convert vl2svg \
   --format-locale format-locale.json \
@@ -98,9 +110,10 @@ vl-convert vl2svg \
 
 ::::{interface} rust
 ```rust
-use vl_convert_rs::converter::{FormatLocale, VlOpts};
+use vl_convert_rs::converter::FormatLocale;
+use vl_convert_rs::{serde_json, VlOpts};
 
-let opts = VlOpts {
+let options = VlOpts {
     format_locale: Some(FormatLocale::Object(serde_json::json!({
         "decimal": ",",
         "thousands": ".",
@@ -109,28 +122,29 @@ let opts = VlOpts {
     }))),
     ..Default::default()
 };
-
-let output = converter.vegalite_to_svg(spec, opts, Default::default()).await?;
 ```
 ::::
 
 ::::{interface} server
-```bash
-jq -c '{
-  spec: .,
-  format_locale: {
-    decimal: ",",
-    thousands: ".",
-    grouping: [3],
-    currency: ["", " EUR"]
+The request field accepts the locale object directly:
+
+```json
+{
+  "spec": {"mark": "text", "data": {"values": []}},
+  "format_locale": {
+    "decimal": ",",
+    "thousands": ".",
+    "grouping": [3],
+    "currency": ["", " EUR"]
   }
-}' chart.vl.json |
-  curl -X POST http://localhost:3000/vegalite/svg \
-  -H 'Content-Type: application/json' \
-  --data-binary @-
+}
 ```
 ::::
 
-Time format locales use the d3-time-format locale shape, which includes arrays
-for days, months, date formats, and time formats. Built-in locale names are
-usually simpler unless the application needs a custom locale.
+Custom time locales follow the
+[d3-time-format locale definition](https://d3js.org/d3-time-format#locale_format).
+They define names for days and months as well as date and time patterns.
+Built-in names are shorter and less error-prone when a standard locale fits.
+
+See {doc}`../advanced/configuration` to apply locale defaults to every
+conversion.

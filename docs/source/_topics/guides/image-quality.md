@@ -1,5 +1,5 @@
 ---
-title: Image Quality
+title: Image Size and Quality
 path: guides/image-quality
 section: Guides
 order: 290
@@ -8,75 +8,132 @@ interfaces: [python, cli, rust, server]
 
 <!-- topic-body -->
 
-# Image Quality
+# Image Size and Quality
 
-Raster output has two separate concerns: chart layout and pixel density.
-`width`, `height`, and `background` change the Vega or Vega-Lite spec before
-rendering. `scale` and `ppi` control the rasterization step after the spec has
-produced SVG.
+Choose vector output when possible. SVG works well for web pages and later
+editing. PDF works well for documents and print. Both preserve shapes and text
+without choosing a fixed pixel size.
 
-For PNG output, vl-convert uses `effective_scale = scale * ppi / 72`. The
-defaults are `scale=1` and `ppi=72`, so `scale=2` doubles pixel dimensions and
-`ppi=144` also doubles them. Use one of those knobs unless you intentionally
-need both larger pixels and non-default PPI metadata. JPEG uses `scale` and
-`quality`; `quality` is `0..100` and defaults to `90`. PDF output is vector
-output and does not use scale.
+Use PNG when the consumer requires pixels, lossless output, or transparency.
+Use JPEG when smaller files matter more than lossless output and transparency.
 
-For process-wide defaults and config files, see
-{doc}`../advanced/configuration`.
+## Chart Size and Pixel Density
+
+`width` and `height` change the chart's logical dimensions before Vega lays out
+axes, legends, titles, and padding. The final image can therefore be larger
+than the requested plot dimensions.
+
+`scale` multiplies the pixel dimensions of PNG and JPEG output without changing
+the logical chart layout. A value of `2` is a common choice for high-density
+displays.
+
+PNG also accepts `ppi`, which sets pixels-per-inch metadata and contributes to
+pixel dimensions:
+
+```text
+effective scale = scale * ppi / 72
+```
+
+The defaults are `scale=1` and `ppi=72`. Use `scale=2` or `ppi=144` to double
+the pixel dimensions. Set both only when you want their effects multiplied.
+
+JPEG accepts `quality` from `0` through `100` and defaults to `90`. Higher
+values usually preserve more detail and produce larger files.
+
+## Examples
 
 ::::{interface} python
 ```python
-png = vlc.vegalite_to_png(vl_spec, scale=2, width=640, height=360)
-jpeg = vlc.vegalite_to_jpeg(vl_spec, scale=2, quality=90)
+import vl_convert as vlc
+
+png = vlc.vegalite_to_png(spec, width=640, height=360, scale=2)
+jpeg = vlc.vegalite_to_jpeg(spec, width=640, height=360, quality=90)
 ```
+
+Both functions return image bytes. The example assumes `spec` is a Vega-Lite
+dictionary such as the one in {doc}`../getting-started/quick-start`.
 ::::
 
 ::::{interface} cli
 ```bash
-vl-convert vl2png --scale 2 --width 640 --height 360 \
-  --input chart.vl.json --output chart.png
-vl-convert vl2jpeg --scale 2 --quality 90 \
-  --input chart.vl.json --output chart.jpg
-```
-::::
+vl-convert vl2png \
+  --input chart.vl.json --output chart.png \
+  --width 640 --height 360 --scale 2
 
+vl-convert vl2jpeg \
+  --input chart.vl.json --output chart.jpg \
+  --width 640 --height 360 --quality 90
+```
+
+The example uses `chart.vl.json` from
+{doc}`../getting-started/quick-start`.
+::::
 
 ::::{interface} rust
 ```rust
 use vl_convert_rs::{JpegOpts, PngOpts, VlOpts};
 
-let vl_opts = VlOpts {
+let chart_size = VlOpts {
     width: Some(640.0),
     height: Some(360.0),
     ..Default::default()
 };
 
-let png_opts = PngOpts {
-    scale: Some(2.0),
-    ppi: None,
-};
-let jpeg_opts = JpegOpts {
-    scale: Some(2.0),
-    quality: Some(90),
-};
-
 let png = converter
-    .vegalite_to_png(spec.clone(), vl_opts.clone(), png_opts)
+    .vegalite_to_png(
+        spec.clone(),
+        chart_size.clone(),
+        PngOpts {
+            scale: Some(2.0),
+            ..Default::default()
+        },
+    )
     .await?;
-let jpeg = converter.vegalite_to_jpeg(spec, vl_opts, jpeg_opts).await?;
-```
-::::
 
+let jpeg = converter
+    .vegalite_to_jpeg(
+        spec,
+        chart_size,
+        JpegOpts {
+            quality: Some(90),
+            ..Default::default()
+        },
+    )
+    .await?;
+```
+
+The example assumes `converter` and `spec` are defined as in
+{doc}`../getting-started/quick-start`.
+::::
 
 ::::{interface} server
+Put sizing options beside `spec` in the request body. For example, save this
+body as `request.json`:
+
+```json
+{
+  "spec": {
+    "data": {"values": [{"x": "A", "y": 2}, {"x": "B", "y": 5}]},
+    "mark": "bar",
+    "encoding": {
+      "x": {"field": "x", "type": "nominal"},
+      "y": {"field": "y", "type": "quantitative"}
+    }
+  },
+  "width": 640,
+  "height": 360,
+  "scale": 2
+}
+```
+
 ```bash
-jq -c '{spec: ., scale: 2, width: 640, height: 360}' chart.vl.json |
-  curl -X POST http://localhost:3000/vegalite/png \
+curl http://127.0.0.1:3000/vegalite/png \
   -H 'Content-Type: application/json' \
-  --data-binary @- > chart.png
+  --data-binary @request.json \
+  --output chart.png
 ```
 ::::
 
-Use SVG output when the consumer can render vector graphics directly. It avoids
-raster density tradeoffs and can still be converted to PNG, JPEG, or PDF later.
+Vega and Vega-Lite PNG output uses Vega's canvas renderer. JPEG and PDF outputs
+are produced from SVG. Direct SVG input conversions use the Rust image and PDF
+renderers without running Vega.
