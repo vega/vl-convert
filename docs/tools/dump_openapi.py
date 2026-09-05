@@ -6,9 +6,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from pathlib import Path
 
-from run_vl_convert import find_binary, repo_root
+from run_vl_convert import find_binary, repo_root, runtime_environment
 
 
 GENERATED = repo_root() / "docs" / "source" / "_generated"
@@ -24,6 +23,7 @@ def dump_surface(surface: str) -> dict:
         cwd=repo_root(),
         text=True,
         capture_output=True,
+        env=runtime_environment(),
     )
     if proc.returncode != 0:
         sys.stderr.write(proc.stderr)
@@ -44,9 +44,13 @@ def validate_surface(surface: str, spec: dict) -> None:
         if admin_paths:
             raise SystemExit(f"public OpenAPI spec leaked admin paths: {admin_paths}")
     elif surface == "admin":
-        non_admin_paths = sorted(path for path in paths if not path.startswith("/admin"))
+        non_admin_paths = sorted(
+            path for path in paths if not path.startswith("/admin")
+        )
         if non_admin_paths:
-            raise SystemExit(f"admin OpenAPI spec leaked public paths: {non_admin_paths}")
+            raise SystemExit(
+                f"admin OpenAPI spec leaked public paths: {non_admin_paths}"
+            )
 
 
 def main() -> int:

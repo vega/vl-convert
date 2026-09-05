@@ -23,6 +23,22 @@ jobs:
           pixi run lint-release
           pixi run check-workspace
 
+  docs:
+    runs-on: macos-15-intel
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v7
+      - uses: prefix-dev/setup-pixi@v0.10.0
+        with:
+          pixi-version: v0.47.0
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          prefix-key: "v1-docs"
+          cache-on-failure: true
+      - name: Build documentation with warnings as errors
+        run: pixi run docs-build-strict
+
   # Run on Linux without Pixi due to glibc linker issues with conda toolchain
   rust-fmt-clippy:
     runs-on: ubuntu-latest
