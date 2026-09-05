@@ -134,4 +134,4 @@ SVG text placement and PNG text rendering require that the fonts referenced by t
 A directory containing additional font files can registered with the VlConvert Python library using the `vl_convert.register_font_directory` function. Similarly, the `--font-dir` argument can be used to register custom fonts in the `vl-convert` CLI application.
 
 ### Built-in Datasets
-The [Vega Editor](https://vega.github.io/editor/) supports referring to built-in datasets as if the exist under a `data/` directory (e.g. `data/cars.json`). This is not currently supporte by VlConvert. Instead an absolute URL must be used (e.g. `https://raw.githubusercontent.com/vega/vega-datasets/next/data/cars.json`).
+The [Vega Editor](https://vega.github.io/editor/) refers to built-in datasets as if they exist under a `data/` directory (e.g. `data/cars.json`). VlConvert resolves these paths against a pinned release of the `vega-datasets` package on the jsDelivr CDN, so they work by default but need network access, and datasets added in later releases may be missing. Set `base_url` to a different release or to a local copy of the datasets to change this.
