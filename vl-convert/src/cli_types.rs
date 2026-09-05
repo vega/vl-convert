@@ -100,9 +100,10 @@ pub(crate) struct Cli {
     )]
     pub(crate) google_font: Vec<String>,
 
-    /// Stop admitting additional Google Font families after this many
-    /// variants have resolved. A single family may cross the threshold;
-    /// `0` disables the threshold.
+    /// Maximum number of Google Font variants one conversion may load,
+    /// counting configured, requested, and automatically discovered
+    /// families. The conversion fails once the cap is reached; a single
+    /// family may carry the total past it. `0` disables the cap.
     #[arg(
         long,
         global = true,
@@ -155,7 +156,7 @@ pub(crate) struct Cli {
     #[arg(long, global = true, value_enum, env = "VLC_MISSING_FONTS")]
     pub(crate) missing_fonts: Option<MissingFontsArg>,
 
-    /// Maximum V8 heap size per worker in megabytes [default: 0 = no limit]
+    /// Maximum V8 heap size per worker in megabytes, at least 64 [default: 0 = no limit]
     #[arg(long, global = true, env = "VLC_MAX_V8_HEAP_SIZE_MB")]
     pub(crate) max_v8_heap_size_mb: Option<u64>,
 

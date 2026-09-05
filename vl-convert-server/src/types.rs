@@ -498,7 +498,7 @@ pub(crate) struct ConfigPatch {
     pub google_font_variant_threshold: Option<Option<NonZeroU64>>,
     /// Maximum JavaScript heap size per persistent worker, in megabytes.
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<u64>, nullable, minimum = 1)]
+    #[schema(value_type = Option<u64>, nullable, minimum = 64)]
     pub max_v8_heap_size_mb: Option<Option<NonZeroU64>>,
     /// Maximum JavaScript execution time per conversion, in seconds.
     #[serde(default, deserialize_with = "double_option::deserialize")]
@@ -582,7 +582,7 @@ pub(crate) struct ConfigReplace {
     pub google_font_variant_threshold: Option<NonZeroU64>,
     /// Maximum JavaScript heap size per persistent worker, in megabytes.
     #[serde(deserialize_with = "required_option::deserialize")]
-    #[schema(value_type = Option<u64>, nullable, required = true, minimum = 1)]
+    #[schema(value_type = Option<u64>, nullable, required = true, minimum = 64)]
     pub max_v8_heap_size_mb: Option<NonZeroU64>,
     /// Maximum JavaScript execution time per conversion, in seconds.
     #[serde(deserialize_with = "required_option::deserialize")]

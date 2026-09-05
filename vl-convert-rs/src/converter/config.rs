@@ -156,12 +156,15 @@ pub struct VlcConfig {
     /// registered per-request via the overlay mechanism. Empty = no
     /// configured fonts (the natural "unset" state).
     pub google_fonts: Vec<GoogleFontRequest>,
-    /// Stop admitting additional Google Font families after this many
-    /// variants have resolved. A single family may cross the threshold.
-    /// `None` preserves unbounded behavior.
+    /// Maximum number of Google Font variants one conversion may load,
+    /// counting configured, per-request, and automatically discovered
+    /// families together. Once the cap is reached the conversion fails rather
+    /// than loading another family; a single family may carry the total past
+    /// the cap. `None` preserves unbounded behavior.
     pub google_font_variant_threshold: Option<NonZeroU64>,
     /// Maximum V8 heap size in megabytes per worker. `None` = no cap;
-    /// `Some(n)` = explicit cap.
+    /// `Some(n)` = explicit cap. Values below 64 MB are rejected when the
+    /// converter is built because V8 cannot initialize a smaller heap.
     pub max_v8_heap_size_mb: Option<NonZeroU64>,
     /// Maximum V8 execution time in seconds. `None` = no cap; `Some(n)` =
     /// explicit cap. When exceeded, V8 execution is terminated and an error is

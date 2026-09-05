@@ -433,14 +433,18 @@ def configure(
             **Replace semantics.** Each call to ``configure(google_fonts=[...])``
             **replaces** the full configured list. ``None`` (or ``[]``) resets to
             the built-in default (empty list).
-        google_font_variant_threshold: Stop admitting additional Google Font families after this many variants
-            have resolved. A single family may cross the threshold. Must be >= 1 if
-            provided. ``None`` resets to the built-in default (no threshold). Passing
-            ``0`` raises ``ValueError``.
-        max_v8_heap_size_mb: Maximum JavaScript (V8) heap size per worker in megabytes.
-            Must be >= 1 if provided. ``None`` resets to the built-in default
-            (no cap). Passing ``0`` raises
+        google_font_variant_threshold: Maximum number of Google Font variants one
+            conversion may load, counting configured, per-call, and automatically
+            discovered families together. Once the cap is reached, the conversion
+            fails rather than loading another family, and a single family may
+            carry the total past the cap. Must be >= 1 if provided. ``None``
+            resets to the built-in default (no cap). Passing ``0`` raises
             ``ValueError``.
+        max_v8_heap_size_mb: Maximum JavaScript (V8) heap size per worker in megabytes.
+            Must be at least 64 if provided, the smallest heap V8 accepts. ``None``
+            resets to the built-in default (no cap). Passing ``0`` raises
+            ``ValueError``, and values below 64 raise ``ValueError`` when the
+            converter is built.
         max_v8_execution_time_secs: Maximum JavaScript (V8) execution time in seconds.
             Must be >= 1 if provided. When exceeded, JavaScript execution stops
             and the conversion returns an error. ``None`` resets to the built-in
@@ -464,9 +468,9 @@ def configure(
         max_ephemeral_workers: Maximum temporary JavaScript workers for concurrent per-request
             plugins. Must be >= 1 if provided. ``None`` resets to the default
             (2). Passing ``0`` raises ``ValueError``.
-        allow_google_fonts: Server policy for accepting ``google_fonts`` and
-            ``auto_google_fonts`` in HTTP request bodies. It does not restrict
-            direct Python calls. ``None`` resets to the default (``False``).
+        allow_google_fonts: Server policy for accepting ``google_fonts`` in HTTP
+            request bodies. It does not restrict direct Python calls. ``None``
+            resets to the default (``False``).
         per_request_plugin_import_domains: Domain patterns allowed for HTTP imports inside per-request plugins.
             Separate from ``plugin_import_domains``. ``None`` (or ``[]``) resets
             to the built-in default, an empty list that disables HTTP imports.
@@ -958,7 +962,8 @@ def vegalite_to_jpeg(
         quality: JPEG quality from 0 through 100. The default is 90.
         config: Chart configuration object to apply during conversion
         theme: Named theme (e.g. "dark") to apply during conversion
-        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
+        show_warnings: Deprecated and ignored. Vega-Lite warnings are always
+            forwarded to the ``vl_convert`` logger.
         format_locale: d3-format locale name or dictionary
         time_format_locale: d3-time-format locale name or dictionary
         vega_plugin: Per-request Vega plugin (inline ESM string or URL).
@@ -1038,7 +1043,8 @@ def vegalite_to_png(
         ppi: Pixels per inch (default 72)
         config: Chart configuration object to apply during conversion
         theme: Named theme (e.g. "dark") to apply during conversion
-        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
+        show_warnings: Deprecated and ignored. Vega-Lite warnings are always
+            forwarded to the ``vl_convert`` logger.
         format_locale: d3-format locale name or dictionary
         time_format_locale: d3-time-format locale name or dictionary
         vega_plugin: Per-request Vega plugin (inline ESM string or URL).
@@ -1078,7 +1084,8 @@ def vegalite_to_scenegraph(
             is the newest version bundled with this release.
         config: Chart configuration object to apply during conversion
         theme: Named theme (e.g. "dark") to apply during conversion
-        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
+        show_warnings: Deprecated and ignored. Vega-Lite warnings are always
+            forwarded to the ``vl_convert`` logger.
         format_locale: d3-format locale name or dictionary
         time_format_locale: d3-time-format locale name or dictionary
         format: Output format: "dict" returns a Python dictionary (default),
@@ -1121,7 +1128,8 @@ def vegalite_to_svg(
             is the newest version bundled with this release.
         config: Chart configuration object to apply during conversion
         theme: Named theme (e.g. "dark") to apply during conversion
-        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
+        show_warnings: Deprecated and ignored. Vega-Lite warnings are always
+            forwarded to the ``vl_convert`` logger.
         format_locale: d3-format locale name or dictionary
         time_format_locale: d3-time-format locale name or dictionary
         vega_plugin: Per-request Vega plugin (inline ESM string or URL).
@@ -1168,7 +1176,8 @@ def vegalite_to_vega(
             is the newest version bundled with this release.
         config: Chart configuration object to apply during conversion
         theme: Named theme (e.g. "dark") to apply during conversion
-        show_warnings: Whether to print Vega-Lite compilation warnings (default false)
+        show_warnings: Deprecated and ignored. Vega-Lite warnings are always
+            forwarded to the ``vl_convert`` logger.
 
     Returns:
         Vega JSON specification dict.

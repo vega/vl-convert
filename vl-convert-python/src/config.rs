@@ -534,14 +534,17 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
 ///     call **replaces** the full configured list. ``None`` (or ``[]``)
 ///     resets to the library default (empty list).
 /// google_font_variant_threshold : int, optional
-///     Stop admitting additional Google Font families after this many variants
-///     have resolved. A single family may cross the threshold. Must be >= 1 if
-///     provided. ``None`` resets to the library default (no threshold). Passing
-///     ``0`` raises ``ValueError``.
+///     Maximum number of Google Font variants one conversion may load, counting
+///     configured, per-call, and automatically discovered families together.
+///     Once the cap is reached the conversion fails rather than loading another
+///     family, and a single family may carry the total past the cap. Must be
+///     >= 1 if provided. ``None`` resets to the library default (no cap).
+///     Passing ``0`` raises ``ValueError``.
 /// max_v8_heap_size_mb : int, optional
-///     Maximum V8 heap size per worker in megabytes. Must be >= 1 if provided.
-///     ``None`` resets to the library default (no cap). Passing ``0`` raises
-///     ``ValueError``.
+///     Maximum V8 heap size per worker in megabytes. Must be at least 64 if
+///     provided, the smallest heap V8 accepts. ``None`` resets to the library
+///     default (no cap). Passing ``0`` raises ``ValueError``, and values below
+///     64 raise ``ValueError`` when the converter is built.
 /// max_v8_execution_time_secs : int, optional
 ///     Maximum V8 execution time in seconds. Must be >= 1 if provided. When
 ///     exceeded, V8 execution is terminated and an error is returned.
