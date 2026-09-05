@@ -3,6 +3,25 @@
 VlConvert converts Vega-Lite, Vega, and SVG inputs to static output formats
 through Python, CLI, Rust, and HTTP server interfaces.
 
+## Rendered Output Preview
+
+The illustrative Vega-Lite spec below is rendered by VlConvert as SVG, PNG,
+and PDF. The source spec and generated outputs are checked in together. On
+narrow screens, scroll the preview horizontally.
+
+<!-- Regenerate the checked-in outputs with `pixi run docs-preview-chart`. -->
+
+:::{container} front-page-chart-scroll
+```{image} _static/charts/front-page-chart.svg
+:alt: Illustrative chart of sample monthly render counts and p95 latency
+:class: front-page-chart-preview
+```
+:::
+
+{download}`Download PNG output <_static/charts/front-page-chart.png>` ·
+{download}`Download PDF output <_static/charts/front-page-chart.pdf>` ·
+{download}`Download Vega-Lite spec <_static/charts/front-page-chart.vl.json>`
+
 Choose the documentation root that matches the boundary where you use
 VlConvert.
 

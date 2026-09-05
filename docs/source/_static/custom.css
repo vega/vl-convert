@@ -10,3 +10,21 @@
 .navbar-brand.logo img.logo__image {
   height: 2rem;
 }
+
+.front-page-chart-scroll {
+  max-width: 100%;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+}
+
+.front-page-chart-preview {
+  display: block;
+  width: 750px;
+  max-width: none;
+  height: auto;
+  margin: 0 auto;
+  border: 1px solid var(--pst-color-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+}

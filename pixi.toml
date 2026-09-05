@@ -33,6 +33,7 @@ build-rs = "cargo build -p vl-convert-rs"
 build-cli = "cargo build -p vl-convert"
 build-py = "maturin build -m vl-convert-python/Cargo.toml --sdist --release"
 docs-generate = "python docs/tools/generate_interface_pages.py"
+docs-preview-chart = { cmd = "python docs/tools/generate_preview_chart.py", depends-on = ["build-cli"] }
 docs-openapi = { cmd = "python docs/tools/dump_openapi.py", depends-on = ["build-cli"] }
 docs-build = { cmd = "sphinx-build -E -b html docs/source docs/build/html && touch docs/build/html/.nojekyll", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
 docs-build-strict = { cmd = "sphinx-build -E -W --keep-going -b html docs/source docs/build/html && touch docs/build/html/.nojekyll", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
