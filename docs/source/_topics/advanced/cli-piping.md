@@ -1,5 +1,5 @@
 ---
-title: CLI Piping
+title: Standard Input and Output
 path: advanced/cli-piping
 section: Advanced
 order: 430
@@ -10,9 +10,9 @@ interfaces: [cli]
 
 # Standard Input and Output
 
-Every conversion command accepts a file path or `-` for standard input and
-standard output. If `--input` or `--output` is omitted, that stream is used by
-default.
+Every conversion command reads `--input` and writes `--output`. Pass `-` for
+either to use standard input or standard output. Omitting an option selects the
+same stream.
 
 Read a specification from standard input and write SVG to a file:
 
@@ -26,19 +26,18 @@ Send SVG to another process:
 vl-convert vl2svg --input chart.vl.json --output - | gzip > chart.svg.gz
 ```
 
-Binary formats such as PNG, JPEG, PDF, and MessagePack can also be written to
-standard output. Redirect binary output to a file or pipe it to a program that
-accepts bytes. Do not let it print directly in an interactive terminal.
+Binary formats such as PNG, JPEG, PDF, and MessagePack can be piped the same
+way. When `--output` is omitted and standard output is an interactive terminal,
+`vl-convert` refuses to write binary data and exits with an error. Pass
+`--output -` to override that guard.
 
-Logs and errors go to standard error, so they do not corrupt successful output.
-In shell scripts, enable pipeline failure handling when an earlier command must
-not fail silently:
+Logs and errors go to standard error, so they never mix with the output. Enable
+`pipefail` in shell scripts so a failed conversion fails the pipeline:
 
 ```bash
 set -o pipefail
 vl-convert vl2png --input chart.vl.json --output - | gzip > chart.png.gz
 ```
 
-Run `vl-convert config-path` to print the platform-standard JSONC configuration
-path. See {doc}`configuration` for precedence rules and
-`--vlc-config disabled`.
+Pass `--vlc-config disabled` in scripts that must not depend on the machine's
+config file. See {doc}`configuration`.

@@ -2,7 +2,7 @@
 title: Altair Integration
 path: guides/altair-integration
 section: Guides
-order: 230
+order: 205
 interfaces: [python]
 ---
 
@@ -10,10 +10,13 @@ interfaces: [python]
 
 # Using VlConvert with Altair
 
-Altair charts produce Vega-Lite specifications. Pass `chart.to_dict()` to
-VlConvert when an application needs the rendered bytes or text in memory.
-Using a dictionary avoids converting the specification to JSON and parsing it
-again.
+Altair charts compile to Vega-Lite specifications, so any Altair chart can be
+rendered with the Vega-Lite functions. Pass `chart.to_dict()` directly. This
+skips serializing the specification to JSON and parsing it again.
+
+Altair's own `chart.save()` already uses VlConvert to write static image files.
+Call VlConvert directly when you need options that `save()` does not expose, or
+when you want the result in memory instead of on disk.
 
 Install both packages if the application does not already include Altair:
 
@@ -49,7 +52,7 @@ with open("chart.png", "wb") as output_file:
     output_file.write(png)
 ```
 
-Use `vegalite_to_svg()` for SVG text or `vegalite_to_pdf()` for PDF bytes.
-Altair's own save support also uses VlConvert for supported export paths. Call
-VlConvert directly when you need its conversion options or want to keep the
-result in memory.
+Use `vegalite_to_svg()` for SVG text or `vegalite_to_pdf()` for PDF bytes. If a
+chart was produced by an older Altair release, pass `vl_version` to select the
+matching Vega-Lite compiler. See {doc}`vegalite-conversions` for the full list
+of outputs and {doc}`image-quality` for size and resolution options.

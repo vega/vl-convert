@@ -1,13 +1,14 @@
 # VlConvert
 
-VlConvert converts Vega-Lite, Vega, and SVG inputs to static output formats
-through Python, CLI, Rust, and HTTP server interfaces.
+VlConvert converts Vega-Lite, Vega, and SVG inputs to SVG, PNG, JPEG, PDF, and
+HTML. It runs the official Vega and Vega-Lite JavaScript libraries in an
+embedded runtime, so it needs no browser or Node.js, and the bundled libraries
+need no network access. Only external data, images, fonts, and plugins that a
+chart references do.
 
 ## Rendered Output Preview
 
-This example starts with one Vega-Lite specification. VlConvert renders the
-same chart as SVG, PNG, and PDF. On narrow screens, scroll the preview
-horizontally.
+One Vega-Lite specification, rendered by VlConvert as SVG, PNG, and PDF.
 
 <!-- Regenerate the checked-in outputs with `pixi run docs-preview-chart`. -->
 
@@ -22,8 +23,11 @@ horizontally.
 {download}`Download PDF output <_static/charts/front-page-chart.pdf>` ·
 {download}`Download Vega-Lite spec <_static/charts/front-page-chart.vl.json>`
 
-Choose the documentation root that matches the boundary where you use
-VlConvert.
+## Choose an Interface
+
+All four interfaces share one conversion engine, so a chart renders the same
+way from each of them given the same configuration and environment. Pick the
+one that matches how you will call VlConvert.
 
 ::::{grid} 1 2 2 4
 :gutter: 2
@@ -56,6 +60,9 @@ Embed `vl-convert-rs` directly in Rust applications.
 Run `vl-convert serve` as an HTTP rendering worker.
 :::
 ::::
+
+{doc}`how-it-works` explains the input types, output formats, fonts, network
+access, and worker model that every interface shares.
 
 ```{toctree}
 :hidden:

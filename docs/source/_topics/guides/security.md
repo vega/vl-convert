@@ -1,8 +1,8 @@
 ---
-title: Security and Data Access
+title: Security and Network Access
 path: guides/security
 section: Guides
-order: 270
+order: 280
 interfaces: [python, cli, rust, server]
 ---
 
@@ -10,29 +10,29 @@ interfaces: [python, cli, rust, server]
 
 # Security and Network Access
 
-A Vega or Vega-Lite specification can refer to remote data, local data, images,
-fonts, and plugin code. Treat the specification as active input when it comes
-from another user or system. Limit both the resources it can reach and the work
-it can perform.
+A Vega or Vega-Lite specification can refer to remote data, local files,
+images, fonts, and plugin code. Treat a specification from another user or
+system as active input: limit the resources it can reach and the work it can
+perform.
 
-VlConvert uses separate controls for three resource types:
+VlConvert controls three resource types separately:
 
-| Resource | Primary control |
+| Resource | Control |
 | --- | --- |
 | Data and images referenced by a specification or SVG | `base_url` and `allowed_base_urls` |
 | Google Fonts | Explicit font requests and `auto_google_fonts` |
-| Plugin modules and their imports | `vega_plugins` and plugin domain allowlists |
+| Plugin modules and their imports | `vega_plugins` and the plugin domain allowlists |
 
-Allowing one resource type does not allow the others.
+Allowing one type does not allow the others.
 
 ## Restrict Data and Images
 
-By default, `allowed_base_urls` permits HTTP and HTTPS URLs but does not permit
-local files. `base_url` supplies the location used to resolve relative data
-URLs. Tighten both settings before processing untrusted input.
+By default, `allowed_base_urls` permits any HTTP or HTTPS URL and no local
+files, and `base_url` resolves relative data URLs against the Vega datasets
+CDN. Tighten both before processing untrusted input.
 
-An empty `allowed_base_urls` list blocks absolute network and filesystem
-access. To permit one service, use its full URL prefix:
+An empty `allowed_base_urls` list blocks every absolute URL and file path. To
+permit one service, list its URL prefix:
 
 ::::{interface} python
 ```python
@@ -57,7 +57,7 @@ vl-convert \
   vl2png --input chart.vl.json --output chart.png
 ```
 
-Use `--allowed-base-urls none` to block every absolute data and image URL.
+`--allowed-base-urls none` blocks every absolute data and image URL.
 ::::
 
 ::::{interface} rust
@@ -95,29 +95,25 @@ configure authentication, request limits, and render-time budgets before
 exposing the listener. See {doc}`/server/deployment`.
 ::::
 
-Allowlist entries can be URL prefixes, schemes such as `https:`, absolute
-filesystem directories, or `*`. Prefer the narrowest prefix that supports the
-application. A filesystem entry must name a directory. Do not use `*` for
-untrusted specifications.
+Allowlist entries can be URL prefixes, schemes such as `https:`, wildcard
+hosts, absolute filesystem directories, or `*`. Use the narrowest prefix that
+works, and never use `*` for untrusted specifications. See
+{doc}`data-loading` for the full pattern syntax and how URLs are resolved.
 
 ## Restrict Fonts and Plugins
 
-Automatic Google Fonts can make network requests based on font names in a
-specification. Keep `auto_google_fonts` disabled unless this behavior is
-required. If you enable it, set a variant threshold and use a cache. See
-{doc}`fonts`.
+Automatic Google Fonts makes network requests based on font names in a
+specification. Keep `auto_google_fonts` off unless you need it. If you enable
+it, set a variant threshold. See {doc}`fonts`.
 
-Plugins execute JavaScript and can import code from allowed domains. Prefer
-reviewed local startup plugins. Keep per-request plugins disabled when callers
-are not trusted. See {doc}`plugins` and
-{doc}`../advanced/plugin-loading`.
+Plugins run JavaScript and can import code from allowed domains. Prefer
+reviewed local startup plugins, and keep per-request plugins disabled for
+untrusted callers. See {doc}`plugins` and {doc}`../advanced/plugin-loading`.
 
 ## Limit Resource Use
 
-An input can require substantial CPU time or JavaScript memory without loading
-external resources. Set `max_v8_execution_time_secs` and
-`max_v8_heap_size_mb` for untrusted workloads. These limits apply to the
-JavaScript portion of a conversion. Use process-level memory and time limits as
-an additional boundary for a public service.
-
-See {doc}`../advanced/memory-management` for the performance tradeoffs.
+A specification can consume CPU time or JavaScript memory without loading any
+external resource. Set `max_v8_execution_time_secs` and `max_v8_heap_size_mb`
+for untrusted workloads. These limits cover only the JavaScript portion of a
+conversion, so add process-level memory and time limits as an outer boundary
+for a public service. See {doc}`../advanced/memory-management`.

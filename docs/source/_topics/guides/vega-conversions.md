@@ -10,13 +10,12 @@ interfaces: [python, cli, rust, server]
 
 # Converting Vega
 
-Use a Vega input when the chart was authored in Vega or was already compiled
-from Vega-Lite. VlConvert evaluates the Vega specification directly, so
-Vega-Lite themes and compiler-version options do not apply.
+Use the Vega functions for charts authored in Vega or already compiled from
+Vega-Lite. VlConvert parses and evaluates the specification directly, so the
+Vega-Lite options `theme` and `vl_version` do not apply.
 
-Available results include SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, and an
-evaluated scenegraph. Use the Vega-Lite conversion API instead if you need
-VlConvert to compile the input first.
+Available outputs: SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, an evaluated
+scenegraph, and the fonts VlConvert resolves for the chart.
 
 ::::{interface} python
 ```python
@@ -26,8 +25,8 @@ svg = vlc.vega_to_svg(vg_spec)
 png = vlc.vega_to_png(vg_spec, scale=2)
 ```
 
-`vg_spec` can be a Python dictionary or a JSON string. SVG functions return
-text, while raster and PDF functions return bytes.
+`vg_spec` is a dictionary or JSON string. SVG and HTML functions return text.
+PNG, JPEG, and PDF functions return bytes.
 ::::
 
 ::::{interface} cli
@@ -36,8 +35,8 @@ vl-convert vg2svg --input chart.vg.json --output chart.svg
 vl-convert vg2png --input chart.vg.json --output chart.png
 ```
 
-The `vg2jpeg`, `vg2pdf`, `vg2html`, `vg2url`, and `vg2sg`
-commands provide the other output types.
+The other commands are `vg2jpeg`, `vg2pdf`, `vg2html`, `vg2url`, `vg2sg`, and
+`vg2fonts`.
 ::::
 
 ::::{interface} rust
@@ -50,16 +49,18 @@ let output = converter
     .await?;
 ```
 
-The SVG text is in `output.svg`, and Vega diagnostic messages are in
+The SVG text is in `output.svg`, and Vega's diagnostic messages are in
 `output.logs`.
 ::::
 
 ::::{interface} server
-Send a JSON body with the Vega value in `spec` to the endpoint for the
-required output. For example, `POST /vega/png` returns PNG bytes and
-`POST /vega/svg` returns SVG text.
-
-The other endpoints are `/vega/jpeg`, `/vega/pdf`, `/vega/html`,
-`/vega/url`, and `/vega/scenegraph`. See {doc}`../api-reference` for
-complete request and response schemas.
+Send a JSON body with the Vega specification in `spec` to the endpoint for the
+output you need: `/vega/svg`, `/vega/png`, `/vega/jpeg`, `/vega/pdf`,
+`/vega/html`, `/vega/url`, `/vega/scenegraph`, or `/vega/fonts`. All are
+`POST` endpoints. The request fields match the Vega-Lite endpoints, minus
+`theme` and `vl_version`. See {doc}`../api-reference` for the schemas.
 ::::
+
+Size, locale, and other per-conversion options work the same way as for
+Vega-Lite. See {doc}`image-quality`, {doc}`locales`, and
+{doc}`../advanced/conversion-overrides`.

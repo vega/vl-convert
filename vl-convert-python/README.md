@@ -60,7 +60,7 @@ with open("chart.vg.json", "wt") as f:
 ```
 
 ## Convert Altair Chart to SVG, PNG, and Vega
-The Altair visualization library provides a Pythonic API for generating Vega-Lite visualizations. As such, `vl-convert-python` can be used to convert Altair charts to PNG, SVG, or Vega. The `vegalite_*` functions support an optional `vl_version` argument that can be used to specify the particular version of the Vega-Lite JavaScript library to use.  Version 4.2 of the Altair package uses Vega-Lite version 4.17, so this is the version that should be specified when converting Altair charts.
+The Altair visualization library provides a Pythonic API for generating Vega-Lite visualizations. As such, `vl-convert-python` can be used to convert Altair charts to PNG, SVG, or Vega. Pass `chart.to_dict()` directly. The `vegalite_*` functions accept an optional keyword-only `vl_version` argument that selects a particular bundled Vega-Lite version when a chart depends on an older release.
 
 ```python
 import altair as alt
@@ -77,17 +77,17 @@ chart = alt.Chart(source).mark_bar().encode(
 )
 
 # Create SVG image string and then write to a file
-svg_str = vlc.vegalite_to_svg(chart.to_json(), vl_version="4.17")
+svg_str = vlc.vegalite_to_svg(chart.to_dict())
 with open("altair_chart.svg", "wt") as f:
     f.write(svg_str)
 
 # Create PNG image data and then write to a file
-png_data = vlc.vegalite_to_png(chart.to_json(), vl_version="4.17", scale=2)
+png_data = vlc.vegalite_to_png(chart.to_dict(), scale=2)
 with open("altair_chart.png", "wb") as f:
     f.write(png_data)
 
 # Create low-level Vega representation of chart and write to file
-vg_spec = vlc.vegalite_to_vega(chart.to_json(), vl_version="4.17")
+vg_spec = vlc.vegalite_to_vega(chart.to_dict())
 with open("altair_chart.vg.json", "wt") as f:
     json.dump(vg_spec, f)
 ```
@@ -111,18 +111,20 @@ This setting applies to subsequent conversions and enables parallel work across 
 Charts that reference [Google Fonts](https://fonts.google.com/) can download and register them automatically. There are two approaches:
 
 ### Explicit Registration
-Use `register_google_fonts_font` to download specific font families before conversion:
+Use `configure(google_fonts=...)` to register specific font families for all subsequent conversions, or pass `google_fonts` to a single conversion:
 
 ```python
 import vl_convert as vlc
 
-# Download all variants of Roboto
-vlc.register_google_fonts_font("Roboto")
+# Register all variants of Roboto and two variants of Playfair Display
+vlc.configure(
+    google_fonts=[
+        "Roboto",
+        {"family": "Playfair Display", "variants": [(400, "normal"), (700, "italic")]},
+    ]
+)
 
-# Download specific weight/style variants
-vlc.register_google_fonts_font("Playfair Display", variants=[(400, "normal"), (700, "italic")])
-
-svg_str = vlc.vegalite_to_svg(vl_spec=vl_spec)
+svg_str = vlc.vegalite_to_svg(vl_spec)
 ```
 
 ### Automatic Detection
@@ -138,10 +140,10 @@ svg_str = vlc.vegalite_to_svg(vl_spec=vl_spec)
 ```
 
 ### Cache Configuration
-Downloaded fonts are cached on disk (default `~/.cache/vl-convert/google-fonts/`). You can limit the cache size:
+Downloaded fonts are cached on disk in the platform cache directory, which `vlc.google_fonts_cache_dir()` returns. The cache is capped at 512 MB by default. You can change the cap:
 
 ```python
-vlc.configure(google_fonts_cache_size_mb=500)
+vlc.set_google_fonts_cache_size_mb(500)
 ```
 
 ## Asyncio API
@@ -164,11 +166,11 @@ async def main():
     await vlca.configure(num_workers=4)
     await vlca.warm_up_workers()  # optional
 
-    svg = await vlca.vegalite_to_svg(vl_spec, "v5_16")
+    svg = await vlca.vegalite_to_svg(vl_spec, vl_version="5.16")
     print(svg[:5])
 
     svgs = await asyncio.gather(
-        *[vlca.vegalite_to_svg(vl_spec, "v5_16") for _ in range(8)]
+        *[vlca.vegalite_to_svg(vl_spec, vl_version="5.16") for _ in range(8)]
     )
     print(len(svgs))
 

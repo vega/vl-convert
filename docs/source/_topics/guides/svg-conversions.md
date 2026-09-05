@@ -1,5 +1,5 @@
 ---
-title: SVG Conversions
+title: Converting SVG
 path: guides/svg-conversions
 section: Guides
 order: 220
@@ -10,13 +10,13 @@ interfaces: [python, cli, rust, server]
 
 # Converting SVG
 
-Use an SVG input when another tool has already produced the vector image.
-VlConvert can turn it into PNG, JPEG, or PDF without parsing a Vega or
-Vega-Lite specification.
+Use the SVG functions when another tool has already produced the vector image.
+VlConvert converts it to PNG, JPEG, or PDF without running Vega.
 
-The SVG must include enough sizing information to establish an image size.
-Referenced fonts and images must be available to the rendering process. See
-{doc}`fonts` and {doc}`security` when the SVG is not fully self-contained.
+The SVG must declare its size through `width` and `height` attributes or a
+`viewBox`. Fonts and images it references must be available to the rendering
+process. See {doc}`fonts` and {doc}`security` when the SVG is not
+self-contained.
 
 ::::{interface} python
 ```python
@@ -29,7 +29,7 @@ png = vlc.svg_to_png(svg)
 pdf = vlc.svg_to_pdf(svg)
 ```
 
-Both results are bytes. Use `svg_to_jpeg()` when JPEG output is required.
+Both results are bytes. `svg_to_jpeg()` produces JPEG.
 ::::
 
 ::::{interface} cli
@@ -38,7 +38,8 @@ vl-convert svg2png --input chart.svg --output chart.png
 vl-convert svg2pdf --input chart.svg --output chart.pdf
 ```
 
-`svg2jpeg` provides JPEG output. PNG and JPEG accept raster scaling options.
+`svg2jpeg` produces JPEG. `svg2png` accepts `--scale` and `--ppi`, `svg2jpeg`
+accepts `--scale` and `--quality`, and `svg2pdf` has no format options.
 ::::
 
 ::::{interface} rust
@@ -49,12 +50,11 @@ let converter = VlConverter::new();
 let output = converter.svg_to_png(svg, Default::default()).await?;
 ```
 
-`svg` is a string containing the input document. The PNG bytes are in
-`output.data`.
+`svg` is a `&str` holding the document. The PNG bytes are in `output.data`.
 ::::
 
 ::::{interface} server
-Send JSON with an `svg` string to `/svg/png`, `/svg/jpeg`, or
+Send JSON with the markup in an `svg` string to `/svg/png`, `/svg/jpeg`, or
 `/svg/pdf`. For example, save this request as `request.json`:
 
 ```json
@@ -71,3 +71,5 @@ curl http://127.0.0.1:3000/svg/png \
   --output chart.png
 ```
 ::::
+
+See {doc}`image-quality` for the `scale`, `ppi`, and `quality` options.

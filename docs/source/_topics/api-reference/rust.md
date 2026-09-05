@@ -10,16 +10,15 @@ interfaces: [rust]
 
 # Rust API Reference
 
-The package is named `vl-convert-rs` on crates.io and is imported as
-`vl_convert_rs` in Rust code.
+The crate is named `vl-convert-rs` on crates.io and imported as `vl_convert_rs`.
 
 ```rust
 use vl_convert_rs::{PngOpts, VlcConfig, VlConverter, VlOpts};
 ```
 
-Create one converter and reuse it for related work. `VlConverter::new()`
-uses the default config. `VlConverter::with_config(...)` validates the config
-and returns a `Result`.
+Create one converter and reuse it. `VlConverter::new()` uses the default
+configuration. `VlConverter::with_config()` validates a `VlcConfig` and returns
+a `Result`.
 
 ```rust
 let converter = VlConverter::with_config(VlcConfig {
@@ -28,8 +27,8 @@ let converter = VlConverter::with_config(VlcConfig {
 })?;
 ```
 
-Conversion methods are async. They return output structs rather than raw bytes
-so callers can inspect Vega logs and Google Fonts usage.
+Conversion methods are `async` and return output structs rather than raw bytes,
+so callers can read Vega's diagnostic messages and Google Fonts usage:
 
 ```rust
 let output = converter
@@ -49,7 +48,7 @@ for entry in &output.logs {
 }
 ```
 
-Common output shapes:
+Output structs:
 
 - `PngOutput`, `JpegOutput`, and `PdfOutput`: `data`, `logs`, `google_fonts`.
 - `SvgOutput`: `svg`, `logs`, `google_fonts`.
@@ -58,8 +57,7 @@ Common output shapes:
 - `ScenegraphMsgpackOutput`: `data`, `logs`, `google_fonts`.
 - `VegaOutput`: `spec`, `logs`.
 
-Applications that already use Tokio can await conversion methods directly. The
-quick start shows the required runtime setup for a new application.
-
-For item-by-item documentation, use the
-[`vl-convert-rs` API on docs.rs](https://docs.rs/vl-convert-rs).
+The {doc}`getting-started/quick-start` shows the Tokio setup for a new
+application, and {doc}`advanced/rust-converter` covers sharing the converter.
+Item-by-item documentation is on
+[docs.rs](https://docs.rs/vl-convert-rs).

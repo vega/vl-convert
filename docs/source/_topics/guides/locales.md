@@ -10,13 +10,15 @@ interfaces: [python, cli, rust, server]
 
 # Number and Time Locales
 
-Locales change how Vega and Vega-Lite format values. `format_locale` controls
-numbers, including decimal marks, grouping, and currency. `time_format_locale`
-controls names and patterns for dates and times.
+Locales control how Vega formats values. `format_locale` sets number formatting
+such as decimal marks, digit grouping, and currency symbols.
+`time_format_locale` sets the names and patterns used for dates and times.
 
-Use a built-in locale name for common regional formats. Use a locale object
-when the application needs custom rules. Locale settings change formatting,
-not the timezone or the underlying data values.
+Use a built-in locale name such as `de-DE` or `ja-JP` for standard regional
+formats, or pass a locale object for custom rules. The built-in names match the
+locale files in [d3-format](https://github.com/d3/d3-format/tree/main/locale)
+and [d3-time-format](https://github.com/d3/d3-time-format/tree/main/locale).
+Locales change formatting only. They do not change the timezone or the data.
 
 ## Use a Built-In Locale
 
@@ -28,6 +30,9 @@ svg = vlc.vegalite_to_svg(
     time_format_locale="de-DE",
 )
 ```
+
+`get_format_locale()` and `get_time_format_locale()` return the definition of
+a built-in locale, and {doc}`../api-reference` lists the accepted names.
 ::::
 
 ::::{interface} cli
@@ -57,7 +62,7 @@ let output = converter
 ::::
 
 ::::{interface} server
-Put locale names beside `spec` in the request:
+Put the locale names beside `spec` in the request:
 
 ```json
 {
@@ -71,8 +76,8 @@ Put locale names beside `spec` in the request:
 ## Define Custom Number Rules
 
 A number locale follows the
-[d3-format locale definition](https://d3js.org/d3-format#locale_format).
-Save this example as `format-locale.json`:
+[d3-format locale definition](https://d3js.org/d3-format#locale_format). Save
+this example as `format-locale.json`:
 
 ```json
 {
@@ -99,7 +104,8 @@ svg = vlc.vegalite_to_svg(spec, format_locale=format_locale)
 ::::
 
 ::::{interface} cli
-Pass a locale name, inline JSON object, or `.json` or `.jsonc` file:
+The option accepts a locale name, an inline JSON object, or a `.json` or
+`.jsonc` file:
 
 ```bash
 vl-convert vl2svg \
@@ -142,9 +148,9 @@ The request field accepts the locale object directly:
 ::::
 
 Custom time locales follow the
-[d3-time-format locale definition](https://d3js.org/d3-time-format#locale_format).
-They define names for days and months as well as date and time patterns.
-Built-in names are shorter and less error-prone when a standard locale fits.
+[d3-time-format locale definition](https://d3js.org/d3-time-format#locale_format)
+and define day and month names as well as date and time patterns. Prefer a
+built-in name when one fits.
 
-See {doc}`../advanced/configuration` to apply locale defaults to every
-conversion.
+See {doc}`../advanced/configuration` to apply a locale to every conversion by
+default.

@@ -2,58 +2,73 @@
 title: Font Introspection
 path: advanced/font-introspection
 section: Advanced
-order: 460
+order: 475
 interfaces: [python, cli, rust, server]
 ---
 
 <!-- topic-body -->
 
-# Inspect Fonts Used by a Chart
+# Inspect Fonts Resolved for a Chart
 
 Font inspection evaluates a Vega or Vega-Lite specification and reports the
-font families, weights, and styles used by the resulting chart. Use it to find
-missing fonts, prepare web font requests, or confirm that a deployment contains
-the same fonts as a development machine.
+fonts VlConvert can supply for it, with the weights and styles the chart uses.
+Use it to prepare web font links for HTML output, generate `@font-face` CSS, or
+confirm that a deployment resolves the same fonts as a development machine.
 
-Each result identifies the family and whether VlConvert resolved it locally or
-through Google Fonts. Google Font results can also include a stylesheet URL,
-HTML link tag, and CSS import rule.
+The result lists only fonts that VlConvert resolved, so it depends on the
+converter's font settings:
+
+- Fonts found in the Google Fonts catalog are listed when `auto_google_fonts`
+  is enabled or the family was requested through `google_fonts`. These records
+  include a stylesheet URL, an HTML link tag, and a CSS import rule.
+- Fonts installed on the host or registered from a directory are listed only
+  when `embed_local_fonts` is enabled.
+- Fonts that cannot be resolved are never listed. Set `missing_fonts` to `warn`
+  or `error` to have them reported instead.
+
+With the default settings both switches are off and the result is an empty
+list. The examples below enable `embed_local_fonts`.
 
 ::::{interface} python
 ```python
 import vl_convert as vlc
 
+vlc.configure(embed_local_fonts=True)
 fonts = vlc.vegalite_fonts(spec)
 for font in fonts:
     print(font["name"], font["source"], font["variants"])
 ```
 
-Set `include_font_face=True` to include generated `@font-face` CSS for available
-variants. This can make the returned data much larger.
+`vegalite_fonts()` reads `embed_local_fonts` from the converter configuration.
+Its `auto_google_fonts` argument overrides the configured value for one call.
+Set `include_font_face=True` to include generated `@font-face` CSS for each
+variant, which can make the result much larger.
 ::::
 
 ::::{interface} cli
 ```bash
-vl-convert vl2fonts \
-  --input chart.vl.json \
-  --output fonts.json \
-  --pretty
+vl-convert --embed-local-fonts \
+  vl2fonts --input chart.vl.json --output fonts.json --pretty
 ```
 
-Use `vg2fonts` for Vega input. Add `--include-font-face` only when the output
-needs embedded font CSS.
+Add `--auto-google-fonts` to include matches from the Google Fonts catalog. Use
+`vg2fonts` for Vega input, and `--include-font-face` only when the output needs
+embedded font CSS.
 ::::
 
 ::::{interface} rust
+The Rust method takes the font switches as arguments instead of reading them
+from `VlcConfig`:
+
 ```rust
 let fonts = converter
     .vegalite_fonts(
         spec,
         Default::default(),
-        false, // Do not discover Google Fonts automatically
-        false, // Do not embed local fonts
-        false, // Do not include @font-face CSS
-        true,  // Subset fonts if CSS is requested
+        false, // auto_google_fonts: do not probe the Google Fonts catalog
+        true,  // embed_local_fonts: list locally available fonts
+        false, // include_font_face: omit @font-face CSS
+        true,  // subset_fonts: subset the CSS when it is included
     )
     .await?;
 
@@ -64,7 +79,8 @@ for font in fonts {
 ::::
 
 ::::{interface} server
-Send a normal specification request to `POST /vegalite/fonts` or
+Start the server with `--embed-local-fonts`, `--auto-google-fonts`, or both,
+then send a normal specification request to `POST /vegalite/fonts` or
 `POST /vega/fonts`:
 
 ```json
@@ -74,11 +90,11 @@ Send a normal specification request to `POST /vegalite/fonts` or
 }
 ```
 
-The response is a JSON array of font records. Font downloads follow the
-server's Google Fonts settings and request gates.
+The response is a JSON array of font records. Google Fonts lookups follow the
+server's font settings.
 ::::
 
-Font inspection performs chart compilation and evaluation, so it can load data
-and consume similar resources to a render. Apply the same access controls and
-resource limits that you use for conversion endpoints. See {doc}`../guides/fonts`
-for registration, fallback, and embedding options.
+Font inspection compiles and evaluates the chart, so it loads data and uses
+resources much like a render. Apply the same access controls and resource
+limits as for conversions. See {doc}`../guides/fonts` for registration,
+fallback, and embedding options.

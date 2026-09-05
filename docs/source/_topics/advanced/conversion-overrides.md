@@ -2,7 +2,7 @@
 title: Conversion Overrides
 path: advanced/conversion-overrides
 section: Advanced
-order: 407
+order: 405
 interfaces: [python, cli, rust, server]
 ---
 
@@ -10,32 +10,33 @@ interfaces: [python, cli, rust, server]
 
 # Conversion Overrides
 
-Use an override when one conversion needs a value that differs from the
-converter default. Persistent settings belong in converter configuration. See
-{doc}`configuration` when the same value should apply to later conversions.
+An override changes one conversion without touching the converter
+configuration. Use {doc}`configuration` instead when the same value should
+apply to every conversion.
 
-| Override | Used By | Effect |
+| Override | Applies to | Effect |
 | --- | --- | --- |
-| `theme` | Vega-Lite | Applies a built-in or custom Vega-Lite theme |
-| `config` | Vega-Lite and supported Vega conversions | Merges Vega or Vega-Lite configuration into the input |
+| `theme` | Vega-Lite | Applies a built-in or custom theme |
+| `config` | Vega-Lite and Vega | Merges a Vega or Vega-Lite configuration object into the input |
 | `format_locale` | Vega-Lite and Vega | Selects number formatting rules |
 | `time_format_locale` | Vega-Lite and Vega | Selects date and time formatting rules |
-| `background`, `width`, `height` | Vega-Lite and Vega | Changes the chart before rendering or evaluation |
+| `background`, `width`, `height` | Vega-Lite and Vega | Sets the chart background and logical size before rendering |
 | `scale` | PNG and JPEG | Multiplies raster pixel dimensions |
 | `ppi` | PNG | Combines with `scale` as `scale * ppi / 72` |
-| `quality` | JPEG | Sets encoding quality from `0` through `100`, with a default of `90` |
-| `bundle` | SVG and HTML | Embeds assets in SVG or browser dependencies in HTML |
+| `quality` | JPEG | Sets encoding quality from `0` through `100`, default `90` |
+| `bundle` | SVG and HTML | Embeds fonts and images in SVG, or browser dependencies in HTML |
 | `renderer` | HTML | Selects `svg`, `canvas`, or `hybrid` rendering in the browser |
 | `vl_version` | Vega-Lite | Selects a bundled Vega-Lite compiler version |
 | `google_fonts` | Vega-Lite and Vega | Makes selected Google Fonts available to one conversion |
 | `vega_plugin` | Vega-Lite and Vega | Registers plugin code for one conversion |
 | `fullscreen` | Vega Editor URLs | Selects the full-screen editor URL form |
 
-SVG input conversions have their own format options and do not use chart
-options such as `theme`, `width`, or `height`.
+SVG input conversions accept only the raster options `scale`, `ppi`, and
+`quality`. Chart options such as `theme`, `width`, and `height` do not apply to
+them.
 
 ::::{interface} python
-Pass overrides as keyword arguments to the conversion function:
+Pass overrides as keyword arguments:
 
 ```python
 png = vlc.vegalite_to_png(
@@ -47,8 +48,8 @@ png = vlc.vegalite_to_png(
 )
 ```
 
-Python supports `config` for both Vega-Lite and Vega conversions. A per-call
-`vega_plugin` also requires `allow_per_request_plugins=True` in `configure()`.
+A per-call `vega_plugin` also requires `allow_per_request_plugins=True` in
+`configure()`.
 ::::
 
 ::::{interface} rust
@@ -78,7 +79,7 @@ A per-call plugin also requires `allow_per_request_plugins: true` in
 ::::
 
 ::::{interface} server
-Put overrides beside `spec` in the JSON request body:
+Put overrides beside `spec` in the request body:
 
 ```json
 {
@@ -90,13 +91,14 @@ Put overrides beside `spec` in the JSON request body:
 }
 ```
 
-Per-request Google Fonts require `--allow-google-fonts`. Per-request plugin
-code requires `--allow-per-request-plugins`. The server rejects unknown JSON
-fields, so a misspelled option causes an error instead of being ignored.
+Per-request `google_fonts` requires `--allow-google-fonts`, and per-request
+`vega_plugin` requires `--allow-per-request-plugins`. The server rejects
+unknown fields, so a misspelled option returns an error instead of being
+ignored.
 ::::
 
 ::::{interface} cli
-Pass overrides as flags after the conversion subcommand:
+Pass overrides as options after the conversion command:
 
 ```bash
 vl-convert vl2png \
@@ -108,8 +110,8 @@ vl-convert vl2png \
   --theme dark
 ```
 
-Run the subcommand with `--help` to see its supported overrides. The CLI
-supports `--config` on Vega-Lite commands but not on Vega commands. Global
-settings such as `--google-font` and `--vega-plugin` appear before the
-subcommand and configure the converter for the command invocation.
+Run a command with `--help` to see its options. `--config` is available on the
+Vega-Lite commands but not the Vega commands. Converter settings such as
+`--google-font` and `--vega-plugin` are global options placed before the
+command.
 ::::

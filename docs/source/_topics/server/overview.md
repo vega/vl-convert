@@ -10,13 +10,27 @@ interfaces: [server]
 
 # Server Overview
 
-`vl-convert serve` makes VlConvert available over HTTP. Use it when several
-applications need one rendering service, when a non-Python and non-Rust
-application needs conversion, or when rendering should run outside the caller's
+`vl-convert serve` exposes VlConvert over HTTP. Use it when several
+applications share one rendering service, when the calling application is not
+written in Python or Rust, or when rendering should run outside the caller's
 process.
 
-For a single script or an application that can embed the Python or Rust
-library, those interfaces usually require less operational work.
+## Compare the Interfaces
+
+All four interfaces run the same conversion engine and produce the same output.
+They differ in where rendering runs and what you have to operate.
+
+| Interface | Where rendering runs | Choose it when |
+| --- | --- | --- |
+| Python | Inside the Python process | The caller is Python, including Altair workflows |
+| Rust | Inside the Rust process | The caller is a Rust application |
+| CLI | A short-lived process per command | You convert files from shell scripts or build pipelines |
+| Server | A long-running HTTP service | Callers use other languages, several services share one renderer, or rendering must be isolated from the caller |
+
+The libraries add no network hop and nothing to deploy, but they load the
+JavaScript runtime into the caller's process. The server keeps that runtime in
+its own process, which you then have to secure, monitor, and scale. Prefer a
+library when the caller can embed one.
 
 ## Start a Local Server
 
@@ -33,25 +47,27 @@ The main listener provides these endpoint groups:
 | `/svg/*` | Convert existing SVG |
 | `/themes` | List and inspect themes |
 | `/bundling/*` | Build browser JavaScript bundles |
-| `/healthz`, `/readyz`, `/infoz` | Process and readiness information |
+| `/healthz`, `/readyz`, `/infoz` | Liveness, readiness, and version information |
+| `/docs`, `/api-doc/openapi.json` | Interactive API documentation and the OpenAPI document |
 
 See {doc}`getting-started/quick-start` for a complete request and
 {doc}`api-reference` for every endpoint.
 
-The default server binds to loopback and is intended for local use. It does not
-require authentication, enforce render-time budgets, cap concurrent requests,
-or hide error details until those options are configured.
+By default the server binds to loopback, allows 30 seconds per request, accepts
+request bodies up to 50 MB, and accepts browser requests from loopback origins
+only. It does not require authentication, enforce render-time budgets, cap
+concurrent requests, or hide error details until you configure those options.
 
 ## Main and Admin Listeners
 
-Conversion and health routes use the main listener. Optional runtime management
-routes use a separate admin listener. Keeping them separate lets a deployment
-expose rendering without exposing configuration, budget, font-cache, or worker
+Conversion and health routes use the main listener. Optional runtime
+management routes use a separate admin listener, so a deployment can expose
+rendering without exposing configuration, budget, font-cache, or worker
 controls.
 
-Do not publish the admin listener to the internet. Bind it to loopback, a
-private management network, or a Unix domain socket, and configure a separate
-admin API key.
+Never publish the admin listener to the internet. Bind it to loopback, a
+private management network, or a Unix domain socket, and give it its own API
+key. See {doc}`admin-api`.
 
 ## Before Production
 
@@ -61,15 +77,15 @@ For specifications that are not fully trusted:
 - keep caller-supplied plugins disabled
 - set JavaScript heap and execution-time limits
 - set request body, timeout, concurrency, and render-time limits
-- put the service behind TLS and an authentication layer when access is not
-  intentionally anonymous
-- return opaque errors to clients and retain detailed structured logs
-- enable proxy-derived client addresses only behind a proxy that rewrites those
-  headers
+- put the service behind TLS and an authentication layer unless access is
+  meant to be anonymous
+- return opaque errors to clients and keep detailed structured logs
+- enable proxy-derived client addresses only behind a proxy that rewrites
+  those headers
 
 CORS controls which browser origins can read responses. It is not
 authentication and does not stop non-browser clients.
 
-Use {doc}`deployment` for concrete deployment profiles,
-{doc}`authentication` for listener credentials, and
-{doc}`rate-limiting` for render-time budgets.
+{doc}`authentication` covers listener credentials, {doc}`rate-limiting` covers
+render-time budgets, {doc}`logging` covers request logs, and {doc}`deployment`
+combines them into complete profiles.

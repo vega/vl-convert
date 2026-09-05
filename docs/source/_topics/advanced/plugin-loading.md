@@ -2,7 +2,7 @@
 title: Plugin Loading and Security
 path: advanced/plugin-loading
 section: Advanced
-order: 475
+order: 480
 interfaces: [python, cli, rust, server]
 ---
 
@@ -16,28 +16,28 @@ control its network access.
 
 ## Choose a Loading Mode
 
-Startup plugins are part of converter configuration. VlConvert loads them in
-the configured order and makes them available to every conversion performed by
-that converter. Use startup plugins for stable extensions maintained with the
-application.
+Startup plugins are part of the converter configuration. VlConvert loads them
+in order when a worker starts and makes them available to every conversion that
+converter performs. Use startup plugins for stable extensions maintained with
+the application.
 
 ::::{interface} python rust server
-Per-request plugins let a caller provide one plugin for one conversion. They
-are disabled by default and use a separate temporary JavaScript runtime. This
-adds startup overhead and executes code selected by the caller. Use this mode
-only when a trusted caller must choose plugin code dynamically.
+Per-request plugins let a caller supply one plugin for one conversion. They are
+disabled by default and run in a separate temporary JavaScript runtime, which
+adds startup overhead and executes code chosen by the caller. Use them only
+when a trusted caller must choose plugin code dynamically.
 ::::
 
 ## Supported Plugin Sources
 
-VlConvert accepts three forms:
+A plugin entry can be one of three forms:
 
 - A `.js` or `.mjs` file path. VlConvert reads and bundles the file before
   loading it.
 - An `http://` or `https://` URL. VlConvert fetches and bundles the module.
 - Inline ESM source. Configuration files and library APIs accept source text.
-  The `--vega-plugin` CLI flag does not, which avoids treating a mistyped path
-  as executable source.
+  The `--vega-plugin` CLI flag does not, so a mistyped path is never treated as
+  executable source.
 
 ::::{interface} python
 ```python
@@ -85,8 +85,8 @@ let config = VlcConfig {
 ::::
 
 ::::{interface} server
-Startup plugins can come from global CLI options or the server's JSONC config
-file. Use the config file for inline source.
+Startup plugins come from global CLI options or the JSONC config file. Use the
+config file for inline source.
 
 ```bash
 vl-convert --vega-plugin ./double-value.js \
@@ -96,8 +96,8 @@ vl-convert --vega-plugin ./double-value.js \
 
 ## Control HTTP Imports
 
-A plugin can import another ESM module. HTTP imports are blocked unless their
-domains match `plugin_import_domains`.
+A plugin can import other ESM modules. HTTP imports are blocked unless their
+domain matches `plugin_import_domains`.
 
 ```javascript
 import { scaleLinear } from "https://esm.sh/d3-scale@4"
@@ -147,17 +147,17 @@ vl-convert \
 
 `esm.sh` matches that host only. `*.jsdelivr.net` matches the named host and
 its subdomains. `*` allows any domain and should be reserved for trusted code.
-Redirect destinations must also match the allowlist.
+Redirect targets must also match the allowlist.
 
-The domain of a URL plugin entry is allowed for that plugin, including relative
-imports from the same host. Imports from any other host still need an explicit
-allowlist entry. This plugin policy is separate from `allowed_base_urls`, which
-controls data and image URLs used by specifications.
+The domain of a URL plugin entry is added to the allowlist automatically, so
+the plugin can import from its own host. Imports from any other host still
+need an explicit entry. This allowlist is separate from `allowed_base_urls`,
+which controls data and image URLs.
 
 ## Bundle Multi-File Plugins
 
 Bundle TypeScript and multi-file JavaScript before passing it to VlConvert.
-Prebundling makes startup independent of package registries and produces one
+Prebundling keeps startup independent of package registries and produces one
 artifact that can be reviewed and deployed with the application.
 
 ```bash
@@ -175,8 +175,8 @@ on browser globals such as `window` or `document` during static conversion.
 ::::{interface} python rust server
 ## Enable Per-Request Plugins
 
-Enable per-request plugins in converter configuration, then pass one plugin as
-the conversion's `vega_plugin` value.
+Enable per-request plugins in the converter configuration, then pass one plugin
+as the conversion's `vega_plugin` value.
 ::::
 
 ::::{interface} python
@@ -219,7 +219,7 @@ vl-convert serve \
   --max-ephemeral-workers 2
 ```
 
-The request body can now contain `vega_plugin`. If caller-supplied code needs
+Request bodies can now contain `vega_plugin`. If caller-supplied code needs
 HTTP imports, allow only the required domains with
 `--per-request-plugin-import-domains`. This allowlist is separate from the one
 for startup plugins.
@@ -227,8 +227,8 @@ for startup plugins.
 
 ## Plugins in HTML Output
 
-With `bundle=true`, generated HTML contains its dependencies and plugin code.
-With `bundle=false`, the browser loads Vega dependencies from a content
-delivery network. URL-backed startup plugins retain their original URLs so the
-browser can load them. File and inline plugins are embedded because a browser
-cannot access the converter's local files.
+With `bundle=true`, the generated HTML contains its dependencies and the plugin
+code. With `bundle=false`, the browser loads Vega from a CDN, URL-backed
+startup plugins keep their original URLs so the browser loads them too, and
+file and inline plugins are embedded because the browser cannot read the
+converter's files. See {doc}`../guides/html-output`.

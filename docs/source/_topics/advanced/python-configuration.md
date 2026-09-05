@@ -10,14 +10,10 @@ interfaces: [python]
 
 # Python Process Lifecycle
 
-The Python package keeps one converter for the current process. Conversion
-functions create its worker pool lazily on first use. Configure the process
-once during application startup so later calls share the intended settings and
+The Python package keeps one converter for the whole process, and its worker
+pool starts on the first conversion. Configure the process once during
+application startup so every later call shares the intended settings and
 workers.
-
-Use `load_config()` when a file owns the full configuration. It starts from
-built-in defaults and then applies the JSONC file. Use `configure()` to change
-only the named fields.
 
 ```python
 import vl_convert as vlc
@@ -29,12 +25,13 @@ vlc.configure(
 )
 ```
 
-The order matters in this example. Calling `load_config()` after `configure()`
-would replace the earlier values.
+Order matters here. `load_config()` replaces every setting, so calling it after
+`configure()` would discard the values `configure()` set. See
+{doc}`configuration` for both functions and the JSONC file format.
 
 ## Warm Workers Before Serving Traffic
 
-Workers normally start on the first conversion. Warm them during application
+Workers normally start on the first conversion. Start them during application
 startup when first-request latency matters:
 
 ```python
@@ -42,20 +39,18 @@ vlc.configure(num_workers=4)
 vlc.warm_up_workers()
 ```
 
-`get_config()` returns the active converter settings, and
-`get_worker_memory_usage()` reports current JavaScript heap statistics.
+`get_worker_memory_usage()` reports the JavaScript heap statistics of each
+worker and starts the pool if it is not running yet.
 
 ## Change Configuration Safely
 
-A configuration change creates a replacement converter when any field differs.
-Conversions already in progress can finish with the previous settings. New
-calls use the replacement and start its workers lazily.
+When a configuration call changes any field, VlConvert builds a replacement
+converter with a fresh worker pool. Conversions already running finish on the
+old pool, and new calls use the replacement, whose workers start lazily.
 
-Frequent reconfiguration therefore discards the benefit of a warm worker pool.
-Use per-call options for values such as scale, dimensions, theme, locale, and
-output bundling. Reserve `configure()` for process-level policy and defaults.
+Frequent reconfiguration therefore throws away warm workers. Use per-call
+options for values such as scale, dimensions, theme, and locale, and reserve
+`configure()` for process-level policy. See {doc}`conversion-overrides`.
 
-`vl_convert.asyncio` uses the same converter state as the synchronous module.
-Do not run competing configuration changes while other startup code is
-configuring the process. See {doc}`python-async` for awaitable conversions and
-{doc}`configuration` for every configuration field.
+`vl_convert.asyncio` shares the same converter, so configure the process once
+before concurrent work begins. See {doc}`python-async`.

@@ -2,7 +2,7 @@
 title: JavaScript Bundling
 path: advanced/javascript-bundling
 section: Advanced
-order: 470
+order: 460
 interfaces: [python, cli, rust, server]
 ---
 
@@ -10,17 +10,14 @@ interfaces: [python, cli, rust, server]
 
 # JavaScript Bundling
 
-Most applications should use {doc}`html-output` to create a complete
-interactive page. Use the bundling API only when you are building your own web
-integration and need a JavaScript asset that contains compatible versions of
+Most applications should use {doc}`../guides/html-output` to produce a complete
+interactive page. Use the bundling API when you are building your own web
+integration and need one JavaScript file containing compatible versions of
 Vega, Vega-Lite, and Vega Embed.
 
-Vega Embed is the browser helper that creates a Vega view from a specification.
-The standard bundle exposes `vega`, `vegaLite`, and `vegaEmbed` on `window` so
-existing browser code can use them without additional module imports.
-
-Select the same Vega-Lite version used by the specifications that the browser
-will render.
+The standard bundle exposes `vega`, `vegaLite`, and `vegaEmbed` on `window`, so
+existing browser code can use them without module imports. Select the same
+Vega-Lite version that the browser will render.
 
 ## Get the Standard Bundle
 
@@ -59,13 +56,13 @@ curl 'http://127.0.0.1:3000/bundling/bundle?vl_version=6.4' \
   --output vega-embed.js
 ```
 
-The response is cacheable JavaScript.
+The response carries a `Cache-Control` header that allows caching for one day.
 ::::
 
 ## Add an Application Snippet
 
-A custom snippet is bundled in the same module scope, so it can refer to
-`vega`, `vegaLite`, or `vegaEmbed`. It must not contain imports outside the
+A snippet is bundled in the same module scope, so it can refer to `vega`,
+`vegaLite`, and `vegaEmbed`. It must not import anything outside the
 dependencies bundled with VlConvert.
 
 For example, save this as `snippet.js`:
@@ -113,5 +110,6 @@ curl http://127.0.0.1:3000/bundling/bundle-snippet \
 ```
 ::::
 
-Bundling executes build work on input source. Apply authentication, body-size
-limits, and request budgets when exposing the server endpoints to other users.
+Bundling runs build tooling on caller-supplied source. Apply authentication,
+body-size limits, and request budgets before exposing the server endpoints to
+other users.

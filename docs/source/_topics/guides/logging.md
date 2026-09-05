@@ -1,8 +1,8 @@
 ---
-title: Logging
+title: Logging and Warnings
 path: guides/logging
 section: Guides
-order: 300
+order: 270
 interfaces: [python, cli, rust, server]
 ---
 
@@ -10,14 +10,15 @@ interfaces: [python, cli, rust, server]
 
 # Logging and Warnings
 
-Vega and Vega-Lite can report warnings while they compile or evaluate a chart.
-Pay attention to these messages because a conversion can succeed while Vega
-drops an invalid property or encounters a recoverable data problem.
+Vega and Vega-Lite report warnings while compiling or evaluating a chart. A
+conversion can succeed even though Vega dropped an invalid property or
+recovered from a data problem, so check these messages when a chart does not
+look as expected.
 
 ::::{interface} python
-VlConvert sends diagnostic messages to Python's `vl_convert` logger. Configure
-a handler before converting if the application does not already configure
-logging:
+VlConvert forwards its messages to the `vl_convert` logger in Python's
+`logging` module. Configure a handler before converting if the application does
+not already configure logging:
 
 ```python
 import logging
@@ -29,12 +30,11 @@ logging.getLogger("vl_convert").setLevel(logging.WARNING)
 svg = vlc.vegalite_to_svg(spec)
 ```
 
-Use `INFO` or `DEBUG` temporarily when diagnosing a problem. Avoid enabling
-verbose logging globally in a library.
+Use `INFO` or `DEBUG` temporarily while diagnosing a problem.
 ::::
 
 ::::{interface} cli
-The CLI writes logs to standard error, leaving standard output available for
+The CLI writes logs to standard error, so standard output stays available for
 conversion results.
 
 ```bash
@@ -42,8 +42,8 @@ vl-convert --log-level warn \
   vl2svg --input chart.vl.json --output chart.svg
 ```
 
-`--log-filter` accepts a `tracing-subscriber` filter for finer control and
-takes priority over `--log-level`:
+`--log-filter` accepts a `tracing-subscriber` filter directive for finer
+control and takes priority over `--log-level`:
 
 ```bash
 vl-convert --log-filter 'vl_convert=debug' \
@@ -52,8 +52,7 @@ vl-convert --log-filter 'vl_convert=debug' \
 ::::
 
 ::::{interface} rust
-Each conversion output includes a `logs` collection with messages produced by
-Vega:
+Every output struct carries the messages Vega produced in `logs`:
 
 ```rust
 for entry in output.logs {
@@ -61,16 +60,11 @@ for entry in output.logs {
 }
 ```
 
-The crate also uses Rust's `log` facade for operational messages. Applications
-must install a compatible logger if they want to receive them. For example, add
-`env_logger` and initialize it once at process startup:
-
-```rust
-env_logger::Builder::from_env(
-    env_logger::Env::default().default_filter_or("vl_convert=warn"),
-)
-.init();
-```
+The crate also emits these messages, plus its own operational messages, through
+the `log` crate under the `vl_convert` target. If no logger is installed when
+the first converter is created, the crate installs `env_logger`, so setting
+`RUST_LOG=vl_convert=info` works without any code. To use a different logger,
+initialize it before creating a converter.
 ::::
 
 ::::{interface} server
@@ -82,6 +76,9 @@ vl-convert --log-format json --log-level info \
 ```
 
 The server logs request identifiers, status, duration, and budget information
-in addition to conversion diagnostics. See {doc}`/server/logging` for the
-request fields and proxy behavior.
+alongside conversion diagnostics. See {doc}`/server/logging` for the request
+fields and proxy behavior.
 ::::
+
+See {doc}`../advanced/troubleshooting` for how to use these messages when a
+conversion fails or renders incorrectly.

@@ -2,7 +2,7 @@
 title: Vega Plugins
 path: guides/plugins
 section: Guides
-order: 280
+order: 290
 interfaces: [python, cli, rust, server]
 ---
 
@@ -12,25 +12,23 @@ interfaces: [python, cli, rust, server]
 
 A Vega plugin adds a named capability to the Vega runtime, such as an
 expression function, color scheme, projection, scale, transform, or data
-format. Most charts do not need a plugin. Use normal Vega or Vega-Lite
-transforms, themes, configuration, and locales when they provide the behavior
-you need.
-
-Use a plugin when a specification refers to a custom runtime name. The
+format. Most charts do not need one. Use a plugin only when a specification
+refers to a custom runtime name that Vega's built-in transforms, themes,
+configuration, and locales cannot provide. The
 [Vega extensibility API](https://vega.github.io/vega/docs/api/extensibility/)
-lists the available registration functions.
+lists the registration functions a plugin can call.
 
 :::{warning}
 A plugin is executable JavaScript. Load plugin files and URLs only from sources
-you trust. Do not enable caller-supplied plugins on a public service unless you
-intend to accept this risk and have strict resource limits.
+you trust. Do not accept caller-supplied plugins on a public service unless you
+have decided to accept that risk and enforce strict resource limits.
 :::
 
 ## Create a Plugin
 
 A plugin is a JavaScript ECMAScript module (ESM) whose default export is a
-function. VlConvert passes the Vega module to that function before it parses
-the specification.
+function. VlConvert calls that function with the Vega module when a worker
+starts, before any specification is compiled or parsed.
 
 Save this example as `double-value.js`:
 
@@ -55,14 +53,12 @@ Save this Vega-Lite specification as `chart.vl.json`:
 }
 ```
 
-The plugin registers `doubleValue` before Vega-Lite compiles the `calculate`
-expression.
+The `calculate` transform can now call `doubleValue`.
 
 ## Register the Plugin
 
 ::::{interface} python
-Register a startup plugin with `configure()`, then convert specifications as
-usual:
+Register the plugin with `configure()`, then convert as usual:
 
 ```python
 import json
@@ -78,22 +74,20 @@ with open("chart.png", "wb") as output_file:
     output_file.write(png)
 ```
 
-The plugin remains available to later conversions in the Python process.
+The plugin stays available to every later conversion in the process.
 ::::
 
 ::::{interface} cli
-Pass the plugin as a global option before the conversion subcommand:
+Pass the plugin as a global option before the conversion command:
 
 ```bash
 vl-convert --vega-plugin ./double-value.js \
   vl2png --input chart.vl.json --output chart.png
 ```
-
-The plugin is available for this command invocation.
 ::::
 
 ::::{interface} rust
-Register startup plugins in `VlcConfig`:
+List startup plugins in `VlcConfig`:
 
 ```rust
 use vl_convert_rs::{PngOpts, VlcConfig, VlConverter, VlOpts};
@@ -109,11 +103,11 @@ let output = converter
 std::fs::write("chart.png", output.data)?;
 ```
 
-The example assumes `spec` contains the Vega-Lite value shown above.
+`spec` holds the Vega-Lite value shown above.
 ::::
 
 ::::{interface} server
-Register a startup plugin before `serve`:
+Register the plugin before `serve`:
 
 ```bash
 vl-convert --vega-plugin ./double-value.js \
@@ -121,11 +115,11 @@ vl-convert --vega-plugin ./double-value.js \
 ```
 
 Every request handled by this process can then use `doubleValue`. Put the
-Vega-Lite specification shown above in the `spec` field of a normal
-`/vegalite/*` request. The quick start shows the complete HTTP request shape.
+specification above in the `spec` field of a normal `/vegalite/*` request, as
+shown in {doc}`../getting-started/quick-start`.
 ::::
 
 Plugins can also come from HTTPS URLs or inline source, and a plugin can import
-other modules. These choices affect startup behavior and network security. See
-{doc}`../advanced/plugin-loading` for loading modes, import allowlists,
-prebundling, and caller-supplied plugins.
+other modules. See {doc}`../advanced/plugin-loading` for loading modes, import
+allowlists, prebundling, and caller-supplied plugins, and {doc}`security` for
+the wider trust model.

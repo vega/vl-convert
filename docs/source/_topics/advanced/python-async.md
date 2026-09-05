@@ -12,12 +12,12 @@ interfaces: [python]
 
 Use `vl_convert.asyncio` when the caller already runs an asyncio event loop,
 such as an asynchronous web service. Its conversion and configuration functions
-are awaitable, so the event loop can continue serving other tasks while
-VlConvert works.
+are awaitable, so the event loop keeps serving other tasks while VlConvert
+works.
 
-The synchronous and asynchronous modules share one process-wide converter
-configuration and worker pool. Configure that shared state once during
-application startup before concurrent conversions begin.
+The synchronous and asynchronous modules share one converter and worker pool.
+Configure that shared state once at startup, before concurrent conversions
+begin.
 
 ```python
 import asyncio
@@ -49,10 +49,14 @@ async def main():
 asyncio.run(main())
 ```
 
-A pool can run conversions concurrently up to its available workers. Extra
-calls wait for a worker. Choose `num_workers` from measured concurrency and
-memory needs rather than the number of submitted tasks.
+A pool runs as many conversions at once as it has workers, and extra calls wait
+for a free worker. Choose `num_workers` from measured concurrency and memory
+needs rather than from the number of tasks you submit. See
+{doc}`memory-management`.
 
-Static metadata values and helpers that do not perform conversion remain
-synchronous even when they are available from `vl_convert.asyncio`. Do not
-`await` a function unless its API reference identifies it as awaitable.
+Not everything in `vl_convert.asyncio` is awaitable. The version getters,
+`get_config_path()`, the locale lookups, and the font directory and Google
+Fonts cache helpers, including `set_google_fonts_cache_size_mb()`, are
+synchronous re-exports. Every conversion, configuration, font inspection, and
+worker function is awaitable. The {doc}`../api-reference` lists the synchronous
+group.

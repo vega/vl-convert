@@ -10,13 +10,13 @@ interfaces: [python, cli, rust, server]
 
 # Themes
 
-A theme is a named Vega configuration object applied while Vega-Lite compiles a
-specification. Themes can set defaults for colors, marks, axes, legends, fonts,
-and other visual properties. They apply to Vega-Lite input, not to an already
-compiled Vega specification.
+A theme is a named Vega configuration object that Vega-Lite applies while
+compiling a specification. Themes set defaults for colors, marks, axes,
+legends, fonts, and other visual properties. They apply to Vega-Lite input
+only. A compiled Vega specification already contains its configuration.
 
-VlConvert includes the themes from the `vega-themes` package. Select a theme
-for one conversion, or set `default_theme` in converter configuration.
+VlConvert bundles the themes from the `vega-themes` package. Select a theme per
+conversion, or set `default_theme` in the converter configuration.
 
 ## Use a Built-In Theme
 
@@ -24,12 +24,12 @@ for one conversion, or set `default_theme` in converter configuration.
 ```python
 import vl_convert as vlc
 
-print(vlc.get_themes())
+print(list(vlc.get_themes()))
 svg = vlc.vegalite_to_svg(spec, theme="dark")
 ```
 
-`get_themes()` returns the available names. `get_theme("dark")` returns the
-corresponding Vega configuration.
+`get_themes()` maps each theme name to its Vega configuration, so
+`vlc.get_themes()["dark"]` is the configuration that the `dark` theme applies.
 ::::
 
 ::::{interface} cli
@@ -58,7 +58,7 @@ let output = converter
 ::::
 
 ::::{interface} server
-`GET /themes` lists available names, and `GET /themes/{name}` returns one
+`GET /themes` lists the available names, and `GET /themes/{name}` returns one
 theme:
 
 ```bash
@@ -87,7 +87,7 @@ are Vega configuration objects. Save this example as `themes.json`:
 }
 ```
 
-A custom theme takes priority when its name matches a built-in theme.
+A custom theme replaces a built-in theme with the same name.
 
 ::::{interface} python
 ```python
@@ -132,8 +132,10 @@ vl-convert --themes themes.json \
   serve --host 127.0.0.1 --port 3000
 ```
 
-The themes are then available through `GET /themes` and Vega-Lite conversion
-requests.
+The themes then appear in `GET /themes` and can be selected by Vega-Lite
+conversion requests.
 ::::
 
-See {doc}`../advanced/configuration` to set a persistent default theme.
+See {doc}`../advanced/configuration` to set a default theme for every
+conversion, and {doc}`../advanced/conversion-overrides` to pass a raw `config`
+object instead of a named theme.

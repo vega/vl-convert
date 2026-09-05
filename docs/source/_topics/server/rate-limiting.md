@@ -2,7 +2,7 @@
 title: Render-Time Budgets
 path: rate-limiting
 section: Server
-order: 430
+order: 420
 interfaces: [server]
 ---
 
@@ -10,20 +10,20 @@ interfaces: [server]
 
 # Render-Time Budgets
 
-Render-time budgets limit processing time rather than request count. They are
-useful because two requests can have very different conversion costs.
+Render-time budgets limit processing time rather than request count, because
+two requests can have very different conversion costs.
 
-`--per-ip-budget-ms` sets the milliseconds available to one client IP during
-each minute of sustained use. `--global-budget-ms` sets the shared capacity for
-all clients. Both buckets start full and refill gradually once per second. A
-value of `0` disables that budget dimension.
+`--per-ip-budget-ms` sets the milliseconds of processing available to one
+client IP per minute. `--global-budget-ms` sets the shared capacity for all
+clients. Each budget is a bucket that starts full and refills every second at
+one sixtieth of its capacity. A value of `0` disables that budget.
 
-A request must have capacity in every enabled bucket. If either bucket is
-exhausted, the server returns `429 Too Many Requests`.
+A request needs capacity in every enabled bucket. If either is exhausted, the
+server returns `429 Too Many Requests`.
 
 ## Configure Budgets
 
-This example permits about five seconds of processing per minute for one IP and
+This example allows about five seconds of processing per minute for one IP and
 thirty seconds per minute across the server:
 
 ```bash
@@ -35,36 +35,37 @@ vl-convert serve \
   --budget-hold-ms 1000
 ```
 
-`budget_hold_ms` is a temporary reservation made when the request enters. When
-the response is ready, VlConvert replaces the reservation with the measured
-processing time. A larger hold prevents many costly requests from entering at
-once but can reject a burst of short requests. A smaller hold allows more
-concurrency but can temporarily overspend a bucket when requests run longer
-than expected.
+`--budget-hold-ms` is the reservation taken when a request is admitted. When
+the response is ready, the reservation is replaced by the measured processing
+time. A larger hold stops many costly requests from entering at once but can
+reject a burst of cheap ones. A smaller hold allows more concurrency but can
+briefly overspend a bucket when requests run longer than expected. The default
+is 1000.
 
-Start near the typical conversion time, then tune from request logs. The hold
-must not exceed an enabled budget cap or that bucket cannot admit a request.
+Start near the typical conversion time, then tune from the request logs. The
+hold must not exceed an enabled budget, or that bucket can never admit a
+request.
 
 Budgets complement these separate controls:
 
 - `--max-concurrent-requests` caps work admitted at the same time
-- `--request-timeout-secs` bounds an HTTP request
+- `--request-timeout-secs` bounds one HTTP request
 - `--max-v8-execution-time-secs` bounds JavaScript execution
 - `--max-body-size-mb` bounds request payload size
 
 ## Identify Clients Correctly
 
 Without `--trust-proxy`, the TCP peer address identifies the client. Behind a
-reverse proxy, that address is usually the proxy, so every caller would share
-one per-IP bucket.
+reverse proxy that address is the proxy itself, so every caller would share one
+per-IP bucket.
 
-Enable `--trust-proxy` only when the proxy removes client-supplied forwarding
-headers and writes trusted values. VlConvert then checks
+Enable `--trust-proxy` only when the proxy strips client-supplied forwarding
+headers and writes trusted values. The server then reads
 `X-Envoy-External-Address`, `X-Forwarded-For`, and `X-Real-IP` before falling
 back to the peer address.
 
 Unix domain sockets have no client IP. Requests over them use the global budget
-but skip the per-IP budget.
+and skip the per-IP budget.
 
 ## Charge Google Fonts Work
 
@@ -81,16 +82,16 @@ vl-convert \
   --google-font-cache-miss-penalty-ms 250
 ```
 
-The final charge is measured processing time plus the font cache-miss penalty.
-The variant threshold limits how many automatically discovered font variants
-can be admitted.
+The final charge is the measured processing time plus the penalty for each
+cache miss. The variant threshold caps how many Google Font variants one
+conversion can load.
 
 ## Observe and Update Budgets
 
-JSON request logs include the outcome, charged time, remaining capacity, and
-font penalty. See {doc}`logging` for field names.
+JSON request logs record the outcome, charged time, remaining capacity, and
+font penalty. See {doc}`logging` for the field names.
 
-An enabled admin listener can inspect current budget state with
-`GET /admin/budget` and update caps or the reservation with
-`POST /admin/budget`. Existing balances are clamped when a cap is lowered.
-Protect this listener as described in {doc}`authentication`.
+When the admin listener is enabled, `GET /admin/budget` reports the current
+state and `POST /admin/budget` updates the caps or the hold. Lowering a cap
+clamps existing balances to the new value. See {doc}`authentication` for
+protecting that listener.

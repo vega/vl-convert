@@ -10,14 +10,11 @@ interfaces: [python]
 
 # Python API Reference
 
-The entries below are generated from the version 2 Python type stubs.
-Vega and Vega-Lite specs may be passed as JSON strings or Python dictionaries.
-PNG, JPEG, and PDF conversion functions return `bytes`. SVG, HTML, and URL
-functions return `str`. Scenegraph functions return a Python `dict` by default,
-or MessagePack `bytes` with `format="msgpack"`.
-
-Use `vl_convert.asyncio` for awaitable conversion, configuration, font, and
-diagnostics functions with the same parameter and return shapes.
+These entries are generated from the version 2 type stubs. Vega and Vega-Lite
+specifications may be passed as JSON strings or dictionaries. PNG, JPEG, and
+PDF functions return `bytes`. SVG, HTML, and URL functions return `str`.
+Scenegraph functions return a `dict` by default, or MessagePack `bytes` with
+`format="msgpack"`.
 
 Start with {doc}`getting-started/quick-start` if you are choosing a conversion
 function for the first time.
@@ -165,13 +162,13 @@ function for the first time.
 
 ## Async API
 
-Import `vl_convert.asyncio` for awaitable versions of the conversion,
-configuration, font, and diagnostics functions above. The async functions use
-the same parameter and return shapes as their sync counterparts, except that
-operations which touch worker state or perform conversions are `async`.
-
-Functions that only return static metadata, such as `get_vega_version()` and
-`get_config_path()`, are synchronous re-exports in the async namespace.
+`vl_convert.asyncio` provides awaitable versions of the conversion,
+configuration, font inspection, and worker functions above, with the same
+parameters and return types. These functions stay synchronous in that
+namespace: the version getters, `get_config_path()`, `get_format_locale()`,
+`get_time_format_locale()`, `current_font_directories()`,
+`google_fonts_cache_dir()`, `google_fonts_cache_size_mb()`, and
+`set_google_fonts_cache_size_mb()`. See {doc}`advanced/python-async`.
 
 ## Types
 
@@ -179,8 +176,7 @@ These names appear in public signatures and return values.
 
 ### `VlSpec`
 
-Vega and Vega-Lite specifications may be passed as a JSON string or as a Python
-dictionary.
+A Vega or Vega-Lite specification as a JSON string or a dictionary.
 
 ```python
 VlSpec = str | dict[str, Any]
@@ -188,11 +184,11 @@ VlSpec = str | dict[str, Any]
 
 ### `Renderer`
 
-HTML rendering accepts `"svg"`, `"canvas"`, or `"hybrid"`.
+The HTML browser renderer: `"svg"`, `"canvas"`, or `"hybrid"`.
 
 ### `FormatLocale` and `TimeFormatLocale`
 
-Locale parameters accept a built-in locale name or a locale dictionary.
+A built-in locale name or a locale dictionary.
 
 ```python
 FormatLocale = FormatLocaleName | dict[str, Any]
@@ -201,8 +197,8 @@ TimeFormatLocale = TimeFormatLocaleName | dict[str, Any]
 
 ### `GoogleFontSpec`
 
-Google Fonts may be passed as a family-name string or as a dictionary with a
-family and optional variants.
+A Google Font request as a family-name string, or a dictionary with a family
+and optional variants:
 
 ```python
 {
@@ -213,15 +209,15 @@ family and optional variants.
 
 ### `FontInfo`
 
-`FontInfo` is the dictionary returned by `vegalite_fonts()` and `vega_fonts()`.
-It contains the font name, source, variants, and optional CSS helpers for
-Google-hosted fonts.
+The dictionary returned for each font by `vegalite_fonts()` and
+`vega_fonts()`. It contains the font name, source, variants, and optional CSS
+helpers for Google-hosted fonts.
 
 ### `ConverterConfig`
 
-`ConverterConfig` is the dictionary returned by `get_config()`.
+The dictionary returned by `get_config()`.
 
 ### `WorkerMemoryUsage`
 
-`WorkerMemoryUsage` is the dictionary returned for each worker by
-`get_worker_memory_usage()`. Sizes are reported in bytes.
+The dictionary returned for each worker by `get_worker_memory_usage()`. Sizes
+are in bytes.
