@@ -39,7 +39,7 @@ docs-build = { cmd = "sphinx-build -E -b html docs/source docs/build/html && tou
 docs-build-strict = { cmd = "sphinx-build -E -W --keep-going -b html docs/source docs/build/html && touch docs/build/html/.nojekyll", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
 docs-clean = "rm -rf docs/build docs/source/_generated docs/source/python docs/source/cli docs/source/rust docs/source/server"
 docs-rebuild = { depends-on = ["docs-clean", "docs-build"] }
-docs-serve = { cmd = ["sphinx-autobuild", "-E", "--pre-build", "python docs/tools/generate_interface_pages.py", "docs/source", "docs/build/html"], depends-on = ["build-cli", "docs-openapi"] }
+docs-serve = { cmd = ["sphinx-autobuild", "-E", "--watch", "logo", "--pre-build", "python docs/tools/generate_interface_pages.py", "docs/source", "docs/build/html"], depends-on = ["build-cli", "docs-openapi"] }
 docs-linkcheck = { cmd = "sphinx-build -E -b linkcheck docs/source docs/build/linkcheck", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
 
 vendor = "cargo run -p vl-convert-vendor"

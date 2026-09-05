@@ -21,7 +21,10 @@ extensions = [
 
 html_theme = "pydata_sphinx_theme"
 html_title = "VlConvert"
-html_favicon = "_static/vl-convert-favicon.svg"
+# Logo assets live in the top-level logo/ directory. Sphinx and the theme copy
+# them into the output _static/ directory at build time.
+LOGO_DIR = ROOT / "logo"
+html_favicon = str(LOGO_DIR / "vl-convert-favicon.svg")
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 html_theme_options = {
@@ -29,8 +32,8 @@ html_theme_options = {
     "navbar_align": "left",
     "show_toc_level": 2,
     "logo": {
-        "image_light": "_static/vl-convert-logo.svg",
-        "image_dark": "_static/vl-convert-logo.svg",
+        "image_light": str(LOGO_DIR / "vl-convert-logo.svg"),
+        "image_dark": str(LOGO_DIR / "vl-convert-logo.svg"),
         "text": "VlConvert",
         "alt_text": "VlConvert",
     },
