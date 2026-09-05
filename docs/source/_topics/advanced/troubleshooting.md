@@ -10,135 +10,168 @@ interfaces: [python, cli, rust, server]
 
 # Troubleshooting
 
-Most conversion failures fall into a few categories: invalid specs, blocked
-data access, missing fonts, V8 resource limits, or plugin loading errors.
+Start with the error message and Vega diagnostic logs. Then reduce the input to
+the smallest specification that still fails. A small reproduction usually
+reveals whether the problem is the specification, an external resource, a font,
+or a converter limit.
 
 ::::{interface} python
-Python functions raise exceptions with the underlying converter error message.
-Temporarily set stricter diagnostics when investigating font or resource
-issues:
+Enable Python logging while reproducing the problem:
 
 ```python
-vlc.configure(missing_fonts="warn", max_v8_execution_time_secs=10)
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("vl_convert").setLevel(logging.DEBUG)
 ```
+
+Conversion failures raise an exception. Successful conversions can still log
+Vega warnings.
 ::::
 
 ::::{interface} cli
-CLI commands print errors and exit non-zero. Use explicit config flags while
-debugging so the active settings are visible in shell history:
+The CLI writes diagnostics to standard error and returns a nonzero exit status
+on failure. Use an explicit configuration while debugging:
 
 ```bash
-vl-convert --missing-fonts warn --max-v8-execution-time-secs 10 \
+vl-convert \
+  --vlc-config disabled \
+  --log-level debug \
   vl2png --input chart.vl.json --output chart.png
 ```
+
+Adding settings back one at a time can identify a config-file or environment
+override that caused the problem.
 ::::
 
 ::::{interface} rust
-Rust methods return `Result<_, AnyError>`. The context chain includes messages
-from V8 limits, data loading, plugin resolution, and font handling.
+Preserve the error chain when reporting a failure, and inspect the `logs` field
+on successful output:
 
 ```rust
-let output = converter
+match converter
     .vegalite_to_png(spec, Default::default(), Default::default())
-    .await?;
+    .await
+{
+    Ok(output) => {
+        for entry in output.logs {
+            eprintln!("{}: {}", entry.level, entry.message);
+        }
+    }
+    Err(error) => eprintln!("{error:#}"),
+}
 ```
 ::::
 
 ::::{interface} server
-Server errors normally return JSON shaped like `{"error": "..."}`. With
-`--opaque-errors=true`, error bodies are empty; disable opaque errors while
-debugging trusted staging traffic. If a request fails because a JSON field is
-unknown or has the wrong shape, check {doc}`conversion-overrides`.
+Use detailed errors only on a trusted development or staging listener:
 
 ```bash
-vl-convert serve --opaque-errors=false --log-format=json --log-level=debug
+vl-convert --log-format json --log-level debug \
+  serve --host 127.0.0.1 --port 3000 --opaque-errors=false
 ```
+
+Production services should normally use `--opaque-errors` and rely on
+server-side logs. Use the response's `X-Request-Id` to correlate it with those
+logs. A non-browser client can also supply its own `X-Request-Id`.
 ::::
 
-## V8 Limits
+## The Specification Fails or Looks Wrong
 
-`max_v8_execution_time_secs` terminates JavaScript execution when a conversion
-exceeds the configured time. The error message starts with `Conversion timed
-out` and includes the configured limit.
+Confirm that the input type matches the API. A Vega-Lite specification belongs
+in a `vegalite_*` function, `vl2*` command, or `/vegalite/*` endpoint. An
+already compiled Vega specification belongs in the corresponding Vega
+interface.
 
-`max_v8_heap_size_mb` caps the V8 heap for each worker. When the heap limit is
-hit, the error message starts with `V8 heap limit exceeded` and includes worker
-memory statistics. Increase the limit, simplify the spec, or omit the limit for
-trusted workloads.
+For Vega-Lite input, select the compiler version that matches the specification
+when version-dependent behavior is involved. Compile the chart to Vega first
+when you need to determine whether a problem occurs during compilation or
+rendering.
 
-After a timeout or heap-limit termination, vl-convert clears the worker's
-terminated state so later requests can run. If every request fails, treat it as
-a spec/configuration problem rather than a stuck worker.
+Warnings about unknown properties often mean the specification contains a
+misspelled field or a feature unsupported by the selected Vega-Lite version.
 
-## Missing Fonts
+## Data or Images Cannot Load
 
-Set `missing_fonts` to `warn` or `error` when a chart renders with the wrong
-font. The default policy falls back silently.
+An error that says an external URL is not allowed means the resolved resource
+did not match `allowed_base_urls`. Check all of these values:
 
-::::{interface} python
-```python
-vlc.configure(missing_fonts="warn")
-fonts = vlc.vegalite_fonts(vl_spec)
-```
-::::
+- the URL in the specification
+- `base_url` when the specification uses a relative URL
+- redirects made by the data or image host
+- the exact allowed prefix, including scheme and path
 
-::::{interface} cli
-```bash
-vl-convert --missing-fonts warn vl2fonts \
-  --input chart.vl.json --output fonts.json
-```
-::::
+Grant the narrowest required prefix. Do not use a wildcard to hide an allowlist
+mistake in an untrusted workload. See {doc}`../guides/security`.
 
-::::{interface} rust
-```rust
-use vl_convert_rs::{VlcConfig, VlConverter};
-use vl_convert_rs::converter::MissingFontsPolicy;
+Also verify that the rendering process can resolve DNS, establish TLS, and
+reach the host. An allowed URL can still fail because of normal network or
+authentication errors.
 
-let converter = VlConverter::with_config(VlcConfig {
-    missing_fonts: MissingFontsPolicy::Warn,
-    ..Default::default()
-})?;
-```
-::::
+## Text Uses the Wrong Font
+
+A font can be installed on the browser machine but absent from the machine
+running VlConvert. Set `missing_fonts` to `warn` or `error` and inspect the
+fonts used by the evaluated chart.
+
+See {doc}`font-introspection` to list required families and variants. Register
+the missing directory or configure an explicit Google Font as described in
+{doc}`../guides/fonts`.
+
+If automatic Google Fonts is enabled, a lookup can fail because the family is
+not in the catalog, the requested variant does not exist, or the network fetch
+failed. The missing-font policy determines whether VlConvert falls back, warns,
+or fails.
+
+## A Conversion Times Out or Uses Too Much Memory
+
+`max_v8_execution_time_secs` covers JavaScript compilation and evaluation.
+`max_v8_heap_size_mb` covers the JavaScript heap of one worker. An error at
+either boundary stops the current conversion.
+
+First test whether the specification or data is unexpectedly large. Reduce
+inline data, simplify expensive transforms, or lower the number of marks when
+possible. Raise a limit only after measuring a representative workload.
+
+Raster images and other native allocations are outside the JavaScript heap, so
+a process can use more memory than `max_v8_heap_size_mb`. See
+{doc}`memory-management`.
+
+## A Plugin Does Not Load
+
+Check that the module has a default export function and does not depend on
+browser-only globals during static conversion. A local multi-file plugin should
+be bundled into one ESM file.
+
+For URL plugins, verify the entry URL and each imported domain. Startup plugins
+use `plugin_import_domains`. Caller-supplied plugins use the separate
+`per_request_plugin_import_domains` setting and must be enabled first.
+
+See {doc}`plugin-loading` for examples and trust boundaries.
+
+## Generated HTML Is Blank
+
+Open the browser developer console. A page created with `bundle=false` must be
+able to load its JavaScript dependencies from the CDN. Try `bundle=true` when
+the page will be opened offline or behind a restrictive network.
+
+A content security policy can also block scripts, data URLs, blob URLs, fonts,
+or plugin imports used by the generated page. Adjust the policy for the
+specific output or choose a static format when interaction is not required.
 
 ::::{interface} server
-```bash
-vl-convert serve --missing-fonts warn --log-format=json
-```
+## Interpret Common HTTP Statuses
+
+- `400 Bad Request` usually means a request field has the wrong type, an unknown
+  field was supplied, or an option value is invalid.
+- `401 Unauthorized` means the bearer token is absent or incorrect.
+- `422 Unprocessable Entity` means the JSON request was accepted but conversion
+  failed.
+- `429 Too Many Requests` means a render-time budget is exhausted.
+- `503 Service Unavailable` can occur while the server is draining or when a
+  concurrency permit is unavailable.
+- `504 Gateway Timeout` means the configured request timeout expired.
+
+When opaque errors are enabled, the status and correlated server logs are the
+diagnostic source.
 ::::
-
-If `auto_google_fonts` is enabled, fonts that are not local and not in the
-Google Fonts catalog are reported through the same missing-font policy.
-
-## Google Fonts
-
-Google Fonts failures can happen during catalog checks, CSS fetches, or font
-file downloads. With `missing_fonts="warn"`, catalog and availability problems
-are logged as warnings where fallback is possible. With `missing_fonts="error"`,
-they fail the conversion.
-
-The Google Fonts cache directory comes from `VL_CONVERT_FONT_CACHE_DIR` when it
-is set. Use `VL_CONVERT_FONT_CACHE_DIR=none` to disable the on-disk cache while
-debugging cache behavior.
-
-::::{interface} server
-Server logs include Google Fonts cache miss and download fields when font work
-runs. Public deployments should pair automatic Google Fonts with
-`--google-font-variant-threshold` and
-`--google-font-cache-miss-penalty-ms`.
-::::
-
-## Plugins
-
-Startup plugins are resolved and loaded into workers. A startup plugin that
-fails during initialization can poison that worker's Vega initialization; fix
-the plugin and reconfigure or restart the converter.
-
-Per-request plugins are disabled by default. Enable them only for trusted
-callers and cap ephemeral workers when the server accepts concurrent requests.
-HTTP imports inside plugins use plugin import-domain settings, not
-`allowed_base_urls`.
-
-When a plugin imports from a CDN, verify both the plugin entry URL and any
-redirect/import targets are allowed. For production, pre-bundle multi-file
-plugins and pass a local `.js`/`.mjs` file.
