@@ -8,24 +8,41 @@ interfaces: [python, cli, rust, server]
 
 <!-- topic-body -->
 
-# Font Introspection
+# Inspect Fonts Used by a Chart
 
-Font introspection returns the fonts and variants a spec needs after Vega
-layout resolves styles.
+Font inspection evaluates a Vega or Vega-Lite specification and reports the
+font families, weights, and styles used by the resulting chart. Use it to find
+missing fonts, prepare web font requests, or confirm that a deployment contains
+the same fonts as a development machine.
+
+Each result identifies the family and whether VlConvert resolved it locally or
+through Google Fonts. Google Font results can also include a stylesheet URL,
+HTML link tag, and CSS import rule.
 
 ::::{interface} python
 ```python
-fonts = vlc.vegalite_fonts(vl_spec)
+import vl_convert as vlc
+
+fonts = vlc.vegalite_fonts(spec)
+for font in fonts:
+    print(font["name"], font["source"], font["variants"])
 ```
+
+Set `include_font_face=True` to include generated `@font-face` CSS for available
+variants. This can make the returned data much larger.
 ::::
 
 ::::{interface} cli
 ```bash
-vl-convert vl2fonts --input chart.vl.json --output fonts.json
-vl-convert vg2fonts --input chart.vg.json --output fonts.json
+vl-convert vl2fonts \
+  --input chart.vl.json \
+  --output fonts.json \
+  --pretty
 ```
-::::
 
+Use `vg2fonts` for Vega input. Add `--include-font-face` only when the output
+needs embedded font CSS.
+::::
 
 ::::{interface} rust
 ```rust
@@ -33,21 +50,35 @@ let fonts = converter
     .vegalite_fonts(
         spec,
         Default::default(),
-        false, // auto_google_fonts
-        false, // embed_local_fonts
-        false, // include_font_face
-        true,  // subset_fonts
+        false, // Do not discover Google Fonts automatically
+        false, // Do not embed local fonts
+        false, // Do not include @font-face CSS
+        true,  // Subset fonts if CSS is requested
     )
     .await?;
+
+for font in fonts {
+    println!("{}: {:?}", font.name, font.variants);
+}
 ```
 ::::
-
 
 ::::{interface} server
-```bash
-jq -c '{spec: .}' chart.vl.json |
-  curl -X POST http://localhost:3000/vegalite/fonts \
-  -H 'Content-Type: application/json' \
-  --data-binary @-
+Send a normal specification request to `POST /vegalite/fonts` or
+`POST /vega/fonts`:
+
+```json
+{
+  "spec": {"mark": "text", "data": {"values": []}},
+  "include_font_face": false
+}
 ```
+
+The response is a JSON array of font records. Font downloads follow the
+server's Google Fonts settings and request gates.
 ::::
+
+Font inspection performs chart compilation and evaluation, so it can load data
+and consume similar resources to a render. Apply the same access controls and
+resource limits that you use for conversion endpoints. See {doc}`../guides/fonts`
+for registration, fallback, and embedding options.
