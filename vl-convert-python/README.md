@@ -1,212 +1,163 @@
-# Overview
-`vl-convert-python` is a dependency-free Python package for converting [Vega-Lite](https://vega.github.io/vega-lite/) chart specifications into static images (SVG or PNG) or [Vega](https://vega.github.io/vega/) chart specifications.
+# vl-convert-python
 
+`vl-convert-python` converts Vega-Lite, Vega, and SVG input from Python. For
+Vega and Vega-Lite charts, it produces SVG, PNG, JPEG, PDF, HTML, scenegraphs,
+font metadata, and Vega Editor URLs. It also compiles Vega-Lite to Vega and
+converts existing SVG to PNG, JPEG, or PDF.
 
-Since an Altair chart can generate Vega-Lite, this package can be used to easily create static images from Altair charts.
+The package embeds the official Vega and Vega-Lite JavaScript libraries. It
+does not require a browser, Node.js, or a separate rendering service.
 
-Try it out on Binder! \
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/jonmmease/vl-convert/main?labpath=vl-convert-python%2Fnotebooks%2Fconvert_vegalite.ipynb)
+## Installation
 
-# Installation
-`vl-convert-python` can be installed using pip with
+Install the package from PyPI:
 
+```bash
+pip install vl-convert-python
 ```
-$ pip install vl-convert-python
-```
 
-# Usage
-The `vl-convert-python` package provides a series of conversion functions under the `vl_convert` module.
+Python 3.7 and later are supported.
 
-## Convert Vega-Lite to SVG, PNG, and Vega
-The `vegalite_to_svg` and `vegalite_to_png` functions can be used to convert Vega-Lite specifications to static SVG and PNG images respectively. The `vegalite_to_vega` function can be used to convert a Vega-Lite specification to a Vega specification.
+## Vega-Lite Example
+
+Conversion functions accept a JSON-compatible dictionary or a JSON string:
 
 ```python
 import vl_convert as vlc
-import json
 
-vl_spec = r"""
-{
-  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "data": {"url": "https://raw.githubusercontent.com/vega/vega-datasets/next/data/movies.json"},
-  "mark": "circle",
-  "encoding": {
-    "x": {
-      "bin": {"maxbins": 10},
-      "field": "IMDB Rating"
+spec = {
+    "data": {
+        "values": [
+            {"category": "A", "value": 3},
+            {"category": "B", "value": 7},
+        ]
     },
-    "y": {
-      "bin": {"maxbins": 10},
-      "field": "Rotten Tomatoes Rating"
+    "mark": "bar",
+    "encoding": {
+        "x": {"field": "category", "type": "nominal"},
+        "y": {"field": "value", "type": "quantitative"},
     },
-    "size": {"aggregate": "count"}
-  }
 }
-"""
 
-# Create SVG image string and then write to a file
-svg_str = vlc.vegalite_to_svg(vl_spec=vl_spec)
-with open("chart.svg", "wt") as f:
-    f.write(svg_str)
+svg = vlc.vegalite_to_svg(spec)
+with open("chart.svg", "w", encoding="utf-8") as output_file:
+    output_file.write(svg)
 
-# Create PNG image data and then write to a file
-png_data = vlc.vegalite_to_png(vl_spec=vl_spec, scale=2)
-with open("chart.png", "wb") as f:
-    f.write(png_data)
-
-# Create low-level Vega representation of chart and write to file
-vg_spec = vlc.vegalite_to_vega(vl_spec)
-with open("chart.vg.json", "wt") as f:
-    json.dump(vg_spec, f)
+png = vlc.vegalite_to_png(spec, scale=2)
+with open("chart.png", "wb") as output_file:
+    output_file.write(png)
 ```
 
-## Convert Altair Chart to SVG, PNG, and Vega
-The Altair visualization library provides a Pythonic API for generating Vega-Lite visualizations. As such, `vl-convert-python` can be used to convert Altair charts to PNG, SVG, or Vega. Pass `chart.to_dict()` directly. The `vegalite_*` functions accept an optional keyword-only `vl_version` argument that selects a particular bundled Vega-Lite version when a chart depends on an older release.
+Use `vegalite_to_vega()` to inspect or save the compiled Vega specification:
+
+```python
+import json
+
+vega_spec = vlc.vegalite_to_vega(spec)
+with open("chart.vg.json", "w", encoding="utf-8") as output_file:
+    json.dump(vega_spec, output_file)
+```
+
+## Altair Example
+
+Pass the result of `Chart.to_dict()` directly to a Vega-Lite conversion:
 
 ```python
 import altair as alt
-from vega_datasets import data
 import vl_convert as vlc
-import json
 
-source = data.barley()
-
-chart = alt.Chart(source).mark_bar().encode(
-    x='sum(yield)',
-    y='variety',
-    color='site'
+chart = (
+    alt.Chart(alt.Data(values=[{"x": "A", "y": 3}, {"x": "B", "y": 7}]))
+    .mark_bar()
+    .encode(x="x:N", y="y:Q")
 )
 
-# Create SVG image string and then write to a file
-svg_str = vlc.vegalite_to_svg(chart.to_dict())
-with open("altair_chart.svg", "wt") as f:
-    f.write(svg_str)
-
-# Create PNG image data and then write to a file
-png_data = vlc.vegalite_to_png(chart.to_dict(), scale=2)
-with open("altair_chart.png", "wb") as f:
-    f.write(png_data)
-
-# Create low-level Vega representation of chart and write to file
-vg_spec = vlc.vegalite_to_vega(chart.to_dict())
-with open("altair_chart.vg.json", "wt") as f:
-    json.dump(vg_spec, f)
+png = vlc.vegalite_to_png(chart.to_dict(), scale=2)
 ```
 
-## Configure Worker Parallelism
-By default, `vl-convert-python` uses `1` converter worker. You can configure this globally:
+Select a bundled Vega-Lite compiler when a chart depends on an older release:
+
+```python
+svg = vlc.vegalite_to_svg(spec, vl_version="5.16")
+```
+
+## Configuration
+
+`configure()` sets process-wide defaults. Conversion arguments override these
+defaults for one call where the API provides a matching argument.
 
 ```python
 import vl_convert as vlc
 
-cfg = vlc.get_config()
-print(cfg["num_workers"])  # 1
-
-vlc.configure(num_workers=4)  # enable parallel worker pool
-vlc.warm_up_workers()  # optional: pre-initialize workers before first conversion
-```
-
-This setting applies to subsequent conversions and enables parallel work across Python threads.
-
-## Google Fonts
-Charts that reference [Google Fonts](https://fonts.google.com/) can download and register them automatically. There are two approaches:
-
-### Explicit Registration
-Use `configure(google_fonts=...)` to register specific font families for all subsequent conversions, or pass `google_fonts` to a single conversion:
-
-```python
-import vl_convert as vlc
-
-# Register all variants of Roboto and two variants of Playfair Display
 vlc.configure(
-    google_fonts=[
-        "Roboto",
-        {"family": "Playfair Display", "variants": [(400, "normal"), (700, "italic")]},
-    ]
+    num_workers=4,
+    base_url=False,
+    allowed_base_urls=["https://data.example.com/"],
+    max_v8_heap_size_mb=512,
+    max_v8_execution_time_secs=10,
 )
-
-svg_str = vlc.vegalite_to_svg(vl_spec)
 ```
 
-### Automatic Detection
-Enable `auto_google_fonts` to have vl-convert scan the chart specification for font references and download matching Google Fonts automatically:
+Use `load_config()` to read the shared JSONC configuration format. Use
+`get_config()` to inspect the active configuration.
+
+## Fonts
+
+VlConvert uses installed system fonts and accepts additional font directories.
+Google Fonts downloads are opt-in. This example uses `spec` from the first
+example:
 
 ```python
 import vl_convert as vlc
 
 vlc.configure(auto_google_fonts=True)
-
-# Fonts referenced in the spec are downloaded automatically
-svg_str = vlc.vegalite_to_svg(vl_spec=vl_spec)
+svg = vlc.vegalite_to_svg(spec)
 ```
 
-### Cache Configuration
-Downloaded fonts are cached on disk in the platform cache directory, which `vlc.google_fonts_cache_dir()` returns. The cache is capped at 512 MB by default. You can change the cap:
+Use `vegalite_fonts()` or `vega_fonts()` to inspect the fonts that VlConvert
+resolves. These functions list local fonts only when `embed_local_fonts` is
+enabled and list Google Fonts only when they are requested or automatic Google
+Fonts are enabled.
 
-```python
-vlc.set_google_fonts_cache_size_mb(500)
-```
+## Asyncio
 
-## Asyncio API
-An async API with matching function names is available under `vl_convert.asyncio`.
+Awaitable conversion functions are available under `vl_convert.asyncio`. This
+example uses `spec` from the first example:
 
 ```python
 import asyncio
 import vl_convert.asyncio as vlca
 
-vl_spec = {
-    "data": {"values": [{"a": "A", "b": 1}, {"a": "B", "b": 2}]},
-    "mark": "bar",
-    "encoding": {
-        "x": {"field": "a", "type": "nominal"},
-        "y": {"field": "b", "type": "quantitative"},
-    },
-}
 
 async def main():
-    await vlca.configure(num_workers=4)
-    await vlca.warm_up_workers()  # optional
-
-    svg = await vlca.vegalite_to_svg(vl_spec, vl_version="5.16")
+    svg = await vlca.vegalite_to_svg(spec)
     print(svg[:5])
 
-    svgs = await asyncio.gather(
-        *[vlca.vegalite_to_svg(vl_spec, vl_version="5.16") for _ in range(8)]
-    )
-    print(len(svgs))
 
 asyncio.run(main())
 ```
 
-The top-level sync API (`vl_convert.<function>`) is unchanged. The async namespace is additive.
+Configuration and cache-management helpers in the asyncio namespace are
+synchronous re-exports. Do not await them.
 
-# How it works
-This crate uses [PyO3](https://pyo3.rs/) to wrap the [`vl-convert-rs`](https://crates.io/crates/vl-convert-rs) Rust crate as a Python library. The `vl-convert-rs` crate is a self-contained Rust library for converting [Vega-Lite](https://vega.github.io/vega-lite/) visualization specifications into various formats.  The conversions are performed using the Vega-Lite and Vega JavaScript libraries running in a v8 JavaScript runtime provided by the [`deno_runtime`](https://crates.io/crates/deno_runtime) crate.  Font metrics and SVG-to-PNG conversions are provided by the [`resvg`](https://crates.io/crates/resvg) crate.
+## Network and File Access
 
-Of note, `vl-convert-python` is fully self-contained and has no dependency on an external web browser or Node.js runtime.
+The bundled JavaScript libraries need no network access. Specifications can
+still request remote data and images, and optional Google Fonts or plugins can
+make additional requests. Data and images share the `allowed_base_urls`
+policy. Local files are blocked by default.
 
-# Development setup
-Create development conda environment
-```
-$ conda create -n vl-convert-dev -c conda-forge python=3.10 deno maturin altair pytest black black-jupyter scikit-image
-```
+See the repository's
+[documentation source](https://github.com/vega/vl-convert/tree/main/docs) for
+the complete configuration and API guides.
 
-Activate environment and pip install remaining dependencies
-```
-$ conda activate vl-convert-dev
-$ pip install pypdfium2
-```
+## Development
 
-Change to Python package directory
-```
-$ cd vl-convert-python
+From the repository root, build the extension in the Pixi environment and run
+its tests:
 
-```
-Build Rust python package with maturin in develop mode
-```
-$ maturin develop --release
-```
-
-Run tests
-```
-$ pytest tests
+```bash
+pixi run dev-py
+pixi run test-py
+pixi run fmt-py-check
 ```

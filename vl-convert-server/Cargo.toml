@@ -4,9 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 readme = "README.md"
-homepage = "https://github.com/jonmmease/vl-convert"
+homepage = "https://github.com/vega/vl-convert"
 repository.workspace = true
-description = "HTTP server for converting Vega-Lite and Vega specifications to static images"
+description = "Serve Vega-Lite, Vega, and SVG conversions over HTTP"
 keywords = ["Visualization", "Vega", "Vega-Lite", "Server"]
 
 [package.metadata.docs.rs]

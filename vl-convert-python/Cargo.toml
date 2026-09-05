@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 readme = "README.md"
-homepage = "https://github.com/jonmmease/vl-convert"
+homepage = "https://github.com/vega/vl-convert"
 repository.workspace = true
 publish = false
 

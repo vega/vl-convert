@@ -1,534 +1,106 @@
-## Overview
-This crate is a thin wrapper around the [`vl-convert-rs`](https://docs.rs/vl-convert-rs/) crate that provides a command line interface for converting Vega-Lite visualization specifications into various formats.
+# vl-convert
+
+`vl-convert` is the command-line interface and HTTP server for VlConvert. For
+Vega and Vega-Lite charts, it produces SVG, PNG, JPEG, PDF, HTML, scenegraphs,
+font metadata, and Vega Editor URLs. It also compiles Vega-Lite to Vega and
+converts existing SVG to PNG, JPEG, or PDF.
+
+The executable embeds the official Vega and Vega-Lite JavaScript libraries. It
+does not require a browser or Node.js.
 
 ## Installation
-Install `vl-convert` using cargo with:
-```
-$ cargo install vl-convert
-```
 
-## CLI Usage
-Display the documentation for the top-level `vl-convert` command
-```plain
-$ vl-convert --help
+Install the executable from crates.io:
 
-vl-convert: A utility for converting Vega-Lite specifications
-
-Usage: vl-convert <COMMAND>
-
-Commands:
-  vl2vg      Convert a Vega-Lite specification to a Vega specification
-  vl2svg     Convert a Vega-Lite specification to an SVG image
-  vl2png     Convert a Vega-Lite specification to an PNG image
-  vl2jpeg    Convert a Vega-Lite specification to an JPEG image
-  vl2pdf     Convert a Vega-Lite specification to a PDF image
-  vl2url     Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
-  vl2html    Convert a Vega-Lite specification to an HTML file
-  vl2fonts   Return font metadata for a rendered Vega-Lite specification
-  vl2sg      Convert a Vega-Lite specification to a Vega scenegraph
-  vg2svg     Convert a Vega specification to an SVG image
-  vg2png     Convert a Vega specification to an PNG image
-  vg2jpeg    Convert a Vega specification to an JPEG image
-  vg2pdf     Convert a Vega specification to an PDF image
-  vg2url     Convert a Vega specification to a URL that opens the chart in the Vega editor
-  vg2html    Convert a Vega specification to an HTML file
-  vg2fonts   Return font metadata for a rendered Vega specification
-  vg2sg      Convert a Vega specification to a Vega scenegraph
-  bundle-js
-             Produce the JavaScript bundle used by Vega Embed integrations
-  svg2png    Convert an SVG image to a PNG image
-  svg2jpeg   Convert an SVG image to a JPEG image
-  svg2pdf    Convert an SVG image to a PDF image
-  ls-themes  List available themes
-  cat-theme  Print the config JSON for a theme
-  config-path
-             Print the default vlc-config file path
-  serve      Run the HTTP conversion server
-  help       Print this message or the help of the given subcommand(s)
-
-Options:
-      --google-font <FONT_FAMILY>  Register a font from Google Fonts for this conversion (repeatable)
-      --auto-google-fonts          Automatically download missing fonts from Google Fonts
-      --missing-fonts <POLICY>     Missing-font behavior: fallback, warn, or error [default: fallback]
-  -h, --help                       Print help information
-  -V, --version                    Print version information
+```bash
+cargo install vl-convert --locked
 ```
 
-The `--google-font`, `--auto-google-fonts`, and `--missing-fonts` flags are global and can be used with any subcommand.
+## Convert a Chart
 
-Various conversion formats are handled by the subcommands listed above. Documentation for each subcommands is displayed using the `--help` flag.
+Convert a Vega-Lite specification file to SVG:
 
-### vl2vg
-Convert a Vega-Lite JSON specification to a Vega JSON specification
-```
-$ vl-convert vl2vg --help 
-
-Convert a Vega-Lite specification to a Vega specification
-
-Usage: vl-convert vl2vg [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>            Path to input Vega-Lite file
-  -o, --output <OUTPUT>          Path to output Vega file to be created
-  -v, --vl-version <VL_VERSION>  Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4 [default: 6.4]
-  -t, --theme <THEME>            Named theme provided by the vegaThemes package (e.g. "dark")
-  -c, --config <CONFIG>          Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
-  -p, --pretty                   Pretty-print JSON in output file
-      --show-warnings            Whether to show Vega-Lite compilation warnings
-  -h, --help                     Print help
+```bash
+vl-convert vl2svg --input chart.vl.json --output chart.svg
 ```
 
-For example, convert a Vega-Lite specification file named `in.vl.json` into a Vega specification file named `out.vg.json`. Perform the conversion using version 5.5 of the Vega-Lite JavaScript library and pretty-print the resulting JSON.
+Convert a Vega specification to PNG and apply a Vega configuration object:
 
-```plain
-$ vl-convert vl2vg -i ./in.vl.json -o ./out.vg.json --vl-version 5.8 --pretty
+```bash
+vl-convert vg2png \
+  --input chart.vg.json \
+  --output chart.png \
+  --config chart-config.json \
+  --scale 2
 ```
 
-### vl2svg
-Convert a Vega-Lite specification to an SVG image
+Input and output default to standard input and standard output. Binary output
+requires a file or an explicit `--output -` when standard output is a terminal.
 
-```
-$ vl-convert vl2svg --help 
+## Command Groups
 
-Convert a Vega-Lite specification to an SVG image
+| Commands | Purpose |
+| --- | --- |
+| `vl2*` | Compile or convert Vega-Lite input |
+| `vg2*` | Convert Vega input |
+| `svg2*` | Convert existing SVG input |
+| `bundle-js` | Build the JavaScript bundle used by Vega Embed integrations |
+| `ls-themes`, `cat-theme` | Inspect bundled and configured themes |
+| `config-path` | Print the platform-default converter config path |
+| `serve` | Run the HTTP conversion server |
 
-Usage: vl-convert vl2svg [OPTIONS] --input <INPUT> --output <OUTPUT>
+Run `vl-convert --help` for global options and `vl-convert <COMMAND> --help`
+for a command's options. Global options go before the command. Command-specific
+options go after it.
 
-Options:
-  -i, --input <INPUT>
-          Path to input Vega-Lite file
-  -o, --output <OUTPUT>
-          Path to output SVG file to be created
-  -v, --vl-version <VL_VERSION>
-          Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4 [default: 6.4]
-      --theme <THEME>
-          Named theme provided by the vegaThemes package (e.g. "dark")
-  -c, --config <CONFIG>
-          Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
-      --show-warnings
-          Whether to show Vega-Lite compilation warnings
-      --font-dir <FONT_DIR>
-          Additional directory to search for fonts
-  -a, --allowed-base-url <ALLOWED_BASE_URL>
-          Allowed base URL for external data requests. Default allows any base URL
-      --format-locale <FORMAT_LOCALE>
-          d3-format locale name or file with .json extension
-      --time-format-locale <TIME_FORMAT_LOCALE>
-          d3-time-format locale name or file with .json extension
-  -h, --help
-          Print help
-```
+## Chart and Converter Configuration
 
-For example, convert a Vega-Lite specification file named `in.vl.json` into an SVG file named `out.svg`. Perform the conversion using version 5.5 of the Vega-Lite JavaScript library, and apply the `dark` theme (available themes available with the `ls-themes` subcommand below).
+`--config` applies a Vega or Vega-Lite configuration object to one chart. It is
+available on the Vega-Lite and Vega chart commands except `vl2url` and
+`vg2url`, which only encode the input specification in a URL.
 
-```plain
-$ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --vl-version 5.8 --theme dark
+`--vlc-config` loads process-wide converter settings from a JSONC file. These
+settings control worker behavior, data and image access, fonts, plugins,
+themes, locales, and JavaScript limits. Relative paths resolve from the current
+working directory:
+
+```bash
+vl-convert --vlc-config production.vlc.jsonc \
+  vg2svg --input chart.vg.json --output chart.svg
 ```
 
-### vl2png
-Convert a Vega-Lite specification to a PNG image
+When `--vlc-config` is omitted, VlConvert loads the platform-default file if it
+exists. Run `vl-convert config-path` to print that location. Pass
+`--vlc-config disabled` to skip config-file loading.
 
-```
-$ vl-convert vl2png --help
+Most global options also have `VLC_*` environment variables. Command-line
+values take priority over environment variables, which take priority over the
+converter config file.
 
-Convert a Vega-Lite specification to an PNG image
+## Network and File Access
 
-Usage: vl-convert vl2png [OPTIONS] --input <INPUT> --output <OUTPUT>
+The bundled JavaScript libraries need no network access. Specifications can
+still request remote data and images. Optional Google Fonts and plugins can
+make additional requests.
 
-Options:
-  -i, --input <INPUT>
-          Path to input Vega-Lite file
-  -o, --output <OUTPUT>
-          Path to output PNG file to be created
-  -v, --vl-version <VL_VERSION>
-          Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4 [default: 6.4]
-      --theme <THEME>
-          Named theme provided by the vegaThemes package (e.g. "dark")
-  -c, --config <CONFIG>
-          Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
-      --scale <SCALE>
-          Image scale factor [default: 1.0]
-  -p, --ppi <PPI>
-          Pixels per inch [default: 72.0]
-      --show-warnings
-          Whether to show Vega-Lite compilation warnings
-      --font-dir <FONT_DIR>
-          Additional directory to search for fonts
-  -a, --allowed-base-url <ALLOWED_BASE_URL>
-          Allowed base URL for external data requests. Default allows any base URL
-      --format-locale <FORMAT_LOCALE>
-          d3-format locale name or file with .json extension
-      --time-format-locale <TIME_FORMAT_LOCALE>
-          d3-time-format locale name or file with .json extension
-  -h, --help
-          Print help
+Data and images share the `allowed_base_urls` policy. HTTP and HTTPS access is
+allowed by default, and local files are blocked. Google Fonts and plugins use
+separate controls. Restrict these settings before converting specifications
+from untrusted sources.
+
+## HTTP Server
+
+Start a local server:
+
+```bash
+vl-convert serve --host 127.0.0.1 --port 3000
 ```
 
-For example, convert a Vega-Lite specification file named `in.vl.json` into a PNG file named `out.png` with a scale factor of 2. Perform the conversion using version 5.5 of the Vega-Lite JavaScript library, and apply the [config](https://vega.github.io/vega/docs/config/) file located at `~/my-config.json`.
-
-```plain
-$ vl-convert vl2png -i ./in.vl.json -o ./out.png --vl-version 5.8 --scale 2 --config ~/my-config.json
-```
-
-### vl2pdf
-Convert a Vega-Lite specification to a PDF image
-```
-$ vl-convert vl2pdf --help
-
-Convert a Vega-Lite specification to a PDF image
-
-Usage: vl-convert vl2pdf [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>
-          Path to input Vega-Lite file
-  -o, --output <OUTPUT>
-          Path to output PDF file to be created
-  -v, --vl-version <VL_VERSION>
-          Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4 [default: 6.4]
-      --theme <THEME>
-          Named theme provided by the vegaThemes package (e.g. "dark")
-  -c, --config <CONFIG>
-          Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
-      --show-warnings
-          Whether to show Vega-Lite compilation warnings
-      --font-dir <FONT_DIR>
-          Additional directory to search for fonts
-  -a, --allowed-base-url <ALLOWED_BASE_URL>
-          Allowed base URL for external data requests. Default allows any base URL
-      --format-locale <FORMAT_LOCALE>
-          d3-format locale name or file with .json extension
-      --time-format-locale <TIME_FORMAT_LOCALE>
-          d3-time-format locale name or file with .json extension
-  -h, --help
-          Print help
-
-```
-
-For example, convert a Vega-Lite specification file named `in.vl.json` into a PDF file named `out.pdf`.
-
-```
-$ vl-convert vl2pdf -i ./in.vl.json -o ./out.pdf
-```
-
-### vl2url
-Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
-
-```
-$ vl-convert vl2url --help
-
-Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
-
-Usage: vl-convert vl2url --input <INPUT>
-
-Options:
-  -i, --input <INPUT>  Path to input Vega-Lite file
-      --fullscreen     Open chart in fullscreen mode
-  -h, --help           Print help
-```
-
-### vl2html
-Convert a Vega-Lite specification to an HTML file
-```
-$ vl-convert vl2html --help
-
-Convert a Vega-Lite specification to an HTML file
-
-Usage: vl-convert vl2html [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>
-          Path to input Vega-Lite file
-  -o, --output <OUTPUT>
-          Path to output HTML file to be created
-  -v, --vl-version <VL_VERSION>
-          Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4 [default: 6.4]
-      --theme <THEME>
-          Named theme provided by the vegaThemes package (e.g. "dark")
-  -c, --config <CONFIG>
-          Path to Vega-Lite config file. Defaults to ~/.config/vl-convert/config.json
-  -b, --bundle
-          Whether to bundle JavaScript dependencies in the HTML file instead of loading them from a CDN
-      --format-locale <FORMAT_LOCALE>
-          d3-format locale name or file with .json extension
-      --time-format-locale <TIME_FORMAT_LOCALE>
-          d3-time-format locale name or file with .json extension
-  -h, --help
-          Print help
-```
-
-### vg2svg
-Convert a Vega specification to an SVG image
-
-```
-$ vl-convert vg2svg --help
-
-Convert a Vega specification to an SVG image
-
-Usage: vl-convert vg2svg [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>
-          Path to input Vega file
-  -o, --output <OUTPUT>
-          Path to output SVG file to be created
-      --font-dir <FONT_DIR>
-          Additional directory to search for fonts
-  -a, --allowed-base-url <ALLOWED_BASE_URL>
-          Allowed base URL for external data requests. Default allows any base URL
-      --format-locale <FORMAT_LOCALE>
-          d3-format locale name or file with .json extension
-      --time-format-locale <TIME_FORMAT_LOCALE>
-          d3-time-format locale name or file with .json extension
-  -h, --help
-          Print help
-```
-
-For example, convert a Vega specification file named `in.vg.json` into an SVG file named `out.svg`.
-
-```plain
-$ vl-convert vg2svg -i ./in.vg.json -o ./out.svg
-```
-
-### vg2png
-```
-$ vl-convert vg2png --help
-
-Convert a Vega specification to an PNG image
-
-Usage: vl-convert vg2png [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>
-          Path to input Vega file
-  -o, --output <OUTPUT>
-          Path to output PNG file to be created
-      --scale <SCALE>
-          Image scale factor [default: 1.0]
-  -p, --ppi <PPI>
-          Pixels per inch [default: 72.0]
-      --font-dir <FONT_DIR>
-          Additional directory to search for fonts
-  -a, --allowed-base-url <ALLOWED_BASE_URL>
-          Allowed base URL for external data requests. Default allows any base URL
-      --format-locale <FORMAT_LOCALE>
-          d3-format locale name or file with .json extension
-      --time-format-locale <TIME_FORMAT_LOCALE>
-          d3-time-format locale name or file with .json extension
-  -h, --help
-          Print help
-```
-
-For example, convert a Vega specification file named `in.vg.json` into a PNG file named `out.png` with a scale factor of 2.
-
-```plain
-$ vl-convert vg2png -i ./in.vg.json -o ./out.png --scale 2
-```
-
-### vg2pdf
-```
-$ vl-convert vg2pdf --help
-
-Convert a Vega specification to an PDF image
-
-Usage: vl-convert vg2pdf [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>
-          Path to input Vega file
-  -o, --output <OUTPUT>
-          Path to output PDF file to be created
-      --font-dir <FONT_DIR>
-          Additional directory to search for fonts
-  -a, --allowed-base-url <ALLOWED_BASE_URL>
-          Allowed base URL for external data requests. Default allows any base URL
-      --format-locale <FORMAT_LOCALE>
-          d3-format locale name or file with .json extension
-      --time-format-locale <TIME_FORMAT_LOCALE>
-          d3-time-format locale name or file with .json extension
-  -h, --help
-          Print help
-```
-
-For example, convert a Vega specification file named `in.vg.json` into a PDF file named `out.pdf`.
-
-```plain
-$ vl-convert vg2pdf -i ./in.vg.json -o ./out.pdf
-```
-
-### vg2url
-Convert a Vega-Lite specification to a URL that opens the chart in the Vega editor
-
-```
-$ vl-convert vg2url --help
-
-Convert a Vega specification to a URL that opens the chart in the Vega editor
-
-Usage: vl-convert vg2url --input <INPUT>
-
-Options:
-  -i, --input <INPUT>  Path to input Vega file
-      --fullscreen     Open chart in fullscreen mode
-  -h, --help           Print help
-```
-
-### vg2html
-Convert a Vega specification to an HTML file
-```
-$ vl-convert vg2html --help
-
-Convert a Vega specification to an HTML file
-
-Usage: vl-convert vg2html [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>
-          Path to input Vega file
-  -o, --output <OUTPUT>
-          Path to output HTML file to be created
-  -b, --bundle
-          Whether to bundle JavaScript dependencies in the HTML file instead of loading them from a CDN
-      --format-locale <FORMAT_LOCALE>
-          d3-format locale name or file with .json extension
-      --time-format-locale <TIME_FORMAT_LOCALE>
-          d3-time-format locale name or file with .json extension
-  -h, --help
-          Print help
-```
-
-### svg2png
-Convert an SVG image to a PNG image
-
-```
-Convert an SVG image to a PNG image
-
-Usage: vl-convert svg2png [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>        Path to input SVG file
-  -o, --output <OUTPUT>      Path to output PNG file to be created
-      --scale <SCALE>        Image scale factor [default: 1.0]
-  -p, --ppi <PPI>            Pixels per inch [default: 72.0]
-      --font-dir <FONT_DIR>  Additional directory to search for fonts
-  -h, --help                 Print help
-```
-
-### svg2jpeg
-Convert an SVG image to a JPEG image
-```
-Convert an SVG image to a JPEG image
-
-Usage: vl-convert svg2jpeg [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>        Path to input SVG file
-  -o, --output <OUTPUT>      Path to output JPEG file to be created
-      --scale <SCALE>        Image scale factor [default: 1.0]
-  -q, --quality <QUALITY>    JPEG Quality between 0 (worst) and 100 (best) [default: 90]
-      --font-dir <FONT_DIR>  Additional directory to search for fonts
-  -h, --help                 Print help
-```
-
-### svg2pdf
-Convert an SVG image to a PDF image
-```
-Convert an SVG image to a PDF image
-
-Usage: vl-convert svg2pdf [OPTIONS] --input <INPUT> --output <OUTPUT>
-
-Options:
-  -i, --input <INPUT>        Path to input SVG file
-  -o, --output <OUTPUT>      Path to output PDF file to be created
-      --font-dir <FONT_DIR>  Additional directory to search for fonts
-  -h, --help                 Print help
-```
-
-### ls-themes
-```
-$ vl-convert ls-themes --help
-
-List available themes
-
-Usage: vl-convert ls-themes
-
-Options:
-  -h, --help  Print help information
-```
-
-Here is an example of listing the names of all available built-in themes.
-```
-$ vl-convert ls-themes
-
-dark
-excel
-fivethirtyeight
-ggplot2
-googlecharts
-latimes
-powerbi
-quartz
-urbaninstitute
-vox
-```
-
-### cat-theme
-```
-$ vl-convert cat-theme --help
-
-Print the config JSON for a theme
-
-Usage: vl-convert cat-theme <THEME>
-
-Arguments:
-  <THEME>  Name of a theme
-
-Options:
-  -h, --help  Print help information
-```
-
-For example, print the config JSON associated with the built-in `dark` theme
-
-```
-$ vl-convert cat-theme dark
-
-{
-  "background": "#333",
-  "title": {
-    "color": "#fff",
-    "subtitleColor": "#fff"
-  },
-  "style": {
-    "guide-label": {
-      "fill": "#fff"
-    },
-    "guide-title": {
-      "fill": "#fff"
-    }
-  },
-  "axis": {
-    "domainColor": "#fff",
-    "gridColor": "#888",
-    "tickColor": "#fff"
-  }
-}
-```
-
-## Google Fonts
-`vl-convert` can download and register fonts from [Google Fonts](https://fonts.google.com/) for use in chart rendering.
-
-### Explicit registration
-Use `--google-font` to download a specific font family (may be repeated):
-```plain
-$ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --google-font "Roboto" --google-font "Playfair Display"
-```
-
-### Automatic detection
-Use `--auto-google-fonts` to have missing fonts detected from the chart specification and downloaded automatically:
-```plain
-$ vl-convert vl2svg -i ./in.vl.json -o ./out.svg --auto-google-fonts
-```
-
-Downloaded fonts are cached on disk at `~/.cache/vl-convert/google-fonts/` (or the platform-appropriate cache directory).
-
-## User-level config file
-If a file exists at `~/.config/vl-convert/config.json`, `vl-convert` will use this path as the default value of the `--config` flag across all subcommands.
+The server exposes interactive API documentation at
+`http://127.0.0.1:3000/docs`. Its defaults are intended for local use. Configure
+authentication, request limits, resource permissions, JavaScript limits, and a
+TLS-terminating proxy before exposing it publicly.
+
+See the repository's
+[documentation source](https://github.com/vega/vl-convert/tree/main/docs) for
+complete CLI and server guides.

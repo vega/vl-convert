@@ -5,9 +5,9 @@ edition.workspace = true
 license.workspace = true
 readme = "README.md"
 documentation = "https://github.com/vega/vl-convert/blob/main/vl-convert/README.md"
-homepage = "https://github.com/jonmmease/vl-convert"
+homepage = "https://github.com/vega/vl-convert"
 repository.workspace = true
-description = "CLI application for converting Vega-Lite visualization specifications to Vega specifications"
+description = "Convert Vega-Lite, Vega, and SVG files from the command line or an HTTP server"
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
