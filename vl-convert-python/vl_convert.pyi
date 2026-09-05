@@ -407,11 +407,12 @@ def configure(
     Args:
         num_workers: Worker count (must be >= 1). ``None`` resets to the built-in default (1).
             Passing ``0`` raises ``ValueError``.
-        base_url: Base URL for resolving relative data paths in Vega specs.
+        base_url: Base URL for resolving relative data and image paths in Vega specs.
             ``None`` or ``True`` resets to the default (vega-datasets CDN).
             ``False`` disables relative path resolution.
             A string sets a custom base URL or filesystem path.
-        allowed_base_urls: CSP-style allowlist for data access (HTTP URLs, filesystem paths).
+        allowed_base_urls: CSP-style allowlist for data and image access (HTTP URLs,
+            filesystem paths).
             Examples: ``"https:"`` (scheme), ``"https://example.com/"`` (prefix),
             ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
             the default (``["http:", "https:"]``). ``[]`` blocks all absolute

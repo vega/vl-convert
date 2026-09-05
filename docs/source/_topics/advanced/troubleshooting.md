@@ -97,13 +97,13 @@ match `allowed_base_urls`. Check all of these:
 - the URL in the specification
 - `base_url`, when the specification uses a relative URL or a bare path
 - the exact allowed prefix, including scheme and path
+- the destination of any redirect the host returns, which is checked too
 - for a local file, that the URL uses `file://` or a filesystem `base_url`
 
 A bare absolute path such as `/data/cars.csv` is treated as relative to
-`base_url`, so with the default base URL it becomes a CDN address. A blocked
-image in PNG output is left blank without an error. Grant the narrowest
-prefix that works, and do not use a wildcard to hide an allowlist mistake in
-an untrusted workload. See {doc}`../guides/data-loading`.
+`base_url`, so with the default base URL it becomes a CDN address. Grant the
+narrowest prefix that works, and do not use a wildcard to hide an allowlist
+mistake in an untrusted workload. See {doc}`../guides/data-loading`.
 
 Also confirm that the rendering process can resolve DNS, complete TLS, and
 reach the host. An allowed URL can still fail for ordinary network or

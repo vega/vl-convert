@@ -4,7 +4,7 @@ use backon::{BlockingRetryable, ExponentialBuilder};
 use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use deno_core::url::Url;
-use log::{error, info, warn};
+use log::{info, warn};
 use reqwest::header::CONTENT_TYPE;
 use reqwest::StatusCode;
 use std::borrow::Cow;
@@ -21,7 +21,10 @@ lazy_static! {
     static ref BLOCKING_CLIENT: reqwest::blocking::Client = reqwest::blocking::ClientBuilder::new()
         .user_agent(VL_CONVERT_USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
+        .timeout(crate::data_ops::REQUEST_TIMEOUT)
+        // Redirects are followed manually so every hop is checked against the
+        // access policy before it is fetched.
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("Failed to construct blocking reqwest client");
 }
@@ -35,8 +38,10 @@ thread_local! {
 pub struct ImageAccessPolicy {
     /// Parsed allowlist patterns (passed directly to `is_access_allowed()`).
     pub allowed_base_urls: Option<Vec<AllowedBaseUrlPattern>>,
-    /// Filesystem root for usvg's `resources_dir` (needed for SVG image resolution).
-    pub filesystem_root: Option<PathBuf>,
+    /// Directory that relative image hrefs resolve against, installed as usvg's
+    /// `resources_dir`. Derived from a filesystem `base_url`. Resolution only:
+    /// every local read is still authorized by `allowed_base_urls`.
+    pub resources_dir: Option<PathBuf>,
 }
 
 struct PolicyScopeGuard {
@@ -106,48 +111,11 @@ fn resolve_local_href_path(href: &str, opts: &Options) -> Result<PathBuf, AnyErr
             .to_file_path()
             .map_err(|_| anyhow!("Invalid file URL path: {href}"));
     }
-    Ok(opts.get_abs_path(Path::new(href)))
-}
-
-fn resolve_path_for_policy_check(path: &Path) -> Result<PathBuf, AnyError> {
-    if path.exists() {
-        return crate::converter::portable_canonicalize(path).map_err(|err| {
-            anyhow!(
-                "Failed to resolve local image path {}: {}",
-                path.display(),
-                err
-            )
-        });
+    let path = Path::new(href);
+    if path.is_relative() && opts.resources_dir.is_none() {
+        bail!("Cannot resolve relative image path '{href}' without a filesystem-backed base_url");
     }
-
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let canonical_parent = crate::converter::portable_canonicalize(parent).map_err(|err| {
-        anyhow!(
-            "Failed to resolve local image parent path {}: {}",
-            parent.display(),
-            err
-        )
-    })?;
-    let Some(file_name) = path.file_name() else {
-        bail!(
-            "Failed to resolve local image path {}: missing file name",
-            path.display()
-        );
-    };
-    Ok(canonical_parent.join(file_name))
-}
-
-fn ensure_path_is_under_root(path: &Path, root: &Path) -> Result<PathBuf, AnyError> {
-    let resolved_path = resolve_path_for_policy_check(path)?;
-    if !resolved_path.starts_with(root) {
-        let detail = format!(
-            "filesystem access denied for image path {} (outside filesystem_root {})",
-            resolved_path.display(),
-            root.display()
-        );
-        bail!("{}", access_denied_message(detail));
-    }
-    Ok(resolved_path)
+    Ok(opts.get_abs_path(path))
 }
 
 enum HttpFetchOutcome {
@@ -167,11 +135,49 @@ fn fetch_http_blocking(
 ) -> Result<HttpFetchOutcome, reqwest::Error> {
     if !is_url_allowed(href, allowed_base_urls) {
         return Ok(HttpFetchOutcome::AccessDenied {
-            message: access_denied_message(format!("External data url not allowed: {href}")),
+            message: access_denied_message(format!("External image url not allowed: {href}")),
         });
     }
 
-    let response = BLOCKING_CLIENT.get(href).send()?;
+    // Follow redirects by hand so each destination passes the same check as
+    // the URL in the specification.
+    let mut current = href.to_string();
+    let mut hops = 0usize;
+    // One deadline covers the whole redirect chain.
+    let deadline = std::time::Instant::now() + crate::data_ops::REQUEST_TIMEOUT;
+    let response = loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            warn!("Timed out while loading image from {href}");
+            return Ok(HttpFetchOutcome::Failed);
+        }
+        let response = BLOCKING_CLIENT.get(&current).timeout(remaining).send()?;
+        if !response.status().is_redirection() {
+            break response;
+        }
+        hops += 1;
+        if hops > crate::data_ops::MAX_REDIRECTS {
+            warn!("Too many HTTP redirects while loading image from {href}");
+            return Ok(HttpFetchOutcome::Failed);
+        }
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok());
+        let Some(next) = crate::data_ops::redirect_target(location, &current) else {
+            warn!("HTTP redirect from {current} has no usable Location header");
+            return Ok(HttpFetchOutcome::Failed);
+        };
+        let is_http = next.starts_with("http://") || next.starts_with("https://");
+        if !is_http || !is_url_allowed(&next, allowed_base_urls) {
+            return Ok(HttpFetchOutcome::AccessDenied {
+                message: access_denied_message(format!(
+                    "External image url not allowed: {next} (redirected from {current})"
+                )),
+            });
+        }
+        current = next;
+    };
     let status = response.status();
     let content_type = response
         .headers()
@@ -196,7 +202,7 @@ fn fetch_http_blocking(
                 Ok(bytes) => String::from_utf8_lossy(bytes.as_ref()).to_string(),
                 Err(_) => String::new(),
             };
-            error!(
+            warn!(
                 "Failed to load image from url {} with status code {:?}\n{}",
                 href, s, body
             );
@@ -222,7 +228,7 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
             if let Some(policy) = policy.as_ref() {
                 if !is_url_allowed(href, &policy.allowed_base_urls) {
                     push_access_error(access_denied_message(format!(
-                        "External data url not allowed: {href}"
+                        "External image url not allowed: {href}"
                     )));
                     return None;
                 }
@@ -260,7 +266,7 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
                     match result {
                         Ok(outcome) => outcome,
                         Err(e) => {
-                            error!("Failed to load image from url {}: {}", href, e);
+                            warn!("Failed to load image from url {}: {}", href, e);
                             HttpFetchOutcome::Failed
                         }
                     }
@@ -320,13 +326,6 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
         }
 
         if let Some(policy) = policy {
-            let Some(filesystem_root) = policy.filesystem_root.as_ref() else {
-                push_access_error(access_denied_message(format!(
-                    "Filesystem access denied by converter policy for image path: {href}"
-                )));
-                return None;
-            };
-
             let local_path = match resolve_local_href_path(href, opts) {
                 Ok(local_path) => local_path,
                 Err(err) => {
@@ -337,13 +336,17 @@ pub fn custom_string_resolver() -> usvg::ImageHrefStringResolverFn<'static> {
                 }
             };
 
-            let allowed_path = match ensure_path_is_under_root(&local_path, filesystem_root) {
-                Ok(path) => path,
-                Err(err) => {
-                    push_access_error(format!("{err}"));
-                    return None;
-                }
-            };
+            // Same rule as data loading: the canonical path must fall under an
+            // allowlisted directory (or match `*`). `base_url` only resolves.
+            let allowed_path =
+                match crate::data_ops::authorize_local_path(&local_path, &policy.allowed_base_urls)
+                {
+                    Ok(path) => path,
+                    Err(err) => {
+                        push_access_error(format!("{err}"));
+                        return None;
+                    }
+                };
 
             if let Some(path_str) = allowed_path.to_str() {
                 return default_string_resolver(path_str, opts);
@@ -412,7 +415,10 @@ pub(crate) fn fetch_and_encode_image_http(
     use base64::Engine;
 
     if !is_url_allowed(href, allowed_base_urls) {
-        bail!("Image URL not allowed by policy: {href}");
+        bail!(
+            "{}",
+            access_denied_message(format!("External image url not allowed: {href}"))
+        );
     }
 
     let outcome = std::thread::scope(|s| {
@@ -462,14 +468,14 @@ pub(crate) fn fetch_and_encode_image_http(
     }
 }
 
-/// Resolve a local image path (relative or file://), check it against
-/// `filesystem_root`, read the file, and return `(mime, base64)`.
+/// Resolve a local image path (relative or file://), authorize it against
+/// `allowed_base_urls`, read the file, and return `(mime, base64)`.
 ///
 /// Relative paths are resolved against `resources_dir` (derived from the
-/// converter's `base_url`).
+/// converter's `base_url`); absolute paths and `file://` URLs need no root.
 pub(crate) fn resolve_and_read_local_image(
     href: &str,
-    filesystem_root: Option<&Path>,
+    allowed_base_urls: &Option<Vec<AllowedBaseUrlPattern>>,
     resources_dir: Option<&Path>,
 ) -> Result<(String, String), AnyError> {
     use base64::Engine;
@@ -480,19 +486,21 @@ pub(crate) fn resolve_and_read_local_image(
         url.to_file_path()
             .map_err(|_| anyhow!("Invalid file URL path: {href}"))?
     } else {
-        // Relative path — resolve against resources_dir
-        match resources_dir {
-            Some(dir) => dir.join(href),
-            None => bail!(
-                "Cannot resolve relative image path '{href}' without a filesystem-backed base_url"
-            ),
+        let path = Path::new(href);
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            match resources_dir {
+                Some(dir) => dir.join(path),
+                None => bail!(
+                    "Cannot resolve relative image path '{href}' without a filesystem-backed base_url"
+                ),
+            }
         }
     };
 
-    // Check containment under filesystem_root
-    if let Some(root) = filesystem_root {
-        ensure_path_is_under_root(&abs_path, root)?;
-    }
+    // Same authorization as data loading and the usvg resolver.
+    let abs_path = crate::data_ops::authorize_local_path(&abs_path, allowed_base_urls)?;
 
     // Read the file
     let bytes = std::fs::read(&abs_path).map_err(|e| {
@@ -521,7 +529,7 @@ mod tests {
     fn test_policy(label: &str) -> ImageAccessPolicy {
         ImageAccessPolicy {
             allowed_base_urls: Some(Vec::new()),
-            filesystem_root: Some(PathBuf::from(format!("/tmp/{label}"))),
+            resources_dir: Some(PathBuf::from(format!("/tmp/{label}"))),
         }
     }
 

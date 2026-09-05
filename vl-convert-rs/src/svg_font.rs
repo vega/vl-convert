@@ -244,7 +244,7 @@ pub(crate) async fn process_svg(
             } else {
                 resolve_and_read_local_image(
                     &image_ref.href,
-                    image_policy.filesystem_root.as_deref(),
+                    &image_policy.allowed_base_urls,
                     resources_dir,
                 )
                 .map_err(|err| error_with_google_font_usage(err, google_fonts.clone()))?

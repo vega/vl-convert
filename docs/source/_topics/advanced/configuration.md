@@ -174,8 +174,9 @@ fetches:
 
 This is an example, not the built-in defaults. By default, `base_url` points at
 the Vega datasets CDN and `allowed_base_urls` permits any HTTP or HTTPS URL.
-Set `base_url` to `false` to reject relative data URLs, and set
-`allowed_base_urls` to an empty list to reject every absolute URL. Misspelled
+Set `base_url` to `false` to reject relative data and image URLs, and set
+`allowed_base_urls` to an empty list to reject every external URL and local
+file. Misspelled
 field names are ignored rather than rejected.
 
 `allowed_base_urls` accepts Content Security Policy-style patterns. Grant only
@@ -197,8 +198,8 @@ semicolons, except font directories, which use the platform path separator.
 | Variable | Purpose |
 | --- | --- |
 | `VLC_CONFIG` | Absolute JSONC config path or `disabled` |
-| `VLC_BASE_URL` | Base for relative data URLs: a URL, a path, `default`, or `disabled` |
-| `VLC_ALLOWED_BASE_URLS` | Data URL allowlist, or the shortcut `none`, `net`, or `all` |
+| `VLC_BASE_URL` | Base for relative data and image URLs: a URL, a path, `default`, or `disabled` |
+| `VLC_ALLOWED_BASE_URLS` | Data and image URL allowlist, or the shortcut `none`, `net`, or `all` |
 | `VLC_FONT_DIR` | Additional font directories |
 | `VLC_GOOGLE_FONT` | Google Font requests such as `Inter:400,700italic` |
 | `VLC_AUTO_GOOGLE_FONTS` | Whether to download missing first-choice fonts from Google Fonts |

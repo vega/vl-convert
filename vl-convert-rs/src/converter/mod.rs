@@ -200,8 +200,9 @@ impl VlConverter {
         let config = self.inner.config();
         let parsed = parse_allowed_base_urls_from_config(&config)
             .expect("allowed_base_urls were already validated");
-        // Use base_url as usvg's resources_dir when it points to a local path
-        let filesystem_root = if config.base_url.is_filesystem() {
+        // A filesystem base_url becomes usvg's resources_dir so relative image
+        // hrefs resolve; access is still decided by allowed_base_urls.
+        let resources_dir = if config.base_url.is_filesystem() {
             config
                 .base_url
                 .resolved_url()
@@ -216,7 +217,7 @@ impl VlConverter {
             // Always engage the allowlist enforcer. An empty list blocks all
             // image URLs rather than falling back to "allow any http/https".
             allowed_base_urls: Some(parsed),
-            filesystem_root,
+            resources_dir,
         }
     }
 
@@ -2089,7 +2090,7 @@ mod tests {
             .unwrap_err();
         assert!(subdomain_err
             .to_string()
-            .contains("External data url not allowed"));
+            .contains("External image url not allowed"));
 
         let userinfo_err = converter
             .svg_to_png(
@@ -2103,89 +2104,212 @@ mod tests {
             .unwrap_err();
         assert!(userinfo_err
             .to_string()
-            .contains("External data url not allowed"));
+            .contains("External image url not allowed"));
     }
 
-    #[tokio::test]
-    async fn test_svg_helper_denies_local_paths_without_filesystem_root() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let local_image_path = temp_dir.path().join("image.png");
-        write_test_png(&local_image_path);
-        let href = Url::from_file_path(&local_image_path).unwrap().to_string();
-
-        let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: vec![],
+    /// Converter with the given allowlist and an optional filesystem base_url.
+    fn image_test_converter(
+        allowed: Vec<String>,
+        base_url: Option<&std::path::Path>,
+    ) -> VlConverter {
+        VlConverter::with_config(VlcConfig {
+            allowed_base_urls: allowed,
+            base_url: base_url
+                .map(|dir| BaseUrlSetting::Custom(dir.to_string_lossy().to_string()))
+                .unwrap_or_default(),
             ..Default::default()
         })
-        .unwrap();
+        .unwrap()
+    }
 
-        let err = converter
-            .svg_to_png(
-                &svg_with_href(&href),
-                PngOpts {
-                    scale: Some(1.0),
-                    ppi: None,
-                },
-            )
-            .await
-            .unwrap_err();
-        assert!(err.to_string().contains("Filesystem access denied"));
+    /// Assert that a conversion succeeded or failed with an access-denied error.
+    fn assert_access<T: std::fmt::Debug>(
+        label: &str,
+        expect_ok: bool,
+        result: Result<T, AnyError>,
+        denied_marker: &str,
+    ) {
+        match (expect_ok, result) {
+            (true, Ok(_)) => {}
+            (false, Err(err)) => assert!(
+                err.to_string().contains(denied_marker),
+                "{label}: expected access denial, got: {err}"
+            ),
+            (expected, other) => panic!("{label}: expected success={expected}, got {other:?}"),
+        }
     }
 
     #[tokio::test]
-    async fn test_svg_helper_enforces_filesystem_root() {
+    async fn test_svg_helper_authorizes_local_images_by_allowlist_only() {
         let temp_dir = tempfile::tempdir().unwrap();
         let root = temp_dir.path().join("root");
         std::fs::create_dir_all(&root).unwrap();
+        write_test_png(&root.join("inside.png"));
+        write_test_png(&temp_dir.path().join("outside.png"));
+        let inside_url = Url::from_file_path(root.join("inside.png"))
+            .unwrap()
+            .to_string();
+        let outside_url = Url::from_file_path(temp_dir.path().join("outside.png"))
+            .unwrap()
+            .to_string();
+        let dir = root.to_string_lossy().to_string();
 
-        let inside_path = root.join("inside.png");
-        write_test_png(&inside_path);
-        let outside_path = temp_dir.path().join("outside.png");
-        write_test_png(&outside_path);
+        // (allowlist, filesystem base_url, href, expected success)
+        let cases: Vec<(Vec<String>, Option<&std::path::Path>, &str, bool)> = vec![
+            (vec![], None, &inside_url, false),
+            (vec![], Some(&root), "inside.png", false),
+            (vec![dir.clone()], None, &inside_url, true),
+            (vec![dir.clone()], Some(&root), "inside.png", true),
+            (vec![dir.clone()], Some(&root), &outside_url, false),
+            (vec![dir.clone()], Some(&root), "../outside.png", false),
+        ];
+        for (allowed, base_url, href, expect_ok) in cases {
+            let converter = image_test_converter(allowed, base_url);
+            let result = converter
+                .svg_to_png(&svg_with_href(href), PngOpts::default())
+                .await;
+            assert_access(href, expect_ok, result, "Filesystem access denied");
+        }
+    }
 
+    #[tokio::test]
+    async fn test_canvas_png_authorizes_local_images_by_allowlist_only() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let image_path = temp_dir.path().join("image.png");
+        write_test_png(&image_path);
+        let image_url = Url::from_file_path(&image_path).unwrap().to_string();
+        let dir = temp_dir.path().to_string_lossy().to_string();
+
+        // (allowlist, filesystem base_url, image url, expected success)
+        let cases: Vec<(Vec<String>, Option<&std::path::Path>, &str, bool)> = vec![
+            (vec![], None, &image_url, false),
+            (vec![], Some(temp_dir.path()), "image.png", false),
+            (vec![dir.clone()], None, &image_url, true),
+            (vec![dir.clone()], Some(temp_dir.path()), "image.png", true),
+        ];
+        for (allowed, base_url, url, expect_ok) in cases {
+            let converter = image_test_converter(allowed, base_url);
+            let result = converter
+                .vegalite_to_png(
+                    vegalite_spec_with_image_url(url),
+                    VlOpts::default(),
+                    PngOpts::default(),
+                )
+                .await;
+            assert_access(url, expect_ok, result, "VLC_ACCESS_DENIED");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_canvas_png_ignores_nested_svg_image_references() {
+        use base64::Engine;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let image_path = temp_dir.path().join("image.png");
+        write_test_png(&image_path);
+        let nested = |href: &str| {
+            let svg = format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><image href="{href}" width="4" height="4"/></svg>"#
+            );
+            format!(
+                "data:image/svg+xml;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(svg)
+            )
+        };
+        let converter = image_test_converter(vec![], None);
+        let render = |url: String| {
+            let converter = converter.clone();
+            async move {
+                converter
+                    .vegalite_to_png(
+                        vegalite_spec_with_image_url(&url),
+                        VlOpts::default(),
+                        PngOpts::default(),
+                    )
+                    .await
+                    .unwrap()
+                    .data
+            }
+        };
+
+        // The data: SVG is allowed, but the local file it references must not
+        // be read, so it renders exactly like a reference to a missing file.
+        let with_local = render(nested(&image_path.to_string_lossy())).await;
+        let with_missing = render(nested(
+            &temp_dir.path().join("missing.png").to_string_lossy(),
+        ))
+        .await;
+        assert_eq!(with_local, with_missing);
+    }
+
+    #[tokio::test]
+    async fn test_canvas_png_fails_relative_image_when_base_url_disabled() {
         let converter = VlConverter::with_config(VlcConfig {
-            base_url: BaseUrlSetting::Custom(root.to_string_lossy().to_string()),
-            allowed_base_urls: vec![root.to_string_lossy().to_string()],
+            base_url: BaseUrlSetting::Disabled,
             ..Default::default()
         })
         .unwrap();
-
-        let allowed = converter
-            .svg_to_png(
-                &svg_with_href("inside.png"),
-                PngOpts {
-                    scale: Some(1.0),
-                    ppi: None,
-                },
-            )
-            .await;
-        assert!(allowed.is_ok());
-
-        let outside_href = Url::from_file_path(&outside_path).unwrap().to_string();
         let err = converter
-            .svg_to_png(
-                &svg_with_href(&outside_href),
-                PngOpts {
-                    scale: Some(1.0),
-                    ppi: None,
-                },
+            .vegalite_to_png(
+                vegalite_spec_with_image_url("images/chart.png"),
+                VlOpts::default(),
+                PngOpts::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("Unsupported image URL"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn test_redirect_targets_are_checked_against_allowlist() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>"#;
+        let other = TestHttpServer::new(vec![
+            ("/data.csv", TestHttpResponse::ok_text("a,b\n1,2\n")),
+            ("/image.svg", TestHttpResponse::ok_svg(svg)),
+        ]);
+        let front = TestHttpServer::new(vec![
+            ("/data.csv", TestHttpResponse::ok_text("a,b\n1,2\n")),
+            ("/same.csv", TestHttpResponse::redirect("/data.csv")),
+            (
+                "/other.csv",
+                TestHttpResponse::redirect(&other.url("/data.csv")),
+            ),
+            (
+                "/other.svg",
+                TestHttpResponse::redirect(&other.url("/image.svg")),
+            ),
+        ]);
+        let converter = image_test_converter(vec![front.origin()], None);
+
+        // A redirect that stays inside the allowlist is followed.
+        converter
+            .vega_to_svg(
+                vega_spec_with_data_url(&front.url("/same.csv")),
+                VgOpts::default(),
+                SvgOpts::default(),
+            )
+            .await
+            .unwrap();
+
+        // Redirects that leave it are denied, for data and for images.
+        let err = converter
+            .vega_to_svg(
+                vega_spec_with_data_url(&front.url("/other.csv")),
+                VgOpts::default(),
+                SvgOpts::default(),
             )
             .await
             .unwrap_err();
         let message = err.to_string();
-        assert!(message.contains("filesystem_root") || message.contains("access denied"));
-
+        assert!(
+            message.contains("VLC_ACCESS_DENIED") && message.contains(&other.url("/data.csv")),
+            "{message}"
+        );
         let err = converter
-            .svg_to_png(
-                &svg_with_href("../outside.png"),
-                PngOpts {
-                    scale: Some(1.0),
-                    ppi: None,
-                },
-            )
+            .svg_to_png(&svg_with_href(&front.url("/other.svg")), PngOpts::default())
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("filesystem_root"));
+        assert!(err.to_string().contains("VLC_ACCESS_DENIED"), "{err}");
     }
 
     #[tokio::test]
@@ -2230,7 +2354,7 @@ mod tests {
             )
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("External data url not allowed"));
+        assert!(err.to_string().contains("External image url not allowed"));
     }
 
     #[tokio::test]
@@ -2325,9 +2449,9 @@ mod tests {
         .unwrap();
         let spec = vegalite_spec_with_image_url("https://example.com/image.png");
 
-        // With HTTP denied, the canvas Image class catches the op error and
-        // fires onerror. The conversion succeeds but the image is not rendered.
-        let result = converter
+        // With HTTP denied, the canvas Image class reports the access-policy
+        // error and the render fails, matching the SVG-based image resolver.
+        let err = converter
             .vegalite_to_png(
                 spec,
                 VlOpts {
@@ -2339,11 +2463,11 @@ mod tests {
                     ppi: Some(72.0),
                 },
             )
-            .await;
-        // The conversion should succeed (image just not loaded)
+            .await
+            .unwrap_err();
         assert!(
-            result.is_ok(),
-            "conversion should succeed even with denied image"
+            err.to_string().contains("VLC_ACCESS_DENIED"),
+            "expected access denial, got: {err}"
         );
     }
 
@@ -2356,9 +2480,9 @@ mod tests {
         .unwrap();
         let spec = vegalite_spec_with_image_url("https://example.com/image.png");
 
-        // With allowlist not including example.com, the op denies the fetch.
-        // Canvas Image catches the error; the conversion succeeds without the image.
-        let result = converter
+        // With allowlist not including example.com, the op denies the fetch
+        // and the render fails with the access-policy error.
+        let err = converter
             .vegalite_to_png(
                 spec,
                 VlOpts {
@@ -2370,10 +2494,11 @@ mod tests {
                     ppi: Some(72.0),
                 },
             )
-            .await;
+            .await
+            .unwrap_err();
         assert!(
-            result.is_ok(),
-            "conversion should succeed even with denied image"
+            err.to_string().contains("VLC_ACCESS_DENIED"),
+            "expected access denial, got: {err}"
         );
     }
 

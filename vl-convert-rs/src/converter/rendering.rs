@@ -58,10 +58,14 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
 }
 
 pub(crate) fn default_image_access_policy() -> ImageAccessPolicy {
-    // Default: allow HTTP, no filesystem (None means allow http/https, deny filesystem)
+    // Default for the free `svg_to_*` functions: any HTTP/HTTPS URL, no
+    // filesystem access. This matches `VlcConfig::default()`.
     ImageAccessPolicy {
-        allowed_base_urls: None,
-        filesystem_root: None,
+        allowed_base_urls: Some(vec![
+            crate::data_ops::AllowedBaseUrlPattern::Scheme("http".to_string()),
+            crate::data_ops::AllowedBaseUrlPattern::Scheme("https".to_string()),
+        ]),
+        resources_dir: None,
     }
 }
 
@@ -187,7 +191,7 @@ pub(crate) fn parse_svg_with_options(
     }
 
     let previous_resources_dir = opts.resources_dir.clone();
-    opts.resources_dir = policy.filesystem_root.clone();
+    opts.resources_dir = policy.resources_dir.clone();
     let (result, access_errors) =
         crate::image_loading::with_image_access_policy(policy.clone(), || {
             usvg::Tree::from_xmltree(&doc, opts)

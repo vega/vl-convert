@@ -80,6 +80,18 @@ class LogCollector {
 }
 
 var logCollector = new LogCollector();
+
+// The canvas polyfill reports failed image loads here. Denied or unresolvable
+// URLs fail the render, like the SVG image resolver; other failures are warnings.
+globalThis._vlcImageAccessErrors = [];
+globalThis.__vlcImageLoadFailed = function (src, message) {
+    const text = `Failed to load image ${src}: ${message}`;
+    if (message.includes("VLC_ACCESS_DENIED") || message.startsWith("Unsupported image URL")) {
+        globalThis._vlcImageAccessErrors.push(text);
+    } else {
+        logCollector.warn(text);
+    }
+};
             """#
             .to_string();
 
@@ -300,6 +312,7 @@ function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, config, err
         vega.timeFormatLocale(timeFormatLocale);
     }
 
+    globalThis._vlcImageAccessErrors.length = 0;
     let view = vegaToView(vgSpec, config, errors);
     let canvasPromise = view.runAsync().then(() => {
         try {
@@ -315,6 +328,10 @@ function vegaToCanvas(vgSpec, formatLocale, timeFormatLocale, scale, config, err
                     .then((canvas) => {
                         if (errors != null && errors.length > 0) {
                             throw new Error(`${errors}`);
+                        }
+                        if (globalThis._vlcImageAccessErrors.length > 0) {
+                            const imageErrors = globalThis._vlcImageAccessErrors.splice(0);
+                            throw new Error(imageErrors.join("\n"));
                         }
                         return canvas;
                     });

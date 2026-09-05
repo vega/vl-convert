@@ -41,9 +41,11 @@ resolved HTTP URL or file path is checked against `allowed_base_urls`. A
 request that fails the check raises an error whose message contains
 `VLC_ACCESS_DENIED`.
 
-VlConvert makes GET requests only, to `http` and `https` URLs only, with a
-10-second connection timeout and a 30-second total timeout. It follows HTTP
-redirects, and the allowlist check applies to the URL in the specification.
+VlConvert makes GET requests only, to `http` and `https` URLs only. Each
+request has a 10-second connection timeout and a 30-second overall limit that
+includes up to ten redirects, each checked against the allowlist. The limit
+applies to each attempt: image fetches for SVG-based output retry transient
+server errors up to four times, so a failing image can take longer overall.
 Vega parses the response as JSON, CSV, TSV, or TopoJSON according to the file
 extension or the `format` property, as described in the
 [Vega-Lite data documentation](https://vega.github.io/vega-lite/docs/data.html).
@@ -168,18 +170,22 @@ together with the other limits a public service needs.
 
 Images follow the same rules as data. This covers Vega `image` marks, whose
 `url` can be a URL or a path, and `<image>` elements in SVG input. `data:` URLs
-are always allowed, and HTTP images must match `allowed_base_urls`.
+are always allowed, HTTP images must match `allowed_base_urls`, and a local
+image file must sit under an allowlisted directory. A relative image path in an
+SVG input document resolves against a filesystem `base_url` and fails without
+one. An SVG used as an image cannot pull in further images from files or
+hosts; only `data:` references inside it are honored. To keep such images,
+inline them as `data:` URLs or flatten the SVG before conversion.
 
-Local image files need the same setup as local data: set `base_url` to the
-directory that holds them and add it to `allowed_base_urls`. PNG output checks
-image paths against the allowlist like data. Outputs that start from SVG, which
-are JPEG, PDF, SVG input conversions, and SVG output with `bundle`, resolve
-local images only under a filesystem `base_url`. Setting both covers every
-format.
+Which outputs load images follows the same pattern as data. PNG, JPEG, and PDF
+output, SVG input conversions, and SVG output with `bundle` load them during
+conversion. Plain SVG output keeps each image URL for the viewer to load, and
+HTML output leaves loading to the browser.
 
-A blocked image is reported differently by output. PNG output of a Vega or
-Vega-Lite chart leaves the image blank without an error. JPEG, PDF, and SVG
-input conversions fail with an access error.
+Where images are loaded, a blocked image fails the conversion with a
+`VLC_ACCESS_DENIED` error. An image that is allowed but cannot be fetched, for
+example because the host returned an error, is logged as a warning and left
+blank, except with `bundle`, which fails because it must inline the image.
 
 ## When Data Is Loaded
 
@@ -195,8 +201,9 @@ evaluate the chart and load its data during conversion.
 | --- | --- | --- |
 | `VLC_ACCESS_DENIED: External data url not allowed: https://cdn.jsdelivr.net/.../srv/data/x.csv` | A bare path was joined to the CDN base URL | Use a `file://` URL or a filesystem `base_url` |
 | `VLC_ACCESS_DENIED: Filesystem access denied for path: /srv/data/x.csv` | The directory is not in `allowed_base_urls` | Add the directory to the allowlist |
-| `VLC_ACCESS_DENIED: External data url not allowed: https://...` | The URL matches no allowlist entry | Add a prefix, wildcard host, or scheme entry |
-| `Unsupported data URL target after Vega loader sanitize: about:invalid/...` | `base_url` is disabled and the specification uses a relative URL | Use an absolute URL or set `base_url` |
+| `VLC_ACCESS_DENIED: External data url not allowed: https://...` or `External image url not allowed` | The URL, or a redirect it returned, matches no allowlist entry | Add a prefix, wildcard host, or scheme entry |
+| `Unsupported data URL target after Vega loader sanitize: about:invalid/...` | `base_url` is disabled and the specification uses a relative data URL | Use an absolute URL or set `base_url` |
+| `Unsupported image URL about:invalid/...` | `base_url` is disabled and an image uses a relative URL | Use an absolute URL or set `base_url` |
 | `HTTP request failed for '...': status 404` | The URL resolved and was allowed, but the host returned an error | Check the URL and the host |
 
 See {doc}`../advanced/configuration` to keep these settings in a config file,

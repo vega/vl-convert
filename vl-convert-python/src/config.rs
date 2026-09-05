@@ -504,16 +504,17 @@ pub fn load_config_inner(path: Option<String>) -> Result<(), vl_convert_rs::anyh
 ///     Worker count (must be >= 1). ``None`` resets to the library default (1).
 ///     Passing ``0`` raises ``ValueError``.
 /// base_url : str | bool, optional
-///     Base URL for resolving relative data paths in Vega specs.
+///     Base URL for resolving relative data and image paths in Vega specs.
 ///     ``None`` or ``True`` resets to the default (vega-datasets CDN).
 ///     ``False`` disables relative path resolution.
 ///     A string sets a custom base URL or filesystem path.
 /// allowed_base_urls : list[str], optional
-///     CSP-style allowlist for data access (HTTP URLs, filesystem paths).
+///     CSP-style allowlist for data and image access (HTTP URLs, filesystem
+///     paths).
 ///     Examples: ``"https:"`` (scheme), ``"https://example.com/"`` (prefix),
 ///     ``"/data/"`` (filesystem), ``"*"`` (everything). ``None`` resets to
 ///     the library default (``["http:", "https:"]``); ``[]`` blocks all
-///     network data.
+///     network data and images.
 /// auto_google_fonts : bool, optional
 ///     Automatically download missing fonts from Google Fonts.
 ///     ``None`` resets to the library default (``False``).

@@ -28,8 +28,9 @@ Allowing one type does not allow the others.
 ## Restrict Data and Images
 
 By default, `allowed_base_urls` permits any HTTP or HTTPS URL and no local
-files, and `base_url` resolves relative data URLs against the Vega datasets
-CDN. Tighten both before processing untrusted input.
+files for both data and images, and `base_url` resolves relative data and
+image URLs against the Vega datasets CDN. Tighten both before processing
+untrusted input.
 
 An empty `allowed_base_urls` list blocks every absolute URL and file path. To
 permit one service, list its URL prefix:

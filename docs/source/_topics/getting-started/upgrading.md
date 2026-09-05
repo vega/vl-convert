@@ -181,12 +181,13 @@ running the executable.
 
 These differences can change results even when code and commands still run.
 
-**Data access is a converter setting with an allowlist.** 1.x placed no
-restriction on the URLs a specification could load unless you passed an
-allowlist per conversion. 2.0 allows any HTTP or HTTPS URL by default and
-blocks local files. Specifications that load local data need the directory
-added to `allowed_base_urls`, and relative data URLs resolve against
-`base_url`. See {doc}`../guides/data-loading`.
+**Data and image access is a converter setting with an allowlist.** 1.x
+placed no restriction on the URLs a specification could load unless you passed
+an allowlist per conversion. 2.0 allows any HTTP or HTTPS URL by default and
+blocks local files, for data and images alike. Specifications that load local
+data or images need the directory added to `allowed_base_urls`, and relative
+data and image URLs resolve against `base_url`. See
+{doc}`../guides/data-loading`.
 
 **Warnings are always captured.** 1.x dropped Vega and Vega-Lite warnings
 unless you asked for them. 2.0 records them on every conversion and reports

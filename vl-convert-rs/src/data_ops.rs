@@ -10,13 +10,16 @@ use regex::Regex;
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 lazy_static! {
     static ref ASYNC_CLIENT: reqwest::Client = reqwest::Client::builder()
         .user_agent(VL_CONVERT_USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
+        .timeout(REQUEST_TIMEOUT)
+        // Redirects are followed manually so every hop is checked against the
+        // access policy before it is fetched.
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("Failed to construct async reqwest client");
     static ref SCHEME_PATTERN_RE: Regex = Regex::new(r"^[a-zA-Z][a-zA-Z0-9+.\-]*:$").unwrap();
@@ -289,6 +292,28 @@ fn validate_http_url(url: &str, policy: &DataAccessPolicy) -> Result<(), JsError
     Ok(())
 }
 
+/// Canonicalize a local path and check it against the allowlist as a `file://`
+/// URL. Shared by the data ops and the image resolvers so every local read
+/// follows the same rule. Returns the canonical path.
+pub(crate) fn authorize_local_path(
+    path: &Path,
+    patterns: &Option<Vec<AllowedBaseUrlPattern>>,
+) -> Result<PathBuf, AnyError> {
+    let canonical = canonicalize_path_for_policy_check(path)?;
+    let file_url = Url::from_file_path(&canonical)
+        .map_err(|_| anyhow!("Cannot convert path to file URL: {}", canonical.display()))?;
+    if !is_access_allowed(file_url.as_str(), patterns) {
+        bail!(
+            "{}",
+            access_denied_message(format!(
+                "Filesystem access denied for path: {}",
+                canonical.display()
+            ))
+        );
+    }
+    Ok(canonical)
+}
+
 /// Validate a filesystem path against the data access policy.
 /// Handles both bare paths and `file://` URLs. Returns the canonicalized path.
 fn validate_file_path(path: &str, policy: &DataAccessPolicy) -> Result<PathBuf, JsErrorBox> {
@@ -302,32 +327,81 @@ fn validate_file_path(path: &str, policy: &DataAccessPolicy) -> Result<PathBuf, 
         PathBuf::from(path)
     };
 
-    // Canonicalize to resolve symlinks and ..
-    let canonical = portable_canonicalize(&fs_path).map_err(|e| {
-        JsErrorBox::generic(format!(
-            "Failed to resolve filesystem path '{}': {e}",
-            fs_path.display()
-        ))
-    })?;
+    authorize_local_path(&fs_path, &policy.allowed_base_urls)
+        .map_err(|e| JsErrorBox::generic(e.to_string()))
+}
 
-    // Convert canonicalized path to a file:// URL for allowlist comparison.
-    // The FilePathPrefix pattern handles canonicalization internally, but for
-    // Prefix patterns we need a file:// URL string.
-    let file_url = Url::from_file_path(&canonical).map_err(|_| {
-        JsErrorBox::generic(format!(
-            "Cannot convert path to file URL: {}",
-            canonical.display()
-        ))
-    })?;
+/// Maximum number of HTTP redirects followed for one data or image request.
+pub(crate) const MAX_REDIRECTS: usize = 10;
 
-    if !is_access_allowed(file_url.as_str(), &policy.allowed_base_urls) {
-        return Err(JsErrorBox::generic(access_denied_message(format!(
-            "Filesystem access denied for path: {}",
-            canonical.display()
-        ))));
+/// Time limit for one data or image request, including every redirect it
+/// follows.
+pub(crate) const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Resolve a redirect `Location` header against the URL that returned it.
+/// Returns `None` when the header is missing or cannot be joined.
+pub(crate) fn redirect_target(location: Option<&str>, current: &str) -> Option<String> {
+    let location = location?;
+    let base = Url::parse(current).ok()?;
+    Some(base.join(location).ok()?.to_string())
+}
+
+/// GET `url`, following redirects manually so that every hop is validated
+/// against the data access policy before it is requested.
+async fn fetch_with_policy(
+    url: &str,
+    policy: &DataAccessPolicy,
+) -> Result<reqwest::Response, JsErrorBox> {
+    validate_http_url(url, policy)?;
+    let mut current = url.to_string();
+    // One deadline covers the whole chain so redirects cannot extend the
+    // request beyond REQUEST_TIMEOUT.
+    let deadline = Instant::now() + REQUEST_TIMEOUT;
+    for _ in 0..=MAX_REDIRECTS {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(JsErrorBox::generic(format!(
+                "HTTP request for '{url}' timed out after {} seconds",
+                REQUEST_TIMEOUT.as_secs()
+            )));
+        }
+        let response = ASYNC_CLIENT
+            .get(&current)
+            .timeout(remaining)
+            .send()
+            .await
+            .map_err(|e| {
+                JsErrorBox::generic(format!("HTTP request failed for '{current}': {e}"))
+            })?;
+
+        if response.status().is_redirection() {
+            let location = response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|v| v.to_str().ok());
+            let Some(next) = redirect_target(location, &current) else {
+                return Err(JsErrorBox::generic(format!(
+                    "HTTP redirect from '{current}' has no usable Location header"
+                )));
+            };
+            validate_http_url(&next, policy).map_err(|e| {
+                JsErrorBox::generic(format!("HTTP redirect from '{current}' blocked: {e}"))
+            })?;
+            current = next;
+            continue;
+        }
+
+        if !response.status().is_success() {
+            return Err(JsErrorBox::generic(format!(
+                "HTTP request failed for '{current}': status {}",
+                response.status()
+            )));
+        }
+        return Ok(response);
     }
-
-    Ok(canonical)
+    Err(JsErrorBox::generic(format!(
+        "Too many HTTP redirects while fetching '{url}'"
+    )))
 }
 
 #[op2]
@@ -341,20 +415,7 @@ pub async fn op_vega_data_fetch(
         state.borrow::<DataAccessPolicy>().clone()
     };
 
-    validate_http_url(&url, &policy)?;
-
-    let response = ASYNC_CLIENT
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| JsErrorBox::generic(format!("HTTP request failed for '{url}': {e}")))?;
-
-    if !response.status().is_success() {
-        return Err(JsErrorBox::generic(format!(
-            "HTTP request failed for '{url}': status {}",
-            response.status()
-        )));
-    }
+    let response = fetch_with_policy(&url, &policy).await?;
 
     response
         .text()
@@ -373,20 +434,7 @@ pub async fn op_vega_data_fetch_bytes(
         state.borrow::<DataAccessPolicy>().clone()
     };
 
-    validate_http_url(&url, &policy)?;
-
-    let response = ASYNC_CLIENT
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| JsErrorBox::generic(format!("HTTP request failed for '{url}': {e}")))?;
-
-    if !response.status().is_success() {
-        return Err(JsErrorBox::generic(format!(
-            "HTTP request failed for '{url}': status {}",
-            response.status()
-        )));
-    }
+    let response = fetch_with_policy(&url, &policy).await?;
 
     response
         .bytes()

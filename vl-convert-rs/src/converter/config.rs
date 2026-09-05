@@ -131,13 +131,13 @@ impl BaseUrlSetting {
 pub struct VlcConfig {
     /// Number of persistent worker V8 isolates. Must be at least 1.
     pub num_workers: NonZeroU64,
-    /// Base URL for resolving relative data paths in Vega specs.
+    /// Base URL for resolving relative data and image paths in Vega specs.
     pub base_url: BaseUrlSetting,
-    /// Allowlist for data access (HTTP URLs, filesystem paths).
+    /// Allowlist for data and image access (HTTP URLs, filesystem paths).
     /// Uses CSP-style patterns: "https:" (scheme), "<https://example.com/>" (prefix),
     /// "/data/" (filesystem). Default is `["http:", "https:"]`: any
     /// HTTP/HTTPS URL is allowed; no filesystem access. Pass `Vec::new()`
-    /// to block all network data; `["*"]` to allow everything.
+    /// to block all network data and images; `["*"]` to allow everything.
     pub allowed_base_urls: Vec<String>,
     /// Whether to auto-download missing fonts from Google Fonts.
     pub auto_google_fonts: bool,

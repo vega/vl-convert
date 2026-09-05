@@ -59,7 +59,7 @@ pub(crate) struct Cli {
     #[arg(long, global = true, value_name = "disabled|PATH", env = "VLC_CONFIG")]
     pub(crate) vlc_config: Option<String>,
 
-    /// Base URL for resolving relative data paths. Reserved values:
+    /// Base URL for resolving relative data and image paths. Reserved values:
     /// `default` (use vega-datasets CDN), `disabled` (relative paths
     /// error). Otherwise either a URL with scheme (`https://...`,
     /// `file://...`) or an absolute filesystem path. Relative paths
@@ -72,7 +72,7 @@ pub(crate) struct Cli {
     )]
     pub(crate) base_url: Option<String>,
 
-    /// Allowed base URLs. Reserved single-value shortcuts: `none`
+    /// Allowed base URLs for data and images. Reserved single-value shortcuts: `none`
     /// (block all), `net` (HTTP/HTTPS only, no filesystem), `all`
     /// (allow everything incl. filesystem). Otherwise a `;`-separated
     /// list of CSP-style patterns: `"https:"` (scheme),
