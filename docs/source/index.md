@@ -6,22 +6,31 @@ embedded runtime, so it needs no browser or Node.js, and the bundled libraries
 need no network access. Network requests occur only for remote data, images,
 fonts, or plugins that the input or configuration references.
 
-## Rendered Output Preview
+## Example
 
-One Vega-Lite specification, rendered by VlConvert as SVG, PNG, and PDF.
+A Vega-Lite specification and the SVG that VlConvert renders from it. The
+links below download the SVG, PNG, PDF, bundled HTML, and compiled Vega
+outputs, or open the chart in the Vega Editor.
 
 <!-- Regenerate the checked-in outputs with `pixi run docs-preview-chart`. -->
 
-:::{container} front-page-chart-scroll
+```{literalinclude} _static/charts/front-page-chart.vl.json
+:language: json
+```
+
 ```{image} _static/charts/front-page-chart.svg
-:alt: Illustrative chart of sample monthly render counts and p95 latency
+:alt: Bar chart of charts rendered per month, from January to June
 :class: front-page-chart-preview
 ```
-:::
 
-{download}`Download PNG output <_static/charts/front-page-chart.png>` ·
-{download}`Download PDF output <_static/charts/front-page-chart.pdf>` ·
-{download}`Download Vega-Lite spec <_static/charts/front-page-chart.vl.json>`
+:::{container} front-page-download-links
+{download}`SVG <_static/charts/front-page-chart.svg>` ·
+{download}`PNG <_static/charts/front-page-chart.png>` ·
+{download}`PDF <_static/charts/front-page-chart.pdf>` ·
+{download}`HTML <_static/charts/front-page-chart.html>` ·
+{download}`Vega spec <_static/charts/front-page-chart.vg.json>` ·
+{{ front_page_editor_link }}
+:::
 
 ## Choose an Interface
 

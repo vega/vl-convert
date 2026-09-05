@@ -39,8 +39,26 @@ html_theme_options = {
     },
 }
 
-myst_enable_extensions = ["colon_fence", "fieldlist", "deflist"]
+myst_enable_extensions = ["colon_fence", "fieldlist", "deflist", "substitution"]
 myst_heading_anchors = 3
+
+# The front-page example links to the Vega Editor with a URL that
+# `pixi run docs-preview-chart` writes beside the other chart outputs.
+EDITOR_URL_FILE = Path(__file__).parent / "_static" / "charts" / "front-page-chart.url.txt"
+if not EDITOR_URL_FILE.exists():
+    raise FileNotFoundError(
+        f"{EDITOR_URL_FILE} is missing; run `pixi run docs-preview-chart`"
+    )
+myst_substitutions = {
+    "front_page_editor_link": (
+        '<a class="front-page-editor-link" '
+        f'href="{EDITOR_URL_FILE.read_text().strip()}" '
+        'target="_blank" rel="noopener">'
+        '<i class="fa-solid fa-arrow-up-right-from-square"></i>'
+        '<code class="docutils literal notranslate">'
+        '<span class="pre">Editor URL</span></code></a>'
+    ),
+}
 
 copybutton_prompt_text = r">>> |\.\.\. |\$ "
 copybutton_prompt_is_regexp = True
