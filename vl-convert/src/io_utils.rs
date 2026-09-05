@@ -520,8 +520,8 @@ fn write_stdout_bytes(data: &[u8]) -> Result<(), anyhow::Error> {
 ///   exists, else return `VlcConfig::default()`.
 /// - `Some("disabled")`: skip config-file loading; return
 ///   `VlcConfig::default()`.
-/// - `Some("<absolute path>")`: load that specific file. Relative paths
-///   are rejected to avoid ambiguity with the `disabled` reserved value.
+/// - `Some("<path>")`: load that specific file. Relative paths resolve from
+///   the current working directory.
 pub(crate) fn resolve_vlc_config(vlc_config: Option<&str>) -> Result<VlcConfig, anyhow::Error> {
     let path = match vlc_config {
         Some(raw) => {
@@ -531,14 +531,11 @@ pub(crate) fn resolve_vlc_config(vlc_config: Option<&str>) -> Result<VlcConfig, 
             }
             let expanded = shellexpand::tilde(trimmed).to_string();
             let path = std::path::PathBuf::from(&expanded);
-            if !path.is_absolute() {
-                bail!(
-                    "--vlc-config path must be absolute, got '{expanded}'. \
-                     Use 'disabled' to skip config-file loading, or pass an \
-                     absolute path."
-                );
+            if path.is_absolute() {
+                path
+            } else {
+                std::env::current_dir()?.join(path)
             }
-            path
         }
         None => {
             let default = vl_convert_rs::vlc_config_path();

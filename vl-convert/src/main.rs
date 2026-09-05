@@ -421,6 +421,7 @@ async fn run_command(
         Vg2svg {
             input,
             output,
+            config,
             format_locale,
             bundle,
             time_format_locale,
@@ -430,6 +431,7 @@ async fn run_command(
             vg_2_svg(
                 input.as_deref(),
                 output.as_deref(),
+                config,
                 format_locale,
                 time_format_locale,
                 svg_opts,
@@ -443,6 +445,7 @@ async fn run_command(
             output,
             scale,
             ppi,
+            config,
             format_locale,
             time_format_locale,
             render,
@@ -452,6 +455,7 @@ async fn run_command(
                 output.as_deref(),
                 scale,
                 ppi,
+                config,
                 format_locale,
                 time_format_locale,
                 render,
@@ -464,6 +468,7 @@ async fn run_command(
             output,
             scale,
             quality,
+            config,
             format_locale,
             time_format_locale,
             render,
@@ -473,6 +478,7 @@ async fn run_command(
                 output.as_deref(),
                 scale,
                 quality,
+                config,
                 format_locale,
                 time_format_locale,
                 render,
@@ -483,6 +489,7 @@ async fn run_command(
         Vg2pdf {
             input,
             output,
+            config,
             format_locale,
             time_format_locale,
             render,
@@ -490,6 +497,7 @@ async fn run_command(
             vg_2_pdf(
                 input.as_deref(),
                 output.as_deref(),
+                config,
                 format_locale,
                 time_format_locale,
                 render,
@@ -510,6 +518,7 @@ async fn run_command(
         Vg2html {
             input,
             output,
+            config,
             bundle,
             format_locale,
             time_format_locale,
@@ -519,6 +528,7 @@ async fn run_command(
             let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
+            let config = read_config_json(config)?;
 
             let format_locale = parse_format_locale_option(format_locale.as_deref())?;
             let time_format_locale =
@@ -531,6 +541,7 @@ async fn run_command(
                 .vega_to_html(
                     vg_spec,
                     VgOpts {
+                        config,
                         format_locale,
                         time_format_locale,
                         google_fonts,
@@ -550,6 +561,7 @@ async fn run_command(
         Vg2fonts {
             input,
             output,
+            config,
             include_font_face,
             format_locale,
             time_format_locale,
@@ -559,6 +571,7 @@ async fn run_command(
             let google_fonts = parse_google_font_requests(&google_font_families)?;
             let vg_str = read_input_string(input.as_deref())?;
             let vg_spec: serde_json::Value = serde_json::from_str(&vg_str)?;
+            let config = read_config_json(config)?;
             let format_locale = parse_format_locale_option(format_locale.as_deref())?;
             let time_format_locale =
                 parse_time_format_locale_option(time_format_locale.as_deref())?;
@@ -571,6 +584,7 @@ async fn run_command(
                 .vega_fonts(
                     vg_spec,
                     VgOpts {
+                        config,
                         google_fonts,
                         format_locale,
                         time_format_locale,
@@ -595,6 +609,7 @@ async fn run_command(
         Vg2sg {
             input,
             output,
+            config,
             format_locale,
             time_format_locale,
             format,
@@ -604,6 +619,7 @@ async fn run_command(
             vg_2_scenegraph(
                 input.as_deref(),
                 output.as_deref(),
+                config,
                 format_locale,
                 time_format_locale,
                 format,

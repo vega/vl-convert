@@ -53,9 +53,10 @@ impl LogLevel {
     long_about = None
 )]
 pub(crate) struct Cli {
-    /// Converter config: an absolute path to a JSONC config file, or the
-    /// reserved value `disabled` to skip config-file loading. When
-    /// omitted, the platform default config path is loaded if it exists.
+    /// Converter config: a path to a JSONC config file, or the reserved
+    /// value `disabled` to skip config-file loading. Relative paths resolve
+    /// from the current working directory. When omitted, the platform
+    /// default config path is loaded if it exists.
     #[arg(long, global = true, value_name = "disabled|PATH", env = "VLC_CONFIG")]
     pub(crate) vlc_config: Option<String>,
 

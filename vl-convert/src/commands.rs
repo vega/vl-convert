@@ -376,6 +376,10 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
@@ -401,6 +405,10 @@ pub(crate) enum Commands {
         /// Path to output PNG file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
         output: Option<String>,
+
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
 
         /// Image scale factor
         #[arg(long, default_value = "1.0")]
@@ -432,6 +440,10 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// Image scale factor
         #[arg(long, default_value = "1.0")]
         scale: f32,
@@ -461,6 +473,10 @@ pub(crate) enum Commands {
         /// Path to output PDF file to be created. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
         output: Option<String>,
+
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
 
         /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
@@ -499,6 +515,10 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// Whether to bundle JavaScript dependencies in the HTML file
         /// instead of loading them from a CDN
         #[arg(short, long)]
@@ -530,6 +550,10 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// Include @font-face CSS blocks in the output
         #[arg(long = "include-font-face")]
         include_font_face: bool,
@@ -559,6 +583,10 @@ pub(crate) enum Commands {
         /// Path to output scenegraph file. Writes to stdout if omitted or set to "-"
         #[arg(short, long)]
         output: Option<String>,
+
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
 
         /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
