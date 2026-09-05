@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import shutil
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -120,7 +119,12 @@ def topic_files() -> list[Path]:
 def validate_interface_blocks(topic: Topic) -> None:
     text = topic.source.read_text()
     unknown = set()
-    for marker in ("```{interface}", "```{not-interface}", "::::{interface}", "::::{not-interface}"):
+    for marker in (
+        "```{interface}",
+        "```{not-interface}",
+        "::::{interface}",
+        "::::{not-interface}",
+    ):
         start = 0
         while True:
             idx = text.find(marker, start)
@@ -214,7 +218,17 @@ def wrapper_text(interface: str, topic: Topic, out_file: Path) -> str:
     )
 
 
-def write_topic_wrappers(topics: list[Topic]) -> dict[str, list[Topic]]:
+def write_if_changed(path: Path, text: str, expected: set[Path]) -> None:
+    expected.add(path)
+    if path.exists() and path.read_text() == text:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def write_topic_wrappers(
+    topics: list[Topic], expected: set[Path]
+) -> dict[str, list[Topic]]:
     by_interface: dict[str, list[Topic]] = defaultdict(list)
     seen: set[tuple[str, str]] = set()
 
@@ -223,18 +237,23 @@ def write_topic_wrappers(topics: list[Topic]) -> dict[str, list[Topic]]:
         for interface in topic.interfaces:
             key = (interface, topic.path)
             if key in seen:
-                raise SystemExit(f"duplicate generated page for {interface}/{topic.path}")
+                raise SystemExit(
+                    f"duplicate generated page for {interface}/{topic.path}"
+                )
             seen.add(key)
 
             by_interface[interface].append(topic)
             out_file = source_root() / interface / f"{topic.path}{topic.suffix}"
-            out_file.parent.mkdir(parents=True, exist_ok=True)
-            out_file.write_text(wrapper_text(interface, topic, out_file))
+            write_if_changed(
+                out_file,
+                wrapper_text(interface, topic, out_file),
+                expected,
+            )
 
     return by_interface
 
 
-def write_index(interface: str, topics: list[Topic]) -> None:
+def write_index(interface: str, topics: list[Topic], expected: set[Path]) -> None:
     details = INTERFACES[interface]
     grouped: dict[str, list[Topic]] = defaultdict(list)
     for topic in topics:
@@ -252,8 +271,12 @@ def write_index(interface: str, topics: list[Topic]) -> None:
         "",
     ]
 
-    for section in sorted(grouped, key=lambda name: (SECTION_ORDER.get(name, 500), name)):
-        section_topics = sorted(grouped[section], key=lambda topic: (topic.order, topic.title))
+    for section in sorted(
+        grouped, key=lambda name: (SECTION_ORDER.get(name, 500), name)
+    ):
+        section_topics = sorted(
+            grouped[section], key=lambda topic: (topic.order, topic.title)
+        )
         lines.extend(
             [
                 "```{toctree}",
@@ -265,22 +288,33 @@ def write_index(interface: str, topics: list[Topic]) -> None:
         lines.extend(topic.path for topic in section_topics)
         lines.extend(["```", ""])
 
-    (source_root() / interface / "index.md").write_text("\n".join(lines))
+    write_if_changed(
+        source_root() / interface / "index.md",
+        "\n".join(lines),
+        expected,
+    )
 
 
-def clean_generated_roots() -> None:
+def remove_stale_generated_files(expected: set[Path]) -> None:
     for interface in INTERFACES:
         root = source_root() / interface
-        if root.exists():
-            shutil.rmtree(root)
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if path.is_file() and path not in expected:
+                path.unlink()
+        for path in sorted(root.rglob("*"), reverse=True):
+            if path.is_dir() and not any(path.iterdir()):
+                path.rmdir()
 
 
 def main() -> int:
-    clean_generated_roots()
     topics = [parse_topic(path) for path in topic_files()]
-    by_interface = write_topic_wrappers(topics)
+    expected: set[Path] = set()
+    by_interface = write_topic_wrappers(topics, expected)
     for interface in INTERFACES:
-        write_index(interface, by_interface.get(interface, []))
+        write_index(interface, by_interface.get(interface, []), expected)
+    remove_stale_generated_files(expected)
     return 0
 
 

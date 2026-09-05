@@ -34,12 +34,12 @@ build-cli = "cargo build -p vl-convert"
 build-py = "maturin build -m vl-convert-python/Cargo.toml --sdist --release"
 docs-generate = "python docs/tools/generate_interface_pages.py"
 docs-openapi = { cmd = "python docs/tools/dump_openapi.py", depends-on = ["build-cli"] }
-docs-build = { cmd = "sphinx-build -b html docs/source docs/build/html && touch docs/build/html/.nojekyll", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
-docs-build-strict = { cmd = "sphinx-build -W --keep-going -b html docs/source docs/build/html && touch docs/build/html/.nojekyll", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
-docs-clean = "rm -rf docs/build docs/source/_generated/openapi-public.json docs/source/python docs/source/cli docs/source/rust docs/source/server"
+docs-build = { cmd = "sphinx-build -E -b html docs/source docs/build/html && touch docs/build/html/.nojekyll", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
+docs-build-strict = { cmd = "sphinx-build -E -W --keep-going -b html docs/source docs/build/html && touch docs/build/html/.nojekyll", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
+docs-clean = "rm -rf docs/build docs/source/_generated docs/source/python docs/source/cli docs/source/rust docs/source/server"
 docs-rebuild = { depends-on = ["docs-clean", "docs-build"] }
-docs-serve = { cmd = "sphinx-autobuild docs/source docs/build/html", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
-docs-linkcheck = { cmd = "sphinx-build -b linkcheck docs/source docs/build/linkcheck", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
+docs-serve = { cmd = ["sphinx-autobuild", "-E", "--pre-build", "python docs/tools/generate_interface_pages.py", "docs/source", "docs/build/html"], depends-on = ["build-cli", "docs-openapi"] }
+docs-linkcheck = { cmd = "sphinx-build -E -b linkcheck docs/source docs/build/linkcheck", depends-on = ["build-cli", "docs-generate", "docs-openapi"] }
 
 vendor = "cargo run -p vl-convert-vendor"
 bundle-licenses = """
