@@ -28,6 +28,33 @@ pub(crate) mod double_option {
     }
 }
 
+/// Serde helper for required-but-nullable fields. Unlike Serde's default
+/// `Option<T>` handling, a missing field is rejected while an explicit null
+/// still deserializes to `None`.
+pub(crate) mod required_option {
+    use serde::{Deserialize, Deserializer};
+
+    pub fn deserialize<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+    where
+        T: Deserialize<'de>,
+        D: Deserializer<'de>,
+    {
+        Option::<T>::deserialize(deserializer)
+    }
+}
+
+fn base_url_schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+    use utoipa::openapi::schema::{ObjectBuilder, OneOfBuilder, Type};
+
+    OneOfBuilder::new()
+        .item(ObjectBuilder::new().schema_type(Type::Boolean))
+        .item(ObjectBuilder::new().schema_type(Type::String))
+        .description(Some(
+            "true selects the Vega datasets default, false disables relative data loading, and a string supplies a custom URL or filesystem path",
+        ))
+        .into()
+}
+
 /// Wire-shape adapter for `BaseUrlSetting`: accepts the `bool | string`
 /// form `VlcConfig::Serialize` emits (`true` → `Default`, `false` →
 /// `Disabled`, any string → `Custom(s)`) so `GET /admin/config`
@@ -428,58 +455,58 @@ pub(crate) struct ConfigPatch {
     // `Option<T>` in the published schema. Absent → preserve current,
     // null → clear (or 400 for non-nullable fields), value → set.
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<u64>, nullable)]
+    #[schema(value_type = u64, minimum = 1)]
     pub num_workers: Option<Option<NonZeroU64>>,
     #[serde(default, deserialize_with = "deserialize_base_url_view_double_option")]
-    #[schema(value_type = Option<Object>, nullable)]
+    #[schema(schema_with = base_url_schema)]
     pub base_url: Option<Option<BaseUrlSetting>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<Vec<String>>, nullable)]
+    #[schema(value_type = Vec<String>)]
     pub allowed_base_urls: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<bool>, nullable)]
+    #[schema(value_type = bool)]
     pub auto_google_fonts: Option<Option<bool>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<bool>, nullable)]
+    #[schema(value_type = bool)]
     pub embed_local_fonts: Option<Option<bool>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<bool>, nullable)]
+    #[schema(value_type = bool)]
     pub subset_fonts: Option<Option<bool>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<String>, nullable)]
+    #[schema(value_type = String)]
     pub missing_fonts: Option<Option<MissingFontsPolicy>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<Vec<Object>>, nullable)]
+    #[schema(value_type = Vec<Object>)]
     pub google_fonts: Option<Option<Vec<GoogleFontRequest>>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<u64>, nullable)]
+    #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub google_font_variant_threshold: Option<Option<NonZeroU64>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<u64>, nullable)]
+    #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub max_v8_heap_size_mb: Option<Option<NonZeroU64>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<u64>, nullable)]
+    #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub max_v8_execution_time_secs: Option<Option<NonZeroU64>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<bool>, nullable)]
+    #[schema(value_type = bool)]
     pub gc_after_conversion: Option<Option<bool>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<Vec<String>>, nullable)]
+    #[schema(value_type = Vec<String>)]
     pub vega_plugins: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<Vec<String>>, nullable)]
+    #[schema(value_type = Vec<String>)]
     pub plugin_import_domains: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<bool>, nullable)]
+    #[schema(value_type = bool)]
     pub allow_per_request_plugins: Option<Option<bool>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<u64>, nullable)]
+    #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub max_ephemeral_workers: Option<Option<NonZeroU64>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<bool>, nullable)]
+    #[schema(value_type = bool)]
     pub allow_google_fonts: Option<Option<bool>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<Vec<String>>, nullable)]
+    #[schema(value_type = Vec<String>)]
     pub per_request_plugin_import_domains: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
     #[schema(value_type = Option<String>, nullable)]
@@ -491,7 +518,7 @@ pub(crate) struct ConfigPatch {
     #[schema(value_type = Option<Object>, nullable)]
     pub default_time_format_locale: Option<Option<TimeFormatLocale>>,
     #[serde(default, deserialize_with = "double_option::deserialize")]
-    #[schema(value_type = Option<Object>, nullable)]
+    #[schema(value_type = Object)]
     pub themes: Option<Option<HashMap<String, serde_json::Value>>>,
 }
 
@@ -505,9 +532,9 @@ pub(crate) struct ConfigPatch {
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ConfigReplace {
-    #[schema(value_type = u64)]
+    #[schema(value_type = u64, minimum = 1)]
     pub num_workers: NonZeroU64,
-    #[schema(value_type = Object)]
+    #[schema(schema_with = base_url_schema)]
     #[serde(deserialize_with = "deserialize_base_url_view")]
     pub base_url: BaseUrlSetting,
     pub allowed_base_urls: Vec<String>,
@@ -518,24 +545,32 @@ pub(crate) struct ConfigReplace {
     pub missing_fonts: MissingFontsPolicy,
     #[schema(value_type = Vec<Object>)]
     pub google_fonts: Vec<GoogleFontRequest>,
-    #[schema(value_type = Option<u64>, nullable)]
+    #[serde(deserialize_with = "required_option::deserialize")]
+    #[schema(value_type = Option<u64>, nullable, required = true, minimum = 1)]
     pub google_font_variant_threshold: Option<NonZeroU64>,
-    #[schema(value_type = Option<u64>, nullable)]
+    #[serde(deserialize_with = "required_option::deserialize")]
+    #[schema(value_type = Option<u64>, nullable, required = true, minimum = 1)]
     pub max_v8_heap_size_mb: Option<NonZeroU64>,
-    #[schema(value_type = Option<u64>, nullable)]
+    #[serde(deserialize_with = "required_option::deserialize")]
+    #[schema(value_type = Option<u64>, nullable, required = true, minimum = 1)]
     pub max_v8_execution_time_secs: Option<NonZeroU64>,
     pub gc_after_conversion: bool,
     pub vega_plugins: Vec<String>,
     pub plugin_import_domains: Vec<String>,
     pub allow_per_request_plugins: bool,
-    #[schema(value_type = Option<u64>, nullable)]
+    #[serde(deserialize_with = "required_option::deserialize")]
+    #[schema(value_type = Option<u64>, nullable, required = true, minimum = 1)]
     pub max_ephemeral_workers: Option<NonZeroU64>,
     pub allow_google_fonts: bool,
     pub per_request_plugin_import_domains: Vec<String>,
+    #[serde(deserialize_with = "required_option::deserialize")]
+    #[schema(nullable, required = true)]
     pub default_theme: Option<String>,
-    #[schema(value_type = Option<Object>, nullable)]
+    #[serde(deserialize_with = "required_option::deserialize")]
+    #[schema(value_type = Option<Object>, nullable, required = true)]
     pub default_format_locale: Option<FormatLocale>,
-    #[schema(value_type = Option<Object>, nullable)]
+    #[serde(deserialize_with = "required_option::deserialize")]
+    #[schema(value_type = Option<Object>, nullable, required = true)]
     pub default_time_format_locale: Option<TimeFormatLocale>,
     #[schema(value_type = Object)]
     pub themes: HashMap<String, serde_json::Value>,
@@ -571,9 +606,11 @@ impl From<ConfigReplace> for VlcConfig {
 }
 
 /// Successful GET / PATCH / PUT / DELETE response body for `/admin/config`.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct ConfigView {
+    #[schema(value_type = ConfigReplace)]
     pub baseline: VlcConfig,
+    #[schema(value_type = ConfigReplace)]
     pub effective: VlcConfig,
     pub generation: u64,
 }
@@ -605,13 +642,13 @@ pub(crate) struct FontDirReplace {
 #[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
 pub(crate) struct CacheSizeReplace {
     /// Cache cap in megabytes. `null` → library default.
-    #[schema(value_type = Option<u64>, nullable)]
+    #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub max_size_mb: Option<NonZeroU64>,
 }
 
 /// Error code for a single field-level validation failure. Static slice so
 /// it serializes cleanly and can be matched by callers.
-#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, utoipa::ToSchema)]
 #[allow(dead_code)]
 pub(crate) enum FieldErrorCode {
     #[serde(rename = "NON_NULLABLE")]
@@ -625,7 +662,7 @@ pub(crate) enum FieldErrorCode {
 }
 
 /// Single field-level validation error entry.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, utoipa::ToSchema)]
 pub(crate) struct FieldError {
     pub path: String,
     pub code: FieldErrorCode,
@@ -635,10 +672,31 @@ pub(crate) struct FieldError {
 /// 422 response body for PATCH / PUT / DELETE `/admin/config` when the
 /// proposed config fails `apply_patch` or `normalize_converter_config` or
 /// `VlConverter::with_config`.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, utoipa::ToSchema)]
 pub(crate) struct ConfigValidationError {
     pub error: String,
     pub field_errors: Vec<FieldError>,
+}
+
+/// PATCH/PUT requests can fail either at JSON parsing or field validation.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+#[allow(dead_code)]
+pub(crate) enum ConfigBadRequestResponse {
+    Error(ErrorResponse),
+    Validation(ConfigValidationError),
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct DrainTimeoutResponse {
+    pub error: String,
+    pub in_flight: usize,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub(crate) struct FontCacheSizeView {
+    #[schema(minimum = 1)]
+    pub max_size_mb: u64,
 }
 
 #[cfg(test)]
@@ -802,6 +860,18 @@ mod tests {
         assert!(
             err.to_string().contains("totally_made_up_field"),
             "expected unknown-field error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn config_replace_requires_nullable_fields_to_be_present() {
+        let mut body = put_body(&[]);
+        body.as_object_mut().unwrap().remove("default_theme");
+        let err = serde_json::from_value::<ConfigReplace>(body)
+            .expect_err("full replacements must include nullable fields explicitly");
+        assert!(
+            err.to_string().contains("default_theme"),
+            "expected missing-field error, got: {err}"
         );
     }
 

@@ -19,17 +19,15 @@ use crate::reconfig::{
     apply_patch, DrainError, PatchRejection, ReconfigCoordinator, ReconfigScopeGuard,
 };
 use crate::types::{
-    ConfigPatch, ConfigReplace, ConfigValidationError, ConfigView, ErrorResponse, FieldError,
-    FieldErrorCode, FontDirRequest,
+    ConfigBadRequestResponse, ConfigPatch, ConfigReplace, ConfigValidationError, ConfigView,
+    DrainTimeoutResponse, ErrorResponse, FieldError, FieldErrorCode, FontCacheSizeView,
+    FontDirRequest,
 };
 
 /// OpenAPI doc for the admin surface. Published at `/admin/api-doc/openapi.json`;
 /// Swagger UI at `/admin/docs`. The main `/api-doc/openapi.json` does not
 /// include `/admin/*` paths.
 ///
-/// Admin body schemas are omitted because the DTOs wrap library types and
-/// tri-state patch fields that are not represented as OpenAPI schemas here.
-/// The spec publishes paths, methods, tags, and response status codes.
 #[derive(OpenApi)]
 #[openapi(tags(
     (name = "Admin", description = "Admin-only endpoints (config + budget)"),
@@ -111,7 +109,7 @@ pub(crate) fn admin_router(admin_state: Arc<AdminState>) -> Router {
 #[utoipa::path(
     get,
     path = "/admin/budget",
-    responses((status = 200, description = "Current budget status")),
+    responses((status = 200, body = BudgetStatus, description = "Current budget status")),
     tag = "Admin",
 )]
 async fn get_budget(State(admin): State<Arc<AdminState>>) -> Json<BudgetStatus> {
@@ -145,8 +143,8 @@ struct WorkerDiagnosticsView {
     post,
     path = "/admin/budget",
     responses(
-        (status = 200, description = "Budget updated; response is fresh BudgetStatus"),
-        (status = 400, description = "Invalid update body"),
+        (status = 200, body = BudgetStatus, description = "Budget updated; response is fresh BudgetStatus"),
+        (status = 400, body = ErrorResponse, description = "Invalid update body"),
     ),
     tag = "Admin",
 )]
@@ -200,8 +198,8 @@ async fn update_budget(
     get,
     path = "/admin/diagnostics/workers",
     responses(
-        (status = 200, description = "Worker memory usage"),
-        (status = 503, description = "Worker diagnostics unavailable"),
+        (status = 200, body = WorkerDiagnosticsView, description = "Worker memory usage"),
+        (status = 503, body = ErrorResponse, description = "Worker diagnostics unavailable"),
     ),
     tag = "Admin",
 )]
@@ -314,6 +312,7 @@ fn json_rejection_response(rej: JsonRejection, opaque: bool) -> Response {
     path = "/admin/config",
     responses((
         status = 200,
+        body = ConfigView,
         description = "ConfigView { baseline, effective, generation }. \
                        Schema mirrors the Python get_config() shape."
     )),
@@ -330,11 +329,11 @@ async fn get_config(State(admin): State<Arc<AdminState>>) -> Response {
     patch,
     path = "/admin/config",
     responses(
-        (status = 200, description = "Commit succeeded; response is fresh ConfigView"),
-        (status = 400, description = "Malformed body / unknown field / null on non-nullable / NonZero zero"),
-        (status = 422, description = "Config validation failed; response is ConfigValidationError with field_errors"),
-        (status = 503, description = "Rebuild failure OR server shutting down during drain"),
-        (status = 504, description = "Drain timed out; response includes in_flight count"),
+        (status = 200, body = ConfigView, description = "Commit succeeded; response is fresh ConfigView"),
+        (status = 400, body = ConfigBadRequestResponse, description = "Malformed body / unknown field / null on non-nullable / NonZero zero"),
+        (status = 422, body = ConfigValidationError, description = "Config validation failed; response includes field_errors"),
+        (status = 503, body = ErrorResponse, description = "Rebuild failure OR server shutting down during drain"),
+        (status = 504, body = DrainTimeoutResponse, description = "Drain timed out; response includes in_flight count"),
     ),
     tag = "Admin",
 )]
@@ -379,11 +378,11 @@ async fn patch_config(
     put,
     path = "/admin/config",
     responses(
-        (status = 200, description = "Commit succeeded; response is fresh ConfigView"),
-        (status = 400, description = "Malformed body / missing required field / unknown field / null on non-nullable / NonZero zero"),
-        (status = 422, description = "Config validation failed; response is ConfigValidationError"),
-        (status = 503, description = "Rebuild failure OR server shutting down"),
-        (status = 504, description = "Drain timed out"),
+        (status = 200, body = ConfigView, description = "Commit succeeded; response is fresh ConfigView"),
+        (status = 400, body = ConfigBadRequestResponse, description = "Malformed body / missing required field / unknown field / null on non-nullable / NonZero zero"),
+        (status = 422, body = ConfigValidationError, description = "Config validation failed"),
+        (status = 503, body = ErrorResponse, description = "Rebuild failure OR server shutting down"),
+        (status = 504, body = DrainTimeoutResponse, description = "Drain timed out"),
     ),
     tag = "Admin",
 )]
@@ -410,10 +409,10 @@ async fn put_config(
     delete,
     path = "/admin/config",
     responses(
-        (status = 200, description = "Reset to baseline; response is fresh ConfigView with effective == baseline"),
-        (status = 422, description = "Baseline rejected normalize_converter_config (should be impossible absent a library regression)"),
-        (status = 503, description = "Rebuild failure OR server shutting down"),
-        (status = 504, description = "Drain timed out"),
+        (status = 200, body = ConfigView, description = "Reset to baseline; response is fresh ConfigView with effective == baseline"),
+        (status = 422, body = ConfigValidationError, description = "Baseline rejected normalize_converter_config (should be impossible absent a library regression)"),
+        (status = 503, body = ErrorResponse, description = "Rebuild failure OR server shutting down"),
+        (status = 504, body = DrainTimeoutResponse, description = "Drain timed out"),
     ),
     tag = "Admin",
 )]
@@ -475,10 +474,10 @@ async fn run_commit<'a>(
             }
             return (
                 StatusCode::GATEWAY_TIMEOUT,
-                Json(json!({
-                    "error": "drain timeout",
-                    "in_flight": inflight,
-                })),
+                Json(DrainTimeoutResponse {
+                    error: "drain timeout".to_string(),
+                    in_flight: inflight,
+                }),
             )
                 .into_response();
         }
@@ -521,7 +520,7 @@ async fn run_commit<'a>(
 #[utoipa::path(
     get,
     path = "/admin/config/fonts/directories",
-    responses((status = 200, description = "Array of absolute filesystem paths")),
+    responses((status = 200, body = Vec<String>, description = "Array of absolute filesystem paths")),
     tag = "Admin",
 )]
 async fn get_font_dirs(State(_admin): State<Arc<AdminState>>) -> Response {
@@ -537,9 +536,9 @@ async fn get_font_dirs(State(_admin): State<Arc<AdminState>>) -> Response {
     put,
     path = "/admin/config/fonts/directories",
     responses(
-        (status = 200, description = "Replacement applied; response is the new list"),
-        (status = 400, description = "Malformed body or any path is not an existing directory"),
-        (status = 503, description = "Library-level set_font_directories failed; registry NOT updated"),
+        (status = 200, body = Vec<String>, description = "Replacement applied; response is the new list"),
+        (status = 400, body = ErrorResponse, description = "Malformed body or any path is not an existing directory"),
+        (status = 503, body = ErrorResponse, description = "Library-level set_font_directories failed; registry NOT updated"),
     ),
     tag = "Admin",
 )]
@@ -585,9 +584,9 @@ async fn put_font_dirs(
     post,
     path = "/admin/config/fonts/directories",
     responses(
-        (status = 200, description = "Font directory appended (or already present); response is the new list"),
-        (status = 400, description = "Missing path or path not found / not a directory"),
-        (status = 503, description = "Library-level register_font_directory failed; registry NOT updated"),
+        (status = 200, body = Vec<String>, description = "Font directory appended (or already present); response is the new list"),
+        (status = 400, body = ErrorResponse, description = "Missing path or path not found / not a directory"),
+        (status = 503, body = ErrorResponse, description = "Library-level register_font_directory failed; registry NOT updated"),
     ),
     tag = "Admin",
 )]
@@ -643,13 +642,14 @@ async fn post_font_dir(
     path = "/admin/config/fonts/cache_size",
     responses((
         status = 200,
+        body = FontCacheSizeView,
         description = "{\"max_size_mb\": <number>}; the resolved cap"
     )),
     tag = "Admin",
 )]
 async fn get_font_cache_size(State(_admin): State<Arc<AdminState>>) -> Response {
     let mb = vl_convert_rs::current_google_fonts_cache_size_mb().get();
-    (StatusCode::OK, Json(json!({ "max_size_mb": mb }))).into_response()
+    (StatusCode::OK, Json(FontCacheSizeView { max_size_mb: mb })).into_response()
 }
 
 /// Set the Google Fonts cache cap. `{"max_size_mb": null}` resets
@@ -658,9 +658,9 @@ async fn get_font_cache_size(State(_admin): State<Arc<AdminState>>) -> Response 
     put,
     path = "/admin/config/fonts/cache_size",
     responses(
-        (status = 200, description = "Cap updated; response is the new resolved cap"),
-        (status = 400, description = "Malformed body"),
-        (status = 503, description = "Library-level set_google_fonts_cache_size_mb failed"),
+        (status = 200, body = FontCacheSizeView, description = "Cap updated; response is the new resolved cap"),
+        (status = 400, body = ErrorResponse, description = "Malformed body"),
+        (status = 503, body = ErrorResponse, description = "Library-level set_google_fonts_cache_size_mb failed"),
     ),
     tag = "Admin",
 )]
@@ -683,5 +683,5 @@ async fn put_font_cache_size(
     }
 
     let mb = vl_convert_rs::current_google_fonts_cache_size_mb().get();
-    (StatusCode::OK, Json(json!({ "max_size_mb": mb }))).into_response()
+    (StatusCode::OK, Json(FontCacheSizeView { max_size_mb: mb })).into_response()
 }

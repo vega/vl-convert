@@ -71,6 +71,10 @@ async fn test_public_openapi_json_responses_have_schemas_and_resolved_refs() {
     assert_eq!(resp.status(), 200);
     let body: Value = resp.json().await.unwrap();
 
+    assert_response_schemas_and_refs(&body, false);
+}
+
+fn assert_response_schemas_and_refs(body: &Value, require_response_content: bool) {
     let paths = body["paths"].as_object().expect("paths must be an object");
     let mut missing_response_schemas = Vec::new();
     for (path, path_item) in paths {
@@ -81,6 +85,14 @@ async fn test_public_openapi_json_responses_have_schemas_and_resolved_refs() {
                 .expect("responses must be an object");
             for (status, response) in responses {
                 let Some(content) = response.get("content").and_then(Value::as_object) else {
+                    if require_response_content {
+                        missing_response_schemas.push(format!(
+                            "{} {} response {} has no documented content",
+                            method.to_uppercase(),
+                            path,
+                            status
+                        ));
+                    }
                     continue;
                 };
                 for (content_type, media_type) in content {
@@ -109,7 +121,7 @@ async fn test_public_openapi_json_responses_have_schemas_and_resolved_refs() {
         .and_then(Value::as_object)
         .expect("components.schemas must be an object");
     let mut unresolved_refs = Vec::new();
-    collect_schema_refs(&body, &mut unresolved_refs);
+    collect_schema_refs(body, &mut unresolved_refs);
     unresolved_refs.retain(|schema_name| !schemas.contains_key(schema_name));
     unresolved_refs.sort();
     unresolved_refs.dedup();
@@ -167,6 +179,7 @@ async fn test_admin_openapi_includes_admin_paths() {
     let expected = [
         "/admin/budget",
         "/admin/config",
+        "/admin/config/fonts/cache_size",
         "/admin/config/fonts/directories",
         "/admin/diagnostics/workers",
     ];
@@ -183,5 +196,49 @@ async fn test_admin_openapi_includes_admin_paths() {
     assert!(
         !has_vegalite,
         "admin spec leaked /vegalite/* paths — should only contain /admin/*"
+    );
+
+    assert_response_schemas_and_refs(&body, true);
+
+    let schemas = body["components"]["schemas"]
+        .as_object()
+        .expect("components.schemas must be an object");
+    for schema in ["ConfigPatch", "ConfigReplace", "ConfigView"] {
+        assert!(schemas.contains_key(schema), "admin spec missing {schema}");
+    }
+
+    for schema in ["ConfigPatch", "ConfigReplace"] {
+        let base_url = &schemas[schema]["properties"]["base_url"];
+        let variants = base_url["oneOf"]
+            .as_array()
+            .expect("base_url must publish its bool-or-string wire types");
+        let types: Vec<&str> = variants
+            .iter()
+            .map(|item| {
+                item["type"]
+                    .as_str()
+                    .expect("variant type must be a string")
+            })
+            .collect();
+        assert_eq!(types, vec!["boolean", "string"]);
+    }
+
+    let patch = &schemas["ConfigPatch"]["properties"];
+    assert_eq!(patch["num_workers"]["type"], "integer");
+    assert_eq!(patch["num_workers"]["minimum"], 1);
+    assert_eq!(patch["allowed_base_urls"]["type"], "array");
+    assert_eq!(patch["themes"]["type"], "object");
+    assert_eq!(
+        patch["max_v8_heap_size_mb"]["type"],
+        serde_json::json!(["integer", "null"])
+    );
+    assert_eq!(patch["max_v8_heap_size_mb"]["minimum"], 1);
+
+    let replace_required = schemas["ConfigReplace"]["required"]
+        .as_array()
+        .expect("ConfigReplace must list required fields");
+    assert!(
+        replace_required.contains(&Value::from("default_theme")),
+        "required-but-nullable fields must still be present in PUT bodies"
     );
 }

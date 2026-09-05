@@ -375,7 +375,7 @@ impl std::fmt::Display for BudgetExhausted {
     }
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct BudgetStatus {
     pub per_ip_budget_ms: i64,
     pub global_budget_ms: i64,
