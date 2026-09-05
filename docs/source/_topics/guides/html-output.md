@@ -21,9 +21,10 @@ By default the page loads Vega, Vega-Lite, and Vega Embed from a content
 delivery network (CDN). The file stays small, but the page needs network access
 when it opens.
 
-Set `bundle=true` to include those libraries in the file. The page then opens
-offline, although data, images, fonts, and URL-backed plugins can still need
-network access unless they are also embedded.
+Set `bundle=true` to include those libraries in the file, along with any
+plugins and the fonts VlConvert resolved for the chart. The page then opens
+offline, although data and images referenced by URL still need network access,
+as do fonts that were not embedded.
 
 ## Choose a Browser Renderer
 

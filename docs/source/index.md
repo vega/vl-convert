@@ -61,8 +61,9 @@ Run `vl-convert serve` as an HTTP rendering worker.
 :::
 ::::
 
-{doc}`how-it-works` explains the input types, output formats, fonts, network
-access, and worker model that every interface shares.
+{doc}`how-it-works/rendering` explains the input types, output formats, fonts,
+network access, and worker model that every interface shares, and
+{doc}`how-it-works/architecture` describes the runtime and crates underneath.
 
 ```{toctree}
 :hidden:
@@ -72,6 +73,6 @@ python/index
 cli/index
 rust/index
 server/index
-how-it-works
+how-it-works/index
 Changelog <https://github.com/vega/vl-convert/releases>
 ```
