@@ -10,7 +10,9 @@ interfaces: [python, cli, rust, server]
 
 # Installation
 
+::::{not-interface} server
 Already using 1.x? See {doc}`upgrading` for what changed in version 2.
+::::
 
 ::::{interface} python
 Install the package from PyPI. Prebuilt wheels are published for Linux, macOS,

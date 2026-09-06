@@ -3,7 +3,7 @@ title: Upgrading from 1.x
 path: getting-started/upgrading
 section: Getting Started
 order: 120
-interfaces: [python, cli, rust, server]
+interfaces: [python, cli, rust]
 ---
 
 <!-- topic-body -->
@@ -162,28 +162,6 @@ Google Fonts settings. `text::register_font_directory()` is unchanged and is
 also re-exported at the crate root. The `VlVersion` variants are the same.
 ::::
 
-::::{interface} server
-## Adopt the Server
-
-The HTTP server is new in 2.0, so there is no 1.x server to upgrade. If you
-wrapped the 1.x Python library or CLI in your own HTTP service, `vl-convert
-serve` can replace it:
-
-- Conversion functions map to endpoints. `vegalite_to_png()` becomes
-  `POST /vegalite/png`, and per-call options become JSON fields beside `spec`.
-  See {doc}`../guides/vegalite-conversions`.
-- Converter settings such as the data allowlist, fonts, and JavaScript limits
-  are global `vl-convert` options placed before `serve`, or fields in a JSONC
-  config file. See {doc}`../advanced/configuration`.
-- The server can provide authentication, request limits, timeouts, render-time
-  budgets, structured logs, and health endpoints. A reverse proxy or platform
-  still handles TLS and can add network-level authentication and rate limits.
-  See {doc}`../overview`.
-
-Rust applications can also embed the `vl-convert-server` crate instead of
-running the executable.
-::::
-
 ## Check Behavior Differences
 
 These differences can change results even when code and commands still run.
@@ -208,7 +186,7 @@ changes anti-aliasing and text rendering at the pixel level. Regenerate image
 baselines in tests that compare PNG bytes. JPEG and PDF output still start from
 the SVG rendering.
 
-::::{interface} python rust server
+::::{interface} python rust
 **Conversions run on a worker pool.** 1.x ran every conversion on one
 JavaScript runtime. 2.0 starts a pool on first use, with one worker by default,
 and can run conversions concurrently when you configure more. See
