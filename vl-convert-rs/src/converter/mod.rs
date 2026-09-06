@@ -589,6 +589,24 @@ impl VlConverter {
         }
     }
 
+    /// Families of every explicitly requested Google Font: the converter
+    /// configuration's `google_fonts` plus the per-call requests. Explicit
+    /// requests are embedded or linked without probing the catalog, so a font
+    /// configured for the whole converter must count the same as one passed
+    /// per call.
+    pub(crate) fn explicit_google_families(
+        &self,
+        requests: Option<&[GoogleFontRequest]>,
+    ) -> HashSet<String> {
+        self.inner
+            .config()
+            .google_fonts
+            .iter()
+            .chain(requests.into_iter().flatten())
+            .map(|request| request.family.clone())
+            .collect()
+    }
+
     /// Apply config-level defaults to VgOpts where the per-request value is None.
     pub(crate) fn apply_vg_defaults(&self, opts: &mut VgOpts) {
         let config = self.inner.config();
@@ -621,11 +639,8 @@ impl VlConverter {
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
-        let explicit_google_families: HashSet<String> = vg_opts
-            .google_fonts
-            .as_ref()
-            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
-            .unwrap_or_default();
+        let explicit_google_families: HashSet<String> =
+            self.explicit_google_families(vg_opts.google_fonts.as_deref());
 
         let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
         if !font_analysis.requests.is_empty() {
@@ -844,11 +859,8 @@ impl VlConverter {
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
 
-        let explicit_google_families: HashSet<String> = vl_opts
-            .google_fonts
-            .as_ref()
-            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
-            .unwrap_or_default();
+        let explicit_google_families: HashSet<String> =
+            self.explicit_google_families(vl_opts.google_fonts.as_deref());
 
         let mut output =
             if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_google_fonts)) = self

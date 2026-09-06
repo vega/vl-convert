@@ -416,10 +416,8 @@ impl VlConverter {
 
         let families: BTreeSet<String> = chars_by_key.keys().map(|k| k.family.clone()).collect();
 
-        let explicit_google_families: HashSet<String> = explicit_requests
-            .as_ref()
-            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
-            .unwrap_or_default();
+        let explicit_google_families: HashSet<String> =
+            self.explicit_google_families(explicit_requests.as_deref());
 
         let classified = classify_scenegraph_fonts(
             &families,

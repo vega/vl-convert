@@ -741,6 +741,47 @@ mod test_png_google_fonts {
 }
 
 #[rustfmt::skip]
+mod test_svg_google_fonts {
+    use crate::*;
+    use futures::executor::block_on;
+    use vl_convert_rs::converter::{GoogleFontRequest, VlcConfig, VlOpts};
+
+    /// Google Fonts configured on the converter must reach SVG output the same
+    /// way per-call requests do: embedded as @font-face when bundling, and
+    /// linked with @import otherwise.
+    #[test]
+    fn test_configured_fonts_reach_svg_output() {
+        initialize();
+
+        let vl_version = VlVersion::v5_8;
+        let vl_spec = load_vl_spec("google_fonts");
+        let converter = VlConverter::with_config(VlcConfig {
+            google_fonts: vec![
+                GoogleFontRequest { family: "Bangers".to_string(), variants: None },
+                GoogleFontRequest { family: "Lugrasimo".to_string(), variants: None },
+            ],
+            ..Default::default()
+        }).unwrap();
+
+        let bundled = block_on(
+            converter.vegalite_to_svg(vl_spec.clone(), VlOpts{vl_version, ..Default::default()}, SvgOpts { bundle: true })
+        ).unwrap();
+        assert!(bundled.svg.contains("@font-face"), "bundled SVG should embed the configured fonts");
+        assert!(bundled.svg.contains("Bangers"), "bundled SVG should embed Bangers");
+        assert!(!bundled.svg.contains("@import"), "bundled SVG should not reference the CDN");
+
+        let linked = block_on(
+            converter.vegalite_to_svg(vl_spec, VlOpts{vl_version, ..Default::default()}, SvgOpts::default())
+        ).unwrap();
+        assert!(linked.svg.contains("@import"), "plain SVG should link the configured fonts");
+        assert!(linked.svg.contains("fonts.googleapis.com"), "plain SVG should reference Google Fonts");
+    }
+
+    #[test]
+    fn test_marker() {} // Help IDE detect test module
+}
+
+#[rustfmt::skip]
 mod test_png_theme_config {
     use crate::*;
     use futures::executor::block_on;
