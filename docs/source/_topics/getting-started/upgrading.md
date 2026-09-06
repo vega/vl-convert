@@ -71,7 +71,11 @@ Python 3.7 and later are still supported, and `vl_version` still accepts both
 `~/.config/vl-convert/config.json` as the Vega-Lite config for every command
 when that file existed. 2.0 ignores it, and `--config` has no default. To keep
 a default chart configuration, put it in a converter config file as a custom
-theme and select it with `default_theme`:
+theme and select it with `default_theme`. Save this example at the path printed
+by `vl-convert config-path`:
+
+:::{dropdown} vlc-config.jsonc
+:open:
 
 ```json
 {
@@ -79,11 +83,12 @@ theme and select it with `default_theme`:
   "default_theme": "house"
 }
 ```
+:::
 
-Save the file at the path printed by `vl-convert config-path`, where it loads
-automatically, or pass it with `--vlc-config`. Alternatively pass
-`--config chart-config.json` on each command. See
-{doc}`../advanced/configuration`.
+The file loads automatically from that path. You can instead pass the converter
+configuration with `--vlc-config`. Alternatively, keep the 1.x chart
+configuration as a separate file and pass its path with `--config` on each
+chart conversion. See {doc}`../advanced/configuration`.
 
 **The default Vega-Lite version is 6.4.** 1.x commands defaulted to 5.21.
 Pass `--vl-version 5.21` to keep the old output for specifications that depend

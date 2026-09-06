@@ -106,9 +106,12 @@ Send the normal JSON request body to `POST /vegalite/scenegraph` or
 `POST /vega/scenegraph`. The response is JSON unless the `Accept` header asks
 for MessagePack. Save this Vega-Lite body as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/scenegraph-vegalite.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/scenegraph \
@@ -119,9 +122,12 @@ curl http://127.0.0.1:3000/vegalite/scenegraph \
 
 For the Vega and MessagePack combination, save this body as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/scenegraph-vega.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vega/scenegraph \

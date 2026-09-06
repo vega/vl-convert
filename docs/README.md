@@ -15,11 +15,11 @@ Use `literalinclude` to show canonical inputs. Do not copy a specification into
 each interface block. The `vl-chart` directive must render the same input and
 options that the guide describes.
 
-Put each chart input in a dropdown whose title is the filename readers should
-use. Open the dropdown by default when the page introduces that input. Leave it
-collapsed when the page reuses an input introduced elsewhere. Keep the
-`literalinclude` inside the dropdown so the expanded code block has a copy
-button.
+Put each displayed named file in a dropdown whose title is the filename readers
+should use. Open the dropdown by default when the file itself is what the page
+or section teaches. Leave it collapsed when the file only supports the
+surrounding workflow. Keep the code block or `literalinclude` inside the
+dropdown so the expanded code has a copy button.
 
 The server needs a complete JSON request body, not only the nested
 specification. Define server examples in

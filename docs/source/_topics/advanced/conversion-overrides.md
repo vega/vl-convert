@@ -99,13 +99,17 @@ A per-call plugin also requires `allow_per_request_plugins: true` in
 ::::
 
 ::::{interface} server
-Put overrides beside `spec` in the request body:
+Put overrides beside `spec` in the request body. Save this body as
+`request.json`:
+
+:::{dropdown} request.json
 
 ```{literalinclude} /_generated/requests/conversion-overrides.json
 :language: json
 ```
+:::
 
-Save the body as `request.json`, then send it to the PNG endpoint:
+Send it to the PNG endpoint:
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/png \

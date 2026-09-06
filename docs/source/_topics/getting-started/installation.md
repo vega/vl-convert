@@ -48,10 +48,14 @@ vl-convert --version
 ::::{interface} rust
 Add the crate to `Cargo.toml`:
 
+:::{dropdown} Cargo.toml
+:open:
+
 ```toml
 [dependencies]
 vl-convert-rs = "2"
 ```
+:::
 
 The crate is imported as `vl_convert_rs`. Conversion methods are asynchronous,
 so your application needs an async runtime such as Tokio. The

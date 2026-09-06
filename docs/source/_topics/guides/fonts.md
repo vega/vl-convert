@@ -118,7 +118,6 @@ This specification sets `config.font` to Roboto Slab, a family few hosts have
 installed. Save it as follows:
 
 :::{dropdown} chart.vl.json
-:open:
 
 ```{literalinclude} /_examples/google-font.vl.json
 :language: json
@@ -188,9 +187,12 @@ vl-convert --google-font "Roboto Slab" \
 
 Save this complete request body as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/google-font-png.json
 :language: json
 ```
+:::
 
 Send the request from a second terminal:
 

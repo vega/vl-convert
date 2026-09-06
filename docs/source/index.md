@@ -14,9 +14,13 @@ outputs, or open the chart in the Vega Editor.
 
 <!-- Regenerate the checked-in outputs with `pixi run docs-preview-chart`. -->
 
+:::{dropdown} front-page-chart.vl.json
+:open:
+
 ```{literalinclude} _static/charts/front-page-chart.vl.json
 :language: json
 ```
+:::
 
 ```{image} _static/charts/front-page-chart.svg
 :alt: Bar chart of charts rendered per month, from January to June

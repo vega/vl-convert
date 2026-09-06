@@ -26,7 +26,6 @@ This chart formats revenue with the `$,.0f` pattern and plots dates on the
 x axis, so both locale settings affect it. Save this specification:
 
 :::{dropdown} chart.vl.json
-:open:
 
 ```{literalinclude} /_examples/locale-demo.vl.json
 :language: json
@@ -84,9 +83,12 @@ std::fs::write("chart.svg", output.svg)?;
 ::::{interface} server
 Save this complete request body as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/locale-de.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/svg \
@@ -112,6 +114,9 @@ A number locale follows the
 [d3-format locale definition](https://d3js.org/d3-format#locale_format). Save
 this example as `format-locale.json`:
 
+:::{dropdown} format-locale.json
+:open:
+
 ```json
 {
   "decimal": ",",
@@ -120,6 +125,7 @@ this example as `format-locale.json`:
   "currency": ["", " EUR"]
 }
 ```
+:::
 
 ::::{interface} python
 Pass the equivalent dictionary:
@@ -166,11 +172,15 @@ let options = VlOpts {
 
 ::::{interface} server
 The request field accepts the locale object directly. This complete body uses
-the same `chart.vl.json` input as the built-in locale example:
+the same `chart.vl.json` input as the built-in locale example. Save it as
+`request.json`:
+
+:::{dropdown} request.json
 
 ```{literalinclude} /_generated/requests/locale-custom.json
 :language: json
 ```
+:::
 ::::
 
 Custom time locales follow the

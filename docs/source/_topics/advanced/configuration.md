@@ -141,7 +141,10 @@ those capabilities explicitly.
 JSONC is JSON with comments and trailing commas. Python `load_config()`, Rust
 `VlcConfig::from_file()`, the CLI, and the server all read the same field
 names. This example favors predictable resource use and blocks external data
-fetches:
+fetches. Save it as `production.vlc.jsonc` to use it with the commands above:
+
+:::{dropdown} production.vlc.jsonc
+:open:
 
 ```json
 {
@@ -173,6 +176,7 @@ fetches:
   "default_time_format_locale": null
 }
 ```
+:::
 
 This is an example, not the built-in defaults. By default, `base_url` points at
 the Vega datasets CDN and `allowed_base_urls` permits any HTTP or HTTPS URL.

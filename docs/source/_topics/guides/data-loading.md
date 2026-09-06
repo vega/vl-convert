@@ -100,9 +100,12 @@ Save this specification:
 
 Save this data as `data/sales.csv`:
 
+:::{dropdown} data/sales.csv
+
 ```{literalinclude} /_examples/data/sales.csv
 :language: text
 ```
+:::
 
 ::::{interface} python
 ```python
@@ -169,9 +172,12 @@ vl-convert \
 
 Save this complete request as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/local-data-png.json
 :language: json
 ```
+:::
 
 Send it from a second terminal whose current directory contains
 `request.json`:

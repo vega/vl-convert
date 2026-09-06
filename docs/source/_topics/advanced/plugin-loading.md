@@ -67,6 +67,8 @@ Here, `chart.vl.json` is the plugin-dependent input from
 
 Put inline source in a JSONC config file:
 
+:::{dropdown} plugins.vlc.jsonc
+
 ```json
 {
   "vega_plugins": [
@@ -74,6 +76,7 @@ Put inline source in a JSONC config file:
   ]
 }
 ```
+:::
 ::::
 
 ::::{interface} rust
@@ -107,6 +110,9 @@ domain matches `plugin_import_domains`. The snippets in this section show the
 required plugin configuration. A complete chart must call `scaledPercent` in
 an expression before the plugin affects its result.
 
+:::{dropdown} scale-plugin.js
+:open:
+
 ```javascript
 import { scaleLinear } from "https://esm.sh/d3-scale@4"
 
@@ -115,6 +121,7 @@ export default function registerScale(vega) {
   vega.expressionFunction("scaledPercent", value => scale(value))
 }
 ```
+:::
 
 ::::{interface} python
 ```python
@@ -248,9 +255,12 @@ for startup plugins.
 Save this complete request, which embeds both canonical files, as
 `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/plugin-per-request-svg.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/svg \

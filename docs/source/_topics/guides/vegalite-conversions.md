@@ -100,9 +100,12 @@ Send a request body to the endpoint for the output you need:
 
 For example, save this complete SVG request as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/vegalite-svg.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/svg \

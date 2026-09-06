@@ -17,7 +17,6 @@ or file.
 Save this specification:
 
 :::{dropdown} chart.vl.json
-:open:
 
 ```{literalinclude} /_examples/quick-start.vl.json
 :language: json
@@ -62,13 +61,19 @@ See {doc}`../guides/vegalite-conversions` for the other output formats and
 ::::{interface} rust
 Add these dependencies to `Cargo.toml`:
 
+:::{dropdown} Cargo.toml
+
 ```toml
 [dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 vl-convert-rs = "2"
 ```
+:::
 
 Use this complete `src/main.rs`. It reads the `chart.vl.json` file saved above:
+
+:::{dropdown} src/main.rs
+:open:
 
 ```rust
 use vl_convert_rs::{anyhow, PngOpts, VlConverter, VlOpts};
@@ -91,6 +96,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 ```
+:::
 
 Run `cargo run`. Conversion methods return output structs, and `data` holds
 the rendered bytes. See {doc}`../guides/vegalite-conversions` for the other
@@ -106,9 +112,12 @@ vl-convert serve --host 127.0.0.1 --port 3000
 
 Save this complete request body as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/quick-start-png.json
 :language: json
 ```
+:::
 
 Send it from a second terminal:
 

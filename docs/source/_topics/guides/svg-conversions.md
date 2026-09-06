@@ -21,7 +21,6 @@ self-contained.
 Save this SVG document:
 
 :::{dropdown} chart.svg
-:open:
 
 ```{literalinclude} /_examples/svg-demo.svg
 :language: xml
@@ -80,9 +79,12 @@ The PNG bytes are in `output.data`.
 Send JSON with the markup in an `svg` string to `/svg/png`, `/svg/jpeg`, or
 `/svg/pdf`. Save this complete request as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/svg-png.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/svg/png \

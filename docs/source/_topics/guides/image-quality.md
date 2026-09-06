@@ -125,9 +125,12 @@ std::fs::write("chart.jpg", jpeg.data)?;
 Put the options beside `spec` in the request body. For example, save this body
 as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/image-quality-png.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/png \

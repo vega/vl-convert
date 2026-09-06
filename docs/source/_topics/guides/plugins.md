@@ -32,14 +32,17 @@ starts, before any specification is compiled or parsed.
 
 Save this example as `double-value.js`:
 
+:::{dropdown} double-value.js
+:open:
+
 ```{literalinclude} /_examples/double-value.js
 :language: javascript
 ```
+:::
 
 Save this Vega-Lite specification:
 
 :::{dropdown} chart.vl.json
-:open:
 
 ```{literalinclude} /_examples/plugin-demo.vl.json
 :language: json
@@ -110,9 +113,12 @@ Every request handled by this process can then use `doubleValue`. Put the
 specification above in the `spec` field of a normal `/vegalite/*` request.
 Save this complete request body as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/plugin-startup-png.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/png \

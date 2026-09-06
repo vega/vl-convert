@@ -23,7 +23,6 @@ Every conversion example and image on this page uses this Vega-Lite
 specification. Save it as follows:
 
 :::{dropdown} chart.vl.json
-:open:
 
 ```{literalinclude} /_examples/theme-demo.vl.json
 :language: json
@@ -73,13 +72,17 @@ std::fs::write("chart.svg", output.svg)?;
 ::::
 
 ::::{interface} server
-Set `theme` beside `spec` in a Vega-Lite conversion request:
+Set `theme` beside `spec` in a Vega-Lite conversion request. Save this body as
+`request.json`:
+
+:::{dropdown} request.json
 
 ```{literalinclude} /_generated/requests/theme-dark.json
 :language: json
 ```
+:::
 
-Save the body as `request.json`, then send it to the SVG endpoint:
+Send it to the SVG endpoint:
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/svg \
@@ -164,9 +167,13 @@ curl http://127.0.0.1:3000/themes/dark
 A custom theme file is a JSON object whose keys are theme names and whose values
 are Vega configuration objects. Save this example as `themes.json`:
 
+:::{dropdown} themes.json
+:open:
+
 ```{literalinclude} /_examples/themes.json
 :language: json
 ```
+:::
 
 A custom theme replaces a built-in theme with the same name.
 
@@ -230,9 +237,12 @@ vl-convert --themes themes.json \
 The themes then appear in `GET /themes` and can be selected by Vega-Lite
 conversion requests. Save this request as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/theme-brand.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/svg \

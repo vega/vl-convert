@@ -31,7 +31,6 @@ list. The examples below enable `embed_local_fonts` and inspect the bundled
 Liberation Sans family. Save this specification:
 
 :::{dropdown} chart.vl.json
-:open:
 
 ```{literalinclude} /_examples/font-introspection.vl.json
 :language: json
@@ -106,9 +105,12 @@ vl-convert --embed-local-fonts \
 
 Save this complete body as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/font-introspection.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/fonts \

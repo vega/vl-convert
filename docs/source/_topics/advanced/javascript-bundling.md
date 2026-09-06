@@ -67,9 +67,13 @@ dependencies bundled with VlConvert.
 
 For example, save this as `snippet.js`:
 
+:::{dropdown} snippet.js
+:open:
+
 ```{literalinclude} /_examples/bundle-snippet.js
 :language: javascript
 ```
+:::
 
 ::::{interface} python
 ```python
@@ -103,9 +107,12 @@ let bundle = converter
 ::::{interface} server
 Save this generated body as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/bundle-snippet.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/bundling/bundle-snippet \
@@ -119,9 +126,12 @@ The resulting `app-chart.js` defines the wrapper. This complete page loads the
 bundle and calls it with a Vega-Lite specification. Save it as `index.html`
 beside `app-chart.js`, then open it in a browser:
 
+:::{dropdown} index.html
+
 ```{literalinclude} /_examples/bundle-demo.html
 :language: html
 ```
+:::
 
 Bundling runs build tooling on caller-supplied source. Apply authentication,
 body-size limits, and request budgets before exposing the server endpoints to

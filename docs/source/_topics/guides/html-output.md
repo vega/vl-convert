@@ -98,13 +98,17 @@ std::fs::write("chart.html", output.html)?;
 ::::
 
 ::::{interface} server
-Put `bundle` and `renderer` beside `spec` in the request body:
+Put `bundle` and `renderer` beside `spec` in the request body. Save this
+complete body as `request.json`:
+
+:::{dropdown} request.json
 
 ```{literalinclude} /_generated/requests/html-bundled.json
 :language: json
 ```
+:::
 
-Save the body as `request.json`, then send it to `POST /vegalite/html`:
+Send it to `POST /vegalite/html`:
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/html \

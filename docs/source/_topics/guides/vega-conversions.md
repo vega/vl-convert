@@ -20,7 +20,6 @@ scenegraph, and the fonts VlConvert resolves for the chart.
 Save this direct Vega specification:
 
 :::{dropdown} chart.vg.json
-:open:
 
 ```{literalinclude} /_examples/vega-demo.vg.json
 :language: json
@@ -76,9 +75,12 @@ output you need: `/vega/svg`, `/vega/png`, `/vega/jpeg`, `/vega/pdf`,
 `/vega/html`, `/vega/url`, `/vega/scenegraph`, or `/vega/fonts`. All are
 `POST` endpoints. For example, save this body as `request.json`:
 
+:::{dropdown} request.json
+
 ```{literalinclude} /_generated/requests/vega-svg.json
 :language: json
 ```
+:::
 
 ```bash
 curl http://127.0.0.1:3000/vega/svg \
