@@ -509,7 +509,7 @@ fn get_svg_native_size(bytes: &[u8]) -> Result<(u32, u32), JsErrorBox> {
 #[cfg(feature = "svg")]
 fn unpremultiply_alpha(mut data: Vec<u8>) -> Vec<u8> {
     // Convert from premultiplied RGBA to straight RGBA
-    for chunk in data.chunks_exact_mut(4) {
+    for chunk in data.as_chunks_mut::<4>().0 {
         let a = chunk[3] as f32;
         if a > 0.0 && a < 255.0 {
             let alpha_factor = 255.0 / a;
