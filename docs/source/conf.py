@@ -45,7 +45,7 @@ myst_heading_anchors = 3
 
 # The front-page example links to the Vega Editor with a URL that
 # `pixi run docs-preview-chart` writes beside the other chart outputs.
-EDITOR_URL_FILE = Path(__file__).parent / "_static" / "charts" / "front-page-chart.url.txt"
+EDITOR_URL_FILE = Path(__file__).parent / "_static" / "charts" / "stacked_bar_h.url.txt"
 if not EDITOR_URL_FILE.exists():
     raise FileNotFoundError(
         f"{EDITOR_URL_FILE} is missing; run `pixi run docs-preview-chart`"

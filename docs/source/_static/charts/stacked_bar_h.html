@@ -27,7 +27,7 @@ ${l}`);}return c;}(t1,"",0);}function n1(n,t,e){return n.fields=t||[],n.fname=e,
     <script type="text/javascript">
 
 {
-    const spec = {"$schema":"https://vega.github.io/schema/vega-lite/v6.json","title":"Charts Rendered per Month","width":400,"height":220,"data":{"values":[{"month":"Jan","charts":18},{"month":"Feb","charts":24},{"month":"Mar","charts":31},{"month":"Apr","charts":38},{"month":"May","charts":42},{"month":"Jun","charts":49}]},"mark":"bar","encoding":{"x":{"field":"month","type":"ordinal","sort":null,"axis":{"labelAngle":0}},"y":{"field":"charts","type":"quantitative"}}};
+    const spec = {"$schema":"https://vega.github.io/schema/vega-lite/v6.json","data":{"url":"data/barley.json"},"mark":"bar","encoding":{"x":{"aggregate":"sum","field":"yield"},"y":{"field":"variety"},"color":{"field":"site"}}};
     const opts = {"renderer":"svg"}
     Promise.all([...document.fonts].map(f => f.load()))
         .then(() => vegaEmbed('#vega-chart', spec, opts))

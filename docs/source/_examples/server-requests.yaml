@@ -1,4 +1,11 @@
 requests:
+  stacked-bar-h-svg:
+    inputs:
+      spec:
+        source: stacked_bar_h.vl.json
+        format: json
+    options:
+      vl_version: "6.4"
   quick-start-png:
     inputs:
       spec:
