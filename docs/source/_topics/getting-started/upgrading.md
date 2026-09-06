@@ -51,8 +51,8 @@ scenegraph functions accept `format="msgpack"`. See
 {doc}`../advanced/configuration` and
 {doc}`../api-reference`.
 
-Python 3.7 and later are still supported, and `vl_version` still accepts both
-`"5.16"` and `"v5_16"`.
+Version 2 requires Python 3.10 or later. The `vl_version` argument still accepts
+both `"5.16"` and `"v5_16"`.
 ::::
 
 ::::{interface} cli

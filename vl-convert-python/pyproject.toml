@@ -7,7 +7,7 @@ name = "vl-convert-python"
 dynamic = ["version", "readme"]
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 description = "Convert Vega-Lite, Vega, and SVG input to static and interactive formats"
 classifiers = [
     "Programming Language :: Rust",
@@ -26,7 +26,7 @@ test = [
 sdist-include = ["*_thirdparty.*"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 line-length = 88
 indent-width = 4
 exclude = []
@@ -92,4 +92,4 @@ isort.split-on-trailing-comma = false
 
 [tool.pyright]
 pythonPlatform="All"
-pythonVersion="3.9"
+pythonVersion="3.10"

@@ -1,13 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import sys
-    from typing import Any, Literal, TypedDict
-
-    if sys.version_info >= (3, 10):
-        from typing import TypeAlias
-    else:
-        from typing_extensions import TypeAlias
+    from typing import Any, Literal, TypeAlias, TypedDict
 
     FormatLocaleName: TypeAlias = Literal[
         "ar-001",

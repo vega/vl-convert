@@ -16,7 +16,7 @@ Install the package from PyPI:
 pip install vl-convert-python
 ```
 
-Python 3.7 and later are supported.
+Python 3.10 and later are supported.
 
 ## Vega-Lite Example
 

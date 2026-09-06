@@ -16,7 +16,7 @@ Already using 1.x? See {doc}`upgrading` for what changed in version 2.
 
 ::::{interface} python
 Install the package from PyPI. Prebuilt wheels are published for Linux, macOS,
-and Windows, and Python 3.7 or later is required.
+and Windows, and Python 3.10 or later is required.
 
 ```bash
 python -m pip install vl-convert-python
