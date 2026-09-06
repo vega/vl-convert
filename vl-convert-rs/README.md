@@ -15,11 +15,53 @@ package.
 
 ## Example
 
-Use [`VlConverter`] for Vega, Vega-Lite, and SVG conversions. See the
+Use one [`VlConverter`] for Vega, Vega-Lite, and SVG conversions. This complete
+example renders inline Vega-Lite data without network access:
+
+```toml
+[dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+vl-convert-rs = "2"
+```
+
+```rust
+use vl_convert_rs::{anyhow, PngOpts, VlConverter, VlOpts};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let spec = r#"{
+      "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+      "data": {"values": [{"category": "A", "value": 3}, {"category": "B", "value": 7}]},
+      "mark": "bar",
+      "encoding": {
+        "x": {"field": "category", "type": "nominal"},
+        "y": {"field": "value", "type": "quantitative"}
+      }
+    }"#
+    .to_string();
+
+    let converter = VlConverter::new();
+    let output = converter
+        .vegalite_to_png(
+            spec,
+            VlOpts::default(),
+            PngOpts {
+                scale: Some(2.0),
+                ..Default::default()
+            },
+        )
+        .await?;
+    std::fs::write("chart.png", output.data)?;
+    Ok(())
+}
+```
+
+See the
 [`VlConverter` API](https://docs.rs/vl-convert-rs/latest/vl_convert_rs/struct.VlConverter.html)
-for examples.
+for the other conversions and options.
 
 ## Windows: winapi `std` feature requirement
+
 This crate depends on `deno_io`, which uses the `winapi` crate on Windows. The `winapi` crate defines its own `ctypes::c_void` type that is incompatible with `std::ffi::c_void` (used by `RawHandle`) unless winapi's `std` feature is enabled. This crate enables `winapi/std` in both `[dependencies]` and `[build-dependencies]` to ensure type compatibility. With Cargo resolver v2, these feature sets are resolved independently, so both sections are required.
 
 ## JavaScript Vendoring and Code Generation

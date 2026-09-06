@@ -18,13 +18,52 @@ cargo install vl-convert --locked
 
 ## Convert a Chart
 
-Convert a Vega-Lite specification file to SVG:
+Save this Vega-Lite specification as `chart.vl.json`:
+
+```json
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "data": {"values": [{"category": "A", "value": 3}, {"category": "B", "value": 7}]},
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "category", "type": "nominal"},
+    "y": {"field": "value", "type": "quantitative"}
+  }
+}
+```
+
+Convert it to SVG:
 
 ```bash
 vl-convert vl2svg --input chart.vl.json --output chart.svg
 ```
 
-Convert a Vega specification to PNG and apply a Vega configuration object:
+For a direct Vega conversion, save this specification as `chart.vg.json`:
+
+```json
+{
+  "$schema": "https://vega.github.io/schema/vega/v6.json",
+  "width": 160,
+  "height": 80,
+  "data": [{"name": "table", "values": [{"x": 20}, {"x": 80}, {"x": 140}]}],
+  "marks": [{
+    "type": "symbol",
+    "from": {"data": "table"},
+    "encode": {"enter": {"x": {"field": "x"}, "y": {"value": 40}, "size": {"value": 200}}}
+  }]
+}
+```
+
+Save this Vega configuration as `chart-config.json`:
+
+```json
+{
+  "background": "white",
+  "style": {"cell": {"stroke": "#d0d7de"}}
+}
+```
+
+Convert the Vega specification to PNG and apply the configuration:
 
 ```bash
 vl-convert vg2png \

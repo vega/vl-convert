@@ -137,8 +137,15 @@ async def main():
 asyncio.run(main())
 ```
 
-Configuration and cache-management helpers in the asyncio namespace are
-synchronous re-exports. Do not await them.
+Most functions in the asyncio namespace are awaitable, including conversion,
+configuration, worker, font-registration, theme, locale, and bundle helpers.
+Only these process-global lookups and setters are synchronous re-exports:
+`current_font_directories()`, `google_fonts_cache_dir()`,
+`google_fonts_cache_size_mb()`, `set_google_fonts_cache_size_mb()`,
+`get_format_locale()`, `get_time_format_locale()`, `get_vega_version()`,
+`get_vega_themes_version()`, `get_vega_embed_version()`,
+`get_vegalite_versions()`, and `get_config_path()`. Do not await those
+functions.
 
 ## Network and File Access
 

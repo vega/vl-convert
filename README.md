@@ -26,6 +26,20 @@ cargo install vl-convert --locked
 
 Convert a Vega-Lite specification to SVG:
 
+Save this input as `chart.vl.json`:
+
+```json
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "data": {"values": [{"category": "A", "value": 3}, {"category": "B", "value": 7}]},
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "category", "type": "nominal"},
+    "y": {"field": "value", "type": "quantitative"}
+  }
+}
+```
+
 ```bash
 vl-convert vl2svg --input chart.vl.json --output chart.svg
 ```
