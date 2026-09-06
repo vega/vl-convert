@@ -14,17 +14,19 @@ The server writes logs to standard error. Use text logs for local development
 and JSON logs for deployed services:
 
 ```bash
-vl-convert --log-format json --log-level info \
-  serve --host 127.0.0.1 --port 3000
+vl-convert serve \
+  --log-format json --log-level info \
+  --port 3000
 ```
 
 `--log-filter` accepts a `tracing-subscriber` directive and takes priority over
 `--log-level`. Use it when one component needs more detail:
 
 ```bash
-vl-convert --log-format json \
+vl-convert serve \
+  --log-format json \
   --log-filter 'vl_convert=debug,tower_http=info' \
-  serve --host 127.0.0.1 --port 3000
+  --port 3000
 ```
 
 Debug logs are high volume and can contain resource names or error details.

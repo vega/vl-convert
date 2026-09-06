@@ -25,7 +25,7 @@ from a secret manager, or through `--api-key`. With the variable set, start the
 server normally:
 
 ```bash
-vl-convert serve --host 127.0.0.1 --port 3000
+vl-convert serve --port 3000
 ```
 
 Conversion, theme, font, bundling, and API documentation routes now require

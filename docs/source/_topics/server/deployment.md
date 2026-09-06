@@ -24,13 +24,12 @@ Use a bearer token when known backend services call the converter. Supply
 command:
 
 ```bash
-vl-convert \
+vl-convert serve \
   --base-url disabled \
   --allowed-base-urls https://data.example.com/ \
   --max-v8-heap-size-mb 512 \
   --max-v8-execution-time-secs 10 \
   --log-format json \
-  serve \
   --host 127.0.0.1 \
   --port 3000 \
   --workers 2 \
@@ -50,14 +49,13 @@ A browser cannot keep a shared API key secret. If a tool must accept anonymous
 internet requests, use strict access and resource controls:
 
 ```bash
-vl-convert \
+vl-convert serve \
   --base-url disabled \
   --allowed-base-urls none \
   --max-v8-heap-size-mb 512 \
   --max-v8-execution-time-secs 10 \
   --missing-fonts warn \
   --log-format json \
-  serve \
   --host 0.0.0.0 \
   --port 3000 \
   --workers 2 \

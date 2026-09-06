@@ -123,8 +123,9 @@ Options after `serve` configure HTTP behavior: listeners, authentication,
 request limits, and budgets. Converter options go before `serve`.
 
 ```bash
-vl-convert --vlc-config production.vlc.jsonc \
-  serve --host 127.0.0.1 --port 3000
+vl-convert serve \
+  --vlc-config production.vlc.jsonc \
+  --port 3000
 ```
 
 When the admin listener is enabled, `PUT /admin/config` replaces the live

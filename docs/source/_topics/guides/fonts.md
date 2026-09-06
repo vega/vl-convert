@@ -100,11 +100,11 @@ directory, enables automatic Google Fonts, and rejects a conversion whose
 first-choice font is still unavailable:
 
 ```bash
-vl-convert \
+vl-convert serve \
   --font-dir /opt/app/fonts \
   --auto-google-fonts \
   --missing-fonts error \
-  serve --host 127.0.0.1 --port 3000
+  --port 3000
 ```
 
 Clients can pass `google_fonts` in a request body only when the server starts
@@ -181,8 +181,9 @@ Start the server with the font request, then send the specification in the
 `spec` field of a `POST /vegalite/png` request with `scale` set to `2`:
 
 ```bash
-vl-convert --google-font "Roboto Slab" \
-  serve --host 127.0.0.1 --port 3000
+vl-convert serve \
+  --google-font "Roboto Slab" \
+  --port 3000
 ```
 
 Save this complete request body as `request.json`:
@@ -236,10 +237,9 @@ for every font lookup that misses the on-disk cache, including lookups for
 families that do not exist.
 
 ```bash
-vl-convert \
+vl-convert serve \
   --auto-google-fonts \
   --google-font-variant-threshold 16 \
-  serve \
   --per-ip-budget-ms 30000 \
   --google-font-cache-miss-penalty-ms 250
 ```

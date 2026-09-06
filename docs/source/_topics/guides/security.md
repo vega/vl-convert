@@ -83,12 +83,11 @@ let converter = VlConverter::with_config(VlcConfig {
 
 ::::{interface} server
 ```bash
-vl-convert \
+vl-convert serve \
   --base-url disabled \
   --allowed-base-urls https://data.example.com/public/ \
   --max-v8-heap-size-mb 512 \
   --max-v8-execution-time-secs 10 \
-  serve \
   --host 127.0.0.1 \
   --port 3000 \
   --opaque-errors

@@ -74,8 +74,9 @@ async fn main() -> anyhow::Result<()> {
 Start the server in one terminal:
 
 ```bash
-vl-convert --vlc-config disabled \
-  serve --host 127.0.0.1 --port 3000
+vl-convert serve \
+  --vlc-config disabled \
+  --port 3000
 ```
 
 Save this request body:

@@ -76,7 +76,7 @@ Confirm the installation, then start a local server:
 
 ```bash
 vl-convert --version
-vl-convert serve --host 127.0.0.1 --port 3000
+vl-convert serve --port 3000
 ```
 
 The server keeps running and listens on port 3000. Leave this terminal open

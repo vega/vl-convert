@@ -98,10 +98,9 @@ let usage = converter.get_worker_memory_usage().await?;
 Set converter limits before `serve` and combine them with HTTP request limits:
 
 ```bash
-vl-convert \
+vl-convert serve \
   --max-v8-heap-size-mb 512 \
   --max-v8-execution-time-secs 10 \
-  serve \
   --workers 2 \
   --max-concurrent-requests 4 \
   --request-timeout-secs 15

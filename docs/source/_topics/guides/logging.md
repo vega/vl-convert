@@ -116,8 +116,9 @@ initialize it before creating a converter.
 Use structured JSON logs in deployed services:
 
 ```bash
-vl-convert --log-format json --log-level info \
-  serve --host 127.0.0.1 --port 3000
+vl-convert serve \
+  --log-format json --log-level info \
+  --port 3000
 ```
 
 The server logs request identifiers, status, duration, and budget information

@@ -164,10 +164,10 @@ error if an allowlisted directory does not exist.
 
 ::::{interface} server
 ```bash
-vl-convert \
+vl-convert serve \
   --base-url "$PWD" \
   --allowed-base-urls "$PWD" \
-  serve --host 127.0.0.1 --port 3000
+  --port 3000
 ```
 
 Save this complete request as `request.json`:

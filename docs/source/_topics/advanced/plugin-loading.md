@@ -98,8 +98,9 @@ Startup plugins come from global CLI options or the JSONC config file. Use the
 config file for inline source.
 
 ```bash
-vl-convert --vega-plugin ./double-value.js \
-  serve --host 127.0.0.1 --port 3000
+vl-convert serve \
+  --vega-plugin ./double-value.js \
+  --port 3000
 ```
 ::::
 
@@ -153,10 +154,10 @@ let converter = VlConverter::with_config(VlcConfig {
 
 ::::{interface} server
 ```bash
-vl-convert \
+vl-convert serve \
   --vega-plugin ./scale-plugin.js \
   --plugin-import-domains esm.sh \
-  serve --host 127.0.0.1 --port 3000
+  --port 3000
 ```
 ::::
 
@@ -241,7 +242,6 @@ std::fs::write("chart.svg", output.svg)?;
 ::::{interface} server
 ```bash
 vl-convert serve \
-  --host 127.0.0.1 \
   --port 3000 \
   --allow-per-request-plugins \
   --max-ephemeral-workers 2

@@ -99,8 +99,9 @@ then send a normal specification request to `POST /vegalite/fonts` or
 `POST /vega/fonts`. For this local-font example, start the server with:
 
 ```bash
-vl-convert --embed-local-fonts \
-  serve --host 127.0.0.1 --port 3000
+vl-convert serve \
+  --embed-local-fonts \
+  --port 3000
 ```
 
 Save this complete body as `request.json`:

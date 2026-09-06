@@ -71,8 +71,9 @@ match converter
 Return detailed errors only on a trusted development or staging listener:
 
 ```bash
-vl-convert --log-format json --log-level debug \
-  serve --host 127.0.0.1 --port 3000 --opaque-errors=false
+vl-convert serve \
+  --log-format json --log-level debug \
+  --port 3000 --opaque-errors=false
 ```
 
 Production services should use `--opaque-errors` and rely on server-side logs.

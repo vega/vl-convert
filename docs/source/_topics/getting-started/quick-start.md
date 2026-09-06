@@ -107,7 +107,7 @@ output formats and {doc}`../advanced/rust-converter` for reusing the converter.
 Start the server in one terminal:
 
 ```bash
-vl-convert serve --host 127.0.0.1 --port 3000
+vl-convert serve --port 3000
 ```
 
 Save this complete request body as `request.json`:

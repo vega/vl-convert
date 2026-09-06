@@ -230,8 +230,9 @@ std::fs::write("chart.svg", output.svg)?;
 Register custom themes before the `serve` subcommand:
 
 ```bash
-vl-convert --themes themes.json \
-  serve --host 127.0.0.1 --port 3000
+vl-convert serve \
+  --themes themes.json \
+  --port 3000
 ```
 
 The themes then appear in `GET /themes` and can be selected by Vega-Lite

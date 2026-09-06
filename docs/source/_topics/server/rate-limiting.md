@@ -28,7 +28,6 @@ thirty seconds per minute across the server:
 
 ```bash
 vl-convert serve \
-  --host 127.0.0.1 \
   --port 3000 \
   --per-ip-budget-ms 5000 \
   --global-budget-ms 30000 \
@@ -73,10 +72,9 @@ When a specification can trigger automatic Google Fonts, add a charge for each
 CSS or font-file cache miss:
 
 ```bash
-vl-convert \
+vl-convert serve \
   --auto-google-fonts \
   --google-font-variant-threshold 16 \
-  serve \
   --per-ip-budget-ms 5000 \
   --global-budget-ms 30000 \
   --google-font-cache-miss-penalty-ms 250

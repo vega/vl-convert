@@ -92,7 +92,7 @@ the Rust types and examples.
 The CLI package includes a long-running conversion server:
 
 ```bash
-vl-convert serve --host 127.0.0.1 --port 3000
+vl-convert serve --port 3000
 ```
 
 The server exposes interactive API documentation at

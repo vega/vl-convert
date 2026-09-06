@@ -105,8 +105,9 @@ std::fs::write("chart.png", output.data)?;
 Register the plugin before `serve`:
 
 ```bash
-vl-convert --vega-plugin ./double-value.js \
-  serve --host 127.0.0.1 --port 3000
+vl-convert serve \
+  --vega-plugin ./double-value.js \
+  --port 3000
 ```
 
 Every request handled by this process can then use `doubleValue`. Put the
