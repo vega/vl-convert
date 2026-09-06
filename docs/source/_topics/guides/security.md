@@ -34,7 +34,8 @@ untrusted input.
 
 An empty `allowed_base_urls` list blocks every HTTP or HTTPS URL and filesystem
 path. Inline `data:` URLs remain allowed. To permit one service, list its URL
-prefix:
+prefix. These configuration examples can be applied to any conversion. The CLI
+example uses `chart.vl.json` from {doc}`../getting-started/quick-start`:
 
 ::::{interface} python
 ```python

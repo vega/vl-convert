@@ -32,26 +32,19 @@ starts, before any specification is compiled or parsed.
 
 Save this example as `double-value.js`:
 
-```javascript
-export default function registerDoubleValue(vega) {
-  vega.expressionFunction("doubleValue", value => value * 2)
-}
+```{literalinclude} /_examples/double-value.js
+:language: javascript
 ```
 
-Save this Vega-Lite specification as `chart.vl.json`:
+Save this Vega-Lite specification:
 
-```json
-{
-  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "data": {"values": [{"category": "A", "value": 2}, {"category": "B", "value": 5}]},
-  "transform": [{"calculate": "doubleValue(datum.value)", "as": "doubled"}],
-  "mark": "bar",
-  "encoding": {
-    "x": {"field": "category", "type": "nominal"},
-    "y": {"field": "doubled", "type": "quantitative"}
-  }
-}
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/plugin-demo.vl.json
+:language: json
 ```
+:::
 
 The `calculate` transform can now call `doubleValue`.
 
@@ -92,6 +85,7 @@ List startup plugins in `VlcConfig`:
 ```rust
 use vl_convert_rs::{PngOpts, VlcConfig, VlConverter, VlOpts};
 
+let spec = std::fs::read_to_string("chart.vl.json")?;
 let converter = VlConverter::with_config(VlcConfig {
     vega_plugins: vec!["./double-value.js".to_string()],
     ..Default::default()
@@ -102,8 +96,6 @@ let output = converter
     .await?;
 std::fs::write("chart.png", output.data)?;
 ```
-
-`spec` holds the Vega-Lite value shown above.
 ::::
 
 ::::{interface} server
@@ -115,9 +107,28 @@ vl-convert --vega-plugin ./double-value.js \
 ```
 
 Every request handled by this process can then use `doubleValue`. Put the
-specification above in the `spec` field of a normal `/vegalite/*` request, as
-shown in {doc}`../getting-started/quick-start`.
+specification above in the `spec` field of a normal `/vegalite/*` request.
+Save this complete request body as `request.json`:
+
+```{literalinclude} /_generated/requests/plugin-startup-png.json
+:language: json
+```
+
+```bash
+curl http://127.0.0.1:3000/vegalite/png \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.png
+```
 ::::
+
+The registered `doubleValue` function doubles the source values before Vega
+draws these bars:
+
+```{vl-chart} /_examples/plugin-demo.vl.json
+:vega-plugin: /_examples/double-value.js
+:alt: Two bars with the source values doubled to four and ten
+```
 
 Plugins can also come from HTTPS URLs or inline source, and a plugin can import
 other modules. See {doc}`../advanced/plugin-loading` for loading modes, import

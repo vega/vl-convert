@@ -35,10 +35,24 @@ SVG input conversions accept only the raster options `scale`, `ppi`, and
 `quality`. Chart options such as `theme`, `width`, and `height` do not apply to
 them.
 
+The examples override this Vega-Lite input:
+
+:::{dropdown} chart.vl.json
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
 ::::{interface} python
 Pass overrides as keyword arguments:
 
 ```python
+from pathlib import Path
+
+import vl_convert as vlc
+
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 png = vlc.vegalite_to_png(
     spec,
     scale=2,
@@ -46,6 +60,7 @@ png = vlc.vegalite_to_png(
     height=360,
     theme="dark",
 )
+Path("chart.png").write_bytes(png)
 ```
 
 A per-call `vega_plugin` also requires `allow_per_request_plugins=True` in
@@ -57,6 +72,10 @@ Put chart options in `VlOpts` or `VgOpts` and format options in an output type
 such as `PngOpts` or `HtmlOpts`:
 
 ```rust
+use vl_convert_rs::{PngOpts, VlConverter, VlOpts};
+
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let converter = VlConverter::new();
 let output = converter
     .vegalite_to_png(
         spec,
@@ -72,6 +91,7 @@ let output = converter
         },
     )
     .await?;
+std::fs::write("chart.png", output.data)?;
 ```
 
 A per-call plugin also requires `allow_per_request_plugins: true` in
@@ -81,14 +101,17 @@ A per-call plugin also requires `allow_per_request_plugins: true` in
 ::::{interface} server
 Put overrides beside `spec` in the request body:
 
-```json
-{
-  "spec": {"mark": "bar", "data": {"values": []}},
-  "scale": 2,
-  "width": 640,
-  "height": 360,
-  "theme": "dark"
-}
+```{literalinclude} /_generated/requests/conversion-overrides.json
+:language: json
+```
+
+Save the body as `request.json`, then send it to the PNG endpoint:
+
+```bash
+curl http://127.0.0.1:3000/vegalite/png \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.png
 ```
 
 Per-request `google_fonts` requires `--allow-google-fonts`, and per-request

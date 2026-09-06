@@ -23,18 +23,32 @@ Set `vl_version` when a specification depends on the behavior of an older
 release. The setting selects the compiler and does not change the input's
 `$schema` field.
 
+The examples use the input from Quick Start:
+
+:::{dropdown} chart.vl.json
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
 ::::{interface} python
 ```python
+from pathlib import Path
+
 import vl_convert as vlc
 
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 vega_spec = vlc.vegalite_to_vega(spec)
 svg = vlc.vegalite_to_svg(spec)
 png = vlc.vegalite_to_png(spec, scale=2)
 pdf = vlc.vegalite_to_pdf(spec)
+Path("chart.svg").write_text(svg, encoding="utf-8")
+Path("chart.png").write_bytes(png)
+Path("chart.pdf").write_bytes(pdf)
 ```
 
-`spec` is a dictionary such as the one in {doc}`../getting-started/quick-start`,
-or the same content as a JSON string.
+The functions also accept the specification as a dictionary.
 ::::
 
 ::::{interface} cli
@@ -53,6 +67,7 @@ Run any command with `--help` to see its options.
 ```rust
 use vl_convert_rs::{VlConverter, VlOpts};
 
+let spec = std::fs::read_to_string("chart.vl.json")?;
 let converter = VlConverter::new();
 let svg = converter
     .vegalite_to_svg(spec.clone(), VlOpts::default(), Default::default())
@@ -60,6 +75,8 @@ let svg = converter
 let png = converter
     .vegalite_to_png(spec, VlOpts::default(), Default::default())
     .await?;
+std::fs::write("chart.svg", svg.svg)?;
+std::fs::write("chart.png", png.data)?;
 ```
 
 Read the result from `svg.svg` or `png.data`. Every output struct also carries
@@ -67,8 +84,7 @@ Vega's diagnostic messages in `logs`.
 ::::
 
 ::::{interface} server
-Send the request body from {doc}`../getting-started/quick-start` to the
-endpoint for the output you need:
+Send a request body to the endpoint for the output you need:
 
 | Output | Endpoint |
 | --- | --- |
@@ -82,8 +98,21 @@ endpoint for the output you need:
 | Scenegraph | `POST /vegalite/scenegraph` |
 | Resolved fonts | `POST /vegalite/fonts` |
 
+For example, save this complete SVG request as `request.json`:
+
+```{literalinclude} /_generated/requests/vegalite-svg.json
+:language: json
+```
+
+```bash
+curl http://127.0.0.1:3000/vegalite/svg \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.svg
+```
+
 The response body contains the output directly. See {doc}`../api-reference`
-for request fields and response content types.
+for the other request fields and response content types.
 ::::
 
 Related guides: {doc}`data-loading` for specifications that load data from

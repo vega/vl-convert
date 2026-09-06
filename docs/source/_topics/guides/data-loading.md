@@ -77,16 +77,47 @@ with semicolons.
 
 Set `base_url` to the directory that holds the data and add the same directory
 to `allowed_base_urls`. Relative URLs in the specification then resolve to
-files under that directory, and `file://` URLs inside it work as well. For a
-specification with `"data": {"url": "data/sales.csv"}` and the file at
-`/srv/charts/data/sales.csv`:
+files under that directory, and `file://` URLs inside it work as well.
+
+Create this layout, then run the examples from the `example` directory:
+
+```text
+example/
+├── chart.vl.json
+└── data/
+    └── sales.csv
+```
+
+Save this specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/local-data.vl.json
+:language: json
+```
+:::
+
+Save this data as `data/sales.csv`:
+
+```{literalinclude} /_examples/data/sales.csv
+:language: text
+```
 
 ::::{interface} python
 ```python
+from pathlib import Path
+
 import vl_convert as vlc
 
-vlc.configure(base_url="/srv/charts", allowed_base_urls=["/srv/charts/"])
+example_dir = Path.cwd().resolve()
+vlc.configure(
+    base_url=str(example_dir),
+    allowed_base_urls=[str(example_dir)],
+)
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 png = vlc.vegalite_to_png(spec)
+Path("chart.png").write_bytes(png)
 ```
 
 `base_url=False` rejects relative URLs, and `base_url=True` restores the CDN
@@ -96,8 +127,8 @@ default.
 ::::{interface} cli
 ```bash
 vl-convert \
-  --base-url /srv/charts \
-  --allowed-base-urls /srv/charts/ \
+  --base-url "$PWD" \
+  --allowed-base-urls "$PWD" \
   vl2png --input chart.vl.json --output chart.png
 ```
 
@@ -110,11 +141,18 @@ file, a relative `base_url` path is resolved against the file's directory.
 ```rust
 use vl_convert_rs::{BaseUrlSetting, VlcConfig, VlConverter};
 
+let example_dir = std::env::current_dir()?;
+let example_dir = example_dir.to_string_lossy().to_string();
 let converter = VlConverter::with_config(VlcConfig {
-    base_url: BaseUrlSetting::Custom("/srv/charts".to_string()),
-    allowed_base_urls: vec!["/srv/charts/".to_string()],
+    base_url: BaseUrlSetting::Custom(example_dir.clone()),
+    allowed_base_urls: vec![example_dir],
     ..Default::default()
 })?;
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let output = converter
+    .vegalite_to_png(spec, Default::default(), Default::default())
+    .await?;
+std::fs::write("chart.png", output.data)?;
 ```
 
 `BaseUrlSetting::Disabled` rejects relative URLs. `with_config()` returns an
@@ -124,15 +162,34 @@ error if an allowlisted directory does not exist.
 ::::{interface} server
 ```bash
 vl-convert \
-  --base-url /srv/charts \
-  --allowed-base-urls /srv/charts/ \
+  --base-url "$PWD" \
+  --allowed-base-urls "$PWD" \
   serve --host 127.0.0.1 --port 3000
 ```
 
-Requests cannot change these settings. When the admin listener is enabled,
+Save this complete request as `request.json`:
+
+```{literalinclude} /_generated/requests/local-data-png.json
+:language: json
+```
+
+Send it from a second terminal whose current directory contains
+`request.json`:
+
+```bash
+curl http://127.0.0.1:3000/vegalite/png \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.png
+```
+
+Requests cannot change the loading settings. When the admin listener is enabled,
 `PATCH /admin/config` updates them without a restart. See
 {doc}`/server/admin-api`.
 ::::
+
+For production, replace `$PWD` or `Path.cwd()` with a stable absolute path such
+as `/srv/charts`. Keep the allowlist limited to the directory the chart needs.
 
 ## Use the Vega Example Datasets
 

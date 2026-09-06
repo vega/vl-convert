@@ -46,16 +46,29 @@ more detail and produce larger files.
 
 ## Examples
 
+The examples use the input from Quick Start:
+
+:::{dropdown} chart.vl.json
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
 ::::{interface} python
 ```python
+from pathlib import Path
+
 import vl_convert as vlc
 
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 png = vlc.vegalite_to_png(spec, width=640, height=360, scale=2)
 jpeg = vlc.vegalite_to_jpeg(spec, width=640, height=360, quality=90)
+Path("chart.png").write_bytes(png)
+Path("chart.jpg").write_bytes(jpeg)
 ```
 
-Both functions return bytes. `spec` is a Vega-Lite dictionary such as the one
-in {doc}`../getting-started/quick-start`.
+Both functions return bytes. They also accept the specification as a dictionary.
 ::::
 
 ::::{interface} cli
@@ -68,14 +81,14 @@ vl-convert vl2jpeg \
   --input chart.vl.json --output chart.jpg \
   --width 640 --height 360 --quality 90
 ```
-
-The example uses `chart.vl.json` from {doc}`../getting-started/quick-start`.
 ::::
 
 ::::{interface} rust
 ```rust
-use vl_convert_rs::{JpegOpts, PngOpts, VlOpts};
+use vl_convert_rs::{JpegOpts, PngOpts, VlConverter, VlOpts};
 
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let converter = VlConverter::new();
 let chart_size = VlOpts {
     width: Some(640.0),
     height: Some(360.0),
@@ -103,29 +116,17 @@ let jpeg = converter
         },
     )
     .await?;
+std::fs::write("chart.png", png.data)?;
+std::fs::write("chart.jpg", jpeg.data)?;
 ```
-
-`converter` and `spec` are defined as in {doc}`../getting-started/quick-start`.
 ::::
 
 ::::{interface} server
 Put the options beside `spec` in the request body. For example, save this body
 as `request.json`:
 
-```json
-{
-  "spec": {
-    "data": {"values": [{"x": "A", "y": 2}, {"x": "B", "y": 5}]},
-    "mark": "bar",
-    "encoding": {
-      "x": {"field": "x", "type": "nominal"},
-      "y": {"field": "y", "type": "quantitative"}
-    }
-  },
-  "width": 640,
-  "height": 360,
-  "scale": 2
-}
+```{literalinclude} /_generated/requests/image-quality-png.json
+:language: json
 ```
 
 ```bash

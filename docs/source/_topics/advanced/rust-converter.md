@@ -33,7 +33,9 @@ startup cost before accepting requests.
 
 `VlConverter` is cheap to clone, and clones share the same worker pool. Store a
 clone in application state or hand clones to tasks. Each worker handles one
-conversion at a time, and additional conversions wait for a free worker.
+conversion at a time, and additional conversions wait for a free worker. This
+lifecycle excerpt assumes the `spec` created in the complete
+{doc}`../getting-started/quick-start` application:
 
 ```rust
 use vl_convert_rs::{PngOpts, VlOpts};

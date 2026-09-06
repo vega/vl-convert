@@ -39,6 +39,9 @@ A plugin entry can be one of three forms:
   The `--vega-plugin` CLI flag does not, so a mistyped path is never treated as
   executable source.
 
+The following are configuration excerpts. The file-based examples use the
+`double-value.js` plugin from {doc}`../guides/plugins`.
+
 ::::{interface} python
 ```python
 vlc.configure(
@@ -58,6 +61,9 @@ Use a path or URL with `--vega-plugin`:
 vl-convert --vega-plugin ./double-value.js \
   vl2svg --input chart.vl.json --output chart.svg
 ```
+
+Here, `chart.vl.json` is the plugin-dependent input from
+{doc}`../guides/plugins`.
 
 Put inline source in a JSONC config file:
 
@@ -97,7 +103,9 @@ vl-convert --vega-plugin ./double-value.js \
 ## Control HTTP Imports
 
 A plugin can import other ESM modules. HTTP imports are blocked unless their
-domain matches `plugin_import_domains`.
+domain matches `plugin_import_domains`. The snippets in this section show the
+required plugin configuration. A complete chart must call `scaledPercent` in
+an expression before the plugin affects its result.
 
 ```javascript
 import { scaleLinear } from "https://esm.sh/d3-scale@4"
@@ -176,37 +184,50 @@ on browser globals such as `window` or `document` during static conversion.
 ## Enable Per-Request Plugins
 
 Enable per-request plugins in the converter configuration, then pass one plugin
-as the conversion's `vega_plugin` value.
+as the conversion's `vega_plugin` value. The following examples reuse
+`double-value.js` and `chart.vl.json` from {doc}`../guides/plugins`.
 ::::
 
 ::::{interface} python
 ```python
+from pathlib import Path
+
+import vl_convert as vlc
+
 vlc.configure(allow_per_request_plugins=True)
 
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
+plugin_source = Path("double-value.js").read_text(encoding="utf-8")
 svg = vlc.vegalite_to_svg(
     spec,
-    vega_plugin="export default function (vega) { vega.expressionFunction('answer', () => 42) }",
+    vega_plugin=plugin_source,
 )
+Path("chart.svg").write_text(svg, encoding="utf-8")
 ```
 ::::
 
 ::::{interface} rust
 ```rust
+use vl_convert_rs::{VlcConfig, VlConverter, VlOpts};
+
 let converter = VlConverter::with_config(VlcConfig {
     allow_per_request_plugins: true,
     ..Default::default()
 })?;
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let plugin_source = std::fs::read_to_string("double-value.js")?;
 
 let output = converter
     .vegalite_to_svg(
         spec,
         VlOpts {
-            vega_plugin: Some(plugin_source.to_string()),
+            vega_plugin: Some(plugin_source),
             ..Default::default()
         },
         Default::default(),
     )
     .await?;
+std::fs::write("chart.svg", output.svg)?;
 ```
 ::::
 
@@ -223,6 +244,20 @@ Request bodies can now contain `vega_plugin`. If caller-supplied code needs
 HTTP imports, allow only the required domains with
 `--per-request-plugin-import-domains`. This allowlist is separate from the one
 for startup plugins.
+
+Save this complete request, which embeds both canonical files, as
+`request.json`:
+
+```{literalinclude} /_generated/requests/plugin-per-request-svg.json
+:language: json
+```
+
+```bash
+curl http://127.0.0.1:3000/vegalite/svg \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.svg
+```
 ::::
 
 ## Plugins in HTML Output

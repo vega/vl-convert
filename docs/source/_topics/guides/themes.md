@@ -19,13 +19,28 @@ configuration object directly with `config` or `--config`.
 VlConvert bundles the themes from the `vega-themes` package. Select a theme per
 conversion, or set `default_theme` in the converter configuration.
 
+Every conversion example and image on this page uses this Vega-Lite
+specification. Save it as follows:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/theme-demo.vl.json
+:language: json
+```
+:::
+
 ## Use a Built-In Theme
 
 ::::{interface} python
 ```python
+from pathlib import Path
+
 import vl_convert as vlc
 
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 svg = vlc.vegalite_to_svg(spec, theme="dark")
+Path("chart.svg").write_text(svg, encoding="utf-8")
 ```
 ::::
 
@@ -41,6 +56,10 @@ vl-convert vl2svg \
 Set `VlOpts.theme` for the conversion:
 
 ```rust
+use vl_convert_rs::{VlConverter, VlOpts};
+
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let converter = VlConverter::new();
 let options = VlOpts {
     theme: Some("dark".to_string()),
     ..Default::default()
@@ -49,17 +68,24 @@ let options = VlOpts {
 let output = converter
     .vegalite_to_svg(spec, options, Default::default())
     .await?;
+std::fs::write("chart.svg", output.svg)?;
 ```
 ::::
 
 ::::{interface} server
 Set `theme` beside `spec` in a Vega-Lite conversion request:
 
-```json
-{
-  "spec": {"mark": "bar", "data": {"values": []}},
-  "theme": "dark"
-}
+```{literalinclude} /_generated/requests/theme-dark.json
+:language: json
+```
+
+Save the body as `request.json`, then send it to the SVG endpoint:
+
+```bash
+curl http://127.0.0.1:3000/vegalite/svg \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.svg
 ```
 ::::
 
@@ -154,6 +180,8 @@ with open("themes.json", encoding="utf-8") as input_file:
 
 vlc.configure(themes=themes)
 svg = vlc.vegalite_to_svg(spec, theme="brand")
+with open("chart.svg", "w", encoding="utf-8") as output_file:
+    output_file.write(svg)
 ```
 ::::
 
@@ -167,7 +195,7 @@ vl-convert --themes themes.json \
 ::::{interface} rust
 ```rust
 use std::collections::HashMap;
-use vl_convert_rs::{serde_json, VlcConfig, VlConverter};
+use vl_convert_rs::{serde_json, VlcConfig, VlConverter, VlOpts};
 
 let themes: HashMap<String, serde_json::Value> =
     serde_json::from_str(include_str!("../themes.json"))?;
@@ -176,6 +204,18 @@ let converter = VlConverter::with_config(VlcConfig {
     themes,
     ..Default::default()
 })?;
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let output = converter
+    .vegalite_to_svg(
+        spec,
+        VlOpts {
+            theme: Some("brand".to_string()),
+            ..Default::default()
+        },
+        Default::default(),
+    )
+    .await?;
+std::fs::write("chart.svg", output.svg)?;
 ```
 ::::
 
@@ -188,10 +228,21 @@ vl-convert --themes themes.json \
 ```
 
 The themes then appear in `GET /themes` and can be selected by Vega-Lite
-conversion requests.
+conversion requests. Save this request as `request.json`:
+
+```{literalinclude} /_generated/requests/theme-brand.json
+:language: json
+```
+
+```bash
+curl http://127.0.0.1:3000/vegalite/svg \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.svg
+```
 ::::
 
-The `brand` theme applied to the same chart:
+The `brand` theme applied to the same input. Only the selected theme changes:
 
 ```{vl-chart} /_examples/theme-demo.vl.json
 :themes: /_examples/themes.json

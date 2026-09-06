@@ -28,7 +28,9 @@ let converter = VlConverter::with_config(VlcConfig {
 ```
 
 Conversion methods are `async` and return output structs rather than raw bytes,
-so callers can read Vega's diagnostic messages and Google Fonts usage:
+so callers can read Vega's diagnostic messages and Google Fonts usage. This
+API excerpt assumes `spec` contains a Vega-Lite specification. The complete
+Tokio application in {doc}`getting-started/quick-start` defines it:
 
 ```rust
 let output = converter
@@ -57,7 +59,6 @@ Output structs:
 - `ScenegraphMsgpackOutput`: `data`, `logs`, `google_fonts`.
 - `VegaOutput`: `spec`, `logs`.
 
-The {doc}`getting-started/quick-start` shows the Tokio setup for a new
-application, and {doc}`advanced/rust-converter` covers sharing the converter.
-Item-by-item documentation is on
+{doc}`advanced/rust-converter` covers sharing the converter. Item-by-item
+documentation is on
 [docs.rs](https://docs.rs/vl-convert-rs).

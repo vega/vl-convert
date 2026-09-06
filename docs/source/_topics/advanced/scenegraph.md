@@ -18,12 +18,39 @@ drive a custom renderer. Use SVG, PNG, JPEG, or PDF for ordinary image export.
 The scenegraph is available as JSON or as MessagePack, a compact binary
 encoding of the same structure.
 
+The examples use the Vega-Lite specification from Quick Start and the direct
+Vega specification from {doc}`../guides/vega-conversions`:
+
+:::{dropdown} chart.vl.json
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+:::{dropdown} chart.vg.json
+
+```{literalinclude} /_examples/vega-demo.vg.json
+:language: json
+```
+:::
+
 ::::{interface} python
 ```python
+import json
+from pathlib import Path
+
 import vl_convert as vlc
 
-scenegraph = vlc.vegalite_to_scenegraph(spec)
-scenegraph_msgpack = vlc.vegalite_to_scenegraph(spec, format="msgpack")
+vl_spec = Path("chart.vl.json").read_text(encoding="utf-8")
+vg_spec = Path("chart.vg.json").read_text(encoding="utf-8")
+scenegraph = vlc.vegalite_to_scenegraph(vl_spec)
+scenegraph_msgpack = vlc.vega_to_scenegraph(vg_spec, format="msgpack")
+Path("scenegraph.json").write_text(
+    json.dumps(scenegraph, indent=2),
+    encoding="utf-8",
+)
+Path("scenegraph.msgpack").write_bytes(scenegraph_msgpack)
 ```
 
 The default result is a dictionary. The MessagePack result is bytes. Use
@@ -50,13 +77,24 @@ vl-convert vg2sg \
 Separate methods return JSON and MessagePack:
 
 ```rust
+use vl_convert_rs::{serde_json, VgOpts, VlConverter, VlOpts};
+
+let vl_spec = std::fs::read_to_string("chart.vl.json")?;
+let vg_spec = std::fs::read_to_string("chart.vg.json")?;
+let converter = VlConverter::new();
 let json_output = converter
-    .vegalite_to_scenegraph(spec.clone(), Default::default())
+    .vegalite_to_scenegraph(vl_spec, VlOpts::default())
     .await?;
 
 let msgpack_output = converter
-    .vegalite_to_scenegraph_msgpack(spec, Default::default())
+    .vega_to_scenegraph_msgpack(vg_spec, VgOpts::default())
     .await?;
+
+std::fs::write(
+    "scenegraph.json",
+    serde_json::to_vec_pretty(&json_output.scenegraph)?,
+)?;
+std::fs::write("scenegraph.msgpack", msgpack_output.data)?;
 ```
 
 Read `json_output.scenegraph` or `msgpack_output.data`. Both outputs also carry
@@ -66,10 +104,27 @@ Vega's diagnostic messages in `logs`.
 ::::{interface} server
 Send the normal JSON request body to `POST /vegalite/scenegraph` or
 `POST /vega/scenegraph`. The response is JSON unless the `Accept` header asks
-for MessagePack:
+for MessagePack. Save this Vega-Lite body as `request.json`:
+
+```{literalinclude} /_generated/requests/scenegraph-vegalite.json
+:language: json
+```
 
 ```bash
 curl http://127.0.0.1:3000/vegalite/scenegraph \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output scenegraph.json
+```
+
+For the Vega and MessagePack combination, save this body as `request.json`:
+
+```{literalinclude} /_generated/requests/scenegraph-vega.json
+:language: json
+```
+
+```bash
+curl http://127.0.0.1:3000/vega/scenegraph \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/msgpack' \
   --data-binary @request.json \

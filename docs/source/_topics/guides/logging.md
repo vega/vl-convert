@@ -15,6 +15,17 @@ conversion can succeed even though Vega dropped an invalid property or
 recovered from a data problem, so check these messages when a chart does not
 look as expected.
 
+The examples use a logarithmic scale whose inferred domain includes zero. Save
+this Vega-Lite specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/warning-demo.vl.json
+:language: json
+```
+:::
+
 ::::{interface} python
 VlConvert forwards its messages to the `vl_convert` logger in Python's
 `logging` module. Configure a handler before converting if the application does
@@ -22,12 +33,25 @@ not already configure logging:
 
 ```python
 import logging
+from pathlib import Path
+
 import vl_convert as vlc
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(levelname)s:%(name)s:%(message)s",
+)
 logging.getLogger("vl_convert").setLevel(logging.WARNING)
 
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 svg = vlc.vegalite_to_svg(spec)
+Path("chart.svg").write_text(svg, encoding="utf-8")
+```
+
+The conversion succeeds and emits this warning:
+
+```text
+WARNING:vl_convert:Log scale domain includes zero: [0,200]
 ```
 
 Use `INFO` or `DEBUG` temporarily while diagnosing a problem.
@@ -40,6 +64,14 @@ conversion results.
 ```bash
 vl-convert --log-level warn \
   vl2svg --input chart.vl.json --output chart.svg
+```
+
+The command succeeds and writes a timestamped warning to standard error. The
+relevant part is:
+
+```text
+...
+WARN vl_convert: Log scale domain includes zero: [0,200]
 ```
 
 `--log-filter` accepts a `tracing-subscriber` filter directive for finer
@@ -55,9 +87,23 @@ vl-convert --log-filter 'vl_convert=debug' \
 Every output struct carries the messages Vega produced in `logs`:
 
 ```rust
+use vl_convert_rs::{VlConverter, VlOpts};
+
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let converter = VlConverter::new();
+let output = converter
+    .vegalite_to_svg(spec, VlOpts::default(), Default::default())
+    .await?;
+
 for entry in output.logs {
     eprintln!("{}: {}", entry.level, entry.message);
 }
+```
+
+This prints:
+
+```text
+WARN: Log scale domain includes zero: [0,200]
 ```
 
 The crate also emits these messages, plus its own operational messages, through
@@ -78,6 +124,29 @@ vl-convert --log-format json --log-level info \
 The server logs request identifiers, status, duration, and budget information
 alongside conversion diagnostics. See {doc}`/server/logging` for the request
 fields and proxy behavior.
+
+Each conversion response also carries Vega diagnostics in the `X-VLC-Logs`
+header. Save this body as `request.json`:
+
+```{literalinclude} /_generated/requests/logging-svg.json
+:language: json
+```
+
+Use `--dump-header` to save the response headers:
+
+```bash
+curl http://127.0.0.1:3000/vegalite/svg \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --dump-header headers.txt \
+  --output chart.svg
+```
+
+`X-VLC-Logs` contains a JSON array. Its first entry is:
+
+```text
+WARN: Log scale domain includes zero: [0,200]
+```
 ::::
 
 See {doc}`../advanced/troubleshooting` for how to use these messages when a

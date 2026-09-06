@@ -62,7 +62,9 @@ are not running yet.
 
 ::::{interface} cli
 A CLI conversion runs in a short-lived process, so heap and execution-time
-limits are more useful than post-conversion garbage collection:
+limits are more useful than post-conversion garbage collection. This
+configuration excerpt uses `chart.vl.json` from
+{doc}`../getting-started/quick-start`:
 
 ```bash
 vl-convert \

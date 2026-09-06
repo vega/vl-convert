@@ -12,7 +12,8 @@ interfaces: [cli]
 
 Every conversion command reads `--input` and writes `--output`. Pass `-` for
 either to use standard input or standard output. Omitting an option selects the
-same stream.
+same stream. The examples use `chart.vl.json` from
+{doc}`../getting-started/quick-start`.
 
 Read a specification from standard input and write SVG to a file:
 

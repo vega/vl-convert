@@ -29,6 +29,10 @@ a warning, and `error` fails the conversion.
 
 ## Make Fonts Available
 
+The snippets in this section show converter setup. The CLI command assumes an
+existing `chart.vl.json`. The complete Roboto Slab example in the next section
+provides one.
+
 ::::{interface} python
 Register a local directory once per process. Use `configure()` for Google Fonts
 and the missing-font policy:
@@ -111,11 +115,15 @@ render-time budgets. See {doc}`/server/rate-limiting`.
 ## Render with a Google Font
 
 This specification sets `config.font` to Roboto Slab, a family few hosts have
-installed. Save it as `chart.vl.json`:
+installed. Save it as follows:
+
+:::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/google-font.vl.json
 :language: json
 ```
+:::
 
 Request the family from Google Fonts and render the chart as PNG:
 
@@ -146,6 +154,7 @@ vl-convert --google-font "Roboto Slab" \
 ```rust
 use vl_convert_rs::{GoogleFontRequest, PngOpts, VlcConfig, VlConverter, VlOpts};
 
+let spec = std::fs::read_to_string("chart.vl.json")?;
 let converter = VlConverter::with_config(VlcConfig {
     google_fonts: vec![GoogleFontRequest {
         family: "Roboto Slab".to_string(),
@@ -166,9 +175,6 @@ let output = converter
     .await?;
 std::fs::write("chart.png", output.data)?;
 ```
-
-`spec` holds the specification above, loaded as in the
-{doc}`../getting-started/quick-start`.
 ::::
 
 ::::{interface} server
@@ -178,6 +184,21 @@ Start the server with the font request, then send the specification in the
 ```bash
 vl-convert --google-font "Roboto Slab" \
   serve --host 127.0.0.1 --port 3000
+```
+
+Save this complete request body as `request.json`:
+
+```{literalinclude} /_generated/requests/google-font-png.json
+:language: json
+```
+
+Send the request from a second terminal:
+
+```bash
+curl http://127.0.0.1:3000/vegalite/png \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.png
 ```
 ::::
 

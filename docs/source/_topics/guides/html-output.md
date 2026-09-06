@@ -39,10 +39,22 @@ browser loads them again.
 `hybrid`, which draws marks on canvas and text as SVG. This option only affects
 the page in the browser. It does not change how VlConvert renders PNG.
 
+The examples use the input from Quick Start:
+
+:::{dropdown} chart.vl.json
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
 ::::{interface} python
 ```python
+from pathlib import Path
+
 import vl_convert as vlc
 
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 html = vlc.vegalite_to_html(
     spec,
     bundle=True,
@@ -66,8 +78,10 @@ vl-convert vl2html \
 
 ::::{interface} rust
 ```rust
-use vl_convert_rs::{HtmlOpts, Renderer};
+use vl_convert_rs::{HtmlOpts, Renderer, VlConverter};
 
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let converter = VlConverter::new();
 let output = converter
     .vegalite_to_html(
         spec,
@@ -86,16 +100,21 @@ std::fs::write("chart.html", output.html)?;
 ::::{interface} server
 Put `bundle` and `renderer` beside `spec` in the request body:
 
-```json
-{
-  "spec": {"mark": "bar", "data": {"values": []}},
-  "bundle": true,
-  "renderer": "svg"
-}
+```{literalinclude} /_generated/requests/html-bundled.json
+:language: json
 ```
 
-Send it to `POST /vegalite/html` or `POST /vega/html`. The response body is the
-HTML document.
+Save the body as `request.json`, then send it to `POST /vegalite/html`:
+
+```bash
+curl http://127.0.0.1:3000/vegalite/html \
+  -H 'Content-Type: application/json' \
+  --data-binary @request.json \
+  --output chart.html
+```
+
+The response body is the HTML document. Use `POST /vega/html` for direct Vega
+input.
 ::::
 
 HTML runs JavaScript in the reader's browser. Review it like any other

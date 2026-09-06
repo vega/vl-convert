@@ -16,6 +16,10 @@ usually shows whether the problem is the specification, an external resource,
 a font, or a converter limit. See {doc}`../guides/logging` for how to see the
 diagnostic messages.
 
+The snippets below add diagnostics to an existing failing conversion. In the
+CLI example, save the reduced input as `chart.vl.json`. See
+{doc}`../getting-started/quick-start` for complete conversion setup.
+
 ::::{interface} python
 Enable logging while reproducing the problem:
 

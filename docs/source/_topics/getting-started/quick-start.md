@@ -14,33 +14,28 @@ This example renders a small Vega-Lite bar chart as `chart.png`. The data is
 inline. See {doc}`../guides/data-loading` when a chart loads data from a URL
 or file.
 
+Save this specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
 ::::{interface} python
 `vegalite_to_png()` takes a Vega-Lite specification as a dictionary or JSON
 string and returns PNG bytes:
 
 ```python
+from pathlib import Path
+
 import vl_convert as vlc
 
-spec = {
-    "data": {
-        "values": [
-            {"category": "A", "value": 28},
-            {"category": "B", "value": 55},
-            {"category": "C", "value": 43},
-            {"category": "D", "value": 91},
-            {"category": "E", "value": 81},
-        ]
-    },
-    "mark": "bar",
-    "encoding": {
-        "x": {"field": "category", "type": "nominal"},
-        "y": {"field": "value", "type": "quantitative"},
-    },
-}
-
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 png = vlc.vegalite_to_png(spec, scale=2)
-with open("chart.png", "wb") as output_file:
-    output_file.write(png)
+Path("chart.png").write_bytes(png)
 ```
 
 `scale=2` doubles the pixel dimensions of the output. See
@@ -48,12 +43,6 @@ with open("chart.png", "wb") as output_file:
 ::::
 
 ::::{interface} cli
-Save this specification as `chart.vl.json`:
-
-```{literalinclude} /_examples/quick-start.vl.json
-:language: json
-```
-
 Render it at twice the default pixel dimensions:
 
 ```bash
@@ -79,31 +68,14 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 vl-convert-rs = "2"
 ```
 
-Use this complete `src/main.rs`:
+Use this complete `src/main.rs`. It reads the `chart.vl.json` file saved above:
 
 ```rust
-use vl_convert_rs::{anyhow, serde_json, PngOpts, VlConverter, VlOpts};
+use vl_convert_rs::{anyhow, PngOpts, VlConverter, VlOpts};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let spec = serde_json::json!({
-        "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-        "data": {
-            "values": [
-                {"category": "A", "value": 28},
-                {"category": "B", "value": 55},
-                {"category": "C", "value": 43},
-                {"category": "D", "value": 91},
-                {"category": "E", "value": 81}
-            ]
-        },
-        "mark": "bar",
-        "encoding": {
-            "x": {"field": "category", "type": "nominal"},
-            "y": {"field": "value", "type": "quantitative"}
-        }
-    });
-
+    let spec = std::fs::read_to_string("chart.vl.json")?;
     let converter = VlConverter::new();
     let output = converter
         .vegalite_to_png(
@@ -132,29 +104,10 @@ Start the server in one terminal:
 vl-convert serve --host 127.0.0.1 --port 3000
 ```
 
-Save this request body as `request.json`:
+Save this complete request body as `request.json`:
 
-```json
-{
-  "spec": {
-    "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-    "data": {
-      "values": [
-        {"category": "A", "value": 28},
-        {"category": "B", "value": 55},
-        {"category": "C", "value": 43},
-        {"category": "D", "value": 91},
-        {"category": "E", "value": 81}
-      ]
-    },
-    "mark": "bar",
-    "encoding": {
-      "x": {"field": "category", "type": "nominal"},
-      "y": {"field": "value", "type": "quantitative"}
-    }
-  },
-  "scale": 2
-}
+```{literalinclude} /_generated/requests/quick-start-png.json
+:language: json
 ```
 
 Send it from a second terminal:
