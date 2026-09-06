@@ -21,6 +21,7 @@ self-contained.
 Save this SVG document:
 
 :::{dropdown} chart.svg
+:open:
 
 ```{literalinclude} /_examples/svg-demo.svg
 :language: xml
@@ -80,6 +81,7 @@ Send JSON with the markup in an `svg` string to `/svg/png`, `/svg/jpeg`, or
 `/svg/pdf`. Save this complete request as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/svg-png.json
 :language: json

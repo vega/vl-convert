@@ -17,6 +17,7 @@ or file.
 Save this specification:
 
 :::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/quick-start.vl.json
 :language: json
@@ -62,6 +63,7 @@ See {doc}`../guides/vegalite-conversions` for the other output formats and
 Add these dependencies to `Cargo.toml`:
 
 :::{dropdown} Cargo.toml
+:open:
 
 ```toml
 [dependencies]
@@ -113,6 +115,7 @@ vl-convert serve --port 3000
 Save this complete request body as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/quick-start-png.json
 :language: json

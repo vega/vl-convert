@@ -49,6 +49,7 @@ more detail and produce larger files.
 The examples use the input from Quick Start:
 
 :::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/quick-start.vl.json
 :language: json
@@ -126,6 +127,7 @@ Put the options beside `spec` in the request body. For example, save this body
 as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/image-quality-png.json
 :language: json

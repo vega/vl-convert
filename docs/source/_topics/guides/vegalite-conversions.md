@@ -26,6 +26,7 @@ release. The setting selects the compiler and does not change the input's
 The examples use the input from Quick Start:
 
 :::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/quick-start.vl.json
 :language: json
@@ -101,6 +102,7 @@ Send a request body to the endpoint for the output you need:
 For example, save this complete SVG request as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/vegalite-svg.json
 :language: json

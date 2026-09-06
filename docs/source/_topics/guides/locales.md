@@ -26,6 +26,7 @@ This chart formats revenue with the `$,.0f` pattern and plots dates on the
 x axis, so both locale settings affect it. Save this specification:
 
 :::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/locale-demo.vl.json
 :language: json
@@ -84,6 +85,7 @@ std::fs::write("chart.svg", output.svg)?;
 Save this complete request body as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/locale-de.json
 :language: json
@@ -176,6 +178,7 @@ the same `chart.vl.json` input as the built-in locale example. Save it as
 `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/locale-custom.json
 :language: json

@@ -7,6 +7,45 @@
   border-radius: 8px;
 }
 
+/* A file dropdown is already a container, so do not nest another card around
+   its only code block. The pre element keeps its own padding and copy button. */
+.bd-content details.sd-dropdown:has(
+    > .sd-summary-content > div[class^="highlight-"]:only-child
+  ),
+.bd-content details.sd-dropdown:has(
+    > .sd-summary-content > div[class^="highlight-"]:only-child
+  )
+  > .sd-summary-title,
+.bd-content details.sd-dropdown
+  > .sd-summary-content:has(> div[class^="highlight-"]:only-child) {
+  border-radius: 0;
+}
+
+.bd-content details.sd-dropdown
+  > .sd-summary-content:has(> div[class^="highlight-"]:only-child) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.bd-content details.sd-dropdown
+  > .sd-summary-content
+  > div[class^="highlight-"]:only-child {
+  margin: 0;
+}
+
+.bd-content details.sd-dropdown
+  > .sd-summary-content
+  > div[class^="highlight-"]:only-child
+  > div.highlight,
+.bd-content details.sd-dropdown
+  > .sd-summary-content
+  > div[class^="highlight-"]:only-child
+  pre {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .navbar-brand.logo img.logo__image {
   height: 2rem;
 }

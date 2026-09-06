@@ -38,6 +38,7 @@ them.
 The examples override this Vega-Lite input:
 
 :::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/quick-start.vl.json
 :language: json
@@ -103,6 +104,7 @@ Put overrides beside `spec` in the request body. Save this body as
 `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/conversion-overrides.json
 :language: json

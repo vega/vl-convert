@@ -19,6 +19,7 @@ The examples use a logarithmic scale whose inferred domain includes zero. Save
 this Vega-Lite specification:
 
 :::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/warning-demo.vl.json
 :language: json
@@ -129,6 +130,7 @@ Each conversion response also carries Vega diagnostics in the `X-VLC-Logs`
 header. Save this body as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/logging-svg.json
 :language: json

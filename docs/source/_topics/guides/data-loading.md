@@ -101,6 +101,7 @@ Save this specification:
 Save this data as `data/sales.csv`:
 
 :::{dropdown} data/sales.csv
+:open:
 
 ```{literalinclude} /_examples/data/sales.csv
 :language: text
@@ -173,6 +174,7 @@ vl-convert serve \
 Save this complete request as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/local-data-png.json
 :language: json

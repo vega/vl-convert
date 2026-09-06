@@ -68,6 +68,7 @@ Here, `chart.vl.json` is the plugin-dependent input from
 Put inline source in a JSONC config file:
 
 :::{dropdown} plugins.vlc.jsonc
+:open:
 
 ```json
 {
@@ -256,6 +257,7 @@ Save this complete request, which embeds both canonical files, as
 `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/plugin-per-request-svg.json
 :language: json

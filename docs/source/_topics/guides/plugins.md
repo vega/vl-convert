@@ -43,6 +43,7 @@ Save this example as `double-value.js`:
 Save this Vega-Lite specification:
 
 :::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/plugin-demo.vl.json
 :language: json
@@ -115,6 +116,7 @@ specification above in the `spec` field of a normal `/vegalite/*` request.
 Save this complete request body as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/plugin-startup-png.json
 :language: json

@@ -82,6 +82,7 @@ vl-convert serve \
 Save this request body:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} _generated/requests/stacked-bar-h-svg.json
 :language: json

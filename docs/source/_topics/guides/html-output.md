@@ -42,6 +42,7 @@ the page in the browser. It does not change how VlConvert renders PNG.
 The examples use the input from Quick Start:
 
 :::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/quick-start.vl.json
 :language: json
@@ -102,6 +103,7 @@ Put `bundle` and `renderer` beside `spec` in the request body. Save this
 complete body as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/html-bundled.json
 :language: json

@@ -23,6 +23,7 @@ Every conversion example and image on this page uses this Vega-Lite
 specification. Save it as follows:
 
 :::{dropdown} chart.vl.json
+:open:
 
 ```{literalinclude} /_examples/theme-demo.vl.json
 :language: json
@@ -76,6 +77,7 @@ Set `theme` beside `spec` in a Vega-Lite conversion request. Save this body as
 `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/theme-dark.json
 :language: json
@@ -239,6 +241,7 @@ The themes then appear in `GET /themes` and can be selected by Vega-Lite
 conversion requests. Save this request as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/theme-brand.json
 :language: json

@@ -108,6 +108,7 @@ let bundle = converter
 Save this generated body as `request.json`:
 
 :::{dropdown} request.json
+:open:
 
 ```{literalinclude} /_generated/requests/bundle-snippet.json
 :language: json
@@ -127,6 +128,7 @@ bundle and calls it with a Vega-Lite specification. Save it as `index.html`
 beside `app-chart.js`, then open it in a browser:
 
 :::{dropdown} index.html
+:open:
 
 ```{literalinclude} /_examples/bundle-demo.html
 :language: html
