@@ -1,16 +1,17 @@
-"""Render Vega-Lite specifications with the local vl-convert CLI at build time.
+"""Render chart inputs with the local vl-convert CLI at build time.
 
-The ``vl-chart`` directive takes a specification from its path argument or from
-its body, renders it with the CLI that the docs build already compiles, and
-inserts the result as an image. Rendered files are cached under
-``_generated/charts`` by a hash of the specification, the options, and the CLI
-version, so unchanged charts cost nothing on later builds.
+The ``vl-chart`` directive takes input from its path argument or body, renders
+it with the CLI that the docs build already compiles, and inserts the result as
+an image. Rendered files are cached under ``_generated/charts`` by a hash of
+the input, options, and CLI version, so unchanged charts cost nothing on later
+builds.
 
-Specifications should carry their data inline so the build does not depend on
-remote data. Google Fonts are fine: pass ``:google-fonts:`` together with
-``:bundle:`` so the subset font is embedded in the SVG. An SVG shown through an
-``<img>`` element cannot load external stylesheets, so an embedded font is the
-only way the typeface reaches the reader.
+Vega and Vega-Lite specifications should carry their data inline so the build
+does not depend on remote data. For SVG output that uses Google Fonts, pass
+``:google-fonts:`` together with ``:bundle:`` so the subset font is embedded.
+An SVG shown through an ``<img>`` element cannot load external stylesheets, so
+an embedded font is the only way the typeface reaches the reader. PNG output
+needs ``:google-fonts:`` but does not need ``:bundle:``.
 """
 
 from __future__ import annotations
@@ -48,13 +49,16 @@ _cli_version: str | None = None
 
 
 class VlChart(SphinxDirective):
-    """Render a Vega-Lite specification and insert it as an image."""
+    """Render a chart input and insert it as an image."""
 
     optional_arguments = 1
     final_argument_whitespace = True
     has_content = True
     option_spec = {
         "format": lambda arg: directives.choice(arg, ("svg", "png")),
+        "input-kind": lambda arg: directives.choice(
+            arg, ("vegalite", "vega", "svg")
+        ),
         "theme": directives.unchanged_required,
         "themes": directives.unchanged_required,
         "vl-version": directives.unchanged_required,
@@ -71,9 +75,14 @@ class VlChart(SphinxDirective):
     }
 
     def run(self) -> list[nodes.Node]:
-        binary = self.binary()
-        spec = self.read_spec()
+        input_kind = self.options.get("input-kind", "vegalite")
         image_format = self.options.get("format", "svg")
+        try:
+            command = conversion_command(input_kind, image_format)
+        except ValueError as exc:
+            raise self.error(f"vl-chart: {exc}") from exc
+        binary = self.binary()
+        chart_input = self.read_input()
 
         global_args: list[str] = []
         file_contents: list[str] = []
@@ -97,17 +106,25 @@ class VlChart(SphinxDirective):
         # so editing a theme or plugin file invalidates the cached chart.
         key = [
             cli_version(binary),
+            input_kind,
             image_format,
             *global_args,
             *command_args,
             *file_contents,
-            spec,
+            chart_input,
         ]
         digest = hashlib.sha256("\0".join(key).encode()).hexdigest()[:16]
         relative = f"{OUTPUT_DIR}/{digest}.{image_format}"
         output = Path(self.env.srcdir) / relative
         if not output.exists():
-            self.render(binary, spec, output, image_format, global_args, command_args)
+            self.render(
+                binary,
+                chart_input,
+                output,
+                command,
+                global_args,
+                command_args,
+            )
 
         image = nodes.image(
             "",
@@ -134,14 +151,12 @@ class VlChart(SphinxDirective):
         except SystemExit as exc:
             raise self.error(f"vl-chart: {exc}") from exc
 
-    def read_spec(self) -> str:
+    def read_input(self) -> str:
         if self.arguments:
             return Path(self.resolve_path(self.arguments[0])).read_text()
         if self.content:
             return "\n".join(self.content)
-        raise self.error(
-            "vl-chart needs a specification path or an inline specification"
-        )
+        raise self.error("vl-chart needs an input path or inline input")
 
     def resolve_path(self, value: str) -> str:
         _, absolute = self.env.relfn2path(value)
@@ -153,14 +168,13 @@ class VlChart(SphinxDirective):
     def render(
         self,
         binary: Path,
-        spec: str,
+        chart_input: str,
         output: Path,
-        image_format: str,
+        command: str,
         global_args: list[str],
         command_args: list[str],
     ) -> None:
         output.parent.mkdir(parents=True, exist_ok=True)
-        command = "vl2svg" if image_format == "svg" else "vl2png"
         proc = subprocess.run(
             [
                 str(binary),
@@ -174,7 +188,7 @@ class VlChart(SphinxDirective):
                 str(output),
                 *command_args,
             ],
-            input=spec.encode(),
+            input=chart_input.encode(),
             capture_output=True,
             env=runtime_environment(),
         )
@@ -182,6 +196,23 @@ class VlChart(SphinxDirective):
             output.unlink(missing_ok=True)
             stderr = proc.stderr.decode(errors="replace").strip()
             raise self.error(f"vl-chart: vl-convert {command} failed:\n{stderr}")
+
+
+def conversion_command(input_kind: str, image_format: str) -> str:
+    """Return the CLI command for a supported chart input and output pair."""
+    commands = {
+        ("vegalite", "svg"): "vl2svg",
+        ("vegalite", "png"): "vl2png",
+        ("vega", "svg"): "vg2svg",
+        ("vega", "png"): "vg2png",
+        ("svg", "png"): "svg2png",
+    }
+    try:
+        return commands[(input_kind, image_format)]
+    except KeyError as exc:
+        raise ValueError(
+            f"cannot render {input_kind!r} input as {image_format!r} output"
+        ) from exc
 
 
 def png_width(path: Path) -> int:
@@ -208,4 +239,4 @@ def cli_version(binary: Path) -> str:
 
 def setup(app: Sphinx) -> dict[str, object]:
     app.add_directive("vl-chart", VlChart)
-    return {"version": "1", "parallel_read_safe": True, "parallel_write_safe": True}
+    return {"version": "2", "parallel_read_safe": True, "parallel_write_safe": True}

@@ -1,0 +1,139 @@
+requests:
+  quick-start-png:
+    inputs:
+      spec:
+        source: quick-start.vl.json
+        format: json
+    options:
+      scale: 2
+  vegalite-svg:
+    inputs:
+      spec:
+        source: quick-start.vl.json
+        format: json
+  vega-svg:
+    inputs:
+      spec:
+        source: vega-demo.vg.json
+        format: json
+  svg-png:
+    inputs:
+      svg:
+        source: svg-demo.svg
+        format: text
+    options:
+      scale: 2
+  theme-dark:
+    inputs:
+      spec:
+        source: theme-demo.vl.json
+        format: json
+    options:
+      theme: dark
+  theme-brand:
+    inputs:
+      spec:
+        source: theme-demo.vl.json
+        format: json
+    options:
+      theme: brand
+  locale-de:
+    inputs:
+      spec:
+        source: locale-demo.vl.json
+        format: json
+    options:
+      format_locale: de-DE
+      time_format_locale: de-DE
+  locale-custom:
+    inputs:
+      spec:
+        source: locale-demo.vl.json
+        format: json
+    options:
+      format_locale:
+        decimal: ","
+        thousands: "."
+        grouping: [3]
+        currency: ["", " EUR"]
+  google-font-png:
+    inputs:
+      spec:
+        source: google-font.vl.json
+        format: json
+    options:
+      scale: 2
+  local-data-png:
+    inputs:
+      spec:
+        source: local-data.vl.json
+        format: json
+  image-quality-png:
+    inputs:
+      spec:
+        source: quick-start.vl.json
+        format: json
+    options:
+      width: 640
+      height: 360
+      scale: 2
+  html-bundled:
+    inputs:
+      spec:
+        source: quick-start.vl.json
+        format: json
+    options:
+      bundle: true
+      renderer: svg
+  font-introspection:
+    inputs:
+      spec:
+        source: font-introspection.vl.json
+        format: json
+    options:
+      include_font_face: false
+  scenegraph-vegalite:
+    inputs:
+      spec:
+        source: quick-start.vl.json
+        format: json
+  scenegraph-vega:
+    inputs:
+      spec:
+        source: vega-demo.vg.json
+        format: json
+  conversion-overrides:
+    inputs:
+      spec:
+        source: quick-start.vl.json
+        format: json
+    options:
+      theme: dark
+      width: 640
+      height: 360
+      scale: 2
+  plugin-startup-png:
+    inputs:
+      spec:
+        source: plugin-demo.vl.json
+        format: json
+  plugin-per-request-svg:
+    inputs:
+      spec:
+        source: plugin-demo.vl.json
+        format: json
+      vega_plugin:
+        source: double-value.js
+        format: text
+  logging-svg:
+    inputs:
+      spec:
+        source: warning-demo.vl.json
+        format: json
+  bundle-snippet:
+    inputs:
+      snippet:
+        source: bundle-snippet.js
+        format: text
+    options:
+      vl_version: "6.4"
