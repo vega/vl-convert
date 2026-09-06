@@ -25,18 +25,12 @@ conversion, or set `default_theme` in the converter configuration.
 ```python
 import vl_convert as vlc
 
-print(list(vlc.get_themes()))
 svg = vlc.vegalite_to_svg(spec, theme="dark")
 ```
-
-`get_themes()` maps each theme name to its Vega configuration, so
-`vlc.get_themes()["dark"]` is the configuration that the `dark` theme applies.
 ::::
 
 ::::{interface} cli
 ```bash
-vl-convert ls-themes
-vl-convert cat-theme dark
 vl-convert vl2svg \
   --input chart.vl.json --output chart.svg \
   --theme dark
@@ -59,15 +53,84 @@ let output = converter
 ::::
 
 ::::{interface} server
-`GET /themes` lists the available names, and `GET /themes/{name}` returns one
-theme:
+Set `theme` beside `spec` in a Vega-Lite conversion request:
+
+```json
+{
+  "spec": {"mark": "bar", "data": {"values": []}},
+  "theme": "dark"
+}
+```
+::::
+
+The same chart with the default configuration and with the `dark` theme:
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item}
+```{vl-chart} /_examples/theme-demo.vl.json
+:alt: Stacked bar chart of revenue by quarter with the default configuration
+```
+:::
+
+:::{grid-item}
+```{vl-chart} /_examples/theme-demo.vl.json
+:theme: dark
+:alt: The same stacked bar chart with the dark theme
+```
+:::
+::::
+
+## List and Inspect Themes
+
+::::{interface} python
+`get_themes()` maps each theme name to the Vega configuration it applies:
+
+```python
+themes = vlc.get_themes()
+print(sorted(themes))
+print(themes["dark"])
+```
+::::
+
+::::{interface} cli
+`ls-themes` prints the available names:
+
+```bash
+vl-convert ls-themes
+```
+
+```{program-output} python ../tools/run_vl_convert.py ls-themes
+```
+
+`cat-theme` prints the configuration a theme applies. `dark` is the shortest:
+
+```bash
+vl-convert cat-theme dark
+```
+
+```{program-output} python ../tools/run_vl_convert.py cat-theme dark
+```
+::::
+
+::::{interface} rust
+`get_themes()` returns the same mapping as a JSON value:
+
+```rust
+let themes = converter.get_themes().await?;
+println!("{}", themes["dark"]);
+```
+::::
+
+::::{interface} server
+`GET /themes` lists the available names, and `GET /themes/{name}` returns the
+configuration one theme applies:
 
 ```bash
 curl http://127.0.0.1:3000/themes
 curl http://127.0.0.1:3000/themes/dark
 ```
-
-Set `theme` beside `spec` in a Vega-Lite conversion request.
 ::::
 
 ## Register a Custom Theme
@@ -75,17 +138,8 @@ Set `theme` beside `spec` in a Vega-Lite conversion request.
 A custom theme file is a JSON object whose keys are theme names and whose values
 are Vega configuration objects. Save this example as `themes.json`:
 
-```json
-{
-  "brand": {
-    "background": "white",
-    "range": {"category": ["#225ea8", "#41b6c4", "#a1dab4"]},
-    "axis": {
-      "labelFont": "Inter",
-      "titleFont": "Inter"
-    }
-  }
-}
+```{literalinclude} /_examples/themes.json
+:language: json
 ```
 
 A custom theme replaces a built-in theme with the same name.
@@ -136,6 +190,14 @@ vl-convert --themes themes.json \
 The themes then appear in `GET /themes` and can be selected by Vega-Lite
 conversion requests.
 ::::
+
+The `brand` theme applied to the same chart:
+
+```{vl-chart} /_examples/theme-demo.vl.json
+:themes: /_examples/themes.json
+:theme: brand
+:alt: The stacked bar chart with the brand theme's blue and green palette
+```
 
 See {doc}`../advanced/configuration` to set a default theme for every
 conversion, and {doc}`../advanced/conversion-overrides` to pass a raw `config`

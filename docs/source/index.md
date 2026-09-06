@@ -20,7 +20,7 @@ outputs, or open the chart in the Vega Editor.
 
 ```{image} _static/charts/front-page-chart.svg
 :alt: Bar chart of charts rendered per month, from January to June
-:class: front-page-chart-preview
+:class: rendered-chart
 ```
 
 :::{container} front-page-download-links

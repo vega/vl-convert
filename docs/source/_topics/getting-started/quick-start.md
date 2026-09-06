@@ -22,11 +22,19 @@ string and returns PNG bytes:
 import vl_convert as vlc
 
 spec = {
-    "data": {"values": [{"a": "A", "b": 2}, {"a": "B", "b": 5}]},
+    "data": {
+        "values": [
+            {"category": "A", "value": 28},
+            {"category": "B", "value": 55},
+            {"category": "C", "value": 43},
+            {"category": "D", "value": 91},
+            {"category": "E", "value": 81},
+        ]
+    },
     "mark": "bar",
     "encoding": {
-        "x": {"field": "a", "type": "nominal"},
-        "y": {"field": "b", "type": "quantitative"},
+        "x": {"field": "category", "type": "nominal"},
+        "y": {"field": "value", "type": "quantitative"},
     },
 }
 
@@ -42,21 +50,8 @@ with open("chart.png", "wb") as output_file:
 ::::{interface} cli
 Save this specification as `chart.vl.json`:
 
-```json
-{
-  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-  "data": {
-    "values": [
-      {"category": "A", "value": 2},
-      {"category": "B", "value": 5}
-    ]
-  },
-  "mark": "bar",
-  "encoding": {
-    "x": {"field": "category", "type": "nominal"},
-    "y": {"field": "value", "type": "quantitative"}
-  }
-}
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
 ```
 
 Render it at twice the default pixel dimensions:
@@ -95,8 +90,11 @@ async fn main() -> anyhow::Result<()> {
         "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
         "data": {
             "values": [
-                {"category": "A", "value": 2},
-                {"category": "B", "value": 5}
+                {"category": "A", "value": 28},
+                {"category": "B", "value": 55},
+                {"category": "C", "value": 43},
+                {"category": "D", "value": 91},
+                {"category": "E", "value": 81}
             ]
         },
         "mark": "bar",
@@ -142,8 +140,11 @@ Save this request body as `request.json`:
     "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
     "data": {
       "values": [
-        {"category": "A", "value": 2},
-        {"category": "B", "value": 5}
+        {"category": "A", "value": 28},
+        {"category": "B", "value": 55},
+        {"category": "C", "value": 43},
+        {"category": "D", "value": 91},
+        {"category": "E", "value": 81}
       ]
     },
     "mark": "bar",
@@ -169,3 +170,9 @@ The endpoint returns PNG bytes, which `curl` writes to `chart.png`. See
 {doc}`../guides/vegalite-conversions` for the other endpoints and
 {doc}`../overview` for what the server provides.
 ::::
+
+The specification renders as this chart:
+
+```{vl-chart} /_examples/quick-start.vl.json
+:alt: Bar chart with five bars labeled A through E
+```

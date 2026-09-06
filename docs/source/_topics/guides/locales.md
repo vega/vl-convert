@@ -22,6 +22,13 @@ Locales change formatting only. They do not change the timezone or the data.
 
 ## Use a Built-In Locale
 
+This chart formats revenue with the `$,.0f` pattern and plots dates on the
+x axis, so both locale settings affect it:
+
+```{literalinclude} /_examples/locale-demo.vl.json
+:language: json
+```
+
 ::::{interface} python
 ```python
 svg = vlc.vegalite_to_svg(
@@ -72,6 +79,16 @@ Put the locale names beside `spec` in the request:
 }
 ```
 ::::
+
+Rendered with `de-DE` for both settings, the y axis groups thousands with a
+dot and places the euro sign after the number, and the x axis uses German
+month names:
+
+```{vl-chart} /_examples/locale-demo.vl.json
+:format-locale: de-DE
+:time-format-locale: de-DE
+:alt: Line chart of monthly revenue with German number and month formatting
+```
 
 ## Define Custom Number Rules
 

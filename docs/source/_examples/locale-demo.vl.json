@@ -1,0 +1,27 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "title": "Monthly Revenue",
+  "width": 380,
+  "height": 180,
+  "data": {
+    "values": [
+      {"month": "2025-01-01", "revenue": 12500},
+      {"month": "2025-02-01", "revenue": 13800},
+      {"month": "2025-03-01", "revenue": 15200},
+      {"month": "2025-04-01", "revenue": 14100},
+      {"month": "2025-05-01", "revenue": 16900},
+      {"month": "2025-06-01", "revenue": 18400},
+      {"month": "2025-07-01", "revenue": 17600},
+      {"month": "2025-08-01", "revenue": 19300},
+      {"month": "2025-09-01", "revenue": 21000},
+      {"month": "2025-10-01", "revenue": 20400},
+      {"month": "2025-11-01", "revenue": 22700},
+      {"month": "2025-12-01", "revenue": 25100}
+    ]
+  },
+  "mark": {"type": "line", "point": true},
+  "encoding": {
+    "x": {"field": "month", "type": "temporal", "scale": {"type": "utc"}, "title": null},
+    "y": {"field": "revenue", "type": "quantitative", "axis": {"format": "$,.0f"}, "title": null}
+  }
+}

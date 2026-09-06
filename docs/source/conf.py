@@ -17,6 +17,7 @@ extensions = [
     "autodoc2",
     "sphinxcontrib.programoutput",
     "sphinxcontrib.openapi",
+    "_ext.vl_chart",
 ]
 
 html_theme = "pydata_sphinx_theme"

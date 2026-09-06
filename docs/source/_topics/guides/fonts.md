@@ -108,6 +108,92 @@ with `--allow-google-fonts`. Do not enable this for untrusted callers without
 render-time budgets. See {doc}`/server/rate-limiting`.
 ::::
 
+## Render with a Google Font
+
+This specification sets `config.font` to Roboto Slab, a family few hosts have
+installed. Save it as `chart.vl.json`:
+
+```{literalinclude} /_examples/google-font.vl.json
+:language: json
+```
+
+Request the family from Google Fonts and render the chart as PNG:
+
+::::{interface} python
+```python
+import json
+import vl_convert as vlc
+
+vlc.configure(google_fonts=["Roboto Slab"])
+
+with open("chart.vl.json", encoding="utf-8") as input_file:
+    spec = json.load(input_file)
+
+png = vlc.vegalite_to_png(spec, scale=2)
+with open("chart.png", "wb") as output_file:
+    output_file.write(png)
+```
+::::
+
+::::{interface} cli
+```bash
+vl-convert --google-font "Roboto Slab" \
+  vl2png --input chart.vl.json --output chart.png --scale 2
+```
+::::
+
+::::{interface} rust
+```rust
+use vl_convert_rs::{GoogleFontRequest, PngOpts, VlcConfig, VlConverter, VlOpts};
+
+let converter = VlConverter::with_config(VlcConfig {
+    google_fonts: vec![GoogleFontRequest {
+        family: "Roboto Slab".to_string(),
+        variants: None,
+    }],
+    ..Default::default()
+})?;
+
+let output = converter
+    .vegalite_to_png(
+        spec,
+        VlOpts::default(),
+        PngOpts {
+            scale: Some(2.0),
+            ..Default::default()
+        },
+    )
+    .await?;
+std::fs::write("chart.png", output.data)?;
+```
+
+`spec` holds the specification above, loaded as in the
+{doc}`../getting-started/quick-start`.
+::::
+
+::::{interface} server
+Start the server with the font request, then send the specification in the
+`spec` field of a `POST /vegalite/png` request with `scale` set to `2`:
+
+```bash
+vl-convert --google-font "Roboto Slab" \
+  serve --host 127.0.0.1 --port 3000
+```
+::::
+
+VlConvert downloads Roboto Slab on the first conversion, caches it, and lays
+out and rasterizes the text with it. The PNG output:
+
+```{vl-chart} /_examples/google-font.vl.json
+:format: png
+:scale: 2
+:google-fonts: Roboto Slab
+:alt: Bar chart whose title and labels are set in the Roboto Slab typeface
+```
+
+Without the request, the text falls back to the default sans-serif font. With
+`missing_fonts` set to `error`, the conversion fails instead.
+
 ## Limit Automatic Downloads
 
 `google_font_variant_threshold` caps the number of Google Font variants one
