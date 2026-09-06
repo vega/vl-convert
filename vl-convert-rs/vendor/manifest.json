@@ -1,10 +1,20 @@
 {
   "folders": {
+    "https://cdn.jsdelivr.net/npm/d3-array@%5E3.2.2/": "cdn.jsdelivr.net/npm/#d3-array@%5e3.2.2_ecb77",
+    "https://cdn.jsdelivr.net/npm/d3-color@%5E3.1.0/": "cdn.jsdelivr.net/npm/#d3-color@%5e3.1.0_93210",
+    "https://cdn.jsdelivr.net/npm/d3-geo@%5E3.1.1/": "cdn.jsdelivr.net/npm/#d3-geo@%5e3.1.1_58289",
     "https://cdn.jsdelivr.net/npm/fast-json-stable-stringify@2.1.0/": "cdn.jsdelivr.net/npm/#fast-json-stable-str_a4987",
-    "https://cdn.jsdelivr.net/npm/json-stringify-pretty-compact@4.0.0/": "cdn.jsdelivr.net/npm/#json-stringify-prett_2eaac"
+    "https://cdn.jsdelivr.net/npm/json-stringify-pretty-compact@4.0.0/": "cdn.jsdelivr.net/npm/#json-stringify-prett_2eaac",
+    "https://cdn.jsdelivr.net/npm/vega-canvas@%5E2.0.0/": "cdn.jsdelivr.net/npm/#vega-canvas@%5e2.0.0_31caf",
+    "https://cdn.jsdelivr.net/npm/vega-dataflow@%5E5.7.5/": "cdn.jsdelivr.net/npm/#vega-dataflow@%5e5.7_6e999",
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@%5E5.0.0/": "cdn.jsdelivr.net/npm/#vega-scenegraph@%5e5_3b2b8",
+    "https://cdn.jsdelivr.net/npm/vega-selections@%5E5.4.1/": "cdn.jsdelivr.net/npm/#vega-selections@%5e5_c076e",
+    "https://cdn.jsdelivr.net/npm/vega-statistics@%5E1.8.1/": "cdn.jsdelivr.net/npm/#vega-statistics@%5e1_e5850",
+    "https://cdn.jsdelivr.net/npm/vega-time@%5E2.1.1/": "cdn.jsdelivr.net/npm/#vega-time@%5e2.1.1_2b4c2",
+    "https://cdn.jsdelivr.net/npm/vega-util@%5E1.17.1/": "cdn.jsdelivr.net/npm/#vega-util@%5e1.17.1_c1591"
   },
   "modules": {
-    "https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.2/+esm": {
+    "https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
@@ -54,6 +64,16 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
+    "https://cdn.jsdelivr.net/npm/d3-array@3.2.4/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/d3-color@3.1.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
     "https://cdn.jsdelivr.net/npm/d3-color@3.1.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
@@ -84,22 +104,37 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
+    "https://cdn.jsdelivr.net/npm/d3-ease@3.0.1/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
     "https://cdn.jsdelivr.net/npm/d3-force@3.0.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/d3-format@3.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/d3-format@3.1.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/d3-format@3.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/d3-format@3.1.2/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/d3-format@3.1.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
     "https://cdn.jsdelivr.net/npm/d3-geo-projection@4.0.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/d3-geo@3.1.1/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
@@ -239,67 +274,92 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-crossfilter@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-canvas@2.0.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-crossfilter@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-crossfilter@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-crossfilter@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-crossfilter@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-crossfilter@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-crossfilter@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-crossfilter@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-crossfilter@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-embed@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-encode@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-encode@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-encode@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-dataflow@6.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-encode@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-embed@7.2.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-encode@5.2.2/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-encode@5.2.2/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-encode@5.2.2/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-encode@5.2.2/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-encode@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
@@ -314,162 +374,207 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-expression@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-expression@6.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-expression@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-expression@6.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-expression@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-expression@6.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-expression@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-expression@6.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-expression@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-expression@6.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-force@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-expression@6.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-force@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-expression@6.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-force@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-force@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-force@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-force@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-format@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-force@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-format@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-force@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-format@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-force@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-format@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-format@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-functions@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-format@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-functions@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-format@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-functions@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-format@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-functions@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-format@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-functions@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-format@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-functions@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-functions@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-geo@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-functions@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-geo@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-functions@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-geo@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-functions@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-geo@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-functions@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-hierarchy@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-functions@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-hierarchy@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-functions@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-hierarchy@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-geo@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-hierarchy@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-geo@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-interpreter@2.2.1/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-geo@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-label@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-geo@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-label@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-geo@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-label@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-hierarchy@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-label@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-hierarchy@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-hierarchy@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-hierarchy@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-hierarchy@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-interpreter@2.3.2/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-label@2.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-label@2.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-label@2.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-label@2.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-label@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
@@ -514,177 +619,222 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-lite@6.4.2/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-lite@6.4.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-loader@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-projection@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-projection@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-projection@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-parser@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-projection@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-projection@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-regression@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-projection@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-regression@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-projection@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-regression@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-projection@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-regression@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-projection@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-runtime@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-regression@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-runtime@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-regression@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-runtime@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-regression@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-runtime@7.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-regression@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-regression@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-runtime@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-runtime@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-runtime@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-runtime@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-runtime@7.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-scale@8.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.3.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.3.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.3.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.3.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.3.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.3.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.3.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.3.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-scenegraph@5.3.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
@@ -694,22 +844,37 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.5/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.5/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.5/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.5/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.5/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-selections@6.1.5/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-statistics@2.0.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
@@ -734,197 +899,257 @@
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-time@3.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-time@3.3.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-time@3.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-time@3.3.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-time@3.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-time@3.3.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-time@3.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-time@3.3.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-tooltip@1.0.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-time@3.3.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-time@3.3.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-time@3.3.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-tooltip@1.1.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-util@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-util@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-util@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-util@2.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-view-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-util@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-view-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-util@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-view-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-util@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-view-transforms@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-util@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-view@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-util@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-view@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-util@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-view@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-util@2.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-view@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-view@6.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view-transforms@5.2.2/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-view@6.2.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega@6.2.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega@6.2.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega@6.2.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega@6.2.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega@6.2.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.3/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }
     },
-    "https://cdn.jsdelivr.net/npm/vega@6.2.0/+esm": {
+    "https://cdn.jsdelivr.net/npm/vega-voronoi@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega-wordcloud@5.1.3/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega@6.4.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega@6.4.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega@6.4.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega@6.4.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega@6.4.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega@6.4.0/+esm": {
+      "headers": {
+        "content-type": "application/javascript; charset=utf-8"
+      }
+    },
+    "https://cdn.jsdelivr.net/npm/vega@6.4.0/+esm": {
       "headers": {
         "content-type": "application/javascript; charset=utf-8"
       }

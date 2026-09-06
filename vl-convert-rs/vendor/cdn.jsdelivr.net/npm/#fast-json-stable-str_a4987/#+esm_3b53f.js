@@ -1,8 +1,8 @@
 /**
- * Bundled by jsDelivr using Rollup v2.79.2 and Terser v5.39.0.
+ * Bundled by jsDelivr using Rollup v4.62.2 and esbuild v0.28.1.
  * Original file: /npm/fast-json-stable-stringify@2.1.0/index.js
  *
  * Do NOT use SRI with dynamically generated files! More information: https://www.jsdelivr.com/using-sri-with-dynamic-files
  */
-var r=function(r,t){t||(t={}),"function"==typeof t&&(t={cmp:t});var e,n="boolean"==typeof t.cycles&&t.cycles,i=t.cmp&&(e=t.cmp,function(r){return function(t,n){var i={key:t,value:r[t]},u={key:n,value:r[n]};return e(i,u)}}),u=[];return function r(t){if(t&&t.toJSON&&"function"==typeof t.toJSON&&(t=t.toJSON()),void 0!==t){if("number"==typeof t)return isFinite(t)?""+t:"null";if("object"!=typeof t)return JSON.stringify(t);var e,o;if(Array.isArray(t)){for(o="[",e=0;e<t.length;e++)e&&(o+=","),o+=r(t[e])||"null";return o+"]"}if(null===t)return"null";if(-1!==u.indexOf(t)){if(n)return JSON.stringify("__cycle__");throw new TypeError("Converting circular structure to JSON")}var f=u.push(t)-1,c=Object.keys(t).sort(i&&i(t));for(o="",e=0;e<c.length;e++){var l=c[e],y=r(t[l]);y&&(o&&(o+=","),o+=JSON.stringify(l)+":"+y)}return u.splice(f,1),"{"+o+"}"}}(r)};export{r as default};
-//# sourceMappingURL=/sm/5401f1784b959a6081b4332d4cb6b2366f8bea9c7a3ea060dff5517cba40b04f.map
+var c,_;function g(){return _||(_=1,c=function(v,f){f||(f={}),typeof f=="function"&&(f={cmp:f});var S=typeof f.cycles=="boolean"?f.cycles:!1,l=f.cmp&&(function(n){return function(r){return function(t,i){var a={key:t,value:r[t]},e={key:i,value:r[i]};return n(a,e)}}})(f.cmp),u=[];return(function n(r){if(r&&r.toJSON&&typeof r.toJSON=="function"&&(r=r.toJSON()),r!==void 0){if(typeof r=="number")return isFinite(r)?""+r:"null";if(typeof r!="object")return JSON.stringify(r);var t,i;if(Array.isArray(r)){for(i="[",t=0;t<r.length;t++)t&&(i+=","),i+=n(r[t])||"null";return i+"]"}if(r===null)return"null";if(u.indexOf(r)!==-1){if(S)return JSON.stringify("__cycle__");throw new TypeError("Converting circular structure to JSON")}var a=u.push(r)-1,e=Object.keys(r).sort(l&&l(r));for(i="",t=0;t<e.length;t++){var y=e[t],s=n(r[y]);s&&(i&&(i+=","),i+=JSON.stringify(y)+":"+s)}return u.splice(a,1),"{"+i+"}"}})(v)}),c}var J=g();export{J as default};
+//# sourceMappingURL=/sm/d6a1c158e9f92202d08826e3e395070a3f2b89bb48acbe2df03559102a5b0e5b.map

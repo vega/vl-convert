@@ -1,0 +1,8 @@
+/**
+ * Bundled by jsDelivr using Rollup v4.62.2 and esbuild v0.28.1.
+ * Original file: /npm/vega-voronoi@5.1.3/build/vega-voronoi.js
+ *
+ * Do NOT use SRI with dynamically generated files! More information: https://www.jsdelivr.com/using-sri-with-dynamic-files
+ */
+import{Transform as u}from"/npm/vega-dataflow@6.1.3/+esm";import{inherits as m}from"/npm/vega-util@2.1.3/+esm";import{Delaunay as y}from"/npm/d3-delaunay@6.0.4/+esm";function l(e){u.call(this,null,e)}l.Definition={type:"Voronoi",metadata:{modifies:!0},params:[{name:"x",type:"field",required:!0},{name:"y",type:"field",required:!0},{name:"size",type:"number",array:!0,length:2},{name:"extent",type:"array",array:!0,length:2,default:[[-1e5,-1e5],[1e5,1e5]],content:{type:"number",array:!0,length:2}},{name:"as",type:"string",default:"path"}]};const c=[-1e5,-1e5,1e5,1e5];m(l,u,{transform(e,r){const o=e.as||"path",t=r.source;if(!t||!t.length)return r;let n=e.size;n=n?[0,0,n[0],n[1]]:(n=e.extent)?[n[0][0],n[0][1],n[1][0],n[1][1]]:c;const f=this.value=y.from(t,e.x,e.y).voronoi(n);for(let i=0,s=t.length;i<s;++i){const a=f.cellPolygon(i);t[i][o]=a&&!h(a)?d(a):null}return r.reflow(e.modified()).modifies(o)}});function d(e){const r=e[0][0],o=e[0][1];let t=e.length-1;for(;e[t][0]===r&&e[t][1]===o;--t);return"M"+e.slice(0,t+1).join("L")+"Z"}function h(e){return e.length===2&&e[0][0]===e[1][0]&&e[0][1]===e[1][1]}export{l as voronoi};
+//# sourceMappingURL=/sm/b6e42e60b1bacddb59ac99bbe34974dbf94446554f3cab674b28369db9b72a7a.map

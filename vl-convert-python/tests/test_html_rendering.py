@@ -68,8 +68,9 @@ def compare_screenshot(actual_bytes: bytes, baseline_name: str, update: bool) ->
     actual = np.array(Image.open(io.BytesIO(actual_bytes)).convert("RGB"))
     expected = np.array(Image.open(baseline_path).convert("RGB"))
 
-    # Pad smaller image with white to match dimensions if within 5px
-    # (cross-platform font rendering can shift layout by a few pixels)
+    # Pad smaller image with white to match dimensions if within 5px.
+    # Keep the top edge fixed, but center width differences because Vega
+    # centers fixed-width charts in their containing element.
     if actual.shape != expected.shape:
         h_diff = abs(actual.shape[0] - expected.shape[0])
         w_diff = abs(actual.shape[1] - expected.shape[1])
@@ -80,7 +81,11 @@ def compare_screenshot(actual_bytes: bytes, baseline_name: str, update: bool) ->
                 arr = actual if arr_name == "actual" else expected
                 if arr.shape[0] < h or arr.shape[1] < w:
                     padded = np.full((h, w, 3), 255, dtype=np.uint8)
-                    padded[: arr.shape[0], : arr.shape[1]] = arr
+                    x_offset = (w - arr.shape[1]) // 2
+                    padded[
+                        : arr.shape[0],
+                        x_offset : x_offset + arr.shape[1],
+                    ] = arr
                     if arr_name == "actual":
                         actual = padded
                     else:

@@ -30,14 +30,14 @@ const VL_PATHS: &[(&str, &str)] = &[
     ("5.21", "/npm/vega-lite@5.21.0/+esm"),
     // 6.1.0 is used by Altair 6.0.0 (keep longer)
     ("6.1", "/npm/vega-lite@6.1.0/+esm"),
-    ("6.4", "/npm/vega-lite@6.4.2/+esm"),
+    ("6.4", "/npm/vega-lite@6.4.3/+esm"),
 ];
 const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
-const VEGA_PATH: &str = "/npm/vega@6.2.0/+esm";
+const VEGA_PATH: &str = "/npm/vega@6.4.0/+esm";
 const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
-const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.1.0/+esm";
+const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.2.0/+esm";
 const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
-const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.2/+esm";
+const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.3/+esm";
 
 // Example custom build script.
 fn main() {
@@ -198,8 +198,19 @@ fn main() {
 
     // Build mapping from actual file paths to canonical import paths
     // Deno 2.x uses hashed filenames like "#+esm_3b53f.js" and truncated directory names
-    // We need to map these back to canonical paths like "/npm/vega@6.2.0/+esm"
+    // We need to map these back to canonical paths like "/npm/vega@6.4.0/+esm"
     let path_mapping = build_path_mapping(&vendor_path);
+
+    // Deno preserves semver ranges in some import specifiers and records the exact
+    // package that each range resolved to in manifest.json. Normalize those aliases
+    // before deduplicating packages so the generated import map only needs exact paths.
+    let alias_replacements =
+        build_manifest_alias_replacements(&vendor_path, &path_mapping).unwrap();
+    visit_dirs(&vendor_path, &mut |f| {
+        let p = f.path().canonicalize().unwrap();
+        replace_in_file(&p, &alias_replacements).unwrap();
+    })
+    .unwrap();
 
     // Write import_map.rs file
     // Build versions csv
@@ -253,16 +264,16 @@ fn main() {
 
     // Use the path mapping to extract package info (handles Deno 2's hashed names)
     for (actual_path, canonical_path) in &path_mapping {
-        // canonical_path is like "/npm/vega@6.2.0/+esm"
+        // canonical_path is like "/npm/vega@6.4.0/+esm"
         if let Some(pkg_part) = canonical_path.strip_prefix("/npm/") {
             if let Some(pkg_name_ver) = pkg_part.strip_suffix("/+esm") {
                 if let Some((name, ver_str)) = pkg_name_ver.rsplit_once('@') {
                     if let Ok(version) = Version::parse(ver_str) {
-                        // actual_path is like "cdn.jsdelivr.net/npm/vega@6.2.0/#+esm_3b53f.js"
+                        // actual_path is like "cdn.jsdelivr.net/npm/vega@6.4.0/#+esm_3b53f.js"
                         // Extract the directory name from actual_path
                         let parts: Vec<&str> = actual_path.split('/').collect();
                         if parts.len() >= 3 {
-                            let dir_name = parts[2].to_string(); // e.g., "vega@6.2.0" or "#fast-json-stable-str_a4987"
+                            let dir_name = parts[2].to_string(); // e.g., "vega@6.4.0" or "#fast-json-stable-str_a4987"
                             packages_info.entry(name.to_string()).or_default().push((
                                 version,
                                 dir_name,
@@ -279,10 +290,17 @@ fn main() {
     let mut final_package_versions: HashMap<String, String> = HashMap::new();
 
     for (name, v) in packages_info.iter_mut() {
-        // Sort packages in descending order by version
-        v.sort_by_key(|e| std::cmp::Reverse(e.0.clone()));
+        // Sort packages in descending order by version. If Deno downloaded the same
+        // version through both an exact URL and a range alias, keep the exact directory.
+        v.sort_by_key(|e| {
+            (
+                std::cmp::Reverse(e.0.clone()),
+                e.1.starts_with('#'),
+                e.1.clone(),
+            )
+        });
 
-        // Store the final version that will be kept (canonical name like "vega@6.2.0")
+        // Store the final version that will be kept (canonical name like "vega@6.4.0")
         if !v.is_empty() {
             final_package_versions.insert(name.clone(), v[0].2.clone());
         }
@@ -291,7 +309,7 @@ fn main() {
         // delete the older ones and store the import string replacement to apply to other files
         if name != "vega-lite" && v.len() > 1 {
             for i in 1..v.len() {
-                // v[i].2 is canonical name like "vega@5.25.0", v[0].2 is "vega@6.2.0"
+                // v[i].2 is canonical name like "vega@5.25.0", v[0].2 is "vega@6.4.0"
                 replacements.insert(v[i].2.clone(), v[0].2.clone());
                 // v[i].1 is actual directory name (may be hashed like "#fast-json-stable-str_a4987")
                 let file_path = format!("{vendor_path_str}/cdn.jsdelivr.net/npm/{}", v[i].1);
@@ -463,8 +481,8 @@ pub fn build_import_map() -> HashMap<String, String> {{
     sorted_mappings.sort_by_key(|(actual, _)| *actual);
 
     for (actual_path, canonical_path) in sorted_mappings {
-        // actual_path is like "cdn.jsdelivr.net/npm/vega@6.2.0/#+esm_3b53f.js"
-        // canonical_path is like "/npm/vega@6.2.0/+esm"
+        // actual_path is like "cdn.jsdelivr.net/npm/vega@6.4.0/#+esm_3b53f.js"
+        // canonical_path is like "/npm/vega@6.4.0/+esm"
         writeln!(
             content,
             "    m.insert(\"{canonical_path}\".to_string(), include_str!(\"../../vendor/{actual_path}\").to_string());",
@@ -488,8 +506,8 @@ pub fn build_import_map() -> HashMap<String, String> {{
             let p = f.path().canonicalize().unwrap();
             let patched_path_str = patched_dir.to_str().unwrap();
             let relative = &p.to_str().unwrap()[(patched_path_str.len())..];
-            // relative is like "/cdn.jsdelivr.net/npm/vega@6.2.0/+esm.js"
-            // Convert to canonical path format: "/npm/vega@6.2.0/+esm"
+            // relative is like "/cdn.jsdelivr.net/npm/vega@6.4.0/+esm.js"
+            // Convert to canonical path format: "/npm/vega@6.4.0/+esm"
             if let Some(canonical) = relative
                 .strip_prefix("/cdn.jsdelivr.net")
                 .and_then(|s| s.strip_suffix(".js"))
@@ -620,8 +638,8 @@ fn replace_in_file(file_path: &PathBuf, replacements: &HashMap<String, String>) 
 
 /// Build a mapping from actual file paths (with Deno 2's hashed names) to canonical import paths.
 /// Returns HashMap where:
-/// - Key: actual relative path like "cdn.jsdelivr.net/npm/vega@6.2.0/#+esm_3b53f.js"
-/// - Value: canonical path like "/npm/vega@6.2.0/+esm"
+/// - Key: actual relative path like "cdn.jsdelivr.net/npm/vega@6.4.0/#+esm_3b53f.js"
+/// - Value: canonical path like "/npm/vega@6.4.0/+esm"
 fn build_path_mapping(vendor_path: &Path) -> HashMap<String, String> {
     let mut mapping = HashMap::new();
     let vendor_path_str = vendor_path.to_str().unwrap();
@@ -648,16 +666,62 @@ fn build_path_mapping(vendor_path: &Path) -> HashMap<String, String> {
     mapping
 }
 
+/// Build replacements from Deno's vendored URL aliases to exact jsDelivr package paths.
+///
+/// For example, Deno may store `/npm/d3-geo@%5E3.1.1/+esm` in a source file while the
+/// downloaded file identifies itself as `/npm/d3-geo@3.1.1/+esm`. The generated module
+/// loader uses the latter canonical path, so imports must use it too.
+fn build_manifest_alias_replacements(
+    vendor_path: &Path,
+    path_mapping: &HashMap<String, String>,
+) -> Result<HashMap<String, String>, AnyError> {
+    let manifest: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(vendor_path.join("manifest.json"))?)?;
+    let folders = manifest
+        .get("folders")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| anyhow::anyhow!("Vendor manifest does not contain a folders object"))?;
+
+    let mut replacements = HashMap::new();
+    for (url_prefix, actual_dir) in folders {
+        let actual_dir = actual_dir
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Invalid folder path for {url_prefix}"))?;
+        let actual_prefix = format!("{actual_dir}/");
+        let canonical_path = path_mapping
+            .iter()
+            .find_map(|(actual_path, canonical_path)| {
+                actual_path
+                    .starts_with(&actual_prefix)
+                    .then_some(canonical_path)
+            })
+            .ok_or_else(|| {
+                anyhow::anyhow!("No vendored JavaScript module found under {actual_dir}")
+            })?;
+        let alias_path = url_prefix
+            .strip_prefix(JSDELIVR_URL)
+            .and_then(|path| path.strip_suffix('/'))
+            .map(|path| format!("{path}/+esm"))
+            .ok_or_else(|| anyhow::anyhow!("Invalid jsDelivr folder URL: {url_prefix}"))?;
+
+        if alias_path != canonical_path.as_str() {
+            replacements.insert(alias_path, canonical_path.clone());
+        }
+    }
+
+    Ok(replacements)
+}
+
 /// Extract the canonical import path from a JS file's "Original file" comment.
-/// Returns path like "/npm/vega@6.2.0/+esm" from comment "Original file: /npm/vega@6.2.0/build/vega.module.js"
+/// Returns path like "/npm/vega@6.4.0/+esm" from comment "Original file: /npm/vega@6.4.0/build/vega.module.js"
 fn extract_canonical_path(file_path: &Path) -> Option<String> {
     let content = fs::read_to_string(file_path).ok()?;
 
     // Look for: " * Original file: /npm/package-name@version/..."
     for line in content.lines().take(10) {
         if let Some(rest) = line.strip_prefix(" * Original file: ") {
-            // rest is like "/npm/vega@6.2.0/build/vega.module.js"
-            // We want to extract "/npm/vega@6.2.0/+esm"
+            // rest is like "/npm/vega@6.4.0/build/vega.module.js"
+            // We want to extract "/npm/vega@6.4.0/+esm"
             if let Some(npm_path) = rest.strip_prefix("/npm/") {
                 let pkg_name_ver = if npm_path.starts_with('@') {
                     let mut parts = npm_path.splitn(3, '/');
@@ -672,4 +736,47 @@ fn extract_canonical_path(file_path: &Path) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builds_replacements_for_range_aliases() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("manifest.json"),
+            r#"{
+                "folders": {
+                    "https://cdn.jsdelivr.net/npm/d3-geo@%5E3.1.1/":
+                        "cdn.jsdelivr.net/npm/#d3-geo@%5e3.1.1_58289",
+                    "https://cdn.jsdelivr.net/npm/clone@2.1.2/":
+                        "cdn.jsdelivr.net/npm/clone@2.1.2"
+                }
+            }"#,
+        )
+        .unwrap();
+        let path_mapping = HashMap::from([
+            (
+                "cdn.jsdelivr.net/npm/#d3-geo@%5e3.1.1_58289/#+esm_3b53f.js".to_string(),
+                "/npm/d3-geo@3.1.1/+esm".to_string(),
+            ),
+            (
+                "cdn.jsdelivr.net/npm/clone@2.1.2/#+esm_3b53f.js".to_string(),
+                "/npm/clone@2.1.2/+esm".to_string(),
+            ),
+        ]);
+
+        let replacements =
+            build_manifest_alias_replacements(temp_dir.path(), &path_mapping).unwrap();
+
+        assert_eq!(
+            replacements,
+            HashMap::from([(
+                "/npm/d3-geo@%5E3.1.1/+esm".to_string(),
+                "/npm/d3-geo@3.1.1/+esm".to_string(),
+            )])
+        );
+    }
 }
