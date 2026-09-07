@@ -133,7 +133,7 @@ impl Canvas2dContext {
             .letter_spacing(letter_spacing)
             .cache_key_flags(cache_key_flags);
 
-        buffer.set_text(&mut self.font_system, text, &attrs, Shaping::Advanced, None);
+        buffer.set_text(text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(&mut self.font_system, false);
 
         // Get text dimensions for alignment

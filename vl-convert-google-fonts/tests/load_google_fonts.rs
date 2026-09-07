@@ -47,8 +47,7 @@ impl Routes {
             let family_raw = rest.split(':').next().unwrap_or("");
             let family_id = family_raw
                 .replace("%20", "-")
-                .replace('+', "-")
-                .replace(' ', "-")
+                .replace(['+', ' '], "-")
                 .to_lowercase();
             return self.css2_families.get(&family_id);
         }
@@ -593,8 +592,7 @@ async fn test_in_process_dedupe_same_file_concurrent_loads() {
         client_a
             .load(load_request("Roboto", Some(&req_a)))
             .await
-            .unwrap()
-            .batch;
+            .unwrap();
     });
 
     let client_b = Arc::clone(&client);
@@ -603,8 +601,7 @@ async fn test_in_process_dedupe_same_file_concurrent_loads() {
         client_b
             .load(load_request("Roboto", Some(&req_b)))
             .await
-            .unwrap()
-            .batch;
+            .unwrap();
     });
 
     task_a.await.unwrap();

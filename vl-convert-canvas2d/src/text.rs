@@ -201,7 +201,7 @@ pub fn measure_text(
         .style(font.style)
         .stretch(font.stretch.into());
 
-    buffer.set_text(font_system, text, &attrs, Shaping::Advanced, None);
+    buffer.set_text(text, &attrs, Shaping::Advanced, None);
     buffer.shape_until_scroll(font_system, false);
 
     // Calculate width from layout runs

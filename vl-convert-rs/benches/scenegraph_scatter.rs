@@ -1,7 +1,6 @@
-use criterion::{
-    black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput,
-};
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use serde_json::json;
+use std::hint::black_box;
 use vl_convert_rs::converter::{PngOpts, SvgOpts, VgOpts, VlConverter};
 use vl_convert_rs::serde_json::Value;
 
