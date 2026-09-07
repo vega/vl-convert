@@ -17,6 +17,11 @@ jobs:
           pixi-version: v0.47.0
       - name: Check cargo fmt compliance
         run: pixi run fmt-py-check
+      - name: Check release automation
+        run: |
+          pixi run fmt-release-check
+          pixi run lint-release
+          pixi run check-workspace
 
   # Run on Linux without Pixi due to glibc linker issues with conda toolchain
   rust-fmt-clippy:

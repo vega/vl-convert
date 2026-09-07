@@ -1,19 +1,19 @@
 [package]
 name = "vl-convert"
-version = "2.0.0-rc2"
-edition = "2021"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 readme = "README.md"
 documentation = "https://github.com/vega/vl-convert/blob/main/vl-convert/README.md"
 homepage = "https://github.com/jonmmease/vl-convert"
-repository = "https://github.com/jonmmease/vl-convert"
+repository.workspace = true
 description = "CLI application for converting Vega-Lite visualization specifications to Vega specifications"
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
 [dependencies]
-vl-convert-rs = { path = "../vl-convert-rs", version = "2.0.0-rc1" }
-vl-convert-google-fonts = { path = "../vl-convert-google-fonts", version = "2.0.0-rc1" }
-vl-convert-server = { path = "../vl-convert-server", version = "2.0.0-rc1" }
+vl-convert-rs = { workspace = true }
+vl-convert-google-fonts = { workspace = true }
+vl-convert-server = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

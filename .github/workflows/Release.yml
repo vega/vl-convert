@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       linux_wheels_only:
@@ -12,330 +11,848 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RUST_VERSION: 1.95.0
+  MATURIN_VERSION: 1.8.6
+
 jobs:
-  build-cli-linux-x86:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
+  validate:
+    name: Validate release source
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      python_version: ${{ steps.metadata.outputs.python_version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      source_ref: ${{ steps.metadata.outputs.source_ref }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Install latest stable Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install protoc
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.11"
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Install release validation dependency
+        run: python -m pip install packaging==23.2
+      - name: Fetch main for release ancestry check
+        if: github.event_name == 'release'
+        run: git fetch origin main:refs/remotes/origin/main
+      - name: Validate release metadata
+        id: metadata
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          sudo apt-get update
-          sudo apt-get install protobuf-compiler
+          python scripts/check_workspace.py
+          version=$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          python_version=$(VERSION="$version" python -c 'import os; from packaging.version import Version; print(Version(os.environ["VERSION"]))')
+          tag="v${version}"
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            if [[ "$RELEASE_TAG" != "$tag" ]]; then
+              echo "Release tag $RELEASE_TAG must equal $tag" >&2
+              exit 1
+            fi
+            prerelease=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .prerelease)
+            expected_prerelease=false
+            if [[ "$version" == *-* ]]; then
+              expected_prerelease=true
+            fi
+            if [[ "$prerelease" != "$expected_prerelease" ]]; then
+              echo "GitHub prerelease is $prerelease; expected $expected_prerelease" >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+              echo "The release commit is not reachable from origin/main" >&2
+              exit 1
+            fi
+          fi
+          {
+            printf 'version=%s\n' "$version"
+            printf 'python_version=%s\n' "$python_version"
+            printf 'tag=%s\n' "$tag"
+            printf 'source_ref=%s\n' "$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+  build-cli-linux-x86:
+    if: ${{ github.event_name == 'release' || !inputs.linux_wheels_only }}
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        with:
+          version: "24.0"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+        run: cargo build --release --locked -p vl-convert
+      - name: Verify version
+        run: test "$(target/release/vl-convert --version)" = "vl-convert ${EXPECTED_VERSION}"
+      - name: Package executable
         run: |
           mkdir -p bin
           cp target/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
+          cp LICENSE thirdparty_* bin/
           zip -r vl-convert_linux-64.zip bin/
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: vl-convert-linux-x86
-          path: |
-            vl-convert_linux-64.zip
+          name: cli-linux-x86
+          path: vl-convert_linux-64.zip
+          if-no-files-found: error
+          overwrite: true
 
   build-cli-linux-aarch64:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
+    if: ${{ github.event_name == 'release' || !inputs.linux_wheels_only }}
+    needs: validate
     runs-on: ubuntu-24.04-arm
+    env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Install latest stable Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install protobuf-compiler
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        with:
+          version: "24.0"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+        run: cargo build --release --locked -p vl-convert
+      - name: Verify version
+        run: test "$(target/release/vl-convert --version)" = "vl-convert ${EXPECTED_VERSION}"
+      - name: Package executable
         run: |
           mkdir -p bin
           cp target/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
+          cp LICENSE thirdparty_* bin/
           zip -r vl-convert_linux-aarch64.zip bin/
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: vl-convert-linux-aarch64
-          path: |
-            vl-convert_linux-aarch64.zip
+          name: cli-linux-aarch64
+          path: vl-convert_linux-aarch64.zip
+          if-no-files-found: error
+          overwrite: true
 
   build-cli-win-64:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
+    if: ${{ github.event_name == 'release' || !inputs.linux_wheels_only }}
+    needs: validate
     runs-on: windows-2022
     env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
       RUST_MIN_STACK: 8388608
     steps:
       - name: Enable long paths
         run: git config --system core.longpaths true
-      - uses: actions/checkout@v7
-      - name: Install latest stable Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        with:
+          version: "24.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      # NASM is needed on Windows to compile aws-lc-rs (x86 assembly optimizations),
-      # pulled in via deno_runtime -> deno_tls -> rustls -> aws-lc-rs
       - name: Install NASM
-        uses: ilammy/setup-nasm@v1
+        uses: ilammy/setup-nasm@72793074d3c8cdda771dba85f6deafe00623038b # v1.5.2
+        with:
+          version: 2.16.01
       - name: Build vl-convert
+        run: cargo build --release --locked -p vl-convert
+      - name: Verify version
         run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+          $actual = & target\release\vl-convert.exe --version
+          if ($actual -ne "vl-convert $env:EXPECTED_VERSION") {
+            throw "Expected vl-convert $env:EXPECTED_VERSION, found $actual"
+          }
+      - name: Package executable
         run: |
           New-Item -Path "artifacts\bin" -ItemType Directory
           Copy-Item "target\release\vl-convert.exe" -Destination "artifacts\bin"
           Copy-Item "LICENSE" -Destination "artifacts\bin"
           Copy-Item "thirdparty_*" -Destination "artifacts\bin"
-      - name: zip executable
-        uses: vimtor/action-zip@v1
+          Compress-Archive -Path "artifacts\*" -DestinationPath "vl-convert_win-64.zip"
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          files: artifacts/
-          dest: vl-convert_win-64.zip
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: vl-convert-win-64
-          path: |
-            vl-convert_win-64.zip
+          name: cli-win-64
+          path: vl-convert_win-64.zip
+          if-no-files-found: error
+          overwrite: true
 
   build-cli-osx-64:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
+    if: ${{ github.event_name == 'release' || !inputs.linux_wheels_only }}
+    needs: validate
     runs-on: macos-15-intel
+    env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Install latest stable Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        with:
+          version: "24.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+        run: cargo build --release --locked -p vl-convert
+      - name: Verify version
+        run: test "$(target/release/vl-convert --version)" = "vl-convert ${EXPECTED_VERSION}"
+      - name: Package executable
         run: |
           mkdir -p bin
           cp target/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
+          cp LICENSE thirdparty_* bin/
           zip -r vl-convert_osx-64.zip bin/
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: vl-convert-osx-64
-          path: |
-            vl-convert_osx-64.zip
+          name: cli-osx-64
+          path: vl-convert_osx-64.zip
+          if-no-files-found: error
+          overwrite: true
 
   build-cli-osx-arm64:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
+    if: ${{ github.event_name == 'release' || !inputs.linux_wheels_only }}
+    needs: validate
     runs-on: macos-14
+    env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Install latest stable Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        with:
+          version: "24.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build vl-convert
-        run: |
-          cargo build --release -p vl-convert
-      - name: Move executable to bin directory
+        run: cargo build --release --locked -p vl-convert
+      - name: Verify version
+        run: test "$(target/release/vl-convert --version)" = "vl-convert ${EXPECTED_VERSION}"
+      - name: Package executable
         run: |
           mkdir -p bin
           cp target/release/vl-convert bin/
-          cp LICENSE bin/
-          cp thirdparty_* bin/
+          cp LICENSE thirdparty_* bin/
           zip -r vl-convert_osx-arm64.zip bin/
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: vl-convert-osx-arm64
-          path: |
-            vl-convert_osx-arm64.zip
+          name: cli-osx-arm64
+          path: vl-convert_osx-arm64.zip
+          if-no-files-found: error
+          overwrite: true
 
   build-wheels-linux-x86_64:
+    needs: validate
     runs-on: ubuntu-latest
+    env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+      EXPECTED_PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: messense/maturin-action@v1.51.0
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Build wheel and source distribution
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v${{ env.MATURIN_VERSION }}
+          rust-toolchain: ${{ env.RUST_VERSION }}
           manylinux: 2_28
           target: x86_64-unknown-linux-gnu
           command: build
-          args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
+          args: --release --locked -m vl-convert-python/Cargo.toml --sdist -o dist --strip
           before-script-linux: |
-            # Install build dependencies
             dnf install -y glib2-devel libffi-devel clang-devel || yum install -y glib2-devel libffi-devel clang-devel
-
-            # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-            curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip
+            curl -LO "$PB_REL/download/v24.0/protoc-24.0-linux-x86_64.zip"
             unzip protoc-24.0-linux-x86_64.zip -d /usr/
-
       - name: Test wheel
         run: |
-          docker run --rm -v $(pwd)/dist:/dist -e RUST_BACKTRACE=1 python:3.11-slim \
-            bash -c "pip install /dist/*x86_64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
+          docker run --rm -v "${PWD}/dist:/dist" \
+            -e EXPECTED_VERSION -e EXPECTED_PYTHON_VERSION python:3.11-slim \
+            bash -c "pip install /dist/*x86_64*.whl && python -c \"import importlib.metadata as md, os, vl_convert as vlc; assert md.version('vl-convert-python') == os.environ['EXPECTED_PYTHON_VERSION']; assert vlc.__version__ == os.environ['EXPECTED_VERSION']; themes = vlc.get_themes(); assert 'dark' in themes\""
+      - name: Verify source distribution metadata
+        run: |
+          python - <<'PY'
+          import email
+          import os
+          import tarfile
+          from pathlib import Path
 
-      - name: Upload wheels
-        uses: actions/upload-artifact@v7
+          archives = list(Path("dist").glob("*.tar.gz"))
+          if len(archives) != 1:
+              raise SystemExit(f"Expected one source distribution, found {archives}")
+          with tarfile.open(archives[0]) as archive:
+              members = [m for m in archive.getmembers() if m.name.endswith("/PKG-INFO")]
+              if len(members) != 1:
+                  raise SystemExit(f"Expected one PKG-INFO, found {len(members)}")
+              metadata = email.message_from_binary_file(archive.extractfile(members[0]))
+          if metadata["Version"] != os.environ["EXPECTED_PYTHON_VERSION"]:
+              raise SystemExit(
+                  f"Expected {os.environ['EXPECTED_PYTHON_VERSION']}, found {metadata['Version']}"
+              )
+          PY
+      - name: Upload distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels-linux-x86_64
-          path: dist
+          name: python-linux-x86_64
+          path: dist/
+          if-no-files-found: error
+          overwrite: true
 
   build-wheels-linux-aarch64:
+    needs: validate
     runs-on: ubuntu-24.04-arm
+    env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+      EXPECTED_PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: messense/maturin-action@v1.51.0
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Build wheel
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v${{ env.MATURIN_VERSION }}
+          rust-toolchain: ${{ env.RUST_VERSION }}
           manylinux: 2_28
           target: aarch64-unknown-linux-gnu
           command: build
-          args: --release -m vl-convert-python/Cargo.toml -o dist --strip
+          args: --release --locked -m vl-convert-python/Cargo.toml -o dist --strip
           before-script-linux: |
-            # Install build dependencies
             dnf install -y glib2-devel libffi-devel clang-devel || yum install -y glib2-devel libffi-devel clang-devel
-
-            # Install protoc
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"
-            curl -LO $PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip
+            curl -LO "$PB_REL/download/v24.0/protoc-24.0-linux-aarch_64.zip"
             unzip protoc-24.0-linux-aarch_64.zip -d /usr/
-
       - name: Test wheel
         run: |
-          docker run --rm -v $(pwd)/dist:/dist -e RUST_BACKTRACE=1 python:3.11-slim \
-            bash -c "pip install /dist/*aarch64*.whl && python -c \"import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')\""
-
-      - name: Upload wheels
-        uses: actions/upload-artifact@v7
+          docker run --rm -v "${PWD}/dist:/dist" \
+            -e EXPECTED_VERSION -e EXPECTED_PYTHON_VERSION python:3.11-slim \
+            bash -c "pip install /dist/*aarch64*.whl && python -c \"import importlib.metadata as md, os, vl_convert as vlc; assert md.version('vl-convert-python') == os.environ['EXPECTED_PYTHON_VERSION']; assert vlc.__version__ == os.environ['EXPECTED_VERSION']; themes = vlc.get_themes(); assert 'dark' in themes\""
+      - name: Upload wheel
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels-linux-aarch64
-          path: dist
+          name: python-linux-aarch64
+          path: dist/
+          if-no-files-found: error
+          overwrite: true
 
   build-wheels-win-64:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
+    if: ${{ github.event_name == 'release' || !inputs.linux_wheels_only }}
+    needs: validate
     runs-on: windows-latest
+    env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+      EXPECTED_PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
+      RUST_MIN_STACK: 8388608
     steps:
       - name: Enable long paths
         run: git config --system core.longpaths true
-      - uses: actions/checkout@v7
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.10"
       - name: Install Protoc
-        uses: arduino/setup-protoc@v3
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
         with:
+          version: "24.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      # NASM is needed on Windows to compile aws-lc-rs (x86 assembly optimizations),
-      # pulled in via deno_runtime -> deno_tls -> rustls -> aws-lc-rs
       - name: Install NASM
-        uses: ilammy/setup-nasm@v1
-      - uses: messense/maturin-action@v1.51.0
+        uses: ilammy/setup-nasm@72793074d3c8cdda771dba85f6deafe00623038b # v1.5.2
         with:
+          version: 2.16.01
+      - name: Build wheel
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v${{ env.MATURIN_VERSION }}
+          rust-toolchain: ${{ env.RUST_VERSION }}
           command: build
-          args: --release -m vl-convert-python/Cargo.toml -o dist --strip
+          args: --release --locked -m vl-convert-python/Cargo.toml -o dist --strip
       - name: Test wheel
         run: |
           pip install (Get-ChildItem dist/*.whl)
-          python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
-      - name: Upload wheels
-        uses: actions/upload-artifact@v7
+          python -c "import importlib.metadata as md, os, vl_convert as vlc; assert md.version('vl-convert-python') == os.environ['EXPECTED_PYTHON_VERSION']; assert vlc.__version__ == os.environ['EXPECTED_VERSION']; themes = vlc.get_themes(); assert 'dark' in themes"
+      - name: Upload wheel
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels-win-64
-          path: dist
+          name: python-win-64
+          path: dist/
+          if-no-files-found: error
+          overwrite: true
 
   build-wheels-osx-64:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
+    if: ${{ github.event_name == 'release' || !inputs.linux_wheels_only }}
+    needs: validate
     runs-on: macos-15-intel
+    env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+      EXPECTED_PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
-      - name: Build Intel wheels
-        uses: messense/maturin-action@v1.51.0
+      - name: Install Protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
         with:
+          version: "24.0"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build wheel
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v${{ env.MATURIN_VERSION }}
+          rust-toolchain: ${{ env.RUST_VERSION }}
           command: build
-          args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
+          args: --release --locked -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
           target: x86_64-apple-darwin
       - name: Test wheel
         run: |
           pip install dist/*.whl
-          python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
-      - name: Upload wheels
-        uses: actions/upload-artifact@v7
+          python -c "import importlib.metadata as md, os, vl_convert as vlc; assert md.version('vl-convert-python') == os.environ['EXPECTED_PYTHON_VERSION']; assert vlc.__version__ == os.environ['EXPECTED_VERSION']; themes = vlc.get_themes(); assert 'dark' in themes"
+      - name: Upload wheel
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels-osx-64
-          path: dist
+          name: python-osx-64
+          path: dist/
+          if-no-files-found: error
+          overwrite: true
 
   build-wheels-osx-arm64:
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
+    if: ${{ github.event_name == 'release' || !inputs.linux_wheels_only }}
+    needs: validate
     runs-on: macos-14
+    env:
+      EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+      EXPECTED_PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.10"
-      - name: Build arm64 wheels
-        uses: messense/maturin-action@v1.51.0
+      - name: Install Protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
         with:
+          version: "24.0"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build wheel
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          maturin-version: v${{ env.MATURIN_VERSION }}
+          rust-toolchain: ${{ env.RUST_VERSION }}
           command: build
-          args: --release -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
+          args: --release --locked -m vl-convert-python/Cargo.toml -i python3.10 -o dist --strip
       - name: Test wheel
         run: |
           pip install dist/*.whl
-          python -c "import vl_convert as vlc; themes = vlc.get_themes(); assert 'dark' in themes, f'dark theme not found in {themes}'; print('Wheel test passed: found', len(themes), 'themes including dark')"
-      - name: Upload wheels
-        uses: actions/upload-artifact@v7
+          python -c "import importlib.metadata as md, os, vl_convert as vlc; assert md.version('vl-convert-python') == os.environ['EXPECTED_PYTHON_VERSION']; assert vlc.__version__ == os.environ['EXPECTED_VERSION']; themes = vlc.get_themes(); assert 'dark' in themes"
+      - name: Upload wheel
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wheels-osx-arm64
-          path: dist
+          name: python-osx-arm64
+          path: dist/
+          if-no-files-found: error
+          overwrite: true
+
+  rust-package-preflight:
+    if: ${{ github.event_name == 'release' || !inputs.linux_wheels_only }}
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Install Protoc
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
+        with:
+          version: "24.0"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify Rust packages
+        run: >-
+          cargo publish --workspace
+          --exclude vl-convert-python
+          --exclude vl-convert-vendor
+          --dry-run --locked
+
+  assemble-artifacts:
+    name: Assemble release artifacts
+    needs:
+      - validate
+      - build-cli-linux-x86
+      - build-cli-linux-aarch64
+      - build-cli-win-64
+      - build-cli-osx-64
+      - build-cli-osx-arm64
+      - build-wheels-linux-x86_64
+      - build-wheels-linux-aarch64
+      - build-wheels-win-64
+      - build-wheels-osx-64
+      - build-wheels-osx-arm64
+      - rust-package-preflight
+    runs-on: ubuntu-latest
+    env:
+      EXPECTED_PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
+    steps:
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: cli-*
+          path: incoming/
+      - name: Download Python artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: python-*
+          path: incoming/
+      - name: Verify and assemble artifacts
+        run: |
+          python - <<'PY'
+          import hashlib
+          import os
+          import shutil
+          from collections import Counter
+          from pathlib import Path
+
+          version = os.environ["EXPECTED_PYTHON_VERSION"]
+          expected = {
+              "vl-convert_linux-64.zip",
+              "vl-convert_linux-aarch64.zip",
+              "vl-convert_osx-64.zip",
+              "vl-convert_osx-arm64.zip",
+              "vl-convert_win-64.zip",
+              f"vl_convert_python-{version}-cp39-abi3-macosx_10_12_x86_64.whl",
+              f"vl_convert_python-{version}-cp39-abi3-macosx_11_0_arm64.whl",
+              f"vl_convert_python-{version}-cp39-abi3-manylinux_2_28_aarch64.whl",
+              f"vl_convert_python-{version}-cp39-abi3-manylinux_2_28_x86_64.whl",
+              f"vl_convert_python-{version}-cp39-abi3-win_amd64.whl",
+              f"vl_convert_python-{version}.tar.gz",
+          }
+          files = [path for path in Path("incoming").rglob("*") if path.is_file()]
+          actual = Counter(path.name for path in files)
+          wanted = Counter(expected)
+          if actual != wanted:
+              missing = sorted((wanted - actual).elements())
+              extra = sorted((actual - wanted).elements())
+              raise SystemExit(f"Artifact mismatch; missing={missing}, extra={extra}")
+
+          output = Path("release-dist")
+          output.mkdir()
+          for path in files:
+              shutil.copy2(path, output / path.name)
+          with (output / "SHA256SUMS").open("w", encoding="utf-8") as checksums:
+              for name in sorted(expected):
+                  digest = hashlib.sha256((output / name).read_bytes()).hexdigest()
+                  checksums.write(f"{digest}  {name}\n")
+          PY
+      - name: Upload assembled artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets
+          path: release-dist/
+          if-no-files-found: error
+          overwrite: true
+
+  publish-crates:
+    name: Publish to crates.io
+    if: github.event_name == 'release'
+    needs: [validate, assemble-artifacts]
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      url: https://crates.io/crates/vl-convert
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - name: Authenticate to crates.io
+        id: crates-auth
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish Rust packages
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          packages=(
+            vl-convert
+            vl-convert-canvas2d
+            vl-convert-canvas2d-deno
+            vl-convert-google-fonts
+            vl-convert-rs
+            vl-convert-server
+          )
+          existing=()
+          unpublished=()
+          for package in "${packages[@]}"; do
+            status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --user-agent vl-convert-release-workflow \
+              "https://crates.io/api/v1/crates/${package}/${VERSION}")
+            case "$status" in
+              200) existing+=("$package") ;;
+              404) unpublished+=("$package") ;;
+              *)
+                echo "crates.io returned HTTP $status for $package $VERSION" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          if (( RUN_ATTEMPT == 1 && ${#existing[@]} > 0 )); then
+            printf 'Version %s already exists for:' "$VERSION" >&2
+            printf ' %s' "${existing[@]}" >&2
+            printf '\n' >&2
+            exit 1
+          fi
+          if (( ${#unpublished[@]} == 0 )); then
+            echo "All Rust packages at $VERSION are already published"
+            exit 0
+          fi
+
+          args=(
+            publish
+            --workspace
+            --exclude vl-convert-python
+            --exclude vl-convert-vendor
+            --locked
+            --no-verify
+          )
+          for package in "${existing[@]}"; do
+            args+=(--exclude "$package")
+          done
+          printf 'Publishing Rust packages at %s:' "$VERSION"
+          printf ' %s' "${unpublished[@]}"
+          printf '\n'
+          cargo "${args[@]}"
 
   publish-pypi:
     name: Publish to PyPI
-    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
-    environment: PyPI Upload
+    if: github.event_name == 'release'
+    needs: [validate, assemble-artifacts]
     runs-on: ubuntu-latest
-    needs:
-      [
-        build-wheels-linux-x86_64,
-        build-wheels-linux-aarch64,
-        build-wheels-win-64,
-        build-wheels-osx-64,
-        build-wheels-osx-arm64,
-      ]
+    environment:
+      name: release
+      url: https://pypi.org/project/vl-convert-python/
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      - name: Download assembled artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: wheels-*
-          path: dist/
-          merge-multiple: true
-      - name: Publish to PyPI
-        uses: messense/maturin-action@v1.51.0
+          name: release-assets
+          path: release-assets/
+      - name: Select Python distributions
+        run: |
+          mkdir dist
+          cp release-assets/*.whl release-assets/*.tar.gz dist/
+      - name: Publish Python distributions
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/
+          skip-existing: ${{ github.run_attempt > 1 }}
+
+  upload-release-assets:
+    name: Upload GitHub Release assets
+    if: github.event_name == 'release'
+    needs: [validate, publish-crates, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download assembled artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets
+          path: release-assets/
+      - name: Upload release assets
         env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        with:
-          command: upload
-          args: --skip-existing dist/*
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"
+
+  verify-release:
+    name: Verify published release
+    if: github.event_name == 'release'
+    needs: [validate, publish-crates, publish-pypi, upload-release-assets]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify registries and GitHub assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          tag = os.environ["RELEASE_TAG"]
+          version = os.environ["VERSION"]
+          python_version = os.environ["PYTHON_VERSION"]
+          crates = (
+              "vl-convert",
+              "vl-convert-canvas2d",
+              "vl-convert-canvas2d-deno",
+              "vl-convert-google-fonts",
+              "vl-convert-rs",
+              "vl-convert-server",
+          )
+
+          def request_json(url, headers=None, attempts=1):
+              request = urllib.request.Request(
+                  url,
+                  headers={"User-Agent": "vl-convert-release-workflow", **(headers or {})},
+              )
+              for attempt in range(attempts):
+                  try:
+                      with urllib.request.urlopen(request, timeout=30) as response:
+                          return json.load(response)
+                  except urllib.error.HTTPError as error:
+                      if error.code != 404 or attempt == attempts - 1:
+                          raise
+                      time.sleep(10)
+
+          for crate in crates:
+              crate_url = (
+                  "https://crates.io/api/v1/crates/"
+                  f"{urllib.parse.quote(crate)}/{urllib.parse.quote(version)}"
+              )
+              request_json(crate_url, attempts=12)
+
+          pypi = request_json(
+              "https://pypi.org/pypi/vl-convert-python/"
+              f"{urllib.parse.quote(python_version)}/json",
+              attempts=12,
+          )
+          expected_distributions = {
+              f"vl_convert_python-{python_version}-cp39-abi3-macosx_10_12_x86_64.whl",
+              f"vl_convert_python-{python_version}-cp39-abi3-macosx_11_0_arm64.whl",
+              f"vl_convert_python-{python_version}-cp39-abi3-manylinux_2_28_aarch64.whl",
+              f"vl_convert_python-{python_version}-cp39-abi3-manylinux_2_28_x86_64.whl",
+              f"vl_convert_python-{python_version}-cp39-abi3-win_amd64.whl",
+              f"vl_convert_python-{python_version}.tar.gz",
+          }
+          actual_distributions = {item["filename"] for item in pypi["urls"]}
+          if actual_distributions != expected_distributions:
+              raise SystemExit(
+                  f"PyPI file mismatch: expected {sorted(expected_distributions)}, "
+                  f"found {sorted(actual_distributions)}"
+              )
+
+          release = request_json(
+              f"https://api.github.com/repos/{repository}/releases/tags/"
+              f"{urllib.parse.quote(tag)}",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          expected_assets = expected_distributions | {
+              "SHA256SUMS",
+              "vl-convert_linux-64.zip",
+              "vl-convert_linux-aarch64.zip",
+              "vl-convert_osx-64.zip",
+              "vl-convert_osx-arm64.zip",
+              "vl-convert_win-64.zip",
+          }
+          actual_assets = {asset["name"] for asset in release["assets"]}
+          if actual_assets != expected_assets:
+              raise SystemExit(
+                  f"GitHub asset mismatch: expected {sorted(expected_assets)}, "
+                  f"found {sorted(actual_assets)}"
+              )
+          print(f"Verified {tag} on crates.io, PyPI, and GitHub")
+          PY

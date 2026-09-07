@@ -4,7 +4,7 @@ Rust library + CLI + Python bindings for converting Vega-Lite to static images (
 
 ## Architecture
 
-```
+```text
 vl-convert-rs/      Core Rust library (Deno v8 for JS execution)
 vl-convert/         CLI wrapper
 vl-convert-python/  Python bindings (PyO3/maturin)
@@ -50,11 +50,10 @@ pixi run bundle-licenses # Bundle Rust licenses for Python wheels
 
 ## Release Process
 
-```bash
-cargo ws publish --all --force "vl-convert*" --allow-branch main custom X.Y.Z
-```
-
-CI publishes to PyPI after manual approval.
+Use `pixi run prepare-release <NEXT_VERSION>` to create the release branch and
+draft pull request. After that pull request merges, publish a GitHub Release to
+start package publication. See `DEVELOP.md` for setup, verification, and
+recovery instructions.
 
 ## Configuration
 

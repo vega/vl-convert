@@ -1,12 +1,12 @@
 [package]
 name = "vl-convert-google-fonts"
-version = "2.0.0-rc2"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Google Fonts downloading and caching"
-license = "BSD-3-Clause"
+license.workspace = true
 readme = "README.md"
 homepage = "https://github.com/vega/vl-convert"
-repository = "https://github.com/vega/vl-convert"
+repository.workspace = true
 keywords = ["Fonts", "Google-Fonts"]
 
 [features]

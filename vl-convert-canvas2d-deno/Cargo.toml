@@ -1,10 +1,10 @@
 [package]
 name = "vl-convert-canvas2d-deno"
-version = "2.0.0-rc2"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Deno extension for Canvas 2D API wrapping vl-convert-canvas2d"
-license = "BSD-3-Clause"
-repository = "https://github.com/vega/vl-convert"
+license.workspace = true
+repository.workspace = true
 readme = "README.md"
 keywords = ["canvas", "2d", "deno", "graphics"]
 
@@ -18,7 +18,7 @@ deno_core = { workspace = true }
 deno_error = { workspace = true }
 
 # Canvas 2D implementation
-vl-convert-canvas2d = { path = "../vl-convert-canvas2d", version = "2.0.0-rc1" }
+vl-convert-canvas2d = { workspace = true }
 
 # For gradient color parsing
 csscolorparser = "0.8.4"

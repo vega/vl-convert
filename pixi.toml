@@ -41,6 +41,10 @@ cp thirdparty_*.* vl-convert-python/ &&
 cp thirdparty_*.* vl-convert-rs/ &&
 cp thirdparty_*.* vl-convert/
 """
+prepare-release = { cmd = ["python", "scripts/release.py", "{{ version }}"], args = ["version"] }
+check-workspace = { cmd = ["python", "scripts/check_workspace.py"] }
+fmt-release-check = { cmd = ["ruff", "format", "scripts", "--check"] }
+lint-release = { cmd = ["ruff", "check", "scripts", "--select", "E,F,I,UP"] }
 
 [pypi-dependencies]
 playwright = ">=1.40"
@@ -50,6 +54,10 @@ playwright = ">=1.40"
 python = "3.11.*"
 maturin = "1.8.*"
 rust = "1.95.*"
+gh = ">=2.80,<3"
+packaging = ">=23,<26"
+semver = ">=3,<4"
+tomlkit = ">=0.13,<1"
 protobuf = ">=4.25.3,<5"
 ruff = ">=0.8,<1"
 pip = ">=24.2,<25"

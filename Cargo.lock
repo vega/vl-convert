@@ -11041,7 +11041,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-vendor"
-version = "2.0.0-rc2"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "dircpy",
