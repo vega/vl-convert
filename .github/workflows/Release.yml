@@ -5,9 +5,16 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      linux_wheels_only:
+        description: Only build Linux Python wheels
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build-cli-linux-x86:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -35,6 +42,7 @@ jobs:
             vl-convert_linux-64.zip
 
   build-cli-linux-aarch64:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -62,6 +70,7 @@ jobs:
             vl-convert_linux-aarch64.zip
 
   build-cli-win-64:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
     runs-on: windows-2022
     env:
       RUST_MIN_STACK: 8388608
@@ -101,6 +110,7 @@ jobs:
             vl-convert_win-64.zip
 
   build-cli-osx-64:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v7
@@ -128,6 +138,7 @@ jobs:
             vl-convert_osx-64.zip
 
   build-cli-osx-arm64:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v7
@@ -159,37 +170,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Get V8 version from Cargo.lock
-        id: v8-version
-        run: |
-          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
-          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
-          echo "V8 version: $V8_VERSION"
-
-      - name: Download pre-built V8
-        id: download-v8
-        run: |
-          mkdir -p v8-prebuilt
-          if curl -L -f -o v8-prebuilt/librusty_v8.a \
-            "https://github.com/vega/vl-convert/releases/download/v8-${{ steps.v8-version.outputs.version }}/librusty_v8-linux-x86_64.a"; then
-            echo "downloaded=true" >> $GITHUB_OUTPUT
-            echo "Pre-built V8 downloaded successfully"
-            ls -la v8-prebuilt/
-          else
-            echo "downloaded=false" >> $GITHUB_OUTPUT
-            echo "No pre-built V8 available, will build from source"
-          fi
-
       - uses: messense/maturin-action@v1.51.0
         with:
           manylinux: 2_28
           target: x86_64-unknown-linux-gnu
           command: build
           args: --release -m vl-convert-python/Cargo.toml --sdist -o dist --strip
-          docker-options: >-
-            -v ${{ github.workspace }}/v8-prebuilt:/v8-prebuilt
-            ${{ steps.download-v8.outputs.downloaded == 'true' && '-e RUSTY_V8_ARCHIVE=/v8-prebuilt/librusty_v8.a' || '-e V8_FROM_SOURCE=1' }}
-            ${{ steps.download-v8.outputs.downloaded != 'true' && '-e GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0' || '' }}
           before-script-linux: |
             # Install build dependencies
             dnf install -y glib2-devel libffi-devel clang-devel || yum install -y glib2-devel libffi-devel clang-devel
@@ -215,37 +201,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Get V8 version from Cargo.lock
-        id: v8-version
-        run: |
-          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
-          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
-          echo "V8 version: $V8_VERSION"
-
-      - name: Download pre-built V8
-        id: download-v8
-        run: |
-          mkdir -p v8-prebuilt
-          if curl -L -f -o v8-prebuilt/librusty_v8.a \
-            "https://github.com/vega/vl-convert/releases/download/v8-${{ steps.v8-version.outputs.version }}/librusty_v8-linux-aarch64.a"; then
-            echo "downloaded=true" >> $GITHUB_OUTPUT
-            echo "Pre-built V8 downloaded successfully"
-            ls -la v8-prebuilt/
-          else
-            echo "downloaded=false" >> $GITHUB_OUTPUT
-            echo "No pre-built V8 available, will build from source"
-          fi
-
       - uses: messense/maturin-action@v1.51.0
         with:
           manylinux: 2_28
           target: aarch64-unknown-linux-gnu
           command: build
           args: --release -m vl-convert-python/Cargo.toml -o dist --strip
-          docker-options: >-
-            -v ${{ github.workspace }}/v8-prebuilt:/v8-prebuilt
-            ${{ steps.download-v8.outputs.downloaded == 'true' && '-e RUSTY_V8_ARCHIVE=/v8-prebuilt/librusty_v8.a' || '-e V8_FROM_SOURCE=1' }}
-            ${{ steps.download-v8.outputs.downloaded != 'true' && '-e GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0' || '' }}
           before-script-linux: |
             # Install build dependencies
             dnf install -y glib2-devel libffi-devel clang-devel || yum install -y glib2-devel libffi-devel clang-devel
@@ -267,6 +228,7 @@ jobs:
           path: dist
 
   build-wheels-win-64:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
     runs-on: windows-latest
     steps:
       - name: Enable long paths
@@ -295,6 +257,7 @@ jobs:
           path: dist
 
   build-wheels-osx-64:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v7
@@ -323,6 +286,7 @@ jobs:
           path: dist
 
   build-wheels-osx-arm64:
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v7
@@ -351,6 +315,7 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
+    if: ${{ github.event_name != 'workflow_dispatch' || !inputs.linux_wheels_only }}
     environment: PyPI Upload
     runs-on: ubuntu-latest
     needs:
