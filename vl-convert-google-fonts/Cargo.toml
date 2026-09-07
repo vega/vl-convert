@@ -1,6 +1,6 @@
 [package]
 name = "vl-convert-google-fonts"
-version = "2.0.0-rc1"
+version = "2.0.0-rc2"
 edition = "2021"
 description = "Google Fonts downloading and caching"
 license = "BSD-3-Clause"
