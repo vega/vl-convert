@@ -33,7 +33,7 @@ dashmap = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-axum = "0.2.0"
-utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "vendored"] }
 arc-swap = "1.9"
 
 [target.'cfg(unix)'.dependencies]
