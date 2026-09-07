@@ -9,6 +9,10 @@ repository = "https://github.com/jonmmease/vl-convert"
 description = "HTTP server for converting Vega-Lite and Vega specifications to static images"
 keywords = ["Visualization", "Vega", "Vega-Lite", "Server"]
 
+[package.metadata.docs.rs]
+# Propagate the cfg to dependency build scripts, including vl-convert-rs.
+rustc-args = ["--cfg", "vl_convert_docsrs"]
+
 [dependencies]
 vl-convert-rs = { path = "../vl-convert-rs", version = "2.0.0-rc1" }
 vl-convert-google-fonts = { path = "../vl-convert-google-fonts", version = "2.0.0-rc1" }
