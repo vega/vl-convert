@@ -49,7 +49,7 @@ playwright = ">=1.40"
 [dependencies]
 python = "3.11.*"
 maturin = "1.8.*"
-rust = "1.91.*"
+rust = "1.95.*"
 protobuf = ">=4.25.3,<5"
 ruff = ">=0.8,<1"
 pip = ">=24.2,<25"

@@ -49,3 +49,5 @@ pub use vl_convert_google_fonts::{google_fonts_cache_dir, FontStyle, VariantRequ
 /// compatibility and faster startup.
 pub static VL_CONVERT_SNAPSHOT: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/VL_CONVERT_SNAPSHOT.bin"));
+
+include!(concat!(env!("OUT_DIR"), "/VL_CONVERT_RESIDUAL_SOURCES.rs"));

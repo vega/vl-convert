@@ -188,6 +188,8 @@ impl InnerVlConverter {
                 super::vl_convert_runtime::init(),
             ],
             startup_snapshot: Some(crate::VL_CONVERT_SNAPSHOT),
+            residual_lazy_js_sources: crate::VL_CONVERT_RESIDUAL_LAZY_JS,
+            residual_lazy_esm_sources: crate::VL_CONVERT_RESIDUAL_LAZY_ESM,
             create_params,
             ..Default::default()
         };
@@ -529,6 +531,26 @@ pub(super) mod tests {
             .await
             .unwrap();
         assert_eq!(bytes, vec![1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_residual_lazy_esm_sources_are_available() {
+        let mut ctx = InnerVlConverter::try_new(
+            std::sync::Arc::new(ConverterContext {
+                config: VlcConfig::default(),
+                parsed_allowed_base_urls: Vec::new(),
+                resolved_plugins: Vec::new(),
+            }),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let result = ctx
+            .execute_script_to_json("[navigator.locks.constructor.name, WebSocket.name]")
+            .await
+            .unwrap();
+        assert_eq!(result, json!(["LockManager", "WebSocket"]));
     }
 
     #[tokio::test]
