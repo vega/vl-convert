@@ -107,8 +107,7 @@ def pull_request_body(current: str, version: str) -> str:
     packages = "\n".join(f"- `{name}`" for name in PRODUCT_PACKAGES)
     return f"""## Summary
 
-Prepare `{version}` as a {release_kind}. This updates the shared workspace version
-and exact internal package requirements from `{current}`.
+Prepare `{version}` as a {release_kind}. This updates the shared workspace version and exact internal package requirements from `{current}`.
 
 ## Packages
 

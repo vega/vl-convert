@@ -50,10 +50,7 @@ pixi run bundle-licenses # Bundle Rust licenses for Python wheels
 
 ## Release Process
 
-Use `pixi run prepare-release <NEXT_VERSION>` to create the release branch and
-draft pull request. After that pull request merges, publish a GitHub Release to
-start package publication. See `DEVELOP.md` for setup, verification, and
-recovery instructions.
+Use `pixi run prepare-release <NEXT_VERSION>` to create the release branch and draft pull request. After that pull request merges, publish a GitHub Release to start package publication. See `DEVELOP.md` for setup, verification, and recovery instructions.
 
 ## Configuration
 
