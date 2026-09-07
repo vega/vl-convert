@@ -667,7 +667,7 @@ impl VlConverter {
 
     /// Return font information for a Vega-Lite spec.
     ///
-    /// Compiles the spec to Vega first, then delegates to [`vega_fonts`].
+    /// Compiles the spec to Vega first, then delegates to [`Self::vega_fonts`].
     pub async fn vegalite_fonts(
         &self,
         vl_spec: impl Into<ValueOrString>,

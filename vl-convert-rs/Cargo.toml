@@ -9,6 +9,13 @@ repository = "https://github.com/jonmmease/vl-convert"
 description = "Library for converting Vega-Lite visualization specifications to Vega specifications"
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
+[package.metadata.docs.rs]
+# Compile the host build script with this cfg so it can avoid linking V8.
+rustc-args = ["--cfg", "vl_convert_docsrs"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(vl_convert_docsrs)"] }
+
 [dependencies]
 vl-convert-canvas2d = { path = "../vl-convert-canvas2d", version = "2.0.0-rc1" }
 vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", version = "2.0.0-rc1", features = ["svg"] }
