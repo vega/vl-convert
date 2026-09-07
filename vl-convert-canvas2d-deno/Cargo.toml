@@ -21,7 +21,7 @@ deno_error = { workspace = true }
 vl-convert-canvas2d = { path = "../vl-convert-canvas2d", version = "2.0.0-rc1" }
 
 # For gradient color parsing
-csscolorparser = "0.7"
+csscolorparser = "0.8.4"
 
 # For image data handling
 tiny-skia = { workspace = true }

@@ -20,9 +20,9 @@ clap = { workspace = true }
 log = { workspace = true }
 shellexpand = { workspace = true }
 itertools = { workspace = true }
-axum = { version = "0.7", features = ["json"] }
+axum = { version = "0.8.9", features = ["json"] }
 tower = { version = "0.5", features = ["timeout", "limit", "load-shed"] }
-tower-http = { version = "0.6", features = ["catch-panic", "compression-full", "cors", "request-id", "timeout", "trace", "propagate-header", "util"] }
+tower-http = { version = "0.7.1", features = ["catch-panic", "compression-full", "cors", "request-id", "timeout", "trace", "propagate-header", "util"] }
 subtle = "2"
 http = "1"
 tracing = "0.1"
@@ -32,8 +32,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 dashmap = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 utoipa = { version = "5", features = ["axum_extras"] }
-utoipa-axum = "0.1.3"
-utoipa-swagger-ui = { version = "8", features = ["axum"] }
+utoipa-axum = "0.2.0"
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 arc-swap = "1.9"
 
 [target.'cfg(unix)'.dependencies]

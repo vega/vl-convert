@@ -39,7 +39,7 @@ pub fn parse_variant_args(
 }
 
 pub fn parse_google_fonts_arg(
-    fonts: Option<Vec<PyObject>>,
+    fonts: Option<Vec<Py<PyAny>>>,
 ) -> PyResult<Option<Vec<GoogleFontRequest>>> {
     let Some(fonts) = fonts else {
         return Ok(None);
@@ -47,7 +47,7 @@ pub fn parse_google_fonts_arg(
     if fonts.is_empty() {
         return Ok(None);
     }
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let mut requests = Vec::with_capacity(fonts.len());
         for obj in &fonts {
             let bound = obj.bind(py);
@@ -56,7 +56,7 @@ pub fn parse_google_fonts_arg(
                     family,
                     variants: None,
                 });
-            } else if let Ok(dict) = bound.downcast::<PyDict>() {
+            } else if let Ok(dict) = bound.cast::<PyDict>() {
                 let family: String = dict
                     .get_item("family")?
                     .ok_or_else(|| {
@@ -100,16 +100,16 @@ pub fn parse_google_fonts_arg(
 #[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 pub fn vegalite_fonts(
     py: Python<'_>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     auto_google_fonts: Option<bool>,
     include_font_face: bool,
-    google_fonts: Option<Vec<PyObject>>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
-) -> PyResult<PyObject> {
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
+) -> PyResult<Py<PyAny>> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -172,13 +172,13 @@ pub fn vegalite_fonts(
 #[pyo3(signature = (vg_spec, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 pub fn vega_fonts(
     py: Python<'_>,
-    vg_spec: PyObject,
+    vg_spec: Py<PyAny>,
     auto_google_fonts: Option<bool>,
     include_font_face: bool,
-    google_fonts: Option<Vec<PyObject>>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
-) -> PyResult<PyObject> {
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
+) -> PyResult<Py<PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -347,15 +347,15 @@ pub fn google_fonts_cache_dir() -> Option<String> {
 #[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 pub fn vegalite_fonts_asyncio<'py>(
     py: Python<'py>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     auto_google_fonts: Option<bool>,
     include_font_face: bool,
-    google_fonts: Option<Vec<PyObject>>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -411,12 +411,12 @@ pub fn vegalite_fonts_asyncio<'py>(
 #[pyo3(signature = (vg_spec, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
 pub fn vega_fonts_asyncio<'py>(
     py: Python<'py>,
-    vg_spec: PyObject,
+    vg_spec: Py<PyAny>,
     auto_google_fonts: Option<bool>,
     include_font_face: bool,
-    google_fonts: Option<Vec<PyObject>>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -472,7 +472,7 @@ pub fn register_font_directory_asyncio<'py>(
             .map_err(|err| {
                 PyValueError::new_err(format!("Failed to register font directory: {err}"))
             })?;
-        Python::with_gil(|py| Ok(py.None().into()))
+        Python::attach(|py| Ok(py.None().into()))
     })
 }
 
@@ -490,6 +490,6 @@ pub fn set_font_directories_asyncio<'py>(
             .map_err(|err| {
                 PyValueError::new_err(format!("Failed to set font directories: {err}"))
             })?;
-        Python::with_gil(|py| Ok(py.None().into()))
+        Python::attach(|py| Ok(py.None().into()))
     })
 }

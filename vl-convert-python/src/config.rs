@@ -191,7 +191,7 @@ pub fn parse_config_overrides(
                 if value.is_none() {
                     overrides.google_fonts = Some(default.google_fonts.clone());
                 } else {
-                    let fonts: Vec<PyObject> = value.extract().map_err(|err| {
+                    let fonts: Vec<Py<PyAny>> = value.extract().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid google_fonts value for configure: {err}"
                         )
@@ -349,7 +349,7 @@ pub fn parse_config_overrides(
                 if value.is_none() {
                     overrides.themes = Some(default.themes.clone());
                 } else {
-                    let py_dict: &Bound<'_, PyDict> = value.downcast().map_err(|err| {
+                    let py_dict: &Bound<'_, PyDict> = value.cast().map_err(|err| {
                         vl_convert_rs::anyhow::anyhow!(
                             "Invalid themes value for configure (expected dict): {err}"
                         )
@@ -632,10 +632,10 @@ pub fn load_config(path: Option<String>) -> PyResult<()> {
 /// Get the currently configured converter options.
 #[pyfunction(name = "get_config")]
 #[pyo3(signature = ())]
-pub fn get_config() -> PyResult<PyObject> {
+pub fn get_config() -> PyResult<Py<PyAny>> {
     let config = converter_config()
         .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         pythonize(py, &config)
             .map_err(|err| PyValueError::new_err(err.to_string()))
             .map(|obj| obj.into())
@@ -656,7 +656,7 @@ pub fn configure_asyncio<'py>(
             .await
             .map_err(|err| prefixed_py_error("Failed to configure converter", err))?
             .map_err(|err| prefixed_py_error("Failed to configure converter", err))?;
-        Python::with_gil(|py| Ok(py.None().into()))
+        Python::attach(|py| Ok(py.None().into()))
     })
 }
 
@@ -672,7 +672,7 @@ pub fn load_config_asyncio<'py>(
             .await
             .map_err(|err| prefixed_py_error("Failed to load config", err))?
             .map_err(|err| prefixed_py_error("Failed to load config", err))?;
-        Python::with_gil(|py| Ok(py.None().into()))
+        Python::attach(|py| Ok(py.None().into()))
     })
 }
 
@@ -685,7 +685,7 @@ pub fn get_config_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
             .await
             .map_err(|err| prefixed_py_error("Failed to read converter config", err))?
             .map_err(|err| prefixed_py_error("Failed to read converter config", err))?;
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             pythonize(py, &config)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
@@ -700,7 +700,7 @@ pub fn warm_up_workers() -> PyResult<()> {
     let converter = converter_read_handle()
         .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
 
-    Python::with_gil(|py| py.allow_threads(move || converter.warm_up()))
+    Python::attach(|py| py.detach(move || converter.warm_up()))
         .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
     Ok(())
 }
@@ -717,6 +717,6 @@ pub fn warm_up_workers_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAn
             .await
             .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?
             .map_err(|err| prefixed_py_error("warm_up_workers request failed", err))?;
-        Python::with_gil(|py| Ok(py.None().into()))
+        Python::attach(|py| Ok(py.None().into()))
     })
 }

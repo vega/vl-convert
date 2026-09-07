@@ -25,48 +25,47 @@ assert_cmd = "2.0"
 backon = { version = "1", default-features = false, features = ["tokio-sleep", "std", "std-blocking-sleep"] }
 clap = { version = "4.5", features = ["derive", "env"] }
 
-# Deno dependencies - versions correspond to Deno v2.7.5
-deno_runtime = "0.246.0"
-node_resolver = "0.76.0"
-deno_core = "0.391.0"
+# Deno dependencies - versions correspond to Deno v2.9.6
+deno_runtime = "0.266.0"
+node_resolver = "0.96.0"
+deno_core = "0.411.0"
 deno_error = "0.7.1"
-deno_graph = { version = "0.107.1", default-features = false, features = ["swc"] }
-deno_ast = { version = "0.53.1", features = ["bundler", "codegen", "transforms", "transpiling"] }
-deno_semver = "0.9.1"
-sys_traits = { version = "0.1.24", features = ["real", "libc"] }
+deno_graph = { version = "0.111.0", default-features = false, features = ["swc"] }
+deno_ast = { version = "0.53.3", features = ["bundler", "codegen", "transforms", "transpiling"] }
+deno_semver = "0.10.1"
+sys_traits = { version = "0.1.28", features = ["real", "libc"] }
 
 dashmap = "6"
 dircpy = "0.3"
-dirs = "6"
+dirs = "7"
 dssim = "3.2.4"
 env_logger = "0.11.8"
 filetime = "0.2"
 fontdb = { version = "0.23.0", features = ["fontconfig"] }
-fs4 = { version = "0.13", features = ["tokio", "sync"] }
 futures = "0.3.30"
 futures-util = "0.3.30"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
-jsonc-parser = { version = "0.32", features = ["serde"] }
-itertools = "0.14.0"
+jsonc-parser = { version = "0.33", features = ["serde"] }
+itertools = "0.15.0"
 lazy_static = "1.4.0"
 log = "0.4.20"
 lz-str = "0.2.1"
-png = "0.17.13"
+png = "0.18.1"
 predicates = "3.0.2"
-pyo3 = { version = "0.25.0", features = ["extension-module", "anyhow", "abi3-py37"] }
-pyo3-async-runtimes = { version = "0.25.0", features = ["tokio-runtime"] }
-pyo3-log = "0.12"
-pythonize = "0.25.0"
+pyo3 = { version = "0.29.2", features = ["extension-module", "anyhow", "abi3-py39"] }
+pyo3-async-runtimes = { version = "0.29.0", features = ["tokio-runtime"] }
+pyo3-log = "0.13.4"
+pythonize = "0.29.0"
 regex = "1"
-reqwest = { version = "0.11.20", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls"] }
 resvg = "0.45.1"
-rstest = "0.25.0"
+rstest = "0.27.0"
 semver = "1.0.20"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.106"
 shellexpand = "3.1.0"
 svg2pdf = "0.13.0"
-svgtypes = "0.15"
+svgtypes = "0.16.1"
 tempfile = "3.8.0"
 tiny-skia = "0.11.4"
 tinyvec = "1"

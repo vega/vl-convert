@@ -7,178 +7,6 @@ on:
   pull_request:
 
 jobs:
-  # Build V8 from source with fPIC flags for Linux shared library builds (Python wheels)
-  # This job skips if the pre-built artifact already exists in GitHub Releases
-  build-v8-linux-x86_64:
-    concurrency:
-      group: v8-build-x86_64
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    outputs:
-      v8-version: ${{ steps.v8-version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Get V8 version from Cargo.lock
-        id: v8-version
-        run: |
-          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
-          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
-          echo "V8 version: $V8_VERSION"
-
-      - name: Check if release already exists
-        id: check-release
-        run: |
-          if gh release view "v8-${{ steps.v8-version.outputs.version }}" --json assets -q '.assets[].name' | grep -q "librusty_v8-linux-x86_64.a"; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release with linux-x86_64 asset already exists, skipping build"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Build V8 from source
-        if: steps.check-release.outputs.exists != 'true'
-        run: |
-          mkdir -p v8-out
-          docker run --rm \
-            -v "${{ github.workspace }}:/io" \
-            -v "${{ github.workspace }}/v8-out:/v8-out" \
-            -w /io \
-            -e V8_FROM_SOURCE=1 \
-            -e "GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0" \
-            quay.io/pypa/manylinux_2_28_x86_64 \
-            bash -c '
-              set -ex
-
-              # Install build dependencies including protoc
-              dnf install -y glib2-devel libffi-devel clang-devel protobuf-compiler
-              protoc --version
-
-              # Install Rust
-              curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-              source "$HOME/.cargo/env"
-
-              # Build vl-convert-python (this will compile V8)
-              cd /io
-              cargo build --release -p vl-convert-python
-
-              # Copy V8 artifact to output volume
-              find /io/target -name "librusty_v8.a" -type f 2>/dev/null | head -5
-              cp /io/target/release/gn_out/obj/librusty_v8.a /v8-out/librusty_v8-linux-x86_64.a
-              ls -la /v8-out/
-            '
-
-      - name: Verify V8 artifact
-        if: steps.check-release.outputs.exists != 'true'
-        run: |
-          ls -la v8-out/
-          file v8-out/librusty_v8-linux-x86_64.a
-
-      - name: Create or update release
-        if: steps.check-release.outputs.exists != 'true'
-        run: |
-          # Create release if it doesn't exist
-          gh release create "v8-${{ steps.v8-version.outputs.version }}" \
-            --title "V8 ${{ steps.v8-version.outputs.version }} Pre-built Binaries" \
-            --notes "Pre-built V8 static libraries with PIC support for Python wheel builds." \
-            --prerelease \
-            2>/dev/null || true
-
-          # Upload the artifact
-          gh release upload "v8-${{ steps.v8-version.outputs.version }}" \
-            v8-out/librusty_v8-linux-x86_64.a \
-            --clobber
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-  build-v8-linux-aarch64:
-    concurrency:
-      group: v8-build-aarch64
-      cancel-in-progress: false
-    runs-on: ubuntu-24.04-arm
-    outputs:
-      v8-version: ${{ steps.v8-version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Get V8 version from Cargo.lock
-        id: v8-version
-        run: |
-          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
-          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
-          echo "V8 version: $V8_VERSION"
-
-      - name: Check if release already exists
-        id: check-release
-        run: |
-          if gh release view "v8-${{ steps.v8-version.outputs.version }}" --json assets -q '.assets[].name' | grep -q "librusty_v8-linux-aarch64.a"; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release with linux-aarch64 asset already exists, skipping build"
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Build V8 from source
-        if: steps.check-release.outputs.exists != 'true'
-        run: |
-          set -ex
-          mkdir -p v8-out
-          docker pull quay.io/pypa/manylinux_2_28_aarch64
-
-          cat > /tmp/build-v8.sh << 'SCRIPT'
-          set -ex
-          dnf install -y glib2-devel libffi-devel clang clang-devel lld compiler-rt protobuf-compiler
-
-          CLANG_VERSION=$(clang++ --version | grep -oP "clang version \K[0-9]+")
-          BUILTINS_PATH=$(find /usr/lib*/clang -name "libclang_rt.builtins*.a" 2>/dev/null | head -1)
-          if [ -n "$BUILTINS_PATH" ]; then
-            for VER in $CLANG_VERSION 19 20 21 22 23; do
-              EXPECTED_DIR="/usr/lib/clang/${VER}/lib/aarch64-unknown-linux-gnu"
-              mkdir -p "$EXPECTED_DIR"
-              ln -sf "$BUILTINS_PATH" "$EXPECTED_DIR/libclang_rt.builtins.a"
-            done
-          else
-            echo "ERROR: Could not find libclang_rt.builtins.a"
-            exit 1
-          fi
-
-          curl --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source "$HOME/.cargo/env"
-          cd /io
-          cargo build --release -p vl-convert-python
-          cp /io/target/release/gn_out/obj/librusty_v8.a /v8-out/librusty_v8-linux-aarch64.a
-          SCRIPT
-
-          chmod +x /tmp/build-v8.sh
-          docker run --rm \
-            -v "${{ github.workspace }}:/io" \
-            -v "${{ github.workspace }}/v8-out:/v8-out" \
-            -v "/tmp/build-v8.sh:/tmp/build-v8.sh:ro" \
-            -w /io \
-            -e V8_FROM_SOURCE=1 \
-            -e "GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0" \
-            -e CLANG_BASE_PATH=/usr \
-            quay.io/pypa/manylinux_2_28_aarch64 \
-            bash /tmp/build-v8.sh
-
-      - name: Create or update release
-        if: steps.check-release.outputs.exists != 'true'
-        run: |
-          gh release create "v8-${{ steps.v8-version.outputs.version }}" \
-            --title "V8 ${{ steps.v8-version.outputs.version }} Pre-built Binaries" \
-            --notes "Pre-built V8 static libraries with PIC support for Python wheel builds." \
-            --prerelease \
-            2>/dev/null || true
-          gh release upload "v8-${{ steps.v8-version.outputs.version }}" \
-            v8-out/librusty_v8-linux-aarch64.a \
-            --clobber
-        env:
-          GH_TOKEN: ${{ github.token }}
-
   python-fmt:
     runs-on: ubuntu-latest
     steps:
@@ -234,7 +62,6 @@ jobs:
   #   - undefined reference to fcntl64
   #   - undefined reference to memfd_create
   vl-convert-rs-tests-linux:
-    needs: [build-v8-linux-x86_64]
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
@@ -251,27 +78,6 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get V8 version from Cargo.lock
-        id: v8-version
-        run: |
-          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
-          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
-          echo "V8 version: $V8_VERSION"
-
-      - name: Download pre-built V8
-        id: download-v8
-        run: |
-          mkdir -p v8-prebuilt
-          if curl -L -f -o v8-prebuilt/librusty_v8.a \
-            "https://github.com/vega/vl-convert/releases/download/v8-${{ steps.v8-version.outputs.version }}/librusty_v8-linux-x86_64.a"; then
-            echo "downloaded=true" >> $GITHUB_OUTPUT
-            echo "Pre-built V8 downloaded successfully"
-            ls -la v8-prebuilt/
-          else
-            echo "downloaded=false" >> $GITHUB_OUTPUT
-            echo "No pre-built V8 available, will build from source"
-          fi
-
       - name: Install fonts on Linux
         if: runner.os == 'Linux'
         run: |
@@ -279,13 +85,9 @@ jobs:
           sudo apt-get install ttf-mscorefonts-installer
       - name: Run rs tests
         # Run tests on single thread for Deno, which expects this
-        env:
-          RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
         run: |
           cargo test -p vl-convert-rs -- --test-threads=1
       - name: Run CLI tests
-        env:
-          RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
         run: |
           cargo test -p vl-convert -- --test-threads=1
 
@@ -344,7 +146,6 @@ jobs:
 
   # Run Linux Python tests without Pixi's conda toolchain due to glibc linker issues
   vl-convert-python-tests-linux:
-    needs: [build-v8-linux-x86_64]
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
@@ -368,30 +169,12 @@ jobs:
         run: |
           echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
           sudo apt-get install ttf-mscorefonts-installer
-      - name: Get V8 version from Cargo.lock
-        id: v8-version
-        run: |
-          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
-          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
-      - name: Download pre-built V8
-        id: download-v8
-        run: |
-          mkdir -p v8-prebuilt
-          if curl -L -f -o v8-prebuilt/librusty_v8.a \
-            "https://github.com/vega/vl-convert/releases/download/v8-${{ steps.v8-version.outputs.version }}/librusty_v8-linux-x86_64.a"; then
-            echo "downloaded=true" >> $GITHUB_OUTPUT
-            ls -la v8-prebuilt/
-          else
-            echo "downloaded=false" >> $GITHUB_OUTPUT
-          fi
       - name: Create virtualenv and install dependencies
         run: |
           python -m venv .venv
           source .venv/bin/activate
           pip install maturin
       - name: Build and install package
-        env:
-          RUSTY_V8_ARCHIVE: ${{ steps.download-v8.outputs.downloaded == 'true' && format('{0}/v8-prebuilt/librusty_v8.a', github.workspace) || '' }}
         run: |
           source .venv/bin/activate
           cd vl-convert-python
@@ -467,28 +250,9 @@ jobs:
 
   # Build and test aarch64 Linux wheel using manylinux container
   vl-convert-python-tests-linux-aarch64:
-    needs: [build-v8-linux-aarch64]
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
-
-      - name: Get V8 version from Cargo.lock
-        id: v8-version
-        run: |
-          V8_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "v8") | .version')
-          echo "version=$V8_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Download pre-built V8
-        id: download-v8
-        run: |
-          mkdir -p v8-prebuilt
-          if curl -L -f -o v8-prebuilt/librusty_v8.a \
-            "https://github.com/vega/vl-convert/releases/download/v8-${{ steps.v8-version.outputs.version }}/librusty_v8-linux-aarch64.a"; then
-            echo "downloaded=true" >> $GITHUB_OUTPUT
-            ls -la v8-prebuilt/
-          else
-            echo "downloaded=false" >> $GITHUB_OUTPUT
-          fi
 
       - uses: messense/maturin-action@v1.51.0
         with:
@@ -496,10 +260,6 @@ jobs:
           target: aarch64-unknown-linux-gnu
           command: build
           args: --release -m vl-convert-python/Cargo.toml -o dist
-          docker-options: >-
-            -v ${{ github.workspace }}/v8-prebuilt:/v8-prebuilt
-            ${{ steps.download-v8.outputs.downloaded == 'true' && '-e RUSTY_V8_ARCHIVE=/v8-prebuilt/librusty_v8.a' || '-e V8_FROM_SOURCE=1' }}
-            ${{ steps.download-v8.outputs.downloaded != 'true' && '-e GN_ARGS=v8_monolithic=true v8_monolithic_for_shared_library=true is_component_build=false v8_enable_temporal_support=false enable_rust=false treat_warnings_as_errors=false symbol_level=0' || '' }}
           before-script-linux: |
             dnf install -y glib2-devel libffi-devel clang-devel || yum install -y glib2-devel libffi-devel clang-devel
             PB_REL="https://github.com/protocolbuffers/protobuf/releases"

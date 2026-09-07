@@ -40,12 +40,12 @@ use vl_convert_rs::module_loader::import_map::VlVersion;
     show_warnings=None,
 ))]
 pub fn vegalite_to_vega(
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     handle_show_warnings(show_warnings);
     let vl_spec = parse_json_spec(vl_spec)?;
     let config = parse_optional_config(config)?;
@@ -80,7 +80,7 @@ pub fn vegalite_to_vega(
             ))
         }
     };
-    Python::with_gil(|py| -> PyResult<PyObject> {
+    Python::attach(|py| -> PyResult<Py<PyAny>> {
         pythonize(py, &vega_spec)
             .map_err(|err| PyValueError::new_err(err.to_string()))
             .map(|obj| obj.into())
@@ -117,13 +117,13 @@ pub fn vegalite_to_vega(
     height=None,
 ))]
 pub fn vega_to_svg(
-    vg_spec: PyObject,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    vg_spec: Py<PyAny>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
     bundle: Option<bool>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -192,17 +192,17 @@ pub fn vega_to_svg(
     height=None,
 ))]
 pub fn vega_to_scenegraph(
-    vg_spec: PyObject,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    vg_spec: Py<PyAny>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     format: &str,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
     let config = parse_optional_config(config)?;
@@ -230,7 +230,7 @@ pub fn vega_to_scenegraph(
                     .map(|o| o.scenegraph)
             })
             .map_err(|err| prefixed_py_error("Vega to Scenegraph conversion failed", err))?;
-            Python::with_gil(|py| -> PyResult<PyObject> {
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
                 pythonize(py, &sg)
                     .map_err(|err| PyValueError::new_err(err.to_string()))
                     .map(|obj| obj.into())
@@ -245,7 +245,7 @@ pub fn vega_to_scenegraph(
                     .map(|o| o.data)
             })
             .map_err(|err| prefixed_py_error("Vega to Scenegraph conversion failed", err))?;
-            Ok(Python::with_gil(|py| -> PyObject {
+            Ok(Python::attach(|py| -> Py<PyAny> {
                 PyBytes::new(py, sg_bytes.as_slice()).into()
             }))
         }
@@ -295,16 +295,16 @@ pub fn vega_to_scenegraph(
     height=None,
 ))]
 pub fn vegalite_to_svg(
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
     bundle: Option<bool>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -392,20 +392,20 @@ pub fn vegalite_to_svg(
     height=None,
 ))]
 pub fn vegalite_to_scenegraph(
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     format: &str,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     handle_show_warnings(show_warnings);
     let config = parse_optional_config(config)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -442,7 +442,7 @@ pub fn vegalite_to_scenegraph(
                     .map(|o| o.scenegraph)
             })
             .map_err(|err| prefixed_py_error("Vega-Lite to Scenegraph conversion failed", err))?;
-            Python::with_gil(|py| -> PyResult<PyObject> {
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
                 pythonize(py, &sg)
                     .map_err(|err| PyValueError::new_err(err.to_string()))
                     .map(|obj| obj.into())
@@ -457,7 +457,7 @@ pub fn vegalite_to_scenegraph(
                     .map(|o| o.data)
             })
             .map_err(|err| prefixed_py_error("Vega-Lite to Scenegraph conversion failed", err))?;
-            Ok(Python::with_gil(|py| -> PyObject {
+            Ok(Python::attach(|py| -> Py<PyAny> {
                 PyBytes::new(py, sg_bytes.as_slice()).into()
             }))
         }
@@ -499,18 +499,18 @@ pub fn vegalite_to_scenegraph(
     height=None,
 ))]
 pub fn vega_to_png(
-    vg_spec: PyObject,
+    vg_spec: Py<PyAny>,
     scale: Option<f32>,
     ppi: Option<f32>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -540,7 +540,7 @@ pub fn vega_to_png(
         Err(err) => return Err(prefixed_py_error("Vega to PNG conversion failed", err)),
     };
 
-    Ok(Python::with_gil(|py| -> PyObject {
+    Ok(Python::attach(|py| -> Py<PyAny> {
         PyBytes::new(py, png_data.as_slice()).into()
     }))
 }
@@ -587,21 +587,21 @@ pub fn vega_to_png(
     height=None,
 ))]
 pub fn vegalite_to_png(
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
     scale: Option<f32>,
     ppi: Option<f32>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -639,7 +639,7 @@ pub fn vegalite_to_png(
         Err(err) => return Err(prefixed_py_error("Vega-Lite to PNG conversion failed", err)),
     };
 
-    Ok(Python::with_gil(|py| -> PyObject {
+    Ok(Python::attach(|py| -> Py<PyAny> {
         PyBytes::new(py, png_data.as_slice()).into()
     }))
 }
@@ -676,18 +676,18 @@ pub fn vegalite_to_png(
     height=None,
 ))]
 pub fn vega_to_jpeg(
-    vg_spec: PyObject,
+    vg_spec: Py<PyAny>,
     scale: Option<f32>,
     quality: Option<u8>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -717,7 +717,7 @@ pub fn vega_to_jpeg(
         Err(err) => return Err(prefixed_py_error("Vega to JPEG conversion failed", err)),
     };
 
-    Ok(Python::with_gil(|py| -> PyObject {
+    Ok(Python::attach(|py| -> Py<PyAny> {
         PyBytes::new(py, jpeg_data.as_slice()).into()
     }))
 }
@@ -764,21 +764,21 @@ pub fn vega_to_jpeg(
     height=None,
 ))]
 pub fn vegalite_to_jpeg(
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
     scale: Option<f32>,
     quality: Option<u8>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     handle_show_warnings(show_warnings);
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -821,7 +821,7 @@ pub fn vegalite_to_jpeg(
         }
     };
 
-    Ok(Python::with_gil(|py| -> PyObject {
+    Ok(Python::attach(|py| -> Py<PyAny> {
         PyBytes::new(py, jpeg_data.as_slice()).into()
     }))
 }
@@ -854,16 +854,16 @@ pub fn vegalite_to_jpeg(
     height=None,
 ))]
 pub fn vega_to_pdf(
-    vg_spec: PyObject,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    vg_spec: Py<PyAny>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
     let time_format_locale = parse_option_time_format_locale(time_format_locale)?;
@@ -891,8 +891,8 @@ pub fn vega_to_pdf(
         Ok(vega_spec) => vega_spec,
         Err(err) => return Err(prefixed_py_error("Vega to PDF conversion failed", err)),
     };
-    Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, pdf_bytes.as_slice()))
+    Ok(Python::attach(|py| -> Py<PyAny> {
+        PyBytes::new(py, pdf_bytes.as_slice()).into_any().unbind()
     }))
 }
 
@@ -930,18 +930,18 @@ pub fn vega_to_pdf(
     height=None,
 ))]
 pub fn vegalite_to_pdf(
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
     } else {
@@ -977,8 +977,8 @@ pub fn vegalite_to_pdf(
         Err(err) => return Err(prefixed_py_error("Vega-Lite to PDF conversion failed", err)),
     };
 
-    Ok(Python::with_gil(|py| -> PyObject {
-        PyObject::from(PyBytes::new(py, pdf_data.as_slice()))
+    Ok(Python::attach(|py| -> Py<PyAny> {
+        PyBytes::new(py, pdf_data.as_slice()).into_any().unbind()
     }))
 }
 
@@ -991,7 +991,7 @@ pub fn vegalite_to_pdf(
 ///     str: URL string
 #[pyfunction]
 #[pyo3(signature = (vl_spec, *, fullscreen=None))]
-pub fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
+pub fn vegalite_to_url(vl_spec: Py<PyAny>, fullscreen: Option<bool>) -> PyResult<String> {
     let vl_spec = parse_json_spec(vl_spec)?;
     Ok(vl_convert_rs::converter::vegalite_to_url(
         &vl_spec,
@@ -1010,7 +1010,7 @@ pub fn vegalite_to_url(vl_spec: PyObject, fullscreen: Option<bool>) -> PyResult<
 ///     str: URL string
 #[pyfunction]
 #[pyo3(signature = (vg_spec, *, fullscreen=None))]
-pub fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<String> {
+pub fn vega_to_url(vg_spec: Py<PyAny>, fullscreen: Option<bool>) -> PyResult<String> {
     let vg_spec = parse_json_spec(vg_spec)?;
     Ok(vl_convert_rs::converter::vega_to_url(
         &vg_spec,
@@ -1060,14 +1060,14 @@ pub fn vega_to_url(vg_spec: PyObject, fullscreen: Option<bool>) -> PyResult<Stri
     height=None,
 ))]
 pub fn vegalite_to_html(
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
     bundle: Option<bool>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     renderer: Option<String>,
     vega_plugin: Option<String>,
     background: Option<String>,
@@ -1147,14 +1147,14 @@ pub fn vegalite_to_html(
     height=None,
 ))]
 pub fn vega_to_html(
-    vg_spec: PyObject,
+    vg_spec: Py<PyAny>,
     bundle: Option<bool>,
-    google_fonts: Option<Vec<PyObject>>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     renderer: Option<String>,
     vega_plugin: Option<String>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1200,14 +1200,14 @@ pub fn vega_to_html(
 ///     bytes: PNG image data
 #[pyfunction]
 #[pyo3(signature = (svg, *, scale=None, ppi=None))]
-pub fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<PyObject> {
+pub fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<Py<PyAny>> {
     let svg = svg.to_string();
     let png_opts = PngOpts { scale, ppi };
     let png_data = run_converter_future(move |converter| async move {
         converter.svg_to_png(&svg, png_opts).await.map(|o| o.data)
     })
     .map_err(|err| prefixed_py_error("SVG to PNG conversion failed", err))?;
-    Ok(Python::with_gil(|py| -> PyObject {
+    Ok(Python::attach(|py| -> Py<PyAny> {
         PyBytes::new(py, png_data.as_slice()).into()
     }))
 }
@@ -1222,14 +1222,14 @@ pub fn svg_to_png(svg: &str, scale: Option<f32>, ppi: Option<f32>) -> PyResult<P
 ///     bytes: JPEG image data
 #[pyfunction]
 #[pyo3(signature = (svg, *, scale=None, quality=None))]
-pub fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<PyObject> {
+pub fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResult<Py<PyAny>> {
     let svg = svg.to_string();
     let jpeg_opts = JpegOpts { scale, quality };
     let jpeg_data = run_converter_future(move |converter| async move {
         converter.svg_to_jpeg(&svg, jpeg_opts).await.map(|o| o.data)
     })
     .map_err(|err| prefixed_py_error("SVG to JPEG conversion failed", err))?;
-    Ok(Python::with_gil(|py| -> PyObject {
+    Ok(Python::attach(|py| -> Py<PyAny> {
         PyBytes::new(py, jpeg_data.as_slice()).into()
     }))
 }
@@ -1242,7 +1242,7 @@ pub fn svg_to_jpeg(svg: &str, scale: Option<f32>, quality: Option<u8>) -> PyResu
 ///     bytes: PDF document data
 #[pyfunction]
 #[pyo3(signature = (svg))]
-pub fn svg_to_pdf(svg: &str) -> PyResult<PyObject> {
+pub fn svg_to_pdf(svg: &str) -> PyResult<Py<PyAny>> {
     let svg = svg.to_string();
     let pdf_data = run_converter_future(move |converter| async move {
         converter
@@ -1251,7 +1251,7 @@ pub fn svg_to_pdf(svg: &str) -> PyResult<PyObject> {
             .map(|o| o.data)
     })
     .map_err(|err| prefixed_py_error("SVG to PDF conversion failed", err))?;
-    Ok(Python::with_gil(|py| -> PyObject {
+    Ok(Python::attach(|py| -> Py<PyAny> {
         PyBytes::new(py, pdf_data.as_slice()).into()
     }))
 }
@@ -1268,9 +1268,9 @@ pub fn svg_to_pdf(svg: &str) -> PyResult<PyObject> {
 ))]
 pub fn vegalite_to_vega_asyncio<'py>(
     py: Python<'py>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -1326,13 +1326,13 @@ pub fn vegalite_to_vega_asyncio<'py>(
 ))]
 pub fn vega_to_svg_asyncio<'py>(
     py: Python<'py>,
-    vg_spec: PyObject,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    vg_spec: Py<PyAny>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
     bundle: Option<bool>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1367,7 +1367,7 @@ pub fn vega_to_svg_asyncio<'py>(
             .await
             .map(|o| o.svg)
             .map_err(|err| prefixed_py_error(error_prefix, err))?;
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
@@ -1392,13 +1392,13 @@ pub fn vega_to_svg_asyncio<'py>(
 ))]
 pub fn vega_to_scenegraph_asyncio<'py>(
     py: Python<'py>,
-    vg_spec: PyObject,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    vg_spec: Py<PyAny>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     format: &str,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1478,16 +1478,16 @@ pub fn vega_to_scenegraph_asyncio<'py>(
 ))]
 pub fn vegalite_to_svg_asyncio<'py>(
     py: Python<'py>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
     bundle: Option<bool>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1530,7 +1530,7 @@ pub fn vegalite_to_svg_asyncio<'py>(
             .await
             .map(|o| o.svg)
             .map_err(|err| prefixed_py_error(error_prefix, err))?;
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
@@ -1558,16 +1558,16 @@ pub fn vegalite_to_svg_asyncio<'py>(
 ))]
 pub fn vegalite_to_scenegraph_asyncio<'py>(
     py: Python<'py>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     format: &str,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1653,14 +1653,14 @@ pub fn vegalite_to_scenegraph_asyncio<'py>(
 ))]
 pub fn vega_to_png_asyncio<'py>(
     py: Python<'py>,
-    vg_spec: PyObject,
+    vg_spec: Py<PyAny>,
     scale: Option<f32>,
     ppi: Option<f32>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1716,17 +1716,17 @@ pub fn vega_to_png_asyncio<'py>(
 ))]
 pub fn vegalite_to_png_asyncio<'py>(
     py: Python<'py>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
     scale: Option<f32>,
     ppi: Option<f32>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1787,14 +1787,14 @@ pub fn vegalite_to_png_asyncio<'py>(
 ))]
 pub fn vega_to_jpeg_asyncio<'py>(
     py: Python<'py>,
-    vg_spec: PyObject,
+    vg_spec: Py<PyAny>,
     scale: Option<f32>,
     quality: Option<u8>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1850,17 +1850,17 @@ pub fn vega_to_jpeg_asyncio<'py>(
 ))]
 pub fn vegalite_to_jpeg_asyncio<'py>(
     py: Python<'py>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
     scale: Option<f32>,
     quality: Option<u8>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
     show_warnings: Option<bool>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1919,12 +1919,12 @@ pub fn vegalite_to_jpeg_asyncio<'py>(
 ))]
 pub fn vega_to_pdf_asyncio<'py>(
     py: Python<'py>,
-    vg_spec: PyObject,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    vg_spec: Py<PyAny>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -1977,14 +1977,14 @@ pub fn vega_to_pdf_asyncio<'py>(
 ))]
 pub fn vegalite_to_pdf_asyncio<'py>(
     py: Python<'py>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     vega_plugin: Option<String>,
-    google_fonts: Option<Vec<PyObject>>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -2031,7 +2031,7 @@ pub fn vegalite_to_pdf_asyncio<'py>(
 #[pyo3(signature = (vl_spec, *, fullscreen=None))]
 pub fn vegalite_to_url_asyncio<'py>(
     py: Python<'py>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     fullscreen: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vl_spec = parse_json_spec(vl_spec)?;
@@ -2042,7 +2042,7 @@ pub fn vegalite_to_url_asyncio<'py>(
         },
     )?;
     future_into_py_object(py, async move {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             pythonize(py, &url)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
@@ -2055,7 +2055,7 @@ pub fn vegalite_to_url_asyncio<'py>(
 #[pyo3(signature = (vg_spec, *, fullscreen=None))]
 pub fn vega_to_url_asyncio<'py>(
     py: Python<'py>,
-    vg_spec: PyObject,
+    vg_spec: Py<PyAny>,
     fullscreen: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
@@ -2066,7 +2066,7 @@ pub fn vega_to_url_asyncio<'py>(
         },
     )?;
     future_into_py_object(py, async move {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             pythonize(py, &url)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
@@ -2094,14 +2094,14 @@ pub fn vega_to_url_asyncio<'py>(
 ))]
 pub fn vegalite_to_html_asyncio<'py>(
     py: Python<'py>,
-    vl_spec: PyObject,
+    vl_spec: Py<PyAny>,
     vl_version: Option<&str>,
     bundle: Option<bool>,
-    google_fonts: Option<Vec<PyObject>>,
-    config: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    config: Option<Py<PyAny>>,
     theme: Option<String>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     renderer: Option<String>,
     vega_plugin: Option<String>,
     background: Option<String>,
@@ -2151,7 +2151,7 @@ pub fn vegalite_to_html_asyncio<'py>(
             .await
             .map(|o| o.html)
             .map_err(|err| prefixed_py_error(error_prefix, err))?;
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())
@@ -2177,14 +2177,14 @@ pub fn vegalite_to_html_asyncio<'py>(
 ))]
 pub fn vega_to_html_asyncio<'py>(
     py: Python<'py>,
-    vg_spec: PyObject,
+    vg_spec: Py<PyAny>,
     bundle: Option<bool>,
-    google_fonts: Option<Vec<PyObject>>,
-    format_locale: Option<PyObject>,
-    time_format_locale: Option<PyObject>,
+    google_fonts: Option<Vec<Py<PyAny>>>,
+    format_locale: Option<Py<PyAny>>,
+    time_format_locale: Option<Py<PyAny>>,
     renderer: Option<String>,
     vega_plugin: Option<String>,
-    config: Option<PyObject>,
+    config: Option<Py<PyAny>>,
     background: Option<String>,
     width: Option<f32>,
     height: Option<f32>,
@@ -2225,7 +2225,7 @@ pub fn vega_to_html_asyncio<'py>(
             .await
             .map(|o| o.html)
             .map_err(|err| prefixed_py_error(error_prefix, err))?;
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             pythonize(py, &value)
                 .map_err(|err| PyValueError::new_err(err.to_string()))
                 .map(|obj| obj.into())

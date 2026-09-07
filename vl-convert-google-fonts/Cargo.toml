@@ -19,7 +19,6 @@ dirs = { workspace = true }
 filetime = { workspace = true }
 fontdb = { workspace = true, optional = true }
 futures-util = { workspace = true }
-fs4 = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
 serde = { workspace = true }
 thiserror = "2"

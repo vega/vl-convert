@@ -1,6 +1,5 @@
 use crate::error::GoogleFontsError;
 use filetime::FileTime;
-use fs4::fs_std::FileExt;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -361,7 +360,7 @@ where
         .write(true)
         .truncate(false)
         .open(lock_path)?;
-    lock_file.lock_exclusive()?;
+    lock_file.lock()?;
 
     // Lock released when `lock_file` is dropped on return
     f()
@@ -505,7 +504,7 @@ mod tests {
         // read_font must reject the symlink and remove it.
         let result = read_font(url, tmp.path()).unwrap();
         assert!(result.is_none());
-        assert!(!font.symlink_metadata().is_ok()); // symlink removed
+        assert!(font.symlink_metadata().is_err()); // symlink removed
         assert!(target.exists()); // target untouched
     }
 

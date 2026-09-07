@@ -75,12 +75,12 @@ pub fn get_local_tz() -> PyResult<Option<String>> {
 ///         (all sizes in bytes).
 #[pyfunction]
 #[pyo3(signature = ())]
-pub fn get_worker_memory_usage() -> PyResult<PyObject> {
+pub fn get_worker_memory_usage() -> PyResult<Py<PyAny>> {
     let stats =
         run_converter_future(|converter| async move { converter.get_worker_memory_usage().await })
             .map_err(|err| prefixed_py_error("get_worker_memory_usage request failed", err))?;
 
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let list = pyo3::types::PyList::empty(py);
         for s in &stats {
             let dict = pyo3::types::PyDict::new(py);
@@ -101,10 +101,10 @@ pub fn get_worker_memory_usage() -> PyResult<PyObject> {
 ///     dict: dict from theme name to config object
 #[pyfunction]
 #[pyo3(signature = ())]
-pub fn get_themes() -> PyResult<PyObject> {
+pub fn get_themes() -> PyResult<Py<PyAny>> {
     let themes = run_converter_future(|converter| async move { converter.get_themes().await })
         .map_err(|err| prefixed_py_error("get_themes request failed", err))?;
-    Python::with_gil(|py| -> PyResult<PyObject> {
+    Python::attach(|py| -> PyResult<Py<PyAny>> {
         pythonize(py, &themes)
             .map_err(|err| PyValueError::new_err(err.to_string()))
             .map(|obj| obj.into())
@@ -122,7 +122,7 @@ pub fn get_themes() -> PyResult<PyObject> {
 ///     dict: d3-format locale dict
 #[pyfunction]
 #[pyo3(signature = (name))]
-pub fn get_format_locale(name: &str) -> PyResult<PyObject> {
+pub fn get_format_locale(name: &str) -> PyResult<Py<PyAny>> {
     match FORMATE_LOCALE_MAP.get(name) {
         None => {
             Err(PyValueError::new_err(format!(
@@ -131,7 +131,7 @@ pub fn get_format_locale(name: &str) -> PyResult<PyObject> {
         }
         Some(locale) => {
             let locale = parse_embedded_locale_json(locale, "format locale")?;
-            Python::with_gil(|py| -> PyResult<PyObject> {
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
                 pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string())).map(|obj| obj.into())
             })
         }
@@ -149,7 +149,7 @@ pub fn get_format_locale(name: &str) -> PyResult<PyObject> {
 ///     dict: d3-time-format locale dict
 #[pyfunction]
 #[pyo3(signature = (name))]
-pub fn get_time_format_locale(name: &str) -> PyResult<PyObject> {
+pub fn get_time_format_locale(name: &str) -> PyResult<Py<PyAny>> {
     match TIME_FORMATE_LOCALE_MAP.get(name) {
         None => {
             Err(PyValueError::new_err(format!(
@@ -158,7 +158,7 @@ pub fn get_time_format_locale(name: &str) -> PyResult<PyObject> {
         }
         Some(locale) => {
             let locale = parse_embedded_locale_json(locale, "time format locale")?;
-            Python::with_gil(|py| -> PyResult<PyObject> {
+            Python::attach(|py| -> PyResult<Py<PyAny>> {
                 pythonize(py, &locale).map_err(|err| PyValueError::new_err(err.to_string())).map(|obj| obj.into())
             })
         }
