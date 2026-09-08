@@ -69,7 +69,7 @@ The Rust crates and `vl-convert-python` share one version. The private `vl-conve
 Choose the next unused Rust SemVer without the `v` prefix. From a clean worktree, optionally validate the release inputs without changing local or remote state:
 
 ```sh
-pixi run prepare-release <NEXT_VERSION> -- --dry-run
+pixi run prepare-release <NEXT_VERSION> --dry-run
 ```
 
 Create the release branch and draft pull request:

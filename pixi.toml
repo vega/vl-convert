@@ -41,7 +41,7 @@ cp thirdparty_*.* vl-convert-python/ &&
 cp thirdparty_*.* vl-convert-rs/ &&
 cp thirdparty_*.* vl-convert/
 """
-prepare-release = { cmd = ["python", "scripts/release.py", "{{ version }}"], args = ["version"] }
+prepare-release = "python scripts/release.py"
 check-workspace = { cmd = ["python", "scripts/check_workspace.py"] }
 fmt-release-check = { cmd = ["ruff", "format", "scripts", "--check"] }
 lint-release = { cmd = ["ruff", "check", "scripts", "--select", "E,F,I,UP"] }
