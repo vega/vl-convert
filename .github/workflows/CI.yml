@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v7
-      - uses: prefix-dev/setup-pixi@v0.10.0
+      - uses: prefix-dev/setup-pixi@v0.10.2
         with:
           pixi-version: v0.47.0
       - name: Check cargo fmt compliance
@@ -36,7 +36,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.9.2
         with:
           cache-on-failure: True
       - name: Install Protoc
@@ -55,7 +55,7 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v7
-      - uses: prefix-dev/setup-pixi@v0.10.0
+      - uses: prefix-dev/setup-pixi@v0.10.2
         with:
           pixi-version: v0.47.0
       - name: Check that license is up to date
@@ -74,7 +74,7 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.9.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -126,7 +126,7 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.9.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -158,11 +158,11 @@ jobs:
       - name: Install latest stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.10"
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.9.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
@@ -231,11 +231,11 @@ jobs:
         run: git config --system core.longpaths true
       - name: Check out repository code
         uses: actions/checkout@v7
-      - uses: prefix-dev/setup-pixi@v0.10.0
+      - uses: prefix-dev/setup-pixi@v0.10.2
         with:
           pixi-version: v0.47.0
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.1
+        uses: Swatinem/rust-cache@v2.9.2
         with:
           prefix-key: "v1-rust"
           cache-on-failure: True
