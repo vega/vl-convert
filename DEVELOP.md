@@ -1,4 +1,4 @@
-# Devlopment
+# Development
 The vl-convert project consists of both Rust and Python components. The project uses [Pixi](https://pixi.sh/latest/) to manage the development environment. Pixi handles the installation of all the development dependencies including Python and Rust themselves. If you don't have Pixi installed, follow the instructions at https://pixi.sh/
 
 # Running Rust tests
@@ -23,7 +23,7 @@ pixi run test-py
 
 # Debug Logging
 To enable logging, set the RUST_LOG environment variable to info, warn, or error
-```
+```sh
 RUST_LOG=info
 ```
 
@@ -33,8 +33,6 @@ vl-convert uses the `cargo bundle-licenses` to bundle the licenses of its Rust d
 ```bash
 pixi run bundle-licenses
 ```
-
-If the generated license files are out of date, 
 
 # Build wheels
 
@@ -46,15 +44,9 @@ pixi run build-py
 
 # Linux Wheel Builds and V8
 
-Linux Python wheels link V8 into a shared library and therefore require a
-position-independent V8 archive. The upstream `rusty_v8` release archives now
-support this use case by enabling `v8_monolithic_for_shared_library`; see
-[denoland/rusty_v8#2008](https://github.com/denoland/rusty_v8/pull/2008).
+Linux Python wheels link V8 into a shared library and therefore require a position-independent V8 archive. The upstream `rusty_v8` release archives support this use case by enabling `v8_monolithic_for_shared_library`. See [denoland/rusty_v8#2008](https://github.com/denoland/rusty_v8/pull/2008) for the implementation.
 
-CI and release builds use the archive downloaded by the `v8` crate. No custom
-V8 source build or vl-convert-hosted archive is required. The original linker
-problem is documented in
-[denoland/rusty_v8#1706](https://github.com/denoland/rusty_v8/issues/1706).
+CI and release builds use the archive downloaded by the `v8` crate. No custom V8 source build or vl-convert-hosted archive is required. The original linker problem is documented in [denoland/rusty_v8#1706](https://github.com/denoland/rusty_v8/issues/1706).
 
 # Vendor JavaScript Dependencies
 vl-convert embeds vendored copies of all the JavaScript libraries it uses. The `vendor` Pixi task performs this 
@@ -67,28 +59,46 @@ pixi run vendor
 For more information on the vendoring process, see [vl-convert-vendor/README.md](vl-convert-vendor/README.md). 
 
 # Release process
-Releases of VlConvert crates are handled using [cargo-workspaces](https://github.com/pksunkara/cargo-workspaces), which can be installed with:
 
-```bash
-pixi shell
-cargo install cargo-workspaces
+## Versions
+
+The Rust crates and `vl-convert-python` share one version. The private `vl-convert-vendor` crate remains at `0.0.0`.
+
+## Prepare a release
+
+Choose the next unused Rust SemVer without the `v` prefix. From a clean worktree, optionally validate the release inputs without changing local or remote state:
+
+```sh
+pixi run prepare-release <NEXT_VERSION> -- --dry-run
 ```
 
-## Tagging and publish to crates.io
-Check out the main branch, then tag and publish new versions of the `vl-convert-canvas2d`, `vl-convert-canvas2d-deno`, `vl-convert-rs`, and `vl-convert` crates with:
+Create the release branch and draft pull request:
 
-(replacing `0.1.0` with the desired version)
-
-```bash
-pixi shell
-cargo ws publish --all --force "vl-convert*" --allow-branch main custom 0.1.0
+```sh
+pixi run prepare-release <NEXT_VERSION>
 ```
 
-This command bumps all crate versions, updates inter-crate dependency versions, commits, tags (`v0.1.0`), and pushes to `origin/main`.
+The command creates and pushes `release/v<NEXT_VERSION>` from the latest `origin/main`, updates the workspace version and exact internal requirements, refreshes the lockfile, and opens a draft pull request. Merge the pull request after its checks pass, then wait for the merged commit's checks on `main` to pass.
 
-## Publish Python packages to PyPI
-The push to `main` will trigger CI, including the "Publish to PyPI" job. This job must be approved manually in the GitHub interface. After it is approved it will run and publish the Python packages to PyPI.
+## Publish a release
 
-## Create GitHub Release
-Create a new GitHub release using the `v0.1.0` tag.
+Create and publish a GitHub Release with a new `v<NEXT_VERSION>` tag that targets the merged version commit on `main`. Mark the GitHub Release as a prerelease when the version has a prerelease component such as `-rc3`.
 
+Publishing the GitHub Release starts the `Release` workflow. The workflow builds and verifies the artifacts before it requests approval through the protected `release` environment. It then publishes the Rust crates and Python distributions and attaches the CLI archives, wheels, source distribution, and checksums.
+
+WARNING: Registry uploads are irreversible. After an upload starts, do not move, delete, or reuse the tag. Prepare a new version when the source or workflow must change.
+
+## Retry or test the workflow
+
+For a transient failure, rerun the failed jobs on the same workflow run. The retry skips exact crate versions and Python files that are already published.
+
+Use the manual `workflow_dispatch` trigger to test builds without publishing. The `linux_wheels_only` input limits the run to the two Linux wheel jobs.
+
+## One-time repository setup
+
+Configure a GitHub environment named `release` with a required reviewer and restrict it to `v*` tags. Add a `v*` tag ruleset that prevents unauthorized updates and deletions.
+
+Configure trusted publishing with the `vega/vl-convert` repository, `.github/workflows/Release.yml` workflow, and `release` environment for:
+
+- The `vl-convert-python` project on PyPI.
+- The `vl-convert`, `vl-convert-canvas2d`, `vl-convert-canvas2d-deno`, `vl-convert-google-fonts`, `vl-convert-rs`, and `vl-convert-server` crates on crates.io.

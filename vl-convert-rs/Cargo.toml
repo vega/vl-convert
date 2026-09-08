@@ -1,11 +1,11 @@
 [package]
 name = "vl-convert-rs"
-version = "2.0.0-rc2"
-edition = "2021"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 readme = "README.md"
 homepage = "https://github.com/jonmmease/vl-convert"
-repository = "https://github.com/jonmmease/vl-convert"
+repository.workspace = true
 description = "Library for converting Vega-Lite visualization specifications to Vega specifications"
 keywords = ["Visualization", "Vega", "Vega-Lite"]
 
@@ -17,9 +17,9 @@ rustc-args = ["--cfg", "vl_convert_docsrs"]
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(vl_convert_docsrs)"] }
 
 [dependencies]
-vl-convert-canvas2d = { path = "../vl-convert-canvas2d", version = "2.0.0-rc1" }
-vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", version = "2.0.0-rc1", features = ["svg"] }
-vl-convert-google-fonts = { path = "../vl-convert-google-fonts", version = "2.0.0-rc1", features = ["fontdb"] }
+vl-convert-canvas2d = { workspace = true }
+vl-convert-canvas2d-deno = { workspace = true, features = ["svg"] }
+vl-convert-google-fonts = { workspace = true, features = ["fontdb"] }
 
 arc-swap = "1.9"
 deno_runtime = { workspace = true }
@@ -88,4 +88,4 @@ deno_error = { workspace = true }
 # Need "snapshot" feature to access deno_runtime::snapshot::create_runtime_snapshot
 deno_runtime = { workspace = true, features = ["snapshot"] }
 # Canvas 2D Deno extension - used in snapshot creation
-vl-convert-canvas2d-deno = { path = "../vl-convert-canvas2d-deno", version = "2.0.0-rc1" }
+vl-convert-canvas2d-deno = { workspace = true }

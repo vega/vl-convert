@@ -1,22 +1,19 @@
 [package]
 name = "vl-convert-python"
-version = "2.0.0-rc2"
-edition = "2021"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 readme = "README.md"
 homepage = "https://github.com/jonmmease/vl-convert"
-repository = "https://github.com/jonmmease/vl-convert"
+repository.workspace = true
 publish = false
-
-[package.metadata.release]
-release = false
 
 [lib]
 name = "vl_convert"
 crate-type = ["cdylib"]
 
 [dependencies]
-vl-convert-rs = { path = "../vl-convert-rs", version = "2.0.0-rc1" }
+vl-convert-rs = { workspace = true }
 pyo3 = { workspace = true }
 lazy_static = { workspace = true }
 futures = { workspace = true }

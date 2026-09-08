@@ -12,6 +12,12 @@ members = [
     "vl-convert-server",
 ]
 
+[workspace.package]
+version = "2.0.0-rc2"
+edition = "2021"
+license = "BSD-3-Clause"
+repository = "https://github.com/vega/vl-convert"
+
 [profile.release]
 strip = true  # Automatically strip symbols from the binary
 opt-level = "z"  # Optimize for size
@@ -24,6 +30,13 @@ anyhow = "1.0"
 assert_cmd = "2.0"
 backon = { version = "1", default-features = false, features = ["tokio-sleep", "std", "std-blocking-sleep"] }
 clap = { version = "4.5", features = ["derive", "env"] }
+
+# Internal packages are released in lockstep.
+vl-convert-canvas2d = { path = "vl-convert-canvas2d", version = "=2.0.0-rc2" }
+vl-convert-canvas2d-deno = { path = "vl-convert-canvas2d-deno", version = "=2.0.0-rc2" }
+vl-convert-google-fonts = { path = "vl-convert-google-fonts", version = "=2.0.0-rc2" }
+vl-convert-rs = { path = "vl-convert-rs", version = "=2.0.0-rc2" }
+vl-convert-server = { path = "vl-convert-server", version = "=2.0.0-rc2" }
 
 # Deno dependencies - versions correspond to Deno v2.9.6
 deno_runtime = "0.266.0"
