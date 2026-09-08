@@ -10853,7 +10853,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vl-convert"
-version = "2.0.0-rc2"
+version = "2.0.0-rc3"
 dependencies = [
  "assert_cmd",
  "bytes",
@@ -10882,7 +10882,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-canvas2d"
-version = "2.0.0-rc2"
+version = "2.0.0-rc3"
 dependencies = [
  "cosmic-text",
  "csscolorparser",
@@ -10901,7 +10901,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-canvas2d-deno"
-version = "2.0.0-rc2"
+version = "2.0.0-rc3"
 dependencies = [
  "csscolorparser",
  "deno_core",
@@ -10917,7 +10917,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-google-fonts"
-version = "2.0.0-rc2"
+version = "2.0.0-rc3"
 dependencies = [
  "backon",
  "dashmap 6.2.1",
@@ -10936,7 +10936,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-python"
-version = "2.0.0-rc2"
+version = "2.0.0-rc3"
 dependencies = [
  "futures",
  "lazy_static",
@@ -10950,7 +10950,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-rs"
-version = "2.0.0-rc2"
+version = "2.0.0-rc3"
 dependencies = [
  "arc-swap",
  "backon",
@@ -11004,7 +11004,7 @@ dependencies = [
 
 [[package]]
 name = "vl-convert-server"
-version = "2.0.0-rc2"
+version = "2.0.0-rc3"
 dependencies = [
  "arc-swap",
  "axum",
