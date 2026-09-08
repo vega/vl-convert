@@ -84,7 +84,7 @@ The command creates and pushes `release/v<NEXT_VERSION>` from the latest `origin
 
 Create and publish a GitHub Release with a new `v<NEXT_VERSION>` tag that targets the merged version commit on `main`. Mark the GitHub Release as a prerelease when the version has a prerelease component such as `-rc3`.
 
-Publishing the GitHub Release starts the `Release` workflow. The workflow builds and verifies the artifacts before it requests approval through the protected `release` environment. It then publishes the Rust crates and Python distributions, attaches the CLI archives, wheels, source distribution, and checksums, and verifies the registries and assets.
+Publishing the GitHub Release starts the `Release` workflow. The workflow builds and verifies the artifacts before it requests approval through the protected `release` environment. It then publishes the Rust crates and Python distributions and attaches the CLI archives, wheels, source distribution, and checksums.
 
 WARNING: Registry uploads are irreversible. After an upload starts, do not move, delete, or reuse the tag. Prepare a new version when the source or workflow must change.
 

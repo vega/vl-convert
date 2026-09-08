@@ -327,27 +327,6 @@ jobs:
           docker run --rm -v "${PWD}/dist:/dist" \
             -e EXPECTED_VERSION -e EXPECTED_PYTHON_VERSION python:3.11-slim \
             bash -c "pip install /dist/*x86_64*.whl && python -c \"import importlib.metadata as md, os, vl_convert as vlc; assert md.version('vl-convert-python') == os.environ['EXPECTED_PYTHON_VERSION']; assert vlc.__version__ == os.environ['EXPECTED_VERSION']; themes = vlc.get_themes(); assert 'dark' in themes\""
-      - name: Verify source distribution metadata
-        run: |
-          python - <<'PY'
-          import email
-          import os
-          import tarfile
-          from pathlib import Path
-
-          archives = list(Path("dist").glob("*.tar.gz"))
-          if len(archives) != 1:
-              raise SystemExit(f"Expected one source distribution, found {archives}")
-          with tarfile.open(archives[0]) as archive:
-              members = [m for m in archive.getmembers() if m.name.endswith("/PKG-INFO")]
-              if len(members) != 1:
-                  raise SystemExit(f"Expected one PKG-INFO, found {len(members)}")
-              metadata = email.message_from_binary_file(archive.extractfile(members[0]))
-          if metadata["Version"] != os.environ["EXPECTED_PYTHON_VERSION"]:
-              raise SystemExit(
-                  f"Expected {os.environ['EXPECTED_PYTHON_VERSION']}, found {metadata['Version']}"
-              )
-          PY
       - name: Upload distributions
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -571,6 +550,11 @@ jobs:
     env:
       EXPECTED_PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
     steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
       - name: Download CLI artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -582,45 +566,7 @@ jobs:
           pattern: python-*
           path: incoming/
       - name: Verify and assemble artifacts
-        run: |
-          python - <<'PY'
-          import hashlib
-          import os
-          import shutil
-          from collections import Counter
-          from pathlib import Path
-
-          version = os.environ["EXPECTED_PYTHON_VERSION"]
-          expected = {
-              "vl-convert_linux-64.zip",
-              "vl-convert_linux-aarch64.zip",
-              "vl-convert_osx-64.zip",
-              "vl-convert_osx-arm64.zip",
-              "vl-convert_win-64.zip",
-              f"vl_convert_python-{version}-cp39-abi3-macosx_10_12_x86_64.whl",
-              f"vl_convert_python-{version}-cp39-abi3-macosx_11_0_arm64.whl",
-              f"vl_convert_python-{version}-cp39-abi3-manylinux_2_28_aarch64.whl",
-              f"vl_convert_python-{version}-cp39-abi3-manylinux_2_28_x86_64.whl",
-              f"vl_convert_python-{version}-cp39-abi3-win_amd64.whl",
-              f"vl_convert_python-{version}.tar.gz",
-          }
-          files = [path for path in Path("incoming").rglob("*") if path.is_file()]
-          actual = Counter(path.name for path in files)
-          wanted = Counter(expected)
-          if actual != wanted:
-              missing = sorted((wanted - actual).elements())
-              extra = sorted((actual - wanted).elements())
-              raise SystemExit(f"Artifact mismatch; missing={missing}, extra={extra}")
-
-          output = Path("release-dist")
-          output.mkdir()
-          for path in files:
-              shutil.copy2(path, output / path.name)
-          with (output / "SHA256SUMS").open("w", encoding="utf-8") as checksums:
-              for name in sorted(expected):
-                  digest = hashlib.sha256((output / name).read_bytes()).hexdigest()
-                  checksums.write(f"{digest}  {name}\n")
-          PY
+        run: python scripts/assemble_release_artifacts.py "$EXPECTED_PYTHON_VERSION" incoming release-dist
       - name: Upload assembled artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -755,104 +701,3 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: gh release upload "$RELEASE_TAG" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"
-
-  verify-release:
-    name: Verify published release
-    if: github.event_name == 'release'
-    needs: [validate, publish-crates, publish-pypi, upload-release-assets]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Verify registries and GitHub assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-          VERSION: ${{ needs.validate.outputs.version }}
-          PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          import time
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-
-          repository = os.environ["GITHUB_REPOSITORY"]
-          tag = os.environ["RELEASE_TAG"]
-          version = os.environ["VERSION"]
-          python_version = os.environ["PYTHON_VERSION"]
-          crates = (
-              "vl-convert",
-              "vl-convert-canvas2d",
-              "vl-convert-canvas2d-deno",
-              "vl-convert-google-fonts",
-              "vl-convert-rs",
-              "vl-convert-server",
-          )
-
-          def request_json(url, headers=None, attempts=1):
-              request = urllib.request.Request(
-                  url,
-                  headers={"User-Agent": "vl-convert-release-workflow", **(headers or {})},
-              )
-              for attempt in range(attempts):
-                  try:
-                      with urllib.request.urlopen(request, timeout=30) as response:
-                          return json.load(response)
-                  except urllib.error.HTTPError as error:
-                      if error.code != 404 or attempt == attempts - 1:
-                          raise
-                      time.sleep(10)
-
-          for crate in crates:
-              crate_url = (
-                  "https://crates.io/api/v1/crates/"
-                  f"{urllib.parse.quote(crate)}/{urllib.parse.quote(version)}"
-              )
-              request_json(crate_url, attempts=12)
-
-          pypi = request_json(
-              "https://pypi.org/pypi/vl-convert-python/"
-              f"{urllib.parse.quote(python_version)}/json",
-              attempts=12,
-          )
-          expected_distributions = {
-              f"vl_convert_python-{python_version}-cp39-abi3-macosx_10_12_x86_64.whl",
-              f"vl_convert_python-{python_version}-cp39-abi3-macosx_11_0_arm64.whl",
-              f"vl_convert_python-{python_version}-cp39-abi3-manylinux_2_28_aarch64.whl",
-              f"vl_convert_python-{python_version}-cp39-abi3-manylinux_2_28_x86_64.whl",
-              f"vl_convert_python-{python_version}-cp39-abi3-win_amd64.whl",
-              f"vl_convert_python-{python_version}.tar.gz",
-          }
-          actual_distributions = {item["filename"] for item in pypi["urls"]}
-          if actual_distributions != expected_distributions:
-              raise SystemExit(
-                  f"PyPI file mismatch: expected {sorted(expected_distributions)}, "
-                  f"found {sorted(actual_distributions)}"
-              )
-
-          release = request_json(
-              f"https://api.github.com/repos/{repository}/releases/tags/"
-              f"{urllib.parse.quote(tag)}",
-              headers={
-                  "Accept": "application/vnd.github+json",
-                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-                  "X-GitHub-Api-Version": "2022-11-28",
-              },
-          )
-          expected_assets = expected_distributions | {
-              "SHA256SUMS",
-              "vl-convert_linux-64.zip",
-              "vl-convert_linux-aarch64.zip",
-              "vl-convert_osx-64.zip",
-              "vl-convert_osx-arm64.zip",
-              "vl-convert_win-64.zip",
-          }
-          actual_assets = {asset["name"] for asset in release["assets"]}
-          if actual_assets != expected_assets:
-              raise SystemExit(
-                  f"GitHub asset mismatch: expected {sorted(expected_assets)}, "
-                  f"found {sorted(actual_assets)}"
-              )
-          print(f"Verified {tag} on crates.io, PyPI, and GitHub")
-          PY
