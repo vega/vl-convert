@@ -105,9 +105,13 @@ def update_root_manifest(version: str) -> None:
 def pull_request_body(current: str, version: str) -> str:
     release_kind = "prerelease" if "-" in version else "stable release"
     packages = "\n".join(f"- `{name}`" for name in PRODUCT_PACKAGES)
+    summary = (
+        f"Prepare `{version}` as a {release_kind}. This updates the shared workspace "
+        f"version and exact internal package requirements from `{current}`."
+    )
     return f"""## Summary
 
-Prepare `{version}` as a {release_kind}. This updates the shared workspace version and exact internal package requirements from `{current}`.
+{summary}
 
 ## Packages
 
