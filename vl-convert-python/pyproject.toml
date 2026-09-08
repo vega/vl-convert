@@ -1,10 +1,12 @@
 [build-system]
-requires = ["maturin>=1.1.0,<2"]
+requires = ["maturin>=1.9.3,<2"]
 build-backend = "maturin"
 
 [project]
 name = "vl-convert-python"
-dynamic = ["version", "readme", "license"]
+dynamic = ["version", "readme"]
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
 description = "Convert Vega-Lite chart specifications to SVG, PNG, or Vega"
 classifiers = [
