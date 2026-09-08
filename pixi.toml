@@ -52,7 +52,7 @@ playwright = ">=1.40"
 # Development Dependencies
 [dependencies]
 python = "3.11.*"
-maturin = "1.8.*"
+maturin = "1.15.*"
 rust = "1.95.*"
 gh = ">=2.80,<3"
 packaging = ">=23,<26"

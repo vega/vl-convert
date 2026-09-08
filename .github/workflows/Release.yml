@@ -20,7 +20,7 @@ concurrency:
 
 env:
   RUST_VERSION: 1.95.0
-  MATURIN_VERSION: 1.8.6
+  MATURIN_VERSION: 1.15.0
 
 jobs:
   validate:
