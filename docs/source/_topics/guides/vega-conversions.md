@@ -45,9 +45,9 @@ PNG, JPEG, and PDF functions return bytes.
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert vg2svg --input chart.vg.json --output chart.svg
-vl-convert vg2png --input chart.vg.json --output chart.png
+```console
+$ vl-convert vg2svg --input chart.vg.json --output chart.svg
+$ vl-convert vg2png --input chart.vg.json --output chart.png
 ```
 
 The other commands are `vg2jpeg`, `vg2pdf`, `vg2html`, `vg2url`, `vg2sg`, and
@@ -84,11 +84,11 @@ output you need: `/vega/svg`, `/vega/png`, `/vega/jpeg`, `/vega/pdf`,
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vega/svg \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.svg
+```console
+$ curl http://127.0.0.1:3000/vega/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.svg
 ```
 
 The request fields match the Vega-Lite endpoints, minus `theme` and

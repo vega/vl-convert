@@ -16,6 +16,11 @@ def main() -> int:
     outputs = [
         ("vl2svg", "stacked_bar_h.svg", VL_VERSION),
         ("vl2png", "stacked_bar_h.png", [*VL_VERSION, "--scale", "2"]),
+        (
+            "vl2jpeg",
+            "stacked_bar_h.jpg",
+            [*VL_VERSION, "--scale", "2", "--quality", "90"],
+        ),
         ("vl2pdf", "stacked_bar_h.pdf", VL_VERSION),
         ("vl2html", "stacked_bar_h.html", [*VL_VERSION, "--bundle"]),
         ("vl2vg", "stacked_bar_h.vg.json", [*VL_VERSION, "--pretty"]),

@@ -51,13 +51,13 @@ vlc.configure(
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert \
-  --base-url disabled \
-  --allowed-base-urls https://data.example.com/public/ \
-  --max-v8-heap-size-mb 512 \
-  --max-v8-execution-time-secs 10 \
-  vl2png --input chart.vl.json --output chart.png
+```console
+$ vl-convert \
+>   --base-url disabled \
+>   --allowed-base-urls https://data.example.com/public/ \
+>   --max-v8-heap-size-mb 512 \
+>   --max-v8-execution-time-secs 10 \
+>   vl2png --input chart.vl.json --output chart.png
 ```
 
 `--allowed-base-urls none` blocks every HTTP or HTTPS data and image URL and
@@ -82,15 +82,15 @@ let converter = VlConverter::with_config(VlcConfig {
 ::::
 
 ::::{interface} server
-```bash
-vl-convert serve \
-  --base-url disabled \
-  --allowed-base-urls https://data.example.com/public/ \
-  --max-v8-heap-size-mb 512 \
-  --max-v8-execution-time-secs 10 \
-  --host 127.0.0.1 \
-  --port 3000 \
-  --opaque-errors
+```console
+$ vl-convert serve \
+>   --base-url disabled \
+>   --allowed-base-urls https://data.example.com/public/ \
+>   --max-v8-heap-size-mb 512 \
+>   --max-v8-execution-time-secs 10 \
+>   --host 127.0.0.1 \
+>   --port 3000 \
+>   --opaque-errors
 ```
 
 `--opaque-errors` keeps internal error details out of client responses. Also

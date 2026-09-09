@@ -53,11 +53,11 @@ The functions also accept the specification as a dictionary.
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert vl2svg --input chart.vl.json --output chart.svg
-vl-convert vl2png --input chart.vl.json --output chart.png --scale 2
-vl-convert vl2pdf --input chart.vl.json --output chart.pdf
-vl-convert vl2vg --input chart.vl.json --output chart.vg.json --pretty
+```console
+$ vl-convert vl2svg --input chart.vl.json --output chart.svg
+$ vl-convert vl2png --input chart.vl.json --output chart.png --scale 2
+$ vl-convert vl2pdf --input chart.vl.json --output chart.pdf
+$ vl-convert vl2vg --input chart.vl.json --output chart.vg.json --pretty
 ```
 
 The other commands are `vl2jpeg`, `vl2html`, `vl2url`, `vl2sg`, and `vl2fonts`.
@@ -109,11 +109,11 @@ For example, save this complete SVG request as `request.json`:
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vegalite/svg \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.svg
+```console
+$ curl http://127.0.0.1:3000/vegalite/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.svg
 ```
 
 The response body contains the output directly. See {doc}`../api-reference`

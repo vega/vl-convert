@@ -38,11 +38,11 @@ Vega warnings.
 The CLI writes diagnostics to standard error and exits with a nonzero status on
 failure. Rule out config files and environment variables while debugging:
 
-```bash
-vl-convert \
-  --vlc-config disabled \
-  --log-level debug \
-  vl2png --input chart.vl.json --output chart.png
+```console
+$ vl-convert \
+>   --vlc-config disabled \
+>   --log-level debug \
+>   vl2png --input chart.vl.json --output chart.png
 ```
 
 Add settings back one at a time to find the one that causes the problem.
@@ -70,10 +70,10 @@ match converter
 ::::{interface} server
 Return detailed errors only on a trusted development or staging listener:
 
-```bash
-vl-convert serve \
-  --log-format json --log-level debug \
-  --port 3000 --opaque-errors=false
+```console
+$ vl-convert serve \
+>   --log-format json --log-level debug \
+>   --port 3000 --opaque-errors=false
 ```
 
 Production services should use `--opaque-errors` and rely on server-side logs.

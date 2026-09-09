@@ -113,11 +113,11 @@ Put overrides beside `spec` in the request body. Save this body as
 
 Send it to the PNG endpoint:
 
-```bash
-curl http://127.0.0.1:3000/vegalite/png \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.png
+```console
+$ curl http://127.0.0.1:3000/vegalite/png \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.png
 ```
 
 Per-request `google_fonts` requires `--allow-google-fonts`, and per-request
@@ -129,14 +129,14 @@ ignored.
 ::::{interface} cli
 Pass overrides as options after the conversion command:
 
-```bash
-vl-convert vl2png \
-  --input chart.vl.json \
-  --output chart.png \
-  --scale 2 \
-  --width 640 \
-  --height 360 \
-  --theme dark
+```console
+$ vl-convert vl2png \
+>   --input chart.vl.json \
+>   --output chart.png \
+>   --scale 2 \
+>   --width 640 \
+>   --height 360 \
+>   --theme dark
 ```
 
 Run a command with `--help` to see its options. `--config` is available on the

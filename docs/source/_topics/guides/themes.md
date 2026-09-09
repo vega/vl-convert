@@ -45,10 +45,10 @@ Path("chart.svg").write_text(svg, encoding="utf-8")
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert vl2svg \
-  --input chart.vl.json --output chart.svg \
-  --theme dark
+```console
+$ vl-convert vl2svg \
+>   --input chart.vl.json --output chart.svg \
+>   --theme dark
 ```
 ::::
 
@@ -86,11 +86,11 @@ Set `theme` beside `spec` in a Vega-Lite conversion request. Save this body as
 
 Send it to the SVG endpoint:
 
-```bash
-curl http://127.0.0.1:3000/vegalite/svg \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.svg
+```console
+$ curl http://127.0.0.1:3000/vegalite/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.svg
 ```
 ::::
 
@@ -128,8 +128,8 @@ print(themes["dark"])
 ::::{interface} cli
 `ls-themes` prints the available names:
 
-```bash
-vl-convert ls-themes
+```console
+$ vl-convert ls-themes
 ```
 
 ```{program-output} python ../tools/run_vl_convert.py ls-themes
@@ -137,8 +137,8 @@ vl-convert ls-themes
 
 `cat-theme` prints the configuration a theme applies. `dark` is the shortest:
 
-```bash
-vl-convert cat-theme dark
+```console
+$ vl-convert cat-theme dark
 ```
 
 ```{program-output} python ../tools/run_vl_convert.py cat-theme dark
@@ -158,9 +158,9 @@ println!("{}", themes["dark"]);
 `GET /themes` lists the available names, and `GET /themes/{name}` returns the
 configuration one theme applies:
 
-```bash
-curl http://127.0.0.1:3000/themes
-curl http://127.0.0.1:3000/themes/dark
+```console
+$ curl http://127.0.0.1:3000/themes
+$ curl http://127.0.0.1:3000/themes/dark
 ```
 ::::
 
@@ -195,9 +195,9 @@ with open("chart.svg", "w", encoding="utf-8") as output_file:
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert --themes themes.json \
-  vl2svg --theme brand --input chart.vl.json --output chart.svg
+```console
+$ vl-convert --themes themes.json \
+>   vl2svg --theme brand --input chart.vl.json --output chart.svg
 ```
 ::::
 
@@ -231,10 +231,10 @@ std::fs::write("chart.svg", output.svg)?;
 ::::{interface} server
 Register custom themes before the `serve` subcommand:
 
-```bash
-vl-convert serve \
-  --themes themes.json \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --themes themes.json \
+>   --port 3000
 ```
 
 The themes then appear in `GET /themes` and can be selected by Vega-Lite
@@ -248,11 +248,11 @@ conversion requests. Save this request as `request.json`:
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vegalite/svg \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.svg
+```console
+$ curl http://127.0.0.1:3000/vegalite/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.svg
 ```
 ::::
 

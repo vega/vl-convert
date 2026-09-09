@@ -73,14 +73,14 @@ Both functions return bytes. They also accept the specification as a dictionary.
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert vl2png \
-  --input chart.vl.json --output chart.png \
-  --width 640 --height 360 --scale 2
+```console
+$ vl-convert vl2png \
+>   --input chart.vl.json --output chart.png \
+>   --width 640 --height 360 --scale 2
 
-vl-convert vl2jpeg \
-  --input chart.vl.json --output chart.jpg \
-  --width 640 --height 360 --quality 90
+$ vl-convert vl2jpeg \
+>   --input chart.vl.json --output chart.jpg \
+>   --width 640 --height 360 --quality 90
 ```
 ::::
 
@@ -134,11 +134,11 @@ as `request.json`:
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vegalite/png \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.png
+```console
+$ curl http://127.0.0.1:3000/vegalite/png \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.png
 ```
 ::::
 

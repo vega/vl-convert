@@ -60,16 +60,16 @@ The default result is a dictionary. The MessagePack result is bytes. Use
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert vl2sg \
-  --input chart.vl.json \
-  --output scenegraph.json \
-  --pretty
+```console
+$ vl-convert vl2sg \
+>   --input chart.vl.json \
+>   --output scenegraph.json \
+>   --pretty
 
-vl-convert vg2sg \
-  --input chart.vg.json \
-  --output scenegraph.msgpack \
-  --format msgpack
+$ vl-convert vg2sg \
+>   --input chart.vg.json \
+>   --output scenegraph.msgpack \
+>   --format msgpack
 ```
 
 `vl2sg` takes Vega-Lite input and `vg2sg` takes Vega input.
@@ -116,11 +116,11 @@ for MessagePack. Save this Vega-Lite body as `request.json`:
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vegalite/scenegraph \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output scenegraph.json
+```console
+$ curl http://127.0.0.1:3000/vegalite/scenegraph \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output scenegraph.json
 ```
 
 For the Vega and MessagePack combination, save this body as `request.json`:
@@ -133,12 +133,12 @@ For the Vega and MessagePack combination, save this body as `request.json`:
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vega/scenegraph \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/msgpack' \
-  --data-binary @request.json \
-  --output scenegraph.msgpack
+```console
+$ curl http://127.0.0.1:3000/vega/scenegraph \
+>   -H 'Content-Type: application/json' \
+>   -H 'Accept: application/msgpack' \
+>   --data-binary @request.json \
+>   --output scenegraph.msgpack
 ```
 ::::
 

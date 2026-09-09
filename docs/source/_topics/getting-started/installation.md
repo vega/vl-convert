@@ -22,15 +22,15 @@ Already using 1.x? See {doc}`upgrading` for what changed in version 2.
 Install the package from PyPI. Prebuilt wheels are published for Linux, macOS,
 and Windows, and Python 3.10 or later is required.
 
-```bash
-python -m pip install --pre --upgrade "vl-convert-python>=2.0.0rc1,<3"
+```console
+$ python -m pip install --pre --upgrade "vl-convert-python>=2.0.0rc1,<3"
 ```
 
 The distribution is named `vl-convert-python`, and Python imports it as
 `vl_convert`. Confirm that the installation works:
 
-```bash
-python -c "import vl_convert as vlc; print(vlc.__version__)"
+```console
+$ python -c "import vl_convert as vlc; print(vlc.__version__)"
 ```
 ::::
 
@@ -38,14 +38,14 @@ python -c "import vl_convert as vlc; print(vlc.__version__)"
 Install a Rust toolchain, then build and install the `vl-convert` executable
 from crates.io:
 
-```bash
-cargo install vl-convert --version '^2.0.0-rc1' --locked
+```console
+$ cargo install vl-convert --version '^2.0.0-rc1' --locked
 ```
 
 Confirm that the executable is on your `PATH`:
 
-```bash
-vl-convert --version
+```console
+$ vl-convert --version
 ```
 
 `vl-convert --help` lists the conversion commands.
@@ -72,15 +72,15 @@ so your application needs an async runtime such as Tokio. The
 The server is the `serve` subcommand of the `vl-convert` executable. Install a
 Rust toolchain, then build and install the executable from crates.io:
 
-```bash
-cargo install vl-convert --version '^2.0.0-rc1' --locked
+```console
+$ cargo install vl-convert --version '^2.0.0-rc1' --locked
 ```
 
 Confirm the installation, then start a local server:
 
-```bash
-vl-convert --version
-vl-convert serve --port 3000
+```console
+$ vl-convert --version
+$ vl-convert serve --port 3000
 ```
 
 The server keeps running and listens on port 3000. Leave this terminal open

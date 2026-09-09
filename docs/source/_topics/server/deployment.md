@@ -23,20 +23,20 @@ Use a bearer token when known backend services call the converter. Supply
 `VLC_API_KEY` through the deployment's secret manager before starting this
 command:
 
-```bash
-vl-convert serve \
-  --base-url disabled \
-  --allowed-base-urls https://data.example.com/ \
-  --max-v8-heap-size-mb 512 \
-  --max-v8-execution-time-secs 10 \
-  --log-format json \
-  --host 127.0.0.1 \
-  --port 3000 \
-  --workers 2 \
-  --max-concurrent-requests 4 \
-  --request-timeout-secs 15 \
-  --max-body-size-mb 8 \
-  --opaque-errors
+```console
+$ vl-convert serve \
+>   --base-url disabled \
+>   --allowed-base-urls https://data.example.com/ \
+>   --max-v8-heap-size-mb 512 \
+>   --max-v8-execution-time-secs 10 \
+>   --log-format json \
+>   --host 127.0.0.1 \
+>   --port 3000 \
+>   --workers 2 \
+>   --max-concurrent-requests 4 \
+>   --request-timeout-secs 15 \
+>   --max-body-size-mb 8 \
+>   --opaque-errors
 ```
 
 Bind to a private network address instead of loopback when the reverse proxy
@@ -48,24 +48,24 @@ network edge.
 A browser cannot keep a shared API key secret. If a tool must accept anonymous
 internet requests, use strict access and resource controls:
 
-```bash
-vl-convert serve \
-  --base-url disabled \
-  --allowed-base-urls none \
-  --max-v8-heap-size-mb 512 \
-  --max-v8-execution-time-secs 10 \
-  --missing-fonts warn \
-  --log-format json \
-  --host 0.0.0.0 \
-  --port 3000 \
-  --workers 2 \
-  --max-concurrent-requests 4 \
-  --request-timeout-secs 15 \
-  --max-body-size-mb 4 \
-  --per-ip-budget-ms 5000 \
-  --global-budget-ms 30000 \
-  --cors-origin https://editor.example.com \
-  --opaque-errors
+```console
+$ vl-convert serve \
+>   --base-url disabled \
+>   --allowed-base-urls none \
+>   --max-v8-heap-size-mb 512 \
+>   --max-v8-execution-time-secs 10 \
+>   --missing-fonts warn \
+>   --log-format json \
+>   --host 0.0.0.0 \
+>   --port 3000 \
+>   --workers 2 \
+>   --max-concurrent-requests 4 \
+>   --request-timeout-secs 15 \
+>   --max-body-size-mb 4 \
+>   --per-ip-budget-ms 5000 \
+>   --global-budget-ms 30000 \
+>   --cors-origin https://editor.example.com \
+>   --opaque-errors
 ```
 
 CORS only controls browser access to responses. Keep network-level rate
@@ -82,12 +82,12 @@ its own.
 A Unix domain socket avoids opening a TCP port and restricts access with
 filesystem permissions:
 
-```bash
-vl-convert serve \
-  --unix-socket /run/myapp/vl-convert.sock \
-  --admin-unix-socket /run/myapp/vl-convert-admin.sock \
-  --socket-mode 0600 \
-  --ready-json
+```console
+$ vl-convert serve \
+>   --unix-socket /run/myapp/vl-convert.sock \
+>   --admin-unix-socket /run/myapp/vl-convert-admin.sock \
+>   --socket-mode 0600 \
+>   --ready-json
 ```
 
 `--ready-json` writes one machine-readable line to standard output after the

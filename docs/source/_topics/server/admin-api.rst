@@ -19,17 +19,17 @@ Never expose this listener alongside public conversion traffic. Bind it to
 loopback, a private management network, or a Unix domain socket, and give it
 its own bearer token on shared systems.
 
-.. code-block:: bash
+.. code-block:: console
 
-   vl-convert serve \
-     --admin-host 127.0.0.1 \
-     --admin-port 3001 \
-     --admin-api-key "$ADMIN_API_KEY"
+   $ vl-convert serve \
+   >   --admin-host 127.0.0.1 \
+   >   --admin-port 3001 \
+   >   --admin-api-key "$ADMIN_API_KEY"
 
-.. code-block:: bash
+.. code-block:: console
 
-   curl http://127.0.0.1:3001/admin/diagnostics/workers \
-     -H "Authorization: Bearer $ADMIN_API_KEY"
+   $ curl http://127.0.0.1:3001/admin/diagnostics/workers \
+   >   -H "Authorization: Bearer $ADMIN_API_KEY"
 
 A TCP admin listener on a non-loopback address requires ``--admin-api-key``.
 Loopback and Unix domain socket listeners can run without a key, in which case

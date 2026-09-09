@@ -26,12 +26,12 @@ server returns `429 Too Many Requests`.
 This example allows about five seconds of processing per minute for one IP and
 thirty seconds per minute across the server:
 
-```bash
-vl-convert serve \
-  --port 3000 \
-  --per-ip-budget-ms 5000 \
-  --global-budget-ms 30000 \
-  --budget-hold-ms 1000
+```console
+$ vl-convert serve \
+>   --port 3000 \
+>   --per-ip-budget-ms 5000 \
+>   --global-budget-ms 30000 \
+>   --budget-hold-ms 1000
 ```
 
 `--budget-hold-ms` is the reservation taken when a request is admitted. When
@@ -71,13 +71,13 @@ and skip the per-IP budget.
 When a specification can trigger automatic Google Fonts, add a charge for each
 CSS or font-file cache miss:
 
-```bash
-vl-convert serve \
-  --auto-google-fonts \
-  --google-font-variant-threshold 16 \
-  --per-ip-budget-ms 5000 \
-  --global-budget-ms 30000 \
-  --google-font-cache-miss-penalty-ms 250
+```console
+$ vl-convert serve \
+>   --auto-google-fonts \
+>   --google-font-variant-threshold 16 \
+>   --per-ip-budget-ms 5000 \
+>   --global-budget-ms 30000 \
+>   --google-font-cache-miss-penalty-ms 250
 ```
 
 The final charge is the measured processing time plus the penalty for each

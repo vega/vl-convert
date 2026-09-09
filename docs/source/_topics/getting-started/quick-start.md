@@ -45,14 +45,14 @@ Path("chart.png").write_bytes(png)
 ::::{interface} cli
 Render it at twice the default pixel dimensions:
 
-```bash
-vl-convert vl2png --input chart.vl.json --output chart.png --scale 2
+```console
+$ vl-convert vl2png --input chart.vl.json --output chart.png --scale 2
 ```
 
 Conversion commands also read standard input and write standard output:
 
-```bash
-vl-convert vl2png --input - --output - < chart.vl.json > chart.png
+```console
+$ vl-convert vl2png --input - --output - < chart.vl.json > chart.png
 ```
 
 See {doc}`../guides/vegalite-conversions` for the other output formats and
@@ -108,8 +108,8 @@ output formats and {doc}`../advanced/rust-converter` for reusing the converter.
 ::::{interface} server
 Start the server in one terminal:
 
-```bash
-vl-convert serve --port 3000
+```console
+$ vl-convert serve --port 3000
 ```
 
 Save this complete request body as `request.json`:
@@ -124,11 +124,11 @@ Save this complete request body as `request.json`:
 
 Send it from a second terminal:
 
-```bash
-curl http://127.0.0.1:3000/vegalite/png \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.png
+```console
+$ curl http://127.0.0.1:3000/vegalite/png \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.png
 ```
 
 The endpoint returns PNG bytes, which `curl` writes to `chart.png`. See

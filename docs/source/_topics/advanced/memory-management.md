@@ -66,11 +66,11 @@ limits are more useful than post-conversion garbage collection. This
 configuration excerpt uses `chart.vl.json` from
 {doc}`../getting-started/quick-start`:
 
-```bash
-vl-convert \
-  --max-v8-heap-size-mb 512 \
-  --max-v8-execution-time-secs 10 \
-  vl2png --input chart.vl.json --output chart.png
+```console
+$ vl-convert \
+>   --max-v8-heap-size-mb 512 \
+>   --max-v8-execution-time-secs 10 \
+>   vl2png --input chart.vl.json --output chart.png
 ```
 ::::
 
@@ -97,20 +97,20 @@ let usage = converter.get_worker_memory_usage().await?;
 ::::{interface} server
 Set converter limits before `serve` and combine them with HTTP request limits:
 
-```bash
-vl-convert serve \
-  --max-v8-heap-size-mb 512 \
-  --max-v8-execution-time-secs 10 \
-  --workers 2 \
-  --max-concurrent-requests 4 \
-  --request-timeout-secs 15
+```console
+$ vl-convert serve \
+>   --max-v8-heap-size-mb 512 \
+>   --max-v8-execution-time-secs 10 \
+>   --workers 2 \
+>   --max-concurrent-requests 4 \
+>   --request-timeout-secs 15
 ```
 
 When the admin listener is enabled, read the current JavaScript heap use with:
 
-```bash
-curl http://127.0.0.1:3001/admin/diagnostics/workers \
-  -H "Authorization: Bearer $ADMIN_API_KEY"
+```console
+$ curl http://127.0.0.1:3001/admin/diagnostics/workers \
+>   -H "Authorization: Bearer $ADMIN_API_KEY"
 ```
 
 Render-time budgets also limit how much shared capacity one client can use.

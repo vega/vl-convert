@@ -7,7 +7,7 @@
   "data": [
     {
       "name": "source_0",
-      "url": "data/barley.json",
+      "url": "https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json",
       "format": {
         "type": "json"
       },

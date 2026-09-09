@@ -68,12 +68,12 @@ with open("chart.html", "w", encoding="utf-8") as output_file:
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert vl2html \
-  --input chart.vl.json \
-  --output chart.html \
-  --bundle \
-  --renderer svg
+```console
+$ vl-convert vl2html \
+>   --input chart.vl.json \
+>   --output chart.html \
+>   --bundle \
+>   --renderer svg
 ```
 ::::
 
@@ -112,11 +112,11 @@ complete body as `request.json`:
 
 Send it to `POST /vegalite/html`:
 
-```bash
-curl http://127.0.0.1:3000/vegalite/html \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.html
+```console
+$ curl http://127.0.0.1:3000/vegalite/html \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.html
 ```
 
 The response body is the HTML document. Use `POST /vega/html` for direct Vega

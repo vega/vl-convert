@@ -222,7 +222,7 @@ ${u}`);}return t;}(J,"",0);}function g(n,t,o){return Object.assign(n,{fields:t||
     <script type="text/javascript">
 
 {
-    const spec = {"$schema":"https://vega.github.io/schema/vega-lite/v6.json","data":{"url":"data/barley.json"},"mark":"bar","encoding":{"x":{"aggregate":"sum","field":"yield"},"y":{"field":"variety"},"color":{"field":"site"}}};
+    const spec = {"$schema":"https://vega.github.io/schema/vega-lite/v6.json","data":{"url":"https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json"},"mark":"bar","encoding":{"x":{"aggregate":"sum","field":"yield"},"y":{"field":"variety"},"color":{"field":"site"}}};
     const opts = {"renderer":"svg"}
     Promise.all([...document.fonts].map(f => f.load()))
         .then(() => vegaEmbed('#vega-chart', spec, opts))

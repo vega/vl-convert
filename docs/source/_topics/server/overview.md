@@ -35,8 +35,8 @@ library when the caller can embed one.
 
 ## Start a Local Server
 
-```bash
-vl-convert serve --port 3000
+```console
+$ vl-convert serve --port 3000
 ```
 
 The main listener provides these endpoint groups:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import tomllib
+from html import escape
 from pathlib import Path
 
 project = "VlConvert"
@@ -32,6 +33,7 @@ LOGO_DIR = ROOT / "logo"
 html_favicon = str(LOGO_DIR / "vl-convert-favicon.svg")
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_js_files = ["conversion-example.js", "terminal-prompts.js"]
 html_theme_options = {
     "github_url": "https://github.com/vega/vl-convert",
     "navbar_align": "left",
@@ -52,25 +54,24 @@ if "-rc" in release:
 myst_enable_extensions = ["colon_fence", "fieldlist", "deflist", "substitution"]
 myst_heading_anchors = 3
 
-# The front-page example links to the Vega Editor with a URL that
-# `pixi run docs-preview-chart` writes beside the other chart outputs.
+# `pixi run docs-preview-chart` writes the front-page URL output beside the
+# other chart outputs.
 EDITOR_URL_FILE = Path(__file__).parent / "_static" / "charts" / "stacked_bar_h.url.txt"
 if not EDITOR_URL_FILE.exists():
     raise FileNotFoundError(
         f"{EDITOR_URL_FILE} is missing; run `pixi run docs-preview-chart`"
     )
+editor_url = EDITOR_URL_FILE.read_text().strip()
 myst_substitutions = {
-    "front_page_editor_link": (
-        '<a class="front-page-editor-link" '
-        f'href="{EDITOR_URL_FILE.read_text().strip()}" '
+    "front_page_editor_url": (
+        '<a class="conversion-example__url-link" '
+        f'href="{escape(editor_url, quote=True)}" '
         'target="_blank" rel="noopener">'
-        '<i class="fa-solid fa-arrow-up-right-from-square"></i>'
-        '<code class="docutils literal notranslate">'
-        '<span class="pre">Editor URL</span></code></a>'
+        f"{escape(editor_url)}</a>"
     ),
 }
 
-copybutton_prompt_text = r">>> |\.\.\. |\$ "
+copybutton_prompt_text = r">>> |\.\.\. |\$ |> "
 copybutton_prompt_is_regexp = True
 
 autodoc2_packages = [

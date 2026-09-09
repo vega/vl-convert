@@ -53,11 +53,11 @@ a built-in locale, and {doc}`../api-reference` lists the accepted names.
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert vl2svg \
-  --input chart.vl.json --output chart.svg \
-  --format-locale de-DE \
-  --time-format-locale de-DE
+```console
+$ vl-convert vl2svg \
+>   --input chart.vl.json --output chart.svg \
+>   --format-locale de-DE \
+>   --time-format-locale de-DE
 ```
 ::::
 
@@ -92,11 +92,11 @@ Save this complete request body as `request.json`:
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vegalite/svg \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.svg
+```console
+$ curl http://127.0.0.1:3000/vegalite/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.svg
 ```
 ::::
 
@@ -148,10 +148,10 @@ svg = vlc.vegalite_to_svg(spec, format_locale=format_locale)
 The option accepts a locale name, an inline JSON object, or a `.json` or
 `.jsonc` file:
 
-```bash
-vl-convert vl2svg \
-  --format-locale format-locale.json \
-  --input chart.vl.json --output chart.svg
+```console
+$ vl-convert vl2svg \
+>   --format-locale format-locale.json \
+>   --input chart.vl.json --output chart.svg
 ```
 ::::
 

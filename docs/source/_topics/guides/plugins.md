@@ -77,9 +77,9 @@ The plugin stays available to every later conversion in the process.
 ::::{interface} cli
 Pass the plugin as a global option before the conversion command:
 
-```bash
-vl-convert --vega-plugin ./double-value.js \
-  vl2png --input chart.vl.json --output chart.png
+```console
+$ vl-convert --vega-plugin ./double-value.js \
+>   vl2png --input chart.vl.json --output chart.png
 ```
 ::::
 
@@ -105,10 +105,10 @@ std::fs::write("chart.png", output.data)?;
 ::::{interface} server
 Register the plugin before `serve`:
 
-```bash
-vl-convert serve \
-  --vega-plugin ./double-value.js \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --vega-plugin ./double-value.js \
+>   --port 3000
 ```
 
 Every request handled by this process can then use `doubleValue`. Put the
@@ -123,11 +123,11 @@ Save this complete request body as `request.json`:
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vegalite/png \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.png
+```console
+$ curl http://127.0.0.1:3000/vegalite/png \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.png
 ```
 ::::
 

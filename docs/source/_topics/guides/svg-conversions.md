@@ -46,9 +46,9 @@ Both results are bytes. `svg_to_jpeg()` produces JPEG.
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert svg2png --input chart.svg --output chart.png --scale 2
-vl-convert svg2pdf --input chart.svg --output chart.pdf
+```console
+$ vl-convert svg2png --input chart.svg --output chart.png --scale 2
+$ vl-convert svg2pdf --input chart.svg --output chart.pdf
 ```
 
 `svg2jpeg` produces JPEG. `svg2png` accepts `--scale` and `--ppi`, `svg2jpeg`
@@ -88,11 +88,11 @@ Send JSON with the markup in an `svg` string to `/svg/png`, `/svg/jpeg`, or
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/svg/png \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.png
+```console
+$ curl http://127.0.0.1:3000/svg/png \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.png
 ```
 ::::
 

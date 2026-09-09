@@ -13,20 +13,20 @@ interfaces: [server]
 The server writes logs to standard error. Use text logs for local development
 and JSON logs for deployed services:
 
-```bash
-vl-convert serve \
-  --log-format json --log-level info \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --log-format json --log-level info \
+>   --port 3000
 ```
 
 `--log-filter` accepts a `tracing-subscriber` directive and takes priority over
 `--log-level`. Use it when one component needs more detail:
 
-```bash
-vl-convert serve \
-  --log-format json \
-  --log-filter 'vl_convert=debug,tower_http=info' \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --log-format json \
+>   --log-filter 'vl_convert=debug,tower_http=info' \
+>   --port 3000
 ```
 
 Debug logs are high volume and can contain resource names or error details.
@@ -67,9 +67,9 @@ Font work adds `google_font.css_cache_misses`,
 
 Send `X-Request-Id` when a non-browser client already has a correlation ID:
 
-```bash
-curl http://127.0.0.1:3000/themes \
-  -H 'X-Request-Id: render-01'
+```console
+$ curl http://127.0.0.1:3000/themes \
+>   -H 'X-Request-Id: render-01'
 ```
 
 If the header is absent, the server generates an ID. Either way the response

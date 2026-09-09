@@ -71,11 +71,11 @@ config-path`, or pass `--vlc-config disabled` to skip config files entirely.
 This configuration excerpt uses `chart.vl.json` from
 {doc}`../getting-started/quick-start` to make the precedence example concrete.
 
-```bash
-VLC_AUTO_GOOGLE_FONTS=true \
-vl-convert --vlc-config disabled \
-  --google-font-variant-threshold 16 \
-  vl2png --input chart.vl.json --output chart.png
+```console
+$ VLC_AUTO_GOOGLE_FONTS=true \
+> vl-convert --vlc-config disabled \
+>   --google-font-variant-threshold 16 \
+>   vl2png --input chart.vl.json --output chart.png
 ```
 
 Global options go before the conversion command. Run `vl-convert --help` for
@@ -122,10 +122,10 @@ built-in defaults
 Options after `serve` configure HTTP behavior: listeners, authentication,
 request limits, and budgets. Converter options go before `serve`.
 
-```bash
-vl-convert serve \
-  --vlc-config production.vlc.jsonc \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --vlc-config production.vlc.jsonc \
+>   --port 3000
 ```
 
 When the admin listener is enabled, `PUT /admin/config` replaces the live

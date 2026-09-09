@@ -17,14 +17,14 @@ same stream. The examples use `chart.vl.json` from
 
 Read a specification from standard input and write SVG to a file:
 
-```bash
-vl-convert vl2svg --input - --output chart.svg < chart.vl.json
+```console
+$ vl-convert vl2svg --input - --output chart.svg < chart.vl.json
 ```
 
 Send SVG to another process:
 
-```bash
-vl-convert vl2svg --input chart.vl.json --output - | gzip > chart.svg.gz
+```console
+$ vl-convert vl2svg --input chart.vl.json --output - | gzip > chart.svg.gz
 ```
 
 Binary formats such as PNG, JPEG, PDF, and MessagePack can be piped the same
@@ -35,9 +35,9 @@ way. When `--output` is omitted and standard output is an interactive terminal,
 Logs and errors go to standard error, so they never mix with the output. Enable
 `pipefail` in shell scripts so a failed conversion fails the pipeline:
 
-```bash
-set -o pipefail
-vl-convert vl2png --input chart.vl.json --output - | gzip > chart.png.gz
+```console
+$ set -o pipefail
+$ vl-convert vl2png --input chart.vl.json --output - | gzip > chart.png.gz
 ```
 
 Pass `--vlc-config disabled` in scripts that must not depend on the machine's

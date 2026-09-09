@@ -61,9 +61,9 @@ Use `INFO` or `DEBUG` temporarily while diagnosing a problem.
 The CLI writes logs to standard error, so standard output stays available for
 conversion results.
 
-```bash
-vl-convert --log-level warn \
-  vl2svg --input chart.vl.json --output chart.svg
+```console
+$ vl-convert --log-level warn \
+>   vl2svg --input chart.vl.json --output chart.svg
 ```
 
 The command succeeds and writes a timestamped warning to standard error. The
@@ -77,9 +77,9 @@ WARN vl_convert: Log scale domain includes zero: [0,200]
 `--log-filter` accepts a `tracing-subscriber` filter directive for finer
 control and takes priority over `--log-level`:
 
-```bash
-vl-convert --log-filter 'vl_convert=debug' \
-  vl2svg --input chart.vl.json --output chart.svg
+```console
+$ vl-convert --log-filter 'vl_convert=debug' \
+>   vl2svg --input chart.vl.json --output chart.svg
 ```
 ::::
 
@@ -116,10 +116,10 @@ initialize it before creating a converter.
 ::::{interface} server
 Use structured JSON logs in deployed services:
 
-```bash
-vl-convert serve \
-  --log-format json --log-level info \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --log-format json --log-level info \
+>   --port 3000
 ```
 
 The server logs request identifiers, status, duration, and budget information
@@ -139,12 +139,12 @@ header. Save this body as `request.json`:
 
 Use `--dump-header` to save the response headers:
 
-```bash
-curl http://127.0.0.1:3000/vegalite/svg \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --dump-header headers.txt \
-  --output chart.svg
+```console
+$ curl http://127.0.0.1:3000/vegalite/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --dump-header headers.txt \
+>   --output chart.svg
 ```
 
 `X-VLC-Logs` contains a JSON array. Its first entry is:

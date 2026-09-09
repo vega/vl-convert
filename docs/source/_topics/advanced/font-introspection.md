@@ -58,9 +58,9 @@ variant, which can make the result much larger.
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert --embed-local-fonts \
-  vl2fonts --input chart.vl.json --output fonts.json --pretty
+```console
+$ vl-convert --embed-local-fonts \
+>   vl2fonts --input chart.vl.json --output fonts.json --pretty
 ```
 
 Add `--auto-google-fonts` to include matches from the Google Fonts catalog. Use
@@ -99,10 +99,10 @@ Start the server with `--embed-local-fonts`, `--auto-google-fonts`, or both,
 then send a normal specification request to `POST /vegalite/fonts` or
 `POST /vega/fonts`. For this local-font example, start the server with:
 
-```bash
-vl-convert serve \
-  --embed-local-fonts \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --embed-local-fonts \
+>   --port 3000
 ```
 
 Save this complete body as `request.json`:
@@ -115,10 +115,10 @@ Save this complete body as `request.json`:
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vegalite/fonts \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json
+```console
+$ curl http://127.0.0.1:3000/vegalite/fonts \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json
 ```
 
 The response is a JSON array of font records. Google Fonts lookups follow the

@@ -32,8 +32,8 @@ with open("vega-embed.js", "w", encoding="utf-8") as output_file:
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert bundle-js --vl-version 6.4 --output vega-embed.js
+```console
+$ vl-convert bundle-js --vl-version 6.4 --output vega-embed.js
 ```
 ::::
 
@@ -51,9 +51,9 @@ std::fs::write("vega-embed.js", bundle)?;
 ::::
 
 ::::{interface} server
-```bash
-curl 'http://127.0.0.1:3000/bundling/bundle?vl_version=6.4' \
-  --output vega-embed.js
+```console
+$ curl 'http://127.0.0.1:3000/bundling/bundle?vl_version=6.4' \
+>   --output vega-embed.js
 ```
 
 The response carries a `Cache-Control` header that allows caching for one day.
@@ -85,11 +85,11 @@ bundle = vlc.javascript_bundle(snippet, vl_version="6.4")
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert bundle-js \
-  --snippet snippet.js \
-  --vl-version 6.4 \
-  --output app-chart.js
+```console
+$ vl-convert bundle-js \
+>   --snippet snippet.js \
+>   --vl-version 6.4 \
+>   --output app-chart.js
 ```
 ::::
 
@@ -115,11 +115,11 @@ Save this generated body as `request.json`:
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/bundling/bundle-snippet \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output app-chart.js
+```console
+$ curl http://127.0.0.1:3000/bundling/bundle-snippet \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output app-chart.js
 ```
 ::::
 

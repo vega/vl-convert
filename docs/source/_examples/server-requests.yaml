@@ -6,6 +6,51 @@ requests:
         format: json
     options:
       vl_version: "6.4"
+  stacked-bar-h-png:
+    inputs:
+      spec:
+        source: stacked_bar_h.vl.json
+        format: json
+    options:
+      vl_version: "6.4"
+      scale: 2
+  stacked-bar-h-jpeg:
+    inputs:
+      spec:
+        source: stacked_bar_h.vl.json
+        format: json
+    options:
+      vl_version: "6.4"
+      scale: 2
+      quality: 90
+  stacked-bar-h-pdf:
+    inputs:
+      spec:
+        source: stacked_bar_h.vl.json
+        format: json
+    options:
+      vl_version: "6.4"
+  stacked-bar-h-html:
+    inputs:
+      spec:
+        source: stacked_bar_h.vl.json
+        format: json
+    options:
+      vl_version: "6.4"
+      bundle: true
+      renderer: svg
+  stacked-bar-h-vega:
+    inputs:
+      spec:
+        source: stacked_bar_h.vl.json
+        format: json
+    options:
+      vl_version: "6.4"
+  stacked-bar-h-url:
+    inputs:
+      spec:
+        source: stacked_bar_h.vl.json
+        format: json
   quick-start-png:
     inputs:
       spec:

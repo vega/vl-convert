@@ -24,8 +24,8 @@ Supply the token through the `VLC_API_KEY` environment variable, preferably
 from a secret manager, or through `--api-key`. With the variable set, start the
 server normally:
 
-```bash
-vl-convert serve --port 3000
+```console
+$ vl-convert serve --port 3000
 ```
 
 Conversion, theme, font, bundling, and API documentation routes now require
@@ -37,9 +37,9 @@ Authorization: Bearer <key>
 
 For example:
 
-```bash
-curl http://127.0.0.1:3000/themes \
-  -H "Authorization: Bearer $VLC_API_KEY"
+```console
+$ curl http://127.0.0.1:3000/themes \
+>   -H "Authorization: Bearer $VLC_API_KEY"
 ```
 
 A missing or incorrect token returns `401 Unauthorized` with a
@@ -66,15 +66,15 @@ The admin listener is optional and independent of the main listener. Set
 `VLC_ADMIN_API_KEY` through the deployment's secret manager, then enable the
 listener:
 
-```bash
-vl-convert serve \
-  --admin-host 127.0.0.1 \
-  --admin-port 3001
+```console
+$ vl-convert serve \
+>   --admin-host 127.0.0.1 \
+>   --admin-port 3001
 ```
 
-```bash
-curl http://127.0.0.1:3001/admin/diagnostics/workers \
-  -H "Authorization: Bearer $VLC_ADMIN_API_KEY"
+```console
+$ curl http://127.0.0.1:3001/admin/diagnostics/workers \
+>   -H "Authorization: Bearer $VLC_ADMIN_API_KEY"
 ```
 
 The main token does not grant admin access, and the admin token does not grant
@@ -88,11 +88,11 @@ A key is still worthwhile on shared hosts.
 For a local sidecar, a restrictive Unix domain socket is often the simplest
 boundary:
 
-```bash
-vl-convert serve \
-  --unix-socket /run/myapp/vl-convert.sock \
-  --admin-unix-socket /run/myapp/vl-convert-admin.sock \
-  --socket-mode 0600
+```console
+$ vl-convert serve \
+>   --unix-socket /run/myapp/vl-convert.sock \
+>   --admin-unix-socket /run/myapp/vl-convert-admin.sock \
+>   --socket-mode 0600
 ```
 
 Never expose the admin listener through the same public route as conversion

@@ -56,12 +56,12 @@ automatically. Individual Vega and Vega-Lite conversions also accept a
 Pass font directories and Google Font requests as global options before the
 conversion command:
 
-```bash
-vl-convert \
-  --font-dir /opt/app/fonts \
-  --google-font 'Inter:400,700italic' \
-  --missing-fonts error \
-  vl2png --input chart.vl.json --output chart.png
+```console
+$ vl-convert \
+>   --font-dir /opt/app/fonts \
+>   --google-font 'Inter:400,700italic' \
+>   --missing-fonts error \
+>   vl2png --input chart.vl.json --output chart.png
 ```
 
 `--auto-google-fonts` downloads missing first-choice fonts automatically. Each
@@ -99,12 +99,12 @@ Configure fonts when the server starts. This example registers a local
 directory, enables automatic Google Fonts, and rejects a conversion whose
 first-choice font is still unavailable:
 
-```bash
-vl-convert serve \
-  --font-dir /opt/app/fonts \
-  --auto-google-fonts \
-  --missing-fonts error \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --font-dir /opt/app/fonts \
+>   --auto-google-fonts \
+>   --missing-fonts error \
+>   --port 3000
 ```
 
 Clients can pass `google_fonts` in a request body only when the server starts
@@ -144,9 +144,9 @@ with open("chart.png", "wb") as output_file:
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert --google-font "Roboto Slab" \
-  vl2png --input chart.vl.json --output chart.png --scale 2
+```console
+$ vl-convert --google-font "Roboto Slab" \
+>   vl2png --input chart.vl.json --output chart.png --scale 2
 ```
 ::::
 
@@ -181,10 +181,10 @@ std::fs::write("chart.png", output.data)?;
 Start the server with the font request, then send the specification in the
 `spec` field of a `POST /vegalite/png` request with `scale` set to `2`:
 
-```bash
-vl-convert serve \
-  --google-font "Roboto Slab" \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --google-font "Roboto Slab" \
+>   --port 3000
 ```
 
 Save this complete request body as `request.json`:
@@ -199,11 +199,11 @@ Save this complete request body as `request.json`:
 
 Send the request from a second terminal:
 
-```bash
-curl http://127.0.0.1:3000/vegalite/png \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.png
+```console
+$ curl http://127.0.0.1:3000/vegalite/png \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.png
 ```
 ::::
 
@@ -238,12 +238,12 @@ On a public server, combine the threshold with
 for every font lookup that misses the on-disk cache, including lookups for
 families that do not exist.
 
-```bash
-vl-convert serve \
-  --auto-google-fonts \
-  --google-font-variant-threshold 16 \
-  --per-ip-budget-ms 30000 \
-  --google-font-cache-miss-penalty-ms 250
+```console
+$ vl-convert serve \
+>   --auto-google-fonts \
+>   --google-font-variant-threshold 16 \
+>   --per-ip-budget-ms 30000 \
+>   --google-font-cache-miss-penalty-ms 250
 ```
 ::::
 
@@ -273,9 +273,9 @@ cap are evicted immediately.
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert --google-fonts-cache-size-mb 128 \
-  vl2png --input chart.vl.json --output chart.png
+```console
+$ vl-convert --google-fonts-cache-size-mb 128 \
+>   vl2png --input chart.vl.json --output chart.png
 ```
 
 A value of `0` selects the default cap.
@@ -300,11 +300,11 @@ Pass `--google-fonts-cache-size-mb` before `serve` to set the cap at startup.
 `GET` and `PUT /admin/config/fonts/cache_size` read and change the cap without
 a restart:
 
-```bash
-curl -X PUT http://127.0.0.1:3001/admin/config/fonts/cache_size \
-  -H "Authorization: Bearer $ADMIN_API_KEY" \
-  -H 'Content-Type: application/json' \
-  --data '{"max_size_mb": 128}'
+```console
+$ curl -X PUT http://127.0.0.1:3001/admin/config/fonts/cache_size \
+>   -H "Authorization: Bearer $ADMIN_API_KEY" \
+>   -H 'Content-Type: application/json' \
+>   --data '{"max_size_mb": 128}'
 ```
 
 `{"max_size_mb": null}` restores the default.

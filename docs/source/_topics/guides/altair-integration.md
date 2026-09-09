@@ -20,8 +20,8 @@ when you want the result in memory instead of on disk.
 
 Install both packages if the application does not already include Altair:
 
-```bash
-python -m pip install altair vl-convert-python
+```console
+$ python -m pip install altair vl-convert-python
 ```
 
 This complete example creates a chart and writes a high-density PNG:

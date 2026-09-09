@@ -129,11 +129,11 @@ default.
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert \
-  --base-url "$PWD" \
-  --allowed-base-urls "$PWD" \
-  vl2png --input chart.vl.json --output chart.png
+```console
+$ vl-convert \
+>   --base-url "$PWD" \
+>   --allowed-base-urls "$PWD" \
+>   vl2png --input chart.vl.json --output chart.png
 ```
 
 `--base-url disabled` rejects relative URLs. The equivalent environment
@@ -164,11 +164,11 @@ error if an allowlisted directory does not exist.
 ::::
 
 ::::{interface} server
-```bash
-vl-convert serve \
-  --base-url "$PWD" \
-  --allowed-base-urls "$PWD" \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --base-url "$PWD" \
+>   --allowed-base-urls "$PWD" \
+>   --port 3000
 ```
 
 Save this complete request as `request.json`:
@@ -184,11 +184,11 @@ Save this complete request as `request.json`:
 Send it from a second terminal whose current directory contains
 `request.json`:
 
-```bash
-curl http://127.0.0.1:3000/vegalite/png \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.png
+```console
+$ curl http://127.0.0.1:3000/vegalite/png \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.png
 ```
 
 Requests cannot change the loading settings. When the admin listener is enabled,

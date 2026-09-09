@@ -29,6 +29,7 @@ CI.yaml
 /docs/source/_generated/openapi-public.json
 /docs/source/_generated/openapi-admin.json
 /docs/source/_generated/charts/
+/docs/source/_generated/setup/
 /docs/source/_generated/requests/
 /docs/source/python/
 /docs/source/cli/

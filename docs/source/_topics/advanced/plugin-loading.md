@@ -57,9 +57,9 @@ vlc.configure(
 ::::{interface} cli
 Use a path or URL with `--vega-plugin`:
 
-```bash
-vl-convert --vega-plugin ./double-value.js \
-  vl2svg --input chart.vl.json --output chart.svg
+```console
+$ vl-convert --vega-plugin ./double-value.js \
+>   vl2svg --input chart.vl.json --output chart.svg
 ```
 
 Here, `chart.vl.json` is the plugin-dependent input from
@@ -98,10 +98,10 @@ let config = VlcConfig {
 Startup plugins come from global CLI options or the JSONC config file. Use the
 config file for inline source.
 
-```bash
-vl-convert serve \
-  --vega-plugin ./double-value.js \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --vega-plugin ./double-value.js \
+>   --port 3000
 ```
 ::::
 
@@ -135,11 +135,11 @@ vlc.configure(
 ::::
 
 ::::{interface} cli
-```bash
-vl-convert \
-  --vega-plugin ./scale-plugin.js \
-  --plugin-import-domains esm.sh \
-  vl2svg --input chart.vl.json --output chart.svg
+```console
+$ vl-convert \
+>   --vega-plugin ./scale-plugin.js \
+>   --plugin-import-domains esm.sh \
+>   vl2svg --input chart.vl.json --output chart.svg
 ```
 ::::
 
@@ -154,11 +154,11 @@ let converter = VlConverter::with_config(VlcConfig {
 ::::
 
 ::::{interface} server
-```bash
-vl-convert serve \
-  --vega-plugin ./scale-plugin.js \
-  --plugin-import-domains esm.sh \
-  --port 3000
+```console
+$ vl-convert serve \
+>   --vega-plugin ./scale-plugin.js \
+>   --plugin-import-domains esm.sh \
+>   --port 3000
 ```
 ::::
 
@@ -177,13 +177,13 @@ Bundle TypeScript and multi-file JavaScript before passing it to VlConvert.
 Prebundling keeps startup independent of package registries and produces one
 artifact that can be reviewed and deployed with the application.
 
-```bash
-npm install --save-dev esbuild
-npx esbuild src/acme-plugin.ts \
-  --bundle \
-  --format=esm \
-  --platform=browser \
-  --outfile=dist/acme-plugin.js
+```console
+$ npm install --save-dev esbuild
+$ npx esbuild src/acme-plugin.ts \
+>   --bundle \
+>   --format=esm \
+>   --platform=browser \
+>   --outfile=dist/acme-plugin.js
 ```
 
 Register `dist/acme-plugin.js` as the startup plugin. The plugin must not rely
@@ -241,11 +241,11 @@ std::fs::write("chart.svg", output.svg)?;
 ::::
 
 ::::{interface} server
-```bash
-vl-convert serve \
-  --port 3000 \
-  --allow-per-request-plugins \
-  --max-ephemeral-workers 2
+```console
+$ vl-convert serve \
+>   --port 3000 \
+>   --allow-per-request-plugins \
+>   --max-ephemeral-workers 2
 ```
 
 Request bodies can now contain `vega_plugin`. If caller-supplied code needs
@@ -264,11 +264,11 @@ Save this complete request, which embeds both canonical files, as
 ```
 :::
 
-```bash
-curl http://127.0.0.1:3000/vegalite/svg \
-  -H 'Content-Type: application/json' \
-  --data-binary @request.json \
-  --output chart.svg
+```console
+$ curl http://127.0.0.1:3000/vegalite/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.svg
 ```
 ::::
 
