@@ -10,6 +10,10 @@ interfaces: [python, cli, rust, server]
 
 # Installation
 
+Version 2 is currently published as a release candidate. Package managers do
+not select prereleases by default, so the commands below opt in to version 2
+prereleases.
+
 ::::{not-interface} server
 Already using 1.x? See {doc}`upgrading` for what changed in version 2.
 ::::
@@ -19,7 +23,7 @@ Install the package from PyPI. Prebuilt wheels are published for Linux, macOS,
 and Windows, and Python 3.10 or later is required.
 
 ```bash
-python -m pip install vl-convert-python
+python -m pip install --pre --upgrade "vl-convert-python>=2.0.0rc1,<3"
 ```
 
 The distribution is named `vl-convert-python`, and Python imports it as
@@ -35,7 +39,7 @@ Install a Rust toolchain, then build and install the `vl-convert` executable
 from crates.io:
 
 ```bash
-cargo install vl-convert --locked
+cargo install vl-convert --version '^2.0.0-rc1' --locked
 ```
 
 Confirm that the executable is on your `PATH`:
@@ -55,7 +59,7 @@ Add the crate to `Cargo.toml`:
 
 ```toml
 [dependencies]
-vl-convert-rs = "2"
+vl-convert-rs = "2.0.0-rc1"
 ```
 :::
 
@@ -69,7 +73,7 @@ The server is the `serve` subcommand of the `vl-convert` executable. Install a
 Rust toolchain, then build and install the executable from crates.io:
 
 ```bash
-cargo install vl-convert --locked
+cargo install vl-convert --version '^2.0.0-rc1' --locked
 ```
 
 Confirm the installation, then start a local server:

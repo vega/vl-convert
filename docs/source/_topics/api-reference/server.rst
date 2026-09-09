@@ -17,6 +17,11 @@ same document at ``/api-doc/openapi.json`` and an interactive Swagger UI at
 ``/docs``. Both require the main listener's API key when one is set. Start with
 :doc:`/server/getting-started/quick-start` for a complete request.
 
+This page documents the HTTP API. Rust applications that embed the server can
+use the `vl-convert-server crate reference
+<https://docs.rs/vl-convert-server/>`_ for the router, listener, and lifecycle
+APIs.
+
 Vega and Vega-Lite conversion endpoints accept JSON request bodies shaped like
 ``{"spec": <spec>, ...overrides}``. Overrides use the same names as the Python
 and Rust options, such as ``scale``, ``ppi``, ``theme``, ``format_locale``,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from pathlib import Path
 
 project = "VlConvert"
@@ -9,6 +10,9 @@ copyright = "2026, Vega"
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).parent))
+
+with (ROOT / "Cargo.toml").open("rb") as workspace_manifest:
+    release = tomllib.load(workspace_manifest)["workspace"]["package"]["version"]
 
 extensions = [
     "myst_parser",
@@ -39,6 +43,11 @@ html_theme_options = {
         "alt_text": "VlConvert",
     },
 }
+if "-rc" in release:
+    html_theme_options["announcement"] = (
+        "These docs cover the <strong>VlConvert 2.0 release candidate</strong>. "
+        '<a href="https://github.com/vega/vl-convert/releases">View releases</a>.'
+    )
 
 myst_enable_extensions = ["colon_fence", "fieldlist", "deflist", "substitution"]
 myst_heading_anchors = 3
@@ -72,7 +81,9 @@ autodoc2_packages = [
     }
 ]
 autodoc2_render_plugin = "myst"
-autodoc2_docstring_parser_regexes = [(r"vl_convert\..*", "_ext.google_docstring_parser")]
+autodoc2_docstring_parser_regexes = [
+    (r"vl_convert\..*", "_ext.google_docstring_parser")
+]
 autodoc2_replace_annotations = [("vl_convert.", "")]
 
 python_maximum_signature_line_length = 88
