@@ -1,3 +1,10 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;600&family=Nunito+Sans:wght@400;600;700&display=swap");
+
+html {
+  --pst-font-family-base: "Nunito Sans", sans-serif;
+  --pst-font-family-heading: "Nunito", sans-serif;
+}
+
 .bd-content div.highlight,
 .bd-content pre {
   max-width: 100%;
@@ -114,6 +121,11 @@
 
 .navbar-brand.logo img.logo__image {
   height: 2rem;
+}
+
+.navbar-brand.logo .logo__title {
+  font-family: "Nunito", sans-serif;
+  font-weight: 400;
 }
 
 .rendered-chart {
