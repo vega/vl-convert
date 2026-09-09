@@ -10,23 +10,23 @@ interfaces: [python, cli, rust, server]
 
 # Installation
 
-Version 2 is currently published as a release candidate. Package managers do not select prereleases by default, so the commands below opt in to version 2 prereleases.
+Version 2 is currently published as a release candidate. The version constraints below select version 2 prereleases.
 
 ::::{not-interface} server
 Already using 1.x? See {doc}`upgrading` for what changed in version 2.
 ::::
 
 ::::{interface} python
-Install the package from PyPI. Prebuilt wheels are published for Linux, macOS, and Windows, and Python 3.10 or later is required.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then add the package to a Python project. `uv add` records the dependency in `pyproject.toml`, updates `uv.lock`, and installs it in the project's environment. Prebuilt wheels are published for Linux, macOS, and Windows, and Python 3.10 or later is required.
 
 ```console
-$ python -m pip install --pre --upgrade "vl-convert-python>=2.0.0rc1,<3"
+$ uv add "vl-convert-python>=2.0.0rc1,<3"
 ```
 
 The distribution is named `vl-convert-python`, and Python imports it as `vl_convert`. Confirm that the installation works:
 
 ```console
-$ python -c "import vl_convert as vlc; print(vlc.__version__)"
+$ uv run python -c "import vl_convert as vlc; print(vlc.__version__)"
 ```
 ::::
 

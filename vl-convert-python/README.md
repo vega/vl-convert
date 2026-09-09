@@ -10,10 +10,10 @@ does not require a browser, Node.js, or a separate rendering service.
 
 ## Installation
 
-Install the package from PyPI:
+Add the package to a project with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-pip install vl-convert-python
+uv add "vl-convert-python>=2.0.0rc1,<3"
 ```
 
 Python 3.10 and later are supported.

@@ -49,10 +49,11 @@ such as resource permissions and logging go before the conversion command.
 
 ### Python
 
-Install the Python package from PyPI:
+Add the Python package to a project with
+[uv](https://docs.astral.sh/uv/):
 
 ```bash
-pip install vl-convert-python
+uv add "vl-convert-python>=2.0.0rc1,<3"
 ```
 
 Render a specification with inline data:

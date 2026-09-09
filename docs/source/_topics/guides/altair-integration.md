@@ -17,7 +17,7 @@ Altair's own `chart.save()` already uses VlConvert to write static image files. 
 Install both packages if the application does not already include Altair:
 
 ```console
-$ python -m pip install altair vl-convert-python
+$ uv add altair "vl-convert-python>=2.0.0rc1,<3"
 ```
 
 This complete example creates a chart and writes a high-density PNG:

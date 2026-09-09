@@ -865,10 +865,17 @@ $ curl http://127.0.0.1:3000/vegalite/url \
 
 ## Choose an Interface
 
-The controls above show each output through every interface. All four interfaces share one conversion engine, so a chart renders the same way from each of them given the same configuration and environment. Pick the interface that matches how you will call VlConvert.
+All four VlConvert interfaces share one conversion engine, so a chart renders the same way from each of them given the same configuration and environment. Each interface has specialized documentation.
 
 ::::{grid} 1 2 2 4
 :gutter: 2
+
+:::{grid-item-card} Rust
+:link: rust/index
+:link-type: doc
+
+Embed `vl-convert-rs` directly in Rust applications.
+:::
 
 :::{grid-item-card} Python
 :link: python/index
@@ -882,13 +889,6 @@ Use `vl-convert-python` from Python applications and Altair workflows.
 :link-type: doc
 
 Run `vl-convert` from scripts, shells, and build pipelines.
-:::
-
-:::{grid-item-card} Rust
-:link: rust/index
-:link-type: doc
-
-Embed `vl-convert-rs` directly in Rust applications.
 :::
 
 :::{grid-item-card} Server
