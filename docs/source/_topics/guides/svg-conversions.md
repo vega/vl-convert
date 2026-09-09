@@ -10,13 +10,9 @@ interfaces: [python, cli, rust, server]
 
 # Converting SVG
 
-Use the SVG functions when another tool has already produced the vector image.
-VlConvert converts it to PNG, JPEG, or PDF without running Vega.
+Use the SVG functions when another tool has already produced the vector image. VlConvert converts it to PNG, JPEG, or PDF without running Vega.
 
-The SVG must declare its size through `width` and `height` attributes or a
-`viewBox`. Fonts and images it references must be available to the rendering
-process. See {doc}`fonts` and {doc}`security` when the SVG is not
-self-contained.
+The SVG must declare its size through `width` and `height` attributes or a `viewBox`. Fonts and images it references must be available to the rendering process. See {doc}`fonts` and {doc}`security` when the SVG is not self-contained.
 
 Save this SVG document:
 
@@ -51,8 +47,7 @@ $ vl-convert svg2png --input chart.svg --output chart.png --scale 2
 $ vl-convert svg2pdf --input chart.svg --output chart.pdf
 ```
 
-`svg2jpeg` produces JPEG. `svg2png` accepts `--scale` and `--ppi`, `svg2jpeg`
-accepts `--scale` and `--quality`, and `svg2pdf` has no format options.
+`svg2jpeg` produces JPEG. `svg2png` accepts `--scale` and `--ppi`, `svg2jpeg` accepts `--scale` and `--quality`, and `svg2pdf` has no format options.
 ::::
 
 ::::{interface} rust
@@ -77,8 +72,7 @@ The PNG bytes are in `output.data`.
 ::::
 
 ::::{interface} server
-Send JSON with the markup in an `svg` string to `/svg/png`, `/svg/jpeg`, or
-`/svg/pdf`. Save this complete request as `request.json`:
+Send JSON with the markup in an `svg` string to `/svg/png`, `/svg/jpeg`, or `/svg/pdf`. Save this complete request as `request.json`:
 
 :::{dropdown} request.json
 :open:

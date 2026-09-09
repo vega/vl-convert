@@ -10,20 +10,14 @@ interfaces: [python, cli, rust, server]
 
 # Configuration
 
-Converter configuration holds settings that outlive a single conversion: data
-access policy, fonts, plugins, worker resources, and default themes and
-locales. Values such as output format, dimensions, and scale belong to the
-individual conversion instead. See {doc}`conversion-overrides` for those.
+Converter configuration holds settings that outlive a single conversion: data access policy, fonts, plugins, worker resources, and default themes and locales. Values such as output format, dimensions, and scale belong to the individual conversion instead. See {doc}`conversion-overrides` for those.
 
-Set only the fields your application needs. Every other field keeps its
-built-in default.
+Set only the fields your application needs. Every other field keeps its built-in default.
 
 ::::{interface} python
 ## Configure a Python Process
 
-`configure()` changes the fields you pass and leaves the rest unchanged.
-Passing `None` for a field resets it to the built-in default. The settings
-apply to later conversions in the current process.
+`configure()` changes the fields you pass and leaves the rest unchanged. Passing `None` for a field resets it to the built-in default. The settings apply to later conversions in the current process.
 
 ```python
 import vl_convert as vlc
@@ -36,9 +30,7 @@ vlc.configure(
 )
 ```
 
-`get_config()` returns the active settings. `load_config()` replaces every
-setting with the built-in defaults plus the contents of a JSONC file. Call
-`configure()` after `load_config()` when code must override the file:
+`get_config()` returns the active settings. `load_config()` replaces every setting with the built-in defaults plus the contents of a JSONC file. Call `configure()` after `load_config()` when code must override the file:
 
 ```python
 vlc.load_config("production.vlc.jsonc")
@@ -46,10 +38,7 @@ vlc.configure(num_workers=4)
 print(vlc.get_config())
 ```
 
-Without a path, `load_config()` reads the platform-standard file returned by
-`get_config_path()`. If that file does not exist, the converter resets to the
-built-in defaults. See {doc}`python-configuration` for how reconfiguration
-affects running workers.
+Without a path, `load_config()` reads the platform-standard file returned by `get_config_path()`. If that file does not exist, the converter resets to the built-in defaults. See {doc}`python-configuration` for how reconfiguration affects running workers.
 ::::
 
 ::::{interface} cli
@@ -64,12 +53,7 @@ VLC_* environment variables
 built-in defaults
 ```
 
-`--vlc-config` takes a path to a JSONC file. A relative path resolves from the
-current working directory. When the option is omitted, the CLI loads the
-platform-default file if it exists. Print that path with `vl-convert
-config-path`, or pass `--vlc-config disabled` to skip config files entirely.
-This configuration excerpt uses `chart.vl.json` from
-{doc}`../getting-started/quick-start` to make the precedence example concrete.
+`--vlc-config` takes a path to a JSONC file. A relative path resolves from the current working directory. When the option is omitted, the CLI loads the platform-default file if it exists. Print that path with `vl-convert config-path`, or pass `--vlc-config disabled` to skip config files entirely. This configuration excerpt uses `chart.vl.json` from {doc}`../getting-started/quick-start` to make the precedence example concrete.
 
 ```console
 $ VLC_AUTO_GOOGLE_FONTS=true \
@@ -78,15 +62,13 @@ $ VLC_AUTO_GOOGLE_FONTS=true \
 >   vl2png --input chart.vl.json --output chart.png
 ```
 
-Global options go before the conversion command. Run `vl-convert --help` for
-the global options and `vl-convert vl2png --help` for a command's own options.
+Global options go before the conversion command. Run `vl-convert --help` for the global options and `vl-convert vl2png --help` for a command's own options.
 ::::
 
 ::::{interface} rust
 ## Configure a Rust Converter
 
-Build a `VlcConfig` and pass it to `VlConverter::with_config()`. The converter
-keeps those settings for its lifetime.
+Build a `VlcConfig` and pass it to `VlConverter::with_config()`. The converter keeps those settings for its lifetime.
 
 ```rust
 use std::num::NonZeroU64;
@@ -101,10 +83,7 @@ let converter = VlConverter::with_config(VlcConfig {
 })?;
 ```
 
-`VlcConfig::from_file()` reads the shared JSONC format. The library does not
-read environment variables or apply precedence rules. Those are the
-application's responsibility. See {doc}`rust-converter` for sharing and
-reusing the converter.
+`VlcConfig::from_file()` reads the shared JSONC format. The library does not read environment variables or apply precedence rules. Those are the application's responsibility. See {doc}`rust-converter` for sharing and reusing the converter.
 ::::
 
 ::::{interface} server
@@ -119,8 +98,7 @@ VLC_* environment variables
 built-in defaults
 ```
 
-Options after `serve` configure HTTP behavior: listeners, authentication,
-request limits, and budgets. Converter options go before `serve`.
+Options after `serve` configure HTTP behavior: listeners, authentication, request limits, and budgets. Converter options go before `serve`.
 
 ```console
 $ vl-convert serve \
@@ -128,21 +106,14 @@ $ vl-convert serve \
 >   --port 3000
 ```
 
-When the admin listener is enabled, `PUT /admin/config` replaces the live
-converter configuration and `PATCH /admin/config` changes selected fields. New
-requests use the updated configuration. See {doc}`/server/admin-api`.
+When the admin listener is enabled, `PUT /admin/config` replaces the live converter configuration and `PATCH /admin/config` changes selected fields. New requests use the updated configuration. See {doc}`/server/admin-api`.
 
-Per-request values take priority over the server configuration, but requests
-cannot select Google Fonts or supply plugin code unless the server enables
-those capabilities explicitly.
+Per-request values take priority over the server configuration, but requests cannot select Google Fonts or supply plugin code unless the server enables those capabilities explicitly.
 ::::
 
 ## JSONC Configuration Files
 
-JSONC is JSON with comments and trailing commas. Python `load_config()`, Rust
-`VlcConfig::from_file()`, the CLI, and the server all read the same field
-names. This example favors predictable resource use and blocks external data
-fetches. Save it as `production.vlc.jsonc` to use it with the commands above:
+JSONC is JSON with comments and trailing commas. Python `load_config()`, Rust `VlcConfig::from_file()`, the CLI, and the server all read the same field names. This example favors predictable resource use and blocks external data fetches. Save it as `production.vlc.jsonc` to use it with the commands above:
 
 :::{dropdown} production.vlc.jsonc
 :open:
@@ -179,28 +150,18 @@ fetches. Save it as `production.vlc.jsonc` to use it with the commands above:
 ```
 :::
 
-This is an example, not the built-in defaults. By default, `base_url` points at
-the Vega datasets CDN and `allowed_base_urls` permits any HTTP or HTTPS URL.
-Set `base_url` to `false` to reject relative data and image URLs, and set
-`allowed_base_urls` to an empty list to reject every external URL and local
-file. Misspelled
-field names are ignored rather than rejected.
+This is an example, not the built-in defaults. By default, `base_url` points at the Vega datasets CDN and `allowed_base_urls` permits any HTTP or HTTPS URL. Set `base_url` to `false` to reject relative data and image URLs, and set `allowed_base_urls` to an empty list to reject every external URL and local file. Misspelled field names are ignored rather than rejected.
 
-`allowed_base_urls` accepts Content Security Policy-style patterns. Grant only
-the paths, URL prefixes, or schemes the application needs, and use `"*"` only
-when every input is trusted. See {doc}`../guides/security`.
+`allowed_base_urls` accepts Content Security Policy-style patterns. Grant only the paths, URL prefixes, or schemes the application needs, and use `"*"` only when every input is trusted. See {doc}`../guides/security`.
 
 ::::{interface} python
-Python dictionaries passed to `configure()` represent font variants as
-`(weight, style)` tuples. JSONC files use objects with `weight` and `style`
-fields, as shown above.
+Python dictionaries passed to `configure()` represent font variants as `(weight, style)` tuples. JSONC files use objects with `weight` and `style` fields, as shown above.
 ::::
 
 ::::{interface} cli
 ## Common Environment Variables
 
-Most global flags have `VLC_*` equivalents. Repeatable values are separated by
-semicolons, except font directories, which use the platform path separator.
+Most global flags have `VLC_*` equivalents. Repeatable values are separated by semicolons, except font directories, which use the platform path separator.
 
 | Variable | Purpose |
 | --- | --- |
@@ -223,8 +184,7 @@ Run `vl-convert --help` for the complete list.
 ::::{interface} server
 ## Common Environment Variables
 
-Most global and `serve` flags have `VLC_*` equivalents. These are the
-server-specific variables used most often:
+Most global and `serve` flags have `VLC_*` equivalents. These are the server-specific variables used most often:
 
 | Variable | Purpose |
 | --- | --- |
@@ -241,6 +201,5 @@ server-specific variables used most often:
 | `VLC_CORS_ORIGIN` | Allowed browser origins |
 | `VLC_TRUST_PROXY` | Whether to use proxy-supplied client addresses |
 
-`PORT` is also accepted when `VLC_PORT` and `--port` are unset. Run
-`vl-convert serve --help` for the complete list.
+`PORT` is also accepted when `VLC_PORT` and `--port` are unset. Run `vl-convert serve --help` for the complete list.
 ::::

@@ -10,9 +10,7 @@ interfaces: [rust]
 
 # Rust Converter Lifecycle
 
-Create one `VlConverter` per application and reuse it. The converter owns a
-lazily started pool of JavaScript workers. Creating a converter for every chart
-repeats that setup and prevents the pool from serving concurrent work.
+Create one `VlConverter` per application and reuse it. The converter owns a lazily started pool of JavaScript workers. Creating a converter for every chart repeats that setup and prevents the pool from serving concurrent work.
 
 ```rust
 use std::num::NonZeroU64;
@@ -26,16 +24,11 @@ let converter = VlConverter::with_config(VlcConfig {
 converter.warm_up()?;
 ```
 
-`warm_up()` is optional. Call it when the application should pay the worker
-startup cost before accepting requests.
+`warm_up()` is optional. Call it when the application should pay the worker startup cost before accepting requests.
 
 ## Share the Converter
 
-`VlConverter` is cheap to clone, and clones share the same worker pool. Store a
-clone in application state or hand clones to tasks. Each worker handles one
-conversion at a time, and additional conversions wait for a free worker. This
-lifecycle excerpt assumes the `spec` created in the complete
-{doc}`../getting-started/quick-start` application:
+`VlConverter` is cheap to clone, and clones share the same worker pool. Store a clone in application state or hand clones to tasks. Each worker handles one conversion at a time, and additional conversions wait for a free worker. This lifecycle excerpt assumes the `spec` created in the complete {doc}`../getting-started/quick-start` application:
 
 ```rust
 use vl_convert_rs::{PngOpts, VlOpts};
@@ -52,18 +45,12 @@ for entry in output.logs {
 }
 ```
 
-Conversion methods are `async` and run on Tokio or any other executor that can
-poll their futures. The {doc}`../getting-started/quick-start` includes a
-complete Tokio application.
+Conversion methods are `async` and run on Tokio or any other executor that can poll their futures. The {doc}`../getting-started/quick-start` includes a complete Tokio application.
 
 ## Configuration and Errors
 
-`VlcConfig` controls worker count, data access, fonts, themes, plugins, and
-JavaScript resource limits. Build it before sharing the converter. See
-{doc}`configuration` and {doc}`memory-management`.
+`VlcConfig` controls worker count, data access, fonts, themes, plugins, and JavaScript resource limits. Build it before sharing the converter. See {doc}`configuration` and {doc}`memory-management`.
 
-Methods return `Result` and keep the error context from compilation, data
-loading, fonts, plugins, and rendering. Successful outputs carry Vega's
-recoverable diagnostics in `logs`. See {doc}`../guides/logging`.
+Methods return `Result` and keep the error context from compilation, data loading, fonts, plugins, and rendering. Successful outputs carry Vega's recoverable diagnostics in `logs`. See {doc}`../guides/logging`.
 
 The complete crate API is on [docs.rs](https://docs.rs/vl-convert-rs).

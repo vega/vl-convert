@@ -865,10 +865,7 @@ $ curl http://127.0.0.1:3000/vegalite/url \
 
 ## Choose an Interface
 
-The controls above show each output through every interface. All four
-interfaces share one conversion engine, so a chart renders the same way from
-each of them given the same configuration and environment. Pick the interface
-that matches how you will call VlConvert.
+The controls above show each output through every interface. All four interfaces share one conversion engine, so a chart renders the same way from each of them given the same configuration and environment. Pick the interface that matches how you will call VlConvert.
 
 ::::{grid} 1 2 2 4
 :gutter: 2
@@ -902,9 +899,7 @@ Run `vl-convert serve` as an HTTP rendering worker.
 :::
 ::::
 
-{doc}`how-it-works/rendering` explains the input types, output formats, fonts,
-network access, and worker model that every interface shares, and
-{doc}`how-it-works/architecture` describes the runtime and crates underneath.
+{doc}`how-it-works/rendering` explains the input types, output formats, fonts, network access, and worker model that every interface shares, and {doc}`how-it-works/architecture` describes the runtime and crates underneath.
 
 ```{toctree}
 :hidden:

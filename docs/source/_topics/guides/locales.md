@@ -10,20 +10,13 @@ interfaces: [python, cli, rust, server]
 
 # Number and Time Locales
 
-Locales control how Vega formats values. `format_locale` sets number formatting
-such as decimal marks, digit grouping, and currency symbols.
-`time_format_locale` sets the names and patterns used for dates and times.
+Locales control how Vega formats values. `format_locale` sets number formatting such as decimal marks, digit grouping, and currency symbols. `time_format_locale` sets the names and patterns used for dates and times.
 
-Use a built-in locale name such as `de-DE` or `ja-JP` for standard regional
-formats, or pass a locale object for custom rules. The built-in names match the
-locale files in [d3-format](https://github.com/d3/d3-format/tree/main/locale)
-and [d3-time-format](https://github.com/d3/d3-time-format/tree/main/locale).
-Locales change formatting only. They do not change the timezone or the data.
+Use a built-in locale name such as `de-DE` or `ja-JP` for standard regional formats, or pass a locale object for custom rules. The built-in names match the locale files in [d3-format](https://github.com/d3/d3-format/tree/main/locale) and [d3-time-format](https://github.com/d3/d3-time-format/tree/main/locale). Locales change formatting only. They do not change the timezone or the data.
 
 ## Use a Built-In Locale
 
-This chart formats revenue with the `$,.0f` pattern and plots dates on the
-x axis, so both locale settings affect it. Save this specification:
+This chart formats revenue with the `$,.0f` pattern and plots dates on the x axis, so both locale settings affect it. Save this specification:
 
 :::{dropdown} chart.vl.json
 :open:
@@ -48,8 +41,7 @@ svg = vlc.vegalite_to_svg(
 Path("chart.svg").write_text(svg, encoding="utf-8")
 ```
 
-`get_format_locale()` and `get_time_format_locale()` return the definition of
-a built-in locale, and {doc}`../api-reference` lists the accepted names.
+`get_format_locale()` and `get_time_format_locale()` return the definition of a built-in locale, and {doc}`../api-reference` lists the accepted names.
 ::::
 
 ::::{interface} cli
@@ -100,9 +92,7 @@ $ curl http://127.0.0.1:3000/vegalite/svg \
 ```
 ::::
 
-Rendered with `de-DE` for both settings, the y axis groups thousands with a
-dot and places the euro sign after the number, and the x axis uses German
-month names:
+Rendered with `de-DE` for both settings, the y axis groups thousands with a dot and places the euro sign after the number, and the x axis uses German month names:
 
 ```{vl-chart} /_examples/locale-demo.vl.json
 :format-locale: de-DE
@@ -112,9 +102,7 @@ month names:
 
 ## Define Custom Number Rules
 
-A number locale follows the
-[d3-format locale definition](https://d3js.org/d3-format#locale_format). Save
-this example as `format-locale.json`:
+A number locale follows the [d3-format locale definition](https://d3js.org/d3-format#locale_format). Save this example as `format-locale.json`:
 
 :::{dropdown} format-locale.json
 :open:
@@ -145,8 +133,7 @@ svg = vlc.vegalite_to_svg(spec, format_locale=format_locale)
 ::::
 
 ::::{interface} cli
-The option accepts a locale name, an inline JSON object, or a `.json` or
-`.jsonc` file:
+The option accepts a locale name, an inline JSON object, or a `.json` or `.jsonc` file:
 
 ```console
 $ vl-convert vl2svg \
@@ -173,9 +160,7 @@ let options = VlOpts {
 ::::
 
 ::::{interface} server
-The request field accepts the locale object directly. This complete body uses
-the same `chart.vl.json` input as the built-in locale example. Save it as
-`request.json`:
+The request field accepts the locale object directly. This complete body uses the same `chart.vl.json` input as the built-in locale example. Save it as `request.json`:
 
 :::{dropdown} request.json
 :open:
@@ -186,10 +171,6 @@ the same `chart.vl.json` input as the built-in locale example. Save it as
 :::
 ::::
 
-Custom time locales follow the
-[d3-time-format locale definition](https://d3js.org/d3-time-format#locale_format)
-and define day and month names as well as date and time patterns. Prefer a
-built-in name when one fits.
+Custom time locales follow the [d3-time-format locale definition](https://d3js.org/d3-time-format#locale_format) and define day and month names as well as date and time patterns. Prefer a built-in name when one fits.
 
-See {doc}`../advanced/configuration` to apply a locale to every conversion by
-default.
+See {doc}`../advanced/configuration` to apply a locale to every conversion by default.

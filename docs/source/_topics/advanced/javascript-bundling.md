@@ -10,14 +10,9 @@ interfaces: [python, cli, rust, server]
 
 # JavaScript Bundling
 
-Most applications should use {doc}`../guides/html-output` to produce a complete
-interactive page. Use the bundling API when you are building your own web
-integration and need one JavaScript file containing compatible versions of
-Vega, Vega-Lite, and Vega Embed.
+Most applications should use {doc}`../guides/html-output` to produce a complete interactive page. Use the bundling API when you are building your own web integration and need one JavaScript file containing compatible versions of Vega, Vega-Lite, and Vega Embed.
 
-The standard bundle exposes `vega`, `vegaLite`, and `vegaEmbed` on `window`, so
-existing browser code can use them without module imports. Select the same
-Vega-Lite version that the browser will render.
+The standard bundle exposes `vega`, `vegaLite`, and `vegaEmbed` on `window`, so existing browser code can use them without module imports. Select the same Vega-Lite version that the browser will render.
 
 ## Get the Standard Bundle
 
@@ -61,9 +56,7 @@ The response carries a `Cache-Control` header that allows caching for one day.
 
 ## Add an Application Snippet
 
-A snippet is bundled in the same module scope, so it can refer to `vega`,
-`vegaLite`, and `vegaEmbed`. It must not import anything outside the
-dependencies bundled with VlConvert.
+A snippet is bundled in the same module scope, so it can refer to `vega`, `vegaLite`, and `vegaEmbed`. It must not import anything outside the dependencies bundled with VlConvert.
 
 For example, save this as `snippet.js`:
 
@@ -123,9 +116,7 @@ $ curl http://127.0.0.1:3000/bundling/bundle-snippet \
 ```
 ::::
 
-The resulting `app-chart.js` defines the wrapper. This complete page loads the
-bundle and calls it with a Vega-Lite specification. Save it as `index.html`
-beside `app-chart.js`, then open it in a browser:
+The resulting `app-chart.js` defines the wrapper. This complete page loads the bundle and calls it with a Vega-Lite specification. Save it as `index.html` beside `app-chart.js`, then open it in a browser:
 
 :::{dropdown} index.html
 :open:
@@ -135,6 +126,4 @@ beside `app-chart.js`, then open it in a browser:
 ```
 :::
 
-Bundling runs build tooling on caller-supplied source. Apply authentication,
-body-size limits, and request budgets before exposing the server endpoints to
-other users.
+Bundling runs build tooling on caller-supplied source. Apply authentication, body-size limits, and request budgets before exposing the server endpoints to other users.

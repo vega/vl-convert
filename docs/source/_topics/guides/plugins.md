@@ -10,25 +10,15 @@ interfaces: [python, cli, rust, server]
 
 # Vega Plugins
 
-A Vega plugin adds a named capability to the Vega runtime, such as an
-expression function, color scheme, projection, scale, transform, or data
-format. Most charts do not need one. Use a plugin only when a specification
-refers to a custom runtime name that Vega's built-in transforms, themes,
-configuration, and locales cannot provide. The
-[Vega extensibility API](https://vega.github.io/vega/docs/api/extensibility/)
-lists the registration functions a plugin can call.
+A Vega plugin adds a named capability to the Vega runtime, such as an expression function, color scheme, projection, scale, transform, or data format. Most charts do not need one. Use a plugin only when a specification refers to a custom runtime name that Vega's built-in transforms, themes, configuration, and locales cannot provide. The [Vega extensibility API](https://vega.github.io/vega/docs/api/extensibility/) lists the registration functions a plugin can call.
 
 :::{warning}
-A plugin is executable JavaScript. Load plugin files and URLs only from sources
-you trust. Do not accept caller-supplied plugins on a public service unless you
-have decided to accept that risk and enforce strict resource limits.
+A plugin is executable JavaScript. Load plugin files and URLs only from sources you trust. Do not accept caller-supplied plugins on a public service unless you have decided to accept that risk and enforce strict resource limits.
 :::
 
 ## Create a Plugin
 
-A plugin is a JavaScript ECMAScript module (ESM) whose default export is a
-function. VlConvert calls that function with the Vega module when a worker
-starts, before any specification is compiled or parsed.
+A plugin is a JavaScript ECMAScript module (ESM) whose default export is a function. VlConvert calls that function with the Vega module when a worker starts, before any specification is compiled or parsed.
 
 Save this example as `double-value.js`:
 
@@ -111,9 +101,7 @@ $ vl-convert serve \
 >   --port 3000
 ```
 
-Every request handled by this process can then use `doubleValue`. Put the
-specification above in the `spec` field of a normal `/vegalite/*` request.
-Save this complete request body as `request.json`:
+Every request handled by this process can then use `doubleValue`. Put the specification above in the `spec` field of a normal `/vegalite/*` request. Save this complete request body as `request.json`:
 
 :::{dropdown} request.json
 :open:
@@ -131,15 +119,11 @@ $ curl http://127.0.0.1:3000/vegalite/png \
 ```
 ::::
 
-The registered `doubleValue` function doubles the source values before Vega
-draws these bars:
+The registered `doubleValue` function doubles the source values before Vega draws these bars:
 
 ```{vl-chart} /_examples/plugin-demo.vl.json
 :vega-plugin: /_examples/double-value.js
 :alt: Two bars with the source values doubled to four and ten
 ```
 
-Plugins can also come from HTTPS URLs or inline source, and a plugin can import
-other modules. See {doc}`../advanced/plugin-loading` for loading modes, import
-allowlists, prebundling, and caller-supplied plugins, and {doc}`security` for
-the wider trust model.
+Plugins can also come from HTTPS URLs or inline source, and a plugin can import other modules. See {doc}`../advanced/plugin-loading` for loading modes, import allowlists, prebundling, and caller-supplied plugins, and {doc}`security` for the wider trust model.

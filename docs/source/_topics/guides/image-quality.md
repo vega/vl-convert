@@ -10,39 +10,29 @@ interfaces: [python, cli, rust, server]
 
 # Image Size and Quality
 
-Prefer vector output when the consumer supports it. SVG suits web pages and
-later editing, and PDF suits documents and print. Neither needs a fixed pixel
-size.
+Prefer vector output when the consumer supports it. SVG suits web pages and later editing, and PDF suits documents and print. Neither needs a fixed pixel size.
 
-Use PNG when the consumer needs pixels, lossless output, or transparency. Use
-JPEG when a smaller file matters more than either.
+Use PNG when the consumer needs pixels, lossless output, or transparency. Use JPEG when a smaller file matters more than either.
 
 ## Chart Size
 
-`width` and `height` set the chart's logical dimensions before Vega adds axes,
-legends, titles, and padding, so the final image is usually larger than the
-values you pass. They override the top-level `width` and `height` of the
-specification.
+`width` and `height` set the chart's logical dimensions before Vega adds axes, legends, titles, and padding, so the final image is usually larger than the values you pass. They override the top-level `width` and `height` of the specification.
 
 ## Pixel Density
 
-`scale` multiplies the pixel dimensions of PNG and JPEG output without changing
-the layout. `2` is a common choice for high-density displays.
+`scale` multiplies the pixel dimensions of PNG and JPEG output without changing the layout. `2` is a common choice for high-density displays.
 
-PNG also accepts `ppi`, which records pixels-per-inch metadata in the file and
-contributes to the pixel dimensions:
+PNG also accepts `ppi`, which records pixels-per-inch metadata in the file and contributes to the pixel dimensions:
 
 ```text
 effective scale = scale * ppi / 72
 ```
 
-The defaults are `scale=1` and `ppi=72`. Either `scale=2` or `ppi=144` doubles
-the pixel dimensions. Set both only when you want the effects multiplied.
+The defaults are `scale=1` and `ppi=72`. Either `scale=2` or `ppi=144` doubles the pixel dimensions. Set both only when you want the effects multiplied.
 
 ## JPEG Quality
 
-`quality` ranges from `0` through `100` and defaults to `90`. Higher values keep
-more detail and produce larger files.
+`quality` ranges from `0` through `100` and defaults to `90`. Higher values keep more detail and produce larger files.
 
 ## Examples
 
@@ -123,8 +113,7 @@ std::fs::write("chart.jpg", jpeg.data)?;
 ::::
 
 ::::{interface} server
-Put the options beside `spec` in the request body. For example, save this body
-as `request.json`:
+Put the options beside `spec` in the request body. For example, save this body as `request.json`:
 
 :::{dropdown} request.json
 :open:
@@ -142,7 +131,4 @@ $ curl http://127.0.0.1:3000/vegalite/png \
 ```
 ::::
 
-PNG output uses Vega's canvas renderer. JPEG and PDF are produced from the SVG
-rendering. SVG input is converted directly by Rust image and PDF libraries
-without running Vega, and `width` and `height` do not apply to it. See
-{doc}`../advanced/conversion-overrides` for every per-conversion option.
+PNG output uses Vega's canvas renderer. JPEG and PDF are produced from the SVG rendering. SVG input is converted directly by Rust image and PDF libraries without running Vega, and `width` and `height` do not apply to it. See {doc}`../advanced/conversion-overrides` for every per-conversion option.

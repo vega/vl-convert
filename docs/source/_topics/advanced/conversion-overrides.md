@@ -10,9 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Conversion Overrides
 
-An override changes one conversion without touching the converter
-configuration. Use {doc}`configuration` instead when the same value should
-apply to every conversion.
+An override changes one conversion without touching the converter configuration. Use {doc}`configuration` instead when the same value should apply to every conversion.
 
 | Override | Applies to | Effect |
 | --- | --- | --- |
@@ -31,9 +29,7 @@ apply to every conversion.
 | `vega_plugin` | Vega-Lite and Vega | Registers plugin code for one conversion |
 | `fullscreen` | Vega Editor URLs | Selects the full-screen editor URL form |
 
-SVG input conversions accept only the raster options `scale`, `ppi`, and
-`quality`. Chart options such as `theme`, `width`, and `height` do not apply to
-them.
+SVG input conversions accept only the raster options `scale`, `ppi`, and `quality`. Chart options such as `theme`, `width`, and `height` do not apply to them.
 
 The examples override this Vega-Lite input:
 
@@ -64,13 +60,11 @@ png = vlc.vegalite_to_png(
 Path("chart.png").write_bytes(png)
 ```
 
-A per-call `vega_plugin` also requires `allow_per_request_plugins=True` in
-`configure()`.
+A per-call `vega_plugin` also requires `allow_per_request_plugins=True` in `configure()`.
 ::::
 
 ::::{interface} rust
-Put chart options in `VlOpts` or `VgOpts` and format options in an output type
-such as `PngOpts` or `HtmlOpts`:
+Put chart options in `VlOpts` or `VgOpts` and format options in an output type such as `PngOpts` or `HtmlOpts`:
 
 ```rust
 use vl_convert_rs::{PngOpts, VlConverter, VlOpts};
@@ -95,13 +89,11 @@ let output = converter
 std::fs::write("chart.png", output.data)?;
 ```
 
-A per-call plugin also requires `allow_per_request_plugins: true` in
-`VlcConfig`.
+A per-call plugin also requires `allow_per_request_plugins: true` in `VlcConfig`.
 ::::
 
 ::::{interface} server
-Put overrides beside `spec` in the request body. Save this body as
-`request.json`:
+Put overrides beside `spec` in the request body. Save this body as `request.json`:
 
 :::{dropdown} request.json
 :open:
@@ -120,10 +112,7 @@ $ curl http://127.0.0.1:3000/vegalite/png \
 >   --output chart.png
 ```
 
-Per-request `google_fonts` requires `--allow-google-fonts`, and per-request
-`vega_plugin` requires `--allow-per-request-plugins`. The server rejects
-unknown fields, so a misspelled option returns an error instead of being
-ignored.
+Per-request `google_fonts` requires `--allow-google-fonts`, and per-request `vega_plugin` requires `--allow-per-request-plugins`. The server rejects unknown fields, so a misspelled option returns an error instead of being ignored.
 ::::
 
 ::::{interface} cli
@@ -139,9 +128,5 @@ $ vl-convert vl2png \
 >   --theme dark
 ```
 
-Run a command with `--help` to see its options. `--config` is available on the
-Vega-Lite and Vega chart commands except `vl2url` and `vg2url`, which only
-encode the input specification in a URL. Converter settings such as
-`--google-font` and `--vega-plugin` are global options placed before the
-command.
+Run a command with `--help` to see its options. `--config` is available on the Vega-Lite and Vega chart commands except `vl2url` and `vg2url`, which only encode the input specification in a URL. Converter settings such as `--google-font` and `--vega-plugin` are global options placed before the command.
 ::::

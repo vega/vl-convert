@@ -10,17 +10,11 @@ interfaces: [python, cli, rust, server]
 
 # Themes
 
-A theme is a named Vega configuration object that Vega-Lite applies while
-compiling a specification. Themes set defaults for colors, marks, axes,
-legends, fonts, and other visual properties. They apply to Vega-Lite input
-only because Vega input skips Vega-Lite compilation. For Vega input, pass a
-configuration object directly with `config` or `--config`.
+A theme is a named Vega configuration object that Vega-Lite applies while compiling a specification. Themes set defaults for colors, marks, axes, legends, fonts, and other visual properties. They apply to Vega-Lite input only because Vega input skips Vega-Lite compilation. For Vega input, pass a configuration object directly with `config` or `--config`.
 
-VlConvert bundles the themes from the `vega-themes` package. Select a theme per
-conversion, or set `default_theme` in the converter configuration.
+VlConvert bundles the themes from the `vega-themes` package. Select a theme per conversion, or set `default_theme` in the converter configuration.
 
-Every conversion example and image on this page uses this Vega-Lite
-specification. Save it as follows:
+Every conversion example and image on this page uses this Vega-Lite specification. Save it as follows:
 
 :::{dropdown} chart.vl.json
 :open:
@@ -73,8 +67,7 @@ std::fs::write("chart.svg", output.svg)?;
 ::::
 
 ::::{interface} server
-Set `theme` beside `spec` in a Vega-Lite conversion request. Save this body as
-`request.json`:
+Set `theme` beside `spec` in a Vega-Lite conversion request. Save this body as `request.json`:
 
 :::{dropdown} request.json
 :open:
@@ -155,8 +148,7 @@ println!("{}", themes["dark"]);
 ::::
 
 ::::{interface} server
-`GET /themes` lists the available names, and `GET /themes/{name}` returns the
-configuration one theme applies:
+`GET /themes` lists the available names, and `GET /themes/{name}` returns the configuration one theme applies:
 
 ```console
 $ curl http://127.0.0.1:3000/themes
@@ -166,8 +158,7 @@ $ curl http://127.0.0.1:3000/themes/dark
 
 ## Register a Custom Theme
 
-A custom theme file is a JSON object whose keys are theme names and whose values
-are Vega configuration objects. Save this example as `themes.json`:
+A custom theme file is a JSON object whose keys are theme names and whose values are Vega configuration objects. Save this example as `themes.json`:
 
 :::{dropdown} themes.json
 :open:
@@ -237,8 +228,7 @@ $ vl-convert serve \
 >   --port 3000
 ```
 
-The themes then appear in `GET /themes` and can be selected by Vega-Lite
-conversion requests. Save this request as `request.json`:
+The themes then appear in `GET /themes` and can be selected by Vega-Lite conversion requests. Save this request as `request.json`:
 
 :::{dropdown} request.json
 :open:
@@ -264,6 +254,4 @@ The `brand` theme applied to the same input. Only the selected theme changes:
 :alt: The stacked bar chart with the brand theme's blue and green palette
 ```
 
-See {doc}`../advanced/configuration` to set a default theme for every
-conversion, and {doc}`../advanced/conversion-overrides` to pass a raw `config`
-object instead of a named theme.
+See {doc}`../advanced/configuration` to set a default theme for every conversion, and {doc}`../advanced/conversion-overrides` to pass a raw `config` object instead of a named theme.

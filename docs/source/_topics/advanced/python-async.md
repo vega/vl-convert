@@ -10,14 +10,9 @@ interfaces: [python]
 
 # Python Async API
 
-Use `vl_convert.asyncio` when the caller already runs an asyncio event loop,
-such as an asynchronous web service. Its conversion and configuration functions
-are awaitable, so the event loop keeps serving other tasks while VlConvert
-works.
+Use `vl_convert.asyncio` when the caller already runs an asyncio event loop, such as an asynchronous web service. Its conversion and configuration functions are awaitable, so the event loop keeps serving other tasks while VlConvert works.
 
-The synchronous and asynchronous modules share one converter and worker pool.
-Configure that shared state once at startup, before concurrent conversions
-begin.
+The synchronous and asynchronous modules share one converter and worker pool. Configure that shared state once at startup, before concurrent conversions begin.
 
 ```python
 import asyncio
@@ -49,14 +44,6 @@ async def main():
 asyncio.run(main())
 ```
 
-A pool runs as many conversions at once as it has workers, and extra calls wait
-for a free worker. Choose `num_workers` from measured concurrency and memory
-needs rather than from the number of tasks you submit. See
-{doc}`memory-management`.
+A pool runs as many conversions at once as it has workers, and extra calls wait for a free worker. Choose `num_workers` from measured concurrency and memory needs rather than from the number of tasks you submit. See {doc}`memory-management`.
 
-Not everything in `vl_convert.asyncio` is awaitable. The version getters,
-`get_config_path()`, the locale lookups, and the font directory and Google
-Fonts cache helpers, including `set_google_fonts_cache_size_mb()`, are
-synchronous re-exports. Every conversion, configuration, font inspection, and
-worker function is awaitable. The {doc}`../api-reference` lists the synchronous
-group.
+Not everything in `vl_convert.asyncio` is awaitable. The version getters, `get_config_path()`, the locale lookups, and the font directory and Google Fonts cache helpers, including `set_google_fonts_cache_size_mb()`, are synchronous re-exports. Every conversion, configuration, font inspection, and worker function is awaitable. The {doc}`../api-reference` lists the synchronous group.

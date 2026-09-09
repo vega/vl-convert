@@ -10,34 +10,19 @@ interfaces: [python, cli, rust, server]
 
 # Interactive HTML Output
 
-HTML output is a web page that renders the chart with Vega Embed, the browser
-helper that loads a Vega or Vega-Lite specification, creates the Vega view, and
-adds tooltips and the action menu. Use it when the reader needs interaction.
-Use SVG, PNG, JPEG, or PDF for static results.
+HTML output is a web page that renders the chart with Vega Embed, the browser helper that loads a Vega or Vega-Lite specification, creates the Vega view, and adds tooltips and the action menu. Use it when the reader needs interaction. Use SVG, PNG, JPEG, or PDF for static results.
 
 ## Choose How Dependencies Load
 
-By default the page loads Vega, Vega-Lite, and Vega Embed from a content
-delivery network (CDN). The file stays small, but the page needs network access
-when it opens.
+By default the page loads Vega, Vega-Lite, and Vega Embed from a content delivery network (CDN). The file stays small, but the page needs network access when it opens.
 
-Set `bundle=true` to include those libraries in the file, along with any
-plugins and the fonts VlConvert resolved for the chart. The page then opens
-offline, although data and images referenced by URL still need network access,
-as do fonts that were not embedded.
+Set `bundle=true` to include those libraries in the file, along with any plugins and the fonts VlConvert resolved for the chart. The page then opens offline, although data and images referenced by URL still need network access, as do fonts that were not embedded.
 
-HTML generation normally embeds the specification without evaluating it. When
-Google Font discovery, an explicit Google Font request, or local font embedding
-is enabled, VlConvert evaluates the chart to resolve fonts. That evaluation can
-load external data and images under VlConvert's access policy before the
-browser loads them again.
+HTML generation normally embeds the specification without evaluating it. When Google Font discovery, an explicit Google Font request, or local font embedding is enabled, VlConvert evaluates the chart to resolve fonts. That evaluation can load external data and images under VlConvert's access policy before the browser loads them again.
 
 ## Choose a Browser Renderer
 
-`renderer` selects how the browser draws the chart: `svg` (the default),
-`canvas` for charts with many marks where browser performance matters, or
-`hybrid`, which draws marks on canvas and text as SVG. This option only affects
-the page in the browser. It does not change how VlConvert renders PNG.
+`renderer` selects how the browser draws the chart: `svg` (the default), `canvas` for charts with many marks where browser performance matters, or `hybrid`, which draws marks on canvas and text as SVG. This option only affects the page in the browser. It does not change how VlConvert renders PNG.
 
 The examples use the input from Quick Start:
 
@@ -99,8 +84,7 @@ std::fs::write("chart.html", output.html)?;
 ::::
 
 ::::{interface} server
-Put `bundle` and `renderer` beside `spec` in the request body. Save this
-complete body as `request.json`:
+Put `bundle` and `renderer` beside `spec` in the request body. Save this complete body as `request.json`:
 
 :::{dropdown} request.json
 :open:
@@ -119,12 +103,7 @@ $ curl http://127.0.0.1:3000/vegalite/html \
 >   --output chart.html
 ```
 
-The response body is the HTML document. Use `POST /vega/html` for direct Vega
-input.
+The response body is the HTML document. Use `POST /vega/html` for direct Vega input.
 ::::
 
-HTML runs JavaScript in the reader's browser. Review it like any other
-generated web content, especially when specifications or plugins come from
-users. See {doc}`../advanced/javascript-bundling` to build the browser bundle
-without an HTML page, and {doc}`../advanced/plugin-loading` for how plugins are
-included in HTML output.
+HTML runs JavaScript in the reader's browser. Review it like any other generated web content, especially when specifications or plugins come from users. See {doc}`../advanced/javascript-bundling` to build the browser bundle without an HTML page, and {doc}`../advanced/plugin-loading` for how plugins are included in HTML output.

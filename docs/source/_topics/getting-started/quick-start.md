@@ -10,9 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Quick Start
 
-This example renders a small Vega-Lite bar chart as `chart.png`. The data is
-inline. See {doc}`../guides/data-loading` when a chart loads data from a URL
-or file.
+This example renders a small Vega-Lite bar chart as `chart.png`. The data is inline. See {doc}`../guides/data-loading` when a chart loads data from a URL or file.
 
 Save this specification:
 
@@ -25,8 +23,7 @@ Save this specification:
 :::
 
 ::::{interface} python
-`vegalite_to_png()` takes a Vega-Lite specification as a dictionary or JSON
-string and returns PNG bytes:
+`vegalite_to_png()` takes a Vega-Lite specification as a dictionary or JSON string and returns PNG bytes:
 
 ```python
 from pathlib import Path
@@ -38,8 +35,7 @@ png = vlc.vegalite_to_png(spec, scale=2)
 Path("chart.png").write_bytes(png)
 ```
 
-`scale=2` doubles the pixel dimensions of the output. See
-{doc}`../guides/vegalite-conversions` for the other output formats.
+`scale=2` doubles the pixel dimensions of the output. See {doc}`../guides/vegalite-conversions` for the other output formats.
 ::::
 
 ::::{interface} cli
@@ -55,8 +51,7 @@ Conversion commands also read standard input and write standard output:
 $ vl-convert vl2png --input - --output - < chart.vl.json > chart.png
 ```
 
-See {doc}`../guides/vegalite-conversions` for the other output formats and
-{doc}`../advanced/cli-piping` for pipeline usage.
+See {doc}`../guides/vegalite-conversions` for the other output formats and {doc}`../advanced/cli-piping` for pipeline usage.
 ::::
 
 ::::{interface} rust
@@ -100,9 +95,7 @@ async fn main() -> anyhow::Result<()> {
 ```
 :::
 
-Run `cargo run`. Conversion methods return output structs, and `data` holds
-the rendered bytes. See {doc}`../guides/vegalite-conversions` for the other
-output formats and {doc}`../advanced/rust-converter` for reusing the converter.
+Run `cargo run`. Conversion methods return output structs, and `data` holds the rendered bytes. See {doc}`../guides/vegalite-conversions` for the other output formats and {doc}`../advanced/rust-converter` for reusing the converter.
 ::::
 
 ::::{interface} server
@@ -131,9 +124,7 @@ $ curl http://127.0.0.1:3000/vegalite/png \
 >   --output chart.png
 ```
 
-The endpoint returns PNG bytes, which `curl` writes to `chart.png`. See
-{doc}`../guides/vegalite-conversions` for the other endpoints and
-{doc}`../overview` for what the server provides.
+The endpoint returns PNG bytes, which `curl` writes to `chart.png`. See {doc}`../guides/vegalite-conversions` for the other endpoints and {doc}`../overview` for what the server provides.
 ::::
 
 The specification renders as this chart:

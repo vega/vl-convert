@@ -10,8 +10,7 @@ interfaces: [server]
 
 # Server Logging
 
-The server writes logs to standard error. Use text logs for local development
-and JSON logs for deployed services:
+The server writes logs to standard error. Use text logs for local development and JSON logs for deployed services:
 
 ```console
 $ vl-convert serve \
@@ -19,8 +18,7 @@ $ vl-convert serve \
 >   --port 3000
 ```
 
-`--log-filter` accepts a `tracing-subscriber` directive and takes priority over
-`--log-level`. Use it when one component needs more detail:
+`--log-filter` accepts a `tracing-subscriber` directive and takes priority over `--log-level`. Use it when one component needs more detail:
 
 ```console
 $ vl-convert serve \
@@ -29,8 +27,7 @@ $ vl-convert serve \
 >   --port 3000
 ```
 
-Debug logs are high volume and can contain resource names or error details.
-Return to a production level after investigating.
+Debug logs are high volume and can contain resource names or error details. Return to a production level after investigating.
 
 ## Request Fields
 
@@ -59,9 +56,7 @@ When render-time budgets are enabled, response events also contain:
 | `budget.ip_remaining_ms` | Client capacity after the request |
 | `budget.client_ip` | Address used for per-IP accounting |
 
-Font work adds `google_font.css_cache_misses`,
-`google_font.file_cache_misses`, `google_font.downloaded_bytes`, and
-`google_font.resolved_variants`.
+Font work adds `google_font.css_cache_misses`, `google_font.file_cache_misses`, `google_font.downloaded_bytes`, and `google_font.resolved_variants`.
 
 ## Correlate a Request
 
@@ -72,11 +67,6 @@ $ curl http://127.0.0.1:3000/themes \
 >   -H 'X-Request-Id: render-01'
 ```
 
-If the header is absent, the server generates an ID. Either way the response
-carries the same `X-Request-Id`, so callers can attach it to their own logs.
-Browser clients can read it when CORS allows their origin.
+If the header is absent, the server generates an ID. Either way the response carries the same `X-Request-Id`, so callers can attach it to their own logs. Browser clients can read it when CORS allows their origin.
 
-Successful render, compilation, HTML, and scenegraph responses also carry
-`X-VLC-Logs`, a JSON array of up to 50 Vega diagnostic messages. Inspect it
-when a chart renders but Vega reported warnings. URL and font-inspection
-responses do not include this header.
+Successful render, compilation, HTML, and scenegraph responses also carry `X-VLC-Logs`, a JSON array of up to 50 Vega diagnostic messages. Inspect it when a chart renders but Vega reported warnings. URL and font-inspection responses do not include this header.

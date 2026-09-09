@@ -10,21 +10,15 @@ interfaces: [server]
 
 # Render-Time Budgets
 
-Render-time budgets limit processing time rather than request count, because
-two requests can have very different conversion costs.
+Render-time budgets limit processing time rather than request count, because two requests can have very different conversion costs.
 
-`--per-ip-budget-ms` sets the milliseconds of processing available to one
-client IP per minute. `--global-budget-ms` sets the shared capacity for all
-clients. Each budget is a bucket that starts full and refills every second at
-one sixtieth of its capacity. A value of `0` disables that budget.
+`--per-ip-budget-ms` sets the milliseconds of processing available to one client IP per minute. `--global-budget-ms` sets the shared capacity for all clients. Each budget is a bucket that starts full and refills every second at one sixtieth of its capacity. A value of `0` disables that budget.
 
-A request needs capacity in every enabled bucket. If either is exhausted, the
-server returns `429 Too Many Requests`.
+A request needs capacity in every enabled bucket. If either is exhausted, the server returns `429 Too Many Requests`.
 
 ## Configure Budgets
 
-This example allows about five seconds of processing per minute for one IP and
-thirty seconds per minute across the server:
+This example allows about five seconds of processing per minute for one IP and thirty seconds per minute across the server:
 
 ```console
 $ vl-convert serve \
@@ -34,16 +28,9 @@ $ vl-convert serve \
 >   --budget-hold-ms 1000
 ```
 
-`--budget-hold-ms` is the reservation taken when a request is admitted. When
-the response is ready, the reservation is replaced by the measured processing
-time. A larger hold stops many costly requests from entering at once but can
-reject a burst of cheap ones. A smaller hold allows more concurrency but can
-briefly overspend a bucket when requests run longer than expected. The default
-is 1000.
+`--budget-hold-ms` is the reservation taken when a request is admitted. When the response is ready, the reservation is replaced by the measured processing time. A larger hold stops many costly requests from entering at once but can reject a burst of cheap ones. A smaller hold allows more concurrency but can briefly overspend a bucket when requests run longer than expected. The default is 1000.
 
-Start near the typical conversion time, then tune from the request logs. The
-hold must not exceed an enabled budget, or that bucket can never admit a
-request.
+Start near the typical conversion time, then tune from the request logs. The hold must not exceed an enabled budget, or that bucket can never admit a request.
 
 Budgets complement these separate controls:
 
@@ -54,22 +41,15 @@ Budgets complement these separate controls:
 
 ## Identify Clients Correctly
 
-Without `--trust-proxy`, the TCP peer address identifies the client. Behind a
-reverse proxy that address is the proxy itself, so every caller would share one
-per-IP bucket.
+Without `--trust-proxy`, the TCP peer address identifies the client. Behind a reverse proxy that address is the proxy itself, so every caller would share one per-IP bucket.
 
-Enable `--trust-proxy` only when the proxy strips client-supplied forwarding
-headers and writes trusted values. The server then reads
-`X-Envoy-External-Address`, `X-Forwarded-For`, and `X-Real-IP` before falling
-back to the peer address.
+Enable `--trust-proxy` only when the proxy strips client-supplied forwarding headers and writes trusted values. The server then reads `X-Envoy-External-Address`, `X-Forwarded-For`, and `X-Real-IP` before falling back to the peer address.
 
-Unix domain sockets have no client IP. Requests over them use the global budget
-and skip the per-IP budget.
+Unix domain sockets have no client IP. Requests over them use the global budget and skip the per-IP budget.
 
 ## Charge Google Fonts Work
 
-When a specification can trigger automatic Google Fonts, add a charge for each
-CSS or font-file cache miss:
+When a specification can trigger automatic Google Fonts, add a charge for each CSS or font-file cache miss:
 
 ```console
 $ vl-convert serve \
@@ -80,16 +60,10 @@ $ vl-convert serve \
 >   --google-font-cache-miss-penalty-ms 250
 ```
 
-The final charge is the measured processing time plus the penalty for each
-cache miss. The variant threshold caps how many Google Font variants one
-conversion can load.
+The final charge is the measured processing time plus the penalty for each cache miss. The variant threshold caps how many Google Font variants one conversion can load.
 
 ## Observe and Update Budgets
 
-JSON request logs record the outcome, charged time, remaining capacity, and
-font penalty. See {doc}`logging` for the field names.
+JSON request logs record the outcome, charged time, remaining capacity, and font penalty. See {doc}`logging` for the field names.
 
-When the admin listener is enabled, `GET /admin/budget` reports the current
-state and `POST /admin/budget` updates the caps or the hold. Lowering a cap
-clamps existing balances to the new value. See {doc}`authentication` for
-protecting that listener.
+When the admin listener is enabled, `GET /admin/budget` reports the current state and `POST /admin/budget` updates the caps or the hold. Lowering a cap clamps existing balances to the new value. See {doc}`authentication` for protecting that listener.

@@ -10,18 +10,12 @@ interfaces: [python, cli, rust, server]
 
 # Loading Data and Images
 
-A specification can carry its data inline or point at it with a URL. Inline
-data in `data.values` or `datasets` never touches the network or the disk. This
-page covers everything else: how VlConvert resolves a `data.url`, which URLs
-and files it may read, and how the same rules apply to images.
+A specification can carry its data inline or point at it with a URL. Inline data in `data.values` or `datasets` never touches the network or the disk. This page covers everything else: how VlConvert resolves a `data.url`, which URLs and files it may read, and how the same rules apply to images.
 
 Two converter settings control loading:
 
-- `base_url` is the base for relative URLs. It defaults to the Vega datasets
-  CDN, so the `data/cars.json` shorthand used by the Vega editor and the
-  Vega-Lite examples works without configuration.
-- `allowed_base_urls` lists the URLs and directories a specification may read.
-  It defaults to any HTTP or HTTPS URL and no local files.
+- `base_url` is the base for relative URLs. It defaults to the Vega datasets CDN, so the `data/cars.json` shorthand used by the Vega editor and the Vega-Lite examples works without configuration.
+- `allowed_base_urls` lists the URLs and directories a specification may read. It defaults to any HTTP or HTTPS URL and no local files.
 
 ## How a Data URL Is Resolved
 
@@ -35,20 +29,9 @@ Vega resolves the `url` of a data source before VlConvert fetches it:
 | `file:///srv/data/cars.csv` | Read from disk when the directory is allowed |
 | `data:text/csv,...` | Decoded inline, always allowed |
 
-Two things follow. To read a local file, use a `file://` URL or set `base_url`
-to a directory, because a bare absolute path becomes a CDN address. And every
-resolved HTTP URL or file path is checked against `allowed_base_urls`. A
-request that fails the check raises an error whose message contains
-`VLC_ACCESS_DENIED`.
+Two things follow. To read a local file, use a `file://` URL or set `base_url` to a directory, because a bare absolute path becomes a CDN address. And every resolved HTTP URL or file path is checked against `allowed_base_urls`. A request that fails the check raises an error whose message contains `VLC_ACCESS_DENIED`.
 
-VlConvert makes GET requests only, to `http` and `https` URLs only. Each
-request has a 10-second connection timeout and a 30-second overall limit that
-includes up to ten redirects, each checked against the allowlist. The limit
-applies to each attempt: image fetches for SVG-based output retry transient
-server errors up to four times, so a failing image can take longer overall.
-Vega parses the response as JSON, CSV, TSV, or TopoJSON according to the file
-extension or the `format` property, as described in the
-[Vega-Lite data documentation](https://vega.github.io/vega-lite/docs/data.html).
+VlConvert makes GET requests only, to `http` and `https` URLs only. Each request has a 10-second connection timeout and a 30-second overall limit that includes up to ten redirects, each checked against the allowlist. The limit applies to each attempt: image fetches for SVG-based output retry transient server errors up to four times, so a failing image can take longer overall. Vega parses the response as JSON, CSV, TSV, or TopoJSON according to the file extension or the `format` property, as described in the [Vega-Lite data documentation](https://vega.github.io/vega-lite/docs/data.html).
 
 ## Allowlist Patterns
 
@@ -62,22 +45,15 @@ Each entry in `allowed_base_urls` is one of these patterns:
 | Directory | `/srv/data/` or `file:///srv/data/` | Files under that directory, after resolving symlinks and `..` |
 | Everything | `*` | Any URL or path, including the whole filesystem |
 
-Prefix entries cannot contain credentials, a query string, or a fragment.
-Directory entries must exist when the converter starts, and on Windows they can
-use drive letters such as `C:\data\`. An empty list blocks every HTTP or HTTPS
-URL and filesystem path. Inline `data:` URLs remain allowed.
+Prefix entries cannot contain credentials, a query string, or a fragment. Directory entries must exist when the converter starts, and on Windows they can use drive letters such as `C:\data\`. An empty list blocks every HTTP or HTTPS URL and filesystem path. Inline `data:` URLs remain allowed.
 
 ::::{interface} cli server
-`--allowed-base-urls` also accepts the shortcuts `none` for an empty list,
-`net` for HTTP and HTTPS only, and `all` for `*`. Separate several patterns
-with semicolons.
+`--allowed-base-urls` also accepts the shortcuts `none` for an empty list, `net` for HTTP and HTTPS only, and `all` for `*`. Separate several patterns with semicolons.
 ::::
 
 ## Load Local Files
 
-Set `base_url` to the directory that holds the data and add the same directory
-to `allowed_base_urls`. Relative URLs in the specification then resolve to
-files under that directory, and `file://` URLs inside it work as well.
+Set `base_url` to the directory that holds the data and add the same directory to `allowed_base_urls`. Relative URLs in the specification then resolve to files under that directory, and `file://` URLs inside it work as well.
 
 Create this layout, then run the examples from the `example` directory:
 
@@ -124,8 +100,7 @@ png = vlc.vegalite_to_png(spec)
 Path("chart.png").write_bytes(png)
 ```
 
-`base_url=False` rejects relative URLs, and `base_url=True` restores the CDN
-default.
+`base_url=False` rejects relative URLs, and `base_url=True` restores the CDN default.
 ::::
 
 ::::{interface} cli
@@ -136,9 +111,7 @@ $ vl-convert \
 >   vl2png --input chart.vl.json --output chart.png
 ```
 
-`--base-url disabled` rejects relative URLs. The equivalent environment
-variables are `VLC_BASE_URL` and `VLC_ALLOWED_BASE_URLS`. In a JSONC config
-file, a relative `base_url` path is resolved against the file's directory.
+`--base-url disabled` rejects relative URLs. The equivalent environment variables are `VLC_BASE_URL` and `VLC_ALLOWED_BASE_URLS`. In a JSONC config file, a relative `base_url` path is resolved against the file's directory.
 ::::
 
 ::::{interface} rust
@@ -159,8 +132,7 @@ let output = converter
 std::fs::write("chart.png", output.data)?;
 ```
 
-`BaseUrlSetting::Disabled` rejects relative URLs. `with_config()` returns an
-error if an allowlisted directory does not exist.
+`BaseUrlSetting::Disabled` rejects relative URLs. `with_config()` returns an error if an allowlisted directory does not exist.
 ::::
 
 ::::{interface} server
@@ -181,8 +153,7 @@ Save this complete request as `request.json`:
 ```
 :::
 
-Send it from a second terminal whose current directory contains
-`request.json`:
+Send it from a second terminal whose current directory contains `request.json`:
 
 ```console
 $ curl http://127.0.0.1:3000/vegalite/png \
@@ -191,80 +162,38 @@ $ curl http://127.0.0.1:3000/vegalite/png \
 >   --output chart.png
 ```
 
-Requests cannot change the loading settings. When the admin listener is enabled,
-`PATCH /admin/config` updates them without a restart. See
-{doc}`/server/admin-api`.
+Requests cannot change the loading settings. When the admin listener is enabled, `PATCH /admin/config` updates them without a restart. See {doc}`/server/admin-api`.
 ::::
 
-For production, replace `$PWD` or `Path.cwd()` with a stable absolute path such
-as `/srv/charts`. Keep the allowlist limited to the directory the chart needs.
+For production, replace `$PWD` or `Path.cwd()` with a stable absolute path such as `/srv/charts`. Keep the allowlist limited to the directory the chart needs.
 
 ## Use the Vega Example Datasets
 
-Vega and Vega-Lite examples reference their sample data with paths such as
-`data/movies.json`. With the default settings these work as they do in the Vega
-editor: the path is joined to `base_url`, which points at version 2.9.0 of the
-`vega-datasets` package on the jsDelivr CDN, and that CDN is covered by the
-default HTTPS allowlist. No configuration is needed.
+Vega and Vega-Lite examples reference their sample data with paths such as `data/movies.json`. With the default settings these work as they do in the Vega editor: the path is joined to `base_url`, which points at version 2.9.0 of the `vega-datasets` package on the jsDelivr CDN, and that CDN is covered by the default HTTPS allowlist. No configuration is needed.
 
 The paths stop working when either setting changes:
 
-- If you narrow `allowed_base_urls`, add the CDN prefix
-  `https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/` to the list.
-- If you set `base_url` to a local directory, `data/movies.json` resolves under
-  that directory instead. Either copy the datasets there or use absolute CDN
-  URLs in the specification.
+- If you narrow `allowed_base_urls`, add the CDN prefix `https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/` to the list.
+- If you set `base_url` to a local directory, `data/movies.json` resolves under that directory instead. Either copy the datasets there or use absolute CDN URLs in the specification.
 - If `base_url` is disabled, relative paths fail. Use absolute URLs.
 
-To render the examples offline, download the `vega-datasets` package, for
-example with `npm pack vega-datasets@2.9.0` or by cloning
-[github.com/vega/vega-datasets](https://github.com/vega/vega-datasets), then
-set `base_url` to the directory that contains its `data` folder and add that
-directory to `allowed_base_urls` as shown above. To use a different dataset
-release, set `base_url` to its CDN URL, such as
-`https://cdn.jsdelivr.net/npm/vega-datasets@3/`.
+To render the examples offline, download the `vega-datasets` package, for example with `npm pack vega-datasets@2.9.0` or by cloning [github.com/vega/vega-datasets](https://github.com/vega/vega-datasets), then set `base_url` to the directory that contains its `data` folder and add that directory to `allowed_base_urls` as shown above. To use a different dataset release, set `base_url` to its CDN URL, such as `https://cdn.jsdelivr.net/npm/vega-datasets@3/`.
 
 ## Restrict Remote Data
 
-The default allows any HTTP or HTTPS host. For specifications you do not fully
-control, replace it with the prefixes or wildcard hosts of the services the
-application uses, and keep local directories out of the list unless they are
-needed. {doc}`security` shows the resulting configuration for each interface
-together with the other limits a public service needs.
+The default allows any HTTP or HTTPS host. For specifications you do not fully control, replace it with the prefixes or wildcard hosts of the services the application uses, and keep local directories out of the list unless they are needed. {doc}`security` shows the resulting configuration for each interface together with the other limits a public service needs.
 
 ## Images
 
-Images follow the same rules as data. This covers Vega `image` marks, whose
-`url` can be a URL or a path, and `<image>` elements in SVG input. `data:` URLs
-are always allowed, HTTP images must match `allowed_base_urls`, and a local
-image file must sit under an allowlisted directory. A relative image path in an
-SVG input document resolves against a filesystem `base_url` and fails without
-one. An SVG used as an image cannot pull in further images from files or
-hosts. Only `data:` references inside it are honored. To keep such images,
-inline them as `data:` URLs or flatten the SVG before conversion.
+Images follow the same rules as data. This covers Vega `image` marks, whose `url` can be a URL or a path, and `<image>` elements in SVG input. `data:` URLs are always allowed, HTTP images must match `allowed_base_urls`, and a local image file must sit under an allowlisted directory. A relative image path in an SVG input document resolves against a filesystem `base_url` and fails without one. An SVG used as an image cannot pull in further images from files or hosts. Only `data:` references inside it are honored. To keep such images, inline them as `data:` URLs or flatten the SVG before conversion.
 
-Which outputs load images follows the same pattern as data. PNG, JPEG, and PDF
-output, SVG input conversions, and SVG output with `bundle` load them during
-conversion. Plain SVG output keeps each image URL for the viewer to load. HTML
-usually leaves image loading to the browser, but the font processing described
-below evaluates the chart and can load its images during conversion.
+Which outputs load images follows the same pattern as data. PNG, JPEG, and PDF output, SVG input conversions, and SVG output with `bundle` load them during conversion. Plain SVG output keeps each image URL for the viewer to load. HTML usually leaves image loading to the browser, but the font processing described below evaluates the chart and can load its images during conversion.
 
-Where images are loaded, a blocked image fails the conversion with a
-`VLC_ACCESS_DENIED` error. An image that is allowed but cannot be fetched, for
-example because the host returned an error, is logged as a warning and left
-blank, except with `bundle`, which fails because it must inline the image.
+Where images are loaded, a blocked image fails the conversion with a `VLC_ACCESS_DENIED` error. An image that is allowed but cannot be fetched, for example because the host returned an error, is logged as a warning and left blank, except with `bundle`, which fails because it must inline the image.
 
 ## When Data Is Loaded
 
-Not every output fetches data. Compiling Vega-Lite to Vega and creating a Vega
-editor URL embed the specification as written. The data loads later under the
-browser's or Vega editor's rules rather than VlConvert's. HTML generation also
-defers data loading unless Google Font discovery, an explicit Google Font
-request, or local font embedding makes VlConvert evaluate the chart to resolve
-fonts. In that case, VlConvert can load the data while generating the file, and
-the browser loads it again when the page opens. Rendered outputs, scenegraph
-output, and font inspection evaluate the chart and load its data during
-conversion.
+Not every output fetches data. Compiling Vega-Lite to Vega and creating a Vega editor URL embed the specification as written. The data loads later under the browser's or Vega editor's rules rather than VlConvert's. HTML generation also defers data loading unless Google Font discovery, an explicit Google Font request, or local font embedding makes VlConvert evaluate the chart to resolve fonts. In that case, VlConvert can load the data while generating the file, and the browser loads it again when the page opens. Rendered outputs, scenegraph output, and font inspection evaluate the chart and load its data during conversion.
 
 ## Troubleshooting
 
@@ -277,5 +206,4 @@ conversion.
 | `Unsupported image URL about:invalid/...` | `base_url` is disabled and an image uses a relative URL | Use an absolute URL or set `base_url` |
 | `HTTP request failed for '...': status 404` | The URL resolved and was allowed, but the host returned an error | Check the URL and the host |
 
-See {doc}`../advanced/configuration` to keep these settings in a config file,
-and {doc}`../advanced/troubleshooting` for other failures.
+See {doc}`../advanced/configuration` to keep these settings in a config file, and {doc}`../advanced/troubleshooting` for other failures.

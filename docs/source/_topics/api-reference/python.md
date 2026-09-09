@@ -10,14 +10,9 @@ interfaces: [python]
 
 # Python API Reference
 
-These entries are generated from the version 2 type stubs. Vega and Vega-Lite
-specifications may be passed as JSON strings or dictionaries. PNG, JPEG, and
-PDF functions return `bytes`. SVG, HTML, and URL functions return `str`.
-Scenegraph functions return a `dict` by default, or MessagePack `bytes` with
-`format="msgpack"`.
+These entries are generated from the version 2 type stubs. Vega and Vega-Lite specifications may be passed as JSON strings or dictionaries. PNG, JPEG, and PDF functions return `bytes`. SVG, HTML, and URL functions return `str`. Scenegraph functions return a `dict` by default, or MessagePack `bytes` with `format="msgpack"`.
 
-Start with {doc}`getting-started/quick-start` if you are choosing a conversion
-function for the first time.
+Start with {doc}`getting-started/quick-start` if you are choosing a conversion function for the first time.
 
 ## Vega-Lite Conversions
 
@@ -162,13 +157,7 @@ function for the first time.
 
 ## Async API
 
-`vl_convert.asyncio` provides awaitable versions of the conversion,
-configuration, font inspection, and worker functions above, with the same
-parameters and return types. These functions stay synchronous in that
-namespace: the version getters, `get_config_path()`, `get_format_locale()`,
-`get_time_format_locale()`, `current_font_directories()`,
-`google_fonts_cache_dir()`, `google_fonts_cache_size_mb()`, and
-`set_google_fonts_cache_size_mb()`. See {doc}`advanced/python-async`.
+`vl_convert.asyncio` provides awaitable versions of the conversion, configuration, font inspection, and worker functions above, with the same parameters and return types. These functions stay synchronous in that namespace: the version getters, `get_config_path()`, `get_format_locale()`, `get_time_format_locale()`, `current_font_directories()`, `google_fonts_cache_dir()`, `google_fonts_cache_size_mb()`, and `set_google_fonts_cache_size_mb()`. See {doc}`advanced/python-async`.
 
 ## Types
 
@@ -197,8 +186,7 @@ TimeFormatLocale = TimeFormatLocaleName | dict[str, Any]
 
 ### `GoogleFontSpec`
 
-A Google Font request as a family-name string, or a dictionary with a family
-and optional variants:
+A Google Font request as a family-name string, or a dictionary with a family and optional variants:
 
 ```python
 {
@@ -209,9 +197,7 @@ and optional variants:
 
 ### `FontInfo`
 
-The dictionary returned for each font by `vegalite_fonts()` and
-`vega_fonts()`. It contains the font name, source, variants, and optional CSS
-helpers for Google-hosted fonts.
+The dictionary returned for each font by `vegalite_fonts()` and `vega_fonts()`. It contains the font name, source, variants, and optional CSS helpers for Google-hosted fonts.
 
 ### `ConverterConfig`
 
@@ -219,5 +205,4 @@ The dictionary returned by `get_config()`.
 
 ### `WorkerMemoryUsage`
 
-The dictionary returned for each worker by `get_worker_memory_usage()`. Sizes
-are in bytes.
+The dictionary returned for each worker by `get_worker_memory_usage()`. Sizes are in bytes.

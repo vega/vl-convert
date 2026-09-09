@@ -10,13 +10,9 @@ interfaces: [python, cli, rust, server]
 
 # Logging and Warnings
 
-Vega and Vega-Lite report warnings while compiling or evaluating a chart. A
-conversion can succeed even though Vega dropped an invalid property or
-recovered from a data problem, so check these messages when a chart does not
-look as expected.
+Vega and Vega-Lite report warnings while compiling or evaluating a chart. A conversion can succeed even though Vega dropped an invalid property or recovered from a data problem, so check these messages when a chart does not look as expected.
 
-The examples use a logarithmic scale whose inferred domain includes zero. Save
-this Vega-Lite specification:
+The examples use a logarithmic scale whose inferred domain includes zero. Save this Vega-Lite specification:
 
 :::{dropdown} chart.vl.json
 :open:
@@ -27,9 +23,7 @@ this Vega-Lite specification:
 :::
 
 ::::{interface} python
-VlConvert forwards its messages to the `vl_convert` logger in Python's
-`logging` module. Configure a handler before converting if the application does
-not already configure logging:
+VlConvert forwards its messages to the `vl_convert` logger in Python's `logging` module. Configure a handler before converting if the application does not already configure logging:
 
 ```python
 import logging
@@ -58,24 +52,21 @@ Use `INFO` or `DEBUG` temporarily while diagnosing a problem.
 ::::
 
 ::::{interface} cli
-The CLI writes logs to standard error, so standard output stays available for
-conversion results.
+The CLI writes logs to standard error, so standard output stays available for conversion results.
 
 ```console
 $ vl-convert --log-level warn \
 >   vl2svg --input chart.vl.json --output chart.svg
 ```
 
-The command succeeds and writes a timestamped warning to standard error. The
-relevant part is:
+The command succeeds and writes a timestamped warning to standard error. The relevant part is:
 
 ```text
 ...
 WARN vl_convert: Log scale domain includes zero: [0,200]
 ```
 
-`--log-filter` accepts a `tracing-subscriber` filter directive for finer
-control and takes priority over `--log-level`:
+`--log-filter` accepts a `tracing-subscriber` filter directive for finer control and takes priority over `--log-level`:
 
 ```console
 $ vl-convert --log-filter 'vl_convert=debug' \
@@ -106,11 +97,7 @@ This prints:
 WARN: Log scale domain includes zero: [0,200]
 ```
 
-The crate also emits these messages, plus its own operational messages, through
-the `log` crate under the `vl_convert` target. If no logger is installed when
-the first converter is created, the crate installs `env_logger`, so setting
-`RUST_LOG=vl_convert=info` works without any code. To use a different logger,
-initialize it before creating a converter.
+The crate also emits these messages, plus its own operational messages, through the `log` crate under the `vl_convert` target. If no logger is installed when the first converter is created, the crate installs `env_logger`, so setting `RUST_LOG=vl_convert=info` works without any code. To use a different logger, initialize it before creating a converter.
 ::::
 
 ::::{interface} server
@@ -122,12 +109,9 @@ $ vl-convert serve \
 >   --port 3000
 ```
 
-The server logs request identifiers, status, duration, and budget information
-alongside conversion diagnostics. See {doc}`/server/logging` for the request
-fields and proxy behavior.
+The server logs request identifiers, status, duration, and budget information alongside conversion diagnostics. See {doc}`/server/logging` for the request fields and proxy behavior.
 
-Each conversion response also carries Vega diagnostics in the `X-VLC-Logs`
-header. Save this body as `request.json`:
+Each conversion response also carries Vega diagnostics in the `X-VLC-Logs` header. Save this body as `request.json`:
 
 :::{dropdown} request.json
 :open:
@@ -154,5 +138,4 @@ WARN: Log scale domain includes zero: [0,200]
 ```
 ::::
 
-See {doc}`../advanced/troubleshooting` for how to use these messages when a
-conversion fails or renders incorrectly.
+See {doc}`../advanced/troubleshooting` for how to use these messages when a conversion fails or renders incorrectly.
