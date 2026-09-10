@@ -365,18 +365,46 @@ def test_pdf(name, tol, as_dict):
     check_png(png, expected_png, tol=tol, name=f"pdf_vegalite_{name}")
 
 
-def test_pdf_rejects_scale_keyword():
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="PDF tests not supported on windows"
+)
+def test_pdf_accepts_scale_one():
     vl_version = "v5_8"
     vl_spec = load_vl_spec("circle_binned")
     vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
     svg = vlc.vegalite_to_svg(vl_spec, vl_version=vl_version)
 
-    with pytest.raises(TypeError):
-        vlc.vega_to_pdf(vg_spec, scale=2)
-    with pytest.raises(TypeError):
-        vlc.vegalite_to_pdf(vl_spec, vl_version=vl_version, scale=2)
-    with pytest.raises(TypeError):
-        vlc.svg_to_pdf(svg, scale=2)
+    assert vlc.vega_to_pdf(vg_spec, scale=1).startswith(b"%PDF")
+    assert vlc.vegalite_to_pdf(
+        vl_spec, vl_version=vl_version, scale=1
+    ).startswith(b"%PDF")
+    assert vlc.svg_to_pdf(svg, scale=1).startswith(b"%PDF")
+
+
+@pytest.mark.parametrize("scale", [0, 2, 1.0000000000000002, float("nan")])
+def test_pdf_rejects_scale_other_than_one(scale):
+    vl_version = "v5_8"
+    vl_spec = load_vl_spec("circle_binned")
+    vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
+    svg = vlc.vegalite_to_svg(vl_spec, vl_version=vl_version)
+
+    with pytest.raises(ValueError, match="scale argument must be 1"):
+        vlc.vega_to_pdf(vg_spec, scale=scale)
+    with pytest.raises(ValueError, match="scale argument must be 1"):
+        vlc.vegalite_to_pdf(vl_spec, vl_version=vl_version, scale=scale)
+    with pytest.raises(ValueError, match="scale argument must be 1"):
+        vlc.svg_to_pdf(svg, scale=scale)
+
+
+@pytest.mark.parametrize(
+    "function_name", ["vega_to_pdf", "vegalite_to_pdf", "svg_to_pdf"]
+)
+def test_pdf_scale_deprecation_in_docstring(function_name):
+    docstring = getattr(vlc, function_name).__doc__
+    normalized_docstring = " ".join(docstring.split())
+    assert ".. deprecated:: 2.0.0" in docstring
+    assert "Retained only for backward compatibility with vl-convert 1.x" in docstring
+    assert "The only non-None value accepted is 1.0" in normalized_docstring
 
 
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="Font mismatch on windows")

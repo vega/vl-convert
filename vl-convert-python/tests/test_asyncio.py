@@ -1,4 +1,5 @@
 import asyncio
+import sys
 
 import pytest
 import vl_convert as vlc
@@ -93,16 +94,35 @@ def test_asyncio_smoke_and_sync_parity_shapes():
     run(scenario())
 
 
-def test_asyncio_pdf_rejects_scale_keyword():
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="PDF tests not supported on windows"
+)
+def test_asyncio_pdf_accepts_scale_one():
     async def scenario():
         vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, vl_version="v5_16")
         svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, vl_version="v5_16")
 
-        with pytest.raises(TypeError):
+        assert (await vlca.vega_to_pdf(vega, scale=1)).startswith(b"%PDF")
+        assert (
+            await vlca.vegalite_to_pdf(
+                SIMPLE_VL_SPEC, vl_version="v5_16", scale=1
+            )
+        ).startswith(b"%PDF")
+        assert (await vlca.svg_to_pdf(svg, scale=1)).startswith(b"%PDF")
+
+    run(scenario())
+
+
+def test_asyncio_pdf_rejects_scale_other_than_one():
+    async def scenario():
+        vega = await vlca.vegalite_to_vega(SIMPLE_VL_SPEC, vl_version="v5_16")
+        svg = await vlca.vegalite_to_svg(SIMPLE_VL_SPEC, vl_version="v5_16")
+
+        with pytest.raises(ValueError, match="scale argument must be 1"):
             await vlca.vega_to_pdf(vega, scale=2)
-        with pytest.raises(TypeError):
+        with pytest.raises(ValueError, match="scale argument must be 1"):
             await vlca.vegalite_to_pdf(SIMPLE_VL_SPEC, vl_version="v5_16", scale=2)
-        with pytest.raises(TypeError):
+        with pytest.raises(ValueError, match="scale argument must be 1"):
             await vlca.svg_to_pdf(svg, scale=2)
 
     run(scenario())
