@@ -135,6 +135,7 @@ pub(crate) fn google_font_request_key(request: &GoogleFontRequest) -> String {
 /// `fontdb` are requested.
 pub(crate) async fn classify_and_request_fonts(
     font_strings: HashSet<String>,
+    explicit_google_families: &HashSet<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
     prefer_cdn: bool,
@@ -143,19 +144,25 @@ pub(crate) async fn classify_and_request_fonts(
         return Ok(FontRequestAnalysis::default());
     }
 
-    let available = available_font_families()?;
+    let mut available = available_font_families()?;
 
     let font_string_vec: Vec<String> = font_strings.into_iter().collect();
 
     let mut google_fonts = GoogleFontUsage::default();
     let google_fonts_set: HashSet<String> = if auto_google_fonts {
-        let candidates = auto_google_probe_candidates(&font_string_vec, &available, prefer_cdn);
+        let mut candidates = auto_google_probe_candidates(&font_string_vec, &available, prefer_cdn);
+        candidates.retain(|family| !is_available(family, explicit_google_families));
         let catalog = google_font_catalog_matches(candidates.iter(), missing_fonts).await?;
         google_fonts.add_assign(&catalog.google_fonts);
         catalog.matches
     } else {
         HashSet::new()
     };
+
+    // Configured and per-call Google Fonts are resolved by the render overlay.
+    // Treat them as available during preflight so strict missing-font handling
+    // reports only families that no configured operation will provide.
+    available.extend(explicit_google_families.iter().cloned());
 
     // Classify each font string by its first entry
     let statuses = resolve_first_fonts(&font_string_vec, &available, |family| {
@@ -221,6 +228,7 @@ pub(crate) async fn classify_and_request_fonts(
 /// fonts via [`classify_and_request_fonts`].
 pub(crate) async fn preprocess_fonts(
     vega_spec: &serde_json::Value,
+    explicit_google_families: &HashSet<String>,
     auto_google_fonts: bool,
     missing_fonts: MissingFontsPolicy,
 ) -> Result<FontRequestAnalysis, AnyError> {
@@ -229,7 +237,14 @@ pub(crate) async fn preprocess_fonts(
     }
 
     let font_strings = extract_fonts_from_vega(vega_spec);
-    classify_and_request_fonts(font_strings, auto_google_fonts, missing_fonts, false).await
+    classify_and_request_fonts(
+        font_strings,
+        explicit_google_families,
+        auto_google_fonts,
+        missing_fonts,
+        false,
+    )
+    .await
 }
 
 /// Return all font family names currently available in fontdb.
@@ -271,14 +286,14 @@ pub(crate) fn auto_google_probe_candidates(
 
 /// Collect font family names from the rendered scenegraph that should be
 /// probed against Google Fonts. Excludes families already identified as
-/// explicit per-call Google Font requests.
+/// configured or per-call Google Font requests.
 pub(crate) fn scenegraph_google_probe_candidates(
     families: &BTreeSet<String>,
     explicit_google_families: &HashSet<String>,
 ) -> BTreeSet<String> {
     families
         .iter()
-        .filter(|family| !explicit_google_families.contains(*family))
+        .filter(|family| !is_available(family, explicit_google_families))
         .cloned()
         .collect()
 }
@@ -405,9 +420,9 @@ pub(crate) fn classify_as_google_font(family: &str) -> Option<ClassifiedFont> {
 /// Classify font families extracted from the scenegraph into Google Fonts
 /// or Local sources.
 ///
-/// `explicit_google_families` are families provided by per-call
-/// `GoogleFontRequest` entries -- they are classified as Google immediately
-/// without catalog probing and are excluded from missing-font reporting.
+/// `explicit_google_families` are families provided by configured or per-call
+/// `GoogleFontRequest` entries. They are classified as Google immediately,
+/// without catalog probing, and are excluded from missing-font reporting.
 ///
 /// Fonts that exist in the Google Fonts catalog are sourced from Google for
 /// portability (CDN links work on any machine). Remaining fonts are classified
@@ -444,8 +459,8 @@ pub(crate) async fn classify_scenegraph_fonts(
     let mut classified_fonts: Vec<ClassifiedFont> = Vec::new();
     let mut unavailable: Vec<String> = Vec::new();
     for family in families {
-        // Explicit per-call requests win immediately
-        if explicit_google_families.contains(family) {
+        // Explicit configured or per-call requests win immediately.
+        if is_available(family, explicit_google_families) {
             if let Some(font) = classify_as_google_font(family) {
                 classified_fonts.push(font);
             }
@@ -511,7 +526,7 @@ mod tests {
             "Bravo".to_string(),
             "Charlie".to_string(),
         ]);
-        let explicit = HashSet::from(["Bravo".to_string()]);
+        let explicit = HashSet::from(["bravo".to_string()]);
 
         let candidates = scenegraph_google_probe_candidates(&families, &explicit);
 
@@ -519,6 +534,24 @@ mod tests {
             candidates,
             BTreeSet::from(["Alpha".to_string(), "Charlie".to_string()])
         );
+    }
+
+    #[tokio::test]
+    async fn test_explicit_google_font_satisfies_strict_preflight() {
+        let font_strings = HashSet::from(["VLC Explicit Test Font".to_string()]);
+        let explicit = HashSet::from(["vlc explicit test font".to_string()]);
+
+        let result = classify_and_request_fonts(
+            font_strings,
+            &explicit,
+            false,
+            MissingFontsPolicy::Error,
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert!(result.requests.is_empty());
     }
 
     #[tokio::test]
