@@ -10,7 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Installation
 
-Version 2 is currently published as a release candidate. The version constraints below select version 2 prereleases.
+These docs require version 2.0.0-rc6 or later. The version constraints below allow version 2 prereleases.
 
 ::::{not-interface} server
 Already using 1.x? See {doc}`upgrading` for what changed in version 2.
@@ -20,7 +20,7 @@ Already using 1.x? See {doc}`upgrading` for what changed in version 2.
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then add the package to a Python project. `uv add` records the dependency in `pyproject.toml`, updates `uv.lock`, and installs it in the project's environment. Prebuilt wheels are published for Linux, macOS, and Windows, and Python 3.10 or later is required.
 
 ```console
-$ uv add "vl-convert-python>=2.0.0rc1,<3"
+$ uv add "vl-convert-python>=2.0.0rc6,<3"
 ```
 
 The distribution is named `vl-convert-python`, and Python imports it as `vl_convert`. Confirm that the installation works:
@@ -30,19 +30,49 @@ $ uv run python -c "import vl_convert as vlc; print(vlc.__version__)"
 ```
 ::::
 
-::::{interface} cli
-Install a Rust toolchain, then build and install the `vl-convert` executable from crates.io:
+::::{interface} server
+The server is the `serve` subcommand of the `vl-convert` executable.
+::::
 
-```console
-$ cargo install vl-convert --version '^2.0.0-rc1' --locked
-```
+::::{interface} cli server
+## Prebuilt Executable
 
-Confirm that the executable is on your `PATH`:
+Download the ZIP archive for your platform and `SHA256SUMS` from the same [GitHub release](https://github.com/vega/vl-convert/releases). Choose version 2.0.0-rc6 or later.
+
+| Platform | Archive |
+| --- | --- |
+| Linux x86-64 | `vl-convert_linux-64.zip` |
+| Linux ARM64 | `vl-convert_linux-aarch64.zip` |
+| macOS Intel | `vl-convert_osx-64.zip` |
+| macOS Apple Silicon | `vl-convert_osx-arm64.zip` |
+| Windows x86-64 | `vl-convert_win-64.zip` |
+
+Calculate the archive's SHA-256 checksum with the command for your platform. Replace `<ARCHIVE>` with the downloaded filename:
+
+| Platform | Command |
+| --- | --- |
+| Linux | `sha256sum <ARCHIVE>` |
+| macOS | `shasum -a 256 <ARCHIVE>` |
+| Windows PowerShell | `Get-FileHash <ARCHIVE> -Algorithm SHA256` |
+
+Compare the result with the matching filename in `SHA256SUMS`. Do not use the archive if the checksums differ.
+
+Extract the archive into a new directory, then add its `bin` subdirectory to your `PATH`. Confirm the installation:
 
 ```console
 $ vl-convert --version
 ```
 
+## Build from Source
+
+To build the executable yourself, install a Rust toolchain and run:
+
+```console
+$ cargo install vl-convert --version '^2.0.0-rc6' --locked
+```
+::::
+
+::::{interface} cli
 `vl-convert --help` lists the conversion commands.
 ::::
 
@@ -54,7 +84,7 @@ Add the crate to `Cargo.toml`:
 
 ```toml
 [dependencies]
-vl-convert-rs = "2.0.0-rc1"
+vl-convert-rs = "2.0.0-rc6"
 ```
 :::
 
@@ -62,17 +92,5 @@ The crate is imported as `vl_convert_rs`. Conversion methods are asynchronous, s
 ::::
 
 ::::{interface} server
-The server is the `serve` subcommand of the `vl-convert` executable. Install a Rust toolchain, then build and install the executable from crates.io:
-
-```console
-$ cargo install vl-convert --version '^2.0.0-rc1' --locked
-```
-
-Confirm the installation:
-
-```console
-$ vl-convert --version
-```
-
 Follow the {doc}`quick-start` to start the server and send a conversion request.
 ::::

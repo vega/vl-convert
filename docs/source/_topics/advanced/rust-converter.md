@@ -53,4 +53,4 @@ Conversion methods are `async` and run on Tokio or any other executor that can p
 
 Methods return `Result` and keep the error context from compilation, data loading, fonts, plugins, and rendering. Successful outputs carry Vega's recoverable diagnostics in `logs`. See {doc}`../guides/logging`.
 
-The complete crate API is on [docs.rs](https://docs.rs/vl-convert-rs).
+The complete crate API is on {rust-api}`docs.rs <index.html>`.

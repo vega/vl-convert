@@ -177,6 +177,11 @@ requests:
       vega_plugin:
         source: double-value.js
         format: text
+  plugin-scale-svg:
+    inputs:
+      spec:
+        source: plugin-scale.vl.json
+        format: json
   logging-svg:
     inputs:
       spec:

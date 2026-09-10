@@ -70,7 +70,7 @@ The file loads automatically from that path. You can instead pass the converter 
 ::::{interface} rust
 ## Update Your Code
 
-Change the dependency to `vl-convert-rs = "2.0.0-rc1"` to allow version 2 release candidates, then update these API calls.
+Change the dependency to `vl-convert-rs = "2.0.0-rc6"` to select rc6 or later, then update these API calls.
 
 **Conversion methods return output structs.** Methods that returned `String` or `Vec<u8>` now return `SvgOutput`, `PngOutput`, `JpegOutput`, `PdfOutput`, `HtmlOutput`, `ScenegraphOutput`, or `VegaOutput`. Read the result from `svg`, `data`, `html`, `scenegraph`, or `spec`, and Vega's messages from `logs`.
 

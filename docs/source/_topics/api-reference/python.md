@@ -184,9 +184,27 @@ FormatLocale = FormatLocaleName | dict[str, Any]
 TimeFormatLocale = TimeFormatLocaleName | dict[str, Any]
 ```
 
+:::{dropdown} Accepted number-format locale names
+```{literalinclude} /../../vl-convert-python/vl_convert.pyi
+:language: python
+:start-at:     FormatLocaleName: TypeAlias
+:end-before:     TimeFormatLocaleName: TypeAlias
+:dedent: 4
+```
+:::
+
+:::{dropdown} Accepted time-format locale names
+```{literalinclude} /../../vl-convert-python/vl_convert.pyi
+:language: python
+:start-at:     TimeFormatLocaleName: TypeAlias
+:end-before:     VegaThemes: TypeAlias
+:dedent: 4
+```
+:::
+
 ### `GoogleFontSpec`
 
-A Google Font request as a family-name string, or a dictionary with a family and optional variants:
+The `google_fonts` parameter accepts family-name strings or `GoogleFontSpec` dictionaries. A dictionary names a family and optional variants:
 
 ```python
 {
@@ -199,10 +217,39 @@ A Google Font request as a family-name string, or a dictionary with a family and
 
 The dictionary returned for each font by `vegalite_fonts()` and `vega_fonts()`. It contains the font name, source, variants, and optional CSS helpers for Google-hosted fonts.
 
+```{literalinclude} /../../vl-convert-python/vl_convert.pyi
+:language: python
+:start-at:     class FontVariant(
+:end-before:     class ConverterConfig(
+:dedent: 4
+```
+
+`FontSource` identifies whether the font comes from Google Fonts or a local file:
+
+```{literalinclude} /../../vl-convert-python/vl_convert.pyi
+:language: python
+:start-at:     class GoogleFontSource(
+:end-before:     class GoogleFontSpec(
+:dedent: 4
+```
+
 ### `ConverterConfig`
 
 The dictionary returned by `get_config()`.
 
+```{literalinclude} /../../vl-convert-python/vl_convert.pyi
+:language: python
+:start-at:     class ConverterConfig(
+:end-before: __all__ = [
+:dedent: 4
+```
+
 ### `WorkerMemoryUsage`
 
 The dictionary returned for each worker by `get_worker_memory_usage()`. Sizes are in bytes.
+
+```{literalinclude} /../../vl-convert-python/vl_convert.pyi
+:language: python
+:start-at: class WorkerMemoryUsage(
+:end-before: def get_worker_memory_usage(
+```

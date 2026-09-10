@@ -40,10 +40,34 @@ Bind to a private network address instead of loopback when the reverse proxy or 
 
 A browser cannot keep a shared API key secret. If a tool must accept anonymous internet requests, use strict access and resource controls:
 
+:::{dropdown} anonymous.vlc.jsonc
+:open:
+
+```json
+{
+  "base_url": false,
+  "allowed_base_urls": [],
+  "google_fonts": [],
+  "auto_google_fonts": false,
+  "vega_plugins": [],
+  "plugin_import_domains": [],
+  "allow_google_fonts": false,
+  "allow_per_request_plugins": false,
+  "per_request_plugin_import_domains": []
+}
+```
+:::
+
+Start the server with this config file and explicit resource limits:
+
 ```console
 $ vl-convert serve \
+>   --vlc-config anonymous.vlc.jsonc \
 >   --base-url disabled \
 >   --allowed-base-urls none \
+>   --auto-google-fonts=false \
+>   --allow-google-fonts=false \
+>   --allow-per-request-plugins=false \
 >   --max-v8-heap-size-mb 512 \
 >   --max-v8-execution-time-secs 10 \
 >   --missing-fonts warn \
@@ -60,7 +84,9 @@ $ vl-convert serve \
 >   --opaque-errors
 ```
 
-CORS only controls browser access to responses. Keep network-level rate limits, abuse monitoring, and egress restrictions in front of the process. Leave automatic Google Fonts and per-request plugins disabled unless the product needs them and has tighter controls for their cost and risk.
+Review the process environment before deployment. `VLC_*` environment variables override the config file, and CLI options override both. In particular, remove `VLC_GOOGLE_FONT` and `VLC_VEGA_PLUGIN` so the server cannot inherit startup fonts or plugins.
+
+CORS only controls browser access to responses. Keep network-level rate limits, abuse monitoring, and egress restrictions in front of the process. Enable Google Fonts or per-request plugins only if the product needs them and has tighter controls for their cost and risk.
 
 If a trusted reverse proxy supplies client IP headers, add `--trust-proxy` only after configuring the proxy to strip inbound forwarded headers and write its own.
 

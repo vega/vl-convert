@@ -5,6 +5,8 @@ import tomllib
 from html import escape
 from pathlib import Path
 
+from sphinx.search import js_index
+
 project = "VlConvert"
 author = "Vega"
 copyright = "2026, Vega"
@@ -19,6 +21,7 @@ extensions = [
     "myst_parser",
     "sphinx_design",
     "sphinx_copybutton",
+    "sphinx.ext.extlinks",
     "autodoc2",
     "sphinxcontrib.programoutput",
     "sphinxcontrib.openapi",
@@ -53,6 +56,13 @@ if "-rc" in release:
 
 myst_enable_extensions = ["colon_fence", "fieldlist", "deflist", "substitution"]
 myst_heading_anchors = 3
+
+extlinks = {
+    "rust-api": (f"https://docs.rs/vl-convert-rs/{release}/vl_convert_rs/%s", "%s"),
+    "server-api": (
+        f"https://docs.rs/vl-convert-server/{release}/vl_convert_server/%s", "%s"
+    ),
+}
 
 # `pixi run docs-preview-chart` writes the front-page URL output beside the
 # other chart outputs.
@@ -96,3 +106,29 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
 ]
+
+
+def label_search_results(app, exception):
+    """Distinguish interface pages in search without changing their headings."""
+    if exception is not None or app.builder.name != "html":
+        return
+    path = Path(app.outdir) / "searchindex.js"
+    index = js_index.loads(path.read_text(encoding="utf-8"))
+    original_titles = index["titles"].copy()
+    labels = {"python": "Python", "cli": "CLI", "rust": "Rust", "server": "Server"}
+    for position, docname in enumerate(index["docnames"]):
+        if label := labels.get(docname.split("/")[0]):
+            index["titles"][position] += f" · {label}"
+    all_titles = {}
+    for title, entries in index["alltitles"].items():
+        for position, anchor in entries:
+            labeled = (
+                index["titles"][position] if title == original_titles[position] else title
+            )
+            all_titles.setdefault(labeled, []).append((position, anchor))
+    index["alltitles"] = all_titles
+    path.write_text(js_index.dumps(index), encoding="utf-8")
+
+
+def setup(app):
+    app.connect("build-finished", label_search_results)

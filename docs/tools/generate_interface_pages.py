@@ -269,6 +269,10 @@ def write_index(interface: str, topics: list[Topic], expected: set[Path]) -> Non
         "",
         details["description"],
         "",
+        "Start with [Installation](getting-started/installation.md), "
+        "follow the [Quick Start](getting-started/quick-start.md), "
+        "or look up a call in the [API Reference](api-reference).",
+        "",
     ]
 
     for section in sorted(
@@ -280,7 +284,7 @@ def write_index(interface: str, topics: list[Topic], expected: set[Path]) -> Non
         lines.extend(
             [
                 "```{toctree}",
-                ":maxdepth: 2",
+                ":maxdepth: 1",
                 f":caption: {section}",
                 "",
             ]

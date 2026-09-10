@@ -92,7 +92,7 @@ When the admin listener is enabled, read the current JavaScript heap use with:
 
 ```console
 $ curl http://127.0.0.1:3001/admin/diagnostics/workers \
->   -H "Authorization: Bearer $ADMIN_API_KEY"
+>   -H "Authorization: Bearer $VLC_ADMIN_API_KEY"
 ```
 
 Render-time budgets also limit how much shared capacity one client can use. See {doc}`/server/rate-limiting`.

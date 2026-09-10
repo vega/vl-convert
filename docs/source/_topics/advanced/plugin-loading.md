@@ -93,27 +93,38 @@ $ vl-convert serve \
 
 ## Control HTTP Imports
 
-A plugin can import other ESM modules. HTTP imports are blocked unless their domain matches `plugin_import_domains`. The snippets in this section show the required plugin configuration. A complete chart must call `scaledPercent` in an expression before the plugin affects its result.
+A plugin can import other ESM modules. HTTP imports are blocked unless their domain matches `plugin_import_domains`. This plugin imports `scaleLinear` from `esm.sh` and registers a `scaledPercent` expression function:
 
 :::{dropdown} scale-plugin.js
 :open:
 
-```javascript
-import { scaleLinear } from "https://esm.sh/d3-scale@4"
+```{literalinclude} /_examples/scale-plugin.js
+:language: javascript
+```
+:::
 
-export default function registerScale(vega) {
-  const scale = scaleLinear().domain([0, 1]).range([0, 100])
-  vega.expressionFunction("scaledPercent", value => scale(value))
-}
+This chart calls `scaledPercent` to convert fractions to percentages:
+
+:::{dropdown} scale-chart.vl.json
+:open:
+
+```{literalinclude} /_examples/plugin-scale.vl.json
+:language: json
 ```
 :::
 
 ::::{interface} python
 ```python
+from pathlib import Path
+
+import vl_convert as vlc
+
 vlc.configure(
     vega_plugins=["./scale-plugin.js"],
     plugin_import_domains=["esm.sh"],
 )
+spec = Path("scale-chart.vl.json").read_text(encoding="utf-8")
+Path("scale-chart.svg").write_text(vlc.vegalite_to_svg(spec), encoding="utf-8")
 ```
 ::::
 
@@ -122,17 +133,24 @@ vlc.configure(
 $ vl-convert \
 >   --vega-plugin ./scale-plugin.js \
 >   --plugin-import-domains esm.sh \
->   vl2svg --input chart.vl.json --output chart.svg
+>   vl2svg --input scale-chart.vl.json --output scale-chart.svg
 ```
 ::::
 
 ::::{interface} rust
 ```rust
+use vl_convert_rs::{VlcConfig, VlConverter};
+
 let converter = VlConverter::with_config(VlcConfig {
     vega_plugins: vec!["./scale-plugin.js".to_string()],
     plugin_import_domains: vec!["esm.sh".to_string()],
     ..Default::default()
 })?;
+let spec = std::fs::read_to_string("scale-chart.vl.json")?;
+let output = converter
+    .vegalite_to_svg(spec, Default::default(), Default::default())
+    .await?;
+std::fs::write("scale-chart.svg", output.svg)?;
 ```
 ::::
 
@@ -143,7 +161,30 @@ $ vl-convert serve \
 >   --plugin-import-domains esm.sh \
 >   --port 3000
 ```
+
+Save the complete request body as `scale-request.json`:
+
+:::{dropdown} scale-request.json
+```{literalinclude} /_generated/requests/plugin-scale-svg.json
+:language: json
+```
+:::
+
+```console
+$ curl http://127.0.0.1:3000/vegalite/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @scale-request.json \
+>   --output scale-chart.svg
+```
 ::::
+
+The resulting bars show values of 25, 50, and 75:
+
+```{vl-chart} /_examples/plugin-scale.vl.json
+:vega-plugin: /_examples/scale-plugin.js
+:plugin-import-domains: esm.sh
+:alt: Bar chart with categories A, B, and C at 25, 50, and 75 percent.
+```
 
 `esm.sh` matches that host only. `*.jsdelivr.net` matches the named host and its subdomains. `*` allows any domain and should be reserved for trusted code. Redirect targets must also match the allowlist.
 

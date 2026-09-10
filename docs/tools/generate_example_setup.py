@@ -63,7 +63,9 @@ requires-python = ">=3.10"
 dependencies = ["vl-convert-python=={python_version}"]
 """,
         "install-vl-convert.md": (
-            "Install the `vl-convert` binary:\n\n"
+            "Download a [prebuilt executable]"
+            "(/cli/getting-started/installation.md#prebuilt-executable), "
+            "or build it with Cargo:\n\n"
             "```console\n"
             "$ cargo install vl-convert \\\n"
             f">   --version '={version}' \\\n"

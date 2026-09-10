@@ -428,11 +428,11 @@ def configure(
             **Replace semantics.** Each call to ``configure(google_fonts=[...])``
             **replaces** the full configured list. ``None`` (or ``[]``) resets to
             the built-in default (empty list).
-        google_font_variant_threshold: Maximum number of Google Font variants one
-            conversion may load, counting configured, per-call, and automatically
-            discovered families together. Once the cap is reached, the conversion
-            fails rather than loading another family, and a single family may
-            carry the total past the cap. Must be >= 1 if provided. ``None``
+        google_font_variant_threshold: Once the number of resolved Google Font variants
+            reaches this threshold, the next font request fails the conversion.
+            Configured, per-call, and automatically discovered families all count.
+            A single request can take the total above the threshold.
+            Must be >= 1 if provided. ``None``
             resets to the built-in default (no cap). Passing ``0`` raises
             ``ValueError``.
         max_v8_heap_size_mb: Maximum JavaScript (V8) heap size per worker in megabytes.

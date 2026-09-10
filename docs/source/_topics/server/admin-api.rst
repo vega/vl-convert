@@ -19,19 +19,21 @@ Never expose this listener alongside public conversion traffic. Bind it to
 loopback, a private management network, or a Unix domain socket, and give it
 its own bearer token on shared systems.
 
+Set ``VLC_ADMIN_API_KEY`` through your secret manager before starting the server:
+
 .. code-block:: console
 
    $ vl-convert serve \
    >   --admin-host 127.0.0.1 \
-   >   --admin-port 3001 \
-   >   --admin-api-key "$ADMIN_API_KEY"
+   >   --admin-port 3001
 
 .. code-block:: console
 
    $ curl http://127.0.0.1:3001/admin/diagnostics/workers \
-   >   -H "Authorization: Bearer $ADMIN_API_KEY"
+   >   -H "Authorization: Bearer $VLC_ADMIN_API_KEY"
 
-A TCP admin listener on a non-loopback address requires ``--admin-api-key``.
+A TCP admin listener on a non-loopback address requires an admin API key, set
+through ``VLC_ADMIN_API_KEY`` or ``--admin-api-key``.
 Loopback and Unix domain socket listeners can run without a key, in which case
 network placement or filesystem permissions must provide the access boundary.
 See :doc:`/server/authentication`.

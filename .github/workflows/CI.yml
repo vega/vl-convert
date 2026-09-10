@@ -38,6 +38,12 @@ jobs:
           cache-on-failure: true
       - name: Build documentation with warnings as errors
         run: pixi run docs-build-strict
+      - name: Serve documentation and fetch the homepage
+        run: |
+          pixi run python -m http.server 8000 --bind 127.0.0.1 --directory docs/build/html &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          curl --fail --silent --show-error --max-time 10 --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/ > /dev/null
 
   # Run on Linux without Pixi due to glibc linker issues with conda toolchain
   rust-fmt-clippy:

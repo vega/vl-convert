@@ -17,7 +17,7 @@ Altair's own `chart.save()` already uses VlConvert to write static image files. 
 Install both packages if the application does not already include Altair:
 
 ```console
-$ uv add altair "vl-convert-python>=2.0.0rc1,<3"
+$ uv add altair "vl-convert-python>=2.0.0rc6,<3"
 ```
 
 This complete example creates a chart and writes a high-density PNG:
@@ -50,3 +50,14 @@ Path("chart.png").write_bytes(png)
 ```
 
 Use `vegalite_to_svg()` for SVG text or `vegalite_to_pdf()` for PDF bytes. If a chart was produced by an older Altair release, pass `vl_version` to select the matching Vega-Lite compiler. See {doc}`vegalite-conversions` for the full list of outputs and {doc}`image-quality` for size and resolution options.
+
+## Configure Altair Exports
+
+`vlc.configure()` also applies to conversions that Altair calls in the same Python process. For example, reuse the chart above to save a PDF with a Google Font:
+
+```python
+vlc.configure(google_fonts=["Roboto Slab"])
+chart.configure(font="Roboto Slab").save("chart.pdf")
+```
+
+VlConvert downloads the font on first use and caches it for later conversions. No changes to Altair are needed. You can also configure {doc}`data-loading` before calling `chart.save()` to allow charts to read local files.

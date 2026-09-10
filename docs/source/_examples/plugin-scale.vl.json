@@ -1,0 +1,18 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "data": {
+    "values": [
+      {"category": "A", "value": 0.25},
+      {"category": "B", "value": 0.5},
+      {"category": "C", "value": 0.75}
+    ]
+  },
+  "transform": [
+    {"calculate": "scaledPercent(datum.value)", "as": "percent"}
+  ],
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "category", "type": "nominal", "title": "Category"},
+    "y": {"field": "percent", "type": "quantitative", "title": "Percent"}
+  }
+}

@@ -43,6 +43,7 @@ COMMAND_OPTIONS = {
     "scale": "--scale",
     "format-locale": "--format-locale",
     "time-format-locale": "--time-format-locale",
+    "plugin-import-domains": "--plugin-import-domains",
 }
 
 _cli_version: str | None = None
@@ -66,6 +67,7 @@ class VlChart(SphinxDirective):
         "format-locale": directives.unchanged_required,
         "time-format-locale": directives.unchanged_required,
         "vega-plugin": directives.unchanged_required,
+        "plugin-import-domains": directives.unchanged_required,
         "google-fonts": directives.unchanged_required,
         "auto-google-fonts": directives.flag,
         "bundle": directives.flag,

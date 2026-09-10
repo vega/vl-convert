@@ -253,7 +253,7 @@ Pass `--google-fonts-cache-size-mb` when starting the server to set the cap. `/i
 
 ```console
 $ curl -X PUT http://127.0.0.1:3001/admin/config/fonts/cache_size \
->   -H "Authorization: Bearer $ADMIN_API_KEY" \
+>   -H "Authorization: Bearer $VLC_ADMIN_API_KEY" \
 >   -H 'Content-Type: application/json' \
 >   --data '{"max_size_mb": 128}'
 ```

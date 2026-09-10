@@ -54,4 +54,4 @@ Output structs:
 - `ScenegraphMsgpackOutput`: `data`, `logs`, `google_fonts`.
 - `VegaOutput`: `spec`, `logs`.
 
-{doc}`advanced/rust-converter` covers sharing the converter. Item-by-item documentation is on [docs.rs](https://docs.rs/vl-convert-rs).
+{doc}`advanced/rust-converter` covers sharing the converter. Item-by-item documentation is on {rust-api}`docs.rs <index.html>`.
