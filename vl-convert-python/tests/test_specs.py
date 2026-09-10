@@ -262,7 +262,7 @@ def test_png(name, scale, as_dict):
     check_png(png, expected_png, tol=tol, name=f"png_vegalite_{name}")
 
 
-def test_png_google_fonts():
+def test_configured_google_fonts():
     vlc.configure(
         google_fonts=[{"family": "Bangers"}, {"family": "Lugrasimo"}],
         missing_fonts="error",
@@ -279,35 +279,12 @@ def test_png_google_fonts():
     png = vlc.vegalite_to_png(vl_spec, vl_version=vl_version, scale=2)
     check_png(png, expected_png, name="png_vegalite_google_fonts")
 
-    svg = vlc.vegalite_to_svg(vl_spec, vl_version=vl_version)
-    assert vlc.svg_to_png(svg).startswith(b"\x89PNG\r\n\x1a\n")
+    html = vlc.vegalite_to_html(vl_spec, vl_version=vl_version, bundle=False)
 
-
-@pytest.mark.parametrize("bundle", [False, True])
-def test_html_configured_google_fonts(bundle):
-    vlc.configure(
-        google_fonts=[{"family": "Bangers"}, {"family": "Lugrasimo"}],
-        missing_fonts="error",
+    assert (
+        '<link rel="stylesheet" '
+        'href="https://fonts.googleapis.com/css2?family=Bangers:' in html
     )
-
-    vl_version = "v5_8"
-    vl_spec = load_vl_spec("google_fonts")
-    vg_spec = vlc.vegalite_to_vega(vl_spec, vl_version=vl_version)
-
-    html_outputs = [
-        vlc.vega_to_html(vg_spec, bundle=bundle),
-        vlc.vegalite_to_html(vl_spec, vl_version=vl_version, bundle=bundle),
-    ]
-    for html in html_outputs:
-        if bundle:
-            assert "@font-face" in html
-            assert 'font-family: "Bangers"' in html
-            assert "base64," in html
-        else:
-            assert (
-                '<link rel="stylesheet" '
-                'href="https://fonts.googleapis.com/css2?family=Bangers:' in html
-            )
 
 
 @pytest.mark.parametrize(

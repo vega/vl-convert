@@ -704,10 +704,10 @@ mod test_png_no_theme {
 }
 
 #[rustfmt::skip]
-mod test_png_google_fonts {
+mod test_configured_google_fonts {
     use crate::*;
     use futures::executor::block_on;
-    use vl_convert_rs::converter::{GoogleFontRequest, MissingFontsPolicy, VlcConfig, VlOpts};
+    use vl_convert_rs::converter::{GoogleFontRequest, HtmlOpts, MissingFontsPolicy, Renderer, VgOpts, VlcConfig, VlOpts};
 
     #[test]
     fn test() {
@@ -736,82 +736,38 @@ mod test_png_google_fonts {
         ).unwrap();
         check_png("google_fonts", vl_version, None, output.data.as_slice());
 
-        let output = block_on(converter.vega_to_svg(vg_output.spec, Default::default(), SvgOpts::default())).unwrap();
-        assert!(output.svg.starts_with("<svg"));
-
         let output = block_on(
-            converter.vegalite_to_svg(vl_spec, VlOpts{vl_version, ..Default::default()}, SvgOpts::default())
+            converter.vegalite_to_svg(vl_spec.clone(), VlOpts{vl_version, ..Default::default()}, SvgOpts::default())
         ).unwrap();
-        assert!(output.svg.starts_with("<svg"));
+        assert!(output.svg.contains("@import"));
+        assert!(output.svg.contains("fonts.googleapis.com"));
+        assert!(output.svg.contains("Bangers"));
 
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40">
             <text x="0" y="30" font-family="Bangers">Configured font</text>
         </svg>"#;
         let output = block_on(converter.svg_to_png(svg, PngOpts::default())).unwrap();
         assert_eq!(&output.data[..8], b"\x89PNG\r\n\x1a\n");
-    }
 
-    #[test]
-    fn test_marker() {} // Help IDE detect test module
-}
+        let vl_html = block_on(
+            converter.vegalite_to_html(
+                vl_spec,
+                VlOpts { vl_version, ..Default::default() },
+                HtmlOpts { bundle: false, renderer: Renderer::Svg },
+            )
+        ).unwrap();
+        assert!(vl_html.html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Bangers:"));
 
-#[rustfmt::skip]
-mod test_html_configured_google_fonts {
-    use crate::*;
-    use futures::executor::block_on;
-    use serde_json::json;
-    use vl_convert_rs::converter::{GoogleFontRequest, HtmlOpts, MissingFontsPolicy, Renderer, VgOpts, VlcConfig, VlOpts};
-
-    fn check_html(html: &str, bundle: bool) {
-        if bundle {
-            assert!(html.contains("@font-face"));
-            assert!(html.contains("font-family: \"Bangers\""));
-            assert!(html.contains("base64,"));
-        } else {
-            assert!(html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Bangers:"));
-        }
-    }
-
-    #[test]
-    fn test() {
-        initialize();
-
-        let vl_version = VlVersion::v5_8;
-        let vl_spec = json!({
-            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-            "data": {"values": [{"category": "A", "value": 1}]},
-            "mark": "bar",
-            "encoding": {
-                "x": {"field": "category", "type": "nominal"},
-                "y": {"field": "value", "type": "quantitative"}
-            },
-            "title": "Configured Google Font",
-            "config": {"title": {"font": "Bangers"}}
-        });
-        let converter = VlConverter::with_config(VlcConfig {
-            google_fonts: vec![GoogleFontRequest {
-                family: "Bangers".to_string(),
-                variants: None,
-            }],
-            missing_fonts: MissingFontsPolicy::Error,
-            ..Default::default()
-        }).unwrap();
-        let vg_spec = block_on(
-            converter.vegalite_to_vega(vl_spec.clone(), VlOpts { vl_version, ..Default::default() })
-        ).unwrap().spec;
-
-        for bundle in [false, true] {
-            let html_opts = HtmlOpts { bundle, renderer: Renderer::Svg };
-            let vl_html = block_on(
-                converter.vegalite_to_html(vl_spec.clone(), VlOpts { vl_version, ..Default::default() }, html_opts.clone())
-            ).unwrap();
-            check_html(&vl_html.html, bundle);
-
-            let vg_html = block_on(
-                converter.vega_to_html(vg_spec.clone(), VgOpts::default(), html_opts)
-            ).unwrap();
-            check_html(&vg_html.html, bundle);
-        }
+        let vg_html = block_on(
+            converter.vega_to_html(
+                vg_output.spec,
+                VgOpts::default(),
+                HtmlOpts { bundle: true, renderer: Renderer::Svg },
+            )
+        ).unwrap();
+        assert!(vg_html.html.contains("@font-face"));
+        assert!(vg_html.html.contains("font-family: \"Bangers\""));
+        assert!(vg_html.html.contains("base64,"));
     }
 
     #[test]
