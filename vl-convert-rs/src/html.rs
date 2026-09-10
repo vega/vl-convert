@@ -343,8 +343,16 @@ impl VlConverter {
 
         if auto_google_fonts || missing != MissingFontsPolicy::Fallback {
             let font_strings = extract_fonts_from_vega(&vega_spec);
-            let analysis =
-                classify_and_request_fonts(font_strings, auto_google_fonts, missing, true).await?;
+            let explicit_google_families =
+                self.explicit_google_families(vg_opts.google_fonts.as_deref());
+            let analysis = classify_and_request_fonts(
+                font_strings,
+                &explicit_google_families,
+                auto_google_fonts,
+                missing,
+                true,
+            )
+            .await?;
             google_fonts.add_assign(analysis.google_fonts);
             if !analysis.requests.is_empty() {
                 vg_opts
@@ -377,8 +385,8 @@ impl VlConverter {
     }
 
     /// Render the Vega scenegraph, walk it in Rust to extract text-by-font
-    /// data, classify fonts as Google or Local, and merge any explicit
-    /// per-request Google Font overrides.
+    /// data, classify fonts as Google or Local, and merge configured and
+    /// per-call Google Font requests.
     ///
     /// This is the single point of truth for font analysis. Called once per
     /// HTML generation or `vega_fonts` / `vegalite_fonts` invocation.
@@ -391,7 +399,12 @@ impl VlConverter {
     ) -> Result<FontAnalysis, AnyError> {
         let missing = self.inner.config().missing_fonts;
 
-        let explicit_requests = vg_opts.google_fonts.clone();
+        let explicit_google_families =
+            self.explicit_google_families(vg_opts.google_fonts.as_deref());
+        let mut explicit_requests = self.inner.config().google_fonts.clone();
+        if let Some(requests) = &vg_opts.google_fonts {
+            explicit_requests.extend(requests.iter().cloned());
+        }
         let format_locale_value = vg_opts
             .format_locale
             .as_ref()
@@ -416,9 +429,6 @@ impl VlConverter {
 
         let families: BTreeSet<String> = chars_by_key.keys().map(|k| k.family.clone()).collect();
 
-        let explicit_google_families: HashSet<String> =
-            self.explicit_google_families(explicit_requests.as_deref());
-
         let classified = classify_scenegraph_fonts(
             &families,
             auto_google_fonts,
@@ -433,23 +443,21 @@ impl VlConverter {
 
         let mut family_variants = variants_by_family(&chars_by_key);
 
-        if let Some(ref requests) = explicit_requests {
-            let known: HashSet<String> =
-                classified_fonts.iter().map(|f| f.family.clone()).collect();
-            for req in requests {
-                if !known.contains(&req.family) {
-                    if let Some(font_id) = family_to_id(&req.family) {
-                        classified_fonts.push(ClassifiedFont {
-                            family: req.family.clone(),
-                            source: FontSource::Google { font_id },
-                        });
-                    }
+        let mut known: HashSet<String> =
+            classified_fonts.iter().map(|f| f.family.clone()).collect();
+        for req in &explicit_requests {
+            if known.insert(req.family.clone()) {
+                if let Some(font_id) = family_to_id(&req.family) {
+                    classified_fonts.push(ClassifiedFont {
+                        family: req.family.clone(),
+                        source: FontSource::Google { font_id },
+                    });
                 }
-                if let Some(ref variants) = req.variants {
-                    let entry = family_variants.entry(req.family.clone()).or_default();
-                    for v in variants {
-                        entry.insert((v.weight.to_string(), v.style.as_str().to_string()));
-                    }
+            }
+            if let Some(ref variants) = req.variants {
+                let entry = family_variants.entry(req.family.clone()).or_default();
+                for v in variants {
+                    entry.insert((v.weight.to_string(), v.style.as_str().to_string()));
                 }
             }
         }
@@ -800,7 +808,11 @@ impl VlConverter {
         let auto_install = self.inner.config().auto_google_fonts;
         let embed_local = self.inner.config().embed_local_fonts;
 
-        let has_font_work = auto_install || embed_local || vl_opts.google_fonts.is_some();
+        let has_font_work = auto_install
+            || embed_local
+            || !self
+                .explicit_google_families(vl_opts.google_fonts.as_deref())
+                .is_empty();
         let mut logs = Vec::new();
         let mut google_fonts = GoogleFontUsage::default();
         let font_head_html = if has_font_work {
@@ -886,7 +898,11 @@ impl VlConverter {
         let auto_install = self.inner.config().auto_google_fonts;
         let embed_local = self.inner.config().embed_local_fonts;
 
-        let has_font_work = auto_install || embed_local || vg_opts.google_fonts.is_some();
+        let has_font_work = auto_install
+            || embed_local
+            || !self
+                .explicit_google_families(vg_opts.google_fonts.as_deref())
+                .is_empty();
         let mut google_fonts = GoogleFontUsage::default();
         let font_head_html = if has_font_work {
             let spec_value: serde_json::Value = match &vg_spec {

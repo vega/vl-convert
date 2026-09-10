@@ -567,12 +567,17 @@ def svg_to_jpeg(
     """
     ...
 
-def svg_to_pdf(svg: str) -> bytes:
+def svg_to_pdf(svg: str, *, scale: float | None = None) -> bytes:
     """
     Convert an SVG image string to PDF document data.
 
     Args:
         svg: SVG image string
+        scale: Retained only for backward compatibility.
+
+            .. deprecated:: 2.0.0
+               This parameter never affected PDF output. Only None and 1.0
+               are accepted. Other numeric values raise ``ValueError``.
 
     Returns:
         PDF document data.
@@ -673,6 +678,7 @@ def vega_to_jpeg(
 def vega_to_pdf(
     vg_spec: VlSpec,
     *,
+    scale: float | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
     vega_plugin: str | None = None,
@@ -687,6 +693,11 @@ def vega_to_pdf(
 
     Args:
         vg_spec: Vega JSON specification string or dict
+        scale: Retained only for backward compatibility.
+
+            .. deprecated:: 2.0.0
+               This parameter never affected PDF output. Only None and 1.0
+               are accepted. Other numeric values raise ``ValueError``.
         format_locale: d3-format locale name or dictionary
         time_format_locale: d3-time-format locale name or dictionary
         vega_plugin: Per-request Vega plugin (inline ESM string or URL).
@@ -977,6 +988,7 @@ def vegalite_to_pdf(
     vl_spec: VlSpec,
     *,
     vl_version: str | None = None,
+    scale: float | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
     format_locale: FormatLocale | None = None,
@@ -992,6 +1004,11 @@ def vegalite_to_pdf(
 
     Args:
         vl_spec: Vega-Lite JSON specification string or dict
+        scale: Retained only for backward compatibility.
+
+            .. deprecated:: 2.0.0
+               This parameter never affected PDF output. Only None and 1.0
+               are accepted. Other numeric values raise ``ValueError``.
         vl_version: Bundled Vega-Lite version, such as ``"6.4"``. The default
             is the newest version bundled with this release.
         config: Chart configuration object to apply during conversion
@@ -1297,7 +1314,7 @@ if TYPE_CHECKING:
         ) -> bytes:
             """Async version of ``svg_to_jpeg``. See sync function for full documentation."""
             ...
-        async def svg_to_pdf(self, svg: str) -> bytes:
+        async def svg_to_pdf(self, svg: str, *, scale: float | None = None) -> bytes:
             """Async version of ``svg_to_pdf``. See sync function for full documentation."""
             ...
         async def svg_to_png(
@@ -1343,6 +1360,7 @@ if TYPE_CHECKING:
             self,
             vg_spec: VlSpec,
             *,
+            scale: float | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
             vega_plugin: str | None = None,
@@ -1477,6 +1495,7 @@ if TYPE_CHECKING:
             vl_spec: VlSpec,
             *,
             vl_version: str | None = None,
+            scale: float | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
             format_locale: FormatLocale | None = None,
