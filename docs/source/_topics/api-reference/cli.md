@@ -10,7 +10,7 @@ interfaces: [cli]
 
 # CLI Reference
 
-This reference is generated from the version 2 `vl-convert` executable used to build the documentation. Global options go before the command, and command-specific options go after it:
+This reference is generated from the version 2 `vl-convert` executable used to build the documentation. Global options can appear before or after the command. Command-specific options must follow it:
 
 ```text
 vl-convert [GLOBAL OPTIONS] <COMMAND> [COMMAND OPTIONS]

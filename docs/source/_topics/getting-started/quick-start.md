@@ -63,7 +63,7 @@ Add these dependencies to `Cargo.toml`:
 ```toml
 [dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-vl-convert-rs = "2"
+vl-convert-rs = "2.0.0-rc1"
 ```
 :::
 

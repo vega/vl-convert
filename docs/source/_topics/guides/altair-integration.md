@@ -23,6 +23,8 @@ $ uv add altair "vl-convert-python>=2.0.0rc1,<3"
 This complete example creates a chart and writes a high-density PNG:
 
 ```python
+from pathlib import Path
+
 import altair as alt
 import vl_convert as vlc
 
@@ -44,8 +46,7 @@ chart = (
 )
 
 png = vlc.vegalite_to_png(chart.to_dict(), scale=2)
-with open("chart.png", "wb") as output_file:
-    output_file.write(png)
+Path("chart.png").write_bytes(png)
 ```
 
 Use `vegalite_to_svg()` for SVG text or `vegalite_to_pdf()` for PDF bytes. If a chart was produced by an older Altair release, pass `vl_version` to select the matching Vega-Lite compiler. See {doc}`vegalite-conversions` for the full list of outputs and {doc}`image-quality` for size and resolution options.

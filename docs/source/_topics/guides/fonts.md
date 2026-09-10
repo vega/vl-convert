@@ -22,7 +22,7 @@ VlConvert bundles Liberation Sans and loads the fonts installed on the host. You
 
 ## Make Fonts Available
 
-The snippets in this section show converter setup. The CLI command assumes an existing `chart.vl.json`. The complete Roboto Slab example in the next section provides one.
+Configure fonts before converting a chart.
 
 ::::{interface} python
 Register a local directory once per process. Use `configure()` for Google Fonts and the missing-font policy:
@@ -41,7 +41,7 @@ Set `auto_google_fonts=True` to download a missing first-choice font automatical
 ::::
 
 ::::{interface} cli
-Pass font directories and Google Font requests as global options before the conversion command:
+Pass font directories and Google Font requests as global options. This command uses `chart.vl.json` from the Roboto Slab example in the next section:
 
 ```console
 $ vl-convert \
@@ -107,17 +107,15 @@ Request the family from Google Fonts and render the chart as PNG:
 
 ::::{interface} python
 ```python
-import json
+from pathlib import Path
+
 import vl_convert as vlc
 
 vlc.configure(google_fonts=["Roboto Slab"])
 
-with open("chart.vl.json", encoding="utf-8") as input_file:
-    spec = json.load(input_file)
-
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 png = vlc.vegalite_to_png(spec, scale=2)
-with open("chart.png", "wb") as output_file:
-    output_file.write(png)
+Path("chart.png").write_bytes(png)
 ```
 ::::
 
@@ -197,7 +195,7 @@ Without the request, the text falls back to the default sans-serif font. With `m
 
 ## Limit Automatic Downloads
 
-`google_font_variant_threshold` caps the number of Google Font variants one conversion may load. Configured, per-conversion, and automatically discovered families all count toward it. When the cap is reached, the conversion fails rather than loading another family. This stops a specification with a long font list from triggering unbounded downloads. One family can carry the total past the cap when it has several variants.
+`google_font_variant_threshold` limits further font requests once a conversion has resolved that many Google Font variants. Configured, per-conversion, and automatically discovered families all count toward it. At or above the threshold, the next font request fails the conversion. A single request can take the total above the threshold when it resolves several variants.
 
 Google Fonts downloads are controlled by these font options only. `allowed_base_urls` governs data and image URLs and has no effect on fonts.
 
@@ -251,7 +249,7 @@ set_google_fonts_cache_size_mb(NonZeroU64::new(128))?;
 ::::
 
 ::::{interface} server
-Pass `--google-fonts-cache-size-mb` before `serve` to set the cap at startup. `/infoz` reports the cache directory. When the admin listener is enabled, `GET` and `PUT /admin/config/fonts/cache_size` read and change the cap without a restart:
+Pass `--google-fonts-cache-size-mb` when starting the server to set the cap. `/infoz` reports the cache directory. When the admin listener is enabled, `GET` and `PUT /admin/config/fonts/cache_size` read and change the cap without a restart:
 
 ```console
 $ curl -X PUT http://127.0.0.1:3001/admin/config/fonts/cache_size \

@@ -26,7 +26,7 @@ Allowing one type does not allow the others.
 
 By default, `allowed_base_urls` permits any HTTP or HTTPS URL and no local files for both data and images, and `base_url` resolves relative data and image URLs against the Vega datasets CDN. Tighten both before processing untrusted input.
 
-An empty `allowed_base_urls` list blocks every HTTP or HTTPS URL and filesystem path. Inline `data:` URLs remain allowed. To permit one service, list its URL prefix. These configuration examples can be applied to any conversion. The CLI example uses `chart.vl.json` from {doc}`../getting-started/quick-start`:
+An empty `allowed_base_urls` list blocks every HTTP or HTTPS URL and filesystem path. Inline `data:` URLs remain allowed. To permit one service, list its URL prefix. These settings apply to any conversion:
 
 ::::{interface} python
 ```python
@@ -42,6 +42,8 @@ vlc.configure(
 ::::
 
 ::::{interface} cli
+This example uses `chart.vl.json` from {doc}`../getting-started/quick-start`:
+
 ```console
 $ vl-convert \
 >   --base-url disabled \

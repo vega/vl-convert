@@ -10,7 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Vega Plugins
 
-A Vega plugin adds a named capability to the Vega runtime, such as an expression function, color scheme, projection, scale, transform, or data format. Most charts do not need one. Use a plugin only when a specification refers to a custom runtime name that Vega's built-in transforms, themes, configuration, and locales cannot provide. The [Vega extensibility API](https://vega.github.io/vega/docs/api/extensibility/) lists the registration functions a plugin can call.
+Plugins extend Vega with custom functions, transforms, and other chart features. Use one when your specification needs an extension that Vega does not include. The [Vega extensibility API](https://vega.github.io/vega/docs/api/extensibility/) lists the registration functions a plugin can call.
 
 :::{warning}
 A plugin is executable JavaScript. Load plugin files and URLs only from sources you trust. Do not accept caller-supplied plugins on a public service unless you have decided to accept that risk and enforce strict resource limits.
@@ -48,24 +48,22 @@ The `calculate` transform can now call `doubleValue`.
 Register the plugin with `configure()`, then convert as usual:
 
 ```python
-import json
+from pathlib import Path
+
 import vl_convert as vlc
 
 vlc.configure(vega_plugins=["./double-value.js"])
 
-with open("chart.vl.json", encoding="utf-8") as input_file:
-    spec = json.load(input_file)
-
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
 png = vlc.vegalite_to_png(spec)
-with open("chart.png", "wb") as output_file:
-    output_file.write(png)
+Path("chart.png").write_bytes(png)
 ```
 
 The plugin stays available to every later conversion in the process.
 ::::
 
 ::::{interface} cli
-Pass the plugin as a global option before the conversion command:
+Pass the plugin as a global option:
 
 ```console
 $ vl-convert --vega-plugin ./double-value.js \
@@ -93,7 +91,7 @@ std::fs::write("chart.png", output.data)?;
 ::::
 
 ::::{interface} server
-Register the plugin before `serve`:
+Register the plugin when starting the server:
 
 ```console
 $ vl-convert serve \

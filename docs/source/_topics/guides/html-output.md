@@ -16,7 +16,7 @@ HTML output is a web page that renders the chart with Vega Embed, the browser he
 
 By default the page loads Vega, Vega-Lite, and Vega Embed from a content delivery network (CDN). The file stays small, but the page needs network access when it opens.
 
-Set `bundle=true` to include those libraries in the file, along with any plugins and the fonts VlConvert resolved for the chart. The page then opens offline, although data and images referenced by URL still need network access, as do fonts that were not embedded.
+Set `bundle=true` to include those libraries in the file, along with any plugins and the fonts VlConvert resolved for the chart. The browser no longer needs to fetch these dependencies. Data and images referenced by URL, and fonts that were not embedded, may still need network access.
 
 HTML generation normally embeds the specification without evaluating it. When Google Font discovery, an explicit Google Font request, or local font embedding is enabled, VlConvert evaluates the chart to resolve fonts. That evaluation can load external data and images under VlConvert's access policy before the browser loads them again.
 
@@ -47,8 +47,7 @@ html = vlc.vegalite_to_html(
     renderer="svg",
 )
 
-with open("chart.html", "w", encoding="utf-8") as output_file:
-    output_file.write(html)
+Path("chart.html").write_text(html, encoding="utf-8")
 ```
 ::::
 

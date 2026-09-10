@@ -128,5 +128,5 @@ $ vl-convert vl2png \
 >   --theme dark
 ```
 
-Run a command with `--help` to see its options. `--config` is available on the Vega-Lite and Vega chart commands except `vl2url` and `vg2url`, which only encode the input specification in a URL. Converter settings such as `--google-font` and `--vega-plugin` are global options placed before the command.
+Run a command with `--help` to see its options. `--config` is available on the Vega-Lite and Vega chart commands except `vl2url` and `vg2url`, which only encode the input specification in a URL. Converter settings such as `--google-font` and `--vega-plugin` are global options and can appear before or after the command.
 ::::

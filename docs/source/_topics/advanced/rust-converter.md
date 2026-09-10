@@ -28,7 +28,7 @@ converter.warm_up()?;
 
 ## Share the Converter
 
-`VlConverter` is cheap to clone, and clones share the same worker pool. Store a clone in application state or hand clones to tasks. Each worker handles one conversion at a time, and additional conversions wait for a free worker. This lifecycle excerpt assumes the `spec` created in the complete {doc}`../getting-started/quick-start` application:
+`VlConverter` is cheap to clone, and clones share the same worker pool. Store a clone in application state or hand clones to tasks. Each worker handles one conversion at a time, and additional conversions wait for a free worker. This example uses `spec` from {doc}`../getting-started/quick-start`:
 
 ```rust
 use vl_convert_rs::{PngOpts, VlOpts};

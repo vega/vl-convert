@@ -68,12 +68,11 @@ The server is the `serve` subcommand of the `vl-convert` executable. Install a R
 $ cargo install vl-convert --version '^2.0.0-rc1' --locked
 ```
 
-Confirm the installation, then start a local server:
+Confirm the installation:
 
 ```console
 $ vl-convert --version
-$ vl-convert serve --port 3000
 ```
 
-The server keeps running and listens on port 3000. Leave this terminal open while you follow the {doc}`quick-start`.
+Follow the {doc}`quick-start` to start the server and send a conversion request.
 ::::

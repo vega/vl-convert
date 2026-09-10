@@ -12,7 +12,7 @@ interfaces: [python, cli, rust, server]
 
 Start with the error message and Vega's diagnostic messages, then reduce the input to the smallest specification that still fails. A small reproduction usually shows whether the problem is the specification, an external resource, a font, or a converter limit. See {doc}`../guides/logging` for how to see the diagnostic messages.
 
-The snippets below add diagnostics to an existing failing conversion. In the CLI example, save the reduced input as `chart.vl.json`. See {doc}`../getting-started/quick-start` for complete conversion setup.
+The snippets below add diagnostics to an existing failing conversion. See {doc}`../getting-started/quick-start` for conversion setup.
 
 ::::{interface} python
 Enable logging while reproducing the problem:
@@ -28,7 +28,7 @@ Conversion failures raise an exception. Successful conversions can still log Veg
 ::::
 
 ::::{interface} cli
-The CLI writes diagnostics to standard error and exits with a nonzero status on failure. Rule out config files and environment variables while debugging:
+The CLI writes diagnostics to standard error and exits with a nonzero status on failure. Save the reduced input as `chart.vl.json`, then skip config files while debugging:
 
 ```console
 $ vl-convert \
@@ -37,7 +37,7 @@ $ vl-convert \
 >   vl2png --input chart.vl.json --output chart.png
 ```
 
-Add settings back one at a time to find the one that causes the problem.
+`--vlc-config disabled` does not disable environment variables. If the problem persists, check and unset relevant `VLC_*` variables. Add settings back one at a time to find the one that causes the problem.
 ::::
 
 ::::{interface} rust

@@ -47,7 +47,7 @@ Memory values are bytes. `get_worker_memory_usage()` starts the workers if they 
 ::::
 
 ::::{interface} cli
-A CLI conversion runs in a short-lived process, so heap and execution-time limits are more useful than post-conversion garbage collection. This configuration excerpt uses `chart.vl.json` from {doc}`../getting-started/quick-start`:
+A CLI conversion runs in a short-lived process, so heap and execution-time limits are more useful than post-conversion garbage collection. This example uses `chart.vl.json` from {doc}`../getting-started/quick-start`:
 
 ```console
 $ vl-convert \
@@ -77,7 +77,7 @@ let usage = converter.get_worker_memory_usage().await?;
 ::::
 
 ::::{interface} server
-Set converter limits before `serve` and combine them with HTTP request limits:
+Combine converter limits with HTTP request limits when starting the server:
 
 ```console
 $ vl-convert serve \

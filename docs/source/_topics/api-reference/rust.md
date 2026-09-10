@@ -25,7 +25,7 @@ let converter = VlConverter::with_config(VlcConfig {
 })?;
 ```
 
-Conversion methods are `async` and return output structs rather than raw bytes, so callers can read Vega's diagnostic messages and Google Fonts usage. This API excerpt assumes `spec` contains a Vega-Lite specification. The complete Tokio application in {doc}`getting-started/quick-start` defines it:
+Conversion methods are `async` and return output structs rather than raw bytes, so callers can read Vega's diagnostic messages and Google Fonts usage. This example uses `spec` from {doc}`getting-started/quick-start`:
 
 ```rust
 let output = converter

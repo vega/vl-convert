@@ -26,12 +26,10 @@ Vega resolves the `url` of a data source before VlConvert fetches it:
 | `https://example.com/data.json` | Fetched with an HTTP GET request |
 | `data/cars.json` | Joined to `base_url`: `https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/cars.json` |
 | `/srv/data/cars.csv` | Also joined to `base_url`, because Vega treats a bare path as relative |
-| `file:///srv/data/cars.csv` | Read from disk when the directory is allowed |
+| `file:///srv/data/cars.csv` | Blocked. Add the directory to the allowlist to read it from disk |
 | `data:text/csv,...` | Decoded inline, always allowed |
 
-Two things follow. To read a local file, use a `file://` URL or set `base_url` to a directory, because a bare absolute path becomes a CDN address. And every resolved HTTP URL or file path is checked against `allowed_base_urls`. A request that fails the check raises an error whose message contains `VLC_ACCESS_DENIED`.
-
-VlConvert makes GET requests only, to `http` and `https` URLs only. Each request has a 10-second connection timeout and a 30-second overall limit that includes up to ten redirects, each checked against the allowlist. The limit applies to each attempt: image fetches for SVG-based output retry transient server errors up to four times, so a failing image can take longer overall. Vega parses the response as JSON, CSV, TSV, or TopoJSON according to the file extension or the `format` property, as described in the [Vega-Lite data documentation](https://vega.github.io/vega-lite/docs/data.html).
+To read a local file, use a `file://` URL or set `base_url` to a directory. With the default base URL, even a bare absolute path becomes a CDN address. Every resolved HTTP URL or file path is checked against `allowed_base_urls`. A request that fails the check raises an error whose message contains `VLC_ACCESS_DENIED`.
 
 ## Allowlist Patterns
 
@@ -165,7 +163,15 @@ $ curl http://127.0.0.1:3000/vegalite/png \
 Requests cannot change the loading settings. When the admin listener is enabled, `PATCH /admin/config` updates them without a restart. See {doc}`/server/admin-api`.
 ::::
 
-For production, replace `$PWD` or `Path.cwd()` with a stable absolute path such as `/srv/charts`. Keep the allowlist limited to the directory the chart needs.
+For production, use a stable absolute path such as `/srv/charts`. Keep the allowlist limited to the directory the chart needs.
+
+## HTTP Requests and Failures
+
+For remote resources, VlConvert makes GET requests to `http` and `https` URLs only. Each request has a 10-second connection timeout and a 30-second overall limit. This includes up to ten redirects, each checked against the allowlist.
+
+The time limit applies to each attempt. Image fetches for SVG-based output retry transient server errors up to four times, so a failing image can take longer overall.
+
+Vega parses data as JSON, CSV, TSV, or TopoJSON according to the file extension or the `format` property. See the [Vega-Lite data documentation](https://vega.github.io/vega-lite/docs/data.html).
 
 ## Use the Vega Example Datasets
 

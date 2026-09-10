@@ -53,7 +53,7 @@ VLC_* environment variables
 built-in defaults
 ```
 
-`--vlc-config` takes a path to a JSONC file. A relative path resolves from the current working directory. When the option is omitted, the CLI loads the platform-default file if it exists. Print that path with `vl-convert config-path`, or pass `--vlc-config disabled` to skip config files entirely. This configuration excerpt uses `chart.vl.json` from {doc}`../getting-started/quick-start` to make the precedence example concrete.
+`--vlc-config` takes a path to a JSONC file. A relative path resolves from the current working directory. When the option is omitted, the CLI loads the platform-default file if it exists. Print that path with `vl-convert config-path`, or pass `--vlc-config disabled` to skip config files entirely. The example uses `chart.vl.json` from {doc}`../getting-started/quick-start`.
 
 ```console
 $ VLC_AUTO_GOOGLE_FONTS=true \
@@ -62,7 +62,7 @@ $ VLC_AUTO_GOOGLE_FONTS=true \
 >   vl2png --input chart.vl.json --output chart.png
 ```
 
-Global options go before the conversion command. Run `vl-convert --help` for the global options and `vl-convert vl2png --help` for a command's own options.
+Global options can appear before or after the conversion command. Run `vl-convert --help` for the global options and `vl-convert vl2png --help` for a command's own options.
 ::::
 
 ::::{interface} rust
@@ -98,7 +98,7 @@ VLC_* environment variables
 built-in defaults
 ```
 
-Options after `serve` configure HTTP behavior: listeners, authentication, request limits, and budgets. Converter options go before `serve`.
+Converter options are global and can appear before or after `serve`. Server-specific options, such as listeners, authentication, request limits, and budgets, follow `serve`.
 
 ```console
 $ vl-convert serve \

@@ -173,15 +173,14 @@ A custom theme replaces a built-in theme with the same name.
 ::::{interface} python
 ```python
 import json
+from pathlib import Path
+
 import vl_convert as vlc
 
-with open("themes.json", encoding="utf-8") as input_file:
-    themes = json.load(input_file)
-
+themes = json.loads(Path("themes.json").read_text(encoding="utf-8"))
 vlc.configure(themes=themes)
 svg = vlc.vegalite_to_svg(spec, theme="brand")
-with open("chart.svg", "w", encoding="utf-8") as output_file:
-    output_file.write(svg)
+Path("chart.svg").write_text(svg, encoding="utf-8")
 ```
 ::::
 
@@ -220,7 +219,7 @@ std::fs::write("chart.svg", output.svg)?;
 ::::
 
 ::::{interface} server
-Register custom themes before the `serve` subcommand:
+Register custom themes when starting the server:
 
 ```console
 $ vl-convert serve \

@@ -1,6 +1,6 @@
 # Architecture
 
-VlConvert is a Rust host for the official Vega and Vega-Lite JavaScript libraries. It does not reimplement Vega's compiler, parser, scenegraph, or renderer. The `vl-convert-rs` crate embeds a JavaScript runtime, loads the bundled Vega libraries into it, and supplies Rust code for everything that has to touch the host machine: file and network access, fonts, Canvas 2D drawing, SVG postprocessing, image encoding, PDF output, and the language bindings.
+VlConvert runs the official Vega and Vega-Lite libraries in an embedded Deno runtime. Rust supplies data loading, fonts, and image output.
 
 The Python package, CLI, Rust crate, and HTTP server all drive this one converter. {doc}`rendering` describes what that means for users. This page describes how the pieces fit together.
 

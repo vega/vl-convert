@@ -60,7 +60,7 @@ $ vl-convert serve \
 >   --google-font-cache-miss-penalty-ms 250
 ```
 
-The final charge is the measured processing time plus the penalty for each cache miss. The variant threshold caps how many Google Font variants one conversion can load.
+The final charge is the measured processing time plus the penalty for each cache miss. Once the conversion reaches the variant threshold, its next font request fails. A single request can take the total above the threshold. See {doc}`guides/fonts` for details.
 
 ## Observe and Update Budgets
 

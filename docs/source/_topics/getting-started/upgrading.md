@@ -27,9 +27,9 @@ vlc.configure(allowed_base_urls=["https://data.example.com/"])
 
 **`show_warnings` is deprecated and ignored.** Passing `True` raises a `DeprecationWarning`. Vega and Vega-Lite warnings now go to the `vl_convert` logger, so configure Python logging instead. See {doc}`../guides/logging`.
 
-**PDF `scale` was removed.** `vegalite_to_pdf()`, `vega_to_pdf()`, and `svg_to_pdf()` no longer accept `scale`. PDF output is vector, so change the chart's `width` and `height` if the page needs a different size.
+**PDF `scale` is retained only for backward compatibility.** `vegalite_to_pdf()`, `vega_to_pdf()`, and `svg_to_pdf()` still accept `scale=None` or `scale=1.0`. Other numeric values raise `ValueError`. The parameter never affected PDF output and is deprecated in version 2. Change the chart's `width` and `height` if the page needs a different size.
 
-**New, optional capabilities.** `configure()`, `load_config()`, and `get_config()` manage process-wide settings such as the worker pool, Google Fonts, plugins, and JavaScript limits. `vl_convert.asyncio` provides awaitable conversions. Conversion functions gained `width`, `height`, `background`, `google_fonts`, and `vega_plugin`, the Vega functions gained `config`, the SVG output functions for Vega and Vega-Lite input gained `bundle`, and the scenegraph functions accept `format="msgpack"`. See {doc}`../advanced/configuration` and {doc}`../api-reference`.
+**New, optional capabilities** include process-wide configuration, Google Fonts, plugins, asynchronous conversions, and more output options. See {doc}`../advanced/configuration` and {doc}`../api-reference`.
 
 Version 2 requires Python 3.10 or later. The `vl_version` argument still accepts both `"5.16"` and `"v5_16"`.
 ::::
@@ -70,7 +70,7 @@ The file loads automatically from that path. You can instead pass the converter 
 ::::{interface} rust
 ## Update Your Code
 
-Change the dependency to `vl-convert-rs = "2"`, then fix these compile errors.
+Change the dependency to `vl-convert-rs = "2.0.0-rc1"` to allow version 2 release candidates, then update these API calls.
 
 **Conversion methods return output structs.** Methods that returned `String` or `Vec<u8>` now return `SvgOutput`, `PngOutput`, `JpegOutput`, `PdfOutput`, `HtmlOutput`, `ScenegraphOutput`, or `VegaOutput`. Read the result from `svg`, `data`, `html`, `scenegraph`, or `spec`, and Vega's messages from `logs`.
 

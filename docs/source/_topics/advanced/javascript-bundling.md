@@ -18,11 +18,12 @@ The standard bundle exposes `vega`, `vegaLite`, and `vegaEmbed` on `window`, so 
 
 ::::{interface} python
 ```python
+from pathlib import Path
+
 import vl_convert as vlc
 
 bundle = vlc.javascript_bundle(vl_version="6.4")
-with open("vega-embed.js", "w", encoding="utf-8") as output_file:
-    output_file.write(bundle)
+Path("vega-embed.js").write_text(bundle, encoding="utf-8")
 ```
 ::::
 
@@ -70,10 +71,9 @@ For example, save this as `snippet.js`:
 
 ::::{interface} python
 ```python
-with open("snippet.js", encoding="utf-8") as input_file:
-    snippet = input_file.read()
-
+snippet = Path("snippet.js").read_text(encoding="utf-8")
 bundle = vlc.javascript_bundle(snippet, vl_version="6.4")
+Path("app-chart.js").write_text(bundle, encoding="utf-8")
 ```
 ::::
 
@@ -94,11 +94,12 @@ let bundle = converter
         VlVersion::v6_4,
     )
     .await?;
+std::fs::write("app-chart.js", bundle)?;
 ```
 ::::
 
 ::::{interface} server
-Save this generated body as `request.json`:
+Save this request as `request.json`:
 
 :::{dropdown} request.json
 :open:

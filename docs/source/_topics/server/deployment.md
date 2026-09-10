@@ -10,7 +10,7 @@ interfaces: [server]
 
 # Deploying the Server
 
-Choose a profile from the trust boundary around the service. The examples are starting points. Tune worker counts and limits with representative charts.
+Choose a configuration based on who can call the server: trusted services, anonymous users, or a local application. Tune worker counts and limits with representative charts.
 
 Put a reverse proxy or platform load balancer in front of a TCP deployment to provide TLS, connection controls, and application-specific identity. Keep the admin listener on a management-only address or a Unix domain socket.
 

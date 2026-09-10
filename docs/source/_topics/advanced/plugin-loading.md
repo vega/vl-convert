@@ -28,7 +28,7 @@ A plugin entry can be one of three forms:
 - An `http://` or `https://` URL. VlConvert fetches and bundles the module.
 - Inline ESM source. Configuration files and library APIs accept source text. The `--vega-plugin` CLI flag does not, so a mistyped path is never treated as executable source.
 
-The following are configuration excerpts. The file-based examples use the `double-value.js` plugin from {doc}`../guides/plugins`.
+The file-based examples use the `double-value.js` plugin from {doc}`../guides/plugins`.
 
 ::::{interface} python
 ```python
@@ -223,7 +223,7 @@ $ vl-convert serve \
 
 Request bodies can now contain `vega_plugin`. If caller-supplied code needs HTTP imports, allow only the required domains with `--per-request-plugin-import-domains`. This allowlist is separate from the one for startup plugins.
 
-Save this complete request, which embeds both canonical files, as `request.json`:
+Save this request, which includes the plugin and specification above, as `request.json`:
 
 :::{dropdown} request.json
 :open:
