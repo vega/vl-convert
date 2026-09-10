@@ -480,6 +480,22 @@ impl VlConverter {
             || self.inner.config().missing_fonts != MissingFontsPolicy::Fallback
     }
 
+    /// Return every Google Font family requested by converter configuration or
+    /// per-call options. These fonts are resolved before rendering and therefore
+    /// count as available during missing-font preflight.
+    pub(crate) fn explicit_google_families(
+        &self,
+        request_fonts: Option<&[GoogleFontRequest]>,
+    ) -> HashSet<String> {
+        self.inner
+            .config()
+            .google_fonts
+            .iter()
+            .chain(request_fonts.into_iter().flatten())
+            .map(|request| request.family.clone())
+            .collect()
+    }
+
     /// If font preprocessing is enabled, compile VL→Vega and process referenced fonts.
     ///
     /// Returns the compiled Vega spec, options, compile logs, and Google Fonts
@@ -507,8 +523,11 @@ impl VlConverter {
             .await?;
         let vega_spec = vega_output.spec;
         let compile_logs = vega_output.logs;
+        let explicit_google_families =
+            self.explicit_google_families(vl_opts.google_fonts.as_deref());
         let font_analysis = preprocess_fonts(
             &vega_spec,
+            &explicit_google_families,
             self.inner.config().auto_google_fonts,
             self.inner.config().missing_fonts,
         )
@@ -536,14 +555,17 @@ impl VlConverter {
     async fn maybe_preprocess_vega_fonts(
         &self,
         spec: &ValueOrString,
+        request_fonts: Option<&[GoogleFontRequest]>,
     ) -> Result<FontRequestAnalysis, AnyError> {
         if self.should_preprocess_fonts() {
             let spec_value: serde_json::Value = match spec {
                 ValueOrString::JsonString(s) => serde_json::from_str(s)?,
                 ValueOrString::Value(v) => v.clone(),
             };
+            let explicit_google_families = self.explicit_google_families(request_fonts);
             preprocess_fonts(
                 &spec_value,
+                &explicit_google_families,
                 self.inner.config().auto_google_fonts,
                 self.inner.config().missing_fonts,
             )
@@ -563,8 +585,10 @@ impl VlConverter {
         }
 
         let font_strings = crate::extract::extract_fonts_from_svg(svg);
+        let explicit_google_families = self.explicit_google_families(None);
         let font_analysis = classify_and_request_fonts(
             font_strings,
+            &explicit_google_families,
             self.inner.config().auto_google_fonts,
             self.inner.config().missing_fonts,
             false,
@@ -620,13 +644,12 @@ impl VlConverter {
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
-        let explicit_google_families: HashSet<String> = vg_opts
-            .google_fonts
-            .as_ref()
-            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
-            .unwrap_or_default();
+        let explicit_google_families =
+            self.explicit_google_families(vg_opts.google_fonts.as_deref());
 
-        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        let font_analysis = self
+            .maybe_preprocess_vega_fonts(&vg_spec, vg_opts.google_fonts.as_deref())
+            .await?;
         if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
@@ -780,7 +803,9 @@ impl VlConverter {
     ) -> Result<ScenegraphOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
-        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        let font_analysis = self
+            .maybe_preprocess_vega_fonts(&vg_spec, vg_opts.google_fonts.as_deref())
+            .await?;
         if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
@@ -808,7 +833,9 @@ impl VlConverter {
     ) -> Result<ScenegraphMsgpackOutput, AnyError> {
         self.apply_vg_defaults(&mut vg_opts);
         let vg_spec = vg_spec.into();
-        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        let font_analysis = self
+            .maybe_preprocess_vega_fonts(&vg_spec, vg_opts.google_fonts.as_deref())
+            .await?;
         if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
@@ -843,11 +870,8 @@ impl VlConverter {
         let vl_spec = vl_spec.into();
         let plugin = vl_opts.vega_plugin.take();
 
-        let explicit_google_families: HashSet<String> = vl_opts
-            .google_fonts
-            .as_ref()
-            .map(|reqs| reqs.iter().map(|r| r.family.clone()).collect())
-            .unwrap_or_default();
+        let explicit_google_families =
+            self.explicit_google_families(vl_opts.google_fonts.as_deref());
 
         let mut output =
             if let Some((vega_spec, mut vg_opts, compile_logs, preprocess_google_fonts)) = self
@@ -1024,7 +1048,9 @@ impl VlConverter {
         let effective_scale = scale * ppi / 72.0;
         let plugin = vg_opts.vega_plugin.take();
 
-        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        let font_analysis = self
+            .maybe_preprocess_vega_fonts(&vg_spec, vg_opts.google_fonts.as_deref())
+            .await?;
         if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
@@ -1165,7 +1191,9 @@ impl VlConverter {
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
-        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        let font_analysis = self
+            .maybe_preprocess_vega_fonts(&vg_spec, vg_opts.google_fonts.as_deref())
+            .await?;
         if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
@@ -1311,7 +1339,9 @@ impl VlConverter {
         let vg_spec = vg_spec.into();
         let plugin = vg_opts.vega_plugin.take();
 
-        let font_analysis = self.maybe_preprocess_vega_fonts(&vg_spec).await?;
+        let font_analysis = self
+            .maybe_preprocess_vega_fonts(&vg_spec, vg_opts.google_fonts.as_deref())
+            .await?;
         if !font_analysis.requests.is_empty() {
             vg_opts
                 .google_fonts
