@@ -96,7 +96,18 @@ impl FromStr for VlVersion {
     type Err = AnyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s {
+        let version = match s.rsplit_once('.') {
+            Some((major_minor, patch))
+                if major_minor.contains('.')
+                    && !patch.is_empty()
+                    && patch.bytes().all(|b| b.is_ascii_digit())
+                    && (patch == "0" || !patch.starts_with('0')) =>
+            {
+                major_minor
+            }
+            _ => s,
+        };
+        Ok(match version {
             "5.8" | "v5.8" | "5_8" | "v5_8" => Self::v5_8,
             "5.14" | "v5.14" | "5_14" | "v5_14" => Self::v5_14,
             "5.15" | "v5.15" | "5_15" | "v5_15" => Self::v5_15,
