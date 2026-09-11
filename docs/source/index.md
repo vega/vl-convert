@@ -899,7 +899,7 @@ Run `vl-convert serve` as an HTTP rendering worker.
 :::
 ::::
 
-{doc}`how-it-works/rendering` explains the input types, output formats, fonts, network access, and worker model that every interface shares, and {doc}`how-it-works/architecture` describes the runtime and crates underneath.
+{doc}`how-it-works/rendering` explains the input types, output formats, fonts, network access, and worker model that every interface shares, and {doc}`how-it-works/architecture` describes the runtime and crates underneath. 
 
 ```{toctree}
 :hidden:

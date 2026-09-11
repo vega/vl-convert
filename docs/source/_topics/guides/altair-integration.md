@@ -99,14 +99,13 @@ if alt.data_transformers.active == "vegafusion":
 else:
     with alt.data_transformers.enable("default", max_rows=None):
         spec = chart.to_dict()
-    vl_version = ".".join(alt.VEGALITE_VERSION.split(".")[:2])
-    html = vlc.vegalite_to_html(spec, vl_version=vl_version, bundle=True)
-    svg = vlc.vegalite_to_svg(spec, vl_version=vl_version, bundle=True)
+    html = vlc.vegalite_to_html(spec, vl_version=alt.VEGALITE_VERSION, bundle=True)
+    svg = vlc.vegalite_to_svg(spec, vl_version=alt.VEGALITE_VERSION, bundle=True)
 
 Path("chart.html").write_text(html, encoding="utf-8")
 Path("chart.svg").write_text(svg, encoding="utf-8")
 ```
 
-The Vega-Lite branch temporarily selects Altair's default transformer to inline data without its row limit, then restores the previous transformer. It also selects the Vega-Lite compiler version that matches Altair.
+The Vega-Lite branch temporarily selects Altair's default transformer to inline data without its row limit, then restores the previous transformer. Passing `alt.VEGALITE_VERSION` selects the bundled compiler for Altair's major/minor version. The patch component is ignored, so `"6.4.1"` selects the bundled 6.4 compiler, not necessarily patch 6.4.1.
 
 `bundle=True` embeds the Google Font in both outputs and the JavaScript libraries in HTML. HTML can still reference external data or images, so bundling alone does not make every chart work offline. See {doc}`html-output` and {doc}`fonts` for details.
