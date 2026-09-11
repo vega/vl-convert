@@ -23,7 +23,7 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then add 
 $ uv add "vl-convert-python>=2.0.0rc6,<3"
 ```
 
-The distribution is named `vl-convert-python`, and Python imports it as `vl_convert`. Confirm that the installation works:
+The PyPI package is named `vl-convert-python`, and Python imports it as `vl_convert`. Confirm that the installation works:
 
 ```console
 $ uv run python -c "import vl_convert as vlc; print(vlc.__version__)"
@@ -31,7 +31,7 @@ $ uv run python -c "import vl_convert as vlc; print(vlc.__version__)"
 ::::
 
 ::::{interface} server
-The server is the `serve` subcommand of the `vl-convert` executable.
+The server is the `serve` subcommand of the `vl-convert` CLI executable.
 ::::
 
 ::::{interface} cli server
@@ -77,18 +77,19 @@ $ cargo install vl-convert --version '^2.0.0-rc6' --locked
 ::::
 
 ::::{interface} rust
-Add the crate to `Cargo.toml`:
+Add these dependencies to `Cargo.toml`:
 
 :::{dropdown} Cargo.toml
 :open:
 
 ```toml
 [dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 vl-convert-rs = "2.0.0-rc6"
 ```
 :::
 
-The crate is imported as `vl_convert_rs`. Conversion methods are asynchronous, so your application needs an async runtime such as Tokio. The {doc}`quick-start` shows a complete Tokio setup.
+The crate is imported as `vl_convert_rs`. Conversion methods are asynchronous and require a Tokio runtime for full functionality. The {doc}`quick-start` shows a complete Tokio setup.
 ::::
 
 ::::{interface} server

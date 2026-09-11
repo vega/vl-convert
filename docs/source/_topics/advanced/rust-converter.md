@@ -45,7 +45,7 @@ for entry in output.logs {
 }
 ```
 
-Conversion methods are `async` and run on Tokio or any other executor that can poll their futures. The {doc}`../getting-started/quick-start` includes a complete Tokio application.
+Conversion methods are `async` and require a Tokio runtime for full functionality. The {doc}`../getting-started/quick-start` includes a complete Tokio application.
 
 ## Configuration and Errors
 

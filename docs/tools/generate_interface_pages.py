@@ -11,6 +11,10 @@ import yaml
 
 
 INTERFACES = {
+    "rust": {
+        "title": "Rust",
+        "description": "Embed `vl-convert-rs` directly in Rust applications.",
+    },
     "python": {
         "title": "Python",
         "description": "Use `vl-convert-python` from Python applications and Altair workflows.",
@@ -18,10 +22,6 @@ INTERFACES = {
     "cli": {
         "title": "CLI",
         "description": "Run `vl-convert` from shells, scripts, and build pipelines.",
-    },
-    "rust": {
-        "title": "Rust",
-        "description": "Embed `vl-convert-rs` directly in Rust applications.",
     },
     "server": {
         "title": "Server",
@@ -271,7 +271,7 @@ def write_index(interface: str, topics: list[Topic], expected: set[Path]) -> Non
         "",
         "Start with [Installation](getting-started/installation.md), "
         "follow the [Quick Start](getting-started/quick-start.md), "
-        "or look up a call in the [API Reference](api-reference).",
+        "or consult the [API Reference](api-reference).",
         "",
     ]
 
