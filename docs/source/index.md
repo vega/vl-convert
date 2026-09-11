@@ -6,7 +6,7 @@ It runs the official Vega and Vega-Lite JavaScript libraries in an embedded Deno
 
 ## How it works
 
-VlConvert's core is a Rust library, and the project additionally provides Python, CLI, and server interfaces to the same conversion functionality. See [How it works](how-it-works/index.md) for more information.
+VlConvert's core is a Rust library, and the project additionally provides Python, CLI, and HTTP server interfaces to the same conversion functionality. See [How it works](how-it-works/index.md) for more information.
 
 ## Example
 
@@ -905,9 +905,9 @@ Run `vl-convert serve` as an HTTP rendering worker.
 :hidden:
 :maxdepth: 2
 
+rust/index
 python/index
 cli/index
-rust/index
 server/index
 how-it-works/index
 Changelog <https://github.com/vega/vl-convert/releases>
