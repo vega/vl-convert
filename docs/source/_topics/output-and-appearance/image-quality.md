@@ -8,15 +8,19 @@ interfaces: [python, cli, rust, server]
 
 <!-- topic-body -->
 
-# Image Size and Quality
+# Image Size and Quality Recommendations
 
-Prefer vector output when the consumer supports it. SVG suits web pages and later editing, and PDF suits documents and print. Neither needs a fixed pixel size.
+Prefer vector output when the consumer supports it. SVG works well in web pages and supports later manual editing. PDF works well for printing directly, and for embedding in LaTeX or Typst documents. Neither needs a fixed pixel size.
 
-Use PNG when the consumer needs pixels, lossless output, or transparency. Use JPEG when a smaller file matters more than either.
+Use PNG when the consumer needs a high quality raster format. Use JPEG when a smaller file matters more than image quality.
 
 ## Chart Size
 
-`width` and `height` set the chart's logical dimensions before Vega adds axes, legends, titles, and padding, so the final image is usually larger than the values you pass. They override the top-level `width` and `height` of the specification.
+The specification's `width` and `height` control chart layout, not necessarily the final exported size. With the default `autosize: "pad"`, they size the plotting area, and Vega expands the output to include axes, legends, titles, and padding.
+
+To request fixed outer dimensions, set `autosize` to `{"type": "fit", "contains": "padding"}` in the specification. This shrinks the plotting area to make room for the surrounding content and includes padding within the requested size. See [Vega autosize](https://vega.github.io/vega/docs/specification/#autosize) and [Vega-Lite sizing](https://vega.github.io/vega-lite/docs/size.html#autosize) for supported layouts, fitting limitations, and other sizing modes.
+
+VlConvert exports the resulting layout. A chart fitted to 640 × 360 has those dimensions in SVG and produces a 640 × 360 PNG at the default `scale=1` and `ppi=72`. With `scale=2`, the same layout produces a 1280 × 720 PNG. The pixel-density settings below change the raster resolution without changing the layout.
 
 ## Pixel Density
 
@@ -29,6 +33,8 @@ effective scale = scale * ppi / 72
 ```
 
 The defaults are `scale=1` and `ppi=72`. Either `scale=2` or `ppi=144` doubles the pixel dimensions. Set both only when you want the effects multiplied.
+
+Some consumers use the `ppi` metadata to preserve the image's physical size when you increase `ppi` for higher resolution without changing `scale`.
 
 ## JPEG Quality
 
