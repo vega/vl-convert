@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pythonize::pythonize;
 use std::str::FromStr;
-use vl_convert_rs::converter::{GoogleFontRequest, VgOpts, VlOpts};
+use vl_convert_rs::converter::{FontOpts, GoogleFontRequest, VgOpts, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::{FontStyle, VariantRequest};
 
@@ -138,17 +138,16 @@ pub fn vegalite_fonts(
 
     let result = run_converter_future(move |converter| async move {
         let config = converter.config();
-        let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
-        let embed_lf = config.embed_local_fonts;
-        let subset_f = subset_fonts.unwrap_or(config.subset_fonts);
         converter
             .vegalite_fonts(
                 vl_spec,
                 vl_opts,
-                auto_gf,
-                embed_lf,
-                include_font_face,
-                subset_f,
+                FontOpts {
+                    auto_google_fonts: auto_google_fonts.unwrap_or(config.auto_google_fonts),
+                    embed_local_fonts: config.embed_local_fonts,
+                    include_font_face,
+                    subset_fonts: subset_fonts.unwrap_or(config.subset_fonts),
+                },
             )
             .await
     })
@@ -201,17 +200,16 @@ pub fn vega_fonts(
 
     let result = run_converter_future(move |converter| async move {
         let config = converter.config();
-        let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
-        let embed_lf = config.embed_local_fonts;
-        let subset_f = subset_fonts.unwrap_or(config.subset_fonts);
         converter
             .vega_fonts(
                 vg_spec,
                 vg_opts,
-                auto_gf,
-                embed_lf,
-                include_font_face,
-                subset_f,
+                FontOpts {
+                    auto_google_fonts: auto_google_fonts.unwrap_or(config.auto_google_fonts),
+                    embed_local_fonts: config.embed_local_fonts,
+                    include_font_face,
+                    subset_fonts: subset_fonts.unwrap_or(config.subset_fonts),
+                },
             )
             .await
     })
@@ -392,17 +390,16 @@ pub fn vegalite_fonts_asyncio<'py>(
         py,
         move |converter| async move {
             let config = converter.config();
-            let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
-            let embed_lf = config.embed_local_fonts;
-            let subset_f = subset_fonts.unwrap_or(config.subset_fonts);
             converter
                 .vegalite_fonts(
                     vl_spec,
                     vl_opts,
-                    auto_gf,
-                    embed_lf,
-                    include_font_face,
-                    subset_f,
+                    FontOpts {
+                        auto_google_fonts: auto_google_fonts.unwrap_or(config.auto_google_fonts),
+                        embed_local_fonts: config.embed_local_fonts,
+                        include_font_face,
+                        subset_fonts: subset_fonts.unwrap_or(config.subset_fonts),
+                    },
                 )
                 .await
         },
@@ -444,17 +441,16 @@ pub fn vega_fonts_asyncio<'py>(
         py,
         move |converter| async move {
             let config = converter.config();
-            let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
-            let embed_lf = config.embed_local_fonts;
-            let subset_f = subset_fonts.unwrap_or(config.subset_fonts);
             converter
                 .vega_fonts(
                     vg_spec,
                     vg_opts,
-                    auto_gf,
-                    embed_lf,
-                    include_font_face,
-                    subset_f,
+                    FontOpts {
+                        auto_google_fonts: auto_google_fonts.unwrap_or(config.auto_google_fonts),
+                        embed_local_fonts: config.embed_local_fonts,
+                        include_font_face,
+                        subset_fonts: subset_fonts.unwrap_or(config.subset_fonts),
+                    },
                 )
                 .await
         },

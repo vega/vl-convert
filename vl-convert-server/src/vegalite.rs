@@ -5,8 +5,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use vl_convert_rs::converter::{
-    vegalite_to_url as converter_vegalite_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer,
-    SvgOpts, UrlOpts, VlOpts, VlcConfig,
+    vegalite_to_url as converter_vegalite_to_url, FontOpts, HtmlOpts, JpegOpts, PdfOpts, PngOpts,
+    Renderer, SvgOpts, UrlOpts, VlOpts, VlcConfig,
 };
 use vl_convert_rs::module_loader::import_map::VlVersion;
 
@@ -506,10 +506,12 @@ pub async fn vegalite_fonts(
         .vegalite_fonts_with_google_font_usage(
             spec,
             vl_opts,
-            snap.config.auto_google_fonts,
-            snap.config.embed_local_fonts,
-            req.include_font_face,
-            snap.config.subset_fonts,
+            FontOpts {
+                auto_google_fonts: snap.config.auto_google_fonts,
+                embed_local_fonts: snap.config.embed_local_fonts,
+                include_font_face: req.include_font_face,
+                subset_fonts: snap.config.subset_fonts,
+            },
         )
         .await
     {

@@ -1,8 +1,8 @@
 use crate::converter::{
     apply_spec_overrides, classify_and_request_fonts, classify_scenegraph_fonts,
-    error_with_google_font_usage, FontAnalysis, GoogleFontRequest, GoogleFontUsage, HtmlOpts,
-    HtmlOutput, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin, ValueOrString, VgOpts,
-    VlConverter, VlOpts,
+    error_with_google_font_usage, FontAnalysis, FontOpts, GoogleFontRequest, GoogleFontUsage,
+    HtmlOpts, HtmlOutput, InnerVlConverter, MissingFontsPolicy, ResolvedPlugin, ValueOrString,
+    VgOpts, VlConverter, VlOpts,
 };
 use crate::deno_emit::{bundle, BundleOptions, BundleType, EmitOptions, SourceMapOption};
 use crate::extract::{
@@ -470,41 +470,29 @@ impl VlConverter {
         })
     }
 
-    /// Return font information for a Vega spec in the requested format.
+    /// Return font information for a Vega spec.
     ///
     /// Renders the scenegraph once to discover the exact fonts, weights, and
-    /// characters used. The `auto_google_fonts` and `embed_local_fonts`
-    /// parameters control which fonts are included.
+    /// characters used. [`FontOpts`] controls font sources, embedded CSS, and subsetting.
     pub async fn vega_fonts(
         &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
-        auto_google_fonts: bool,
-        embed_local_fonts: bool,
-        include_font_face: bool,
-        subset_fonts: bool,
+        font_opts: FontOpts,
     ) -> Result<Vec<FontInfo>, AnyError> {
         Ok(self
-            .vega_fonts_with_google_font_usage(
-                vg_spec,
-                vg_opts,
-                auto_google_fonts,
-                embed_local_fonts,
-                include_font_face,
-                subset_fonts,
-            )
+            .vega_fonts_with_google_font_usage(vg_spec, vg_opts, font_opts)
             .await?
             .0)
     }
 
+    /// Return font information and Google Fonts usage for a Vega spec.
+    /// See [`Self::vega_fonts`] for inspection behavior.
     pub async fn vega_fonts_with_google_font_usage(
         &self,
         vg_spec: impl Into<ValueOrString>,
         vg_opts: VgOpts,
-        auto_google_fonts: bool,
-        embed_local_fonts: bool,
-        include_font_face: bool,
-        subset_fonts: bool,
+        font_opts: FontOpts,
     ) -> Result<(Vec<FontInfo>, GoogleFontUsage), AnyError> {
         let vg_spec = vg_spec.into();
         let spec_value: serde_json::Value = match &vg_spec {
@@ -513,11 +501,20 @@ impl VlConverter {
         };
 
         let analysis = self
-            .analyze_classified_fonts(spec_value, vg_opts, auto_google_fonts, embed_local_fonts)
+            .analyze_classified_fonts(
+                spec_value,
+                vg_opts,
+                font_opts.auto_google_fonts,
+                font_opts.embed_local_fonts,
+            )
             .await?;
 
-        self.build_font_info(analysis, include_font_face, subset_fonts)
-            .await
+        self.build_font_info(
+            analysis,
+            font_opts.include_font_face,
+            font_opts.subset_fonts,
+        )
+        .await
     }
 
     /// Build structured `FontInfo` from a completed font analysis.
@@ -678,32 +675,21 @@ impl VlConverter {
         &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
-        auto_google_fonts: bool,
-        embed_local_fonts: bool,
-        include_font_face: bool,
-        subset_fonts: bool,
+        font_opts: FontOpts,
     ) -> Result<Vec<FontInfo>, AnyError> {
         Ok(self
-            .vegalite_fonts_with_google_font_usage(
-                vl_spec,
-                vl_opts,
-                auto_google_fonts,
-                embed_local_fonts,
-                include_font_face,
-                subset_fonts,
-            )
+            .vegalite_fonts_with_google_font_usage(vl_spec, vl_opts, font_opts)
             .await?
             .0)
     }
 
+    /// Return font information and Google Fonts usage for a Vega-Lite spec.
+    /// See [`Self::vegalite_fonts`] for inspection behavior.
     pub async fn vegalite_fonts_with_google_font_usage(
         &self,
         vl_spec: impl Into<ValueOrString>,
         vl_opts: VlOpts,
-        auto_google_fonts: bool,
-        embed_local_fonts: bool,
-        include_font_face: bool,
-        subset_fonts: bool,
+        font_opts: FontOpts,
     ) -> Result<(Vec<FontInfo>, GoogleFontUsage), AnyError> {
         let vega_spec = self.vegalite_to_vega(vl_spec, vl_opts.clone()).await?.spec;
         let vg_opts = VgOpts {
@@ -712,15 +698,8 @@ impl VlConverter {
             google_fonts: vl_opts.google_fonts,
             ..Default::default()
         };
-        self.vega_fonts_with_google_font_usage(
-            vega_spec,
-            vg_opts,
-            auto_google_fonts,
-            embed_local_fonts,
-            include_font_face,
-            subset_fonts,
-        )
-        .await
+        self.vega_fonts_with_google_font_usage(vega_spec, vg_opts, font_opts)
+            .await
     }
 
     /// Build font `<link>` and/or `<style>` tags for HTML `<head>` injection.
