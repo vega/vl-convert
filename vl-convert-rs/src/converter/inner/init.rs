@@ -106,8 +106,28 @@ function buildLoader(errors) {
     const loader = vega.loader({ baseURL });
     const originalSanitize = loader.sanitize.bind(loader);
 
-    loader.load = async (uri, options) => {
+    loader.sanitize = async (uri, options) => {
+        let fileUrl;
+        if (typeof uri === 'string' && options?.context !== 'href') {
+            const windowsPath = globalThis.Deno?.build?.os === 'windows'
+                && /^[A-Za-z]:[\\/]/.test(uri);
+            if (windowsPath || (uri.startsWith('/') && !uri.startsWith('//'))) {
+                const path = windowsPath ? uri.slice(2).replaceAll('\\', '/') : uri;
+                const prefix = windowsPath ? `file:///${uri.slice(0, 2)}` : 'file://';
+                fileUrl = prefix + path.split('/').map(encodeURIComponent).join('/');
+                uri = fileUrl;
+            }
+        }
         const sanitized = await originalSanitize(uri, options);
+        // Image readers need the file scheme to decode escaped path characters.
+        if (fileUrl && options?.context === 'image') {
+            sanitized.href = fileUrl;
+        }
+        return sanitized;
+    };
+
+    loader.load = async (uri, options) => {
+        const sanitized = await loader.sanitize(uri, options);
         const href = sanitized.href;
         const responseType = options?.http?.response;
         const wantBinary = responseType === 'arraybuffer';
@@ -517,5 +537,62 @@ function vegaLiteToCanvas_{ver_name}(vlSpec, config, theme, formatLocale, timeFo
             self.initialized_vl_versions.insert(*vl_version);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::converter::{ConverterContext, VlcConfig};
+    use crate::text::get_font_baseline_snapshot;
+    use serde_json::json;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_absolute_path_sanitization() {
+        let mut converter = InnerVlConverter::try_new(
+            Arc::new(ConverterContext {
+                config: VlcConfig::default(),
+                parsed_allowed_base_urls: Vec::new(),
+                resolved_plugins: Vec::new(),
+            }),
+            get_font_baseline_snapshot().unwrap(),
+        )
+        .await
+        .unwrap();
+        converter.init_vega().await.unwrap();
+        converter.execute_script_to_json(r#"
+            var pathChecks;
+            (async () => {
+                const loader = buildLoader([]);
+                const cases = [
+                    ['/data/a #%.csv', 'data', '/data/a%20%23%25.csv', true],
+                    ['/data/a #%.png', 'image', 'file:///data/a%20%23%25.png', true],
+                    ['//example.com/a.csv', 'data', 'http://example.com/a.csv', false],
+                    ['a.csv', 'data', 'https://example.com/a.csv', false],
+                    ['/chart', 'href', 'https://example.com/chart', false],
+                    ['file:///data/a.csv', 'data', '/data/a.csv', true],
+                ];
+                if (Deno.build.os === 'windows') {
+                    cases.push(
+                        ['C:\\data\\a #%.csv', 'data', '/C:/data/a%20%23%25.csv', true],
+                        ['C:/data/a.png', 'image', 'file:///C:/data/a.png', true],
+                    );
+                }
+                pathChecks = await Promise.all(cases.map(async ([uri, context, href, localFile]) => {
+                    const result = await loader.sanitize(uri, {context, baseURL: 'https://example.com'});
+                    return result.href === href && result.localFile === localFile;
+                }));
+            })();
+            null;
+        "#).await.unwrap();
+        let checks = converter
+            .execute_script_to_json("pathChecks")
+            .await
+            .unwrap();
+        assert!(
+            checks.as_array().unwrap().iter().all(|v| *v == json!(true)),
+            "{checks}"
+        );
     }
 }

@@ -1,6 +1,6 @@
 use serde_json::json;
 use std::collections::HashMap;
-use vl_convert_rs::converter::{SvgOpts, VlOpts, VlcConfig};
+use vl_convert_rs::converter::{BaseUrlSetting, PngOpts, SvgOpts, VlOpts, VlcConfig};
 use vl_convert_rs::VlConverter;
 
 fn simple_vl_bar_spec() -> serde_json::Value {
@@ -200,4 +200,73 @@ async fn test_per_request_locale_overrides_default() {
         "Per-request en-US locale should produce English formatting. Got: {}",
         &output.svg[..output.svg.len().min(500)]
     );
+}
+
+#[tokio::test]
+async fn test_absolute_data_path_uses_allowlist_without_base_url() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("data #100%.csv");
+    std::fs::write(&path, "label\nloaded\n").unwrap();
+    let spec = json!({
+        "data": {"url": path},
+        "mark": "text",
+        "encoding": {"text": {"field": "label"}}
+    });
+    for base_url in [BaseUrlSetting::Default, BaseUrlSetting::Disabled] {
+        for allowed in [false, true] {
+            let converter = VlConverter::with_config(VlcConfig {
+                base_url: base_url.clone(),
+                allowed_base_urls: if allowed {
+                    vec![directory.path().to_string_lossy().into_owned()]
+                } else {
+                    vec![]
+                },
+                ..Default::default()
+            })
+            .unwrap();
+            let result = converter
+                .vegalite_to_svg(spec.clone(), VlOpts::default(), SvgOpts::default())
+                .await;
+            if allowed {
+                assert!(result.unwrap().svg.contains(">loaded</text>"));
+            } else {
+                assert!(result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("Filesystem access denied"));
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_absolute_image_path_preserves_escaped_characters() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("image #100%.png");
+    let mut image = tiny_skia::Pixmap::new(2, 2).unwrap();
+    image.fill(tiny_skia::Color::from_rgba8(255, 0, 0, 255));
+    image.save_png(&path).unwrap();
+    let converter = VlConverter::with_config(VlcConfig {
+        allowed_base_urls: vec![directory.path().to_string_lossy().into_owned()],
+        ..Default::default()
+    })
+    .unwrap();
+    let spec = json!({
+        "data": {"values": [{}]},
+        "mark": {"type": "image", "width": 20, "height": 20},
+        "encoding": {"url": {"value": path}}
+    });
+    let png = converter
+        .vegalite_to_png(spec.clone(), VlOpts::default(), PngOpts::default())
+        .await
+        .unwrap();
+    let pixels = image::load_from_memory(&png.data).unwrap().to_rgba8();
+    assert!(pixels.pixels().any(|p| p.0 == [255, 0, 0, 255]));
+
+    let svg = converter
+        .vegalite_to_svg(spec, VlOpts::default(), SvgOpts::default())
+        .await
+        .unwrap();
+    let file_url = deno_core::url::Url::from_file_path(path).unwrap();
+    assert!(svg.svg.contains(file_url.as_str()));
 }
