@@ -994,6 +994,8 @@ def vegalite_fonts(
     google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    *,
+    subset_fonts: bool | None = None,
 ) -> list[FontInfo]:
     """
     Return structured font metadata for a rendered Vega-Lite spec.
@@ -1013,8 +1015,8 @@ def vegalite_fonts(
         Override auto-download from Google Fonts
         (default: use converter config)
     include_font_face
-        Whether to run the font subsetting pipeline and populate
-        the ``font_face`` field on each variant (default False)
+        Whether to populate each variant's ``font_face`` field with CSS
+        that embeds the font (default False)
     google_fonts
         Google Fonts to use for this conversion. Each entry is a family name
         string or a dict with ``"family"`` and optional ``"variants"``.
@@ -1022,6 +1024,9 @@ def vegalite_fonts(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
+    subset_fonts
+        Override font subsetting for this call. None uses the converter
+        configuration. Applies to Google Fonts URLs and embedded font CSS.
 
     Returns
     -------
@@ -1036,6 +1041,8 @@ def vega_fonts(
     google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
+    *,
+    subset_fonts: bool | None = None,
 ) -> list[FontInfo]:
     """
     Return structured font metadata for a rendered Vega spec.
@@ -1048,8 +1055,8 @@ def vega_fonts(
         Override auto-download from Google Fonts
         (default: use converter config)
     include_font_face
-        Whether to run the font subsetting pipeline and populate
-        the ``font_face`` field on each variant (default False)
+        Whether to populate each variant's ``font_face`` field with CSS
+        that embeds the font (default False)
     google_fonts
         Google Fonts to use for this conversion. Each entry is a family name
         string or a dict with ``"family"`` and optional ``"variants"``.
@@ -1057,6 +1064,9 @@ def vega_fonts(
         d3-format locale name or dictionary
     time_format_locale
         d3-time-format locale name or dictionary
+    subset_fonts
+        Override font subsetting for this call. None uses the converter
+        configuration. Applies to Google Fonts URLs and embedded font CSS.
 
     Returns
     -------
@@ -1698,6 +1708,8 @@ if TYPE_CHECKING:
             google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            *,
+            subset_fonts: bool | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vegalite_fonts``. See sync function for full documentation."""
             ...
@@ -1709,6 +1721,8 @@ if TYPE_CHECKING:
             google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
+            *,
+            subset_fonts: bool | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vega_fonts``. See sync function for full documentation."""
             ...
