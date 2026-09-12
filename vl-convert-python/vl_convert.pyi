@@ -986,6 +986,7 @@ def vega_to_url(vg_spec: VlSpec, *, fullscreen: bool | None = None) -> str:
 
 def vegalite_fonts(
     vl_spec: VlSpec,
+    *,
     vl_version: str | None = None,
     config: dict[str, Any] | None = None,
     theme: VegaThemes | None = None,
@@ -994,7 +995,6 @@ def vegalite_fonts(
     google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
-    *,
     subset_fonts: bool | None = None,
 ) -> list[FontInfo]:
     """
@@ -1036,12 +1036,12 @@ def vegalite_fonts(
 
 def vega_fonts(
     vg_spec: VlSpec,
+    *,
     auto_google_fonts: bool | None = None,
     include_font_face: bool = False,
     google_fonts: list[str | GoogleFontSpec] | None = None,
     format_locale: FormatLocale | None = None,
     time_format_locale: TimeFormatLocale | None = None,
-    *,
     subset_fonts: bool | None = None,
 ) -> list[FontInfo]:
     """
@@ -1700,6 +1700,7 @@ if TYPE_CHECKING:
         async def vegalite_fonts(
             self,
             vl_spec: VlSpec,
+            *,
             vl_version: str | None = None,
             config: dict[str, Any] | None = None,
             theme: VegaThemes | None = None,
@@ -1708,7 +1709,6 @@ if TYPE_CHECKING:
             google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
-            *,
             subset_fonts: bool | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vegalite_fonts``. See sync function for full documentation."""
@@ -1716,12 +1716,12 @@ if TYPE_CHECKING:
         async def vega_fonts(
             self,
             vg_spec: VlSpec,
+            *,
             auto_google_fonts: bool | None = None,
             include_font_face: bool = False,
             google_fonts: list[str | GoogleFontSpec] | None = None,
             format_locale: FormatLocale | None = None,
             time_format_locale: TimeFormatLocale | None = None,
-            *,
             subset_fonts: bool | None = None,
         ) -> list[FontInfo]:
             """Async version of ``vega_fonts``. See sync function for full documentation."""

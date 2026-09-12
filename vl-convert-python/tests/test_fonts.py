@@ -18,9 +18,14 @@ def test_font_subsetting_override(spec_kind, use_async):
     if spec_kind == "vega":
         spec = vlc.vegalite_to_vega(spec)
     get_fonts = getattr(vlca if use_async else vlc, f"{spec_kind}_fonts")
-    parameter = inspect.signature(get_fonts).parameters["subset_fonts"]
-    assert parameter.kind == inspect.Parameter.KEYWORD_ONLY
-    assert parameter.default is None
+    parameters = inspect.signature(get_fonts).parameters
+    assert all(
+        parameter.kind == inspect.Parameter.KEYWORD_ONLY
+        for parameter in list(parameters.values())[1:]
+    )
+    assert parameters["subset_fonts"].default is None
+    with pytest.raises(TypeError):
+        get_fonts(spec, None)
 
     async def font_face_css(**kwargs):
         result = get_fonts(spec, include_font_face=True, **kwargs)
