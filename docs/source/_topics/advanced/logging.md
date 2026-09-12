@@ -12,7 +12,7 @@ interfaces: [python, cli, rust, server]
 
 Vega and Vega-Lite report warnings while compiling or evaluating a chart. A conversion can succeed even though Vega dropped an invalid property or recovered from a data problem, so check these messages when a chart does not look as expected.
 
-The examples use a logarithmic scale whose inferred domain includes zero. Save this Vega-Lite specification:
+This examples use a logarithmic scale whose inferred domain includes zero. Save this Vega-Lite specification:
 
 :::{dropdown} chart.vl.json
 :open:
@@ -97,7 +97,7 @@ This prints:
 WARN: Log scale domain includes zero: [0,200]
 ```
 
-The crate also emits these messages, plus its own operational messages, through the `log` crate under the `vl_convert` target. If no logger is installed when the first converter is created, the crate installs `env_logger`, so setting `RUST_LOG=vl_convert=info` works without any code. To use a different logger, initialize it before creating a converter.
+The crate also emits these messages, plus its own operational messages, through the `log` crate under the `vl_convert` target. If no logger is installed when the first converter is created, the crate installs `env_logger`, so setting `RUST_LOG=vl_convert=info` works without any additional configuration. To use a different logger, initialize it before creating a converter.
 ::::
 
 ::::{interface} server
@@ -137,5 +137,3 @@ $ curl http://127.0.0.1:3000/vegalite/svg \
 WARN: Log scale domain includes zero: [0,200]
 ```
 ::::
-
-See {doc}`../advanced/troubleshooting` for how to use these messages when a conversion fails or renders incorrectly.

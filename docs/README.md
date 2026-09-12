@@ -8,6 +8,14 @@ Topic directories follow the sidebar sections. Each topic's `path` field sets
 its generated page URL independently of its source location. Relative
 documentation links resolve from that generated path.
 
+An `external_url` replaces the topic's navigation link and leaves its local
+page unlisted.
+
+Both Python API reference pages use `vl-convert-python/vl_convert.pyi`. At build
+time, `_ext/python_api.py` exposes its async signatures with the sync functions'
+full docstrings in a generated stub package under `docs/build/python-api/`.
+Both pages then use the same autodoc2 renderer.
+
 ## Example contract
 
 Keep end-user example inputs in `docs/source/_examples/`. A guide that explains
@@ -37,6 +45,10 @@ present an undefined name or file as a runnable example.
 
 Keep deterministic examples offline. Use network access only in a guide that
 explicitly teaches remote data, Google Fonts, or remote plugins.
+
+Show the printed output below every Python example that calls `print()`.
+Use `literalinclude` and `program-output` to display and run the same example
+file. Label output that depends on the environment or varies between runs.
 
 In Sphinx source, use `console` blocks for terminal commands. Prefix each
 command with `$ ` and each continuation line with `> `. The copy button removes

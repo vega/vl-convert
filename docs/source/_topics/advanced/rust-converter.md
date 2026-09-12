@@ -28,11 +28,12 @@ converter.warm_up()?;
 
 ## Share the Converter
 
-`VlConverter` is cheap to clone, and clones share the same worker pool. Store a clone in application state or hand clones to tasks. Each worker handles one conversion at a time, and additional conversions wait for a free worker. This example uses `spec` from {doc}`../getting-started/quick-start`:
+`VlConverter` is cheap to clone, and clones share the same worker pool. Store a clone in application state or hand clones to tasks. Each worker handles one conversion at a time, and additional conversions wait for a free worker. This example reads the `chart.vl.json` file from {doc}`../getting-started/quick-start`:
 
 ```rust
 use vl_convert_rs::{PngOpts, VlOpts};
 
+let spec = std::fs::read_to_string("chart.vl.json")?;
 let task_converter = converter.clone();
 let output = task_converter
     .vegalite_to_png(spec, VlOpts::default(), PngOpts::default())
@@ -49,7 +50,7 @@ Conversion methods are `async` and require a Tokio runtime for full functionalit
 
 ## Configuration and Errors
 
-`VlcConfig` controls worker count, data access, fonts, themes, plugins, and JavaScript resource limits. Build it before sharing the converter. See {doc}`configuration` and {doc}`memory-management`.
+Use `VlcConfig` to set options when creating the converter with `VlConverter::with_config()`. See {doc}`configuration` for available settings and {doc}`memory-management` for resource controls.
 
 Methods return `Result` and keep the error context from compilation, data loading, fonts, plugins, and rendering. Successful outputs carry Vega's recoverable diagnostics in `logs`. See {doc}`../guides/logging`.
 

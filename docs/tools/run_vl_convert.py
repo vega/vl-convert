@@ -18,12 +18,12 @@ def binary_name() -> str:
 
 
 def find_binary() -> Path:
-    env_bin = os.environ.get("VL_CONVERT_BIN")
+    env_bin = os.environ.get("VLC_DOCS_BIN")
     if env_bin:
         path = Path(env_bin).expanduser()
         if path.exists():
             return path
-        raise SystemExit(f"VL_CONVERT_BIN does not exist: {path}")
+        raise SystemExit(f"VLC_DOCS_BIN does not exist: {path}")
 
     root = repo_root()
     for profile in ("debug", "release"):
@@ -33,7 +33,7 @@ def find_binary() -> Path:
 
     raise SystemExit(
         "Could not find vl-convert. Run `cargo build -p vl-convert` or set "
-        "VL_CONVERT_BIN."
+        "VLC_DOCS_BIN."
     )
 
 

@@ -1,5 +1,5 @@
 ---
-title: Python API Reference
+title: Python Sync API Reference
 path: api-reference
 section: API Reference
 order: 900
@@ -8,7 +8,9 @@ interfaces: [python]
 
 <!-- topic-body -->
 
-# Python API Reference
+# Python Sync API Reference
+
+This page documents the synchronous `vl_convert` module. For `vl_convert.asyncio`, see {doc}`async-api-reference`.
 
 These entries are generated from the version 2 type stubs. Vega and Vega-Lite specifications may be passed as JSON strings or dictionaries. PNG, JPEG, and PDF functions return `bytes`. SVG, HTML, and URL functions return `str`. Scenegraph functions return a `dict` by default, or MessagePack `bytes` with `format="msgpack"`.
 
@@ -154,10 +156,6 @@ Start with {doc}`getting-started/quick-start` if you are choosing a conversion f
 
 ```{autodoc2-object} vl_convert.get_vegalite_versions
 ```
-
-## Async API
-
-`vl_convert.asyncio` provides awaitable versions of the conversion, configuration, font inspection, and worker functions above, with the same parameters and return types. These functions stay synchronous in that namespace: the version getters, `get_config_path()`, `get_format_locale()`, `get_time_format_locale()`, `current_font_directories()`, `google_fonts_cache_dir()`, `google_fonts_cache_size_mb()`, and `set_google_fonts_cache_size_mb()`. See {doc}`advanced/python-async`.
 
 ## Types
 

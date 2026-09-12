@@ -10,7 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Themes
 
-A theme is a named Vega configuration object that Vega-Lite applies while compiling a specification. Themes set defaults for colors, marks, axes, legends, fonts, and other visual properties. They apply to Vega-Lite input only because Vega input skips Vega-Lite compilation. For Vega input, pass a configuration object directly with `config` or `--config`.
+A theme is a named configuration object that Vega-Lite applies while compiling a specification. Themes set defaults for colors, marks, axes, legends, fonts, and other visual properties. They apply to Vega-Lite input only because Vega input skips Vega-Lite compilation. For Vega input, pass a configuration object directly with `config` or `--config`.
 
 VlConvert bundles the themes from the `vega-themes` package. Select a theme per conversion, or set `default_theme` in the converter configuration.
 
@@ -25,6 +25,8 @@ Every conversion example and image on this page uses this Vega-Lite specificatio
 :::
 
 ## Use a Built-In Theme
+
+Themes included in `vega-themes` can be referenced by name. Visit the [theme explorer](https://vega.github.io/vega-themes/) to preview available themes.
 
 ::::{interface} python
 ```python
@@ -111,10 +113,13 @@ The same chart with the default configuration and with the `dark` theme:
 ::::{interface} python
 `get_themes()` maps each theme name to the Vega configuration it applies:
 
-```python
-themes = vlc.get_themes()
-print(sorted(themes))
-print(themes["dark"])
+```{literalinclude} /_examples/list-themes.py
+:language: python
+```
+
+Output:
+
+```{program-output} python _examples/list-themes.py
 ```
 ::::
 

@@ -17,7 +17,7 @@ Read {doc}`../guides/plugins` first for the plugin contract and a complete start
 Startup plugins are part of the converter configuration. VlConvert loads them in order when a worker starts and makes them available to every conversion that converter performs. Use startup plugins for stable extensions maintained with the application.
 
 ::::{interface} python rust server
-Per-request plugins let a caller supply one plugin for one conversion. They are disabled by default and run in a separate temporary JavaScript runtime, which adds startup overhead and executes code chosen by the caller. Use them only when a trusted caller must choose plugin code dynamically.
+Per-request plugins let a caller supply a plugin for one conversion. They are disabled by default and run in a separate temporary JavaScript runtime, which adds startup overhead and executes code chosen by the caller. Use them only when a trusted caller must choose plugin code dynamically.
 ::::
 
 ## Supported Plugin Sources
@@ -194,8 +194,9 @@ The domain of a URL plugin entry is added to the allowlist automatically, so the
 
 Bundle TypeScript and multi-file JavaScript before passing it to VlConvert. Prebundling keeps startup independent of package registries and produces one artifact that can be reviewed and deployed with the application.
 
+After [installing esbuild with npm](https://esbuild.github.io/getting-started/#install-esbuild), bundle the plugin:
+
 ```console
-$ npm install --save-dev esbuild
 $ npx esbuild src/acme-plugin.ts \
 >   --bundle \
 >   --format=esm \

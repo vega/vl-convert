@@ -13,7 +13,7 @@ interfaces: [python, cli, rust, server]
 Plugins extend Vega with custom functions, transforms, and other chart features. Use one when your specification needs an extension that Vega does not include. The [Vega extensibility API](https://vega.github.io/vega/docs/api/extensibility/) lists the registration functions a plugin can call.
 
 :::{warning}
-A plugin is executable JavaScript. Load plugin files and URLs only from sources you trust. Do not accept caller-supplied plugins on a public service unless you have decided to accept that risk and enforce strict resource limits.
+A plugin is executable JavaScript. Load plugin files and URLs only from sources you trust. Do not accept caller-supplied plugins on a public service unless you have decided to accept that risk
 :::
 
 ## Create a Plugin

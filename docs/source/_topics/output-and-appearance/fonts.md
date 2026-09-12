@@ -10,13 +10,9 @@ interfaces: [python, cli, rust, server]
 
 # Fonts and Google Fonts
 
-Fonts change both the look and the layout of a chart. Vega measures labels, titles, and legends before positioning chart elements, so a substituted font can shift wrapping and alignment compared with a browser preview.
+Vega displays text in charts using fonts. VlConvert loads fonts installed on the host, and to ensure that a suitable fallback font is always available, it bundles [Liberation Sans](https://en.wikipedia.org/wiki/Liberation_fonts). Additionally, you can register fonts located in specific directories, or request fonts from [Google Fonts](https://fonts.google.com/).
 
-VlConvert bundles Liberation Sans and loads the fonts installed on the host. You can also register font directories or request families from Google Fonts. Pick the approach that matches your deployment:
-
-- Install or register the fonts when you control the rendering host.
-- Request specific Google Font families when the host may not have them.
-- Enable automatic Google Fonts only for trusted specifications on hosts that may use the network.
+## Missing font handling
 
 `missing_fonts` decides what happens when a specification's first-choice font is unavailable. `fallback` substitutes silently and is the default, `warn` records a warning, and `error` fails the conversion.
 
@@ -37,6 +33,11 @@ vlc.configure(
 )
 ```
 
+For a font with weight 400 and normal style, set `variants` to:
+
+- In Python's `configure()`: `[(400, "normal")]`
+- In a JSONC file: `[{"weight": 400, "style": "normal"}]`
+
 Set `auto_google_fonts=True` to download a missing first-choice font automatically. Individual Vega and Vega-Lite conversions also accept a `google_fonts` argument.
 ::::
 
@@ -51,7 +52,7 @@ $ vl-convert \
 >   vl2png --input chart.vl.json --output chart.png
 ```
 
-`--auto-google-fonts` downloads missing first-choice fonts automatically. Each command creates its own converter, so these options apply to one invocation unless they also appear in a config file or environment variable.
+`--auto-google-fonts` downloads missing first-choice fonts automatically.
 ::::
 
 ::::{interface} rust
@@ -213,7 +214,7 @@ $ vl-convert serve \
 
 ## Google Fonts Cache
 
-Downloaded Google Fonts are cached on disk and reused across conversions and process restarts. The cache holds both the Google Fonts CSS responses and the font files. Its directory is the platform cache directory plus `vl-convert/google-fonts`, such as `~/.cache/vl-convert/google-fonts` on Linux or `~/Library/Caches/vl-convert/google-fonts` on macOS. Set the `VL_CONVERT_FONT_CACHE_DIR` environment variable to move it, or set it to `none` to disable caching and download fonts on every conversion. Set the variable before starting VlConvert.
+Downloaded Google Fonts are cached on disk and reused across conversions and process restarts. The cache holds both the Google Fonts CSS responses and the font files. Its directory is the platform cache directory plus `vl-convert/google-fonts`, such as `~/.cache/vl-convert/google-fonts` on Linux or `~/Library/Caches/vl-convert/google-fonts` on macOS. Set the `VLC_GOOGLE_FONTS_CACHE_DIR` environment variable to move it, or set it to `none` to disable caching and download fonts on every conversion. Set the variable before starting VlConvert.
 
 Cached font files are evicted least-recently-used once they exceed a 512 MB cap. The cap applies to the whole process and can be changed at runtime.
 
@@ -222,6 +223,11 @@ Cached font files are evicted least-recently-used once they exceed a 512 MB cap.
 print(vlc.google_fonts_cache_dir())
 print(vlc.google_fonts_cache_size_mb())
 vlc.set_google_fonts_cache_size_mb(128)
+```
+
+Example output (the directory depends on your platform and environment):
+
+```{program-output} python -c "import vl_convert as vlc; print(vlc.google_fonts_cache_dir()); print(vlc.google_fonts_cache_size_mb())"
 ```
 
 `set_google_fonts_cache_size_mb(None)` restores the default. Fonts over the new cap are evicted immediately.
@@ -263,10 +269,10 @@ $ curl -X PUT http://127.0.0.1:3001/admin/config/fonts/cache_size \
 
 ## Embed Fonts in SVG and HTML
 
-Set `embed_local_fonts` to include the fonts a chart uses as base64 `@font-face` rules in SVG and HTML output. VlConvert subsets embedded fonts by default so the output contains only the glyphs the chart uses. Set `subset_fonts` to `false` only when the text may change later. Passing `bundle` to an SVG conversion also embeds its fonts and images so the file is self-contained.
+Set `embed_local_fonts` to include the fonts a chart uses as base64 `@font-face` rules in SVG and HTML output. VlConvert subsets embedded fonts by default so the output contains only the glyphs the chart uses on first render. Set `subset_fonts` to `false` when the text may change later. Passing `bundle` to an SVG conversion also embeds its fonts and images so the file is self-contained.
 
-PNG and JPEG contain rendered pixels, and PDF output embeds the fonts it needs, so consumers of those formats do not need the font files.
+PNG and JPEG contain rendered pixels, and PDF output always embeds the fonts it needs, so consumers of those formats do not need the font files.
 
 Embedding increases output size and redistributes the font file, so confirm that the font license permits it.
 
-See {doc}`../advanced/font-introspection` to list the fonts VlConvert resolves for a chart, and {doc}`../advanced/troubleshooting` when text renders in the wrong font.
+See {doc}`../advanced/font-introspection` to list the fonts VlConvert resolves for a chart.

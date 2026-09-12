@@ -44,6 +44,6 @@ async def main():
 asyncio.run(main())
 ```
 
-A pool runs as many conversions at once as it has workers, and extra calls wait for a free worker. Choose `num_workers` from measured concurrency and memory needs rather than from the number of tasks you submit. See {doc}`memory-management`.
+A pool runs as many conversions at once as it has workers, and extra calls wait for a free worker. See {doc}`memory-management`.
 
-Not everything in `vl_convert.asyncio` is awaitable. The version getters, `get_config_path()`, locale lookups, `current_font_directories()`, and Google Fonts cache helpers are synchronous re-exports. This includes `set_google_fonts_cache_size_mb()`. In contrast, `register_font_directory()` and `set_font_directories()` must be awaited. See the {doc}`../api-reference` for the full list of synchronous functions.
+See the {doc}`../async-api-reference` for which `vl_convert.asyncio` functions are awaitable and which are synchronous.

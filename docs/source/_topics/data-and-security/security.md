@@ -10,7 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Security and Network Access
 
-A Vega or Vega-Lite specification can refer to remote data, local files, images, fonts, and plugin code. Treat a specification from another user or system as active input: limit the resources it can reach and the work it can perform.
+A Vega or Vega-Lite specification can refer to remote data, local files, images, fonts, and plugin code. When processing specifications from other users or systems, limit the resources they can access and the work they can perform.
 
 VlConvert controls three resource types separately:
 
@@ -24,9 +24,9 @@ Allowing one type does not allow the others.
 
 ## Restrict Data and Images
 
-By default, `allowed_base_urls` permits any HTTP or HTTPS URL and no local files for both data and images, and `base_url` resolves relative data and image URLs against the Vega datasets CDN. Tighten both before processing untrusted input.
+By default, `allowed_base_urls` permits any HTTP or HTTPS URL and no local files for both data and images, and `base_url` resolves relative data and image URLs against the Vega datasets CDN. It's recommended to tighten both before processing untrusted input.
 
-An empty `allowed_base_urls` list blocks every HTTP or HTTPS URL and filesystem path. Inline `data:` URLs remain allowed. To permit one service, list its URL prefix. These settings apply to any conversion:
+An empty `allowed_base_urls` list blocks every HTTP or HTTPS URL and filesystem path. Inline `values` and `data:` URLs remain allowed. To permit one service, list its URL prefix. These settings apply to any conversion:
 
 ::::{interface} python
 ```python
@@ -98,4 +98,4 @@ Plugins run JavaScript and can import code from allowed domains. Prefer reviewed
 
 ## Limit Resource Use
 
-A specification can consume CPU time or JavaScript memory without loading any external resource. Set `max_v8_execution_time_secs` and `max_v8_heap_size_mb` for untrusted workloads. These limits cover only the JavaScript portion of a conversion, so add process-level memory and time limits as an outer boundary for a public service. See {doc}`../advanced/memory-management`.
+A specification can consume CPU time or JavaScript memory without loading any external resource. Set `max_v8_execution_time_secs` and `max_v8_heap_size_mb` for untrusted workloads. These limits cover only the JavaScript portion of a conversion, so adding process-level memory and time limits for a public service is also recommended. See {doc}`../advanced/memory-management`.

@@ -1,6 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
   "config": {"font": "Liberation Sans"},
+  "title": {"text": "Sales", "font": "Inter", "fontWeight": 600},
   "data": {
     "values": [
       {"category": "A", "value": 28},

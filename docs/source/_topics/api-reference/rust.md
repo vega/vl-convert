@@ -1,6 +1,7 @@
 ---
 title: Rust API Reference
 path: api-reference
+external_url: https://docs.rs/vl-convert-rs/2.0.0-rc6/vl_convert_rs/
 section: API Reference
 order: 900
 interfaces: [rust]
@@ -53,5 +54,7 @@ Output structs:
 - `ScenegraphOutput`: `scenegraph`, `logs`, `google_fonts`.
 - `ScenegraphMsgpackOutput`: `data`, `logs`, `google_fonts`.
 - `VegaOutput`: `spec`, `logs`.
+
+Font inspection uses `vegalite_fonts()` or `vega_fonts()` with chart options and a `FontOpts` struct, and returns `Vec<FontInfo>`. See {doc}`advanced/font-introspection`.
 
 {doc}`advanced/rust-converter` covers sharing the converter. Item-by-item documentation is on {rust-api}`docs.rs <index.html>`.

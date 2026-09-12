@@ -12,8 +12,6 @@ interfaces: [python, cli, rust, server]
 
 Most applications should use {doc}`../guides/html-output` to produce a complete interactive page. Use the bundling API when you are building your own web integration and need one JavaScript file containing compatible versions of Vega, Vega-Lite, and Vega Embed.
 
-The standard bundle exposes `vega`, `vegaLite`, and `vegaEmbed` on `window`, so existing browser code can use them without module imports. Select the same Vega-Lite version that the browser will render.
-
 ## Get the Standard Bundle
 
 ::::{interface} python
@@ -54,6 +52,8 @@ $ curl 'http://127.0.0.1:3000/bundling/bundle?vl_version=6.4' \
 
 The response carries a `Cache-Control` header that allows caching for one day.
 ::::
+
+The standard bundle exposes `vega`, `vegaLite`, and `vegaEmbed` on `window`, so browser code can use them without module imports. Select the same Vega-Lite version that the browser will render.
 
 ## Add an Application Snippet
 

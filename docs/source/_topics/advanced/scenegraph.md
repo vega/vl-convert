@@ -133,4 +133,4 @@ $ curl http://127.0.0.1:3000/vega/scenegraph \
 ```
 ::::
 
-The scenegraph follows Vega's internal representation and can change when Vega changes its layout or mark implementation. Keep the source specification as the durable artifact.
+The scenegraph follows Vega's internal representation and may change when Vega changes its layout or mark implementation.

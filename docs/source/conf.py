@@ -5,6 +5,7 @@ import tomllib
 from html import escape
 from pathlib import Path
 
+from docutils import nodes
 from sphinx.search import js_index
 
 project = "VlConvert"
@@ -22,6 +23,7 @@ extensions = [
     "sphinx_design",
     "sphinx_copybutton",
     "sphinx.ext.extlinks",
+    "_ext.python_api",
     "autodoc2",
     "sphinxcontrib.programoutput",
     "sphinxcontrib.openapi",
@@ -40,6 +42,7 @@ html_js_files = ["conversion-example.js", "terminal-prompts.js"]
 html_theme_options = {
     "github_url": "https://github.com/vega/vl-convert",
     "navbar_align": "left",
+    "header_links_before_dropdown": 4,
     "show_toc_level": 2,
     "logo": {
         "image_light": str(LOGO_DIR / "vl-convert-logo.svg"),
@@ -86,7 +89,7 @@ copybutton_prompt_is_regexp = True
 
 autodoc2_packages = [
     {
-        "path": "../../vl-convert-python/vl_convert.pyi",
+        "path": "../build/python-api/vl_convert",
         "module": "vl_convert",
         "auto_mode": False,
     }
@@ -130,5 +133,17 @@ def label_search_results(app, exception):
     path.write_text(js_index.dumps(index), encoding="utf-8")
 
 
+def link_url_outputs(app, doctree, docname):
+    """Turn generated URL output into a link with its full text visible."""
+    for block in doctree.findall(nodes.literal_block):
+        if "url-output" in block["classes"]:
+            url = block.astext().strip()
+            link = nodes.reference(
+                "", url, refuri=url, target="_blank", rel="noopener"
+            )
+            block.replace_self(nodes.paragraph("", "", link, classes=["url-output"]))
+
+
 def setup(app):
+    app.connect("doctree-resolved", link_url_outputs)
     app.connect("build-finished", label_search_results)

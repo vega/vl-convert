@@ -137,6 +137,11 @@ requests:
     options:
       bundle: true
       renderer: svg
+  editor-url:
+    inputs:
+      spec:
+        source: quick-start.vl.json
+        format: json
   font-introspection:
     inputs:
       spec:

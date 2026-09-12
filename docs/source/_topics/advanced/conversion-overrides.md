@@ -10,7 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Conversion Overrides
 
-An override changes one conversion without touching the converter configuration. Use {doc}`configuration` instead when the same value should apply to every conversion.
+An override changes one conversion without affecting the converter configuration. Use {doc}`configuration` instead when the same value should apply to every conversion.
 
 | Override | Applies to | Effect |
 | --- | --- | --- |
@@ -60,7 +60,9 @@ png = vlc.vegalite_to_png(
 Path("chart.png").write_bytes(png)
 ```
 
-A per-call `vega_plugin` also requires `allow_per_request_plugins=True` in `configure()`.
+A per-call `vega_plugin` also requires `allow_per_request_plugins=True` in `configure()`. See [Enable Per-Request Plugins](plugin-loading.md#enable-per-request-plugins).
+
+Font inspection also accepts per-call `auto_google_fonts` and `subset_fonts` overrides. See {doc}`font-introspection`.
 ::::
 
 ::::{interface} rust
@@ -89,7 +91,9 @@ let output = converter
 std::fs::write("chart.png", output.data)?;
 ```
 
-A per-call plugin also requires `allow_per_request_plugins: true` in `VlcConfig`.
+A per-call plugin also requires `allow_per_request_plugins: true` in `VlcConfig`. See [Enable Per-Request Plugins](plugin-loading.md#enable-per-request-plugins).
+
+Font inspection takes `FontOpts` as the third argument to `vegalite_fonts()` or `vega_fonts()`. These options apply to one call and do not inherit `VlcConfig`. See {doc}`font-introspection`.
 ::::
 
 ::::{interface} server
@@ -112,7 +116,7 @@ $ curl http://127.0.0.1:3000/vegalite/png \
 >   --output chart.png
 ```
 
-Per-request `google_fonts` requires `--allow-google-fonts`, and per-request `vega_plugin` requires `--allow-per-request-plugins`. The server rejects unknown fields, so a misspelled option returns an error instead of being ignored.
+Per-request `google_fonts` requires `--allow-google-fonts`, and per-request `vega_plugin` requires `--allow-per-request-plugins`. See [Enable Per-Request Plugins](plugin-loading.md#enable-per-request-plugins).
 ::::
 
 ::::{interface} cli

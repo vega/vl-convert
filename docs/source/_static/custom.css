@@ -168,7 +168,8 @@ html {
   overflow: auto;
 }
 
-.conversion-example-output-url {
+.conversion-example-output-url,
+.url-output {
   margin: 1rem 0;
   padding: 1rem;
   border: 1px solid var(--pst-color-border);
@@ -176,7 +177,8 @@ html {
   background: var(--pst-color-surface);
 }
 
-.conversion-example__url-link {
+.conversion-example__url-link,
+.url-output a {
   overflow-wrap: anywhere;
   font-family: var(--pst-font-family-monospace);
   font-size: 0.875rem;

@@ -28,6 +28,11 @@ The PyPI package is named `vl-convert-python`, and Python imports it as `vl_conv
 ```console
 $ uv run python -c "import vl_convert as vlc; print(vlc.__version__)"
 ```
+
+Example output (the installed version may differ):
+
+```{program-output} python -c "import vl_convert as vlc; print(vlc.__version__)"
+```
 ::::
 
 ::::{interface} server

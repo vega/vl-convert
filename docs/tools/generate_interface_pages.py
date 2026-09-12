@@ -51,6 +51,7 @@ class Topic:
     suffix: str
     body_marker: str
     body: str
+    external_url: str | None = None
 
 
 def repo_root() -> Path:
@@ -106,6 +107,7 @@ def parse_topic(path: Path) -> Topic:
         suffix=path.suffix,
         body_marker=body_marker,
         body=body,
+        external_url=meta.get("external_url"),
     )
 
 
@@ -203,14 +205,18 @@ def filtered_body(topic: Topic, interface: str) -> str:
 def wrapper_text(interface: str, topic: Topic, out_file: Path) -> str:
     body = filtered_body(topic, interface)
     if topic.suffix == ".rst":
+        orphan = ":orphan:\n\n" if topic.external_url else ""
         return (
+            f"{orphan}"
             f".. Generated from {topic.source.relative_to(source_root()).as_posix()}. "
             "Do not edit.\n\n"
             f"{body}"
         )
 
+    orphan = "orphan: true\n" if topic.external_url else ""
     return (
         "---\n"
+        f"{orphan}"
         f"current_interface: {interface}\n"
         f"generated_from: {topic.source.relative_to(source_root()).as_posix()}\n"
         "---\n\n"
@@ -257,6 +263,11 @@ def write_topic_wrappers(
 
 def write_index(interface: str, topics: list[Topic], expected: set[Path]) -> None:
     details = INTERFACES[interface]
+    api_url = next(
+        topic.external_url or topic.path
+        for topic in topics
+        if topic.path == "api-reference"
+    )
     grouped: dict[str, list[Topic]] = defaultdict(list)
     for topic in topics:
         grouped[topic.section].append(topic)
@@ -273,7 +284,7 @@ def write_index(interface: str, topics: list[Topic], expected: set[Path]) -> Non
         "",
         "Start with [Installation](getting-started/installation.md), "
         "follow the [Quick Start](getting-started/quick-start.md), "
-        "or consult the [API Reference](api-reference).",
+        f"or consult the [API Reference]({api_url}).",
         "",
     ]
 
@@ -291,7 +302,12 @@ def write_index(interface: str, topics: list[Topic], expected: set[Path]) -> Non
                 "",
             ]
         )
-        lines.extend(topic.path for topic in section_topics)
+        lines.extend(
+            f"{topic.title} <{topic.external_url}>"
+            if topic.external_url
+            else topic.path
+            for topic in section_topics
+        )
         lines.extend(["```", ""])
 
     write_if_changed(

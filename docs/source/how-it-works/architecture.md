@@ -2,7 +2,7 @@
 
 VlConvert runs the official Vega and Vega-Lite libraries in an embedded Deno runtime. Rust supplies data loading, fonts, and image output.
 
-The Python package, CLI, Rust crate, and HTTP server all drive this one converter. {doc}`rendering` describes what that means for users. This page describes how the pieces fit together.
+The Python package, CLI, Rust crate, and HTTP server all drive this one converter. This page describes how the pieces fit together.
 
 ## Runtime
 

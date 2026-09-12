@@ -55,7 +55,7 @@ chart.save("chart.pdf")
 
 VlConvert downloads the font on first use and caches it for later conversions. `missing_fonts="error"` fails the export if a first-choice font is unavailable, instead of substituting another font. The PNG contains rendered pixels, and the PDF embeds its fonts, so recipients do not need to install Roboto Slab.
 
-Configure VlConvert once before exporting. The settings apply to subsequent conversions throughout the Python process, including calls made by Altair. They are not stored in the chart specification. See {doc}`../advanced/python-configuration` for details.
+Configure VlConvert once before exporting. The settings apply to subsequent conversions throughout the Python process, including calls made by Altair. They are not stored in the chart specification. See {doc}`../advanced/configuration` for details.
 
 Altair forwards only selected options to VlConvert. Set `google_fonts` through `vlc.configure()`, not as an argument to `chart.save()`.
 

@@ -10,7 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Loading Data and Images
 
-A specification can carry its data inline or point at it with a URL. Inline data in `data.values` or `datasets` never touches the network or the disk. This page covers everything else: how VlConvert resolves a `data.url`, which URLs and files it may read, and how the same rules apply to images.
+A Vega or Vega-Lite specification can carry its data inline or point to it with a URL. Inline data in `data.values` or `datasets` never touches the network or the disk and is never restricted. This page covers other configurations: How VlConvert resolves a `data.url`, which URLs and files it may read, and how the same rules apply to images.
 
 Two converter settings control loading:
 
@@ -45,7 +45,7 @@ Each entry in `allowed_base_urls` is one of these patterns:
 | Directory | `/srv/data/` or `file:///srv/data/` | Files under that directory, after resolving symlinks and `..` |
 | Everything | `*` | Any URL or path, including the whole filesystem |
 
-Prefix entries cannot contain credentials, a query string, or a fragment. Directory entries must exist when the converter starts, and on Windows they can use drive letters such as `C:\data\`. An empty list blocks every HTTP or HTTPS URL and filesystem path. Inline `data:` URLs remain allowed.
+Prefix entries cannot contain credentials, a query string (?...),, or a fragment (#...). Directory entries must exist when the converter starts, and on Windows they can use drive letters such as `C:\data\`. An empty list blocks every HTTP or HTTPS URL and filesystem path. Inline `data:` URLs remain allowed.
 
 The `file:` pattern allows any local file the process can read, including absolute paths without a `file://` prefix. Use it only with trusted specifications. An allowlist containing only `file:` blocks HTTP and HTTPS access. Include `http:` and `https:` to allow those as well.
 
@@ -199,7 +199,9 @@ The default allows any HTTP or HTTPS host. For specifications you do not fully c
 
 ## Images
 
-Images follow the same rules as data. This covers Vega `image` marks, whose `url` can be a URL or a path, and `<image>` elements in SVG input. `data:` URLs are always allowed, and both HTTP images and local image files must match `allowed_base_urls`. A relative image path in an SVG input document resolves against a filesystem `base_url` and fails without one. An SVG used as an image cannot pull in further images from files or hosts. Only `data:` references inside it are honored. To keep such images, inline them as `data:` URLs or flatten the SVG before conversion.
+Images follow the same rules as data. This covers Vega `image` marks, whose `url` can be a URL or a path, and `<image>` elements in SVG input. `data:` URLs are always allowed, and both HTTP images and local image files must match `allowed_base_urls`. A relative image path in an SVG input document resolves against a filesystem `base_url` and fails without one. 
+
+An SVG used as an image cannot pull in further images from files or hosts. Only `data:` references inside it are honored. To keep such images, inline them as `data:` URLs or flatten the SVG before conversion.
 
 Which outputs load images follows the same pattern as data. PNG, JPEG, and PDF output, SVG input conversions, and SVG output with `bundle` load them during conversion. Plain SVG output keeps each image URL for the viewer to load. HTML usually leaves image loading to the browser, but the font processing described below evaluates the chart and can load its images during conversion.
 
@@ -211,14 +213,6 @@ Not every output fetches data. Compiling Vega-Lite to Vega and creating a Vega e
 
 Absolute-path handling applies when VlConvert loads resources. It does not make local paths portable in HTML or Vega Editor links. For those outputs, inline the data and images or use URLs the browser can access.
 
-## Troubleshooting
+## Configuration
 
-| Message | Cause | Fix |
-| --- | --- | --- |
-| `VLC_ACCESS_DENIED: Filesystem access denied for path: /srv/data/x.csv` | The directory is not in `allowed_base_urls` | Add the directory to the allowlist |
-| `VLC_ACCESS_DENIED: External data url not allowed: https://...` or `External image url not allowed` | The URL, or a redirect it returned, matches no allowlist entry | Add a prefix, wildcard host, or scheme entry |
-| `Unsupported data URL target after Vega loader sanitize: about:invalid/...` | `base_url` is disabled and the specification uses a relative data URL | Use an absolute path or URL, or set `base_url` |
-| `Unsupported image URL about:invalid/...` | `base_url` is disabled and an image uses a relative URL | Use an absolute path or URL, or set `base_url` |
-| `HTTP request failed for '...': status 404` | The URL resolved and was allowed, but the host returned an error | Check the URL and the host |
-
-See {doc}`../advanced/configuration` to keep these settings in a config file, and {doc}`../advanced/troubleshooting` for other failures.
+See {doc}`../advanced/configuration` for information on keeping these settings in a config file
