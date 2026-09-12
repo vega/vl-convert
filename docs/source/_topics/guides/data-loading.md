@@ -24,7 +24,7 @@ Vega resolves the `url` of a data source before VlConvert fetches it:
 | URL in the specification | Result with default settings |
 | --- | --- |
 | `https://example.com/data.json` | Fetched with an HTTP GET request |
-| `data/cars.json` | Joined to `base_url`: `https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/cars.json` |
+| `data/cars.json` | Joined to `base_url`: `https://cdn.jsdelivr.net/npm/vega-datasets@v3.2.1/data/cars.json` |
 | `/srv/data/cars.csv` | Also joined to `base_url`, because Vega treats a bare path as relative |
 | `file:///srv/data/cars.csv` | Blocked. Add the directory to the allowlist to read it from disk |
 | `data:text/csv,...` | Decoded inline, always allowed |
@@ -175,15 +175,15 @@ Vega parses data as JSON, CSV, TSV, or TopoJSON according to the file extension 
 
 ## Use the Vega Example Datasets
 
-Vega and Vega-Lite examples reference their sample data with paths such as `data/movies.json`. With the default settings these work as they do in the Vega editor: the path is joined to `base_url`, which points at version 2.9.0 of the `vega-datasets` package on the jsDelivr CDN, and that CDN is covered by the default HTTPS allowlist. No configuration is needed.
+Vega and Vega-Lite examples reference their sample data with paths such as `data/movies.json`. With the default settings these work as they do in the Vega editor: the path is joined to `base_url`, which points at version 3.2.1 of the `vega-datasets` package on the jsDelivr CDN, and that CDN is covered by the default HTTPS allowlist. No configuration is needed.
 
 The paths stop working when either setting changes:
 
-- If you narrow `allowed_base_urls`, add the CDN prefix `https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/` to the list.
+- If you narrow `allowed_base_urls`, add the CDN prefix `https://cdn.jsdelivr.net/npm/vega-datasets@v3.2.1/` to the list.
 - If you set `base_url` to a local directory, `data/movies.json` resolves under that directory instead. Either copy the datasets there or use absolute CDN URLs in the specification.
 - If `base_url` is disabled, relative paths fail. Use absolute URLs.
 
-To render the examples offline, download the `vega-datasets` package, for example with `npm pack vega-datasets@2.9.0` or by cloning [github.com/vega/vega-datasets](https://github.com/vega/vega-datasets), then set `base_url` to the directory that contains its `data` folder and add that directory to `allowed_base_urls` as shown above. To use a different dataset release, set `base_url` to its CDN URL, such as `https://cdn.jsdelivr.net/npm/vega-datasets@3/`.
+To render the examples offline, download the `vega-datasets` package, for example with `npm pack vega-datasets@3.2.1` or by cloning [github.com/vega/vega-datasets](https://github.com/vega/vega-datasets), then set `base_url` to the directory that contains its `data` folder and add that directory to `allowed_base_urls` as shown above. To use a different dataset release, set `base_url` to its CDN URL, such as `https://cdn.jsdelivr.net/npm/vega-datasets@3/`.
 
 ## Restrict Remote Data
 

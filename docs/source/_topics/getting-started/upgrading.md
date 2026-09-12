@@ -10,14 +10,14 @@ interfaces: [python, cli, rust]
 
 # Upgrading from 1.x
 
-Version 2 keeps the conversions you already use but changes how converters are configured, tightens data access, and replaces a few options. This page lists what to change when moving from 1.9 to 2.0, followed by behavior differences to check even when your code still runs.
+Version 2 keeps the conversions you already use but changes some details on how converters are configured, tightens data access, and replaces a few options. This page lists what to change when moving from 1.9 to 2.0, followed by behavior differences to check even when your code still runs.
 
 ::::{interface} python
 ## Update Your Code
 
 **Options are keyword-only.** Every conversion function takes the specification positionally and everything else by keyword. A call such as `vegalite_to_svg(spec, "5.16")` now raises `TypeError`. Write `vegalite_to_svg(spec, vl_version="5.16")` instead.
 
-**`allowed_base_urls` moved to `configure()`.** The per-call argument was removed from every conversion function. Set the allowlist once for the process:
+**`allowed_base_urls` moved to the new `vlc.configure()`.** The per-call argument was removed from every conversion function. Set the allowlist once for the process:
 
 ```python
 import vl_convert as vlc
@@ -31,7 +31,7 @@ vlc.configure(allowed_base_urls=["https://data.example.com/"])
 
 **New, optional capabilities** include process-wide configuration, Google Fonts, plugins, asynchronous conversions, and more output options. See {doc}`../advanced/configuration` and {doc}`../api-reference`.
 
-Version 2 requires Python 3.10 or later. The `vl_version` argument still accepts both `"5.16"` and `"v5_16"`.
+Version 2 requires Python 3.10 or later.
 ::::
 
 ::::{interface} cli
@@ -102,19 +102,23 @@ let png = converter
 
 **Converter construction.** `VlConverter::new()` still creates a converter with default settings. Use `VlConverter::with_config()` to set worker count, data access, fonts, and limits. Methods take `&self` instead of `&mut self`, and the worker pool starts on first use. See {doc}`../advanced/rust-converter`.
 
-**Unchanged.** The free functions `converter::svg_to_png()`, `svg_to_jpeg()`, and `svg_to_pdf()` keep their 1.x signatures, although the converter methods of the same names are preferred because they apply the data access policy and Google Fonts settings. `text::register_font_directory()` is unchanged and is also re-exported at the crate root. The `VlVersion` variants are the same.
+**Unchanged.** The free functions `converter::svg_to_png()`, `svg_to_jpeg()`, and `svg_to_pdf()` keep their 1.x signatures, although the converter methods of the same names are preferred because they apply the data access policy and Google Fonts settings. `text::register_font_directory()` is unchanged and is also re-exported at the crate root.
 ::::
 
 ## Check Behavior Differences
 
 These differences can change results even when code and commands still run.
 
-**Data and image access is a converter setting with an allowlist.** 1.x placed no restriction on the URLs a specification could load unless you passed an allowlist per conversion. 2.0 allows any HTTP or HTTPS URL by default and blocks local files, for data and images alike. Specifications that load local data or images need the directory added to `allowed_base_urls`, and relative data and image URLs resolve against `base_url`. See {doc}`../guides/data-loading`.
+**The allowlist now covers images as well as data.** HTTP and HTTPS URLs remain allowed by default. Custom `allowed_base_urls` settings now restrict image loading too, so include any image locations your charts use. Local data and image files require an explicitly allowed directory.
 
-**Warnings are always captured.** 1.x dropped Vega and Vega-Lite warnings unless you asked for them. 2.0 records them on every conversion and reports them through each interface's logging, so expect to see messages you did not see before. They are worth reading: a warning often explains a chart that renders differently than expected. See {doc}`../guides/logging`.
+**The default base URL has changed.** The default base_url, that relative URLs resolve against, is now `https://cdn.jsdelivr.net/npm/vega-datasets@v3.2.1/` instead of `https://vega.github.io/vega-datasets/`. If your allowlist only permits the old host, update it or set `base_url` to the old location. See {doc}`../guides/data-loading`.
 
-**PNG pixels differ slightly.** 1.x rasterized the SVG output. 2.0 renders PNG with Vega's canvas renderer through a built-in Canvas 2D implementation, which changes anti-aliasing and text rendering at the pixel level. Regenerate image baselines in tests that compare PNG bytes. JPEG and PDF output still start from the SVG rendering.
+**Warnings are always captured.** 1.x dropped Vega and Vega-Lite warnings unless you asked for them. 2.0 records them on every conversion and reports them through each interface's logging, so expect to see messages you did not see before. They are worth reading! A warning often explains why a chart renders differently than expected. See {doc}`../guides/logging`.
+
+**PNG pixels may differ slightly.** To build a PNG image, 1.x first generated an SVG and then rasterized the SVG using the `resvg` crate. This approach generally worked well, but one limitation was that it did not support Vega's [label transform](https://vega.github.io/vega/docs/transforms/label/). Also, the SVG generation followed by SVG parsing had some overhead for charts with many mark instances.
+
+Version 2.0 renders PNGs using Vega's canvas renderer with a new Canvas 2D implementation based on [tinyskia](https://github.com/linebender/tiny-skia) and [cosmic-text](https://github.com/pop-os/cosmic-text). This may result in small pixel-level changes to PNGs. Regenerate image baselines in tests that compare PNG bytes.
 
 ::::{interface} python rust
-**Conversions run on a worker pool.** 1.x ran every conversion on one JavaScript runtime. 2.0 starts a pool on first use, with one worker by default, and can run conversions concurrently when you configure more. See {doc}`../advanced/memory-management` for sizing.
+**Conversions run on a worker pool.** 1.x ran every conversion on one JavaScript runtime. 2.0 starts a pool on first use, with one worker by default, and can run conversions concurrently when you configure multiple workers. See {doc}`../advanced/memory-management` for sizing.
 ::::

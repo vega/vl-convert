@@ -10,7 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Quick Start
 
-This example renders a small Vega-Lite bar chart as `chart.png`. The data is inline. See {doc}`../guides/data-loading` when a chart loads data from a URL or file.
+This example renders a small Vega-Lite bar chart with inline data as `chart.png`. See {doc}`../guides/data-loading` for configuration options when a chart loads data from a URL or file.
 
 Save this specification:
 
@@ -45,13 +45,13 @@ Render it at twice the default pixel dimensions:
 $ vl-convert vl2png --input chart.vl.json --output chart.png --scale 2
 ```
 
-Conversion commands also read standard input and write standard output:
+Conversion commands can also read standard input and write standard output:
 
 ```console
 $ vl-convert vl2png --input - --output - < chart.vl.json > chart.png
 ```
 
-See {doc}`../guides/vegalite-conversions` for the other output formats and {doc}`../advanced/cli-piping` for pipeline usage.
+See {doc}`../guides/vegalite-conversions` for the other supported output formats and {doc}`../advanced/cli-piping` for details on pipeline usage.
 ::::
 
 ::::{interface} rust
@@ -67,7 +67,7 @@ vl-convert-rs = "2.0.0-rc6"
 ```
 :::
 
-Use this complete `src/main.rs`. It reads the `chart.vl.json` file saved above:
+Use this complete `src/main.rs` which reads the `chart.vl.json` file saved above:
 
 :::{dropdown} src/main.rs
 :open:
@@ -95,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
 ```
 :::
 
-Run `cargo run`. Conversion methods return output structs, and `data` holds the rendered bytes. See {doc}`../guides/vegalite-conversions` for the other output formats and {doc}`../advanced/rust-converter` for reusing the converter.
+Run `cargo run`. Conversion methods return output structs where the `data` property holds the rendered bytes. See {doc}`../guides/vegalite-conversions` for the other supported output formats and {doc}`../advanced/rust-converter` for information on reusing the converter.
 ::::
 
 ::::{interface} server
@@ -115,7 +115,7 @@ Save this complete request body as `request.json`:
 ```
 :::
 
-Send it from a second terminal:
+Use `curl` to POST the request from a second terminal:
 
 ```console
 $ curl http://127.0.0.1:3000/vegalite/png \
@@ -124,7 +124,7 @@ $ curl http://127.0.0.1:3000/vegalite/png \
 >   --output chart.png
 ```
 
-The endpoint returns PNG bytes, which `curl` writes to `chart.png`. See {doc}`../guides/vegalite-conversions` for the other endpoints and {doc}`../overview` for what the server provides.
+The endpoint returns PNG bytes, which `curl` writes to `chart.png`. See {doc}`../guides/vegalite-conversions` for the other endpoints and {doc}`../overview` for additional features the server provides.
 ::::
 
 The specification renders as this chart:
