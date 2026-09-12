@@ -36,6 +36,7 @@ const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
 const VEGA_PATH: &str = "/npm/vega@6.4.0/+esm";
 const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
 const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.2.0/+esm";
+const VEGA_DATASETS_PATH: &str = "/npm/vega-datasets@v3.2.1/";
 const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
 const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.3/+esm";
 
@@ -354,6 +355,7 @@ pub const JSDELIVR_URL: &str = "{JSDELIVR_URL}";
 pub const VEGA_PATH: &str = "{VEGA_PATH}";
 pub const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
 pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
+pub const VEGA_DATASETS_PATH: &str = "{VEGA_DATASETS_PATH}";
 pub const DEBOUNCE_PATH: &str = "{DEBOUNCE_PATH}";
 pub const MSGPACK_PATH: &str = "{MSGPACK_PATH}";
 
