@@ -36,7 +36,7 @@ To update the Vega version:
 
 # Updating the Vega datasets version
 
-Update `VEGA_DATASETS_PATH` alongside the other dependency pins in `vl-convert-vendor/src/main.rs`, then run `pixi run vendor`. The generated constant sets the default base URL for relative data and image URLs. Dataset files are loaded from the CDN at runtime, not bundled with vl-convert.
+Update `VEGA_DATASETS_PATH` alongside the other dependency pins in `vl-convert-vendor/src/main.rs`. Run `pixi run vendor` to regenerate the constant that sets the default base URL for relative data and image URLs. Dataset files are loaded from the CDN at runtime, not bundled with vl-convert.
 
 # Removing old Vega-Lite versions
 When removing old versions (e.g., versions not used by any Altair release):
