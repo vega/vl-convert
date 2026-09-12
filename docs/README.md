@@ -4,6 +4,10 @@ The documentation has shared topic sources in `docs/source/_topics/`. The
 generator creates separate Python, CLI, Rust, and server pages from those
 sources. Edit the shared source, not a generated interface page.
 
+Topic directories follow the sidebar sections. Each topic's `path` field sets
+its generated page URL independently of its source location. Relative
+documentation links resolve from that generated path.
+
 ## Example contract
 
 Keep end-user example inputs in `docs/source/_examples/`. A guide that explains

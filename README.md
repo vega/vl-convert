@@ -109,8 +109,8 @@ request them. Relative sample-data paths such as `data/cars.json` use the
 
 Data and images share the `allowed_base_urls` access policy. Local files are
 blocked by default. Google Fonts and plugins use separate controls. See the
-[data-loading guide](docs/source/_topics/guides/data-loading.md) and
-[security guide](docs/source/_topics/guides/security.md) before processing
+[data-loading guide](docs/source/_topics/data-and-security/data-loading.md) and
+[security guide](docs/source/_topics/data-and-security/security.md) before processing
 specifications from untrusted sources.
 
 ## Rendering Model
