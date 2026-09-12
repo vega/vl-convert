@@ -1,8 +1,8 @@
 ---
 title: Altair Integration
 path: guides/altair-integration
-section: Guides
-order: 205
+section: Convert and Export
+order: 225
 interfaces: [python]
 ---
 
@@ -67,16 +67,27 @@ For trusted charts, `vlc.configure(auto_google_fonts=True)` lets VlConvert look 
 
 ## Allow Local Data and Images
 
-VlConvert blocks local file access by default. For charts that reference files in an existing `data` directory, configure that directory as the base for relative URLs and allow VlConvert to read it:
+VlConvert blocks local file access by default. Allow the directory and pass an absolute path to Altair. For example, given a `data/sales.csv` file with `category` and `sales` columns:
 
 ```python
 from pathlib import Path
 
-data_dir = str(Path("data").resolve())
-vlc.configure(base_url=data_dir, allowed_base_urls=[data_dir])
+data_path = Path("data/sales.csv").resolve()
+vlc.configure(allowed_base_urls=[str(data_path.parent)])
+
+local_chart = (
+    alt.Chart(str(data_path))
+    .mark_bar()
+    .encode(x="category:N", y="sales:Q")
+)
+local_chart.save("sales.png")
 ```
 
-Subsequent `chart.save()` calls use these settings for files loaded by VlConvert. This allowlist replaces the default HTTP and HTTPS access, so include any required remote prefixes too. DataFrames passed directly to Altair do not need local file access. See {doc}`data-loading` for complete examples and access rules.
+Absolute paths work for image URLs too, without a `file://` prefix or a change to `base_url`. To use relative paths such as `sales.csv`, also set `base_url` to the directory that contains the files.
+
+For trusted charts, `vlc.configure(allowed_base_urls=["file:"])` allows any local file the process can read. To also allow HTTP and HTTPS access, use `allowed_base_urls=["http:", "https:", "file:"]`.
+
+Subsequent `chart.save()` calls use these settings for files loaded by VlConvert. This allowlist replaces the default HTTP and HTTPS access, so include any required remote prefixes too. DataFrames passed directly to Altair do not need local file access. These settings do not make local paths portable in browser-rendered HTML. See {doc}`data-loading` for complete examples and access rules.
 
 ## HTML and SVG Limitations
 
@@ -106,6 +117,6 @@ Path("chart.html").write_text(html, encoding="utf-8")
 Path("chart.svg").write_text(svg, encoding="utf-8")
 ```
 
-The Vega-Lite branch temporarily selects Altair's default transformer to inline data without its row limit, then restores the previous transformer. Passing `alt.VEGALITE_VERSION` selects the bundled compiler for Altair's major/minor version. The patch component is ignored, so `"6.4.1"` selects the bundled 6.4 compiler, not necessarily patch 6.4.1.
+The Vega-Lite branch temporarily selects Altair's default transformer to inline data without its row limit, then restores the previous transformer. Passing `alt.VEGALITE_VERSION` selects the bundled compiler for Altair's major/minor version.
 
 `bundle=True` embeds the Google Font in both outputs and the JavaScript libraries in HTML. HTML can still reference external data or images, so bundling alone does not make every chart work offline. See {doc}`html-output` and {doc}`fonts` for details.

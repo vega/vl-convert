@@ -1,14 +1,14 @@
 ---
-title: Converting SVG
+title: Converting from SVG
 path: guides/svg-conversions
-section: Guides
+section: Convert and Export
 order: 220
 interfaces: [python, cli, rust, server]
 ---
 
 <!-- topic-body -->
 
-# Converting SVG
+# Converting from SVG
 
 Use the SVG functions when another tool has already produced the vector image. VlConvert converts it to PNG, JPEG, or PDF without running Vega.
 

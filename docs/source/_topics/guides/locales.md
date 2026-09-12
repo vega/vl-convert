@@ -1,7 +1,7 @@
 ---
 title: Number and Time Locales
 path: guides/locales
-section: Guides
+section: Output and Appearance
 order: 260
 interfaces: [python, cli, rust, server]
 ---

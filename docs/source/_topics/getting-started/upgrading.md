@@ -109,9 +109,11 @@ let png = converter
 
 These differences can change results even when code and commands still run.
 
-**The allowlist now covers images as well as data.** HTTP and HTTPS URLs remain allowed by default. Custom `allowed_base_urls` settings now restrict image loading too, so include any image locations your charts use. Local data and image files require an explicitly allowed directory.
+**The allowlist now covers images as well as data.** HTTP and HTTPS URLs remain allowed by default. Custom `allowed_base_urls` settings now restrict image loading too, so include any image locations your charts use. Local data and image files remain blocked unless the allowlist permits them.
 
 **The default base URL has changed.** The default base_url, that relative URLs resolve against, is now `https://cdn.jsdelivr.net/npm/vega-datasets@v3.2.1/` instead of `https://vega.github.io/vega-datasets/`. If your allowlist only permits the old host, update it or set `base_url` to the old location. See {doc}`../guides/data-loading`.
+
+**Absolute data and image paths refer to local files.** Paths such as `/data/cars.csv` and, on Windows, `C:\data\cars.csv` no longer resolve against `base_url`. Allow the directory to load them without a `file://` prefix. For a remote resource, remove the leading slash to resolve `data/cars.csv` against `base_url`, or use an explicit HTTP or HTTPS URL. Chart hyperlinks keep their existing URL behavior.
 
 **Warnings are always captured.** 1.x dropped Vega and Vega-Lite warnings unless you asked for them. 2.0 records them on every conversion and reports them through each interface's logging, so expect to see messages you did not see before. They are worth reading! A warning often explains why a chart renders differently than expected. See {doc}`../guides/logging`.
 

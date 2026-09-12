@@ -1,7 +1,7 @@
 ---
 title: HTML Output
 path: guides/html-output
-section: Guides
+section: Output and Appearance
 order: 235
 interfaces: [python, cli, rust, server]
 ---

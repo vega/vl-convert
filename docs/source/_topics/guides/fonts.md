@@ -1,7 +1,7 @@
 ---
 title: Fonts and Google Fonts
 path: guides/fonts
-section: Guides
+section: Output and Appearance
 order: 240
 interfaces: [python, cli, rust, server]
 ---

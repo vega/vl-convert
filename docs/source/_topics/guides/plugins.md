@@ -1,8 +1,8 @@
 ---
 title: Vega Plugins
 path: guides/plugins
-section: Guides
-order: 290
+section: Advanced
+order: 477
 interfaces: [python, cli, rust, server]
 ---
 

@@ -1,7 +1,7 @@
 ---
 title: Themes
 path: guides/themes
-section: Guides
+section: Output and Appearance
 order: 250
 interfaces: [python, cli, rust, server]
 ---

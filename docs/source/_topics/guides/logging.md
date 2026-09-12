@@ -1,8 +1,8 @@
 ---
 title: Logging and Warnings
 path: guides/logging
-section: Guides
-order: 270
+section: Advanced
+order: 485
 interfaces: [python, cli, rust, server]
 ---
 

@@ -1,14 +1,14 @@
 ---
-title: Converting Vega-Lite
+title: Converting from Vega-Lite
 path: guides/vegalite-conversions
-section: Guides
+section: Convert and Export
 order: 200
 interfaces: [python, cli, rust, server]
 ---
 
 <!-- topic-body -->
 
-# Converting Vega-Lite
+# Converting from Vega-Lite
 
 Use the Vega-Lite functions for charts authored in Vega-Lite. VlConvert compiles the specification to Vega with the bundled Vega-Lite library, then returns or renders the result.
 

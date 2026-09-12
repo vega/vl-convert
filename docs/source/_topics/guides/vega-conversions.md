@@ -1,20 +1,20 @@
 ---
-title: Converting Vega
+title: Converting from Vega
 path: guides/vega-conversions
-section: Guides
+section: Convert and Export
 order: 210
 interfaces: [python, cli, rust, server]
 ---
 
 <!-- topic-body -->
 
-# Converting Vega
+# Converting from Vega
 
-Use the Vega functions for charts authored in Vega or already compiled from Vega-Lite. VlConvert parses and evaluates the specification directly, so the Vega-Lite options `theme` and `vl_version` do not apply.
+Use the Vega functions for charts authored in Vega or already compiled to Vega from Vega-Lite. VlConvert parses and evaluates the specification directly, so the Vega-Lite `theme` and `vl_version` options do not apply.
 
-Available outputs: SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, an evaluated scenegraph, and the fonts VlConvert resolves for the chart.
+Available outputs: SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, and an evaluated scenegraph.
 
-Save this direct Vega specification:
+Save this Vega specification:
 
 :::{dropdown} chart.vg.json
 :open:
@@ -37,7 +37,7 @@ Path("chart.svg").write_text(svg, encoding="utf-8")
 Path("chart.png").write_bytes(png)
 ```
 
-Vega functions also accept a dictionary. SVG and HTML functions return text. PNG, JPEG, and PDF functions return bytes.
+Vega functions also accept the specification as a dictionary. SVG and HTML functions return text. PNG, JPEG, and PDF functions return bytes.
 ::::
 
 ::::{interface} cli
@@ -46,7 +46,7 @@ $ vl-convert vg2svg --input chart.vg.json --output chart.svg
 $ vl-convert vg2png --input chart.vg.json --output chart.png
 ```
 
-The other commands are `vg2jpeg`, `vg2pdf`, `vg2html`, `vg2url`, `vg2sg`, and `vg2fonts`.
+The other commands are `vg2jpeg`, `vg2pdf`, `vg2html`, `vg2url`, and `vg2sg`.
 ::::
 
 ::::{interface} rust
@@ -65,7 +65,7 @@ The SVG text is in `output.svg`, and Vega's diagnostic messages are in `output.l
 ::::
 
 ::::{interface} server
-Send a JSON body with the Vega specification in `spec` to the endpoint for the output you need: `/vega/svg`, `/vega/png`, `/vega/jpeg`, `/vega/pdf`, `/vega/html`, `/vega/url`, `/vega/scenegraph`, or `/vega/fonts`. All are `POST` endpoints. For example, save this body as `request.json`:
+Send a JSON body with the Vega specification in `spec` to the endpoint for the output you need: `/vega/svg`, `/vega/png`, `/vega/jpeg`, `/vega/pdf`, `/vega/html`, `/vega/url`, or `/vega/scenegraph`. All are `POST` endpoints. For example, save this body as `request.json`:
 
 :::{dropdown} request.json
 :open:

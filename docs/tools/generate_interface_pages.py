@@ -31,7 +31,9 @@ INTERFACES = {
 
 SECTION_ORDER = {
     "Getting Started": 100,
-    "Guides": 200,
+    "Convert and Export": 200,
+    "Output and Appearance": 210,
+    "Data and Security": 220,
     "Server": 250,
     "Advanced": 300,
     "API Reference": 900,

@@ -1,7 +1,7 @@
 ---
 title: Image Size and Quality
 path: guides/image-quality
-section: Guides
+section: Output and Appearance
 order: 230
 interfaces: [python, cli, rust, server]
 ---

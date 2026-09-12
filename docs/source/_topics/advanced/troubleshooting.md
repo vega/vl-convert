@@ -83,12 +83,14 @@ Warnings about unknown properties usually mean a misspelled field or a feature t
 An error containing `VLC_ACCESS_DENIED` means the resolved resource did not match `allowed_base_urls`. Check all of these:
 
 - the URL in the specification
-- `base_url`, when the specification uses a relative URL or a bare path
+- `base_url`, when the specification uses a relative URL
 - the exact allowed prefix, including scheme and path
 - the destination of any redirect the host returns, which is checked too
-- for a local file, that the URL uses `file://` or a filesystem `base_url`
+- for a local file, that its directory is allowed
 
-A bare absolute path such as `/data/cars.csv` is treated as relative to `base_url`, so with the default base URL it becomes a CDN address. Grant the narrowest prefix that works, and do not use a wildcard to hide an allowlist mistake in an untrusted workload. See {doc}`../guides/data-loading`.
+An absolute path such as `/data/cars.csv` refers to a local file and does not use `base_url`. Check that the file exists on the machine running VlConvert and that the process has permission to read it. For a remote resource, use `data/cars.csv` to resolve against `base_url`, or supply an explicit HTTP or HTTPS URL.
+
+Grant the narrowest prefix that works, and do not use a wildcard to hide an allowlist mistake in an untrusted workload. See {doc}`../guides/data-loading`.
 
 Also confirm that the rendering process can resolve DNS, complete TLS, and reach the host. An allowed URL can still fail for ordinary network or authentication reasons.
 

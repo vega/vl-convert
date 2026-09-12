@@ -1,7 +1,7 @@
 ---
 title: Security and Network Access
 path: guides/security
-section: Guides
+section: Data and Security
 order: 280
 interfaces: [python, cli, rust, server]
 ---
