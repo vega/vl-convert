@@ -10,6 +10,7 @@ pub const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
 pub const VEGA_PATH: &str = "/npm/vega@6.4.0/+esm";
 pub const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
 pub const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.2.0/+esm";
+pub const VEGA_DATASETS_PATH: &str = "/npm/vega-datasets@v3.2.1/";
 pub const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
 pub const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.3/+esm";
 

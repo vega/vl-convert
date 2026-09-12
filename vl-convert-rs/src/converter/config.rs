@@ -1,4 +1,5 @@
 use crate::data_ops::{normalize_allowed_base_url, AllowedBaseUrlPattern};
+use crate::module_loader::import_map::{url_for_path, VEGA_DATASETS_PATH};
 use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use deno_core::url::Url;
@@ -87,9 +88,7 @@ impl BaseUrlSetting {
     /// Filesystem paths are converted to file:// URLs.
     pub fn resolved_url(&self) -> Result<Option<String>, AnyError> {
         match self {
-            Self::Default => Ok(Some(
-                "https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/".to_string(),
-            )),
+            Self::Default => Ok(Some(url_for_path(VEGA_DATASETS_PATH))),
             Self::Disabled => Ok(None),
             Self::Custom(url) => {
                 if !is_filesystem_path(url) && Url::parse(url).is_ok() {
@@ -579,6 +578,10 @@ mod tests {
     #[test]
     fn default_config_values() {
         let cfg = VlcConfig::default();
+        assert_eq!(
+            cfg.base_url.resolved_url().unwrap(),
+            Some(url_for_path(VEGA_DATASETS_PATH))
+        );
         assert_eq!(cfg.num_workers.get(), 1, "num_workers default is 1");
         assert_eq!(
             cfg.allowed_base_urls,

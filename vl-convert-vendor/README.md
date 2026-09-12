@@ -1,7 +1,7 @@
 # Overview
 `vl-convert-vendor` is a helper crate that downloads multiple versions of Vega-Lite, and their dependencies, using Deno's vendoring feature. It also generates the `vl-convert-rs/src/module_loader/import_map.rs` file which inlines the source code of all the downloaded dependencies using the `include_str!` macro.
 
-This crate only needs to be run when a new Vega-Lite version is to be added or Vega is updated.
+Run this crate when updating the dependency pins in `src/main.rs`, including the default `vega-datasets` CDN version.
 
 # Run
 
@@ -33,6 +33,10 @@ To update the Vega version:
 1. Update `VEGA_PATH` in `vl-convert-vendor/src/main.rs`: `/npm/vega@X.Y.Z/+esm`
 2. Run `pixi run vendor`
 3. Run tests to verify compatibility
+
+# Updating the Vega datasets version
+
+Update `VEGA_DATASETS_PATH` alongside the other dependency pins in `vl-convert-vendor/src/main.rs`. Run `pixi run vendor` to regenerate the constant that sets the default base URL for relative data and image URLs. Dataset files are loaded from the CDN at runtime, not bundled with vl-convert.
 
 # Removing old Vega-Lite versions
 When removing old versions (e.g., versions not used by any Altair release):
