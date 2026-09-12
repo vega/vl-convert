@@ -278,7 +278,9 @@ def get_time_format_locale(name: TimeFormatLocaleName) -> dict[str, Any]:
     """
     ...
 
-def javascript_bundle(snippet: str | None = None, vl_version: str | None = None) -> str:
+def javascript_bundle(
+    snippet: str | None = None, *, vl_version: str | None = None
+) -> str:
     """
     Create a JavaScript bundle containing the Vega Embed, Vega-Lite, and Vega libraries.
 
@@ -1518,7 +1520,7 @@ if TYPE_CHECKING:
             """See :func:`vl_convert.get_time_format_locale` for full documentation."""
             ...
         async def javascript_bundle(
-            self, snippet: str | None = None, vl_version: str | None = None
+            self, snippet: str | None = None, *, vl_version: str | None = None
         ) -> str:
             """Async version of ``javascript_bundle``. See sync function for full documentation."""
             ...
@@ -1581,7 +1583,7 @@ if TYPE_CHECKING:
             """Async version of ``get_worker_memory_usage``. See sync function for full documentation."""
             ...
         async def svg_to_jpeg(
-            self, svg: str, scale: float | None = None, quality: int | None = None
+            self, svg: str, *, scale: float | None = None, quality: int | None = None
         ) -> bytes:
             """Async version of ``svg_to_jpeg``. See sync function for full documentation."""
             ...
@@ -1589,7 +1591,7 @@ if TYPE_CHECKING:
             """Async version of ``svg_to_pdf``. See sync function for full documentation."""
             ...
         async def svg_to_png(
-            self, svg: str, scale: float | None = None, ppi: float | None = None
+            self, svg: str, *, scale: float | None = None, ppi: float | None = None
         ) -> bytes:
             """Async version of ``svg_to_png``. See sync function for full documentation."""
             ...
@@ -1693,7 +1695,7 @@ if TYPE_CHECKING:
             """Async version of ``vega_to_svg``. See sync function for full documentation."""
             ...
         async def vega_to_url(
-            self, vg_spec: VlSpec, fullscreen: bool | None = None
+            self, vg_spec: VlSpec, *, fullscreen: bool | None = None
         ) -> str:
             """Async version of ``vega_to_url``. See sync function for full documentation."""
             ...
@@ -1842,7 +1844,7 @@ if TYPE_CHECKING:
             """Async version of ``vegalite_to_svg``. See sync function for full documentation."""
             ...
         async def vegalite_to_url(
-            self, vl_spec: VlSpec, fullscreen: bool | None = None
+            self, vl_spec: VlSpec, *, fullscreen: bool | None = None
         ) -> str:
             """Async version of ``vegalite_to_url``. See sync function for full documentation."""
             ...
