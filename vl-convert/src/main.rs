@@ -11,8 +11,8 @@ use clap::Parser;
 use std::num::NonZeroU64;
 use std::str::FromStr;
 use vl_convert_rs::converter::{
-    vega_to_url, vegalite_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts, UrlOpts,
-    VgOpts, VlConverter, VlOpts, VlcConfig,
+    vega_to_url, vegalite_to_url, FontOpts, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer,
+    SvgOpts, UrlOpts, VgOpts, VlConverter, VlOpts, VlcConfig,
 };
 use vl_convert_rs::{anyhow, anyhow::bail};
 
@@ -359,9 +359,12 @@ async fn run_command(
             let time_format_locale =
                 parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-            let auto_google_fonts = base_config.auto_google_fonts;
-            let embed_local_fonts = base_config.embed_local_fonts;
-            let subset_fonts = base_config.subset_fonts;
+            let font_opts = FontOpts {
+                auto_google_fonts: base_config.auto_google_fonts,
+                embed_local_fonts: base_config.embed_local_fonts,
+                include_font_face,
+                subset_fonts: base_config.subset_fonts,
+            };
             let converter = VlConverter::with_config(base_config)?;
             let fonts = converter
                 .vegalite_fonts(
@@ -378,10 +381,7 @@ async fn run_command(
                         height: render.height,
                         ..Default::default()
                     },
-                    auto_google_fonts,
-                    embed_local_fonts,
-                    include_font_face,
-                    subset_fonts,
+                    font_opts,
                 )
                 .await?;
             let json = if pretty {
@@ -563,9 +563,12 @@ async fn run_command(
             let time_format_locale =
                 parse_time_format_locale_option(time_format_locale.as_deref())?;
 
-            let auto_google_fonts = base_config.auto_google_fonts;
-            let embed_local_fonts = base_config.embed_local_fonts;
-            let subset_fonts = base_config.subset_fonts;
+            let font_opts = FontOpts {
+                auto_google_fonts: base_config.auto_google_fonts,
+                embed_local_fonts: base_config.embed_local_fonts,
+                include_font_face,
+                subset_fonts: base_config.subset_fonts,
+            };
             let converter = VlConverter::with_config(base_config)?;
             let fonts = converter
                 .vega_fonts(
@@ -579,10 +582,7 @@ async fn run_command(
                         height: render.height,
                         ..Default::default()
                     },
-                    auto_google_fonts,
-                    embed_local_fonts,
-                    include_font_face,
-                    subset_fonts,
+                    font_opts,
                 )
                 .await?;
             let json = if pretty {

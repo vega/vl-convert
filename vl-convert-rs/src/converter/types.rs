@@ -194,6 +194,33 @@ impl VlOpts {
     }
 }
 
+/// Options for inspecting fonts in Vega and Vega-Lite specifications.
+///
+/// These values apply to one inspection and do not inherit converter configuration.
+#[derive(Debug, Clone)]
+pub struct FontOpts {
+    /// Download missing first-choice fonts from Google Fonts. Defaults to false.
+    pub auto_google_fonts: bool,
+    /// Include locally available fonts in the result. Defaults to false.
+    pub embed_local_fonts: bool,
+    /// Generate embedded `@font-face` CSS for each font variant. Defaults to false.
+    pub include_font_face: bool,
+    /// Limit embedded fonts and Google Fonts stylesheet requests to the characters
+    /// needed by the chart. Defaults to true.
+    pub subset_fonts: bool,
+}
+
+impl Default for FontOpts {
+    fn default() -> Self {
+        Self {
+            auto_google_fonts: false,
+            embed_local_fonts: false,
+            include_font_face: false,
+            subset_fonts: true,
+        }
+    }
+}
+
 /// Options specific to SVG output format.
 #[derive(Debug, Clone, Default)]
 pub struct SvgOpts {

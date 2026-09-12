@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pythonize::pythonize;
 use std::str::FromStr;
-use vl_convert_rs::converter::{GoogleFontRequest, VgOpts, VlOpts};
+use vl_convert_rs::converter::{FontOpts, GoogleFontRequest, VgOpts, VlOpts};
 use vl_convert_rs::module_loader::import_map::VlVersion;
 use vl_convert_rs::{FontStyle, VariantRequest};
 
@@ -89,15 +89,18 @@ pub fn parse_google_fonts_arg(
 ///     theme (str): Named theme (e.g. "dark")
 ///     auto_google_fonts (bool): Override auto-download from Google Fonts
 ///         (default: use converter config)
-///     include_font_face (bool): Whether to run the font subsetting pipeline
-///         and populate the font_face field on each variant (default False)
+///     include_font_face (bool): Whether to populate each variant's font_face
+///         field with CSS that embeds the font (default False)
 ///     google_fonts (list): Google Fonts for this conversion
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     subset_fonts (bool | None): Override font subsetting for this call.
+///         None uses the converter configuration. Applies to Google Fonts URLs
+///         and embedded font CSS.
 /// Returns:
 ///     list[FontInfo]: Structured font metadata for each font used by the chart
 #[pyfunction]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vl_spec, *, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None, subset_fonts=None))]
 pub fn vegalite_fonts(
     py: Python<'_>,
     vl_spec: Py<PyAny>,
@@ -109,6 +112,7 @@ pub fn vegalite_fonts(
     google_fonts: Option<Vec<Py<PyAny>>>,
     format_locale: Option<Py<PyAny>>,
     time_format_locale: Option<Py<PyAny>>,
+    subset_fonts: Option<bool>,
 ) -> PyResult<Py<PyAny>> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -134,17 +138,16 @@ pub fn vegalite_fonts(
 
     let result = run_converter_future(move |converter| async move {
         let config = converter.config();
-        let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
-        let embed_lf = config.embed_local_fonts;
-        let subset_f = config.subset_fonts;
         converter
             .vegalite_fonts(
                 vl_spec,
                 vl_opts,
-                auto_gf,
-                embed_lf,
-                include_font_face,
-                subset_f,
+                FontOpts {
+                    auto_google_fonts: auto_google_fonts.unwrap_or(config.auto_google_fonts),
+                    embed_local_fonts: config.embed_local_fonts,
+                    include_font_face,
+                    subset_fonts: subset_fonts.unwrap_or(config.subset_fonts),
+                },
             )
             .await
     })
@@ -161,15 +164,18 @@ pub fn vegalite_fonts(
 ///     vg_spec (str | dict): Vega JSON specification string or dict
 ///     auto_google_fonts (bool): Override auto-download from Google Fonts
 ///         (default: use converter config)
-///     include_font_face (bool): Whether to run the font subsetting pipeline
-///         and populate the font_face field on each variant (default False)
+///     include_font_face (bool): Whether to populate each variant's font_face
+///         field with CSS that embeds the font (default False)
 ///     google_fonts (list): Google Fonts for this conversion
 ///     format_locale (str | dict): d3-format locale name or dictionary
 ///     time_format_locale (str | dict): d3-time-format locale name or dictionary
+///     subset_fonts (bool | None): Override font subsetting for this call.
+///         None uses the converter configuration. Applies to Google Fonts URLs
+///         and embedded font CSS.
 /// Returns:
 ///     list[FontInfo]: Structured font metadata for each font used by the chart
 #[pyfunction]
-#[pyo3(signature = (vg_spec, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vg_spec, *, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None, subset_fonts=None))]
 pub fn vega_fonts(
     py: Python<'_>,
     vg_spec: Py<PyAny>,
@@ -178,6 +184,7 @@ pub fn vega_fonts(
     google_fonts: Option<Vec<Py<PyAny>>>,
     format_locale: Option<Py<PyAny>>,
     time_format_locale: Option<Py<PyAny>>,
+    subset_fonts: Option<bool>,
 ) -> PyResult<Py<PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -193,17 +200,16 @@ pub fn vega_fonts(
 
     let result = run_converter_future(move |converter| async move {
         let config = converter.config();
-        let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
-        let embed_lf = config.embed_local_fonts;
-        let subset_f = config.subset_fonts;
         converter
             .vega_fonts(
                 vg_spec,
                 vg_opts,
-                auto_gf,
-                embed_lf,
-                include_font_face,
-                subset_f,
+                FontOpts {
+                    auto_google_fonts: auto_google_fonts.unwrap_or(config.auto_google_fonts),
+                    embed_local_fonts: config.embed_local_fonts,
+                    include_font_face,
+                    subset_fonts: subset_fonts.unwrap_or(config.subset_fonts),
+                },
             )
             .await
     })
@@ -344,7 +350,7 @@ pub fn google_fonts_cache_dir() -> Option<String> {
 
 #[doc = async_variant_doc!("vegalite_fonts")]
 #[pyfunction(name = "vegalite_fonts")]
-#[pyo3(signature = (vl_spec, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vl_spec, *, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None, subset_fonts=None))]
 pub fn vegalite_fonts_asyncio<'py>(
     py: Python<'py>,
     vl_spec: Py<PyAny>,
@@ -356,6 +362,7 @@ pub fn vegalite_fonts_asyncio<'py>(
     google_fonts: Option<Vec<Py<PyAny>>>,
     format_locale: Option<Py<PyAny>>,
     time_format_locale: Option<Py<PyAny>>,
+    subset_fonts: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -383,17 +390,16 @@ pub fn vegalite_fonts_asyncio<'py>(
         py,
         move |converter| async move {
             let config = converter.config();
-            let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
-            let embed_lf = config.embed_local_fonts;
-            let subset_f = config.subset_fonts;
             converter
                 .vegalite_fonts(
                     vl_spec,
                     vl_opts,
-                    auto_gf,
-                    embed_lf,
-                    include_font_face,
-                    subset_f,
+                    FontOpts {
+                        auto_google_fonts: auto_google_fonts.unwrap_or(config.auto_google_fonts),
+                        embed_local_fonts: config.embed_local_fonts,
+                        include_font_face,
+                        subset_fonts: subset_fonts.unwrap_or(config.subset_fonts),
+                    },
                 )
                 .await
         },
@@ -408,7 +414,7 @@ pub fn vegalite_fonts_asyncio<'py>(
 
 #[doc = async_variant_doc!("vega_fonts")]
 #[pyfunction(name = "vega_fonts")]
-#[pyo3(signature = (vg_spec, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None))]
+#[pyo3(signature = (vg_spec, *, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None, subset_fonts=None))]
 pub fn vega_fonts_asyncio<'py>(
     py: Python<'py>,
     vg_spec: Py<PyAny>,
@@ -417,6 +423,7 @@ pub fn vega_fonts_asyncio<'py>(
     google_fonts: Option<Vec<Py<PyAny>>>,
     format_locale: Option<Py<PyAny>>,
     time_format_locale: Option<Py<PyAny>>,
+    subset_fonts: Option<bool>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let vg_spec = parse_json_spec(vg_spec)?;
     let format_locale = parse_option_format_locale(format_locale)?;
@@ -434,17 +441,16 @@ pub fn vega_fonts_asyncio<'py>(
         py,
         move |converter| async move {
             let config = converter.config();
-            let auto_gf = auto_google_fonts.unwrap_or(config.auto_google_fonts);
-            let embed_lf = config.embed_local_fonts;
-            let subset_f = config.subset_fonts;
             converter
                 .vega_fonts(
                     vg_spec,
                     vg_opts,
-                    auto_gf,
-                    embed_lf,
-                    include_font_face,
-                    subset_f,
+                    FontOpts {
+                        auto_google_fonts: auto_google_fonts.unwrap_or(config.auto_google_fonts),
+                        embed_local_fonts: config.embed_local_fonts,
+                        include_font_face,
+                        subset_fonts: subset_fonts.unwrap_or(config.subset_fonts),
+                    },
                 )
                 .await
         },
