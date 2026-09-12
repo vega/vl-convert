@@ -9,12 +9,12 @@ const DEFAULT_MAX_RETRIES: usize = 3;
 ///
 /// Set to a path to override the default cache location.
 /// Set to `"none"` to disable persistent caching entirely (in-memory only).
-const ENV_FONT_CACHE_DIR: &str = "VL_CONVERT_FONT_CACHE_DIR";
+const ENV_FONT_CACHE_DIR: &str = "VLC_GOOGLE_FONTS_CACHE_DIR";
 
 /// Environment variable to override the Google Fonts CSS2 API base URL.
 ///
 /// Set to a URL to use a custom mirror or local test server.
-const ENV_GOOGLE_FONTS_CSS2_URL: &str = "VL_CONVERT_GOOGLE_FONTS_CSS2_URL";
+const ENV_GOOGLE_FONTS_CSS2_URL: &str = "VLC_GOOGLE_FONTS_CSS2_URL";
 
 /// Runtime configuration for [`GoogleFontsClient`](crate::GoogleFontsClient).
 ///
@@ -51,8 +51,8 @@ impl ClientConfig {
 /// Returns the resolved Google Fonts cache directory, or `None` if caching is disabled.
 ///
 /// Resolution order:
-/// 1. `VL_CONVERT_FONT_CACHE_DIR` env var set to `"none"` → `None`
-/// 2. `VL_CONVERT_FONT_CACHE_DIR` env var set to a path → `Some(path)`
+/// 1. `VLC_GOOGLE_FONTS_CACHE_DIR` env var set to `"none"` → `None`
+/// 2. `VLC_GOOGLE_FONTS_CACHE_DIR` env var set to a path → `Some(path)`
 /// 3. OS cache dir fallback → `Some(<cache_dir>/vl-convert/google-fonts)`
 pub fn google_fonts_cache_dir() -> Option<PathBuf> {
     match std::env::var(ENV_FONT_CACHE_DIR) {

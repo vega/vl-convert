@@ -322,9 +322,9 @@ pub fn set_google_fonts_cache_size_mb(max_size_mb: Option<u64>) -> PyResult<()> 
 ///
 /// Resolved once per process from the environment:
 ///
-/// 1. ``VL_CONVERT_FONT_CACHE_DIR=none``: ``None`` (caching disabled,
+/// 1. ``VLC_GOOGLE_FONTS_CACHE_DIR=none``: ``None`` (caching disabled,
 ///    fonts always fetched fresh).
-/// 2. ``VL_CONVERT_FONT_CACHE_DIR=/some/path``: that path.
+/// 2. ``VLC_GOOGLE_FONTS_CACHE_DIR=/some/path``: that path.
 /// 3. Unset: the OS cache directory joined with ``vl-convert/google-fonts``
 ///    (e.g. ``~/Library/Caches/vl-convert/google-fonts`` on macOS).
 ///
