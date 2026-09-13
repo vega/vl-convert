@@ -103,6 +103,12 @@ Configure trusted publishing with the `vega/vl-convert` repository, `.github/wor
 - The `vl-convert-python` project on PyPI.
 - The `vl-convert`, `vl-convert-canvas2d`, `vl-convert-canvas2d-deno`, `vl-convert-google-fonts`, `vl-convert-rs`, and `vl-convert-server` crates on crates.io.
 
+# Release documentation hosting
+
+The docs workflow runs after package and release asset publication succeeds. See
+[documentation publication and recovery](docs/README.md#publish-release-documentation)
+for the archive layout, menu policy, and docs-only retries.
+
 # Rust API documentation
 
 Build the supported Rust API with missing documentation and broken links treated as errors:

@@ -79,3 +79,30 @@ pixi run ruff check docs/tools docs/source/_ext
 Use `pixi run docs-serve` for a live preview. Its pre-build commands regenerate
 the interface pages, setup files, and server request bodies after a source
 change.
+
+## Publish release documentation
+
+After package and release asset publication succeeds, the `Release` workflow
+builds docs from the release checkout, updates `gh-pages/<VERSION>/`, and
+deploys the site at `https://vega.github.io/vl-convert/`.
+
+The root points to the newest stable release, or a preview link before the
+first stable release. The dropdown lists the latest patch per stable minor
+series and the newest RC newer than stable. Older versions retain their URLs
+even when removed from the menu.
+
+### Retry or correct the site
+
+For build or archive failures, rerun the failed jobs in the original Release
+run. Successful package-publishing jobs do not repeat.
+
+To deploy the current `gh-pages` contents without rebuilding docs or publishing
+packages:
+
+```bash
+gh workflow run Docs.yml --ref main
+```
+
+For a small correction, edit the generated files on `gh-pages`, push, and run
+that command. Also fix the source docs for future releases. Rebuilding a
+version overwrites its direct HTML edits.

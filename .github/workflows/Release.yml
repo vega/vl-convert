@@ -701,3 +701,77 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
         run: gh release upload "$RELEASE_TAG" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"
+
+  archive-docs:
+    name: Build and archive release documentation
+    if: github.event_name == 'release'
+    needs: [validate, upload-release-assets]
+    runs-on: macos-15-intel
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      SOURCE_SHA: ${{ needs.validate.outputs.source_ref }}
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.source_ref }}
+          persist-credentials: false
+      - uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
+        with:
+          pixi-version: v0.47.0
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          prefix-key: v1-docs
+          cache-on-failure: true
+      - name: Build documentation with warnings as errors
+        run: pixi run docs-build-strict
+      - name: Serve documentation and fetch the homepage
+        run: |
+          pixi run python -m http.server 8000 --bind 127.0.0.1 --directory docs/build/html &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          curl --fail --silent --show-error --max-time 10 --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/ > /dev/null
+      - name: Load the archive or initialize its branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh auth setup-git
+          git init --initial-branch=gh-pages docs/build/archive
+          git -C docs/build/archive remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          existing=$(git -C docs/build/archive ls-remote --heads origin refs/heads/gh-pages)
+          if [[ -n "$existing" ]]; then
+            git -C docs/build/archive fetch --depth=1 origin gh-pages
+            git -C docs/build/archive checkout -B gh-pages FETCH_HEAD
+          fi
+      - name: Update the version directory and menu
+        run: |
+          pixi run python docs/tools/pages.py \
+            --build docs/build/html --site docs/build/archive \
+            --version "$VERSION" --source-sha "$SOURCE_SHA"
+      - name: Push the generated site
+        working-directory: docs/build/archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: publish $VERSION"
+            git push origin HEAD:refs/heads/gh-pages
+          fi
+
+  deploy-docs:
+    name: Deploy release documentation
+    needs: archive-docs
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # GITHUB_TOKEN pushes do not trigger workflows, so call deployment explicitly.
+    uses: ./.github/workflows/Docs.yml
