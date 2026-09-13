@@ -131,9 +131,9 @@ function buildLoader(errors) {
             }
         }
         const sanitized = await originalSanitize(uri, options);
-        // Image readers need the file scheme to decode escaped path characters.
-        if (fileUrl && options?.context === 'image') {
-            sanitized.href = fileUrl;
+        // Vega strips file://; image readers need it for Windows paths and URL decoding.
+        if (sanitized.localFile && options?.context === 'image') {
+            sanitized.href = 'file://' + sanitized.href;
         }
         return sanitized;
     };
@@ -589,6 +589,8 @@ mod tests {
                     ['a.csv', 'data', 'https://example.com/a.csv', false],
                     ['/chart', 'href', 'https://example.com/chart', false],
                     ['file:///data/a.csv', 'data', '/data/a.csv', true],
+                    ['file:///C:/data/a%20%23%25.png', 'image', 'file:///C:/data/a%20%23%25.png', true],
+                    ['a%20%23%25.png', 'image', 'file:///C:/data/a%20%23%25.png', true, 'file:///C:/data/'],
                 ];
                 if (Deno.build.os === 'windows') {
                     cases.push(
@@ -596,8 +598,8 @@ mod tests {
                         ['C:/data/a.png', 'image', 'file:///C:/data/a.png', true],
                     );
                 }
-                pathChecks = await Promise.all(cases.map(async ([uri, context, href, localFile]) => {
-                    const result = await loader.sanitize(uri, {context, baseURL: 'https://example.com'});
+                pathChecks = await Promise.all(cases.map(async ([uri, context, href, localFile, baseURL = 'https://example.com']) => {
+                    const result = await loader.sanitize(uri, {context, baseURL});
                     return result.href === href && result.localFile === localFile;
                 }));
             })();

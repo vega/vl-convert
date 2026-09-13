@@ -2326,7 +2326,7 @@ mod tests {
     #[tokio::test]
     async fn test_canvas_png_authorizes_local_images_by_allowlist_only() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let image_path = temp_dir.path().join("image.png");
+        let image_path = temp_dir.path().join("image #%.png");
         write_test_png(&image_path);
         let image_url = Url::from_file_path(&image_path).unwrap().to_string();
         let dir = temp_dir.path().to_string_lossy().to_string();
@@ -2334,9 +2334,14 @@ mod tests {
         // (allowlist, filesystem base_url, image url, expected success)
         let cases: Vec<(Vec<String>, Option<&std::path::Path>, &str, bool)> = vec![
             (vec![], None, &image_url, false),
-            (vec![], Some(temp_dir.path()), "image.png", false),
+            (vec![], Some(temp_dir.path()), "image%20%23%25.png", false),
             (vec![dir.clone()], None, &image_url, true),
-            (vec![dir.clone()], Some(temp_dir.path()), "image.png", true),
+            (
+                vec![dir.clone()],
+                Some(temp_dir.path()),
+                "image%20%23%25.png",
+                true,
+            ),
         ];
         for (allowed, base_url, url, expect_ok) in cases {
             let converter = image_test_converter(allowed, base_url);
@@ -2347,6 +2352,16 @@ mod tests {
                     PngOpts::default(),
                 )
                 .await;
+            if let Ok(output) = &result {
+                assert!(
+                    !output
+                        .logs
+                        .iter()
+                        .any(|entry| entry.message.contains("Failed to load image")),
+                    "{url}: {:?}",
+                    output.logs
+                );
+            }
             assert_access(url, expect_ok, result, "VLC_ACCESS_DENIED");
         }
     }
