@@ -36,6 +36,10 @@ jobs:
         with:
           prefix-key: "v1-docs"
           cache-on-failure: true
+      - name: Check Rust API documentation
+        run: |
+          cargo rustdoc -p vl-convert-rs --lib -- -D missing_docs -D rustdoc::broken_intra_doc_links
+          cargo rustdoc -p vl-convert-google-fonts --lib --all-features -- -D missing_docs -D rustdoc::broken_intra_doc_links
       - name: Build documentation with warnings as errors
         run: pixi run docs-build-strict
       - name: Serve documentation and fetch the homepage

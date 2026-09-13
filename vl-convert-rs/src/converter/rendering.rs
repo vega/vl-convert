@@ -1,5 +1,4 @@
 use crate::image_loading::ImageAccessPolicy;
-use crate::text::USVG_OPTIONS;
 use deno_core::anyhow::{anyhow, bail};
 use deno_core::error::AnyError;
 use image::codecs::jpeg::JpegEncoder;
@@ -7,7 +6,6 @@ use image::ImageReader;
 use png::{PixelDimensions, Unit};
 use resvg::render;
 use std::io::Cursor;
-use std::panic;
 use svg2pdf::{ConversionOptions, PageOptions};
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
@@ -57,108 +55,6 @@ pub fn encode_png(pixmap: Pixmap, ppi: f32) -> Result<Vec<u8>, AnyError> {
     Ok(data)
 }
 
-pub(crate) fn default_image_access_policy() -> ImageAccessPolicy {
-    // Default for the free `svg_to_*` functions: any HTTP/HTTPS URL, no
-    // filesystem access. This matches `VlcConfig::default()`.
-    ImageAccessPolicy {
-        allowed_base_urls: Some(vec![
-            crate::data_ops::AllowedBaseUrlPattern::Scheme("http".to_string()),
-            crate::data_ops::AllowedBaseUrlPattern::Scheme("https".to_string()),
-        ]),
-        resources_dir: None,
-    }
-}
-
-pub fn svg_to_png(svg: &str, scale: f32, ppi: Option<f32>) -> Result<Vec<u8>, AnyError> {
-    svg_to_png_with_policy(svg, scale, ppi, &default_image_access_policy())
-}
-
-pub(crate) fn svg_to_png_with_policy(
-    svg: &str,
-    scale: f32,
-    ppi: Option<f32>,
-    policy: &ImageAccessPolicy,
-) -> Result<Vec<u8>, AnyError> {
-    // default ppi to 72
-    let ppi = ppi.unwrap_or(72.0);
-    let scale = scale * ppi / 72.0;
-    let policy = policy.clone();
-
-    // catch_unwind so that we don't poison Mutexes
-    // if usvg/resvg panics
-    let response = panic::catch_unwind(|| {
-        let rtree = match parse_svg(svg, &policy) {
-            Ok(rtree) => rtree,
-            Err(err) => return Err(err),
-        };
-
-        let mut pixmap = tiny_skia::Pixmap::new(
-            (rtree.size().width() * scale) as u32,
-            (rtree.size().height() * scale) as u32,
-        )
-        .unwrap();
-
-        let transform = tiny_skia::Transform::from_scale(scale, scale);
-        render(&rtree, transform, &mut pixmap.as_mut());
-        Ok(encode_png(pixmap, ppi))
-    });
-    match response {
-        Ok(Ok(Ok(png_result))) => Ok(png_result),
-        Ok(Err(err)) => Err(err),
-        err => bail!("{err:?}"),
-    }
-}
-
-pub fn svg_to_jpeg(svg: &str, scale: f32, quality: Option<u8>) -> Result<Vec<u8>, AnyError> {
-    svg_to_jpeg_with_policy(svg, scale, quality, &default_image_access_policy())
-}
-
-pub(crate) fn svg_to_jpeg_with_policy(
-    svg: &str,
-    scale: f32,
-    quality: Option<u8>,
-    policy: &ImageAccessPolicy,
-) -> Result<Vec<u8>, AnyError> {
-    let png_bytes = svg_to_png_with_policy(svg, scale, None, policy)?;
-    let img = ImageReader::new(Cursor::new(png_bytes))
-        .with_guessed_format()?
-        .decode()?;
-
-    let quality = quality.unwrap_or(90);
-    if quality > 100 {
-        bail!("JPEG quality parameter must be between 0 and 100 inclusive. Received: {quality}");
-    }
-
-    let mut jpeg_bytes: Vec<u8> = Vec::new();
-    let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_bytes, quality);
-
-    // Encode the image
-    encoder.encode_image(&img)?;
-
-    Ok(jpeg_bytes)
-}
-
-pub fn svg_to_pdf(svg: &str) -> Result<Vec<u8>, AnyError> {
-    svg_to_pdf_with_policy(svg, &default_image_access_policy())
-}
-
-pub(crate) fn svg_to_pdf_with_policy(
-    svg: &str,
-    policy: &ImageAccessPolicy,
-) -> Result<Vec<u8>, AnyError> {
-    let tree = parse_svg(svg, policy)?;
-    let pdf = svg2pdf::to_pdf(&tree, ConversionOptions::default(), PageOptions::default());
-    pdf.map_err(|err| anyhow!("Failed to convert SVG to PDF: {}", err))
-}
-
-/// Helper to parse svg string to usvg Tree with more helpful error messages
-pub(crate) fn parse_svg(svg: &str, policy: &ImageAccessPolicy) -> Result<usvg::Tree, AnyError> {
-    let mut opts = USVG_OPTIONS
-        .lock()
-        .map_err(|err| anyhow!("Failed to acquire usvg options lock: {err}"))?;
-    parse_svg_with_options(svg, policy, &mut opts)
-}
-
 pub(crate) fn parse_svg_with_options(
     svg: &str,
     policy: &ImageAccessPolicy,
@@ -205,6 +101,11 @@ pub(crate) fn parse_svg_with_options(
     Ok(result?)
 }
 
+/// Encode a Vega-Lite specification in a Vega Editor URL.
+///
+/// This synchronous function does not render, fetch resources, or upload the spec.
+/// The URL is compressed and encoded, not encrypted. Anyone with the link can
+/// read the specification and its inline data. JSON strings are encoded as supplied.
 pub fn vegalite_to_url(
     vl_spec: impl Into<ValueOrString>,
     url_opts: UrlOpts,
@@ -224,6 +125,10 @@ pub fn vegalite_to_url(
     ))
 }
 
+/// Encode a Vega specification in a Vega Editor URL.
+///
+/// Like [`vegalite_to_url`], this does not render or upload the specification.
+/// The URL is compressed and encoded, not encrypted. Do not share private data.
 pub fn vega_to_url(
     vg_spec: impl Into<ValueOrString>,
     url_opts: UrlOpts,
@@ -241,6 +146,61 @@ pub fn vega_to_url(
     Ok(format!(
         "https://vega.github.io/editor/#/url/vega/{compressed_data}{view}"
     ))
+}
+
+pub(crate) fn svg_to_png_with_options(
+    svg: &str,
+    scale: f32,
+    ppi: Option<f32>,
+    policy: &ImageAccessPolicy,
+    options: &mut usvg::Options<'static>,
+) -> Result<Vec<u8>, AnyError> {
+    let ppi = ppi.unwrap_or(72.0);
+    let scale = scale * ppi / 72.0;
+    let tree = parse_svg_with_options(svg, policy, options)?;
+
+    let mut pixmap = tiny_skia::Pixmap::new(
+        (tree.size().width() * scale) as u32,
+        (tree.size().height() * scale) as u32,
+    )
+    .ok_or_else(|| anyhow!("Failed to allocate pixmap for SVG render"))?;
+
+    let transform = tiny_skia::Transform::from_scale(scale, scale);
+    render(&tree, transform, &mut pixmap.as_mut());
+    encode_png(pixmap, ppi)
+}
+
+pub(crate) fn svg_to_jpeg_with_options(
+    svg: &str,
+    scale: f32,
+    quality: Option<u8>,
+    policy: &ImageAccessPolicy,
+    options: &mut usvg::Options<'static>,
+) -> Result<Vec<u8>, AnyError> {
+    let png_bytes = svg_to_png_with_options(svg, scale, None, policy, options)?;
+    let img = ImageReader::new(Cursor::new(png_bytes))
+        .with_guessed_format()?
+        .decode()?;
+
+    let quality = quality.unwrap_or(90);
+    if quality > 100 {
+        bail!("JPEG quality parameter must be between 0 and 100 inclusive. Received: {quality}");
+    }
+
+    let mut jpeg_bytes: Vec<u8> = Vec::new();
+    let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_bytes, quality);
+    encoder.encode_image(&img)?;
+    Ok(jpeg_bytes)
+}
+
+pub(crate) fn svg_to_pdf_with_options(
+    svg: &str,
+    policy: &ImageAccessPolicy,
+    options: &mut usvg::Options<'static>,
+) -> Result<Vec<u8>, AnyError> {
+    let tree = parse_svg_with_options(svg, policy, options)?;
+    let pdf = svg2pdf::to_pdf(&tree, ConversionOptions::default(), PageOptions::default());
+    pdf.map_err(|err| anyhow!("Failed to convert SVG to PDF: {}", err))
 }
 
 #[cfg(test)]

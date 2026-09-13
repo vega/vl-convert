@@ -6,7 +6,7 @@ use vl_convert_google_fonts::{FontStyle, VariantRequest};
 use vl_convert_rs::converter::{
     BaseUrlSetting, FormatLocale, GoogleFontRequest, TimeFormatLocale, VlcConfig,
 };
-use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::VlVersion;
 use vl_convert_rs::{anyhow, anyhow::bail};
 
 use crate::cli_types::{Cli, LogLevel};

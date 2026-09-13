@@ -14,10 +14,12 @@ pub struct RegisteredFontBatch {
 }
 
 impl RegisteredFontBatch {
+    /// Face IDs grouped by font file, in the order supplied by the batch.
     pub fn per_source_ids(&self) -> &[TinyVec<[fontdb::ID; 8]>] {
         &self.per_source_ids
     }
 
+    /// All face IDs registered from the batch, in source order.
     pub fn face_ids(&self) -> &[fontdb::ID] {
         &self.all_ids
     }

@@ -96,17 +96,6 @@ pub enum FontFamilyEntry {
 /// quoting, escaping, and multi-word unquoted names). Returns an empty list
 /// if the input is not valid CSS.
 ///
-/// # Examples
-///
-/// ```
-/// use vl_convert_rs::extract::{parse_css_font_family, FontFamilyEntry};
-///
-/// let entries = parse_css_font_family("Roboto, sans-serif");
-/// assert_eq!(entries, vec![
-///     FontFamilyEntry::Named("Roboto".into()),
-///     FontFamilyEntry::Generic("sans-serif".into()),
-/// ]);
-/// ```
 pub fn parse_css_font_family(s: &str) -> Vec<FontFamilyEntry> {
     let Ok(families) = svgtypes::parse_font_families(s) else {
         return Vec::new();

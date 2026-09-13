@@ -8,7 +8,7 @@ use vl_convert_rs::converter::{
     vegalite_to_url as converter_vegalite_to_url, HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer,
     SvgOpts, UrlOpts, VlOpts, VlcConfig,
 };
-use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::VlVersion;
 
 use crate::accept::{preferred_scenegraph_format, ScenegraphFormat};
 use crate::config::AppState;

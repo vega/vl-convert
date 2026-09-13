@@ -62,7 +62,7 @@ impl Drop for DownloadGateGuard<'_> {
     }
 }
 
-/// Google Fonts font loader client.
+/// Download Google Fonts with disk caching and per-operation usage accounting.
 pub struct GoogleFontsClient {
     config: ClientConfig,
     /// Eagerly-built async client.
@@ -408,7 +408,7 @@ impl GoogleFontsClient {
     /// Resolve requested variants against what a font actually provides.
     ///
     /// Fetches the CSS2 response (using the cache) and applies the same
-    /// weight/style fallback logic used by [`load`]: exact match → closest
+    /// weight/style fallback logic used by [`Self::load`]: exact match → closest
     /// weight with matching style → closest weight any style.  Returns the
     /// resolved `VariantRequest` list without downloading font files, making
     /// this suitable for building CDN `<link>` URLs with correct weights.
@@ -444,6 +444,8 @@ impl GoogleFontsClient {
         Ok(VariantResolutionResult { variants, usage })
     }
 
+    /// Blocking version of [`Self::resolve_available_variants`], with the same
+    /// fallback behavior and usage accounting.
     pub fn resolve_available_variants_blocking(
         &self,
         family: &str,

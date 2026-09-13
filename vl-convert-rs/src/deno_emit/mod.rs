@@ -23,7 +23,6 @@ pub use emit::BundleType;
 pub use deno_ast::EmitOptions;
 pub use deno_ast::ModuleSpecifier;
 pub use deno_ast::SourceMapOption;
-pub use deno_ast::TranspileOptions;
 pub use deno_graph::source::LoadFuture;
 pub use deno_graph::source::LoadOptions;
 pub use deno_graph::source::Loader;

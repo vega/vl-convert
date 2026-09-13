@@ -1,5 +1,6 @@
 mod conversions;
 mod fonts;
+pub(crate) use fonts::resolve_google_fonts;
 mod init;
 mod rendering;
 mod runtime;
@@ -106,7 +107,6 @@ pub(crate) struct InnerVlConverter {
 ///
 /// Usage: `with_font_overlay!(inner, gf_option, inner.async_method(args).await)`
 /// or:    `with_font_overlay!(inner, gf_option, inner.sync_method(args))`
-#[macro_export]
 macro_rules! with_font_overlay {
     ($inner:expr, $google_fonts:expr, $work:expr) => {{
         let google_fonts = $inner.apply_font_overlay_if_needed($google_fonts).await?;
@@ -124,6 +124,8 @@ macro_rules! with_font_overlay {
         }
     }};
 }
+
+pub(crate) use with_font_overlay;
 
 impl InnerVlConverter {
     pub async fn try_new(
@@ -264,6 +266,7 @@ impl InnerVlConverter {
 pub(crate) struct VlConverterInner {
     pub(super) vegaembed_bundles: Mutex<HashMap<VlVersion, String>>,
     pub(super) pool: Mutex<Option<super::worker_pool::WorkerPool>>,
+    pub(super) svg_semaphore: Arc<tokio::sync::Semaphore>,
     /// Active config. Conversion requests read one `Arc` snapshot via
     /// `load_full()`. Config changes construct a fresh `VlConverterInner`
     /// via [`VlConverter::with_config`]; there is no in-place mutation path.

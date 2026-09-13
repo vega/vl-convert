@@ -100,9 +100,11 @@ let png = converter
 
 **URL helpers take `UrlOpts`.** `vegalite_to_url(&spec, true)` becomes `vegalite_to_url(&spec, UrlOpts { fullscreen: true })`, and the same for `vega_to_url`.
 
-**Converter construction.** `VlConverter::new()` still creates a converter with default settings. Use `VlConverter::with_config()` to set worker count, data access, fonts, and limits. Methods take `&self` instead of `&mut self`, and the worker pool starts on first use. See {doc}`../advanced/rust-converter`.
+**Converter construction.** `VlConverter::new()` still creates a converter with default settings. Use `VlConverter::with_config()` to set worker count, data access, fonts, and limits. Methods take `&self` instead of `&mut self`, and JavaScript workers start when needed. See {doc}`../advanced/rust-converter`.
 
-**Unchanged.** The free functions `converter::svg_to_png()`, `svg_to_jpeg()`, and `svg_to_pdf()` keep their 1.x signatures, although the converter methods of the same names are preferred because they apply the data access policy and Google Fonts settings. `text::register_font_directory()` is unchanged and is also re-exported at the crate root.
+**SVG conversions use converter methods.** The free `converter::svg_to_png()`, `svg_to_jpeg()`, and `svg_to_pdf()` functions were removed. Use the async methods on `VlConverter` with `PngOpts`, `JpegOpts`, or `PdfOpts`. They apply the converter's font and image-access settings without starting JavaScript workers. See {doc}`../guides/svg-conversions`.
+
+**Public imports.** Use the crate-root `register_font_directory()` function. Implementation modules such as `text`, `html`, `extract`, and `module_loader` are now private. Import supported types, version constants, and locale maps from `vl_convert_rs` instead. Use `VlcConfig` in place of the removed `VlConverterConfig` alias.
 ::::
 
 ## Check Behavior Differences

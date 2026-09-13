@@ -625,7 +625,7 @@ async fn post_font_dir(
     // API appends.
     if !vl_convert_rs::current_font_directories().contains(&req.path) {
         let path_str = req.path.to_string_lossy();
-        if let Err(err) = vl_convert_rs::text::register_font_directory(&path_str) {
+        if let Err(err) = vl_convert_rs::register_font_directory(&path_str) {
             return simple_error_response(
                 StatusCode::SERVICE_UNAVAILABLE,
                 &format!("failed to register font directory: {err}"),

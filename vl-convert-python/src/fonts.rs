@@ -4,7 +4,7 @@ use pyo3::types::PyDict;
 use pythonize::pythonize;
 use std::str::FromStr;
 use vl_convert_rs::converter::{GoogleFontRequest, VgOpts, VlOpts};
-use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::VlVersion;
 use vl_convert_rs::{FontStyle, VariantRequest};
 
 use crate::utils::{

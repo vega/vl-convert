@@ -11,7 +11,7 @@ use super::config::VlcConfig;
 
 /// Check if a domain matches any pattern in the allowlist.
 /// Patterns: `"esm.sh"` = exact, `"*.jsdelivr.net"` = subdomain wildcard, `"*"` = any.
-pub fn domain_matches_patterns(domain: &str, patterns: &[String]) -> bool {
+pub(crate) fn domain_matches_patterns(domain: &str, patterns: &[String]) -> bool {
     patterns.iter().any(|pattern| {
         if pattern == "*" {
             true

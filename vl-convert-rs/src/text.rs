@@ -28,10 +28,6 @@ pub struct FontBaselineSnapshot {
 }
 
 impl FontBaselineSnapshot {
-    pub fn resolved(&self) -> Arc<ResolvedFontConfig> {
-        self.resolved.clone()
-    }
-
     pub fn clone_fontdb(&self) -> Database {
         self.resolved.clone_fontdb()
     }
@@ -298,8 +294,7 @@ pub fn custom_fallback_selector() -> FallbackSelectionFn<'static> {
 }
 
 /// Append `dir` to the process-global font-directory list and refresh the
-/// fontdb. Workers pick up the new state on their next work item via
-/// `FONT_CONFIG_VERSION`.
+/// font database. Workers use the updated directories on their next conversion.
 pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
     {
         let mut font_config = FONT_CONFIG
@@ -313,9 +308,8 @@ pub fn register_font_directory(dir: &str) -> Result<(), anyhow::Error> {
 /// Replace the process-global font-directory list with `paths`.
 ///
 /// The replacement list is authoritative: paths absent from `paths` are
-/// removed from the global registry and from subsequent font resolution. Bumps
-/// `FONT_CONFIG_VERSION`; workers pick up the new state on their next work
-/// item.
+/// removed from the global registry and from subsequent font resolution.
+/// Workers use the updated directories on their next conversion.
 pub fn set_font_directories(paths: &[PathBuf]) -> Result<(), anyhow::Error> {
     {
         let mut font_config = FONT_CONFIG

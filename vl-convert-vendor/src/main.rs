@@ -216,7 +216,12 @@ fn main() {
     // Build versions csv
     let ver_unders: Vec<_> = VL_PATHS
         .iter()
-        .map(|(ver, _)| format!("v{}", ver.replace('.', "_")))
+        .map(|(ver, _)| {
+            format!(
+                "/// Vega-Lite {ver} compiler.\n    v{}",
+                ver.replace('.', "_")
+            )
+        })
         .collect();
     let vl_versions_csv = ver_unders.join(",\n    ");
 
@@ -357,8 +362,11 @@ pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
 pub const DEBOUNCE_PATH: &str = "{DEBOUNCE_PATH}";
 pub const MSGPACK_PATH: &str = "{MSGPACK_PATH}";
 
+/// Bundled Vega version, including the patch number.
 pub const VEGA_VERSION: &str = "{VEGA_VERSION}";
+/// Bundled Vega Themes version, including the patch number.
 pub const VEGA_THEMES_VERSION: &str = "{VEGA_THEMES_VERSION}";
+/// Bundled Vega Embed version, including the patch number.
 pub const VEGA_EMBED_VERSION: &str = "{VEGA_EMBED_VERSION}";
 
 pub fn url_for_path(path: &str) -> String {{
@@ -377,6 +385,11 @@ pub fn msgpack_url() -> String {{
     url_for_path(MSGPACK_PATH)
 }}
 
+/// A bundled Vega-Lite compiler version.
+///
+/// Parse a supported major/minor selector such as `"6.4"` or `"v6_4"`
+/// with `FromStr`. Unsupported versions return an error. Each variant selects
+/// the bundled patch release for that major/minor version.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[allow(non_camel_case_types)]
 pub enum VlVersion {{
@@ -384,7 +397,7 @@ pub enum VlVersion {{
 }}
 
 impl VlVersion {{
-    pub fn to_path(self) -> String {{
+    pub(crate) fn to_path(self) -> String {{
         use VlVersion::*;
         let path = match self {{
             {path_match_csv}
@@ -392,10 +405,11 @@ impl VlVersion {{
         path.to_string()
     }}
 
-    pub fn to_url(self) -> String {{
+    pub(crate) fn to_url(self) -> String {{
         format!("{{}}{{}}", JSDELIVR_URL, self.to_path())
     }}
 
+    /// Return the major/minor selector, not the bundled patch version.
     pub fn to_semver(self) -> &'static str {{
         use VlVersion::*;
         match self {{
@@ -404,6 +418,7 @@ impl VlVersion {{
     }}
 }}
 
+/// Default Vega-Lite major/minor selector.
 pub const DEFAULT_VL_VERSION: &str = "{LATEST_VEGALITE}";
 
 impl Default for VlVersion {{
@@ -423,6 +438,7 @@ impl FromStr for VlVersion {{
     }}
 }}
 
+/// Vega-Lite compiler versions included in this build.
 pub const VL_VERSIONS: &[VlVersion] = &[
     {version_instances_csv},
 ];

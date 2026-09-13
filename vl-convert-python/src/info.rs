@@ -2,10 +2,10 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pythonize::pythonize;
 use std::str::FromStr;
-use vl_convert_rs::module_loader::import_map::{
+use vl_convert_rs::{
     VlVersion, VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION, VL_VERSIONS,
 };
-use vl_convert_rs::module_loader::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
+use vl_convert_rs::{FORMATE_LOCALE_MAP, TIME_FORMATE_LOCALE_MAP};
 
 use crate::utils::{
     async_variant_doc, parse_embedded_locale_json, prefixed_py_error, run_converter_future,

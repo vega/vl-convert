@@ -13,7 +13,7 @@ pub(crate) fn format_log_entries(logs: &[LogEntry]) -> Vec<String> {
 }
 
 pub(crate) fn vegalite_versions() -> Vec<&'static str> {
-    vl_convert_rs::module_loader::import_map::VL_VERSIONS
+    vl_convert_rs::VL_VERSIONS
         .iter()
         .map(|v| v.to_semver())
         .collect()

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use utoipa::ToSchema;
-use vl_convert_rs::module_loader::import_map;
+use vl_convert_rs::{VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION};
 
 use crate::config::AppState;
 
@@ -163,9 +163,9 @@ pub async fn readyz(State(state): State<Arc<AppState>>) -> Response {
             description = "Server info",
             example = json!({
                 "version": env!("CARGO_PKG_VERSION"),
-                "vega_version": import_map::VEGA_VERSION,
-                "vega_themes_version": import_map::VEGA_THEMES_VERSION,
-                "vega_embed_version": import_map::VEGA_EMBED_VERSION,
+                "vega_version": VEGA_VERSION,
+                "vega_themes_version": VEGA_THEMES_VERSION,
+                "vega_embed_version": VEGA_EMBED_VERSION,
                 "vegalite_versions": crate::util::vegalite_versions(),
                 "google_fonts_cache_dir": "/home/app/.cache/vl-convert/google-fonts",
                 "local_tz": "America/New_York"
@@ -177,9 +177,9 @@ pub async fn readyz(State(state): State<Arc<AppState>>) -> Response {
 pub async fn infoz(State(state): State<Arc<AppState>>) -> Json<InfoResponse> {
     Json(InfoResponse {
         version: env!("CARGO_PKG_VERSION").to_string(),
-        vega_version: import_map::VEGA_VERSION.to_string(),
-        vega_themes_version: import_map::VEGA_THEMES_VERSION.to_string(),
-        vega_embed_version: import_map::VEGA_EMBED_VERSION.to_string(),
+        vega_version: VEGA_VERSION.to_string(),
+        vega_themes_version: VEGA_THEMES_VERSION.to_string(),
+        vega_embed_version: VEGA_EMBED_VERSION.to_string(),
         vegalite_versions: crate::util::vegalite_versions()
             .into_iter()
             .map(str::to_string)

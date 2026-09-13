@@ -13,9 +13,12 @@ use super::config::MissingFontsPolicy;
 use vl_convert_google_fonts::VariantRequest;
 pub use vl_convert_google_fonts::{GoogleFontStats, GoogleFontUsage, UsedGoogleFontVariant};
 
+/// A Google Font family and optional weight/style variants to load.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GoogleFontRequest {
+    /// Family name as listed by Google Fonts, such as `"Roboto"`.
     pub family: String,
+    /// Requested variants. `None` lets font resolution select variants for the chart.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variants: Option<Vec<VariantRequest>>,
 }
@@ -70,6 +73,10 @@ pub(crate) fn error_with_google_font_usage(
     }
 }
 
+/// Recover accumulated Google Fonts usage from a failed conversion.
+///
+/// Returns empty usage when the error chain contains no font-usage information.
+/// Useful for accounting for downloads even when rendering fails.
 pub fn google_font_usage_from_error(error: &AnyError) -> GoogleFontUsage {
     let mut google_fonts = GoogleFontUsage::default();
     for cause in error.chain() {

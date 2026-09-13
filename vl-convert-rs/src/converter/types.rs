@@ -6,12 +6,21 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use vl_convert_google_fonts::GoogleFontUsage;
 
+/// Options applied to a Vega specification before conversion.
+///
+/// Unset locale options inherit the converter defaults. Size overrides change the
+/// logical chart dimensions, which can differ from the final image dimensions
+/// because of Vega autosizing, axes, legends, and padding.
 #[derive(Debug, Clone, Default)]
 pub struct VgOpts {
+    /// Number-format locale. `None` inherits the converter default.
     pub format_locale: Option<FormatLocale>,
+    /// Date/time-format locale. `None` inherits the converter default.
     pub time_format_locale: Option<TimeFormatLocale>,
     /// Per-request overlay plugin (inline ESM or URL). Requires `allow_per_request_plugins`.
     pub vega_plugin: Option<String>,
+    /// Additional Google Fonts to load for this conversion.
+    /// Configured font requests still apply. `None` adds no per-call requests.
     pub google_fonts: Option<Vec<super::GoogleFontRequest>>,
     /// Vega config object merged via `vega.mergeConfig(spec.config, config)`.
     pub config: Option<serde_json::Value>,
@@ -24,7 +33,7 @@ pub struct VgOpts {
 }
 
 impl VgOpts {
-    pub fn to_embed_opts(&self, renderer: Renderer) -> Result<serde_json::Value, AnyError> {
+    pub(crate) fn to_embed_opts(&self, renderer: Renderer) -> Result<serde_json::Value, AnyError> {
         let mut opts_map = serde_json::Map::new();
 
         opts_map.insert(
@@ -59,14 +68,19 @@ impl VgOpts {
     }
 }
 
+/// Number-format locale, supplied as a bundled locale name or a d3-format object.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum FormatLocale {
+    /// Bundled locale name, such as `"en-US"`.
     Name(String),
+    /// Custom d3-format locale object.
     Object(serde_json::Value),
 }
 
 impl FormatLocale {
+    /// Resolve a bundled locale name to its JSON object, or clone a custom object.
+    /// Returns an error if the bundled locale name is unknown.
     pub fn as_object(&self) -> Result<serde_json::Value, AnyError> {
         match self {
             FormatLocale::Name(name) => {
@@ -80,14 +94,19 @@ impl FormatLocale {
     }
 }
 
+/// Date/time-format locale, supplied as a bundled locale name or a d3-time-format object.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum TimeFormatLocale {
+    /// Bundled locale name, such as `"en-US"`.
     Name(String),
+    /// Custom d3-time-format locale object.
     Object(serde_json::Value),
 }
 
 impl TimeFormatLocale {
+    /// Resolve a bundled locale name to its JSON object, or clone a custom object.
+    /// Returns an error if the bundled locale name is unknown.
     pub fn as_object(&self) -> Result<serde_json::Value, AnyError> {
         match self {
             TimeFormatLocale::Name(name) => {
@@ -101,10 +120,14 @@ impl TimeFormatLocale {
     }
 }
 
+/// Renderer used by Vega Embed in exported HTML.
 #[derive(Debug, Clone, Copy)]
 pub enum Renderer {
+    /// Vector SVG rendering.
     Svg,
+    /// Raster Canvas rendering.
     Canvas,
+    /// Combined SVG and Canvas rendering.
     Hybrid,
 }
 
@@ -132,13 +155,25 @@ impl FromStr for Renderer {
     }
 }
 
+/// Options applied when compiling a Vega-Lite specification.
+///
+/// Unset theme and locale options inherit the converter defaults. Other `None`
+/// fields leave the specification unchanged. Use [`Default`] to select the bundled
+/// default Vega-Lite version.
 #[derive(Debug, Clone, Default)]
 pub struct VlOpts {
+    /// Vega-Lite configuration passed to the compiler, overriding specification config.
     pub config: Option<serde_json::Value>,
+    /// Built-in or configured theme name. `None` inherits the converter default.
     pub theme: Option<String>,
+    /// Bundled Vega-Lite compiler version. Defaults to [`VlVersion::default()`].
     pub vl_version: VlVersion,
+    /// Number-format locale. `None` inherits the converter default.
     pub format_locale: Option<FormatLocale>,
+    /// Date/time-format locale. `None` inherits the converter default.
     pub time_format_locale: Option<TimeFormatLocale>,
+    /// Additional Google Fonts to load for this conversion.
+    /// Configured font requests still apply. `None` adds no per-call requests.
     pub google_fonts: Option<Vec<super::GoogleFontRequest>>,
     /// Per-request overlay plugin (inline ESM or URL). Requires `allow_per_request_plugins`.
     pub vega_plugin: Option<String>,
@@ -151,7 +186,7 @@ pub struct VlOpts {
 }
 
 impl VlOpts {
-    pub fn to_embed_opts(&self, renderer: Renderer) -> Result<serde_json::Value, AnyError> {
+    pub(crate) fn to_embed_opts(&self, renderer: Renderer) -> Result<serde_json::Value, AnyError> {
         let mut opts_map = serde_json::Map::new();
 
         opts_map.insert(
@@ -197,13 +232,19 @@ impl VlOpts {
 /// Options specific to SVG output format.
 #[derive(Debug, Clone, Default)]
 pub struct SvgOpts {
+    /// Inline external images and enabled Google Fonts in the SVG. Defaults to false.
+    /// Local-font embedding is controlled separately by `VlcConfig::embed_local_fonts`.
     pub bundle: bool,
 }
 
 /// Options specific to HTML output format.
 #[derive(Debug, Clone)]
 pub struct HtmlOpts {
+    /// Embed JavaScript dependencies and enabled Google Fonts in the HTML.
+    /// Defaults to false, so the browser loads libraries from a CDN.
+    /// Local-font embedding is controlled separately by `VlcConfig::embed_local_fonts`.
     pub bundle: bool,
+    /// Browser renderer. Defaults to [`Renderer::Svg`].
     pub renderer: Renderer,
 }
 
@@ -219,14 +260,19 @@ impl Default for HtmlOpts {
 /// Options specific to PNG output format.
 #[derive(Debug, Clone, Default)]
 pub struct PngOpts {
+    /// Pixel scale factor. `None` means 1.0. Multiplies the PPI scale as well.
     pub scale: Option<f32>,
+    /// Pixels per inch. `None` means 72.0. Scales pixel dimensions by `ppi / 72`
+    /// and records pixel density in PNG metadata for consumers that use physical size.
     pub ppi: Option<f32>,
 }
 
 /// Options specific to JPEG output format.
 #[derive(Debug, Clone, Default)]
 pub struct JpegOpts {
+    /// Pixel scale factor. `None` means 1.0.
     pub scale: Option<f32>,
+    /// JPEG quality from 1 to 100. `None` means 90.
     pub quality: Option<u8>,
 }
 
@@ -237,15 +283,20 @@ pub struct PdfOpts {}
 /// Options specific to URL output format.
 #[derive(Debug, Clone, Default)]
 pub struct UrlOpts {
+    /// Open the Vega Editor in chart-only view. Defaults to false.
     pub fullscreen: bool,
 }
 
 /// Log level for entries captured during Vega/VL evaluation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LogLevel {
+    /// An error reported by the JavaScript libraries.
     Error,
+    /// A warning that did not prevent a result.
     Warn,
+    /// An informational message.
     Info,
+    /// A debug message.
     Debug,
 }
 
@@ -263,74 +314,99 @@ impl std::fmt::Display for LogLevel {
 /// A log entry captured during Vega/VL evaluation.
 #[derive(Debug, Clone)]
 pub struct LogEntry {
+    /// Severity reported by Vega or Vega-Lite.
     pub level: LogLevel,
+    /// Diagnostic text captured during evaluation.
     pub message: String,
 }
 
-pub trait WithGoogleFonts {
+pub(crate) trait WithGoogleFonts {
     fn add_google_fonts(&mut self, usage: GoogleFontUsage);
 }
 
 /// Output from a Vega-Lite -> Vega compilation.
 #[derive(Debug)]
 pub struct VegaOutput {
+    /// Compiled Vega specification.
     pub spec: serde_json::Value,
+    /// Diagnostics captured while compiling the specification.
     pub logs: Vec<LogEntry>,
 }
 
 /// Output from an SVG conversion.
 #[derive(Debug)]
 pub struct SvgOutput {
+    /// SVG document as UTF-8 text.
     pub svg: String,
+    /// Diagnostics captured during conversion.
     pub logs: Vec<LogEntry>,
+    /// Google Fonts downloads and resolved variants used by this conversion.
     pub google_fonts: GoogleFontUsage,
 }
 
 /// Output from a PNG conversion.
 #[derive(Debug)]
 pub struct PngOutput {
+    /// PNG-encoded image bytes.
     pub data: Vec<u8>,
+    /// Diagnostics captured during conversion.
     pub logs: Vec<LogEntry>,
+    /// Google Fonts downloads and resolved variants used by this conversion.
     pub google_fonts: GoogleFontUsage,
 }
 
 /// Output from a JPEG conversion.
 #[derive(Debug)]
 pub struct JpegOutput {
+    /// JPEG-encoded image bytes.
     pub data: Vec<u8>,
+    /// Diagnostics captured during conversion.
     pub logs: Vec<LogEntry>,
+    /// Google Fonts downloads and resolved variants used by this conversion.
     pub google_fonts: GoogleFontUsage,
 }
 
 /// Output from a PDF conversion.
 #[derive(Debug)]
 pub struct PdfOutput {
+    /// PDF document bytes.
     pub data: Vec<u8>,
+    /// Diagnostics captured during conversion.
     pub logs: Vec<LogEntry>,
+    /// Google Fonts downloads and resolved variants used by this conversion.
     pub google_fonts: GoogleFontUsage,
 }
 
 /// Output from an HTML conversion.
 #[derive(Debug)]
 pub struct HtmlOutput {
+    /// Complete HTML document as UTF-8 text.
     pub html: String,
+    /// Diagnostics captured during export and font analysis.
     pub logs: Vec<LogEntry>,
+    /// Google Fonts downloads and resolved variants used by this export.
     pub google_fonts: GoogleFontUsage,
 }
 
 /// Output from a scenegraph extraction.
 #[derive(Debug)]
 pub struct ScenegraphOutput {
+    /// Evaluated scenegraph as a JSON value.
     pub scenegraph: serde_json::Value,
+    /// Diagnostics captured during evaluation.
     pub logs: Vec<LogEntry>,
+    /// Google Fonts downloads and resolved variants used by this conversion.
     pub google_fonts: GoogleFontUsage,
 }
 
 /// Output from a scenegraph msgpack extraction.
 #[derive(Debug)]
 pub struct ScenegraphMsgpackOutput {
+    /// MessagePack-encoded evaluated scenegraph.
     pub data: Vec<u8>,
+    /// Diagnostics captured during evaluation.
     pub logs: Vec<LogEntry>,
+    /// Google Fonts downloads and resolved variants used by this conversion.
     pub google_fonts: GoogleFontUsage,
 }
 
