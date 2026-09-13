@@ -183,7 +183,7 @@ pub fn get_time_format_locale(name: &str) -> PyResult<Py<PyAny>> {
 /// Returns:
 ///     str: Bundled snippet with all dependencies
 #[pyfunction]
-#[pyo3(signature = (snippet=None, vl_version=None))]
+#[pyo3(signature = (snippet=None, *, vl_version=None))]
 pub fn javascript_bundle(snippet: Option<String>, vl_version: Option<&str>) -> PyResult<String> {
     let vl_version = if let Some(vl_version) = vl_version {
         VlVersion::from_str(vl_version)?
@@ -262,7 +262,7 @@ pub fn get_themes_asyncio<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
 
 #[doc = async_variant_doc!("javascript_bundle")]
 #[pyfunction(name = "javascript_bundle")]
-#[pyo3(signature = (snippet=None, vl_version=None))]
+#[pyo3(signature = (snippet=None, *, vl_version=None))]
 pub fn javascript_bundle_asyncio<'py>(
     py: Python<'py>,
     snippet: Option<String>,

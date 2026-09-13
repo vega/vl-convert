@@ -36,6 +36,7 @@ const JSDELIVR_URL: &str = "https://cdn.jsdelivr.net";
 const VEGA_PATH: &str = "/npm/vega@6.4.0/+esm";
 const VEGA_THEMES_PATH: &str = "/npm/vega-themes@3.0.0/+esm";
 const VEGA_EMBED_PATH: &str = "/npm/vega-embed@7.2.0/+esm";
+const VEGA_DATASETS_PATH: &str = "/npm/vega-datasets@v3.2.1/";
 const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
 const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.3/+esm";
 
@@ -359,6 +360,7 @@ pub const JSDELIVR_URL: &str = "{JSDELIVR_URL}";
 pub const VEGA_PATH: &str = "{VEGA_PATH}";
 pub const VEGA_THEMES_PATH: &str = "{VEGA_THEMES_PATH}";
 pub const VEGA_EMBED_PATH: &str = "{VEGA_EMBED_PATH}";
+pub const VEGA_DATASETS_PATH: &str = "{VEGA_DATASETS_PATH}";
 pub const DEBOUNCE_PATH: &str = "{DEBOUNCE_PATH}";
 pub const MSGPACK_PATH: &str = "{MSGPACK_PATH}";
 
@@ -387,9 +389,10 @@ pub fn msgpack_url() -> String {{
 
 /// A bundled Vega-Lite compiler version.
 ///
-/// Parse a supported major/minor selector such as `"6.4"` or `"v6_4"`
-/// with `FromStr`. Unsupported versions return an error. Each variant selects
-/// the bundled patch release for that major/minor version.
+/// Parse a selector such as `"6.4"`, `"v6_4"`, or `"6.4.1"` with `FromStr`.
+/// Patch numbers are accepted but do not select a different compiler. Each variant
+/// uses the bundled patch release for its major/minor version. Unsupported versions
+/// return an error.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[allow(non_camel_case_types)]
 pub enum VlVersion {{
@@ -431,7 +434,18 @@ impl FromStr for VlVersion {{
     type Err = AnyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {{
-        Ok(match s {{
+        let version = match s.rsplit_once('.') {{
+            Some((major_minor, patch))
+                if major_minor.contains('.')
+                    && !patch.is_empty()
+                    && patch.bytes().all(|b| b.is_ascii_digit())
+                    && (patch == "0" || !patch.starts_with('0')) =>
+            {{
+                major_minor
+            }}
+            _ => s,
+        }};
+        Ok(match version {{
             {from_str_matches_csv},
             _ => bail!("Unsupported Vega-Lite version string {{}}", s)
         }})

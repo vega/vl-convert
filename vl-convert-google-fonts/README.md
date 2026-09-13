@@ -13,3 +13,14 @@ This crate provides a client for downloading and caching fonts from the [Google 
 | Feature  | Description |
 |----------|-------------|
 | `fontdb` | Adds `GoogleFontsDatabaseExt` trait for registering/unregistering font batches on a `fontdb::Database` |
+
+## Environment Variables
+
+These variables configure the shared Google Fonts client in Python, Rust, the CLI, and the server. Set them before the client is initialized.
+
+| Variable | Effect |
+| --- | --- |
+| `VLC_GOOGLE_FONTS_CACHE_DIR` | Absolute cache directory for downloaded fonts and CSS. Set to `none` to disable disk caching. Defaults to the platform cache directory plus `vl-convert/google-fonts`. |
+| `VLC_GOOGLE_FONTS_CSS2_URL` | Google Fonts CSS2 endpoint, for a mirror or local test server. Defaults to `https://fonts.googleapis.com/css2`. |
+
+These replace the prerelease names `VL_CONVERT_FONT_CACHE_DIR` and `VL_CONVERT_GOOGLE_FONTS_CSS2_URL`, which are no longer recognized. Rust callers can also set the corresponding fields in `ClientConfig` directly.
