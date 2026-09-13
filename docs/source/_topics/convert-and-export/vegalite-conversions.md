@@ -14,7 +14,7 @@ Use the Vega-Lite functions for charts authored in Vega-Lite. VlConvert compiles
 
 Available outputs: compiled Vega JSON, SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, an evaluated scenegraph. SVG, HTML, and URL outputs are text. PNG, JPEG, and PDF outputs are bytes.
 
-VlConvert bundles several Vega-Lite versions and uses the newest by default. Set `vl_version` when a specification depends on the behavior of an older release. The setting selects the compiler and does not change the input's `$schema` field.
+VlConvert bundles several Vega-Lite versions and uses the newest by default. See [Supported Vega-Lite Versions](#supported-vega-lite-versions) to select another compiler. The setting does not change the input's `$schema` field.
 
 The examples below use the same input from Quick Start:
 
@@ -108,6 +108,31 @@ $ curl http://127.0.0.1:3000/vegalite/svg \
 ```
 
 The response body contains the output directly. See {doc}`../api-reference` for the other request fields and response content types.
+::::
+
+## Supported Vega-Lite Versions
+
+This VlConvert release accepts these major/minor versions, listed from oldest to newest. The newest is the default:
+
+```{program-output} python -c "import vl_convert as vlc; print(', '.join(vlc.get_vegalite_versions()))"
+```
+
+Each selects the bundled patch release for that major/minor version. A full version string such as `6.4.1` selects the same compiler as `6.4`, not that exact patch release.
+
+::::{interface} python
+Pass `vl_version="6.4"` to a Vega-Lite conversion function. Use `vlc.get_vegalite_versions()` to list the versions in your installed package.
+::::
+
+::::{interface} cli
+Pass `--vl-version 6.4` to a Vega-Lite conversion command. Its `--help` output lists the supported versions.
+::::
+
+::::{interface} rust
+Set `VlOpts.vl_version` to a `VlVersion` variant, such as `VlVersion::v6_4`, or parse a version string with `"6.4.1".parse::<VlVersion>()?`. The crate-root `VL_VERSIONS` constant lists the bundled versions.
+::::
+
+::::{interface} server
+Set `"vl_version": "6.4"` in the request body. `GET /info` returns the server's supported versions in `vegalite_versions`.
 ::::
 
 Related guides: {doc}`data-loading` for specifications that load data from URLs or files, {doc}`image-quality` for size and resolution options, {doc}`themes` and {doc}`locales` for appearance and formatting, {doc}`html-output` for interactive pages, and {doc}`../advanced/scenegraph` and {doc}`../advanced/font-introspection` for the intermediate outputs.
