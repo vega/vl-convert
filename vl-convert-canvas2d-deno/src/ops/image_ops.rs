@@ -429,12 +429,12 @@ pub fn op_canvas_decode_svg_at_size(
     target_height: u32,
 ) -> Result<DecodedImage, JsErrorBox> {
     use resvg::tiny_skia::Pixmap;
-    use usvg::{Options, Tree};
+    use usvg::Tree;
 
     let svg_str = std::str::from_utf8(bytes)
         .map_err(|e| JsErrorBox::generic(format!("Invalid UTF-8 in SVG: {}", e)))?;
 
-    let opt = Options::default();
+    let opt = svg_options();
     let tree = Tree::from_str(svg_str, &opt)
         .map_err(|e| JsErrorBox::generic(format!("Failed to parse SVG: {}", e)))?;
 
@@ -488,14 +488,32 @@ fn is_svg(bytes: &[u8]) -> bool {
         || trimmed.starts_with("<!DOCTYPE svg")
 }
 
+/// usvg options for SVG images drawn onto the canvas. Nested `data:` images are
+/// decoded; file paths and URLs are refused so an SVG cannot carry a reference
+/// past the access policy that admitted it.
+#[cfg(feature = "svg")]
+pub(crate) fn svg_options() -> usvg::Options<'static> {
+    let image_href_resolver = usvg::ImageHrefResolver {
+        resolve_data: usvg::ImageHrefResolver::default_data_resolver(),
+        resolve_string: Box::new(|href: &str, _opts: &usvg::Options| {
+            log::warn!("Ignoring nested image reference inside an SVG image: {href}");
+            None
+        }),
+    };
+    usvg::Options {
+        image_href_resolver,
+        ..usvg::Options::default()
+    }
+}
+
 #[cfg(feature = "svg")]
 fn get_svg_native_size(bytes: &[u8]) -> Result<(u32, u32), JsErrorBox> {
-    use usvg::{Options, Tree};
+    use usvg::Tree;
 
     let svg_str = std::str::from_utf8(bytes)
         .map_err(|e| JsErrorBox::generic(format!("Invalid UTF-8 in SVG: {}", e)))?;
 
-    let opt = Options::default();
+    let opt = svg_options();
     let tree = Tree::from_str(svg_str, &opt)
         .map_err(|e| JsErrorBox::generic(format!("Failed to parse SVG: {}", e)))?;
 

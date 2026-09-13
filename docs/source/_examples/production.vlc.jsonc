@@ -1,0 +1,28 @@
+{
+  // Persistent conversion workers
+  "num_workers": 4,
+
+  // Data loading
+  "base_url": false,
+  "allowed_base_urls": [],
+
+  // Fonts
+  "auto_google_fonts": false,
+  "google_fonts": [
+    {"family": "Inter", "variants": [{"weight": 400, "style": "normal"}]}
+  ],
+  "missing_fonts": "warn",
+
+  // JavaScript resource limits
+  "max_v8_heap_size_mb": 1024,
+  "max_v8_execution_time_secs": 10,
+
+  // Vega extensions
+  "vega_plugins": [],
+  "plugin_import_domains": [],
+
+  // Vega-Lite defaults
+  "default_theme": null,
+  "default_format_locale": null,
+  "default_time_format_locale": null
+}

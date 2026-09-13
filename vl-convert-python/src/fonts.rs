@@ -4,7 +4,7 @@ use pyo3::types::PyDict;
 use pythonize::pythonize;
 use std::str::FromStr;
 use vl_convert_rs::converter::{FontOpts, GoogleFontRequest, VgOpts, VlOpts};
-use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::VlVersion;
 use vl_convert_rs::{FontStyle, VariantRequest};
 
 use crate::utils::{
@@ -79,7 +79,7 @@ pub fn parse_google_fonts_arg(
     })
 }
 
-/// Return font information for a rendered Vega-Lite spec
+/// Return information about the fonts that VlConvert resolves for a Vega-Lite spec
 ///
 /// Args:
 ///     vl_spec (str | dict): Vega-Lite JSON specification string or dict
@@ -98,7 +98,7 @@ pub fn parse_google_fonts_arg(
 ///         None uses the converter configuration. Applies to Google Fonts URLs
 ///         and embedded font CSS.
 /// Returns:
-///     list[FontInfo]: Structured font metadata for each font used by the chart
+///     list[FontInfo]: Metadata for each font that VlConvert resolves for the chart
 #[pyfunction]
 #[pyo3(signature = (vl_spec, *, vl_version=None, config=None, theme=None, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None, subset_fonts=None))]
 pub fn vegalite_fonts(
@@ -158,7 +158,7 @@ pub fn vegalite_fonts(
         .map(|obj| obj.into())
 }
 
-/// Return font information for a rendered Vega spec
+/// Return information about the fonts that VlConvert resolves for a Vega spec
 ///
 /// Args:
 ///     vg_spec (str | dict): Vega JSON specification string or dict
@@ -173,7 +173,7 @@ pub fn vegalite_fonts(
 ///         None uses the converter configuration. Applies to Google Fonts URLs
 ///         and embedded font CSS.
 /// Returns:
-///     list[FontInfo]: Structured font metadata for each font used by the chart
+///     list[FontInfo]: Metadata for each font that VlConvert resolves for the chart
 #[pyfunction]
 #[pyo3(signature = (vg_spec, *, auto_google_fonts=None, include_font_face=false, google_fonts=None, format_locale=None, time_format_locale=None, subset_fonts=None))]
 pub fn vega_fonts(

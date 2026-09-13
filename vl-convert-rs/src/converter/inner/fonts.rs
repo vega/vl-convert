@@ -91,64 +91,69 @@ impl InnerVlConverter {
         &self,
         request_fonts: Option<Vec<GoogleFontRequest>>,
     ) -> Result<ResolvedGoogleFonts, AnyError> {
-        let mut merged = self.ctx.config.google_fonts.clone();
-        if let Some(request) = request_fonts {
-            merged.extend(request);
-        }
-        if merged.is_empty() {
-            return Ok(ResolvedGoogleFonts::default());
-        }
-
-        let unique = unique_google_font_requests(merged);
-
-        let mut batches = Vec::new();
-        let mut google_fonts = GoogleFontUsage::default();
-        let variant_threshold = self
-            .ctx
-            .config
-            .google_font_variant_threshold
-            .map(|n| usize::try_from(n.get()).unwrap_or(usize::MAX));
-        let mut used_variants = 0usize;
-        for request in unique {
-            if let Some(threshold) = variant_threshold {
-                if used_variants >= threshold {
-                    return Err(error_with_google_font_usage(
-                        anyhow!(
-                            "Google Font variant threshold {threshold} reached after resolving \
-                             {used_variants} variants; refusing to load family '{}'",
-                            request.family
-                        ),
-                        google_fonts,
-                    ));
-                }
-            }
-            let loaded = match GOOGLE_FONTS_CLIENT
-                .load(FontLoadRequest {
-                    family: &request.family,
-                    variants: request.variants.as_deref(),
-                })
-                .await
-            {
-                Ok(loaded) => loaded,
-                Err(err) => {
-                    let error = AnyError::new(err).context(format!(
-                        "Failed to load request font '{}' from Google Fonts",
-                        request.family
-                    ));
-                    return Err(error_with_google_font_usage(error, google_fonts));
-                }
-            };
-            used_variants = used_variants.saturating_add(
-                usize::try_from(loaded.usage.stats.resolved_variants).unwrap_or(usize::MAX),
-            );
-            google_fonts.add_assign(loaded.usage);
-            batches.push(loaded.batch);
-        }
-        Ok(ResolvedGoogleFonts {
-            batches,
-            google_fonts,
-        })
+        resolve_google_fonts(&self.ctx.config, request_fonts).await
     }
+}
+
+pub(crate) async fn resolve_google_fonts(
+    config: &crate::converter::VlcConfig,
+    request_fonts: Option<Vec<GoogleFontRequest>>,
+) -> Result<ResolvedGoogleFonts, AnyError> {
+    let mut merged = config.google_fonts.clone();
+    if let Some(request) = request_fonts {
+        merged.extend(request);
+    }
+    if merged.is_empty() {
+        return Ok(ResolvedGoogleFonts::default());
+    }
+
+    let unique = unique_google_font_requests(merged);
+
+    let mut batches = Vec::new();
+    let mut google_fonts = GoogleFontUsage::default();
+    let variant_threshold = config
+        .google_font_variant_threshold
+        .map(|n| usize::try_from(n.get()).unwrap_or(usize::MAX));
+    let mut used_variants = 0usize;
+    for request in unique {
+        if let Some(threshold) = variant_threshold {
+            if used_variants >= threshold {
+                return Err(error_with_google_font_usage(
+                    anyhow!(
+                        "Google Font variant threshold {threshold} reached after resolving \
+                             {used_variants} variants; refusing to load family '{}'",
+                        request.family
+                    ),
+                    google_fonts,
+                ));
+            }
+        }
+        let loaded = match GOOGLE_FONTS_CLIENT
+            .load(FontLoadRequest {
+                family: &request.family,
+                variants: request.variants.as_deref(),
+            })
+            .await
+        {
+            Ok(loaded) => loaded,
+            Err(err) => {
+                let error = AnyError::new(err).context(format!(
+                    "Failed to load request font '{}' from Google Fonts",
+                    request.family
+                ));
+                return Err(error_with_google_font_usage(error, google_fonts));
+            }
+        };
+        used_variants = used_variants.saturating_add(
+            usize::try_from(loaded.usage.stats.resolved_variants).unwrap_or(usize::MAX),
+        );
+        google_fonts.add_assign(loaded.usage);
+        batches.push(loaded.batch);
+    }
+    Ok(ResolvedGoogleFonts {
+        batches,
+        google_fonts,
+    })
 }
 
 #[derive(Default)]

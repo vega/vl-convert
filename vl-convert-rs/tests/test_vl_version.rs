@@ -1,5 +1,4 @@
-use vl_convert_rs::module_loader::import_map::VL_VERSIONS;
-use vl_convert_rs::VlVersion;
+use vl_convert_rs::{VlVersion, VL_VERSIONS};
 
 #[test]
 fn test_vl_version_aliases_and_patch_versions() {

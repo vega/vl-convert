@@ -32,7 +32,7 @@ pub enum MissingFontsPolicy {
 
 /// A plugin after resolution: URL fetched, HTTP imports bundled.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResolvedPlugin {
+pub(crate) struct ResolvedPlugin {
     /// Original URL if this was a URL plugin (used for bundle=false HTML export).
     /// None for file-backed or inline plugins.
     pub original_url: Option<String>,
@@ -41,6 +41,9 @@ pub struct ResolvedPlugin {
     pub bundled_source: String,
 }
 
+/// How relative data and image references are resolved.
+///
+/// Resolving a reference does not grant access. See [`VlcConfig::allowed_base_urls`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum BaseUrlSetting {
     /// Resolve relative paths against the vega-datasets CDN
@@ -86,7 +89,7 @@ impl serde::Serialize for BaseUrlSetting {
 impl BaseUrlSetting {
     /// Resolve to the actual base URL string, or None if disabled.
     /// Filesystem paths are converted to file:// URLs.
-    pub fn resolved_url(&self) -> Result<Option<String>, AnyError> {
+    pub(crate) fn resolved_url(&self) -> Result<Option<String>, AnyError> {
         match self {
             Self::Default => Ok(Some(url_for_path(VEGA_DATASETS_PATH))),
             Self::Disabled => Ok(None),
@@ -109,7 +112,7 @@ impl BaseUrlSetting {
     }
 
     /// Whether this base URL resolves to a local filesystem path.
-    pub fn is_filesystem(&self) -> bool {
+    pub(crate) fn is_filesystem(&self) -> bool {
         match self {
             Self::Default => false,
             Self::Disabled => false,
@@ -125,42 +128,51 @@ impl BaseUrlSetting {
     }
 }
 
+/// Converter-wide defaults, access policies, fonts, plugins, and worker limits.
+///
+/// Construct a converter with [`super::VlConverter::with_config`].
+/// [`super::VlConverter`] does not automatically load a configuration
+/// file or apply CLI environment settings.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct VlcConfig {
-    /// Number of persistent worker V8 isolates. Must be at least 1.
+    /// Number of persistent worker V8 isolates. Defaults to 1. Must be at least 1.
+    /// Also limits concurrent SVG-only conversions separately from the V8 pool.
     pub num_workers: NonZeroU64,
-    /// Base URL for resolving relative data paths in Vega specs.
+    /// Base URL for resolving relative data and image paths in Vega specs.
     pub base_url: BaseUrlSetting,
-    /// Allowlist for data access (HTTP URLs, filesystem paths).
-    /// Uses CSP-style patterns: "https:" (scheme), "<https://example.com/>" (prefix),
-    /// "/data/" (filesystem). Default is `["http:", "https:"]`: any
+    /// Allowlist for data and image access (HTTP URLs, filesystem paths).
+    /// Uses CSP-style patterns: `https:` (scheme), `https://example.com/` (prefix),
+    /// `/data/` (filesystem). Default is `["http:", "https:"]`: any
     /// HTTP/HTTPS URL is allowed; no filesystem access. Pass `Vec::new()`
-    /// to block all network data; `["*"]` to allow everything.
+    /// to block all network data and images; `["*"]` to allow everything.
     pub allowed_base_urls: Vec<String>,
-    /// Whether to auto-download missing fonts from Google Fonts.
+    /// Automatically download missing fonts from Google Fonts. Defaults to false.
     pub auto_google_fonts: bool,
     /// Whether to embed locally-available fonts as base64 `@font-face` blocks
     /// in HTML and SVG output. Defaults to false.
-    /// Does not apply to PDF/PNG/JPEG, which always embed fonts via fontdb.
+    /// Does not control PDF font embedding or font rasterization in PNG/JPEG.
     pub embed_local_fonts: bool,
     /// Whether to subset embedded fonts to only the characters used.
     /// Defaults to true. Applies to HTML and SVG output.
     /// When false, full font files are embedded and CDN URLs omit the `&text=` parameter.
     pub subset_fonts: bool,
-    /// How to handle missing first-choice fonts: silently fallback, warn, or error.
+    /// Missing first-choice font policy. Defaults to [`MissingFontsPolicy::Fallback`].
     pub missing_fonts: MissingFontsPolicy,
     /// Google Fonts to register for all conversions. Each request specifies a
     /// family and optionally specific variants. Fonts are downloaded and
     /// registered per-request via the overlay mechanism. Empty = no
     /// configured fonts (the natural "unset" state).
     pub google_fonts: Vec<GoogleFontRequest>,
-    /// Stop admitting additional Google Font families after this many
-    /// variants have resolved. A single family may cross the threshold.
-    /// `None` preserves unbounded behavior.
+    /// Maximum number of Google Font variants one conversion may load,
+    /// counting configured, per-request, and automatically discovered
+    /// families together. Once the cap is reached the conversion fails rather
+    /// than loading another family; a single family may carry the total past
+    /// the cap. `None` preserves unbounded behavior.
     pub google_font_variant_threshold: Option<NonZeroU64>,
     /// Maximum V8 heap size in megabytes per worker. `None` = no cap;
-    /// `Some(n)` = explicit cap.
+    /// `Some(n)` = explicit cap. Values below 64 MB are rejected when the
+    /// converter is built because V8 cannot initialize a smaller heap.
     pub max_v8_heap_size_mb: Option<NonZeroU64>,
     /// Maximum V8 execution time in seconds. `None` = no cap; `Some(n)` =
     /// explicit cap. When exceeded, V8 execution is terminated and an error is
@@ -168,9 +180,8 @@ pub struct VlcConfig {
     /// (Vega evaluation, plugin loading); Rust-side post-processing is not
     /// subject to this limit.
     pub max_v8_execution_time_secs: Option<NonZeroU64>,
-    /// Whether to run V8 garbage collection after each conversion to release
-    /// memory back to the OS. Defaults to false. Enabling this reduces peak
-    /// memory between conversions at the cost of slower throughput.
+    /// Request V8 garbage collection after each conversion. Defaults to false.
+    /// Can reduce retained JavaScript memory at the cost of throughput.
     pub gc_after_conversion: bool,
     /// User-provided Vega plugin ESM modules. Each string is either:
     /// - An HTTP/HTTPS URL (fetched and bundled at startup)
@@ -187,13 +198,13 @@ pub struct VlcConfig {
     pub plugin_import_domains: Vec<String>,
     /// Whether to allow per-request plugins via `VgOpts`/`VlOpts`.
     /// Defaults to false. When enabled, requests can include a `vega_plugin`
-    /// field that runs on an ephemeral V8 isolate (50-100ms overhead).
+    /// field that runs on a separate, short-lived V8 isolate.
     pub allow_per_request_plugins: bool,
     /// Maximum number of concurrent ephemeral workers for per-request plugins.
-    /// `None` = no limit. `Some(n)` = cap concurrent ephemeral V8 isolates.
+    /// Defaults to two workers. `None` removes this concurrency limit.
     pub max_ephemeral_workers: Option<NonZeroU64>,
-    /// Whether to allow per-request `google_fonts` / `auto_google_fonts` overrides.
-    /// Defaults to false. When false, requests containing these fields are rejected.
+    /// Whether the HTTP server accepts per-request Google Fonts overrides.
+    /// Defaults to false. Rust calls are not restricted by this server policy.
     pub allow_google_fonts: bool,
     /// Domain allowlist for HTTP imports inside per-request plugins.
     /// Separate from `plugin_import_domains` (which controls config-level
@@ -227,10 +238,6 @@ pub(crate) struct ConverterContext {
     /// Empty if no plugins configured.
     pub resolved_plugins: Vec<ResolvedPlugin>,
 }
-
-/// Backward-compatible alias for [`VlcConfig`].
-#[deprecated(since = "2.0.0", note = "use VlcConfig instead")]
-pub type VlConverterConfig = VlcConfig;
 
 impl Default for VlcConfig {
     fn default() -> Self {
@@ -334,6 +341,12 @@ impl VlcConfig {
     }
 }
 
+/// Validate converter settings and resolve file-backed plugin sources.
+///
+/// Returns normalized settings or an error for invalid access patterns, resource
+/// limits, plugin settings, or unreadable plugin files. Does not start workers.
+/// [`super::VlConverter::with_config`] calls this automatically. Servers can call
+/// it before replacing a live configuration.
 pub fn normalize_converter_config(mut config: VlcConfig) -> Result<VlcConfig, AnyError> {
     // `num_workers` is `NonZeroU64` (type-level guarantee); no runtime check needed.
 

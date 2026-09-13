@@ -1,6 +1,7 @@
 mod common;
 
 use common::*;
+use serde_json::Value;
 
 #[tokio::test]
 async fn test_public_docs_available() {
@@ -59,6 +60,99 @@ async fn test_main_openapi_excludes_admin_paths() {
 }
 
 #[tokio::test]
+async fn test_public_openapi_json_responses_have_schemas_and_resolved_refs() {
+    let server = &*DEFAULT_SERVER;
+    let resp = server
+        .client
+        .get(format!("{}/api-doc/openapi.json", server.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body: Value = resp.json().await.unwrap();
+
+    assert_response_schemas_and_refs(&body, false);
+}
+
+fn assert_response_schemas_and_refs(body: &Value, require_response_content: bool) {
+    let paths = body["paths"].as_object().expect("paths must be an object");
+    let mut missing_response_schemas = Vec::new();
+    for (path, path_item) in paths {
+        let methods = path_item.as_object().expect("path item must be an object");
+        for (method, operation) in methods {
+            let responses = operation["responses"]
+                .as_object()
+                .expect("responses must be an object");
+            for (status, response) in responses {
+                let Some(content) = response.get("content").and_then(Value::as_object) else {
+                    if require_response_content {
+                        missing_response_schemas.push(format!(
+                            "{} {} response {} has no documented content",
+                            method.to_uppercase(),
+                            path,
+                            status
+                        ));
+                    }
+                    continue;
+                };
+                for (content_type, media_type) in content {
+                    if content_type.starts_with("application/json")
+                        && media_type.get("schema").is_none()
+                    {
+                        missing_response_schemas.push(format!(
+                            "{} {} response {} {}",
+                            method.to_uppercase(),
+                            path,
+                            status,
+                            content_type
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        missing_response_schemas.is_empty(),
+        "JSON responses missing schemas: {missing_response_schemas:?}"
+    );
+
+    let schemas = body
+        .pointer("/components/schemas")
+        .and_then(Value::as_object)
+        .expect("components.schemas must be an object");
+    let mut unresolved_refs = Vec::new();
+    collect_schema_refs(body, &mut unresolved_refs);
+    unresolved_refs.retain(|schema_name| !schemas.contains_key(schema_name));
+    unresolved_refs.sort();
+    unresolved_refs.dedup();
+    assert!(
+        unresolved_refs.is_empty(),
+        "OpenAPI schema refs missing from components.schemas: {unresolved_refs:?}"
+    );
+}
+
+fn collect_schema_refs(value: &Value, refs: &mut Vec<String>) {
+    match value {
+        Value::Object(map) => {
+            if let Some(reference) = map.get("$ref").and_then(Value::as_str) {
+                if let Some(schema_name) = reference.strip_prefix("#/components/schemas/") {
+                    refs.push(schema_name.to_string());
+                }
+            }
+            for nested in map.values() {
+                collect_schema_refs(nested, refs);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect_schema_refs(item, refs);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[tokio::test]
 async fn test_admin_openapi_includes_admin_paths() {
     // The admin spec at `/admin/api-doc/openapi.json` must include every
     // admin endpoint. Spawns a server with an admin listener so the spec is
@@ -85,6 +179,7 @@ async fn test_admin_openapi_includes_admin_paths() {
     let expected = [
         "/admin/budget",
         "/admin/config",
+        "/admin/config/fonts/cache",
         "/admin/config/fonts/directories",
         "/admin/diagnostics/workers",
     ];
@@ -101,5 +196,49 @@ async fn test_admin_openapi_includes_admin_paths() {
     assert!(
         !has_vegalite,
         "admin spec leaked /vegalite/* paths — should only contain /admin/*"
+    );
+
+    assert_response_schemas_and_refs(&body, true);
+
+    let schemas = body["components"]["schemas"]
+        .as_object()
+        .expect("components.schemas must be an object");
+    for schema in ["ConfigPatch", "ConfigReplace", "ConfigView"] {
+        assert!(schemas.contains_key(schema), "admin spec missing {schema}");
+    }
+
+    for schema in ["ConfigPatch", "ConfigReplace"] {
+        let base_url = &schemas[schema]["properties"]["base_url"];
+        let variants = base_url["oneOf"]
+            .as_array()
+            .expect("base_url must publish its bool-or-string wire types");
+        let types: Vec<&str> = variants
+            .iter()
+            .map(|item| {
+                item["type"]
+                    .as_str()
+                    .expect("variant type must be a string")
+            })
+            .collect();
+        assert_eq!(types, vec!["boolean", "string"]);
+    }
+
+    let patch = &schemas["ConfigPatch"]["properties"];
+    assert_eq!(patch["num_workers"]["type"], "integer");
+    assert_eq!(patch["num_workers"]["minimum"], 1);
+    assert_eq!(patch["allowed_base_urls"]["type"], "array");
+    assert_eq!(patch["themes"]["type"], "object");
+    assert_eq!(
+        patch["max_v8_heap_size_mb"]["type"],
+        serde_json::json!(["integer", "null"])
+    );
+    assert_eq!(patch["max_v8_heap_size_mb"]["minimum"], 64);
+
+    let replace_required = schemas["ConfigReplace"]["required"]
+        .as_array()
+        .expect("ConfigReplace must list required fields");
+    assert!(
+        replace_required.contains(&Value::from("default_theme")),
+        "required-but-nullable fields must still be present in PUT bodies"
     );
 }

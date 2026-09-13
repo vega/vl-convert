@@ -1,0 +1,111 @@
+---
+title: Vega Editor URL
+path: guides/url-output
+section: Output and Appearance
+order: 236
+interfaces: [python, cli, rust, server]
+---
+
+<!-- topic-body -->
+
+# Vega Editor URL
+
+URL output creates a link that opens a Vega or Vega-Lite specification in the [Vega Editor](https://vega.github.io/editor/). Use it to share a chart that others can inspect and edit.
+
+:::{warning}
+The specification is compressed and encoded in the URL, not encrypted. Anyone with the link can read the specification, including its inline data. Do not share a link containing private data or credentials.
+:::
+
+Generating the URL does not render the chart or upload the specification to the Vega Editor. The editor renders it when someone opens the link. External data and images are not embedded, so their URLs must be accessible from the browser. VlConvert configuration settings are not included in the link.
+
+## Create an Editor URL
+
+Save the specification from Quick Start as `chart.vl.json`:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+::::{interface} python
+```python
+from pathlib import Path
+
+import vl_convert as vlc
+
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
+url = vlc.vegalite_to_url(spec)
+print(url)
+```
+
+::::
+
+::::{interface} cli
+```console
+$ vl-convert vl2url --input chart.vl.json
+```
+
+::::
+
+::::{interface} rust
+These are synchronous free functions. They do not need a `VlConverter` or an async runtime.
+
+```rust
+use vl_convert_rs::converter::{vegalite_to_url, UrlOpts};
+use vl_convert_rs::serde_json;
+
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let spec: serde_json::Value = serde_json::from_str(&spec)?;
+let url = vegalite_to_url(spec, UrlOpts::default())?;
+println!("{url}");
+```
+
+::::
+
+::::{interface} server
+Save this complete request body as `request.json`:
+
+:::{dropdown} request.json
+:open:
+
+```{literalinclude} /_generated/requests/editor-url.json
+:language: json
+```
+:::
+
+```console
+$ curl http://127.0.0.1:3000/vegalite/url \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json
+```
+
+::::
+
+Output:
+
+```{program-output} python ../tools/run_vl_convert.py vl2url --input docs/source/_examples/quick-start.vl.json
+:class: url-output
+```
+
+Click the URL to open it in a new browser tab. By default, the editor shows both the specification and the chart.
+
+::::{interface} python
+Use `vega_to_url()` for Vega specifications. Set `fullscreen=True` to open the chart in the editor's full-screen view.
+::::
+
+::::{interface} cli
+Use `vg2url` for Vega specifications. Add `--fullscreen` to open the chart in the editor's full-screen view.
+::::
+
+::::{interface} rust
+Use `vega_to_url()` for Vega specifications. Set `UrlOpts { fullscreen: true }` to open the chart in the editor's full-screen view.
+::::
+
+::::{interface} server
+The response is a plain-text URL. Use `POST /vega/url` for Vega specifications. Add `"fullscreen": true` beside `spec` in the request body to open the chart in the editor's full-screen view.
+::::
+
+For a standalone HTML page instead of an editor link, see {doc}`html-output`.

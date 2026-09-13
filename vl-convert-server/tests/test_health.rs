@@ -42,13 +42,9 @@ async fn test_health_endpoints() {
     );
 }
 
-/// Locks the public `/infoz` surface: the exact set of keys must be
-/// `{version, vega_version, vega_themes_version, vega_embed_version,
-/// vegalite_versions, google_fonts_cache_dir, local_tz}`. Anything else
-/// (notably `generation`) would
-/// leak admin-scope observability to unauthenticated callers. Design §2.8.
+/// Keep operational details out of the unauthenticated `/infoz` response.
 #[tokio::test]
-async fn test_infoz_surface_unchanged() {
+async fn test_infoz_public_fields() {
     let server = &*DEFAULT_SERVER;
     let resp = server
         .client
@@ -66,7 +62,6 @@ async fn test_infoz_surface_unchanged() {
         "vega_themes_version",
         "vega_embed_version",
         "vegalite_versions",
-        "google_fonts_cache_dir",
         "local_tz",
     ]
     .into_iter()

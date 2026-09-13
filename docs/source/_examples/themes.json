@@ -1,0 +1,12 @@
+{
+  "brand": {
+    "background": "#f7f9fc",
+    "range": {"category": ["#225ea8", "#41b6c4", "#a1dab4"]},
+    "axis": {
+      "labelColor": "#4c5a6b",
+      "titleColor": "#4c5a6b",
+      "gridColor": "#dfe5ee"
+    },
+    "title": {"color": "#225ea8"}
+  }
+}

@@ -14,7 +14,7 @@ use std::str::FromStr;
 use vl_convert_rs::converter::{
     HtmlOpts, JpegOpts, PdfOpts, PngOpts, Renderer, SvgOpts, UrlOpts, VgOpts, VlOpts,
 };
-use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::VlVersion;
 
 fn validate_pdf_scale(scale: Option<f64>) -> PyResult<()> {
     if let Some(scale) = scale {

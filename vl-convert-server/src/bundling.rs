@@ -4,12 +4,13 @@ use axum::response::{IntoResponse, Json, Response};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::VlVersion;
 
 use crate::config::AppState;
 use crate::types::{BundleQuery, BundleSnippetRequest, ErrorResponse};
 use crate::util::error_response;
 
+/// Return a browser bundle containing Vega, Vega-Lite, and Vega Embed.
 #[utoipa::path(
     get,
     path = "/bundling/bundle",
@@ -61,6 +62,7 @@ pub async fn bundle(
     }
 }
 
+/// Bundle an application snippet with compatible visualization dependencies.
 #[utoipa::path(
     post,
     path = "/bundling/bundle-snippet",

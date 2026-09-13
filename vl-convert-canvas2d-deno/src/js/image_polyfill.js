@@ -101,6 +101,9 @@ class Image {
         return;
       }
       this.#applyLoadFailure(result.error);
+      // Let the host runtime log the failure or fail the render (vl-convert
+      // installs this hook); without one, failures stay silent as in a browser.
+      globalThis.__vlcImageLoadFailed?.(nextSrc, String(result.error?.message ?? result.error));
       this.#emitEvent("error", result.error);
       throw result.error;
     });
@@ -320,14 +323,20 @@ class Image {
 
         if (isHttpUrl) {
           bytes = new Uint8Array(await op_vega_data_fetch_bytes(normalizedUrl));
-        } else {
-          // Handle data: URLs and other non-HTTP schemes via fetch
+        } else if (url.startsWith("data:")) {
+          // data: URLs need no network or filesystem access.
           const response = await fetch(url);
           if (!response.ok) {
             throw new Error(`Failed to fetch image: ${response.status}`);
           }
           const arrayBuffer = await response.arrayBuffer();
           bytes = new Uint8Array(arrayBuffer);
+        } else {
+          // Anything else (for example `about:invalid/...` from a relative URL
+          // with the base URL disabled) cannot be loaded during conversion.
+          throw new Error(
+            `Unsupported image URL ${url}: expected an http(s), file, or data URL`,
+          );
         }
       }
 

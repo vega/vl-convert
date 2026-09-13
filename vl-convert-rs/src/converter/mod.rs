@@ -1,6 +1,6 @@
 mod config;
 mod fonts;
-mod inner;
+pub(crate) mod inner;
 mod permissions;
 mod plugin;
 mod rendering;
@@ -17,10 +17,10 @@ pub use fonts::{
 };
 pub(crate) use inner::InnerVlConverter;
 pub(crate) use inner::VlConverterInner;
+pub use permissions::vlc_config_path;
 pub(crate) use permissions::*;
-pub use permissions::{domain_matches_patterns, vlc_config_path};
 pub(crate) use plugin::resolve_plugin;
-pub use rendering::*;
+pub use rendering::{vega_to_url, vegalite_to_url};
 pub use types::*;
 pub use value_or_string::*;
 pub(crate) use worker_pool::{CallerGoneGuard, OutstandingTicket, QueuedWork, WorkFn};
@@ -51,25 +51,30 @@ use std::sync::atomic::AtomicUsize;
 
 // Extension for worker-local vl-convert ops. MainWorker provides Web APIs
 // (URL, fetch, etc.); Canvas 2D ops live in vl_convert_canvas2d.
-deno_core::extension!(
-    vl_convert_runtime,
-    ops = [
-        op_get_json_arg,
-        op_set_msgpack_result,
-        crate::data_ops::op_vega_data_fetch,
-        crate::data_ops::op_vega_data_fetch_bytes,
-        crate::data_ops::op_vega_file_read,
-        crate::data_ops::op_vega_file_read_bytes,
-    ],
-    esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
-    esm = [
-        dir "src/js",
-        "bootstrap.js",
-    ],
-);
+mod runtime_extension {
+    use super::{op_get_json_arg, op_set_msgpack_result};
+    deno_core::extension!(
+        vl_convert_runtime,
+        ops = [
+            op_get_json_arg,
+            op_set_msgpack_result,
+            crate::data_ops::op_vega_data_fetch,
+            crate::data_ops::op_vega_data_fetch_bytes,
+            crate::data_ops::op_vega_file_read,
+            crate::data_ops::op_vega_file_read_bytes,
+        ],
+        esm_entry_point = "ext:vl_convert_runtime/bootstrap.js",
+        esm = [
+            dir "src/js",
+            "bootstrap.js",
+        ],
+    );
+}
+pub(crate) use runtime_extension::vl_convert_runtime;
 
 const VEGAEMBED_GLOBAL_SNIPPET: &str =
     "window.vegaEmbed=vegaEmbed; window.vega=vega; window.vegaLite=vegaLite; window.lodashDebounce=lodashDebounce;";
+#[doc(hidden)]
 pub const ACCESS_DENIED_MARKER: &str = "VLC_ACCESS_DENIED";
 
 /// Canonicalize a path, stripping the Windows extended-length prefix (`\\?\`)
@@ -88,43 +93,43 @@ pub(crate) fn portable_canonicalize(
     Ok(canonical)
 }
 
-/// Struct for performing Vega-Lite to Vega conversions using the Deno v8 runtime.
+/// Convert Vega-Lite, Vega, and SVG to images, HTML, and intermediate results.
 ///
-/// # Examples
+/// Create one converter and reuse it. Clones share the configuration and worker
+/// pool. Workers start when needed or through [`Self::warm_up`]. SVG-only
+/// conversions use Tokio's blocking pool without starting JavaScript workers.
+/// Run async methods in a Tokio runtime.
+///
+/// # Errors and diagnostics
+///
+/// Conversion errors include invalid specifications, failed or denied resource
+/// loads, missing fonts under [`MissingFontsPolicy::Error`], and configured
+/// JavaScript limits. Successful outputs carry captured Vega/Vega-Lite logs and,
+/// where applicable, Google Fonts usage. Compilation and URL generation do not
+/// perform all the work of rendering, so their error conditions differ.
+///
+/// # Example
 ///
 /// ```
-/// use vl_convert_rs::{VlConverter, VlOpts, VlVersion};
-/// let converter = VlConverter::new();
+/// use vl_convert_rs::{anyhow, serde_json::json, VlConverter, VlOpts, SvgOpts};
 ///
-/// let vl_spec: serde_json::Value = serde_json::from_str(r#"
-/// {
-///   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-///   "data": {"url": "data/movies.json"},
-///   "mark": "circle",
-///   "encoding": {
-///     "x": {
-///       "bin": {"maxbins": 10},
-///       "field": "IMDB Rating"
-///     },
-///     "y": {
-///       "bin": {"maxbins": 10},
-///       "field": "Rotten Tomatoes Rating"
-///     },
-///     "size": {"aggregate": "count"}
-///   }
-/// }"#).unwrap();
-///
-/// let vega_output = futures::executor::block_on(
-///     converter.vegalite_to_vega(
-///         vl_spec,
-///         VlOpts {
-///             vl_version: VlVersion::default(),
-///             ..Default::default()
+/// #[tokio::main]
+/// async fn main() -> anyhow::Result<()> {
+///     let converter = VlConverter::new();
+///     let spec = json!({
+///         "data": {"values": [{"x": 1, "y": 2}]},
+///         "mark": "point",
+///         "encoding": {
+///             "x": {"field": "x", "type": "quantitative"},
+///             "y": {"field": "y", "type": "quantitative"}
 ///         }
-///     )
-/// ).expect("Failed to perform Vega-Lite to Vega conversion");
-///
-/// println!("{}", vega_output.spec);
+///     });
+///     let output = converter.vegalite_to_svg(
+///         spec, VlOpts::default(), SvgOpts::default()
+///     ).await?;
+///     assert!(output.svg.contains("<svg"));
+///     Ok(())
+/// }
 /// ```
 #[derive(Clone)]
 pub struct VlConverter {
@@ -132,10 +137,16 @@ pub struct VlConverter {
 }
 
 impl VlConverter {
+    /// Create a converter with [`VlcConfig::default()`]. Workers start lazily.
+    /// Does not read a configuration file.
     pub fn new() -> Self {
         Self::with_config(VlcConfig::default()).expect("default converter config is valid")
     }
 
+    /// Validate configuration and create a converter without starting workers.
+    ///
+    /// Returns an error for invalid settings or unreadable file-backed plugins.
+    /// URL plugins are resolved when workers start.
     pub fn with_config(config: VlcConfig) -> Result<Self, AnyError> {
         let config = Arc::new(normalize_converter_config(config)?);
 
@@ -163,6 +174,9 @@ impl VlConverter {
             inner: Arc::new(VlConverterInner {
                 vegaembed_bundles: Default::default(),
                 pool: Default::default(),
+                svg_semaphore: Arc::new(tokio::sync::Semaphore::new(
+                    usize::try_from(config.num_workers.get()).expect("num_workers fits in usize"),
+                )),
                 config: arc_swap::ArcSwap::from(config),
                 resolved_plugins: Mutex::new(Vec::new()),
                 ephemeral_semaphore,
@@ -170,6 +184,8 @@ impl VlConverter {
         })
     }
 
+    /// Return a copy of the converter's normalized configuration.
+    /// Changing this value does not change the converter.
     pub fn config(&self) -> VlcConfig {
         (*self.inner.config()).clone()
     }
@@ -200,8 +216,9 @@ impl VlConverter {
         let config = self.inner.config();
         let parsed = parse_allowed_base_urls_from_config(&config)
             .expect("allowed_base_urls were already validated");
-        // Use base_url as usvg's resources_dir when it points to a local path
-        let filesystem_root = if config.base_url.is_filesystem() {
+        // A filesystem base_url becomes usvg's resources_dir so relative image
+        // hrefs resolve; access is still decided by allowed_base_urls.
+        let resources_dir = if config.base_url.is_filesystem() {
             config
                 .base_url
                 .resolved_url()
@@ -216,18 +233,21 @@ impl VlConverter {
             // Always engage the allowlist enforcer. An empty list blocks all
             // image URLs rather than falling back to "allow any http/https".
             allowed_base_urls: Some(parsed),
-            filesystem_root,
+            resources_dir,
         }
     }
 
     /// Eagerly start the worker pool for this converter instance.
     ///
-    /// This is optional; if not called, the pool starts lazily on first request.
+    /// This is optional. The pool starts lazily when a request needs it.
+    /// SVG-only conversions do not use this pool.
     pub fn warm_up(&self) -> Result<(), AnyError> {
         let _ = self.get_or_spawn_sender()?;
         Ok(())
     }
 
+    /// Execute a small JavaScript expression on one worker to check responsiveness.
+    /// Starts the pool if needed. Does not probe every worker or external resources.
     pub async fn health_check(&self) -> Result<(), AnyError> {
         self.run_on_worker(|inner| {
             Box::pin(async move {
@@ -623,6 +643,9 @@ impl VlConverter {
         }
     }
 
+    /// Compile Vega-Lite to a Vega specification with the selected compiler and options.
+    /// Returns compilation diagnostics alongside the specification. Does not render
+    /// the chart or load its data and images.
     pub async fn vegalite_to_vega(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -634,6 +657,9 @@ impl VlConverter {
             .await
     }
 
+    /// Convert a Vega specification to SVG text. Font embedding and image inlining follow the converter and [`SvgOpts`] settings.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vega_to_svg(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -796,6 +822,9 @@ impl VlConverter {
         Ok((svg, google_fonts))
     }
 
+    /// Convert a Vega specification to an evaluated scenegraph as JSON, including diagnostics and font usage.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vega_to_scenegraph(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -826,6 +855,9 @@ impl VlConverter {
         Ok(output)
     }
 
+    /// Convert a Vega specification to an evaluated scenegraph encoded as MessagePack bytes.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vega_to_scenegraph_msgpack(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -860,6 +892,9 @@ impl VlConverter {
         Ok(output)
     }
 
+    /// Convert a Vega-Lite specification to SVG text. Font embedding and image inlining follow the converter and [`SvgOpts`] settings.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vegalite_to_svg(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -935,6 +970,9 @@ impl VlConverter {
         Ok(output)
     }
 
+    /// Convert a Vega-Lite specification to an evaluated scenegraph as JSON, including diagnostics and font usage.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vegalite_to_scenegraph(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -985,6 +1023,9 @@ impl VlConverter {
         }
     }
 
+    /// Convert a Vega-Lite specification to an evaluated scenegraph encoded as MessagePack bytes.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vegalite_to_scenegraph_msgpack(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -1035,6 +1076,9 @@ impl VlConverter {
         }
     }
 
+    /// Convert a Vega specification to PNG bytes through the Canvas renderer. [`PngOpts`] controls scale and pixel density.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vega_to_png(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -1093,6 +1137,9 @@ impl VlConverter {
         Ok(output)
     }
 
+    /// Convert a Vega-Lite specification to PNG bytes through the Canvas renderer. [`PngOpts`] controls scale and pixel density.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vegalite_to_png(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -1179,6 +1226,9 @@ impl VlConverter {
         }
     }
 
+    /// Convert a Vega specification to JPEG bytes through SVG rendering. [`JpegOpts`] controls scale and quality.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vega_to_jpeg(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -1239,6 +1289,9 @@ impl VlConverter {
         Ok(output)
     }
 
+    /// Convert a Vega-Lite specification to JPEG bytes through SVG rendering. [`JpegOpts`] controls scale and quality.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vegalite_to_jpeg(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -1329,6 +1382,9 @@ impl VlConverter {
         }
     }
 
+    /// Convert a Vega specification to PDF bytes through SVG rendering, with fonts embedded in the document.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vega_to_pdf(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -1383,6 +1439,9 @@ impl VlConverter {
         Ok(output)
     }
 
+    /// Convert a Vega-Lite specification to PDF bytes through SVG rendering, with fonts embedded in the document.
+    ///
+    /// Uses the converter's data-access, font, plugin, and JavaScript-limit settings.
     pub async fn vegalite_to_pdf(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -1463,98 +1522,107 @@ impl VlConverter {
         }
     }
 
-    pub async fn svg_to_png(&self, svg: &str, png_opts: PngOpts) -> Result<PngOutput, AnyError> {
-        let scale = png_opts.scale.unwrap_or(1.0);
-        let ppi = png_opts.ppi;
-        let image_policy = self.image_access_policy();
-        let font_analysis = self.preprocess_svg_font_requests(svg).await?;
-        let google_fonts = (!font_analysis.requests.is_empty()).then_some(font_analysis.requests);
-        let svg = svg.to_string();
-        let mut output = self
-            .run_on_worker(move |inner| {
-                let inner = &mut *inner;
-                Box::pin(async move {
-                    with_font_overlay!(
-                        inner,
-                        google_fonts,
-                        inner
-                            .svg_to_png_with_worker_options(&svg, scale, ppi, &image_policy)
-                            .map(|data| PngOutput {
-                                data,
-                                logs: Vec::new(),
-                                google_fonts: Default::default(),
-                            })
-                    )
-                })
-            })
+    async fn render_svg(
+        &self,
+        svg: &str,
+        render: impl FnOnce(
+                &str,
+                &ImageAccessPolicy,
+                &mut usvg::Options<'static>,
+            ) -> Result<Vec<u8>, AnyError>
+            + Send
+            + 'static,
+    ) -> Result<(Vec<u8>, GoogleFontUsage), AnyError> {
+        let permit = self.inner.svg_semaphore.clone().acquire_owned().await?;
+        let analysis = self.preprocess_svg_font_requests(svg).await?;
+        let mut usage = analysis.google_fonts;
+        let resolved = inner::resolve_google_fonts(&self.inner.config(), Some(analysis.requests))
             .await
-            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
-        output.google_fonts.add_assign(font_analysis.google_fonts);
-        Ok(output)
+            .map_err(|err| error_with_google_font_usage(err, usage.clone()))?;
+        usage.add_assign(resolved.google_fonts);
+        let image_policy = self.image_access_policy();
+        let svg = svg.to_string();
+        let result = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            use vl_convert_google_fonts::GoogleFontsDatabaseExt;
+            let mut db = crate::text::get_font_baseline_snapshot()?.clone_fontdb();
+            for batch in resolved.batches {
+                db.register_google_fonts_batch(batch);
+            }
+            let mut options = crate::text::build_usvg_options_with_fontdb(db);
+            render(&svg, &image_policy, &mut options)
+        })
+        .await
+        .map_err(AnyError::from)
+        .and_then(|result| result)
+        .map_err(|err| error_with_google_font_usage(err, usage.clone()))?;
+        Ok((result, usage))
     }
 
+    /// Convert an SVG document to PNG using this converter's font and image-access settings.
+    /// Runs on Tokio's blocking pool without starting JavaScript workers.
+    /// Returns encoded bytes and font usage.
+    pub async fn svg_to_png(&self, svg: &str, png_opts: PngOpts) -> Result<PngOutput, AnyError> {
+        let (data, google_fonts) = self
+            .render_svg(svg, move |svg, policy, options| {
+                rendering::svg_to_png_with_options(
+                    svg,
+                    png_opts.scale.unwrap_or(1.0),
+                    png_opts.ppi,
+                    policy,
+                    options,
+                )
+            })
+            .await?;
+        Ok(PngOutput {
+            data,
+            logs: Vec::new(),
+            google_fonts,
+        })
+    }
+
+    /// Convert an SVG document to JPEG using this converter's font and image-access settings.
+    /// Runs on Tokio's blocking pool without starting JavaScript workers.
+    /// Returns encoded bytes and font usage.
     pub async fn svg_to_jpeg(
         &self,
         svg: &str,
         jpeg_opts: JpegOpts,
     ) -> Result<JpegOutput, AnyError> {
-        let scale = jpeg_opts.scale.unwrap_or(1.0);
-        let quality = jpeg_opts.quality;
-        let image_policy = self.image_access_policy();
-        let font_analysis = self.preprocess_svg_font_requests(svg).await?;
-        let google_fonts = (!font_analysis.requests.is_empty()).then_some(font_analysis.requests);
-        let svg = svg.to_string();
-        let mut output = self
-            .run_on_worker(move |inner| {
-                let inner = &mut *inner;
-                Box::pin(async move {
-                    with_font_overlay!(
-                        inner,
-                        google_fonts,
-                        inner
-                            .svg_to_jpeg_with_worker_options(&svg, scale, quality, &image_policy)
-                            .map(|data| JpegOutput {
-                                data,
-                                logs: Vec::new(),
-                                google_fonts: Default::default(),
-                            })
-                    )
-                })
+        let (data, google_fonts) = self
+            .render_svg(svg, move |svg, policy, options| {
+                rendering::svg_to_jpeg_with_options(
+                    svg,
+                    jpeg_opts.scale.unwrap_or(1.0),
+                    jpeg_opts.quality,
+                    policy,
+                    options,
+                )
             })
-            .await
-            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
-        output.google_fonts.add_assign(font_analysis.google_fonts);
-        Ok(output)
+            .await?;
+        Ok(JpegOutput {
+            data,
+            logs: Vec::new(),
+            google_fonts,
+        })
     }
 
+    /// Convert an SVG document to PDF using this converter's font and image-access settings.
+    /// Runs on Tokio's blocking pool without starting JavaScript workers.
+    /// Returns encoded bytes and font usage.
     pub async fn svg_to_pdf(&self, svg: &str, _pdf_opts: PdfOpts) -> Result<PdfOutput, AnyError> {
-        let image_policy = self.image_access_policy();
-        let font_analysis = self.preprocess_svg_font_requests(svg).await?;
-        let google_fonts = (!font_analysis.requests.is_empty()).then_some(font_analysis.requests);
-        let svg = svg.to_string();
-        let mut output = self
-            .run_on_worker(move |inner| {
-                let inner = &mut *inner;
-                Box::pin(async move {
-                    with_font_overlay!(
-                        inner,
-                        google_fonts,
-                        inner
-                            .svg_to_pdf_with_worker_options(&svg, &image_policy)
-                            .map(|data| PdfOutput {
-                                data,
-                                logs: Vec::new(),
-                                google_fonts: Default::default(),
-                            })
-                    )
-                })
-            })
-            .await
-            .map_err(|err| error_with_google_font_usage(err, font_analysis.google_fonts.clone()))?;
-        output.google_fonts.add_assign(font_analysis.google_fonts);
-        Ok(output)
+        let (data, google_fonts) = self
+            .render_svg(svg, rendering::svg_to_pdf_with_options)
+            .await?;
+        Ok(PdfOutput {
+            data,
+            logs: Vec::new(),
+            google_fonts,
+        })
     }
 
+    /// Return bundled JavaScript exposing Vega, Vega-Lite, and Vega Embed on `window`.
+    /// Uses vendored libraries and caches the bundle in this converter.
     pub async fn get_vegaembed_bundle(&self, vl_version: VlVersion) -> Result<String, AnyError> {
         if let Some(bundle) = self
             .inner
@@ -1590,6 +1658,9 @@ impl VlConverter {
         Ok(bundle)
     }
 
+    /// Bundle JavaScript that uses the provided `vega`, `vegaLite`, and `vegaEmbed` imports.
+    /// Resolves the libraries from vendored modules. Returns an error if the source
+    /// cannot be parsed or bundled. Does not execute the caller's snippet.
     pub async fn bundle_vega_snippet(
         &self,
         snippet: impl Into<String>,
@@ -1674,11 +1745,15 @@ impl VlConverter {
         Ok(results)
     }
 
+    /// Return the local timezone name observed by the JavaScript runtime.
+    /// Returns `None` if no name is available. Starts a worker if needed.
     pub async fn get_local_tz(&self) -> Result<Option<String>, AnyError> {
         self.run_on_worker(|inner| Box::pin(inner.get_local_tz()))
             .await
     }
 
+    /// Return built-in and configured themes as an object keyed by theme name.
+    /// Configured themes take precedence over built-in names.
     pub async fn get_themes(&self) -> Result<serde_json::Value, AnyError> {
         self.run_on_worker(|inner| Box::pin(inner.get_themes()))
             .await
@@ -1701,6 +1776,53 @@ mod tests {
     use worker_pool::WorkerPool;
 
     fn assert_send_future<F: Future + Send>(_: F) {}
+
+    #[tokio::test]
+    async fn test_svg_conversions_do_not_start_workers() {
+        let converter = VlConverter::new();
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><rect width="10" height="20" fill="red"/></svg>"#;
+        let png = converter
+            .svg_to_png(
+                svg,
+                PngOpts {
+                    scale: Some(2.0),
+                    ppi: Some(144.0),
+                },
+            )
+            .await
+            .unwrap();
+        let image = image::load_from_memory(&png.data).unwrap();
+        assert_eq!((image.width(), image.height()), (40, 80));
+        let jpeg = converter
+            .svg_to_jpeg(svg, JpegOpts::default())
+            .await
+            .unwrap();
+        let image = image::load_from_memory(&jpeg.data).unwrap();
+        assert_eq!((image.width(), image.height()), (10, 20));
+        let pdf = converter.svg_to_pdf(svg, PdfOpts::default()).await.unwrap();
+        assert!(pdf.data.starts_with(b"%PDF-"));
+        assert!(converter
+            .svg_to_png("not SVG", PngOpts::default())
+            .await
+            .is_err());
+        assert!(converter.inner.pool.lock().unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_svg_missing_font_error_does_not_start_workers() {
+        let converter = VlConverter::with_config(VlcConfig {
+            missing_fonts: MissingFontsPolicy::Error,
+            ..Default::default()
+        })
+        .unwrap();
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><text font-family="VlcDefinitelyMissingFont">A</text></svg>"#;
+        let error = converter
+            .svg_to_png(svg, PngOpts::default())
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("VlcDefinitelyMissingFont"));
+        assert!(converter.inner.pool.lock().unwrap().is_none());
+    }
 
     fn write_test_png(path: &std::path::Path) {
         std::fs::write(path, PNG_1X1_BYTES).unwrap();
@@ -2119,7 +2241,7 @@ mod tests {
             .unwrap_err();
         assert!(subdomain_err
             .to_string()
-            .contains("External data url not allowed"));
+            .contains("External image url not allowed"));
 
         let userinfo_err = converter
             .svg_to_png(
@@ -2133,89 +2255,227 @@ mod tests {
             .unwrap_err();
         assert!(userinfo_err
             .to_string()
-            .contains("External data url not allowed"));
+            .contains("External image url not allowed"));
     }
 
-    #[tokio::test]
-    async fn test_svg_helper_denies_local_paths_without_filesystem_root() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let local_image_path = temp_dir.path().join("image.png");
-        write_test_png(&local_image_path);
-        let href = Url::from_file_path(&local_image_path).unwrap().to_string();
-
-        let converter = VlConverter::with_config(VlcConfig {
-            allowed_base_urls: vec![],
+    /// Converter with the given allowlist and an optional filesystem base_url.
+    fn image_test_converter(
+        allowed: Vec<String>,
+        base_url: Option<&std::path::Path>,
+    ) -> VlConverter {
+        VlConverter::with_config(VlcConfig {
+            allowed_base_urls: allowed,
+            base_url: base_url
+                .map(|dir| BaseUrlSetting::Custom(dir.to_string_lossy().to_string()))
+                .unwrap_or_default(),
             ..Default::default()
         })
-        .unwrap();
+        .unwrap()
+    }
 
-        let err = converter
-            .svg_to_png(
-                &svg_with_href(&href),
-                PngOpts {
-                    scale: Some(1.0),
-                    ppi: None,
-                },
-            )
-            .await
-            .unwrap_err();
-        assert!(err.to_string().contains("Filesystem access denied"));
+    /// Assert that a conversion succeeded or failed with an access-denied error.
+    fn assert_access<T: std::fmt::Debug>(
+        label: &str,
+        expect_ok: bool,
+        result: Result<T, AnyError>,
+        denied_marker: &str,
+    ) {
+        match (expect_ok, result) {
+            (true, Ok(_)) => {}
+            (false, Err(err)) => assert!(
+                err.to_string().contains(denied_marker),
+                "{label}: expected access denial, got: {err}"
+            ),
+            (expected, other) => panic!("{label}: expected success={expected}, got {other:?}"),
+        }
     }
 
     #[tokio::test]
-    async fn test_svg_helper_enforces_filesystem_root() {
+    async fn test_svg_helper_authorizes_local_images_by_allowlist_only() {
         let temp_dir = tempfile::tempdir().unwrap();
         let root = temp_dir.path().join("root");
         std::fs::create_dir_all(&root).unwrap();
+        write_test_png(&root.join("inside.png"));
+        write_test_png(&temp_dir.path().join("outside.png"));
+        let inside_url = Url::from_file_path(root.join("inside.png"))
+            .unwrap()
+            .to_string();
+        let outside_url = Url::from_file_path(temp_dir.path().join("outside.png"))
+            .unwrap()
+            .to_string();
+        let dir = root.to_string_lossy().to_string();
 
-        let inside_path = root.join("inside.png");
-        write_test_png(&inside_path);
-        let outside_path = temp_dir.path().join("outside.png");
-        write_test_png(&outside_path);
+        // (allowlist, filesystem base_url, href, expected success)
+        let cases: Vec<(Vec<String>, Option<&std::path::Path>, &str, bool)> = vec![
+            (vec![], None, &inside_url, false),
+            (vec![], Some(&root), "inside.png", false),
+            (vec![dir.clone()], None, &inside_url, true),
+            (vec![dir.clone()], Some(&root), "inside.png", true),
+            (vec![dir.clone()], Some(&root), &outside_url, false),
+            (vec![dir.clone()], Some(&root), "../outside.png", false),
+        ];
+        for (allowed, base_url, href, expect_ok) in cases {
+            let converter = image_test_converter(allowed, base_url);
+            let result = converter
+                .svg_to_png(&svg_with_href(href), PngOpts::default())
+                .await;
+            assert_access(href, expect_ok, result, "Filesystem access denied");
+        }
+    }
 
+    #[tokio::test]
+    async fn test_canvas_png_authorizes_local_images_by_allowlist_only() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let image_path = temp_dir.path().join("image #%.png");
+        write_test_png(&image_path);
+        let image_url = Url::from_file_path(&image_path).unwrap().to_string();
+        let dir = temp_dir.path().to_string_lossy().to_string();
+
+        // (allowlist, filesystem base_url, image url, expected success)
+        let cases: Vec<(Vec<String>, Option<&std::path::Path>, &str, bool)> = vec![
+            (vec![], None, &image_url, false),
+            (vec![], Some(temp_dir.path()), "image%20%23%25.png", false),
+            (vec![dir.clone()], None, &image_url, true),
+            (
+                vec![dir.clone()],
+                Some(temp_dir.path()),
+                "image%20%23%25.png",
+                true,
+            ),
+        ];
+        for (allowed, base_url, url, expect_ok) in cases {
+            let converter = image_test_converter(allowed, base_url);
+            let result = converter
+                .vegalite_to_png(
+                    vegalite_spec_with_image_url(url),
+                    VlOpts::default(),
+                    PngOpts::default(),
+                )
+                .await;
+            if let Ok(output) = &result {
+                assert!(
+                    !output
+                        .logs
+                        .iter()
+                        .any(|entry| entry.message.contains("Failed to load image")),
+                    "{url}: {:?}",
+                    output.logs
+                );
+            }
+            assert_access(url, expect_ok, result, "VLC_ACCESS_DENIED");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_canvas_png_ignores_nested_svg_image_references() {
+        use base64::Engine;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let image_path = temp_dir.path().join("image.png");
+        write_test_png(&image_path);
+        let nested = |href: &str| {
+            let svg = format!(
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><image href="{href}" width="4" height="4"/></svg>"#
+            );
+            format!(
+                "data:image/svg+xml;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(svg)
+            )
+        };
+        let converter = image_test_converter(vec![], None);
+        let render = |url: String| {
+            let converter = converter.clone();
+            async move {
+                converter
+                    .vegalite_to_png(
+                        vegalite_spec_with_image_url(&url),
+                        VlOpts::default(),
+                        PngOpts::default(),
+                    )
+                    .await
+                    .unwrap()
+                    .data
+            }
+        };
+
+        // The data: SVG is allowed, but the local file it references must not
+        // be read, so it renders exactly like a reference to a missing file.
+        let with_local = render(nested(&image_path.to_string_lossy())).await;
+        let with_missing = render(nested(
+            &temp_dir.path().join("missing.png").to_string_lossy(),
+        ))
+        .await;
+        assert_eq!(with_local, with_missing);
+    }
+
+    #[tokio::test]
+    async fn test_canvas_png_fails_relative_image_when_base_url_disabled() {
         let converter = VlConverter::with_config(VlcConfig {
-            base_url: BaseUrlSetting::Custom(root.to_string_lossy().to_string()),
-            allowed_base_urls: vec![root.to_string_lossy().to_string()],
+            base_url: BaseUrlSetting::Disabled,
             ..Default::default()
         })
         .unwrap();
-
-        let allowed = converter
-            .svg_to_png(
-                &svg_with_href("inside.png"),
-                PngOpts {
-                    scale: Some(1.0),
-                    ppi: None,
-                },
-            )
-            .await;
-        assert!(allowed.is_ok());
-
-        let outside_href = Url::from_file_path(&outside_path).unwrap().to_string();
         let err = converter
-            .svg_to_png(
-                &svg_with_href(&outside_href),
-                PngOpts {
-                    scale: Some(1.0),
-                    ppi: None,
-                },
+            .vegalite_to_png(
+                vegalite_spec_with_image_url("images/chart.png"),
+                VlOpts::default(),
+                PngOpts::default(),
+            )
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("Unsupported image URL"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn test_redirect_targets_are_checked_against_allowlist() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>"#;
+        let other = TestHttpServer::new(vec![
+            ("/data.csv", TestHttpResponse::ok_text("a,b\n1,2\n")),
+            ("/image.svg", TestHttpResponse::ok_svg(svg)),
+        ]);
+        let front = TestHttpServer::new(vec![
+            ("/data.csv", TestHttpResponse::ok_text("a,b\n1,2\n")),
+            ("/same.csv", TestHttpResponse::redirect("/data.csv")),
+            (
+                "/other.csv",
+                TestHttpResponse::redirect(&other.url("/data.csv")),
+            ),
+            (
+                "/other.svg",
+                TestHttpResponse::redirect(&other.url("/image.svg")),
+            ),
+        ]);
+        let converter = image_test_converter(vec![front.origin()], None);
+
+        // A redirect that stays inside the allowlist is followed.
+        converter
+            .vega_to_svg(
+                vega_spec_with_data_url(&front.url("/same.csv")),
+                VgOpts::default(),
+                SvgOpts::default(),
+            )
+            .await
+            .unwrap();
+
+        // Redirects that leave it are denied, for data and for images.
+        let err = converter
+            .vega_to_svg(
+                vega_spec_with_data_url(&front.url("/other.csv")),
+                VgOpts::default(),
+                SvgOpts::default(),
             )
             .await
             .unwrap_err();
         let message = err.to_string();
-        assert!(message.contains("filesystem_root") || message.contains("access denied"));
-
+        assert!(
+            message.contains("VLC_ACCESS_DENIED") && message.contains(&other.url("/data.csv")),
+            "{message}"
+        );
         let err = converter
-            .svg_to_png(
-                &svg_with_href("../outside.png"),
-                PngOpts {
-                    scale: Some(1.0),
-                    ppi: None,
-                },
-            )
+            .svg_to_png(&svg_with_href(&front.url("/other.svg")), PngOpts::default())
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("filesystem_root"));
+        assert!(err.to_string().contains("VLC_ACCESS_DENIED"), "{err}");
     }
 
     #[tokio::test]
@@ -2260,7 +2520,7 @@ mod tests {
             )
             .await
             .unwrap_err();
-        assert!(err.to_string().contains("External data url not allowed"));
+        assert!(err.to_string().contains("External image url not allowed"));
     }
 
     #[tokio::test]
@@ -2355,9 +2615,9 @@ mod tests {
         .unwrap();
         let spec = vegalite_spec_with_image_url("https://example.com/image.png");
 
-        // With HTTP denied, the canvas Image class catches the op error and
-        // fires onerror. The conversion succeeds but the image is not rendered.
-        let result = converter
+        // With HTTP denied, the canvas Image class reports the access-policy
+        // error and the render fails, matching the SVG-based image resolver.
+        let err = converter
             .vegalite_to_png(
                 spec,
                 VlOpts {
@@ -2369,11 +2629,11 @@ mod tests {
                     ppi: Some(72.0),
                 },
             )
-            .await;
-        // The conversion should succeed (image just not loaded)
+            .await
+            .unwrap_err();
         assert!(
-            result.is_ok(),
-            "conversion should succeed even with denied image"
+            err.to_string().contains("VLC_ACCESS_DENIED"),
+            "expected access denial, got: {err}"
         );
     }
 
@@ -2386,9 +2646,9 @@ mod tests {
         .unwrap();
         let spec = vegalite_spec_with_image_url("https://example.com/image.png");
 
-        // With allowlist not including example.com, the op denies the fetch.
-        // Canvas Image catches the error; the conversion succeeds without the image.
-        let result = converter
+        // With allowlist not including example.com, the op denies the fetch
+        // and the render fails with the access-policy error.
+        let err = converter
             .vegalite_to_png(
                 spec,
                 VlOpts {
@@ -2400,10 +2660,11 @@ mod tests {
                     ppi: Some(72.0),
                 },
             )
-            .await;
+            .await
+            .unwrap_err();
         assert!(
-            result.is_ok(),
-            "conversion should succeed even with denied image"
+            err.to_string().contains("VLC_ACCESS_DENIED"),
+            "expected access denial, got: {err}"
         );
     }
 

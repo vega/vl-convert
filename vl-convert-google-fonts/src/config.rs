@@ -39,11 +39,11 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
-    pub fn fonts_dir(&self) -> Option<PathBuf> {
+    pub(crate) fn fonts_dir(&self) -> Option<PathBuf> {
         self.cache_dir.as_ref().map(|d| d.join("fonts"))
     }
 
-    pub fn css_dir(&self) -> Option<PathBuf> {
+    pub(crate) fn css_dir(&self) -> Option<PathBuf> {
         self.cache_dir.as_ref().map(|d| d.join("css"))
     }
 }

@@ -1,0 +1,278 @@
+---
+title: Fonts and Google Fonts
+path: guides/fonts
+section: Output and Appearance
+order: 240
+interfaces: [python, cli, rust, server]
+---
+
+<!-- topic-body -->
+
+# Fonts and Google Fonts
+
+Vega displays text in charts using fonts. VlConvert loads fonts installed on the host, and to ensure that a suitable fallback font is always available, it bundles [Liberation Sans](https://en.wikipedia.org/wiki/Liberation_fonts). Additionally, you can register fonts located in specific directories, or request fonts from [Google Fonts](https://fonts.google.com/).
+
+## Missing font handling
+
+`missing_fonts` decides what happens when a specification's first-choice font is unavailable. `fallback` substitutes silently and is the default, `warn` records a warning, and `error` fails the conversion.
+
+## Make Fonts Available
+
+Configure fonts before converting a chart.
+
+::::{interface} python
+Register a local directory once per process. Use `configure()` for Google Fonts and the missing-font policy:
+
+```python
+import vl_convert as vlc
+
+vlc.register_font_directory("/opt/app/fonts")
+vlc.configure(
+    google_fonts=[{"family": "Inter", "variants": [(400, "normal")]}],
+    missing_fonts="error",
+)
+```
+
+For a font with weight 400 and normal style, set `variants` to:
+
+- In Python's `configure()`: `[(400, "normal")]`
+- In a JSONC file: `[{"weight": 400, "style": "normal"}]`
+
+Set `auto_google_fonts=True` to download a missing first-choice font automatically. Individual Vega and Vega-Lite conversions also accept a `google_fonts` argument.
+::::
+
+::::{interface} cli
+Pass font directories and Google Font requests as global options. This command uses `chart.vl.json` from the Roboto Slab example in the next section:
+
+```console
+$ vl-convert \
+>   --font-dir /opt/app/fonts \
+>   --google-font 'Inter:400,700italic' \
+>   --missing-fonts error \
+>   vl2png --input chart.vl.json --output chart.png
+```
+
+`--auto-google-fonts` downloads missing first-choice fonts automatically.
+::::
+
+::::{interface} rust
+Register font directories before creating converters. Put Google Fonts and the missing-font policy in `VlcConfig`:
+
+```rust
+use vl_convert_rs::converter::MissingFontsPolicy;
+use vl_convert_rs::{
+    register_font_directory, GoogleFontRequest, VlcConfig, VlConverter,
+};
+
+register_font_directory("/opt/app/fonts")?;
+let converter = VlConverter::with_config(VlcConfig {
+    google_fonts: vec![GoogleFontRequest {
+        family: "Inter".to_string(),
+        variants: None,
+    }],
+    missing_fonts: MissingFontsPolicy::Error,
+    ..Default::default()
+})?;
+```
+
+Set `auto_google_fonts: true` to look up missing first-choice fonts automatically.
+::::
+
+::::{interface} server
+Configure fonts when the server starts. This example registers a local directory, enables automatic Google Fonts, and rejects a conversion whose first-choice font is still unavailable:
+
+```console
+$ vl-convert serve \
+>   --font-dir /opt/app/fonts \
+>   --auto-google-fonts \
+>   --missing-fonts error \
+>   --port 3000
+```
+
+Clients can pass `google_fonts` in a request body only when the server starts with `--allow-google-fonts`. Do not enable this for untrusted callers without render-time budgets. See {doc}`/server/rate-limiting`.
+::::
+
+## Render with a Google Font
+
+This specification sets `config.font` to Roboto Slab, a family few hosts have installed. Save it as follows:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/google-font.vl.json
+:language: json
+```
+:::
+
+Request the family from Google Fonts and render the chart as PNG:
+
+::::{interface} python
+```python
+from pathlib import Path
+
+import vl_convert as vlc
+
+vlc.configure(google_fonts=["Roboto Slab"])
+
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
+png = vlc.vegalite_to_png(spec, scale=2)
+Path("chart.png").write_bytes(png)
+```
+::::
+
+::::{interface} cli
+```console
+$ vl-convert --google-font "Roboto Slab" \
+>   vl2png --input chart.vl.json --output chart.png --scale 2
+```
+::::
+
+::::{interface} rust
+```rust
+use vl_convert_rs::{GoogleFontRequest, PngOpts, VlcConfig, VlConverter, VlOpts};
+
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let converter = VlConverter::with_config(VlcConfig {
+    google_fonts: vec![GoogleFontRequest {
+        family: "Roboto Slab".to_string(),
+        variants: None,
+    }],
+    ..Default::default()
+})?;
+
+let output = converter
+    .vegalite_to_png(
+        spec,
+        VlOpts::default(),
+        PngOpts {
+            scale: Some(2.0),
+            ..Default::default()
+        },
+    )
+    .await?;
+std::fs::write("chart.png", output.data)?;
+```
+::::
+
+::::{interface} server
+Start the server with the font request, then send the specification in the `spec` field of a `POST /vegalite/png` request with `scale` set to `2`:
+
+```console
+$ vl-convert serve \
+>   --google-font "Roboto Slab" \
+>   --port 3000
+```
+
+Save this complete request body as `request.json`:
+
+:::{dropdown} request.json
+:open:
+
+```{literalinclude} /_generated/requests/google-font-png.json
+:language: json
+```
+:::
+
+Send the request from a second terminal:
+
+```console
+$ curl http://127.0.0.1:3000/vegalite/png \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.png
+```
+::::
+
+VlConvert downloads Roboto Slab on the first conversion, caches it, and lays out and rasterizes the text with it. The PNG output:
+
+```{vl-chart} /_examples/google-font.vl.json
+:format: png
+:scale: 2
+:google-fonts: Roboto Slab
+:alt: Bar chart whose title and labels are set in the Roboto Slab typeface
+```
+
+Without the request, the text falls back to the default sans-serif font. With `missing_fonts` set to `error`, the conversion fails instead.
+
+## Limit Automatic Downloads
+
+`google_font_variant_threshold` limits further font requests once a conversion has resolved that many Google Font variants. Configured, per-conversion, and automatically discovered families all count toward it. At or above the threshold, the next font request fails the conversion. A single request can take the total above the threshold when it resolves several variants.
+
+Google Fonts downloads are controlled by these font options only. `allowed_base_urls` governs data and image URLs and has no effect on fonts.
+
+::::{interface} server
+On a public server, combine the threshold with `--google-font-cache-miss-penalty-ms`. The penalty charges extra request budget for every font lookup that misses the on-disk cache, including lookups for families that do not exist.
+
+```console
+$ vl-convert serve \
+>   --auto-google-fonts \
+>   --google-font-variant-threshold 16 \
+>   --per-ip-budget-ms 30000 \
+>   --google-font-cache-miss-penalty-ms 250
+```
+::::
+
+## Google Fonts Cache
+
+Downloaded Google Fonts are cached on disk and reused across conversions and process restarts. The cache holds both the Google Fonts CSS responses and the font files. Its directory is the platform cache directory plus `vl-convert/google-fonts`, such as `~/.cache/vl-convert/google-fonts` on Linux or `~/Library/Caches/vl-convert/google-fonts` on macOS. Set the `VLC_GOOGLE_FONTS_CACHE_DIR` environment variable to move it, or set it to `none` to disable caching and download fonts on every conversion. Set the variable before starting VlConvert.
+
+Cached font files are evicted least-recently-used once they exceed a 512 MB cap. The cap applies to the whole process and can be changed at runtime.
+
+::::{interface} python
+```python
+print(vlc.google_fonts_cache_dir())
+print(vlc.google_fonts_cache_size_mb())
+vlc.set_google_fonts_cache_size_mb(128)
+```
+
+Example output (the directory depends on your platform and environment):
+
+```{program-output} python -c "import vl_convert as vlc; print(vlc.google_fonts_cache_dir()); print(vlc.google_fonts_cache_size_mb())"
+```
+
+`set_google_fonts_cache_size_mb(None)` restores the default. Fonts over the new cap are evicted immediately.
+::::
+
+::::{interface} cli
+```console
+$ vl-convert --google-fonts-cache-size-mb 128 \
+>   vl2png --input chart.vl.json --output chart.png
+```
+
+A value of `0` selects the default cap.
+::::
+
+::::{interface} rust
+```rust
+use std::num::NonZeroU64;
+use vl_convert_rs::{google_fonts_cache_dir, set_google_fonts_cache_size_mb};
+
+println!("{:?}", google_fonts_cache_dir());
+set_google_fonts_cache_size_mb(NonZeroU64::new(128))?;
+```
+
+`current_google_fonts_cache_size_mb()` reads the active cap, and passing `None` restores the default.
+::::
+
+::::{interface} server
+Pass `--google-fonts-cache-size-mb` when starting the server to set the cap. When the admin API is enabled, `GET /admin/config/fonts/cache` returns the capacity and cache directory. `PUT` changes the capacity without a restart and returns both fields. The directory is read-only:
+
+```console
+$ curl -X PUT http://127.0.0.1:3001/admin/config/fonts/cache \
+>   -H "Authorization: Bearer $VLC_ADMIN_API_KEY" \
+>   -H 'Content-Type: application/json' \
+>   --data '{"max_size_mb": 128}'
+```
+
+`{"max_size_mb": null}` restores the default.
+::::
+
+## Embed Fonts in SVG and HTML
+
+Set `embed_local_fonts` to include the fonts a chart uses as base64 `@font-face` rules in SVG and HTML output. VlConvert subsets embedded fonts by default so the output contains only the glyphs the chart uses on first render. Set `subset_fonts` to `false` when the text may change later. Passing `bundle` to an SVG conversion also embeds its fonts and images so the file is self-contained.
+
+PNG and JPEG contain rendered pixels, and PDF output always embeds the fonts it needs, so consumers of those formats do not need the font files.
+
+Embedding increases output size and redistributes the font file, so confirm that the font license permits it.
+
+See {doc}`../advanced/font-introspection` to list the fonts VlConvert resolves for a chart.

@@ -474,6 +474,9 @@ impl VlConverter {
     ///
     /// Renders the scenegraph once to discover the exact fonts, weights, and
     /// characters used. [`FontOpts`] controls font sources, embedded CSS, and subsetting.
+    ///
+    /// Inspection settings come from [`FontOpts`], not the converter's defaults.
+    /// The converter's missing-font policy still applies even when CSS is omitted.
     pub async fn vega_fonts(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -486,8 +489,10 @@ impl VlConverter {
             .0)
     }
 
-    /// Return font information and Google Fonts usage for a Vega spec.
-    /// See [`Self::vega_fonts`] for inspection behavior.
+    /// Inspect fonts and also return Google Fonts download and variant usage.
+    ///
+    /// Uses the same options and missing-font policy as [`Self::vega_fonts`].
+    /// Usage includes work performed while resolving fonts and building CSS.
     pub async fn vega_fonts_with_google_font_usage(
         &self,
         vg_spec: impl Into<ValueOrString>,
@@ -671,6 +676,9 @@ impl VlConverter {
     /// Return font information for a Vega-Lite spec.
     ///
     /// Compiles the spec to Vega first, then delegates to [`Self::vega_fonts`].
+    ///
+    /// Inspection settings come from [`FontOpts`], not the converter's defaults.
+    /// The converter's missing-font policy still applies even when CSS is omitted.
     pub async fn vegalite_fonts(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -683,8 +691,10 @@ impl VlConverter {
             .0)
     }
 
-    /// Return font information and Google Fonts usage for a Vega-Lite spec.
-    /// See [`Self::vegalite_fonts`] for inspection behavior.
+    /// Inspect fonts and also return Google Fonts download and variant usage.
+    ///
+    /// Uses the same options and missing-font policy as [`Self::vegalite_fonts`].
+    /// Usage includes work performed while resolving fonts and building CSS.
     pub async fn vegalite_fonts_with_google_font_usage(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -761,18 +771,14 @@ impl VlConverter {
         }
     }
 
-    /// Convert a Vega-Lite spec to a self-contained HTML page.
+    /// Export a Vega-Lite specification as an interactive HTML page.
     ///
-    /// # `bundle` flag
-    ///
-    /// Controls how **Vega/vega-embed** are delivered:
-    /// - `true`: all Vega JS is inlined in a `<script>` tag; the page works offline.
-    /// - `false`: Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
-    ///
-    /// **Plugins are always bundled** (HTTP imports inlined via deno_emit) regardless
-    /// of this flag, with one exception: URL-backed plugins (e.g. `https://esm.sh/…`)
-    /// are fetched live from their original URL when `bundle=false`, so the browser
-    /// benefits from CDN caching. With `bundle=true` their source is inlined too.
+    /// The browser renders the chart with Vega Embed. [`HtmlOpts::bundle`]
+    /// embeds JavaScript libraries and configured plugins instead of loading
+    /// the libraries from a CDN. Data and images can still require network access.
+    /// Font settings determine whether fonts are referenced or embedded.
+    /// Export may evaluate the chart to discover fonts and can fail under the
+    /// converter's missing-font or resource-access policies.
     pub async fn vegalite_to_html(
         &self,
         vl_spec: impl Into<ValueOrString>,
@@ -852,18 +858,14 @@ impl VlConverter {
         })
     }
 
-    /// Convert a Vega spec to a self-contained HTML page.
+    /// Export a Vega specification as an interactive HTML page.
     ///
-    /// # `bundle` flag
-    ///
-    /// Controls how **Vega/vega-embed** are delivered:
-    /// - `true`: all Vega JS is inlined in a `<script>` tag; the page works offline.
-    /// - `false`: Vega/vega-embed are loaded from the jsDelivr CDN via `<script src>`.
-    ///
-    /// **Plugins are always bundled** (HTTP imports inlined via deno_emit) regardless
-    /// of this flag, with one exception: URL-backed plugins (e.g. `https://esm.sh/…`)
-    /// are fetched live from their original URL when `bundle=false`, so the browser
-    /// benefits from CDN caching. With `bundle=true` their source is inlined too.
+    /// The browser renders the chart with Vega Embed. [`HtmlOpts::bundle`]
+    /// embeds JavaScript libraries and configured plugins instead of loading
+    /// the libraries from a CDN. Data and images can still require network access.
+    /// Font settings determine whether fonts are referenced or embedded.
+    /// Export may evaluate the chart to discover fonts and can fail under the
+    /// converter's missing-font or resource-access policies.
     pub async fn vega_to_html(
         &self,
         vg_spec: impl Into<ValueOrString>,

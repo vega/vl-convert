@@ -12,6 +12,7 @@ use crate::util::{
     append_vlc_logs_header, attach_google_font_usage, conversion_error_response, format_log_entries,
 };
 
+/// Convert an SVG document to a PNG image.
 #[utoipa::path(
     post,
     path = "/svg/png",
@@ -55,6 +56,7 @@ pub async fn svg_to_png(
     }
 }
 
+/// Convert an SVG document to a JPEG image.
 #[utoipa::path(
     post,
     path = "/svg/jpeg",
@@ -98,6 +100,7 @@ pub async fn svg_to_jpeg(
     }
 }
 
+/// Convert an SVG document to a PDF document.
 #[utoipa::path(
     post,
     path = "/svg/pdf",

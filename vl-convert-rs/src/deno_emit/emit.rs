@@ -60,6 +60,8 @@ pub struct BundleOptions {
 #[derive(Debug)]
 pub struct BundleEmit {
     pub code: String,
+    // Retain the upstream bundler's source-map result, though VlConvert uses only code.
+    #[allow(dead_code)]
     pub maybe_map: Option<String>,
 }
 

@@ -71,9 +71,11 @@ pub(crate) async fn vl_2_vg(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn vg_2_svg(
     input: Option<&str>,
     output: Option<&str>,
+    config: Option<String>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     svg_opts: SvgOpts,
@@ -82,6 +84,7 @@ pub(crate) async fn vg_2_svg(
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
     let vg_spec = parse_as_json(&vega_str)?;
+    let config = read_config_json(config)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
@@ -89,6 +92,7 @@ pub(crate) async fn vg_2_svg(
     let converter = VlConverter::with_config(converter_config)?;
 
     let mut vg_opts = VgOpts {
+        config,
         format_locale,
         time_format_locale,
         ..Default::default()
@@ -113,6 +117,7 @@ pub(crate) async fn vg_2_png(
     output: Option<&str>,
     scale: f32,
     ppi: f32,
+    config: Option<String>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     render: RenderOverrides,
@@ -120,6 +125,7 @@ pub(crate) async fn vg_2_png(
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
     let vg_spec = parse_as_json(&vega_str)?;
+    let config = read_config_json(config)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
@@ -127,6 +133,7 @@ pub(crate) async fn vg_2_png(
     let converter = VlConverter::with_config(converter_config)?;
 
     let mut vg_opts = VgOpts {
+        config,
         format_locale,
         time_format_locale,
         ..Default::default()
@@ -161,6 +168,7 @@ pub(crate) async fn vg_2_jpeg(
     output: Option<&str>,
     scale: f32,
     quality: u8,
+    config: Option<String>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     render: RenderOverrides,
@@ -168,6 +176,7 @@ pub(crate) async fn vg_2_jpeg(
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
     let vg_spec = parse_as_json(&vega_str)?;
+    let config = read_config_json(config)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
@@ -175,6 +184,7 @@ pub(crate) async fn vg_2_jpeg(
     let converter = VlConverter::with_config(converter_config)?;
 
     let mut vg_opts = VgOpts {
+        config,
         format_locale,
         time_format_locale,
         ..Default::default()
@@ -203,9 +213,11 @@ pub(crate) async fn vg_2_jpeg(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn vg_2_pdf(
     input: Option<&str>,
     output: Option<&str>,
+    config: Option<String>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     render: RenderOverrides,
@@ -213,6 +225,7 @@ pub(crate) async fn vg_2_pdf(
 ) -> Result<(), anyhow::Error> {
     let vega_str = read_input_string(input)?;
     let vg_spec = parse_as_json(&vega_str)?;
+    let config = read_config_json(config)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
@@ -220,6 +233,7 @@ pub(crate) async fn vg_2_pdf(
     let converter = VlConverter::with_config(converter_config)?;
 
     let mut vg_opts = VgOpts {
+        config,
         format_locale,
         time_format_locale,
         ..Default::default()
@@ -507,6 +521,7 @@ pub(crate) async fn vl_2_scenegraph(
 pub(crate) async fn vg_2_scenegraph(
     input: Option<&str>,
     output: Option<&str>,
+    config: Option<String>,
     format_locale: Option<String>,
     time_format_locale: Option<String>,
     format: ScenegraphFormat,
@@ -520,11 +535,13 @@ pub(crate) async fn vg_2_scenegraph(
 
     let vega_str = read_input_string(input)?;
     let vg_spec = parse_as_json(&vega_str)?;
+    let config = read_config_json(config)?;
 
     let format_locale = parse_format_locale_option(format_locale.as_deref())?;
     let time_format_locale = parse_time_format_locale_option(time_format_locale.as_deref())?;
 
     let mut vg_opts = VgOpts {
+        config,
         format_locale,
         time_format_locale,
         ..Default::default()

@@ -48,15 +48,19 @@ impl LogLevel {
 
 #[derive(Debug, Parser)]
 #[command(version, name = "vl-convert")]
-#[command(about = "vl-convert: A utility for converting Vega-Lite specifications", long_about = None)]
+#[command(
+    about = "Convert Vega-Lite, Vega, and SVG files, or run the HTTP server",
+    long_about = None
+)]
 pub(crate) struct Cli {
-    /// Converter config: an absolute path to a JSONC config file, or the
-    /// reserved value `disabled` to skip config-file loading. When
-    /// omitted, the platform default config path is loaded if it exists.
+    /// Converter config: a path to a JSONC config file, or the reserved
+    /// value `disabled` to skip config-file loading. Relative paths resolve
+    /// from the current working directory. When omitted, the platform
+    /// default config path is loaded if it exists.
     #[arg(long, global = true, value_name = "disabled|PATH", env = "VLC_CONFIG")]
     pub(crate) vlc_config: Option<String>,
 
-    /// Base URL for resolving relative data paths. Reserved values:
+    /// Base URL for resolving relative data and image paths. Reserved values:
     /// `default` (use vega-datasets CDN), `disabled` (relative paths
     /// error). Otherwise either a URL with scheme (`https://...`,
     /// `file://...`) or an absolute filesystem path. Relative paths
@@ -69,7 +73,7 @@ pub(crate) struct Cli {
     )]
     pub(crate) base_url: Option<String>,
 
-    /// Allowed base URLs. Reserved single-value shortcuts: `none`
+    /// Allowed base URLs for data and images. Reserved single-value shortcuts: `none`
     /// (block all), `net` (HTTP/HTTPS only, no filesystem), `all`
     /// (allow everything incl. filesystem). Otherwise a `;`-separated
     /// list of CSP-style patterns: `"https:"` (scheme),
@@ -97,9 +101,10 @@ pub(crate) struct Cli {
     )]
     pub(crate) google_font: Vec<String>,
 
-    /// Stop admitting additional Google Font families after this many
-    /// variants have resolved. A single family may cross the threshold;
-    /// `0` disables the threshold.
+    /// Maximum number of Google Font variants one conversion may load,
+    /// counting configured, requested, and automatically discovered
+    /// families. The conversion fails once the cap is reached; a single
+    /// family may carry the total past it. `0` disables the cap.
     #[arg(
         long,
         global = true,
@@ -152,7 +157,7 @@ pub(crate) struct Cli {
     #[arg(long, global = true, value_enum, env = "VLC_MISSING_FONTS")]
     pub(crate) missing_fonts: Option<MissingFontsArg>,
 
-    /// Maximum V8 heap size per worker in megabytes [default: 0 = no limit]
+    /// Maximum V8 heap size per worker in megabytes, at least 64 [default: 0 = no limit]
     #[arg(long, global = true, env = "VLC_MAX_V8_HEAP_SIZE_MB")]
     pub(crate) max_v8_heap_size_mb: Option<u64>,
 
@@ -200,11 +205,9 @@ pub(crate) struct Cli {
     )]
     pub(crate) plugin_import_domains: Vec<String>,
 
-    /// Additional directory to search for fonts. Repeatable: pass the
-    /// flag multiple times (`--font-dir /a --font-dir /b`) to register
-    /// multiple directories. Calls
-    /// `vl_convert_rs::set_font_directories` once at startup with the
-    /// combined list (replace semantics).
+    /// Additional directory to search for fonts. Repeat the flag to
+    /// register multiple directories (`--font-dir /a --font-dir /b`).
+    /// The combined list is registered when the process starts.
     #[arg(
         long,
         global = true,
@@ -214,8 +217,8 @@ pub(crate) struct Cli {
     )]
     pub(crate) font_dir: Vec<PathBuf>,
 
-    /// Capacity (MB) of the on-disk Google Fonts LRU cache. `0` resolves
-    /// to the library default (`Option<NonZeroU64>::None`).
+    /// Capacity of the on-disk Google Fonts cache, in megabytes.
+    /// `0` uses the default capacity of 512 MB.
     #[arg(
         long,
         global = true,
@@ -242,7 +245,7 @@ pub(crate) struct Cli {
     #[arg(
         long,
         global = true,
-        value_name = "LOCALE|JSON|FILE.json|null",
+        value_name = "LOCALE|JSON|FILE.json|FILE.jsonc|null",
         env = "VLC_DEFAULT_FORMAT_LOCALE"
     )]
     pub(crate) default_format_locale: Option<String>,
@@ -254,7 +257,7 @@ pub(crate) struct Cli {
     #[arg(
         long,
         global = true,
-        value_name = "LOCALE|JSON|FILE.json|null",
+        value_name = "LOCALE|JSON|FILE.json|FILE.jsonc|null",
         env = "VLC_DEFAULT_TIME_FORMAT_LOCALE"
     )]
     pub(crate) default_time_format_locale: Option<String>,
@@ -265,7 +268,7 @@ pub(crate) struct Cli {
     #[arg(
         long,
         global = true,
-        value_name = "JSON|FILE.json|null",
+        value_name = "JSON|FILE.json|FILE.jsonc|null",
         env = "VLC_THEMES"
     )]
     pub(crate) themes: Option<String>,
@@ -274,8 +277,8 @@ pub(crate) struct Cli {
     #[arg(long, global = true, value_enum, default_value_t = LogLevel::Warn, env = "VLC_LOG_LEVEL")]
     pub(crate) log_level: LogLevel,
 
-    /// Tracing-subscriber output format. `text` is human-readable;
-    /// `json` emits one structured line per event for log aggregators.
+    /// Log output format. `text` is human-readable; `json` emits one
+    /// structured line per event for log aggregators.
     #[arg(long, global = true, value_enum, default_value_t = LogFormat::Text, env = "VLC_LOG_FORMAT")]
     pub(crate) log_format: LogFormat,
 

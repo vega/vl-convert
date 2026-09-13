@@ -102,3 +102,20 @@ Configure trusted publishing with the `vega/vl-convert` repository, `.github/wor
 
 - The `vl-convert-python` project on PyPI.
 - The `vl-convert`, `vl-convert-canvas2d`, `vl-convert-canvas2d-deno`, `vl-convert-google-fonts`, `vl-convert-rs`, and `vl-convert-server` crates on crates.io.
+
+# Rust API documentation
+
+Build the supported Rust API with missing documentation and broken links treated as errors:
+
+```sh
+cargo rustdoc -p vl-convert-rs --lib -- -D missing_docs -D rustdoc::broken_intra_doc_links
+cargo rustdoc -p vl-convert-google-fonts --lib --all-features -- -D missing_docs -D rustdoc::broken_intra_doc_links
+```
+
+The HTML is written to `target/doc/vl_convert_rs/index.html`. Internal implementation modules are private. When adding a public type, document its caller-visible behavior and export it from the crate root.
+
+The vendoring tool generates `vl-convert-rs/src/module_loader/import_map.rs`. Update its template in `vl-convert-vendor/src/main.rs` when changing generated documentation or visibility.
+
+## Windows dependency features
+
+`deno_io` uses `winapi` on Windows. Enable `winapi/std` in both the dependencies and build dependencies of `vl-convert-rs` so its `c_void` type matches `std::ffi::c_void`. Cargo resolver v2 resolves those feature sets independently.

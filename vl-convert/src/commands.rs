@@ -48,11 +48,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        /// Vega-Lite version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
-        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        /// Named theme provided by the vega-themes package (e.g. "dark")
         #[arg(short, long)]
         theme: Option<String>,
 
@@ -78,11 +78,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        /// Vega-Lite version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
-        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        /// Named theme provided by the vega-themes package (e.g. "dark")
         #[arg(long)]
         theme: Option<String>,
 
@@ -90,11 +90,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -106,7 +106,7 @@ pub(crate) enum Commands {
         render: RenderOverrides,
     },
 
-    /// Convert a Vega-Lite specification to an PNG image
+    /// Convert a Vega-Lite specification to a PNG image
     Vl2png {
         /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
@@ -116,11 +116,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        /// Vega-Lite version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
-        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        /// Named theme provided by the vega-themes package (e.g. "dark")
         #[arg(long)]
         theme: Option<String>,
 
@@ -136,11 +136,11 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -148,7 +148,7 @@ pub(crate) enum Commands {
         render: RenderOverrides,
     },
 
-    /// Convert a Vega-Lite specification to an JPEG image
+    /// Convert a Vega-Lite specification to a JPEG image
     Vl2jpeg {
         /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
@@ -158,11 +158,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        /// Vega-Lite version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
-        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        /// Named theme provided by the vega-themes package (e.g. "dark")
         #[arg(long)]
         theme: Option<String>,
 
@@ -174,15 +174,15 @@ pub(crate) enum Commands {
         #[arg(long, default_value = "1.0")]
         scale: f32,
 
-        /// JPEG Quality between 0 (worst) and 100 (best)
+        /// JPEG quality between 0 (worst) and 100 (best)
         #[arg(short, long, default_value = "90")]
         quality: u8,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -190,7 +190,7 @@ pub(crate) enum Commands {
         render: RenderOverrides,
     },
 
-    /// Convert a Vega-Lite specification to a PDF image
+    /// Convert a Vega-Lite specification to a PDF document
     Vl2pdf {
         /// Path to input Vega-Lite file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
@@ -200,11 +200,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        /// Vega-Lite version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
-        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        /// Named theme provided by the vega-themes package (e.g. "dark")
         #[arg(long)]
         theme: Option<String>,
 
@@ -212,11 +212,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -249,11 +249,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        /// Vega-Lite version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
-        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        /// Named theme provided by the vega-themes package (e.g. "dark")
         #[arg(long)]
         theme: Option<String>,
 
@@ -266,11 +266,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         bundle: bool,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -292,11 +292,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        /// Vega-Lite version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
-        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        /// Named theme provided by the vega-themes package (e.g. "dark")
         #[arg(long)]
         theme: Option<String>,
 
@@ -308,11 +308,11 @@ pub(crate) enum Commands {
         #[arg(long = "include-font-face")]
         include_font_face: bool,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -334,11 +334,11 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        /// Vega-Lite version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
 
-        /// Named theme provided by the vegaThemes package (e.g. "dark")
+        /// Named theme provided by the vega-themes package (e.g. "dark")
         #[arg(long)]
         theme: Option<String>,
 
@@ -346,15 +346,15 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         config: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
-        /// Output format: json or msgpack
+        /// Output format: JSON or MessagePack
         #[arg(long, value_enum, default_value = "json")]
         format: ScenegraphFormat,
 
@@ -376,11 +376,15 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -392,7 +396,7 @@ pub(crate) enum Commands {
         render: RenderOverrides,
     },
 
-    /// Convert a Vega specification to an PNG image
+    /// Convert a Vega specification to a PNG image
     Vg2png {
         /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
@@ -402,6 +406,10 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// Image scale factor
         #[arg(long, default_value = "1.0")]
         scale: f32,
@@ -410,11 +418,11 @@ pub(crate) enum Commands {
         #[arg(short, long, default_value = "72.0")]
         ppi: f32,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -422,7 +430,7 @@ pub(crate) enum Commands {
         render: RenderOverrides,
     },
 
-    /// Convert a Vega specification to an JPEG image
+    /// Convert a Vega specification to a JPEG image
     Vg2jpeg {
         /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
@@ -432,19 +440,23 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// Image scale factor
         #[arg(long, default_value = "1.0")]
         scale: f32,
 
-        /// JPEG Quality between 0 (worst) and 100 (best)
+        /// JPEG quality between 0 (worst) and 100 (best)
         #[arg(short, long, default_value = "90")]
         quality: u8,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -452,7 +464,7 @@ pub(crate) enum Commands {
         render: RenderOverrides,
     },
 
-    /// Convert a Vega specification to an PDF image
+    /// Convert a Vega specification to a PDF document
     Vg2pdf {
         /// Path to input Vega file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]
@@ -462,11 +474,15 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -499,16 +515,20 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// Whether to bundle JavaScript dependencies in the HTML file
         /// instead of loading them from a CDN
         #[arg(short, long)]
         bundle: bool,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -530,15 +550,19 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
         /// Include @font-face CSS blocks in the output
         #[arg(long = "include-font-face")]
         include_font_face: bool,
 
-        /// d3-format locale name or file with .json extension
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
@@ -560,15 +584,19 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// d3-format locale name or file with .json extension
+        /// Path to Vega config file
+        #[arg(short, long)]
+        config: Option<String>,
+
+        /// d3-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         format_locale: Option<String>,
 
-        /// d3-time-format locale name or file with .json extension
+        /// d3-time-format locale name, inline JSON, or .json/.jsonc file
         #[arg(long)]
         time_format_locale: Option<String>,
 
-        /// Output format: json or msgpack
+        /// Output format: JSON or MessagePack
         #[arg(long, value_enum, default_value = "json")]
         format: ScenegraphFormat,
 
@@ -590,7 +618,7 @@ pub(crate) enum Commands {
         #[arg(short, long)]
         output: Option<String>,
 
-        /// Vega-Lite Version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
+        /// Vega-Lite version. One of 5.8, 5.14, 5.15, 5.16, 5.17, 5.20, 5.21, 6.1, 6.4
         #[arg(short, long, default_value = DEFAULT_VL_VERSION)]
         vl_version: String,
     },
@@ -628,12 +656,12 @@ pub(crate) enum Commands {
         #[arg(long, default_value = "1.0")]
         scale: f32,
 
-        /// JPEG Quality between 0 (worst) and 100 (best)
+        /// JPEG quality between 0 (worst) and 100 (best)
         #[arg(short, long, default_value = "90")]
         quality: u8,
     },
 
-    /// Convert an SVG image to a PDF image
+    /// Convert an SVG image to a PDF document
     Svg2pdf {
         /// Path to input SVG file. Reads from stdin if omitted or set to "-"
         #[arg(short, long)]

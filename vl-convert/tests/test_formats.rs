@@ -66,6 +66,13 @@ const SIMPLE_VL_SPEC: &str = r#"{
   }
 }"#;
 
+const SIMPLE_VG_SPEC: &str = r#"{
+  "$schema": "https://vega.github.io/schema/vega/v5.json",
+  "width": 20,
+  "height": 20,
+  "marks": []
+}"#;
+
 fn write_temp_json(contents: &str) -> Result<NamedTempFile, Box<dyn std::error::Error>> {
     let mut file = tempfile::Builder::new().suffix(".json").tempfile()?;
     file.write_all(contents.as_bytes())?;
@@ -179,6 +186,87 @@ fn vl2vg_render_overrides_set_top_level_properties() -> Result<(), Box<dyn std::
     assert_eq!(spec["width"], 321);
     assert_eq!(spec["height"], 123);
     assert_eq!(spec["background"], "#abcdef");
+    Ok(())
+}
+
+#[test]
+fn relative_vlc_config_resolves_from_working_directory() -> Result<(), Box<dyn std::error::Error>> {
+    initialize();
+
+    let temp_dir = tempfile::tempdir()?;
+    fs::write(
+        temp_dir.path().join("vlc-config.jsonc"),
+        r##"{
+  "themes": {
+    "relative-config-theme": {"background": "#abcdef"}
+  }
+}"##,
+    )?;
+
+    let mut cmd = vl_convert_cmd()?;
+    let output = cmd
+        .current_dir(temp_dir.path())
+        .arg("--vlc-config")
+        .arg("vlc-config.jsonc")
+        .arg("ls-themes")
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "ls-themes failed with status {:?}; stderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8(output.stdout)?.contains("relative-config-theme"),
+        "relative converter config was not loaded"
+    );
+    Ok(())
+}
+
+#[test]
+fn vega_commands_accept_config() -> Result<(), Box<dyn std::error::Error>> {
+    for command in [
+        "vg2svg", "vg2png", "vg2jpeg", "vg2pdf", "vg2html", "vg2fonts", "vg2sg",
+    ] {
+        let mut cmd = vl_convert_cmd()?;
+        let output = cmd.arg(command).arg("--help").output()?;
+        assert!(output.status.success(), "{command} --help failed");
+        assert!(
+            String::from_utf8(output.stdout)?.contains("--config <CONFIG>"),
+            "{command} does not expose --config"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn vg2svg_applies_config() -> Result<(), Box<dyn std::error::Error>> {
+    initialize();
+
+    let spec = write_temp_json(SIMPLE_VG_SPEC)?;
+    let config = write_temp_json(r##"{"background": "#abcdef"}"##)?;
+    let mut cmd = vl_convert_cmd()?;
+    let output = cmd
+        .arg("--vlc-config")
+        .arg("disabled")
+        .arg("vg2svg")
+        .arg("--input")
+        .arg(spec.path())
+        .arg("--config")
+        .arg(config.path())
+        .output()?;
+
+    assert!(
+        output.status.success(),
+        "vg2svg failed with status {:?}; stderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8(output.stdout)?.contains(r##"fill="#abcdef""##),
+        "Vega config background was not applied"
+    );
     Ok(())
 }
 

@@ -1,0 +1,102 @@
+---
+title: Admin Server API
+path: admin-api
+section: API Reference
+order: 910
+interfaces: [server]
+---
+
+.. topic-body
+
+Admin Server API
+================
+
+The optional admin API manages a running server. It can inspect and update
+render-time budgets, replace the converter configuration, manage font
+directories and the Google Fonts cache size, and report worker memory use.
+
+Set ``VLC_ADMIN_API_KEY`` to require an admin bearer token, then enable the
+admin API:
+
+.. code-block:: console
+
+   $ vl-convert serve \
+   >   --admin-host 127.0.0.1 \
+   >   --admin-port 3001
+
+.. code-block:: console
+
+   $ curl http://127.0.0.1:3001/admin/diagnostics/workers \
+   >   -H "Authorization: Bearer $VLC_ADMIN_API_KEY"
+
+The admin API requires a key when bound to a non-loopback TCP address. Set it
+through ``VLC_ADMIN_API_KEY`` or ``--admin-api-key``.
+It can run without a key on loopback or a Unix domain socket, where network
+access or filesystem permissions must restrict who can connect.
+See :doc:`/server/authentication`.
+
+A running server also serves this reference at ``/admin/api-doc/openapi.json``
+and an interactive Swagger UI at ``/admin/docs``.
+
+Live Configuration Changes
+--------------------------
+
+``GET /admin/config`` returns the active converter settings. ``PATCH
+/admin/config`` changes selected fields. ``PUT /admin/config`` replaces the
+complete converter configuration. ``DELETE /admin/config`` restores the
+configuration the server started with. Font directories and the Google Fonts
+cache size have their own endpoints because they apply to the whole process
+rather than to one converter.
+
+A configuration change follows this sequence:
+
+#. The server validates the proposed configuration.
+#. The server stops accepting new conversion requests.
+#. In-flight requests are given time to finish.
+#. The server starts replacement workers.
+#. New requests begin using the replacement.
+
+While this runs, ``/readyz`` returns ``503`` and new conversion requests
+receive ``503`` with ``Retry-After: 5``. If draining or worker start-up fails,
+the previous configuration stays active. ``--reconfig-drain-timeout-secs``
+bounds the wait.
+
+Sending values identical to the active configuration does not rebuild workers.
+
+``GET /admin/config/fonts/cache`` returns ``max_size_mb`` and the read-only
+``directory``. ``PUT`` accepts only ``max_size_mb`` and returns both fields.
+Pass ``null`` for ``max_size_mb`` to restore the default capacity.
+
+Patch and Replacement Bodies
+----------------------------
+
+A ``PATCH`` field has three states:
+
+- Omitted keeps the current value.
+- A JSON value sets the field.
+- ``null`` clears a nullable field such as ``default_theme`` or
+  ``max_v8_heap_size_mb``.
+
+``null`` is rejected for required fields such as ``num_workers``,
+``base_url``, ``allowed_base_urls``, and ``themes``.
+
+``PUT`` is a full replacement. Every required field must be present and valid,
+and nullable fields may be ``null``. The field names match the JSONC converter
+config file.
+
+``base_url`` accepts ``true`` for the Vega datasets default, ``false`` to reject
+relative data URLs, or a URL or filesystem path. ``allowed_base_urls`` is a
+list of Content Security Policy-style patterns, and an empty list blocks every
+HTTP or HTTPS data and image URL and every filesystem path. Inline ``data:``
+URLs remain allowed.
+
+Generated Endpoint Reference
+----------------------------
+
+The reference below is generated from
+``vl-convert serve --dump-openapi=admin``.
+
+.. openapi:: ../_generated/openapi-admin.json
+   :group:
+   :examples:
+   :format: markdown

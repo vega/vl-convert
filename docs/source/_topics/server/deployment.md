@@ -1,0 +1,57 @@
+---
+title: Server Deployment
+path: deployment
+section: Server
+order: 440
+interfaces: [server]
+---
+
+<!-- topic-body -->
+
+# Deploying the Server
+
+## HTTP Address and Port
+
+The server binds to loopback by default. Use `--host` and `--port` to choose the server address and port:
+
+```console
+$ vl-convert serve --host 0.0.0.0 --port 3000
+```
+
+`0.0.0.0` listens on all IPv4 interfaces. The server provides HTTP, not HTTPS. A reverse proxy or platform load balancer can terminate TLS and provide application-specific authentication. See {doc}`authentication` for the built-in bearer tokens and {doc}`rate-limiting` for client IP handling behind a proxy.
+
+## Browser Access
+
+By default, CORS permits loopback origins only. Use `--cors-origin` to allow a browser application at another origin:
+
+```console
+$ vl-convert serve \
+>   --port 3000 \
+>   --cors-origin https://editor.example.com
+```
+
+:::{warning}
+CORS controls which browser origins can read responses. It is not authentication and does not block non-browser clients.
+:::
+
+## Local Subprocess or Sidecar
+
+A Unix domain socket avoids opening a TCP port and restricts access with filesystem permissions:
+
+```console
+$ vl-convert serve \
+>   --unix-socket /run/myapp/vl-convert.sock \
+>   --admin-unix-socket /run/myapp/vl-convert-admin.sock \
+>   --socket-mode 0600 \
+>   --ready-json
+```
+
+`--ready-json` writes one machine-readable line to standard output after the server has bound all configured ports or Unix sockets. When using a Unix socket, the server also exits when the parent process closes its standard input. `--exit-on-parent-close` turns that behavior on or off explicitly. Per-IP budgets do not apply to Unix sockets, which have no client IP, so use a global budget when a sidecar has several callers.
+
+## Health and Shutdown
+
+Use `/healthz` for liveness and `/readyz` for readiness. Readiness runs a cached converter check and reports `503` during live reconfiguration. `/infoz` reports component versions and the local timezone. All three routes skip authentication, so filter `/infoz` at the proxy if those host details should not be public.
+
+The server drains in-flight requests during shutdown. `--drain-timeout-secs` bounds how long shutdown waits, and the separate `--reconfig-drain-timeout-secs` bounds live configuration changes.
+
+See {doc}`guides/security` for data, image, font, and plugin access controls, and {doc}`advanced/configuration` for configuration files and overrides.

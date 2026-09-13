@@ -8,11 +8,18 @@ use std::sync::Arc;
 use crate::config::AppState;
 use crate::util::{append_vlc_logs_header, error_response};
 
+/// List the available Vega themes.
 #[utoipa::path(
     get,
     path = "/themes",
     responses(
-        (status = 200, content_type = "application/json", description = "List of theme names"),
+        (
+            status = 200,
+            body = Vec<String>,
+            content_type = "application/json",
+            description = "List of theme names",
+            example = json!(["dark", "excel", "fivethirtyeight"])
+        ),
         (status = 500, body = crate::types::ErrorResponse, description = "Internal error"),
     ),
     tag = "Themes"
@@ -26,11 +33,7 @@ pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
     match result {
         Ok(Value::Object(themes)) => {
             let names: Vec<String> = themes.keys().sorted().cloned().collect();
-            (
-                headers,
-                Json(Value::Array(names.into_iter().map(Value::String).collect())),
-            )
-                .into_response()
+            (headers, Json(names)).into_response()
         }
         Ok(_) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -45,6 +48,7 @@ pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
     }
 }
 
+/// Return one Vega theme configuration.
 #[utoipa::path(
     get,
     path = "/themes/{name}",
@@ -52,7 +56,16 @@ pub async fn list_themes(State(state): State<Arc<AppState>>) -> Response {
         ("name" = String, Path, description = "Theme name"),
     ),
     responses(
-        (status = 200, content_type = "application/json", description = "Theme configuration object"),
+        (
+            status = 200,
+            body = serde_json::Value,
+            content_type = "application/json",
+            description = "Theme configuration object",
+            example = json!({
+                "background": "white",
+                "axis": {"labelFont": "Inter", "titleFont": "Inter"}
+            })
+        ),
         (status = 404, body = crate::types::ErrorResponse, description = "Theme not found"),
         (status = 500, body = crate::types::ErrorResponse, description = "Internal error"),
     ),

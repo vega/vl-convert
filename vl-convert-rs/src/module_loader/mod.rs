@@ -21,7 +21,9 @@ use std::sync::Arc;
 
 lazy_static! {
     pub static ref IMPORT_MAP: HashMap<String, String> = build_import_map();
+    /// Bundled d3-format locales, keyed by locale name with JSON text values.
     pub static ref FORMATE_LOCALE_MAP: HashMap<String, String> = build_format_locale_map();
+    /// Bundled d3-time-format locales, keyed by locale name with JSON text values.
     pub static ref TIME_FORMATE_LOCALE_MAP: HashMap<String, String> =
         build_time_format_locale_map();
 }

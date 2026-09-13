@@ -23,6 +23,32 @@ jobs:
           pixi run lint-release
           pixi run check-workspace
 
+  docs:
+    runs-on: macos-15-intel
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v7
+      - uses: prefix-dev/setup-pixi@v0.10.0
+        with:
+          pixi-version: v0.47.0
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          prefix-key: "v1-docs"
+          cache-on-failure: true
+      - name: Check Rust API documentation
+        run: |
+          cargo rustdoc -p vl-convert-rs --lib -- -D missing_docs -D rustdoc::broken_intra_doc_links
+          cargo rustdoc -p vl-convert-google-fonts --lib --all-features -- -D missing_docs -D rustdoc::broken_intra_doc_links
+      - name: Build documentation with warnings as errors
+        run: pixi run docs-build-strict
+      - name: Serve documentation and fetch the homepage
+        run: |
+          pixi run python -m http.server 8000 --bind 127.0.0.1 --directory docs/build/html &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          curl --fail --silent --show-error --max-time 10 --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/ > /dev/null
+
   # Run on Linux without Pixi due to glibc linker issues with conda toolchain
   rust-fmt-clippy:
     runs-on: ubuntu-latest

@@ -165,21 +165,7 @@ pub fn variants_by_family(
     result
 }
 
-/// Resolve which font variants are actually available on the Google Fonts CDN
-/// for each classified Google font family.
-///
-/// For each Google font, converts the requested `(weight, style)` pairs into
-/// `VariantRequest`s, queries the CDN, and returns the resolved variants.
-/// Failures are logged as warnings and the family is skipped.
-pub async fn resolve_cdn_variants(
-    classified_fonts: &[ClassifiedFont],
-    family_variants: &HashMap<String, BTreeSet<(String, String)>>,
-) -> HashMap<String, BTreeSet<(String, String)>> {
-    resolve_cdn_variants_with_google_font_usage(classified_fonts, family_variants)
-        .await
-        .0
-}
-
+/// Resolve available Google Fonts variants and report download usage.
 pub async fn resolve_cdn_variants_with_google_font_usage(
     classified_fonts: &[ClassifiedFont],
     family_variants: &HashMap<String, BTreeSet<(String, String)>>,

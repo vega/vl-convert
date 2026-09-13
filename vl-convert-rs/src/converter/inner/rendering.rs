@@ -1,14 +1,8 @@
 use super::InnerVlConverter;
 use crate::image_loading::ImageAccessPolicy;
-use deno_core::anyhow::{anyhow, bail};
+use deno_core::anyhow::bail;
 use deno_core::error::AnyError;
-use image::codecs::jpeg::JpegEncoder;
-use image::ImageReader;
-use resvg::render;
-use std::io::Cursor;
-use svg2pdf::{ConversionOptions, PageOptions};
 
-use super::super::rendering::{encode_png, parse_svg_with_options};
 use super::super::transfer::JsonArgGuard;
 use super::super::types::*;
 use super::super::value_or_string::{apply_spec_overrides, ValueOrString};
@@ -180,36 +174,6 @@ vegaLiteToCanvas_{ver_name:?}(
         })
     }
 
-    pub(crate) fn parse_svg_with_worker_options(
-        &mut self,
-        svg: &str,
-        policy: &ImageAccessPolicy,
-    ) -> Result<usvg::Tree, AnyError> {
-        parse_svg_with_options(svg, policy, &mut self.usvg_options)
-    }
-
-    pub(crate) fn svg_to_png_with_worker_options(
-        &mut self,
-        svg: &str,
-        scale: f32,
-        ppi: Option<f32>,
-        policy: &ImageAccessPolicy,
-    ) -> Result<Vec<u8>, AnyError> {
-        let ppi = ppi.unwrap_or(72.0);
-        let scale = scale * ppi / 72.0;
-        let tree = self.parse_svg_with_worker_options(svg, policy)?;
-
-        let mut pixmap = tiny_skia::Pixmap::new(
-            (tree.size().width() * scale) as u32,
-            (tree.size().height() * scale) as u32,
-        )
-        .ok_or_else(|| anyhow!("Failed to allocate pixmap for SVG render"))?;
-
-        let transform = tiny_skia::Transform::from_scale(scale, scale);
-        render(&tree, transform, &mut pixmap.as_mut());
-        encode_png(pixmap, ppi)
-    }
-
     pub(crate) fn svg_to_jpeg_with_worker_options(
         &mut self,
         svg: &str,
@@ -217,22 +181,13 @@ vegaLiteToCanvas_{ver_name:?}(
         quality: Option<u8>,
         policy: &ImageAccessPolicy,
     ) -> Result<Vec<u8>, AnyError> {
-        let png_bytes = self.svg_to_png_with_worker_options(svg, scale, None, policy)?;
-        let img = ImageReader::new(Cursor::new(png_bytes))
-            .with_guessed_format()?
-            .decode()?;
-
-        let quality = quality.unwrap_or(90);
-        if quality > 100 {
-            bail!(
-                "JPEG quality parameter must be between 0 and 100 inclusive. Received: {quality}"
-            );
-        }
-
-        let mut jpeg_bytes: Vec<u8> = Vec::new();
-        let mut encoder = JpegEncoder::new_with_quality(&mut jpeg_bytes, quality);
-        encoder.encode_image(&img)?;
-        Ok(jpeg_bytes)
+        super::super::rendering::svg_to_jpeg_with_options(
+            svg,
+            scale,
+            quality,
+            policy,
+            &mut self.usvg_options,
+        )
     }
 
     pub(crate) fn svg_to_pdf_with_worker_options(
@@ -240,9 +195,7 @@ vegaLiteToCanvas_{ver_name:?}(
         svg: &str,
         policy: &ImageAccessPolicy,
     ) -> Result<Vec<u8>, AnyError> {
-        let tree = self.parse_svg_with_worker_options(svg, policy)?;
-        let pdf = svg2pdf::to_pdf(&tree, ConversionOptions::default(), PageOptions::default());
-        pdf.map_err(|err| anyhow!("Failed to convert SVG to PDF: {}", err))
+        super::super::rendering::svg_to_pdf_with_options(svg, policy, &mut self.usvg_options)
     }
 
     pub async fn vega_to_jpeg(

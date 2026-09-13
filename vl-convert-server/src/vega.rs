@@ -12,8 +12,9 @@ use vl_convert_rs::converter::{
 use crate::accept::{preferred_scenegraph_format, ScenegraphFormat};
 use crate::config::AppState;
 use crate::types::{
-    ErrorResponse, VegaCommon, VegaFontsRequest, VegaHtmlRequest, VegaJpegRequest, VegaPdfRequest,
-    VegaPngRequest, VegaScenegraphRequest, VegaSvgRequest, VegaUrlRequest,
+    ErrorResponse, FontInfoResponse, VegaCommon, VegaFontsRequest, VegaHtmlRequest,
+    VegaJpegRequest, VegaPdfRequest, VegaPngRequest, VegaScenegraphRequest, VegaSvgRequest,
+    VegaUrlRequest,
 };
 use crate::util::{
     append_vlc_logs_header, attach_google_font_usage, conversion_error_response, error_response,
@@ -35,6 +36,7 @@ fn build_vg_opts(req: &VegaCommon, config: &VlcConfig) -> Result<VgOpts, String>
     })
 }
 
+/// Convert a Vega specification to an SVG document.
 #[utoipa::path(
     post,
     path = "/vega/svg",
@@ -80,6 +82,7 @@ pub async fn vega_to_svg(
     }
 }
 
+/// Convert a Vega specification to a PNG image.
 #[utoipa::path(
     post,
     path = "/vega/png",
@@ -128,6 +131,7 @@ pub async fn vega_to_png(
     }
 }
 
+/// Convert a Vega specification to a JPEG image.
 #[utoipa::path(
     post,
     path = "/vega/jpeg",
@@ -176,6 +180,7 @@ pub async fn vega_to_jpeg(
     }
 }
 
+/// Convert a Vega specification to a PDF document.
 #[utoipa::path(
     post,
     path = "/vega/pdf",
@@ -224,6 +229,7 @@ pub async fn vega_to_pdf(
     }
 }
 
+/// Convert a Vega specification to an interactive HTML page.
 #[utoipa::path(
     post,
     path = "/vega/html",
@@ -283,6 +289,7 @@ pub async fn vega_to_html(
     }
 }
 
+/// Create a Vega Editor URL for a Vega specification.
 #[utoipa::path(
     post,
     path = "/vega/url",
@@ -310,6 +317,7 @@ pub async fn vega_to_url(
     }
 }
 
+/// Evaluate a Vega specification and return its scenegraph.
 #[utoipa::path(
     post,
     path = "/vega/scenegraph",
@@ -401,12 +409,26 @@ pub async fn vega_scenegraph(
     }
 }
 
+/// Return the fonts that VlConvert resolves for a Vega specification.
 #[utoipa::path(
     post,
     path = "/vega/fonts",
     request_body = VegaFontsRequest,
     responses(
-        (status = 200, content_type = "application/json", description = "Font information"),
+        (
+            status = 200,
+            body = Vec<FontInfoResponse>,
+            content_type = "application/json",
+            description = "Font information",
+            example = json!([{
+                "name": "Inter",
+                "source": {"type": "google", "font_id": "inter"},
+                "variants": [{"weight": "400", "style": "normal", "font_face": null}],
+                "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400",
+                "link_tag": "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400\">",
+                "import_rule": "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400');"
+            }])
+        ),
         (status = 400, body = ErrorResponse, description = "Invalid request"),
         (status = 422, body = ErrorResponse, description = "Font analysis failed"),
     ),

@@ -1,0 +1,160 @@
+---
+title: Font Introspection
+path: advanced/font-introspection
+section: Advanced
+order: 475
+interfaces: [python, cli, rust, server]
+---
+
+<!-- topic-body -->
+
+# Font Introspection
+
+Font introspection exposes the low-level font processing that supports VlConvert's PDF, SVG, and HTML exports. It identifies the fonts a chart uses and can generate the `@font-face` CSS used to embed them in SVG and HTML. These functions are public so you can reuse them for font checks, custom web pages, or other export workflows.
+
+The result lists resolved font families, weights, and styles for a Vega or Vega-Lite specification. Which fonts appear depends on the font settings:
+
+- Google Fonts are included when `auto_google_fonts` is enabled or the family is requested through `google_fonts`.
+- Fonts installed on the host or registered from a directory are listed only when `embed_local_fonts` is enabled.
+- Missing fonts are omitted when `missing_fonts` is `fallback` or `warn`. With `error`, inspection fails. See [Missing Fonts](#missing-fonts).
+
+The default settings return an empty list, even when the chart can render with local fonts.
+
+## Inspect Local and Google Fonts
+
+This chart uses Inter at weight 600 for its title and the bundled Liberation Sans family for its axis labels and titles. The examples enable both font sources and set `missing_fonts` to `error` so inspection fails if a first-choice font is unavailable. Google Fonts may require network access.
+
+Save this specification:
+
+:::{dropdown} font-introspection.vl.json
+:open:
+
+```{literalinclude} /_examples/font-introspection.vl.json
+:language: json
+```
+:::
+
+::::{interface} python
+```{literalinclude} /_examples/inspect-fonts.py
+:language: python
+```
+
+Output:
+
+```{program-output} python inspect-fonts.py
+:cwd: /_examples
+:language: json
+```
+
+`vegalite_fonts()` and `vega_fonts()` read `embed_local_fonts` from the converter configuration. Their `auto_google_fonts` and `subset_fonts` arguments override the configured values. Omit these arguments or pass `None` to use the configured values.
+
+Set `include_font_face=True` to include `@font-face` CSS for each variant. Embedded font data can make the result much larger.
+::::
+
+::::{interface} cli
+```console
+$ vl-convert --auto-google-fonts --embed-local-fonts --missing-fonts error \
+>   vl2fonts --input font-introspection.vl.json --output fonts.json --pretty
+```
+
+Use `vg2fonts` for Vega input. Add `--include-font-face` to include embedded font CSS.
+::::
+
+::::{interface} rust
+Both `vegalite_fonts()` and `vega_fonts()` take `FontOpts` after the specification and chart options. These settings apply to one inspection and do not inherit `VlcConfig`. Missing-font handling still uses `VlcConfig.missing_fonts`, even when embedded CSS is disabled.
+
+```rust
+use vl_convert_rs::converter::MissingFontsPolicy;
+use vl_convert_rs::{serde_json, FontOpts, VlcConfig, VlConverter};
+
+let spec = std::fs::read_to_string("font-introspection.vl.json")?;
+let converter = VlConverter::with_config(VlcConfig {
+    missing_fonts: MissingFontsPolicy::Error,
+    ..Default::default()
+})?;
+let fonts = converter
+    .vegalite_fonts(
+        spec,
+        Default::default(),
+        FontOpts {
+            auto_google_fonts: true,
+            embed_local_fonts: true,
+            ..Default::default()
+        },
+    )
+    .await?;
+
+println!("{}", serde_json::to_string_pretty(&fonts)?);
+```
+
+`FontOpts` omits embedded CSS and enables subsetting by default. Set `include_font_face: true` to include the CSS, or `subset_fonts: false` to disable subsetting.
+::::
+
+::::{interface} server
+Configure font sources and missing-font handling when starting the server:
+
+```console
+$ vl-convert serve \
+>   --auto-google-fonts \
+>   --embed-local-fonts \
+>   --missing-fonts error \
+>   --port 3000
+```
+
+Save this complete body as `request.json`:
+
+:::{dropdown} request.json
+:open:
+
+```{literalinclude} /_generated/requests/font-introspection.json
+:language: json
+```
+:::
+
+Send it to `POST /vegalite/fonts`, or use `POST /vega/fonts` for Vega input:
+
+```console
+$ curl http://127.0.0.1:3000/vegalite/fonts \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json
+```
+
+The response is a JSON array of font records.
+::::
+
+::::{not-interface} python
+Output:
+
+```{program-output} python inspect-fonts.py
+:cwd: /_examples
+:language: json
+```
+::::
+
+Inter's record includes a stylesheet URL, an HTML link tag, and a CSS import rule. Liberation Sans has no remote URL and appears with weight 400 for axis labels and 700 for axis titles. The `font_face` fields are `null` because these examples omit embedded font CSS.
+
+Font subsetting keeps only the characters a chart needs, reducing the size of downloaded or embedded fonts without changing the chart's appearance. The `text=` parameter in Inter's URLs requests this subset. Set `subset_fonts` to false to disable subsetting.
+
+::::{interface} python
+For example, `vlc.vegalite_fonts(spec, subset_fonts=False)` returns Google Fonts URLs without `text=`. Combined with `include_font_face=True`, it embeds the full fonts in the returned CSS. The override leaves the shared configuration unchanged.
+::::
+
+## Missing Fonts
+
+`missing_fonts` checks whether the first-choice font family is available locally or through the enabled Google Fonts settings. A local font excluded because `embed_local_fonts` is disabled is not missing.
+
+| Policy | When a first-choice font is unavailable |
+| --- | --- |
+| `fallback` (default) | Continue silently and omit the missing family from the result. |
+| `warn` | Log a warning, then continue and omit the missing family. |
+| `error` | Fail the inspection instead of returning font records. |
+
+For example, change the title's `font` to `"VLC Missing Example Font, Liberation Sans"`. The examples above fail because the first family is unavailable, even though Liberation Sans can render the text. A fallback does not satisfy the first-choice check, and the result does not list the fallback face used for that text.
+
+Warnings go through the interface's logging system, not into the font records. See {doc}`../guides/logging`.
+
+::::{interface} server
+Font-inspection responses do not include `X-VLC-Logs`, so callers cannot retrieve these warnings from the response. Use `--missing-fonts error` when an unavailable first-choice font should fail the request.
+::::
+
+Font introspection evaluates the chart, which can load data and consume rendering resources. Apply the same access controls and resource limits as for conversions. See {doc}`../guides/fonts` for registration, fallback, and embedding options.

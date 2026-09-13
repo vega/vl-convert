@@ -14,8 +14,11 @@ pub const VEGA_DATASETS_PATH: &str = "/npm/vega-datasets@v3.2.1/";
 pub const DEBOUNCE_PATH: &str = "/npm/lodash.debounce@4.0.8/+esm";
 pub const MSGPACK_PATH: &str = "/npm/@msgpack/msgpack@3.1.3/+esm";
 
+/// Bundled Vega version, including the patch number.
 pub const VEGA_VERSION: &str = "6.4.0";
+/// Bundled Vega Themes version, including the patch number.
 pub const VEGA_THEMES_VERSION: &str = "3.0.0";
+/// Bundled Vega Embed version, including the patch number.
 pub const VEGA_EMBED_VERSION: &str = "7.2.0";
 
 pub fn url_for_path(path: &str) -> String {
@@ -34,22 +37,37 @@ pub fn msgpack_url() -> String {
     url_for_path(MSGPACK_PATH)
 }
 
+/// A bundled Vega-Lite compiler version.
+///
+/// Parse a selector such as `"6.4"`, `"v6_4"`, or `"6.4.1"` with `FromStr`.
+/// Patch numbers are accepted but do not select a different compiler. Each variant
+/// uses the bundled patch release for its major/minor version. Unsupported versions
+/// return an error.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[allow(non_camel_case_types)]
 pub enum VlVersion {
+    /// Vega-Lite 5.8 compiler.
     v5_8,
+    /// Vega-Lite 5.14 compiler.
     v5_14,
+    /// Vega-Lite 5.15 compiler.
     v5_15,
+    /// Vega-Lite 5.16 compiler.
     v5_16,
+    /// Vega-Lite 5.17 compiler.
     v5_17,
+    /// Vega-Lite 5.20 compiler.
     v5_20,
+    /// Vega-Lite 5.21 compiler.
     v5_21,
+    /// Vega-Lite 6.1 compiler.
     v6_1,
+    /// Vega-Lite 6.4 compiler.
     v6_4,
 }
 
 impl VlVersion {
-    pub fn to_path(self) -> String {
+    pub(crate) fn to_path(self) -> String {
         use VlVersion::*;
         let path = match self {
             v5_8 => "/npm/vega-lite@5.8.0/+esm",
@@ -65,10 +83,11 @@ impl VlVersion {
         path.to_string()
     }
 
-    pub fn to_url(self) -> String {
+    pub(crate) fn to_url(self) -> String {
         format!("{}{}", JSDELIVR_URL, self.to_path())
     }
 
+    /// Return the major/minor selector, not the bundled patch version.
     pub fn to_semver(self) -> &'static str {
         use VlVersion::*;
         match self {
@@ -85,6 +104,7 @@ impl VlVersion {
     }
 }
 
+/// Default Vega-Lite major/minor selector.
 pub const DEFAULT_VL_VERSION: &str = "6.4";
 
 impl Default for VlVersion {
@@ -123,6 +143,7 @@ impl FromStr for VlVersion {
     }
 }
 
+/// Vega-Lite compiler versions included in this build.
 pub const VL_VERSIONS: &[VlVersion] = &[
     VlVersion::v5_8,
     VlVersion::v5_14,

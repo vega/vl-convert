@@ -1,17 +1,48 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
-use serde_json::{json, Value};
+use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use vl_convert_rs::module_loader::import_map;
+use utoipa::ToSchema;
+use vl_convert_rs::{VEGA_EMBED_VERSION, VEGA_THEMES_VERSION, VEGA_VERSION};
 
 use crate::config::AppState;
 
 const PROBE_INTERVAL: Duration = Duration::from_secs(1);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[derive(Debug, Serialize, ToSchema)]
+pub(crate) struct StatusResponse {
+    /// Probe result, such as `ok`, `ready`, or `not ready`.
+    status: String,
+}
+
+impl StatusResponse {
+    fn new(status: impl Into<String>) -> Self {
+        Self {
+            status: status.into(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub(crate) struct InfoResponse {
+    /// VlConvert server version.
+    version: String,
+    /// Bundled Vega version.
+    vega_version: String,
+    /// Bundled vega-themes version.
+    vega_themes_version: String,
+    /// Bundled Vega Embed version.
+    vega_embed_version: String,
+    /// Bundled Vega-Lite versions accepted by conversion requests.
+    vegalite_versions: Vec<String>,
+    /// Time zone used to interpret local dates, when configured.
+    local_tz: Option<String>,
+}
 
 pub struct ReadinessState {
     last_check: Mutex<Option<Instant>>,
@@ -33,24 +64,44 @@ impl Default for ReadinessState {
     }
 }
 
+/// Report whether the server process is running.
 #[utoipa::path(
     get,
     path = "/healthz",
     responses(
-        (status = 200, content_type = "application/json", description = "Health check"),
+        (
+            status = 200,
+            body = StatusResponse,
+            content_type = "application/json",
+            description = "Health check",
+            example = json!({"status": "ok"})
+        ),
     ),
     tag = "Health"
 )]
-pub async fn healthz() -> Json<Value> {
-    Json(json!({ "status": "ok" }))
+pub async fn healthz() -> Json<StatusResponse> {
+    Json(StatusResponse::new("ok"))
 }
 
+/// Report whether the converter can accept requests.
 #[utoipa::path(
     get,
     path = "/readyz",
     responses(
-        (status = 200, content_type = "application/json", description = "Ready"),
-        (status = 503, content_type = "application/json", description = "Not ready"),
+        (
+            status = 200,
+            body = StatusResponse,
+            content_type = "application/json",
+            description = "Ready",
+            example = json!({"status": "ready"})
+        ),
+        (
+            status = 503,
+            body = StatusResponse,
+            content_type = "application/json",
+            description = "Not ready",
+            example = json!({"status": "not ready"})
+        ),
     ),
     tag = "Health"
 )]
@@ -60,7 +111,7 @@ pub async fn readyz(State(state): State<Arc<AppState>>) -> Response {
     if state.readiness.reconfig_in_progress.load(Ordering::Acquire) {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "status": "reconfig in progress" })),
+            Json(StatusResponse::new("reconfig in progress")),
         )
             .into_response();
     }
@@ -88,33 +139,48 @@ pub async fn readyz(State(state): State<Arc<AppState>>) -> Response {
 
     let ready = *state.readiness.last_result.lock().await;
     if ready {
-        (StatusCode::OK, Json(json!({ "status": "ready" }))).into_response()
+        (StatusCode::OK, Json(StatusResponse::new("ready"))).into_response()
     } else {
         (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "status": "not ready" })),
+            Json(StatusResponse::new("not ready")),
         )
             .into_response()
     }
 }
 
+/// Return server and bundled visualization-library version information.
 #[utoipa::path(
     get,
     path = "/infoz",
     responses(
-        (status = 200, content_type = "application/json", description = "Server info"),
+        (
+            status = 200,
+            body = InfoResponse,
+            content_type = "application/json",
+            description = "Server info",
+            example = json!({
+                "version": env!("CARGO_PKG_VERSION"),
+                "vega_version": VEGA_VERSION,
+                "vega_themes_version": VEGA_THEMES_VERSION,
+                "vega_embed_version": VEGA_EMBED_VERSION,
+                "vegalite_versions": crate::util::vegalite_versions(),
+                "local_tz": "America/New_York"
+            })
+        ),
     ),
     tag = "Health"
 )]
-pub async fn infoz(State(state): State<Arc<AppState>>) -> Json<Value> {
-    Json(json!({
-        "version": env!("CARGO_PKG_VERSION"),
-        "vega_version": import_map::VEGA_VERSION,
-        "vega_themes_version": import_map::VEGA_THEMES_VERSION,
-        "vega_embed_version": import_map::VEGA_EMBED_VERSION,
-        "vegalite_versions": crate::util::vegalite_versions(),
-        "google_fonts_cache_dir": vl_convert_rs::google_fonts_cache_dir()
-            .map(|p| p.to_string_lossy().into_owned()),
-        "local_tz": state.local_tz.clone(),
-    }))
+pub async fn infoz(State(state): State<Arc<AppState>>) -> Json<InfoResponse> {
+    Json(InfoResponse {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        vega_version: VEGA_VERSION.to_string(),
+        vega_themes_version: VEGA_THEMES_VERSION.to_string(),
+        vega_embed_version: VEGA_EMBED_VERSION.to_string(),
+        vegalite_versions: crate::util::vegalite_versions()
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+        local_tz: state.local_tz.clone(),
+    })
 }

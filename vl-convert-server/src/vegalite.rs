@@ -8,14 +8,14 @@ use vl_convert_rs::converter::{
     vegalite_to_url as converter_vegalite_to_url, FontOpts, HtmlOpts, JpegOpts, PdfOpts, PngOpts,
     Renderer, SvgOpts, UrlOpts, VlOpts, VlcConfig,
 };
-use vl_convert_rs::module_loader::import_map::VlVersion;
+use vl_convert_rs::VlVersion;
 
 use crate::accept::{preferred_scenegraph_format, ScenegraphFormat};
 use crate::config::AppState;
 use crate::types::{
-    ErrorResponse, VegaliteCommon, VegaliteFontsRequest, VegaliteHtmlRequest, VegaliteJpegRequest,
-    VegalitePdfRequest, VegalitePngRequest, VegaliteScenegraphRequest, VegaliteSvgRequest,
-    VegaliteUrlRequest, VegaliteVegaRequest,
+    ErrorResponse, FontInfoResponse, VegaliteCommon, VegaliteFontsRequest, VegaliteHtmlRequest,
+    VegaliteJpegRequest, VegalitePdfRequest, VegalitePngRequest, VegaliteScenegraphRequest,
+    VegaliteSvgRequest, VegaliteUrlRequest, VegaliteVegaRequest,
 };
 use crate::util::{
     append_vlc_logs_header, attach_google_font_usage, conversion_error_response, error_response,
@@ -42,12 +42,22 @@ fn build_vl_opts(req: &VegaliteCommon, config: &VlcConfig) -> Result<VlOpts, Str
     })
 }
 
+/// Compile a Vega-Lite specification to Vega.
 #[utoipa::path(
     post,
     path = "/vegalite/vega",
     request_body = VegaliteVegaRequest,
     responses(
-        (status = 200, content_type = "application/json", description = "Vega specification"),
+        (
+            status = 200,
+            body = serde_json::Value,
+            content_type = "application/json",
+            description = "Vega specification",
+            example = json!({
+                "$schema": "https://vega.github.io/schema/vega/v6.json",
+                "marks": []
+            })
+        ),
         (status = 400, body = ErrorResponse, description = "Invalid request"),
         (status = 422, body = ErrorResponse, description = "Conversion failed"),
     ),
@@ -97,6 +107,7 @@ pub async fn vegalite_to_vega(
     }
 }
 
+/// Convert a Vega-Lite specification to an SVG document.
 #[utoipa::path(
     post,
     path = "/vegalite/svg",
@@ -146,6 +157,7 @@ pub async fn vegalite_to_svg(
     }
 }
 
+/// Convert a Vega-Lite specification to a PNG image.
 #[utoipa::path(
     post,
     path = "/vegalite/png",
@@ -198,6 +210,7 @@ pub async fn vegalite_to_png(
     }
 }
 
+/// Convert a Vega-Lite specification to a JPEG image.
 #[utoipa::path(
     post,
     path = "/vegalite/jpeg",
@@ -250,6 +263,7 @@ pub async fn vegalite_to_jpeg(
     }
 }
 
+/// Convert a Vega-Lite specification to a PDF document.
 #[utoipa::path(
     post,
     path = "/vegalite/pdf",
@@ -298,6 +312,7 @@ pub async fn vegalite_to_pdf(
     }
 }
 
+/// Convert a Vega-Lite specification to an interactive HTML page.
 #[utoipa::path(
     post,
     path = "/vegalite/html",
@@ -361,6 +376,7 @@ pub async fn vegalite_to_html(
     }
 }
 
+/// Create a Vega Editor URL for a Vega-Lite specification.
 #[utoipa::path(
     post,
     path = "/vegalite/url",
@@ -388,6 +404,7 @@ pub async fn vegalite_to_url(
     }
 }
 
+/// Compile and evaluate a Vega-Lite specification, then return its scenegraph.
 #[utoipa::path(
     post,
     path = "/vegalite/scenegraph",
@@ -479,12 +496,26 @@ pub async fn vegalite_scenegraph(
     }
 }
 
+/// Return the fonts that VlConvert resolves for a Vega-Lite specification.
 #[utoipa::path(
     post,
     path = "/vegalite/fonts",
     request_body = VegaliteFontsRequest,
     responses(
-        (status = 200, content_type = "application/json", description = "Font information"),
+        (
+            status = 200,
+            body = Vec<FontInfoResponse>,
+            content_type = "application/json",
+            description = "Font information",
+            example = json!([{
+                "name": "Inter",
+                "source": {"type": "google", "font_id": "inter"},
+                "variants": [{"weight": "400", "style": "normal", "font_face": null}],
+                "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400",
+                "link_tag": "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400\">",
+                "import_rule": "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400');"
+            }])
+        ),
         (status = 400, body = ErrorResponse, description = "Invalid request"),
         (status = 422, body = ErrorResponse, description = "Font analysis failed"),
     ),

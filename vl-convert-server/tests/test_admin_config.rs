@@ -116,32 +116,32 @@ async fn put_font_dirs(server: &BudgetServer, body: Value) -> (reqwest::StatusCo
     (status, body)
 }
 
-async fn get_font_cache_size(server: &BudgetServer) -> (reqwest::StatusCode, Value) {
+async fn get_font_cache(server: &BudgetServer) -> (reqwest::StatusCode, Value) {
     let client = reqwest::Client::new();
     let resp = client
         .get(format!(
-            "{}/admin/config/fonts/cache_size",
+            "{}/admin/config/fonts/cache",
             server.admin_base_url
         ))
         .send()
         .await
-        .expect("admin GET /admin/config/fonts/cache_size failed");
+        .expect("admin GET /admin/config/fonts/cache failed");
     let status = resp.status();
     let body = resp.json::<Value>().await.unwrap_or_else(|_| Value::Null);
     (status, body)
 }
 
-async fn put_font_cache_size(server: &BudgetServer, body: Value) -> (reqwest::StatusCode, Value) {
+async fn put_font_cache(server: &BudgetServer, body: Value) -> (reqwest::StatusCode, Value) {
     let client = reqwest::Client::new();
     let resp = client
         .put(format!(
-            "{}/admin/config/fonts/cache_size",
+            "{}/admin/config/fonts/cache",
             server.admin_base_url
         ))
         .json(&body)
         .send()
         .await
-        .expect("admin PUT /admin/config/fonts/cache_size failed");
+        .expect("admin PUT /admin/config/fonts/cache failed");
     let status = resp.status();
     let body = resp.json::<Value>().await.unwrap_or_else(|_| Value::Null);
     (status, body)
@@ -293,7 +293,7 @@ async fn test_admin_config_patch_invalid_value_422() {
 #[tokio::test]
 async fn test_admin_config_patch_rejects_google_fonts_cache_size_mb() {
     // `google_fonts_cache_size_mb` is process-global state managed by
-    // `PUT /admin/config/fonts/cache_size`.
+    // `PUT /admin/config/fonts/cache`.
     let server = default_admin_server();
     let (status, _) = patch_config(&server, json!({"google_fonts_cache_size_mb": 64})).await;
     assert_eq!(
@@ -601,41 +601,48 @@ async fn test_admin_config_font_dir_nonexistent_400() {
 }
 
 #[tokio::test]
-async fn test_admin_config_cache_size_get_returns_resolved_cap() {
+async fn test_admin_config_cache_get_returns_capacity_and_directory() {
     let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let server = default_admin_server();
-    let (status, body) = get_font_cache_size(&server).await;
+    let (status, body) = get_font_cache(&server).await;
     assert_eq!(status, 200);
     let mb = body["max_size_mb"]
         .as_u64()
         .expect("max_size_mb is a number");
     assert!(mb > 0, "resolved cap must be positive, got {mb}");
+    assert_eq!(
+        body.get("directory"),
+        Some(&json!(
+            vl_convert_rs::google_fonts_cache_dir().map(|p| p.to_string_lossy().into_owned())
+        ))
+    );
 }
 
 #[tokio::test]
-async fn test_admin_config_cache_size_put_sets_and_get_reflects() {
+async fn test_admin_config_cache_put_sets_and_get_reflects() {
     let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let server = default_admin_server();
 
-    let (status, body) = put_font_cache_size(&server, json!({"max_size_mb": 64})).await;
+    let (status, body) = put_font_cache(&server, json!({"max_size_mb": 64})).await;
     assert_eq!(status, 200);
     assert_eq!(body["max_size_mb"], 64);
 
-    let (_, after) = get_font_cache_size(&server).await;
+    let (_, after) = get_font_cache(&server).await;
     assert_eq!(after["max_size_mb"], 64);
+    assert_eq!(body, after);
 }
 
 #[tokio::test]
-async fn test_admin_config_cache_size_put_null_resets_to_default() {
+async fn test_admin_config_cache_put_null_resets_to_default() {
     let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     let server = default_admin_server();
 
     // Set to a small non-default value first.
-    let (s, _) = put_font_cache_size(&server, json!({"max_size_mb": 32})).await;
+    let (s, _) = put_font_cache(&server, json!({"max_size_mb": 32})).await;
     assert_eq!(s, 200);
 
     // null resets.
-    let (status, body) = put_font_cache_size(&server, json!({"max_size_mb": null})).await;
+    let (status, body) = put_font_cache(&server, json!({"max_size_mb": null})).await;
     assert_eq!(status, 200);
     let resolved = body["max_size_mb"].as_u64().unwrap();
     assert_ne!(resolved, 32, "null must reset away from explicit value");
@@ -643,12 +650,17 @@ async fn test_admin_config_cache_size_put_null_resets_to_default() {
 }
 
 #[tokio::test]
-async fn test_admin_config_cache_size_put_rejects_zero() {
+async fn test_admin_config_cache_put_rejects_invalid_fields() {
     let _guard = SYSTEM_FONT_CONFIG_LOCK.lock().await;
     // NonZeroU64 rejects 0 at parse time.
     let server = default_admin_server();
-    let (status, _) = put_font_cache_size(&server, json!({"max_size_mb": 0})).await;
-    assert_eq!(status, 400);
+    for body in [
+        json!({"max_size_mb": 0}),
+        json!({"max_size_mb": 64, "directory": "/tmp/cache"}),
+    ] {
+        let (status, _) = put_font_cache(&server, body).await;
+        assert_eq!(status, 400);
+    }
 }
 
 #[tokio::test]

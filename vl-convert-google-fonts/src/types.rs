@@ -4,6 +4,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
 
+/// A font family, weight, and style resolved during Google Fonts processing.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UsedGoogleFontVariant {
     /// Requested/display family name.
@@ -14,6 +15,7 @@ pub struct UsedGoogleFontVariant {
     pub style: FontStyle,
 }
 
+/// Counters for Google Fonts resolution and network activity.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoogleFontStats {
     /// CSS2 stylesheet requests that missed the local cache.
@@ -27,11 +29,13 @@ pub struct GoogleFontStats {
 }
 
 impl GoogleFontStats {
+    /// Total stylesheet and font-file cache misses, using saturating addition.
     pub fn cache_misses(&self) -> u64 {
         self.css_cache_misses
             .saturating_add(self.font_file_cache_misses)
     }
 
+    /// Accumulate counters with saturating addition.
     pub fn add_assign(&mut self, other: impl Borrow<Self>) {
         let other = other.borrow();
         self.css_cache_misses = self.css_cache_misses.saturating_add(other.css_cache_misses);
@@ -45,6 +49,7 @@ impl GoogleFontStats {
     }
 }
 
+/// Google Fonts counters and the distinct variants resolved for an operation.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoogleFontUsage {
     /// Numeric counters for Google Fonts work.
@@ -55,10 +60,12 @@ pub struct GoogleFontUsage {
 }
 
 impl GoogleFontUsage {
+    /// Total stylesheet and font-file cache misses, using saturating addition.
     pub fn cache_misses(&self) -> u64 {
         self.stats.cache_misses()
     }
 
+    /// Accumulate counters with saturating addition and, when present, merge distinct variants.
     pub fn add_assign(&mut self, other: impl Borrow<Self>) {
         let other = other.borrow();
         self.stats.add_assign(other.stats);
@@ -69,10 +76,13 @@ impl GoogleFontUsage {
         }
     }
 
+    /// Add counters without changing the resolved-variant list.
     pub fn add_stats(&mut self, stats: impl Borrow<GoogleFontStats>) {
         self.stats.add_assign(*stats.borrow());
     }
 
+    /// Replace the resolved variants with those supplied for one font family.
+    /// Also set `stats.resolved_variants` to the length of the new list.
     pub fn set_used_variants(
         &mut self,
         family: &str,
@@ -89,6 +99,7 @@ impl GoogleFontUsage {
         self.stats.resolved_variants = u64::try_from(self.used_variants.len()).unwrap_or(u64::MAX);
     }
 
+    /// Whether all counters are zero and no resolved variants are recorded.
     pub fn is_empty(&self) -> bool {
         self.stats == GoogleFontStats::default() && self.used_variants.is_empty()
     }
@@ -103,13 +114,20 @@ impl From<GoogleFontStats> for GoogleFontUsage {
     }
 }
 
+/// A font family to download, optionally restricted to selected variants.
 #[derive(Debug, Clone, Copy)]
 pub struct FontLoadRequest<'a> {
+    /// Google Fonts display name, such as `"Roboto"` (case-sensitive).
     pub family: &'a str,
+    /// Requested weights and styles. `None` loads all available variants.
+    /// An empty slice is an error. Unavailable variants use the closest match.
+    /// Availability is checked at weights 100 through 900 in steps of 100,
+    /// for both normal and italic styles.
     pub variants: Option<&'a [VariantRequest]>,
 }
 
 impl<'a> FontLoadRequest<'a> {
+    /// Request all available variants of a font family.
     pub fn new(family: &'a str) -> Self {
         Self {
             family,
@@ -118,21 +136,30 @@ impl<'a> FontLoadRequest<'a> {
     }
 }
 
+/// Downloaded font data and the usage recorded while loading it.
 #[derive(Debug)]
 pub struct FontLoadResult {
+    /// Font files and the variants they provide.
     pub batch: LoadedFontBatch,
+    /// Resolution and download activity, including cache misses.
     pub usage: GoogleFontUsage,
 }
 
+/// Whether Google Fonts recognizes a family, without downloading font files.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FontProbeResult {
+    /// Whether the family has available variants.
     pub known: bool,
+    /// Activity recorded while checking the family.
     pub usage: GoogleFontUsage,
 }
 
+/// Available variants selected for a request, without downloading font files.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariantResolutionResult {
+    /// Selected weights and styles after fallback and deduplication.
     pub variants: Vec<VariantRequest>,
+    /// Activity recorded while resolving the variants.
     pub usage: GoogleFontUsage,
 }
 
@@ -141,11 +168,14 @@ pub struct VariantResolutionResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FontStyle {
+    /// Upright text, serialized as `"normal"`.
     Normal,
+    /// Italic text, serialized as `"italic"`.
     Italic,
 }
 
 impl FontStyle {
+    /// Return the CSS keyword `"normal"` or `"italic"`.
     pub fn as_str(&self) -> &'static str {
         match self {
             FontStyle::Normal => "normal",
@@ -169,7 +199,9 @@ impl FromStr for FontStyle {
 /// A request for a specific weight + style combination.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct VariantRequest {
+    /// CSS font weight, such as `400` for regular or `700` for bold.
     pub weight: u16,
+    /// Upright or italic style.
     pub style: FontStyle,
 }
 
@@ -226,7 +258,7 @@ pub fn family_to_id(family: &str) -> Option<String> {
 }
 
 /// Check if a string is a valid font ID.
-pub fn is_valid_font_id(id: &str) -> bool {
+fn is_valid_font_id(id: &str) -> bool {
     if id.is_empty() {
         return false;
     }
@@ -249,11 +281,16 @@ pub(crate) struct ResolvedFont {
     pub url: String,
 }
 
+/// Font files loaded for one family, ready for embedding or registration.
 #[derive(Debug, Clone)]
 pub struct LoadedFontBatch {
+    /// Normalized family identifier, such as `"playfair-display"`.
     pub font_id: String,
+    /// Weights and styles provided by the loaded files.
     pub loaded_variants: Vec<VariantRequest>,
+    /// Number of font files in `font_data`.
     pub ttf_file_count: usize,
+    /// Raw TTF or OTF data, shared so callers can reuse it without copying.
     pub font_data: Vec<Arc<Vec<u8>>>,
 }
 

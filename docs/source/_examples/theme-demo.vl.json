@@ -1,0 +1,28 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "title": "Revenue by Quarter",
+  "width": 240,
+  "height": 180,
+  "data": {
+    "values": [
+      {"quarter": "Q1", "region": "North", "revenue": 42},
+      {"quarter": "Q1", "region": "South", "revenue": 31},
+      {"quarter": "Q1", "region": "West", "revenue": 18},
+      {"quarter": "Q2", "region": "North", "revenue": 47},
+      {"quarter": "Q2", "region": "South", "revenue": 36},
+      {"quarter": "Q2", "region": "West", "revenue": 24},
+      {"quarter": "Q3", "region": "North", "revenue": 52},
+      {"quarter": "Q3", "region": "South", "revenue": 34},
+      {"quarter": "Q3", "region": "West", "revenue": 29},
+      {"quarter": "Q4", "region": "North", "revenue": 61},
+      {"quarter": "Q4", "region": "South", "revenue": 40},
+      {"quarter": "Q4", "region": "West", "revenue": 33}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {"field": "quarter", "type": "nominal", "axis": {"labelAngle": 0}},
+    "y": {"field": "revenue", "type": "quantitative"},
+    "color": {"field": "region", "type": "nominal"}
+  }
+}
