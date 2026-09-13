@@ -31,6 +31,7 @@ extensions = [
 ]
 
 html_theme = "pydata_sphinx_theme"
+templates_path = ["_templates"]
 html_title = "VlConvert"
 # Logo assets live in the top-level logo/ directory. Sphinx and the theme copy
 # them into the output _static/ directory at build time.
@@ -42,6 +43,7 @@ html_js_files = ["conversion-example.js", "terminal-prompts.js"]
 html_theme_options = {
     "github_url": "https://github.com/vega/vl-convert",
     "navbar_align": "left",
+    "navbar_end": ["release-version", "theme-switcher", "navbar-icon-links"],
     "header_links_before_dropdown": 4,
     "show_toc_level": 2,
     "logo": {
