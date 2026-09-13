@@ -20,8 +20,7 @@ use crate::reconfig::{
 };
 use crate::types::{
     ConfigBadRequestResponse, ConfigPatch, ConfigReplace, ConfigValidationError, ConfigView,
-    DrainTimeoutResponse, ErrorResponse, FieldError, FieldErrorCode, FontCacheSizeView,
-    FontDirRequest,
+    DrainTimeoutResponse, ErrorResponse, FieldError, FieldErrorCode, FontCacheView, FontDirRequest,
 };
 
 /// OpenAPI doc for the admin surface. Published at `/admin/api-doc/openapi.json`;
@@ -78,8 +77,8 @@ fn admin_openapi_router() -> OpenApiRouter<Arc<AdminState>> {
         .routes(routes!(get_font_dirs))
         .routes(routes!(put_font_dirs))
         .routes(routes!(post_font_dir))
-        .routes(routes!(get_font_cache_size))
-        .routes(routes!(put_font_cache_size))
+        .routes(routes!(get_font_cache))
+        .routes(routes!(put_font_cache))
 }
 
 /// OpenAPI document for the admin server surface served at
@@ -442,7 +441,7 @@ async fn delete_config(State(admin): State<Arc<AdminState>>) -> Response {
 /// drain + rebuild, swap the snapshot, return the resulting ConfigView.
 ///
 /// Process-global state lives outside the DTO under
-/// `/admin/config/fonts/{directories,cache_size}`, so every non-identity
+/// `/admin/config/fonts/{directories,cache}`, so every non-identity
 /// `VlcConfig` commit drains and rebuilds. `generation` moves forward by 1 on
 /// every successful commit.
 async fn run_commit<'a>(
@@ -642,43 +641,51 @@ async fn post_font_dir(
 }
 
 // =============================================================================
-// /admin/config/fonts/cache_size
+// /admin/config/fonts/cache
 // =============================================================================
 //
 // Process-global Google Fonts LRU cache cap. This is not a writable
 // `VlcConfig` field and does not require drain/rebuild.
 
-/// Return the active Google Fonts cache capacity in megabytes.
+/// Return the Google Fonts cache capacity and read-only directory.
 #[utoipa::path(
     get,
-    path = "/admin/config/fonts/cache_size",
+    path = "/admin/config/fonts/cache",
     responses((
         status = 200,
-        body = FontCacheSizeView,
-        description = "Active Google Fonts cache capacity"
+        body = FontCacheView,
+        description = "Google Fonts cache capacity and directory"
     )),
     tag = "Admin",
 )]
-async fn get_font_cache_size(State(_admin): State<Arc<AdminState>>) -> Response {
+async fn get_font_cache(State(_admin): State<Arc<AdminState>>) -> Response {
     let mb = vl_convert_rs::current_google_fonts_cache_size_mb().get();
-    (StatusCode::OK, Json(FontCacheSizeView { max_size_mb: mb })).into_response()
+    (
+        StatusCode::OK,
+        Json(FontCacheView {
+            max_size_mb: mb,
+            directory: vl_convert_rs::google_fonts_cache_dir()
+                .map(|p| p.to_string_lossy().into_owned()),
+        }),
+    )
+        .into_response()
 }
 
 /// Set the Google Fonts cache capacity. `{"max_size_mb": null}` restores the
-/// default capacity.
+/// default capacity. The directory is read-only and cannot be set here.
 #[utoipa::path(
     put,
-    path = "/admin/config/fonts/cache_size",
+    path = "/admin/config/fonts/cache",
     responses(
-        (status = 200, body = FontCacheSizeView, description = "Cache capacity updated"),
+        (status = 200, body = FontCacheView, description = "Cache capacity updated"),
         (status = 400, body = ErrorResponse, description = "Malformed body"),
         (status = 503, body = ErrorResponse, description = "Google Fonts cache capacity could not be updated"),
     ),
     tag = "Admin",
 )]
-async fn put_font_cache_size(
+async fn put_font_cache(
     State(admin): State<Arc<AdminState>>,
-    body: Result<Json<crate::types::CacheSizeReplace>, JsonRejection>,
+    body: Result<Json<crate::types::FontCacheReplace>, JsonRejection>,
 ) -> Response {
     let Json(req) = match body {
         Ok(b) => b,
@@ -695,5 +702,13 @@ async fn put_font_cache_size(
     }
 
     let mb = vl_convert_rs::current_google_fonts_cache_size_mb().get();
-    (StatusCode::OK, Json(FontCacheSizeView { max_size_mb: mb })).into_response()
+    (
+        StatusCode::OK,
+        Json(FontCacheView {
+            max_size_mb: mb,
+            directory: vl_convert_rs::google_fonts_cache_dir()
+                .map(|p| p.to_string_lossy().into_owned()),
+        }),
+    )
+        .into_response()
 }

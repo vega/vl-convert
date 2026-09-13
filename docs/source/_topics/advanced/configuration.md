@@ -137,9 +137,9 @@ VLC_* environment variables
 built-in defaults
 ```
 
-Converter options are global and can appear before or after `serve`. Server-specific options, such as listeners, authentication, request limits, and budgets, follow `serve`.
+Converter options are global and can appear before or after `serve`. Server-specific options, such as addresses, ports, authentication, request limits, and budgets, follow `serve`.
 
-When the admin listener is enabled, `PUT /admin/config` replaces the live converter configuration and `PATCH /admin/config` changes selected fields. New requests use the updated configuration. See {doc}`/server/admin-api`.
+When the admin API is enabled, `PUT /admin/config` replaces the live converter configuration and `PATCH /admin/config` changes selected fields. New requests use the updated configuration. See {doc}`/server/admin-api`.
 
 Per-request values take priority over the server configuration, but requests cannot select Google Fonts or supply plugin code unless the server enables those capabilities explicitly.
 ::::
@@ -174,11 +174,11 @@ Most global and `serve` flags have `VLC_*` equivalents. These are the server-spe
 
 | Variable | Purpose |
 | --- | --- |
-| `VLC_HOST`, `VLC_PORT`, `VLC_UNIX_SOCKET` | Main listener binding |
+| `VLC_HOST`, `VLC_PORT`, `VLC_UNIX_SOCKET` | Server API address, port, or Unix socket |
 | `VLC_WORKERS` | Persistent conversion worker count |
-| `VLC_API_KEY` | Bearer token for the main listener |
-| `VLC_ADMIN_HOST`, `VLC_ADMIN_PORT` | Admin listener binding |
-| `VLC_ADMIN_API_KEY` | Bearer token for the admin listener |
+| `VLC_API_KEY` | Bearer token for the server API |
+| `VLC_ADMIN_HOST`, `VLC_ADMIN_PORT` | Admin API address and port |
+| `VLC_ADMIN_API_KEY` | Bearer token for the admin API |
 | `VLC_MAX_CONCURRENT_REQUESTS` | Maximum requests admitted at once |
 | `VLC_REQUEST_TIMEOUT_SECS` | Per-request timeout |
 | `VLC_MAX_BODY_SIZE_MB` | Maximum request body size |

@@ -85,7 +85,7 @@ $ vl-convert serve \
 >   --opaque-errors
 ```
 
-`--opaque-errors` keeps internal error details out of client responses. Also configure authentication, request limits, and render-time budgets before exposing the listener. See {doc}`/server/deployment`.
+`--opaque-errors` keeps internal error details out of client responses. Also configure authentication, request limits, and render-time budgets before exposing the server API. See {doc}`/server/deployment`.
 ::::
 
 Allowlist entries can be URL prefixes, schemes such as `https:`, wildcard hosts, absolute filesystem directories, or `*`. Use the narrowest prefix that works, and never use `*` for untrusted specifications. See {doc}`data-loading` for the full pattern syntax and how URLs are resolved.

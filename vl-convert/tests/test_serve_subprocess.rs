@@ -119,7 +119,7 @@ fn test_dump_admin_openapi_stdout_and_exits() {
         "/admin/budget",
         "/admin/config",
         "/admin/config/fonts/directories",
-        "/admin/config/fonts/cache_size",
+        "/admin/config/fonts/cache",
     ] {
         assert!(
             paths.contains_key(path),

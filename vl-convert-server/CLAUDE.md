@@ -188,9 +188,10 @@ and the Google Fonts cache size, each with dedicated
 `/admin/config/fonts/...` endpoints. They serialize against the reconfig
 coordinator lock but do not close the gate or rebuild the converter.
 
-Read-only process/system state belongs on `/infoz`, not `/admin/config`.
-`google_fonts_cache_dir` is the model: it is resolved at process start,
-reported by `/infoz`, and guarded by `test_infoz_surface_unchanged`.
+Read-only operational state belongs in the admin API, not `/infoz`.
+The Google Fonts cache directory is reported as `directory` by
+`/admin/config/fonts/cache` and cannot be changed through `PUT`.
+`/infoz` exposes component versions and the local timezone only.
 
 ## Downstream Binaries
 

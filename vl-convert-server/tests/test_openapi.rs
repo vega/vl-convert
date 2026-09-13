@@ -179,7 +179,7 @@ async fn test_admin_openapi_includes_admin_paths() {
     let expected = [
         "/admin/budget",
         "/admin/config",
-        "/admin/config/fonts/cache_size",
+        "/admin/config/fonts/cache",
         "/admin/config/fonts/directories",
         "/admin/diagnostics/workers",
     ];
@@ -232,7 +232,7 @@ async fn test_admin_openapi_includes_admin_paths() {
         patch["max_v8_heap_size_mb"]["type"],
         serde_json::json!(["integer", "null"])
     );
-    assert_eq!(patch["max_v8_heap_size_mb"]["minimum"], 1);
+    assert_eq!(patch["max_v8_heap_size_mb"]["minimum"], 64);
 
     let replace_required = schemas["ConfigReplace"]["required"]
         .as_array()

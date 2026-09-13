@@ -255,10 +255,10 @@ set_google_fonts_cache_size_mb(NonZeroU64::new(128))?;
 ::::
 
 ::::{interface} server
-Pass `--google-fonts-cache-size-mb` when starting the server to set the cap. `/infoz` reports the cache directory. When the admin listener is enabled, `GET` and `PUT /admin/config/fonts/cache_size` read and change the cap without a restart:
+Pass `--google-fonts-cache-size-mb` when starting the server to set the cap. When the admin API is enabled, `GET /admin/config/fonts/cache` returns the capacity and cache directory. `PUT` changes the capacity without a restart and returns both fields. The directory is read-only:
 
 ```console
-$ curl -X PUT http://127.0.0.1:3001/admin/config/fonts/cache_size \
+$ curl -X PUT http://127.0.0.1:3001/admin/config/fonts/cache \
 >   -H "Authorization: Bearer $VLC_ADMIN_API_KEY" \
 >   -H 'Content-Type: application/json' \
 >   --data '{"max_size_mb": 128}'

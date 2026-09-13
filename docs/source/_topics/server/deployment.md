@@ -1,5 +1,5 @@
 ---
-title: Server Deployment Profiles
+title: Server Deployment
 path: deployment
 section: Server
 order: 440
@@ -10,85 +10,27 @@ interfaces: [server]
 
 # Deploying the Server
 
-Choose a configuration based on who can call the server: trusted services, anonymous users, or a local application. Tune worker counts and limits with representative charts.
+## HTTP Address and Port
 
-Put a reverse proxy or platform load balancer in front of a TCP deployment to provide TLS, connection controls, and application-specific identity. Keep the admin listener on a management-only address or a Unix domain socket.
+The server binds to loopback by default. Use `--host` and `--port` to choose the server address and port:
 
-## Private Backend Service
+```console
+$ vl-convert serve --host 0.0.0.0 --port 3000
+```
 
-Use a bearer token when known backend services call the converter. Supply `VLC_API_KEY` through the deployment's secret manager before starting this command:
+`0.0.0.0` listens on all IPv4 interfaces. The server provides HTTP, not HTTPS. A reverse proxy or platform load balancer can terminate TLS and provide application-specific authentication. See {doc}`authentication` for the built-in bearer tokens and {doc}`rate-limiting` for client IP handling behind a proxy.
+
+## Browser Access
+
+By default, CORS permits loopback origins only. Use `--cors-origin` to allow a browser application at another origin:
 
 ```console
 $ vl-convert serve \
->   --base-url disabled \
->   --allowed-base-urls https://data.example.com/ \
->   --max-v8-heap-size-mb 512 \
->   --max-v8-execution-time-secs 10 \
->   --log-format json \
->   --host 127.0.0.1 \
 >   --port 3000 \
->   --workers 2 \
->   --max-concurrent-requests 4 \
->   --request-timeout-secs 15 \
->   --max-body-size-mb 8 \
->   --opaque-errors
+>   --cors-origin https://editor.example.com
 ```
 
-Bind to a private network address instead of loopback when the reverse proxy or caller runs on another host. Do not expose this listener without TLS at the network edge.
-
-## Intentionally Anonymous Browser Service
-
-A browser cannot keep a shared API key secret. If a tool must accept anonymous internet requests, use strict access and resource controls:
-
-:::{dropdown} anonymous.vlc.jsonc
-:open:
-
-```json
-{
-  "base_url": false,
-  "allowed_base_urls": [],
-  "google_fonts": [],
-  "auto_google_fonts": false,
-  "vega_plugins": [],
-  "plugin_import_domains": [],
-  "allow_google_fonts": false,
-  "allow_per_request_plugins": false,
-  "per_request_plugin_import_domains": []
-}
-```
-:::
-
-Start the server with this config file and explicit resource limits:
-
-```console
-$ vl-convert serve \
->   --vlc-config anonymous.vlc.jsonc \
->   --base-url disabled \
->   --allowed-base-urls none \
->   --auto-google-fonts=false \
->   --allow-google-fonts=false \
->   --allow-per-request-plugins=false \
->   --max-v8-heap-size-mb 512 \
->   --max-v8-execution-time-secs 10 \
->   --missing-fonts warn \
->   --log-format json \
->   --host 0.0.0.0 \
->   --port 3000 \
->   --workers 2 \
->   --max-concurrent-requests 4 \
->   --request-timeout-secs 15 \
->   --max-body-size-mb 4 \
->   --per-ip-budget-ms 5000 \
->   --global-budget-ms 30000 \
->   --cors-origin https://editor.example.com \
->   --opaque-errors
-```
-
-Review the process environment before deployment. `VLC_*` environment variables override the config file, and CLI options override both. In particular, remove `VLC_GOOGLE_FONT` and `VLC_VEGA_PLUGIN` so the server cannot inherit startup fonts or plugins.
-
-CORS only controls browser access to responses. Keep network-level rate limits, abuse monitoring, and egress restrictions in front of the process. Enable Google Fonts or per-request plugins only if the product needs them and has tighter controls for their cost and risk.
-
-If a trusted reverse proxy supplies client IP headers, add `--trust-proxy` only after configuring the proxy to strip inbound forwarded headers and write its own.
+CORS controls which browser origins can read responses. It is not authentication and does not block non-browser clients. A browser application cannot keep a shared API key secret.
 
 ## Local Subprocess or Sidecar
 
@@ -102,12 +44,12 @@ $ vl-convert serve \
 >   --ready-json
 ```
 
-`--ready-json` writes one machine-readable line to standard output after the listeners bind. With a Unix socket listener, the server also exits when the parent process closes its standard input. `--exit-on-parent-close` turns that behavior on or off explicitly. Per-IP budgets do not apply to Unix sockets, which have no client IP, so use a global budget when a sidecar has several callers.
+`--ready-json` writes one machine-readable line to standard output after the server has bound all configured ports or Unix sockets. When using a Unix socket, the server also exits when the parent process closes its standard input. `--exit-on-parent-close` turns that behavior on or off explicitly. Per-IP budgets do not apply to Unix sockets, which have no client IP, so use a global budget when a sidecar has several callers.
 
 ## Health and Shutdown
 
-Use `/healthz` for liveness and `/readyz` for readiness. Readiness runs a cached converter check and reports `503` during live reconfiguration. `/infoz` reports component versions, the local timezone, and the Google Fonts cache location. All three routes skip authentication, so filter `/infoz` at the proxy if those host details should not be public.
+Use `/healthz` for liveness and `/readyz` for readiness. Readiness runs a cached converter check and reports `503` during live reconfiguration. `/infoz` reports component versions and the local timezone. All three routes skip authentication, so filter `/infoz` at the proxy if those host details should not be public.
 
 The server drains in-flight requests during shutdown. `--drain-timeout-secs` bounds how long shutdown waits, and the separate `--reconfig-drain-timeout-secs` bounds live configuration changes.
 
-See {doc}`authentication`, {doc}`rate-limiting`, and {doc}`guides/security` for the controls these profiles use.
+See {doc}`guides/security` for data, image, font, and plugin access controls, and {doc}`advanced/configuration` for configuration files and overrides.

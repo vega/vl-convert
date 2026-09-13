@@ -682,10 +682,11 @@ pub(crate) struct FontDirReplace {
     pub paths: Vec<std::path::PathBuf>,
 }
 
-/// Request body for `PUT /admin/config/fonts/cache_size`. `null` restores the
+/// Request body for `PUT /admin/config/fonts/cache`. `null` restores the
 /// default capacity.
 #[derive(Debug, serde::Deserialize, utoipa::ToSchema)]
-pub(crate) struct CacheSizeReplace {
+#[serde(deny_unknown_fields)]
+pub(crate) struct FontCacheReplace {
     /// Cache capacity in megabytes. `null` restores the default.
     #[schema(value_type = Option<u64>, nullable, minimum = 1)]
     pub max_size_mb: Option<NonZeroU64>,
@@ -742,7 +743,9 @@ pub(crate) struct DrainTimeoutResponse {
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct FontCacheSizeView {
+pub(crate) struct FontCacheView {
+    /// Read-only Google Fonts cache directory, when available.
+    pub directory: Option<String>,
     /// Active Google Fonts cache capacity in megabytes.
     #[schema(minimum = 1)]
     pub max_size_mb: u64,
@@ -889,9 +892,8 @@ mod tests {
 
     #[test]
     fn config_replace_rejects_cache_dir_field() {
-        // `google_fonts_cache_dir` is read-only system state surfaced on
-        // `/infoz`, not part of the writable config DTO. `ConfigReplace`
-        // must reject it via `deny_unknown_fields`.
+        // The cache directory is read-only state on `/admin/config/fonts/cache`,
+        // not part of the writable converter config.
         let body = put_body(&[("google_fonts_cache_dir", serde_json::json!("/tmp/cache"))]);
         let err = serde_json::from_value::<ConfigReplace>(body)
             .expect_err("google_fonts_cache_dir is not a writable field");
@@ -986,15 +988,14 @@ mod tests {
 
     #[test]
     fn vlc_config_serialize_does_not_emit_google_fonts_cache_dir() {
-        // `google_fonts_cache_dir` is read-only system state surfaced on
-        // `/infoz`, not on `VlcConfig`.
+        // The cache directory belongs to the process, not to `VlcConfig`.
         let value: serde_json::Value = serde_json::to_value(VlcConfig::default()).expect("ser");
         assert!(
             !value
                 .as_object()
                 .unwrap()
                 .contains_key("google_fonts_cache_dir"),
-            "google_fonts_cache_dir must live on /infoz, not on VlcConfig"
+            "google_fonts_cache_dir must live on /admin/config/fonts/cache, not on VlcConfig"
         );
     }
 }

@@ -40,8 +40,6 @@ pub(crate) struct InfoResponse {
     vega_embed_version: String,
     /// Bundled Vega-Lite versions accepted by conversion requests.
     vegalite_versions: Vec<String>,
-    /// Google Fonts cache directory, when available.
-    google_fonts_cache_dir: Option<String>,
     /// Time zone used to interpret local dates, when configured.
     local_tz: Option<String>,
 }
@@ -167,7 +165,6 @@ pub async fn readyz(State(state): State<Arc<AppState>>) -> Response {
                 "vega_themes_version": VEGA_THEMES_VERSION,
                 "vega_embed_version": VEGA_EMBED_VERSION,
                 "vegalite_versions": crate::util::vegalite_versions(),
-                "google_fonts_cache_dir": "/home/app/.cache/vl-convert/google-fonts",
                 "local_tz": "America/New_York"
             })
         ),
@@ -184,8 +181,6 @@ pub async fn infoz(State(state): State<Arc<AppState>>) -> Json<InfoResponse> {
             .into_iter()
             .map(str::to_string)
             .collect(),
-        google_fonts_cache_dir: vl_convert_rs::google_fonts_cache_dir()
-            .map(|p| p.to_string_lossy().into_owned()),
         local_tz: state.local_tz.clone(),
     })
 }

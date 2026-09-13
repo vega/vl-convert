@@ -11,15 +11,12 @@ interfaces: [server]
 Admin Server API
 ================
 
-The optional admin listener manages a running server. It can inspect and update
+The optional admin API manages a running server. It can inspect and update
 render-time budgets, replace the converter configuration, manage font
 directories and the Google Fonts cache size, and report worker memory use.
 
-Never expose this listener alongside public conversion traffic. Bind it to
-loopback, a private management network, or a Unix domain socket, and give it
-its own bearer token on shared systems.
-
-Set ``VLC_ADMIN_API_KEY`` through your secret manager before starting the server:
+Set ``VLC_ADMIN_API_KEY`` to require an admin bearer token, then enable the
+admin API:
 
 .. code-block:: console
 
@@ -32,10 +29,10 @@ Set ``VLC_ADMIN_API_KEY`` through your secret manager before starting the server
    $ curl http://127.0.0.1:3001/admin/diagnostics/workers \
    >   -H "Authorization: Bearer $VLC_ADMIN_API_KEY"
 
-A TCP admin listener on a non-loopback address requires an admin API key, set
+The admin API requires a key when bound to a non-loopback TCP address. Set it
 through ``VLC_ADMIN_API_KEY`` or ``--admin-api-key``.
-Loopback and Unix domain socket listeners can run without a key, in which case
-network placement or filesystem permissions must provide the access boundary.
+It can run without a key on loopback or a Unix domain socket, where network
+access or filesystem permissions must restrict who can connect.
 See :doc:`/server/authentication`.
 
 A running server also serves this reference at ``/admin/api-doc/openapi.json``
@@ -54,7 +51,7 @@ rather than to one converter.
 A configuration change follows this sequence:
 
 #. The server validates the proposed configuration.
-#. The main listener stops admitting conversion requests.
+#. The server stops accepting new conversion requests.
 #. In-flight requests are given time to finish.
 #. The server starts replacement workers.
 #. New requests begin using the replacement.
@@ -65,6 +62,10 @@ the previous configuration stays active. ``--reconfig-drain-timeout-secs``
 bounds the wait.
 
 Sending values identical to the active configuration does not rebuild workers.
+
+``GET /admin/config/fonts/cache`` returns ``max_size_mb`` and the read-only
+``directory``. ``PUT`` accepts only ``max_size_mb`` and returns both fields.
+Pass ``null`` for ``max_size_mb`` to restore the default capacity.
 
 Patch and Replacement Bodies
 ----------------------------

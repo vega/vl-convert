@@ -10,7 +10,7 @@ interfaces: [server]
 
 # Server Logging
 
-The server writes logs to standard error. Use text logs for local development and JSON logs for deployed services:
+The server writes text logs to standard error by default. Select JSON output with `--log-format json`:
 
 ```console
 $ vl-convert serve \
@@ -27,7 +27,7 @@ $ vl-convert serve \
 >   --port 3000
 ```
 
-Debug logs are high volume and can contain resource names or error details. Return to a production level after investigating.
+Debug logs include more detail and can contain resource names or error details.
 
 ## Request Fields
 

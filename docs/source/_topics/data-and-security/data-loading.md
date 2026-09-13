@@ -168,7 +168,7 @@ $ curl http://127.0.0.1:3000/vegalite/png \
 >   --output chart.png
 ```
 
-Requests cannot change the loading settings. When the admin listener is enabled, `PATCH /admin/config` updates them without a restart. See {doc}`/server/admin-api`.
+Requests cannot change the loading settings. When the admin API is enabled, `PATCH /admin/config` updates them without a restart. See {doc}`/server/admin-api`.
 ::::
 
 For production, use a stable absolute path such as `/srv/charts`. Keep the allowlist limited to the directory the chart needs.

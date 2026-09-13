@@ -30,7 +30,7 @@ $ vl-convert serve \
 
 `--budget-hold-ms` is the reservation taken when a request is admitted. When the response is ready, the reservation is replaced by the measured processing time. A larger hold stops many costly requests from entering at once but can reject a burst of cheap ones. A smaller hold allows more concurrency but can briefly overspend a bucket when requests run longer than expected. The default is 1000.
 
-Start near the typical conversion time, then tune from the request logs. The hold must not exceed an enabled budget, or that bucket can never admit a request.
+The hold must not exceed an enabled budget, or that bucket can never admit a request.
 
 Budgets complement these separate controls:
 
@@ -39,7 +39,7 @@ Budgets complement these separate controls:
 - `--max-v8-execution-time-secs` bounds JavaScript execution
 - `--max-body-size-mb` bounds request payload size
 
-## Identify Clients Correctly
+## Client IP Addresses
 
 Without `--trust-proxy`, the TCP peer address identifies the client. Behind a reverse proxy that address is the proxy itself, so every caller would share one per-IP bucket.
 
@@ -66,4 +66,4 @@ The final charge is the measured processing time plus the penalty for each cache
 
 JSON request logs record the outcome, charged time, remaining capacity, and font penalty. See {doc}`logging` for the field names.
 
-When the admin listener is enabled, `GET /admin/budget` reports the current state and `POST /admin/budget` updates the caps or the hold. Lowering a cap clamps existing balances to the new value. See {doc}`authentication` for protecting that listener.
+When the admin API is enabled, `GET /admin/budget` reports the current state and `POST /admin/budget` updates the caps or the hold. Lowering a cap clamps existing balances to the new value. See {doc}`authentication` for admin API authentication.

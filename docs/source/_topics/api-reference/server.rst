@@ -14,12 +14,12 @@ Server API
 This reference is generated from the version 2 executable with
 ``vl-convert serve --dump-openapi=public``. A running server also serves the
 same document at ``/api-doc/openapi.json`` and an interactive Swagger UI at
-``/docs``. Both require the main listener's API key when one is set. Start with
+``/docs``. Both require the server API key when one is set. Start with
 :doc:`/server/getting-started/quick-start` for a complete request.
 
 This page documents the HTTP API. Rust applications that embed the server can
 use the :server-api:`vl-convert-server crate reference <index.html>` for the
-router, listener, and lifecycle APIs.
+routing, socket binding, and lifecycle APIs.
 
 Vega and Vega-Lite conversion endpoints accept JSON request bodies shaped like
 ``{"spec": <spec>, ...overrides}``. Overrides use the same names as the Python
@@ -33,7 +33,7 @@ compilation, HTML, and scenegraph responses carry Vega's diagnostic messages
 in the ``X-VLC-Logs`` header. URL and font-inspection responses do not include
 this header.
 
-The :doc:`/server/admin-api` uses a separate listener and credential, so it has
+The :doc:`/server/admin-api` uses a separate port or Unix socket and credential, so it has
 its own reference.
 
 .. openapi:: ../_generated/openapi-public.json

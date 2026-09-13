@@ -82,7 +82,7 @@ $ vl-convert serve \
 >   --request-timeout-secs 15
 ```
 
-When the admin listener is enabled, read the current JavaScript heap use with:
+When the admin API is enabled, read the current JavaScript heap use with:
 
 ```console
 $ curl http://127.0.0.1:3001/admin/diagnostics/workers \
