@@ -157,5 +157,4 @@ Every conversion command accepts `--input -` and `--output -` for standard input
 
 ### `serve`
 
-```{program-output} python ../tools/run_vl_convert.py serve --help
-```
+See the {doc}`server CLI reference </server/cli-reference>` for startup options.

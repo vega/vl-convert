@@ -60,13 +60,15 @@ Font work adds `google_font.css_cache_misses`, `google_font.file_cache_misses`, 
 
 ## Correlate a Request
 
-Send `X-Request-Id` when a non-browser client already has a correlation ID:
+The server returns an `X-Request-Id` header with each response. With `--log-format json`, the same value appears in server logs as `http.request_id`. Use it to find the logs for a request.
+
+The server generates an ID when the request does not include one. To supply your own request ID:
 
 ```console
-$ curl http://127.0.0.1:3000/themes \
+$ curl -i http://127.0.0.1:3000/themes \
 >   -H 'X-Request-Id: render-01'
 ```
 
-If the header is absent, the server generates an ID. Either way the response carries the same `X-Request-Id`, so callers can attach it to their own logs. Browser clients can read it when CORS allows their origin.
+## Vega Diagnostics
 
 Successful render, compilation, HTML, and scenegraph responses also carry `X-VLC-Logs`, a JSON array of up to 50 Vega diagnostic messages. Inspect it when a chart renders but Vega reported warnings. URL and font-inspection responses do not include this header.

@@ -30,7 +30,9 @@ $ vl-convert serve \
 >   --cors-origin https://editor.example.com
 ```
 
-CORS controls which browser origins can read responses. It is not authentication and does not block non-browser clients. A browser application cannot keep a shared API key secret.
+:::{warning}
+CORS controls which browser origins can read responses. It is not authentication and does not block non-browser clients.
+:::
 
 ## Local Subprocess or Sidecar
 
