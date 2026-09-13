@@ -706,11 +706,10 @@ mod test_png_no_theme {
 #[rustfmt::skip]
 mod test_configured_google_fonts {
     use crate::*;
-    use futures::executor::block_on;
     use vl_convert_rs::converter::{GoogleFontRequest, HtmlOpts, MissingFontsPolicy, Renderer, VgOpts, VlcConfig, VlOpts};
 
-    #[test]
-    fn test() {
+    #[tokio::test]
+    async fn test() {
         initialize();
 
         let vl_version = VlVersion::v5_8;
@@ -724,21 +723,18 @@ mod test_configured_google_fonts {
             ..Default::default()
         }).unwrap();
 
-        let vg_output = block_on(
-            converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})
-        ).unwrap();
+        let vg_output = converter.vegalite_to_vega(vl_spec.clone(), VlOpts{vl_version, ..Default::default()})
+            .await.unwrap();
 
-        let output = block_on(converter.vega_to_png(vg_output.spec.clone(), Default::default(), PngOpts { scale: Some(2.0), ppi: None })).unwrap();
+        let output = converter.vega_to_png(vg_output.spec.clone(), Default::default(), PngOpts { scale: Some(2.0), ppi: None }).await.unwrap();
         check_png("google_fonts", vl_version, None, output.data.as_slice());
 
-        let output = block_on(
-            converter.vegalite_to_png(vl_spec.clone(), VlOpts{vl_version, ..Default::default()}, PngOpts { scale: Some(2.0), ppi: None })
-        ).unwrap();
+        let output = converter.vegalite_to_png(vl_spec.clone(), VlOpts{vl_version, ..Default::default()}, PngOpts { scale: Some(2.0), ppi: None })
+            .await.unwrap();
         check_png("google_fonts", vl_version, None, output.data.as_slice());
 
-        let output = block_on(
-            converter.vegalite_to_svg(vl_spec.clone(), VlOpts{vl_version, ..Default::default()}, SvgOpts::default())
-        ).unwrap();
+        let output = converter.vegalite_to_svg(vl_spec.clone(), VlOpts{vl_version, ..Default::default()}, SvgOpts::default())
+            .await.unwrap();
         assert!(output.svg.contains("@import"));
         assert!(output.svg.contains("fonts.googleapis.com"));
         assert!(output.svg.contains("Bangers"));
@@ -746,25 +742,23 @@ mod test_configured_google_fonts {
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40">
             <text x="0" y="30" font-family="Bangers">Configured font</text>
         </svg>"#;
-        let output = block_on(converter.svg_to_png(svg, PngOpts::default())).unwrap();
+        let output = converter.svg_to_png(svg, PngOpts::default()).await.unwrap();
         assert_eq!(&output.data[..8], b"\x89PNG\r\n\x1a\n");
 
-        let vl_html = block_on(
-            converter.vegalite_to_html(
-                vl_spec,
-                VlOpts { vl_version, ..Default::default() },
-                HtmlOpts { bundle: false, renderer: Renderer::Svg },
-            )
-        ).unwrap();
+        let vl_html = converter.vegalite_to_html(
+            vl_spec,
+            VlOpts { vl_version, ..Default::default() },
+            HtmlOpts { bundle: false, renderer: Renderer::Svg },
+        )
+        .await.unwrap();
         assert!(vl_html.html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css2?family=Bangers:"));
 
-        let vg_html = block_on(
-            converter.vega_to_html(
-                vg_output.spec,
-                VgOpts::default(),
-                HtmlOpts { bundle: true, renderer: Renderer::Svg },
-            )
-        ).unwrap();
+        let vg_html = converter.vega_to_html(
+            vg_output.spec,
+            VgOpts::default(),
+            HtmlOpts { bundle: true, renderer: Renderer::Svg },
+        )
+        .await.unwrap();
         assert!(vg_html.html.contains("@font-face"));
         assert!(vg_html.html.contains("font-family: \"Bangers\""));
         assert!(vg_html.html.contains("base64,"));

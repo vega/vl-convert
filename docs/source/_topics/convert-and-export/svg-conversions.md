@@ -68,7 +68,7 @@ let output = converter
 std::fs::write("chart.png", output.data)?;
 ```
 
-The PNG bytes are in `output.data`. Use `svg_to_jpeg()` with `JpegOpts` or `svg_to_pdf()` with `PdfOpts` for other formats. These methods apply the converter's font and image-access settings and run on Tokio's blocking pool without starting JavaScript workers.
+The PNG bytes are in `output.data`. Use `svg_to_jpeg()` with `JpegOpts` or `svg_to_pdf()` with `PdfOpts` for other formats. These methods apply the converter's font and image-access settings. They require a Tokio runtime but do not start JavaScript workers.
 ::::
 
 ::::{interface} server
