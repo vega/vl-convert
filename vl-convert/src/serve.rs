@@ -837,10 +837,6 @@ pub(crate) async fn run_serve(
     mut base_config: VlcConfig,
     args: ServeArgs,
 ) -> anyhow::Result<()> {
-    if let Some(surface) = args.openapi_dump_surface() {
-        return dump_openapi(surface);
-    }
-
     // Per-request gates only apply in serve mode, so they are injected here.
     if let Some(v) = args.allow_google_fonts {
         base_config.allow_google_fonts = v;

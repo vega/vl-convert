@@ -1,13 +1,13 @@
 """Render chart inputs with the local vl-convert CLI at build time.
 
-The ``vl-chart`` directive takes input from its path argument or body, renders
+The ``vl-chart`` directive reads an input file, renders
 it with the CLI that the docs build already compiles, and inserts the result as
 an image. Rendered files are cached under ``_generated/charts`` by a hash of
 the input, options, and CLI version, so unchanged charts cost nothing on later
 builds.
 
-Vega and Vega-Lite specifications should carry their data inline so the build
-does not depend on remote data. For SVG output that uses Google Fonts, pass
+Rendering can fetch remote data, fonts, and plugin imports referenced by the
+input or options. For SVG output that uses Google Fonts, pass
 ``:google-fonts:`` together with ``:bundle:`` so the subset font is embedded.
 An SVG shown through an ``<img>`` element cannot load external stylesheets, so
 an embedded font is the only way the typeface reaches the reader. PNG output
@@ -52,14 +52,11 @@ _cli_version: str | None = None
 class VlChart(SphinxDirective):
     """Render a chart input and insert it as an image."""
 
-    optional_arguments = 1
+    required_arguments = 1
     final_argument_whitespace = True
-    has_content = True
     option_spec = {
         "format": lambda arg: directives.choice(arg, ("svg", "png")),
-        "input-kind": lambda arg: directives.choice(
-            arg, ("vegalite", "vega", "svg")
-        ),
+        "input-kind": lambda arg: directives.choice(arg, ("vegalite", "vega", "svg")),
         "theme": directives.unchanged_required,
         "themes": directives.unchanged_required,
         "vl-version": directives.unchanged_required,
@@ -69,11 +66,8 @@ class VlChart(SphinxDirective):
         "vega-plugin": directives.unchanged_required,
         "plugin-import-domains": directives.unchanged_required,
         "google-fonts": directives.unchanged_required,
-        "auto-google-fonts": directives.flag,
         "bundle": directives.flag,
         "alt": directives.unchanged,
-        "class": directives.class_option,
-        "width": directives.length_or_percentage_or_unitless,
     }
 
     def run(self) -> list[nodes.Node]:
@@ -84,7 +78,7 @@ class VlChart(SphinxDirective):
         except ValueError as exc:
             raise self.error(f"vl-chart: {exc}") from exc
         binary = self.binary()
-        chart_input = self.read_input()
+        chart_input = Path(self.resolve_path(self.arguments[0])).read_text()
 
         global_args: list[str] = []
         file_contents: list[str] = []
@@ -95,8 +89,6 @@ class VlChart(SphinxDirective):
                 file_contents.append(Path(path).read_text())
         if "google-fonts" in self.options:
             global_args += ["--google-font", self.options["google-fonts"]]
-        if "auto-google-fonts" in self.options:
-            global_args.append("--auto-google-fonts")
         command_args: list[str] = []
         for option, flag in COMMAND_OPTIONS.items():
             if option in self.options:
@@ -132,11 +124,9 @@ class VlChart(SphinxDirective):
             "",
             uri=f"/{relative}",
             alt=self.options.get("alt", ""),
-            classes=["rendered-chart", *self.options.get("class", [])],
+            classes=["rendered-chart"],
         )
-        if "width" in self.options:
-            image["width"] = self.options["width"]
-        elif image_format == "png":
+        if image_format == "png":
             # A PNG rendered at scale N is shown at 1/N so it stays sharp on
             # high-density displays without growing larger than the SVG charts.
             scale = float(self.options.get("scale", 1))
@@ -152,13 +142,6 @@ class VlChart(SphinxDirective):
             return find_binary()
         except SystemExit as exc:
             raise self.error(f"vl-chart: {exc}") from exc
-
-    def read_input(self) -> str:
-        if self.arguments:
-            return Path(self.resolve_path(self.arguments[0])).read_text()
-        if self.content:
-            return "\n".join(self.content)
-        raise self.error("vl-chart needs an input path or inline input")
 
     def resolve_path(self, value: str) -> str:
         _, absolute = self.env.relfn2path(value)

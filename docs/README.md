@@ -43,8 +43,9 @@ Conceptual examples and API-reference excerpts do not always need a complete
 chart. Introduce these as fragments or state which setup they omit. Do not
 present an undefined name or file as a runnable example.
 
-Keep deterministic examples offline. Use network access only in a guide that
-explicitly teaches remote data, Google Fonts, or remote plugins.
+The build can fetch remote data, Google Fonts, and plugin imports used by
+rendered examples. The homepage uses checked-in outputs, so its remote dataset
+is fetched only when you run `pixi run docs-preview-chart`.
 
 Show the printed output below every Python example that calls `print()`.
 Use `literalinclude` and `program-output` to display and run the same example

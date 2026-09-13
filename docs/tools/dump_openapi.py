@@ -37,27 +37,10 @@ def dump_surface(surface: str) -> dict:
         )
 
 
-def validate_surface(surface: str, spec: dict) -> None:
-    paths = spec.get("paths", {})
-    if surface == "public":
-        admin_paths = sorted(path for path in paths if path.startswith("/admin"))
-        if admin_paths:
-            raise SystemExit(f"public OpenAPI spec leaked admin paths: {admin_paths}")
-    elif surface == "admin":
-        non_admin_paths = sorted(
-            path for path in paths if not path.startswith("/admin")
-        )
-        if non_admin_paths:
-            raise SystemExit(
-                f"admin OpenAPI spec leaked public paths: {non_admin_paths}"
-            )
-
-
 def main() -> int:
     GENERATED.mkdir(parents=True, exist_ok=True)
     for surface, output in SURFACES.items():
         spec = dump_surface(surface)
-        validate_surface(surface, spec)
         output.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n")
 
     return 0

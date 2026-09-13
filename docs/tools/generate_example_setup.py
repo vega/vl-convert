@@ -3,47 +3,19 @@
 
 from __future__ import annotations
 
-import argparse
 import tomllib
 from pathlib import Path
 
-from packaging.version import InvalidVersion, Version
+from packaging.version import Version
 
 
-def repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
-
-
-def default_workspace_manifest() -> Path:
-    return repo_root() / "Cargo.toml"
-
-
-def default_output_dir() -> Path:
-    return repo_root() / "docs" / "source" / "_generated" / "setup"
-
-
-def read_workspace_version(path: Path) -> str:
-    """Read the version shared by the workspace packages."""
-    try:
-        with path.open("rb") as file:
-            manifest = tomllib.load(file)
-        version = manifest["workspace"]["package"]["version"]
-    except (OSError, KeyError, tomllib.TOMLDecodeError) as exc:
-        raise ValueError(f"cannot read workspace package version from {path}") from exc
-
-    if not isinstance(version, str) or not version:
-        raise ValueError(f"workspace package version in {path} must be a string")
-    return version
+ROOT = Path(__file__).resolve().parents[2]
+OUTPUT = ROOT / "docs" / "source" / "_generated" / "setup"
 
 
 def build_setup_files(version: str) -> dict[str, str]:
     """Return example setup files pinned to the supplied version."""
-    try:
-        python_version = Version(version)
-    except InvalidVersion as exc:
-        raise ValueError(
-            f"workspace version is not valid for Python: {version}"
-        ) from exc
+    python_version = Version(version)
 
     return {
         "Cargo.toml": f"""[package]
@@ -89,24 +61,11 @@ def write_setup_files(output_dir: Path, files: dict[str, str]) -> None:
             path.unlink()
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--workspace-manifest", type=Path, default=default_workspace_manifest()
-    )
-    parser.add_argument("--output-dir", type=Path, default=default_output_dir())
-    return parser.parse_args()
-
-
-def main() -> int:
-    args = parse_args()
-    try:
-        version = read_workspace_version(args.workspace_manifest)
-        write_setup_files(args.output_dir, build_setup_files(version))
-    except ValueError as exc:
-        raise SystemExit(f"example setup: {exc}") from exc
-    return 0
+def main() -> None:
+    with (ROOT / "Cargo.toml").open("rb") as file:
+        version = tomllib.load(file)["workspace"]["package"]["version"]
+    write_setup_files(OUTPUT, build_setup_files(version))
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
