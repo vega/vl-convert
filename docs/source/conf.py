@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import tomllib
 from html import escape
@@ -33,6 +34,10 @@ extensions = [
 html_theme = "pydata_sphinx_theme"
 templates_path = ["_templates"]
 html_title = "VlConvert"
+DOCS_SITE_URL = os.environ.get(
+    "VLC_DOCS_SITE_URL", "https://vega.github.io/vl-convert"
+).rstrip("/")
+html_baseurl = f"{DOCS_SITE_URL}/{release}/"
 # Logo assets live in the top-level logo/ directory. Sphinx and the theme copy
 # them into the output _static/ directory at build time.
 LOGO_DIR = ROOT / "logo"
@@ -43,7 +48,13 @@ html_js_files = ["conversion-example.js", "terminal-prompts.js"]
 html_theme_options = {
     "github_url": "https://github.com/vega/vl-convert",
     "navbar_align": "left",
-    "navbar_end": ["release-version", "theme-switcher", "navbar-icon-links"],
+    "navbar_end": ["version-menu", "theme-switcher", "navbar-icon-links"],
+    "switcher": {
+        "json_url": f"{DOCS_SITE_URL}/versions.json",
+        "version_match": release,
+    },
+    # Builds must not depend on a published manifest, including the first release.
+    "check_switcher": False,
     "header_links_before_dropdown": 4,
     "show_toc_level": 2,
     "logo": {

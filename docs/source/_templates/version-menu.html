@@ -1,0 +1,4 @@
+{# Keep the Cargo version visible when this release is absent from the menu. #}
+{% filter replace("Choose version", "v" ~ release) %}
+  {% include "components/version-switcher.html" %}
+{% endfilter %}
