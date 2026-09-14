@@ -4,10 +4,10 @@
 
 Use Altair's `chart.save()` to export charts. Altair calls VlConvert for PNG, SVG, and PDF output, so you can use `vlc.configure()` to set up fonts and file access before saving. See [Saving Altair Charts](https://altair-viz.github.io/user_guide/saving_charts.html) for output formats, PNG resolution, and other `save()` options.
 
-The configuration examples below require VlConvert 2.0.0rc6 or later:
+Install Altair with the VlConvert release covered by these docs:
 
 ```console
-$ uv add altair "vl-convert-python>=2.0.0rc6,<3"
+$ uv add altair "vl-convert-python==2.0.0rc7"
 ```
 
 ## Save with a Google Font

@@ -530,8 +530,8 @@
 <section id="configure-altair-exports">
 <h1>Configure Altair Exports<a class="headerlink" href="#configure-altair-exports" title="Link to this heading">#</a></h1>
 <p>Use Altair’s <code class="docutils literal notranslate"><span class="pre">chart.save()</span></code> to export charts. Altair calls VlConvert for PNG, SVG, and PDF output, so you can use <code class="docutils literal notranslate"><span class="pre">vlc.configure()</span></code> to set up fonts and file access before saving. See <a class="reference external" href="https://altair-viz.github.io/user_guide/saving_charts.html">Saving Altair Charts</a> for output formats, PNG resolution, and other <code class="docutils literal notranslate"><span class="pre">save()</span></code> options.</p>
-<p>The configuration examples below require VlConvert 2.0.0rc6 or later:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>add<span class="w"> </span>altair<span class="w"> </span><span class="s2">&quot;vl-convert-python&gt;=2.0.0rc6,&lt;3&quot;</span>
+<p>Install Altair with the VlConvert release covered by these docs:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>add<span class="w"> </span>altair<span class="w"> </span><span class="s2">&quot;vl-convert-python==2.0.0rc7&quot;</span>
 </pre></div>
 </div>
 <section id="save-with-a-google-font">

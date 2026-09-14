@@ -2,7 +2,7 @@
 
 # Installation
 
-These docs require version 2.0.0-rc6 or later. The version constraints below allow version 2 prereleases.
+The commands below install VlConvert 2.0.0-rc7, the release covered by these docs.
 
 Already using 1.x? See {doc}`upgrading` for what changed in version 2.
 
@@ -15,7 +15,7 @@ Add these dependencies to `Cargo.toml`:
 ```toml
 [dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-vl-convert-rs = "2.0.0-rc6"
+vl-convert-rs = "=2.0.0-rc7"
 ```
 :::
 

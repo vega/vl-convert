@@ -2,14 +2,14 @@
 
 # Installation
 
-These docs require version 2.0.0-rc6 or later. The version constraints below allow version 2 prereleases.
+The commands below install VlConvert 2.0.0-rc7, the release covered by these docs.
 
 
 The server is the `serve` subcommand of the `vl-convert` CLI executable.
 
 ## Prebuilt Executable
 
-Download the ZIP archive for your platform and `SHA256SUMS` from the same [GitHub release](https://github.com/vega/vl-convert/releases). Choose version 2.0.0-rc6 or later.
+Download the ZIP archive for your platform and `SHA256SUMS` from the [VlConvert 2.0.0-rc7 release](https://github.com/vega/vl-convert/releases/tag/v2.0.0-rc7).
 
 | Platform | Archive |
 | --- | --- |
@@ -40,7 +40,7 @@ $ vl-convert --version
 To build the executable yourself, install a Rust toolchain and run:
 
 ```console
-$ cargo install vl-convert --version '^2.0.0-rc6' --locked
+$ cargo install vl-convert --version '=2.0.0-rc7' --locked
 ```
 
 

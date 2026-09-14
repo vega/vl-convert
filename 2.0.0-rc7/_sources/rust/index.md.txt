@@ -4,7 +4,7 @@
 
 Embed `vl-convert-rs` directly in Rust applications.
 
-Start with [Installation](getting-started/installation.md), follow the [Quick Start](getting-started/quick-start.md), or consult the [API Reference](https://docs.rs/vl-convert-rs/2.0.0-rc6/vl_convert_rs/).
+Start with [Installation](getting-started/installation.md), follow the [Quick Start](getting-started/quick-start.md), or consult the [API Reference](https://docs.rs/vl-convert-rs/2.0.0-rc7/vl_convert_rs/).
 
 ```{toctree}
 :maxdepth: 1
@@ -64,5 +64,5 @@ guides/logging
 :maxdepth: 1
 :caption: API Reference
 
-Rust API Reference <https://docs.rs/vl-convert-rs/2.0.0-rc6/vl_convert_rs/>
+Rust API Reference <https://docs.rs/vl-convert-rs/2.0.0-rc7/vl_convert_rs/>
 ```
