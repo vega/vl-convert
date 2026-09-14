@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from packaging.version import Version
 
 
 INTERFACES = {
@@ -62,7 +63,7 @@ def source_root() -> Path:
     return repo_root() / "docs" / "source"
 
 
-def parse_topic(path: Path) -> Topic:
+def parse_topic(path: Path, version: str) -> Topic:
     text = path.read_text()
     if not text.startswith("---\n"):
         raise SystemExit(f"{path} must start with YAML front matter")
@@ -96,11 +97,12 @@ def parse_topic(path: Path) -> Topic:
     if body_marker not in text:
         raise SystemExit(f"{path} missing body marker: {body_marker}")
     body = text.split(body_marker, 1)[1].lstrip()
+    body = body.replace("{vlc_version}", version).replace(
+        "{vlc_python_version}", str(Version(version))
+    )
 
     external_url = meta.get("external_url")
     if external_url:
-        with (repo_root() / "Cargo.toml").open("rb") as manifest:
-            version = tomllib.load(manifest)["workspace"]["package"]["version"]
         external_url = external_url.replace("{version}", version)
 
     return Topic(
@@ -300,7 +302,9 @@ def remove_stale_generated_files(expected: set[Path]) -> None:
 
 
 def main() -> int:
-    topics = [parse_topic(path) for path in topic_files()]
+    with (repo_root() / "Cargo.toml").open("rb") as manifest:
+        version = tomllib.load(manifest)["workspace"]["package"]["version"]
+    topics = [parse_topic(path, version) for path in topic_files()]
     expected: set[Path] = set()
     by_interface = write_topic_wrappers(topics, expected)
     for interface in INTERFACES:
