@@ -1,0 +1,65 @@
+<!-- Generated from _topics/getting-started/quick-start.md. Do not edit. -->
+
+# Quick Start
+
+This example renders a small Vega-Lite bar chart with inline data as `chart.png`. See {doc}`../guides/data-loading` for configuration options when a chart loads data from a URL or file.
+
+Save this specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+
+Add these dependencies to `Cargo.toml`:
+
+:::{dropdown} Cargo.toml
+:open:
+
+```toml
+[dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+vl-convert-rs = "2.0.0-rc6"
+```
+:::
+
+Use this complete `src/main.rs` which reads the `chart.vl.json` file saved above:
+
+:::{dropdown} src/main.rs
+:open:
+
+```rust
+use vl_convert_rs::{anyhow, PngOpts, VlConverter, VlOpts};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let spec = std::fs::read_to_string("chart.vl.json")?;
+    let converter = VlConverter::new();
+    let output = converter
+        .vegalite_to_png(
+            spec,
+            VlOpts::default(),
+            PngOpts {
+                scale: Some(2.0),
+                ..Default::default()
+            },
+        )
+        .await?;
+    std::fs::write("chart.png", output.data)?;
+    Ok(())
+}
+```
+:::
+
+Run `cargo run`. Conversion methods return output structs where the `data` property holds the rendered bytes. See {doc}`../guides/vegalite-conversions` for the other supported output formats and {doc}`../advanced/rust-converter` for information on reusing the converter.
+
+
+The specification renders as this chart:
+
+```{vl-chart} /_examples/quick-start.vl.json
+:alt: Bar chart with five bars labeled A through E
+```

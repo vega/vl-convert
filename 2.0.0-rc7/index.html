@@ -1,0 +1,1876 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>VlConvert &#8212; VlConvert</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=e741de7a" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="_static/documentation_options.js?v=69c16fac"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=cb5fb026"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'index';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://vega.github.io/vl-convert/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '2.0.0-rc7';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            false;
+        </script>
+    <script src="_static/conversion-example.js?v=ca9e3140"></script>
+    <script src="_static/terminal-prompts.js?v=df46982e"></script>
+    <link rel="canonical" href="https://vega.github.io/vl-convert/2.0.0-rc7/index.html" />
+    <link rel="icon" href="_static/vl-convert-favicon.svg"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Rust" href="rust/index.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+<aside class="bd-header-announcement" aria-label="Announcement">
+  <div class="bd-header-announcement__content">These docs cover the <strong>VlConvert 2.0 release candidate</strong>. <a href="https://github.com/vega/vl-convert/releases">View releases</a>.</div>
+</aside>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="#">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="_static/vl-convert-logo.svg" class="logo__image only-light" alt="VlConvert"/>
+    <img src="_static/vl-convert-logo.svg" class="logo__image only-dark pst-js-only" alt="VlConvert"/>
+  
+  
+    <p class="title logo__title">VlConvert</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="rust/index.html">
+    Rust
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="python/index.html">
+    Python
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="cli/index.html">
+    CLI
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="server/index.html">
+    Server
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="how-it-works/architecture.html">
+    Architecture
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://github.com/vega/vl-convert/releases">
+    Changelog
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+  
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    v2.0.0-rc7  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div>
+</div>
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/vega/vl-convert" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="rust/index.html">
+    Rust
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="python/index.html">
+    Python
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="cli/index.html">
+    CLI
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="server/index.html">
+    Server
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="how-it-works/architecture.html">
+    Architecture
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://github.com/vega/vl-convert/releases">
+    Changelog
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+  
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    v2.0.0-rc7  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div>
+</div>
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/vega/vl-convert" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none"></div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="vlconvert">
+<h1>VlConvert<a class="headerlink" href="#vlconvert" title="Link to this heading">#</a></h1>
+<p>VlConvert converts Vega-Lite and Vega chart specifications to a variety of static and interactive formats including SVG, PNG, PDF, HTML, and more. It also converts Vega-Lite to Vega.</p>
+<p>It runs the official Vega and Vega-Lite JavaScript libraries in an embedded Deno runtime, so it does not require a browser or Node.js installation. It bundles these libraries and their dependencies so access to an online CDN is not required for it to operate. Network requests occur only for remote data, images, fonts, or plugins that the input spec or configuration references.</p>
+<section id="how-it-works">
+<h2>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading">#</a></h2>
+<p>VlConvert’s core is a Rust library, and the project additionally provides Python, CLI, and HTTP server interfaces to the same conversion functionality. See <a class="reference internal" href="how-it-works/architecture.html"><span class="doc">Architecture</span></a> for how the components fit together.</p>
+</section>
+<section id="example">
+<h2>Example<a class="headerlink" href="#example" title="Link to this heading">#</a></h2>
+<p>Use the interface tabs and format selector below to view example code snippets for converting a Vega-Lite specification to a variety of output formats.</p>
+<!-- Regenerate the checked-in outputs with `pixi run docs-preview-chart`. -->
+<details class="sd-sphinx-override sd-dropdown sd-card sd-mb-3" open="open">
+<summary class="sd-summary-title sd-card-header">
+<span class="sd-summary-text">stacked_bar_h.vl.json</span><span class="sd-summary-state-marker sd-summary-chevron-right"><svg version="1.1" width="1.5em" height="1.5em" class="sd-octicon sd-octicon-chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.72 18.78a.75.75 0 0 1 0-1.06L14.44 12 8.72 6.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0Z"></path></svg></span></summary><div class="sd-summary-content sd-card-body docutils">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://vega.github.io/schema/vega-lite/v6.json&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json&quot;</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;mark&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bar&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;encoding&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;aggregate&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;yield&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;color&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</details><div class="conversion-example docutils container">
+<div class="conversion-example__format">
+  <label>
+    Output
+    <select class="conversion-example__format-select">
+      <option value="svg" data-file="_static/charts/stacked_bar_h.svg" data-preview="image">SVG</option>
+      <option value="png" data-file="_static/charts/stacked_bar_h.png" data-preview="image">PNG</option>
+      <option value="jpeg" data-file="_static/charts/stacked_bar_h.jpg" data-preview="image">JPEG</option>
+      <option value="pdf" data-file="_static/charts/stacked_bar_h.pdf">PDF</option>
+      <option value="html" data-file="_static/charts/stacked_bar_h.html" data-preview="html">HTML</option>
+      <option value="vega" data-file="_static/charts/stacked_bar_h.vg.json" data-preview="vega">Vega</option>
+      <option value="url" data-preview="url">URL</option>
+    </select>
+  </label>
+</div><div class="conversion-example-panel conversion-example-panel-svg is-active docutils container">
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-0" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="rust" for="sd-tab-item-0">
+Rust</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id1">
+<div class="code-block-caption"><span class="caption-text">src/main.rs</span><a class="headerlink" href="#id1" title="Link to this code">#</a></div>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">vl_convert_rs</span><span class="p">::{</span><span class="n">anyhow</span><span class="p">,</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">,</span><span class="w"> </span><span class="n">VlOpts</span><span class="p">,</span><span class="w"> </span><span class="n">VlVersion</span><span class="p">};</span>
+
+<span class="cp">#[tokio::main]</span>
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">spec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">read_to_string</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">converter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">converter</span>
+<span class="w">        </span><span class="p">.</span><span class="n">vegalite_to_svg</span><span class="p">(</span>
+<span class="w">            </span><span class="n">spec</span><span class="p">,</span>
+<span class="w">            </span><span class="n">VlOpts</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">vl_version</span><span class="p">:</span><span class="w"> </span><span class="nc">VlVersion</span><span class="p">::</span><span class="n">v6_4</span><span class="p">,</span>
+<span class="w">                </span><span class="o">..</span><span class="nb">Default</span><span class="p">::</span><span class="n">default</span><span class="p">()</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="nb">Default</span><span class="p">::</span><span class="n">default</span><span class="p">(),</span>
+<span class="w">        </span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.svg&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">output</span><span class="p">.</span><span class="n">svg</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">Cargo.toml</span><a class="headerlink" href="#id2" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[package]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">edition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2021&quot;</span>
+
+<span class="k">[dependencies]</span>
+<span class="n">serde_json</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="n">tokio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;macros&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;rt-multi-thread&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="n">vl-convert-rs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;=2.0.0-rc7&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-1" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="python" for="sd-tab-item-1">
+Python</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id3">
+<div class="code-block-caption"><span class="caption-text">main.py</span><a class="headerlink" href="#id3" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span> <span class="nn">vl_convert</span> <span class="k">as</span> <span class="nn">vlc</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+<span class="n">svg</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vegalite_to_svg</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">vl_version</span><span class="o">=</span><span class="s2">&quot;6.4&quot;</span><span class="p">)</span>
+<span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.svg&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">svg</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id4">
+<div class="code-block-caption"><span class="caption-text">pyproject.toml</span><a class="headerlink" href="#id4" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[project]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.10&quot;</span>
+<span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;vl-convert-python==2.0.0rc7&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-2" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="cli" for="sd-tab-item-2">
+CLI</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Perform the conversion:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>vl2svg<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--input<span class="w"> </span>stacked_bar_h.vl.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.svg<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--vl-version<span class="w"> </span><span class="m">6</span>.4
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-3" name="sd-tab-set-0" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="server" for="sd-tab-item-3">
+Server</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Start the server in one terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>serve<span class="w"> </span>--port<span class="w"> </span><span class="m">3000</span>
+</pre></div>
+</div>
+<p>Save this request body:</p>
+<details class="sd-sphinx-override sd-dropdown sd-card sd-mb-3" open="open">
+<summary class="sd-summary-title sd-card-header">
+<span class="sd-summary-text">request.json</span><span class="sd-summary-state-marker sd-summary-chevron-right"><svg version="1.1" width="1.5em" height="1.5em" class="sd-octicon sd-octicon-chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.72 18.78a.75.75 0 0 1 0-1.06L14.44 12 8.72 6.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0Z"></path></svg></span></summary><div class="sd-summary-content sd-card-body docutils">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://vega.github.io/schema/vega-lite/v6.json&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;mark&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bar&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;encoding&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;aggregate&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;yield&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;color&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;vl_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;6.4&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</details><p>Send the request from a second terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>http://127.0.0.1:3000/vegalite/svg<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;Content-Type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--data-binary<span class="w"> </span>@request.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.svg
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="conversion-example-panel conversion-example-panel-png docutils container">
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-4" name="sd-tab-set-1" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="rust" for="sd-tab-item-4">
+Rust</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id5">
+<div class="code-block-caption"><span class="caption-text">src/main.rs</span><a class="headerlink" href="#id5" title="Link to this code">#</a></div>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">vl_convert_rs</span><span class="p">::{</span><span class="n">anyhow</span><span class="p">,</span><span class="w"> </span><span class="n">PngOpts</span><span class="p">,</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">,</span><span class="w"> </span><span class="n">VlOpts</span><span class="p">,</span><span class="w"> </span><span class="n">VlVersion</span><span class="p">};</span>
+
+<span class="cp">#[tokio::main]</span>
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">spec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">read_to_string</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">converter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">converter</span>
+<span class="w">        </span><span class="p">.</span><span class="n">vegalite_to_png</span><span class="p">(</span>
+<span class="w">            </span><span class="n">spec</span><span class="p">,</span>
+<span class="w">            </span><span class="n">VlOpts</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">vl_version</span><span class="p">:</span><span class="w"> </span><span class="nc">VlVersion</span><span class="p">::</span><span class="n">v6_4</span><span class="p">,</span>
+<span class="w">                </span><span class="o">..</span><span class="nb">Default</span><span class="p">::</span><span class="n">default</span><span class="p">()</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="n">PngOpts</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="mf">2.0</span><span class="p">),</span>
+<span class="w">                </span><span class="o">..</span><span class="nb">Default</span><span class="p">::</span><span class="n">default</span><span class="p">()</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">        </span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.png&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">output</span><span class="p">.</span><span class="n">data</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id6">
+<div class="code-block-caption"><span class="caption-text">Cargo.toml</span><a class="headerlink" href="#id6" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[package]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">edition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2021&quot;</span>
+
+<span class="k">[dependencies]</span>
+<span class="n">serde_json</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="n">tokio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;macros&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;rt-multi-thread&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="n">vl-convert-rs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;=2.0.0-rc7&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-5" name="sd-tab-set-1" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="python" for="sd-tab-item-5">
+Python</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id7">
+<div class="code-block-caption"><span class="caption-text">main.py</span><a class="headerlink" href="#id7" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span> <span class="nn">vl_convert</span> <span class="k">as</span> <span class="nn">vlc</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+<span class="n">png</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vegalite_to_png</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">vl_version</span><span class="o">=</span><span class="s2">&quot;6.4&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.png&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_bytes</span><span class="p">(</span><span class="n">png</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id8">
+<div class="code-block-caption"><span class="caption-text">pyproject.toml</span><a class="headerlink" href="#id8" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[project]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.10&quot;</span>
+<span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;vl-convert-python==2.0.0rc7&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-6" name="sd-tab-set-1" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="cli" for="sd-tab-item-6">
+CLI</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Perform the conversion:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>vl2png<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--input<span class="w"> </span>stacked_bar_h.vl.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.png<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--vl-version<span class="w"> </span><span class="m">6</span>.4<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--scale<span class="w"> </span><span class="m">2</span>
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-7" name="sd-tab-set-1" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="server" for="sd-tab-item-7">
+Server</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Start the server in one terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>serve<span class="w"> </span>--port<span class="w"> </span><span class="m">3000</span>
+</pre></div>
+</div>
+<p>Save this request body:</p>
+<details class="sd-sphinx-override sd-dropdown sd-card sd-mb-3" open="open">
+<summary class="sd-summary-title sd-card-header">
+<span class="sd-summary-text">request.json</span><span class="sd-summary-state-marker sd-summary-chevron-right"><svg version="1.1" width="1.5em" height="1.5em" class="sd-octicon sd-octicon-chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.72 18.78a.75.75 0 0 1 0-1.06L14.44 12 8.72 6.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0Z"></path></svg></span></summary><div class="sd-summary-content sd-card-body docutils">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://vega.github.io/schema/vega-lite/v6.json&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;mark&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bar&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;encoding&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;aggregate&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;yield&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;color&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;vl_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;6.4&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</details><p>Send the request from a second terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>http://127.0.0.1:3000/vegalite/png<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;Content-Type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--data-binary<span class="w"> </span>@request.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.png
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="conversion-example-panel conversion-example-panel-jpeg docutils container">
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-8" name="sd-tab-set-2" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="rust" for="sd-tab-item-8">
+Rust</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id9">
+<div class="code-block-caption"><span class="caption-text">src/main.rs</span><a class="headerlink" href="#id9" title="Link to this code">#</a></div>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">vl_convert_rs</span><span class="p">::{</span><span class="n">anyhow</span><span class="p">,</span><span class="w"> </span><span class="n">JpegOpts</span><span class="p">,</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">,</span><span class="w"> </span><span class="n">VlOpts</span><span class="p">,</span><span class="w"> </span><span class="n">VlVersion</span><span class="p">};</span>
+
+<span class="cp">#[tokio::main]</span>
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">spec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">read_to_string</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">converter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">converter</span>
+<span class="w">        </span><span class="p">.</span><span class="n">vegalite_to_jpeg</span><span class="p">(</span>
+<span class="w">            </span><span class="n">spec</span><span class="p">,</span>
+<span class="w">            </span><span class="n">VlOpts</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">vl_version</span><span class="p">:</span><span class="w"> </span><span class="nc">VlVersion</span><span class="p">::</span><span class="n">v6_4</span><span class="p">,</span>
+<span class="w">                </span><span class="o">..</span><span class="nb">Default</span><span class="p">::</span><span class="n">default</span><span class="p">()</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="n">JpegOpts</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">scale</span><span class="p">:</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="mf">2.0</span><span class="p">),</span>
+<span class="w">                </span><span class="n">quality</span><span class="p">:</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="mi">90</span><span class="p">),</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">        </span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.jpg&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">output</span><span class="p">.</span><span class="n">data</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id10">
+<div class="code-block-caption"><span class="caption-text">Cargo.toml</span><a class="headerlink" href="#id10" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[package]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">edition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2021&quot;</span>
+
+<span class="k">[dependencies]</span>
+<span class="n">serde_json</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="n">tokio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;macros&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;rt-multi-thread&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="n">vl-convert-rs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;=2.0.0-rc7&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-9" name="sd-tab-set-2" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="python" for="sd-tab-item-9">
+Python</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id11">
+<div class="code-block-caption"><span class="caption-text">main.py</span><a class="headerlink" href="#id11" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span> <span class="nn">vl_convert</span> <span class="k">as</span> <span class="nn">vlc</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+<span class="n">jpeg</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vegalite_to_jpeg</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">vl_version</span><span class="o">=</span><span class="s2">&quot;6.4&quot;</span><span class="p">,</span>
+    <span class="n">scale</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">quality</span><span class="o">=</span><span class="mi">90</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.jpg&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_bytes</span><span class="p">(</span><span class="n">jpeg</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id12">
+<div class="code-block-caption"><span class="caption-text">pyproject.toml</span><a class="headerlink" href="#id12" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[project]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.10&quot;</span>
+<span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;vl-convert-python==2.0.0rc7&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-10" name="sd-tab-set-2" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="cli" for="sd-tab-item-10">
+CLI</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Perform the conversion:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>vl2jpeg<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--input<span class="w"> </span>stacked_bar_h.vl.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.jpg<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--vl-version<span class="w"> </span><span class="m">6</span>.4<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--scale<span class="w"> </span><span class="m">2</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--quality<span class="w"> </span><span class="m">90</span>
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-11" name="sd-tab-set-2" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="server" for="sd-tab-item-11">
+Server</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Start the server in one terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>serve<span class="w"> </span>--port<span class="w"> </span><span class="m">3000</span>
+</pre></div>
+</div>
+<p>Save this request body:</p>
+<details class="sd-sphinx-override sd-dropdown sd-card sd-mb-3" open="open">
+<summary class="sd-summary-title sd-card-header">
+<span class="sd-summary-text">request.json</span><span class="sd-summary-state-marker sd-summary-chevron-right"><svg version="1.1" width="1.5em" height="1.5em" class="sd-octicon sd-octicon-chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.72 18.78a.75.75 0 0 1 0-1.06L14.44 12 8.72 6.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0Z"></path></svg></span></summary><div class="sd-summary-content sd-card-body docutils">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://vega.github.io/schema/vega-lite/v6.json&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;mark&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bar&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;encoding&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;aggregate&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;yield&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;color&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;vl_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;6.4&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;quality&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">90</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</details><p>Send the request from a second terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>http://127.0.0.1:3000/vegalite/jpeg<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;Content-Type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--data-binary<span class="w"> </span>@request.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.jpg
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="conversion-example-panel conversion-example-panel-pdf docutils container">
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-12" name="sd-tab-set-3" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="rust" for="sd-tab-item-12">
+Rust</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id13">
+<div class="code-block-caption"><span class="caption-text">src/main.rs</span><a class="headerlink" href="#id13" title="Link to this code">#</a></div>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">vl_convert_rs</span><span class="p">::{</span><span class="n">anyhow</span><span class="p">,</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">,</span><span class="w"> </span><span class="n">VlOpts</span><span class="p">,</span><span class="w"> </span><span class="n">VlVersion</span><span class="p">};</span>
+
+<span class="cp">#[tokio::main]</span>
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">spec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">read_to_string</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">converter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">converter</span>
+<span class="w">        </span><span class="p">.</span><span class="n">vegalite_to_pdf</span><span class="p">(</span>
+<span class="w">            </span><span class="n">spec</span><span class="p">,</span>
+<span class="w">            </span><span class="n">VlOpts</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">vl_version</span><span class="p">:</span><span class="w"> </span><span class="nc">VlVersion</span><span class="p">::</span><span class="n">v6_4</span><span class="p">,</span>
+<span class="w">                </span><span class="o">..</span><span class="nb">Default</span><span class="p">::</span><span class="n">default</span><span class="p">()</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="nb">Default</span><span class="p">::</span><span class="n">default</span><span class="p">(),</span>
+<span class="w">        </span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.pdf&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">output</span><span class="p">.</span><span class="n">data</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id14">
+<div class="code-block-caption"><span class="caption-text">Cargo.toml</span><a class="headerlink" href="#id14" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[package]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">edition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2021&quot;</span>
+
+<span class="k">[dependencies]</span>
+<span class="n">serde_json</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="n">tokio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;macros&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;rt-multi-thread&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="n">vl-convert-rs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;=2.0.0-rc7&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-13" name="sd-tab-set-3" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="python" for="sd-tab-item-13">
+Python</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id15">
+<div class="code-block-caption"><span class="caption-text">main.py</span><a class="headerlink" href="#id15" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span> <span class="nn">vl_convert</span> <span class="k">as</span> <span class="nn">vlc</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+<span class="n">pdf</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vegalite_to_pdf</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">vl_version</span><span class="o">=</span><span class="s2">&quot;6.4&quot;</span><span class="p">)</span>
+<span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.pdf&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_bytes</span><span class="p">(</span><span class="n">pdf</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id16">
+<div class="code-block-caption"><span class="caption-text">pyproject.toml</span><a class="headerlink" href="#id16" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[project]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.10&quot;</span>
+<span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;vl-convert-python==2.0.0rc7&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-14" name="sd-tab-set-3" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="cli" for="sd-tab-item-14">
+CLI</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Perform the conversion:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>vl2pdf<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--input<span class="w"> </span>stacked_bar_h.vl.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.pdf<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--vl-version<span class="w"> </span><span class="m">6</span>.4
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-15" name="sd-tab-set-3" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="server" for="sd-tab-item-15">
+Server</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Start the server in one terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>serve<span class="w"> </span>--port<span class="w"> </span><span class="m">3000</span>
+</pre></div>
+</div>
+<p>Save this request body:</p>
+<details class="sd-sphinx-override sd-dropdown sd-card sd-mb-3" open="open">
+<summary class="sd-summary-title sd-card-header">
+<span class="sd-summary-text">request.json</span><span class="sd-summary-state-marker sd-summary-chevron-right"><svg version="1.1" width="1.5em" height="1.5em" class="sd-octicon sd-octicon-chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.72 18.78a.75.75 0 0 1 0-1.06L14.44 12 8.72 6.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0Z"></path></svg></span></summary><div class="sd-summary-content sd-card-body docutils">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://vega.github.io/schema/vega-lite/v6.json&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;mark&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bar&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;encoding&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;aggregate&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;yield&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;color&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;vl_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;6.4&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</details><p>Send the request from a second terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>http://127.0.0.1:3000/vegalite/pdf<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;Content-Type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--data-binary<span class="w"> </span>@request.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.pdf
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="conversion-example-panel conversion-example-panel-html docutils container">
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-16" name="sd-tab-set-4" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="rust" for="sd-tab-item-16">
+Rust</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id17">
+<div class="code-block-caption"><span class="caption-text">src/main.rs</span><a class="headerlink" href="#id17" title="Link to this code">#</a></div>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">vl_convert_rs</span><span class="p">::{</span>
+<span class="w">    </span><span class="n">anyhow</span><span class="p">,</span><span class="w"> </span><span class="n">HtmlOpts</span><span class="p">,</span><span class="w"> </span><span class="n">Renderer</span><span class="p">,</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">,</span><span class="w"> </span><span class="n">VlOpts</span><span class="p">,</span><span class="w"> </span><span class="n">VlVersion</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="cp">#[tokio::main]</span>
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">spec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">read_to_string</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">converter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">converter</span>
+<span class="w">        </span><span class="p">.</span><span class="n">vegalite_to_html</span><span class="p">(</span>
+<span class="w">            </span><span class="n">spec</span><span class="p">,</span>
+<span class="w">            </span><span class="n">VlOpts</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">vl_version</span><span class="p">:</span><span class="w"> </span><span class="nc">VlVersion</span><span class="p">::</span><span class="n">v6_4</span><span class="p">,</span>
+<span class="w">                </span><span class="o">..</span><span class="nb">Default</span><span class="p">::</span><span class="n">default</span><span class="p">()</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">            </span><span class="n">HtmlOpts</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">bundle</span><span class="p">:</span><span class="w"> </span><span class="nc">true</span><span class="p">,</span>
+<span class="w">                </span><span class="n">renderer</span><span class="p">:</span><span class="w"> </span><span class="nc">Renderer</span><span class="p">::</span><span class="n">Svg</span><span class="p">,</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">        </span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.html&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">output</span><span class="p">.</span><span class="n">html</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id18">
+<div class="code-block-caption"><span class="caption-text">Cargo.toml</span><a class="headerlink" href="#id18" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[package]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">edition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2021&quot;</span>
+
+<span class="k">[dependencies]</span>
+<span class="n">serde_json</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="n">tokio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;macros&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;rt-multi-thread&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="n">vl-convert-rs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;=2.0.0-rc7&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-17" name="sd-tab-set-4" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="python" for="sd-tab-item-17">
+Python</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id19">
+<div class="code-block-caption"><span class="caption-text">main.py</span><a class="headerlink" href="#id19" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span> <span class="nn">vl_convert</span> <span class="k">as</span> <span class="nn">vlc</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+<span class="n">html</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vegalite_to_html</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">vl_version</span><span class="o">=</span><span class="s2">&quot;6.4&quot;</span><span class="p">,</span>
+    <span class="n">bundle</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">renderer</span><span class="o">=</span><span class="s2">&quot;svg&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.html&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">html</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id20">
+<div class="code-block-caption"><span class="caption-text">pyproject.toml</span><a class="headerlink" href="#id20" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[project]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.10&quot;</span>
+<span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;vl-convert-python==2.0.0rc7&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-18" name="sd-tab-set-4" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="cli" for="sd-tab-item-18">
+CLI</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Perform the conversion:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>vl2html<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--input<span class="w"> </span>stacked_bar_h.vl.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.html<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--vl-version<span class="w"> </span><span class="m">6</span>.4<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--bundle<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--renderer<span class="w"> </span>svg
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-19" name="sd-tab-set-4" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="server" for="sd-tab-item-19">
+Server</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Start the server in one terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>serve<span class="w"> </span>--port<span class="w"> </span><span class="m">3000</span>
+</pre></div>
+</div>
+<p>Save this request body:</p>
+<details class="sd-sphinx-override sd-dropdown sd-card sd-mb-3" open="open">
+<summary class="sd-summary-title sd-card-header">
+<span class="sd-summary-text">request.json</span><span class="sd-summary-state-marker sd-summary-chevron-right"><svg version="1.1" width="1.5em" height="1.5em" class="sd-octicon sd-octicon-chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.72 18.78a.75.75 0 0 1 0-1.06L14.44 12 8.72 6.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0Z"></path></svg></span></summary><div class="sd-summary-content sd-card-body docutils">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://vega.github.io/schema/vega-lite/v6.json&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;mark&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bar&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;encoding&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;aggregate&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;yield&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;color&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;vl_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;6.4&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;bundle&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;renderer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;svg&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</details><p>Send the request from a second terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>http://127.0.0.1:3000/vegalite/html<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;Content-Type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--data-binary<span class="w"> </span>@request.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.html
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="conversion-example-panel conversion-example-panel-vega docutils container">
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-20" name="sd-tab-set-5" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="rust" for="sd-tab-item-20">
+Rust</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id21">
+<div class="code-block-caption"><span class="caption-text">src/main.rs</span><a class="headerlink" href="#id21" title="Link to this code">#</a></div>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">vl_convert_rs</span><span class="p">::{</span><span class="n">anyhow</span><span class="p">,</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">,</span><span class="w"> </span><span class="n">VlOpts</span><span class="p">,</span><span class="w"> </span><span class="n">VlVersion</span><span class="p">};</span>
+
+<span class="cp">#[tokio::main]</span>
+<span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">spec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">read_to_string</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">converter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">VlConverter</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">converter</span>
+<span class="w">        </span><span class="p">.</span><span class="n">vegalite_to_vega</span><span class="p">(</span>
+<span class="w">            </span><span class="n">spec</span><span class="p">,</span>
+<span class="w">            </span><span class="n">VlOpts</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">vl_version</span><span class="p">:</span><span class="w"> </span><span class="nc">VlVersion</span><span class="p">::</span><span class="n">v6_4</span><span class="p">,</span>
+<span class="w">                </span><span class="o">..</span><span class="nb">Default</span><span class="p">::</span><span class="n">default</span><span class="p">()</span>
+<span class="w">            </span><span class="p">},</span>
+<span class="w">        </span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="k">await</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">vega</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">serde_json</span><span class="p">::</span><span class="n">to_string_pretty</span><span class="p">(</span><span class="o">&amp;</span><span class="n">output</span><span class="p">.</span><span class="n">spec</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.vg.json&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">vega</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id22">
+<div class="code-block-caption"><span class="caption-text">Cargo.toml</span><a class="headerlink" href="#id22" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[package]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">edition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2021&quot;</span>
+
+<span class="k">[dependencies]</span>
+<span class="n">serde_json</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="n">tokio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;macros&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;rt-multi-thread&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="n">vl-convert-rs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;=2.0.0-rc7&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-21" name="sd-tab-set-5" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="python" for="sd-tab-item-21">
+Python</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id23">
+<div class="code-block-caption"><span class="caption-text">main.py</span><a class="headerlink" href="#id23" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span> <span class="nn">vl_convert</span> <span class="k">as</span> <span class="nn">vlc</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+<span class="n">vega</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vegalite_to_vega</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">vl_version</span><span class="o">=</span><span class="s2">&quot;6.4&quot;</span><span class="p">)</span>
+<span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.vg.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span>
+    <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">vega</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id24">
+<div class="code-block-caption"><span class="caption-text">pyproject.toml</span><a class="headerlink" href="#id24" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[project]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.10&quot;</span>
+<span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;vl-convert-python==2.0.0rc7&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-22" name="sd-tab-set-5" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="cli" for="sd-tab-item-22">
+CLI</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Perform the conversion:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>vl2vg<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--input<span class="w"> </span>stacked_bar_h.vl.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.vg.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--vl-version<span class="w"> </span><span class="m">6</span>.4<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--pretty
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-23" name="sd-tab-set-5" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="server" for="sd-tab-item-23">
+Server</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Start the server in one terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>serve<span class="w"> </span>--port<span class="w"> </span><span class="m">3000</span>
+</pre></div>
+</div>
+<p>Save this request body:</p>
+<details class="sd-sphinx-override sd-dropdown sd-card sd-mb-3" open="open">
+<summary class="sd-summary-title sd-card-header">
+<span class="sd-summary-text">request.json</span><span class="sd-summary-state-marker sd-summary-chevron-right"><svg version="1.1" width="1.5em" height="1.5em" class="sd-octicon sd-octicon-chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.72 18.78a.75.75 0 0 1 0-1.06L14.44 12 8.72 6.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0Z"></path></svg></span></summary><div class="sd-summary-content sd-card-body docutils">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://vega.github.io/schema/vega-lite/v6.json&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;mark&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bar&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;encoding&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;aggregate&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;yield&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;color&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">&quot;vl_version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;6.4&quot;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</details><p>Send the request from a second terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>http://127.0.0.1:3000/vegalite/vega<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;Content-Type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--data-binary<span class="w"> </span>@request.json<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--output<span class="w"> </span>stacked_bar_h.vg.json
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="conversion-example-panel conversion-example-panel-url docutils container">
+<div class="sd-tab-set docutils">
+<input checked="checked" id="sd-tab-item-24" name="sd-tab-set-6" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="rust" for="sd-tab-item-24">
+Rust</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id25">
+<div class="code-block-caption"><span class="caption-text">src/main.rs</span><a class="headerlink" href="#id25" title="Link to this code">#</a></div>
+<div class="highlight-rust notranslate"><div class="highlight"><pre><span></span><span class="k">use</span><span class="w"> </span><span class="n">vl_convert_rs</span><span class="p">::{</span><span class="n">anyhow</span><span class="p">,</span><span class="w"> </span><span class="n">vegalite_to_url</span><span class="p">,</span><span class="w"> </span><span class="n">UrlOpts</span><span class="p">};</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">anyhow</span><span class="p">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">()</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">spec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">fs</span><span class="p">::</span><span class="n">read_to_string</span><span class="p">(</span><span class="s">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vegalite_to_url</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span><span class="w"> </span><span class="n">UrlOpts</span><span class="p">::</span><span class="n">default</span><span class="p">())</span><span class="o">?</span><span class="p">;</span>
+<span class="w">    </span><span class="fm">println!</span><span class="p">(</span><span class="s">&quot;{url}&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id26">
+<div class="code-block-caption"><span class="caption-text">Cargo.toml</span><a class="headerlink" href="#id26" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[package]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">edition</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;2021&quot;</span>
+
+<span class="k">[dependencies]</span>
+<span class="n">serde_json</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span>
+<span class="n">tokio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">version</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">features</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;macros&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;rt-multi-thread&quot;</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+<span class="n">vl-convert-rs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;=2.0.0-rc7&quot;</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-25" name="sd-tab-set-6" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="python" for="sd-tab-item-25">
+Python</label><div class="sd-tab-content docutils">
+<div class="literal-block-wrapper docutils container" id="id27">
+<div class="code-block-caption"><span class="caption-text">main.py</span><a class="headerlink" href="#id27" title="Link to this code">#</a></div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span> <span class="nn">vl_convert</span> <span class="k">as</span> <span class="nn">vlc</span>
+
+<span class="n">spec</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;stacked_bar_h.vl.json&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">(</span><span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+<span class="n">url</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vegalite_to_url</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="literal-block-wrapper docutils container" id="id28">
+<div class="code-block-caption"><span class="caption-text">pyproject.toml</span><a class="headerlink" href="#id28" title="Link to this code">#</a></div>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[project]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;vl-convert-example&quot;</span>
+<span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;0.1.0&quot;</span>
+<span class="n">requires-python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&gt;=3.10&quot;</span>
+<span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;vl-convert-python==2.0.0rc7&quot;</span><span class="p">]</span>
+</pre></div>
+</div>
+</div>
+</div>
+<input id="sd-tab-item-26" name="sd-tab-set-6" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="cli" for="sd-tab-item-26">
+CLI</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Perform the conversion:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>vl2url<span class="w"> </span>--input<span class="w"> </span>stacked_bar_h.vl.json
+</pre></div>
+</div>
+</div>
+<input id="sd-tab-item-27" name="sd-tab-set-6" type="radio">
+<label class="sd-tab-label" data-sync-group="front-page-interface" data-sync-id="server" for="sd-tab-item-27">
+Server</label><div class="sd-tab-content docutils">
+<p>Download a <a class="reference internal" href="cli/getting-started/installation.html#prebuilt-executable"><span class="std std-ref">prebuilt executable</span></a>, or build it with Cargo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cargo<span class="w"> </span>install<span class="w"> </span>vl-convert<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--version<span class="w"> </span><span class="s1">&#39;=2.0.0-rc7&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--locked
+</pre></div>
+</div>
+<p>Start the server in one terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vl-convert<span class="w"> </span>serve<span class="w"> </span>--port<span class="w"> </span><span class="m">3000</span>
+</pre></div>
+</div>
+<p>Save this request body:</p>
+<details class="sd-sphinx-override sd-dropdown sd-card sd-mb-3" open="open">
+<summary class="sd-summary-title sd-card-header">
+<span class="sd-summary-text">request.json</span><span class="sd-summary-state-marker sd-summary-chevron-right"><svg version="1.1" width="1.5em" height="1.5em" class="sd-octicon sd-octicon-chevron-right" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.72 18.78a.75.75 0 0 1 0-1.06L14.44 12 8.72 6.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0Z"></path></svg></span></summary><div class="sd-summary-content sd-card-body docutils">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;spec&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://vega.github.io/schema/vega-lite/v6.json&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json&quot;</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">&quot;mark&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bar&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;encoding&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;aggregate&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;yield&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;color&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</details><p>Send the request from a second terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>http://127.0.0.1:3000/vegalite/url<span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;Content-Type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="gp">&gt; </span><span class="w">  </span>--data-binary<span class="w"> </span>@request.json
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="conversion-example-output conversion-example-output-image is-active">
+  <img
+    class="rendered-chart conversion-example__image"
+    src="_static/charts/stacked_bar_h.svg"
+    alt="Horizontal stacked bar chart of barley yield by variety and site"
+  >
+</div>
+<div class="conversion-example-output conversion-example-output-html">
+  <iframe
+    class="conversion-example__html-frame"
+    data-src="_static/charts/stacked_bar_h.html"
+    title="Generated HTML chart preview"
+    loading="lazy"
+  ></iframe>
+</div><div class="conversion-example-output conversion-example-output-vega docutils container">
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;$schema&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://vega.github.io/schema/vega/v6.json&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;background&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;white&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;padding&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;width&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">300</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;style&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cell&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;source_0&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://cdn.jsdelivr.net/npm/vega-datasets@v2.9.0/data/barley.json&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;format&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;json&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;transform&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;aggregate&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;groupby&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="s2">&quot;variety&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="s2">&quot;site&quot;</span>
+<span class="w">          </span><span class="p">],</span>
+<span class="w">          </span><span class="nt">&quot;ops&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="s2">&quot;sum&quot;</span>
+<span class="w">          </span><span class="p">],</span>
+<span class="w">          </span><span class="nt">&quot;fields&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="s2">&quot;yield&quot;</span>
+<span class="w">          </span><span class="p">],</span>
+<span class="w">          </span><span class="nt">&quot;as&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="s2">&quot;sum_yield&quot;</span>
+<span class="w">          </span><span class="p">]</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;stack&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;groupby&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="s2">&quot;variety&quot;</span>
+<span class="w">          </span><span class="p">],</span>
+<span class="w">          </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum_yield&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;sort&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">              </span><span class="s2">&quot;site&quot;</span>
+<span class="w">            </span><span class="p">],</span>
+<span class="w">            </span><span class="nt">&quot;order&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">              </span><span class="s2">&quot;ascending&quot;</span>
+<span class="w">            </span><span class="p">]</span>
+<span class="w">          </span><span class="p">},</span>
+<span class="w">          </span><span class="nt">&quot;as&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">            </span><span class="s2">&quot;sum_yield_start&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="s2">&quot;sum_yield_end&quot;</span>
+<span class="w">          </span><span class="p">],</span>
+<span class="w">          </span><span class="nt">&quot;offset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;zero&quot;</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;filter&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="nt">&quot;expr&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;isValid(datum[\&quot;sum_yield\&quot;]) &amp;&amp; isFinite(+datum[\&quot;sum_yield\&quot;])&quot;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">]</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;signals&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;y_step&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;value&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;height&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;update&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bandspace(domain(&#39;y&#39;).length, 0.1, 0.05) * y_step&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;marks&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;marks&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;rect&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;style&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="s2">&quot;bar&quot;</span>
+<span class="w">      </span><span class="p">],</span>
+<span class="w">      </span><span class="nt">&quot;from&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;source_0&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;encode&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;update&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;fill&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;color&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span>
+<span class="w">          </span><span class="p">},</span>
+<span class="w">          </span><span class="nt">&quot;ariaRoleDescription&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;value&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bar&quot;</span>
+<span class="w">          </span><span class="p">},</span>
+<span class="w">          </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;signal&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;\&quot;Sum of yield: \&quot; + (format(datum[\&quot;sum_yield\&quot;], \&quot;\&quot;)) + \&quot;; variety: \&quot; + (isValid(datum[\&quot;variety\&quot;]) ? isArray(datum[\&quot;variety\&quot;]) ? join(datum[\&quot;variety\&quot;], &#39; &#39;) : datum[\&quot;variety\&quot;] : \&quot;\&quot;+datum[\&quot;variety\&quot;]) + \&quot;; site: \&quot; + (isValid(datum[\&quot;site\&quot;]) ? isArray(datum[\&quot;site\&quot;]) ? join(datum[\&quot;site\&quot;], &#39; &#39;) : datum[\&quot;site\&quot;] : \&quot;\&quot;+datum[\&quot;site\&quot;])&quot;</span>
+<span class="w">          </span><span class="p">},</span>
+<span class="w">          </span><span class="nt">&quot;x&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum_yield_end&quot;</span>
+<span class="w">          </span><span class="p">},</span>
+<span class="w">          </span><span class="nt">&quot;x2&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sum_yield_start&quot;</span>
+<span class="w">          </span><span class="p">},</span>
+<span class="w">          </span><span class="nt">&quot;y&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span>
+<span class="w">          </span><span class="p">},</span>
+<span class="w">          </span><span class="nt">&quot;height&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">&quot;signal&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;max(0.25, bandwidth(&#39;y&#39;))&quot;</span>
+<span class="w">          </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;scales&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;linear&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;domain&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;source_0&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;fields&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">          </span><span class="s2">&quot;sum_yield_start&quot;</span><span class="p">,</span>
+<span class="w">          </span><span class="s2">&quot;sum_yield_end&quot;</span>
+<span class="w">        </span><span class="p">]</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;range&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">        </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;signal&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;width&quot;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">],</span>
+<span class="w">      </span><span class="nt">&quot;nice&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;zero&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;band&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;domain&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;source_0&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;sort&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;range&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;step&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">          </span><span class="nt">&quot;signal&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;y_step&quot;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;paddingInner&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.1</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;paddingOuter&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.05</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;color&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ordinal&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;domain&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;source_0&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;field&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;sort&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;range&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;category&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;axes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;orient&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bottom&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;gridScale&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;grid&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;tickCount&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;signal&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ceil(width/40)&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;domain&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;labels&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;aria&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;maxExtent&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;minExtent&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;ticks&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;zindex&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;x&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;orient&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bottom&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;grid&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Sum of yield&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;labelFlush&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;labelOverlap&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;tickCount&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;signal&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ceil(width/40)&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;zindex&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;scale&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;y&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;orient&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;left&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;grid&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;variety&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;zindex&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;legends&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;fill&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;color&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;symbolType&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;square&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;site&quot;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+<div class="conversion-example-output conversion-example-output-url docutils container">
+<p><a class="conversion-example__url-link" href="https://vega.github.io/editor/#/url/vega-lite/N4IgJAzgxgFgpgWwIYgFwhgF0wBwqgegIDc4BzJAOjIEtMYBXAI0poHsDp5kTykBaADZ04JAGyUAVhDYA7EABoQAEySYUqUAwBOgtBmx5CBKMtlSIyuMOLbKsuJgKycCXhX6r1ERxAACxABMlACclAAMBF5IBExIunAAnhZyIAC+SsjaANb6cdqKIHCyUGzKNLJkaKAAHtUgSGRk2nyYcPoQDAiFAGY01sr6if2CgxkgifV9A-rE8f2Yk+OlgmwFmiDTox0i6WlpQA" target="_blank" rel="noopener">https://vega.github.io/editor/#/url/vega-lite/N4IgJAzgxgFgpgWwIYgFwhgF0wBwqgegIDc4BzJAOjIEtMYBXAI0poHsDp5kTykBaADZ04JAGyUAVhDYA7EABoQAEySYUqUAwBOgtBmx5CBKMtlSIyuMOLbKsuJgKycCXhX6r1ERxAACxABMlACclAAMBF5IBExIunAAnhZyIAC+SsjaANb6cdqKIHCyUGzKNLJkaKAAHtUgSGRk2nyYcPoQDAiFAGY01sr6if2CgxkgifV9A-rE8f2Yk+OlgmwFmiDTox0i6WlpQA</a></p>
+</div>
+<div class="conversion-example__actions">
+  <a
+    class="conversion-example__download"
+    href="_static/charts/stacked_bar_h.svg"
+    download="stacked_bar_h.svg"
+  >
+    <i class="fa-solid fa-download" aria-hidden="true"></i>
+    <span>Download SVG</span>
+  </a>
+</div></div>
+</section>
+<section id="choose-an-interface">
+<h2>Choose an Interface<a class="headerlink" href="#choose-an-interface" title="Link to this heading">#</a></h2>
+<p>All four VlConvert interfaces share one conversion engine, so a chart renders the same way from each of them given the same configuration and environment. Each interface has specialized documentation.</p>
+<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils">
+<div class="sd-row sd-row-cols-1 sd-row-cols-xs-1 sd-row-cols-sm-2 sd-row-cols-md-2 sd-row-cols-lg-4 sd-g-2 sd-g-xs-2 sd-g-sm-2 sd-g-md-2 sd-g-lg-2 docutils">
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+Rust</div>
+<p class="sd-card-text">Embed <code class="docutils literal notranslate"><span class="pre">vl-convert-rs</span></code> directly in Rust applications.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="rust/index.html"><span class="doc">Rust</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+Python</div>
+<p class="sd-card-text">Use <code class="docutils literal notranslate"><span class="pre">vl-convert-python</span></code> from Python applications and Altair workflows.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="python/index.html"><span class="doc">Python</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+CLI</div>
+<p class="sd-card-text">Run <code class="docutils literal notranslate"><span class="pre">vl-convert</span></code> from scripts, shells, and build pipelines.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="cli/index.html"><span class="doc">CLI</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+Server</div>
+<p class="sd-card-text">Run <code class="docutils literal notranslate"><span class="pre">vl-convert</span> <span class="pre">serve</span></code> as an HTTP rendering worker.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="server/index.html"><span class="doc">Server</span></a></div>
+</div>
+</div>
+</div>
+<div class="toctree-wrapper compound">
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="right-next"
+       href="rust/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Rust</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-it-works">How it works</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example">Example</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#choose-an-interface">Choose an Interface</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, Vega.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,69 @@
+<!-- Generated from _topics/advanced/configuration.md. Do not edit. -->
+
+# Configuration
+
+The converter configuration holds settings that apply across all conversions: data access policy, fonts, plugins, worker resources, and default themes and locales. Values such as output format, dimensions, and scale belong to the individual conversion instead. See {doc}`conversion-overrides` for those.
+
+## JSONC Configuration Files
+
+Python, Rust, the CLI, and the server all read the same configuration format. This example limits worker resources and blocks external data and image loads. Save it as `production.vlc.jsonc`:
+
+:::{dropdown} production.vlc.jsonc
+:open:
+
+```{literalinclude} /_examples/production.vlc.jsonc
+:language: json
+```
+:::
+
+Note that JSONC is JSON with support for comments and trailing commas.
+
+Fields omitted from the file use their built-in defaults. This example changes some of those defaults: `base_url` normally points at the Vega datasets CDN, and `allowed_base_urls` permits any HTTP or HTTPS URL. Setting `base_url` to `false` rejects relative data and image URLs. Setting `allowed_base_urls` to an empty list rejects every external URL and local file.
+
+`allowed_base_urls` accepts Content Security Policy-style patterns. Grant only the paths, URL prefixes, or schemes the application needs, and use `"*"` only when every input is trusted. See {doc}`../guides/security`.
+
+
+## Configure a CLI Command
+
+Pass the file with `--vlc-config` and use flags to override individual settings. This example lowers the heap limit from 1024 to 512 MB and uses `chart.vl.json` from {doc}`../getting-started/quick-start`:
+
+```console
+$ vl-convert --vlc-config production.vlc.jsonc \
+>   --max-v8-heap-size-mb 512 \
+>   vl2png --input chart.vl.json --output chart.png
+```
+
+The CLI takes each setting from the first source that provides it:
+
+```text
+command-line flags
+VLC_* environment variables
+--vlc-config or the platform-default config file
+built-in defaults
+```
+
+Relative configuration paths resolve from the current working directory. When `--vlc-config` is omitted, the CLI loads the platform-default file if it exists. Print that path with `vl-convert config-path`, or pass `--vlc-config disabled` to skip config files entirely.
+
+Global options can appear before or after the conversion command. Run `vl-convert --help` for the global options and `vl-convert vl2png --help` for a command's own options.
+
+
+## Common Environment Variables
+
+Most global flags have `VLC_*` equivalents. Repeatable values are separated by semicolons, except font directories, which use the platform path separator.
+
+| Variable | Purpose |
+| --- | --- |
+| `VLC_CONFIG` | JSONC config path or `disabled`. Relative paths resolve from the working directory |
+| `VLC_BASE_URL` | Base for relative data and image URLs: a URL, a path, `default`, or `disabled` |
+| `VLC_ALLOWED_BASE_URLS` | Data and image URL allowlist, or the shortcut `none`, `net`, or `all` |
+| `VLC_FONT_DIR` | Additional font directories |
+| `VLC_GOOGLE_FONT` | Google Font requests such as `Inter:400,700italic` |
+| `VLC_AUTO_GOOGLE_FONTS` | Whether to download missing first-choice fonts from Google Fonts |
+| `VLC_MISSING_FONTS` | `fallback`, `warn`, or `error` |
+| `VLC_MAX_V8_HEAP_SIZE_MB` | Heap limit for each JavaScript worker |
+| `VLC_MAX_V8_EXECUTION_TIME_SECS` | JavaScript execution timeout |
+| `VLC_VEGA_PLUGIN` | Plugin file paths or URLs |
+| `VLC_PLUGIN_IMPORT_DOMAINS` | Allowed HTTP import domains for startup plugins |
+| `VLC_LOG_LEVEL`, `VLC_LOG_FORMAT`, `VLC_LOG_FILTER` | Logging settings |
+
+Run `vl-convert --help` for the complete list.

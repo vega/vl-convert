@@ -1,0 +1,22 @@
+<!-- Generated from _topics/getting-started/installation.md. Do not edit. -->
+
+# Installation
+
+These docs require version 2.0.0-rc6 or later. The version constraints below allow version 2 prereleases.
+
+Already using 1.x? See {doc}`upgrading` for what changed in version 2.
+
+
+Add these dependencies to `Cargo.toml`:
+
+:::{dropdown} Cargo.toml
+:open:
+
+```toml
+[dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+vl-convert-rs = "2.0.0-rc6"
+```
+:::
+
+The crate is imported as `vl_convert_rs`. Conversion methods are asynchronous and require a Tokio runtime for full functionality. The {doc}`quick-start` shows a complete Tokio setup.

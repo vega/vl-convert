@@ -1,0 +1,49 @@
+<!-- Generated from _topics/convert-and-export/svg-conversions.md. Do not edit. -->
+
+# Converting from SVG
+
+Use the SVG functions when another tool has already produced the vector image. VlConvert converts it to PNG, JPEG, or PDF without running Vega.
+
+The SVG must declare its size through `width` and `height` attributes or a `viewBox`. Fonts and images it references must be available to the rendering process. See {doc}`fonts` and {doc}`security` when the SVG is not self-contained.
+
+Save this SVG document:
+
+:::{dropdown} chart.svg
+:open:
+
+```{literalinclude} /_examples/svg-demo.svg
+:language: xml
+```
+:::
+
+
+```rust
+use vl_convert_rs::{PngOpts, VlConverter};
+
+let svg = std::fs::read_to_string("chart.svg")?;
+let converter = VlConverter::new();
+let output = converter
+    .svg_to_png(
+        &svg,
+        PngOpts {
+            scale: Some(2.0),
+            ..Default::default()
+        },
+    )
+    .await?;
+std::fs::write("chart.png", output.data)?;
+```
+
+The PNG bytes are in `output.data`. Use `svg_to_jpeg()` with `JpegOpts` or `svg_to_pdf()` with `PdfOpts` for other formats. These methods apply the converter's font and image-access settings. They require a Tokio runtime but do not start JavaScript workers.
+
+
+The PNG conversion preserves the shapes and colors in the SVG document:
+
+```{vl-chart} /_examples/svg-demo.svg
+:input-kind: svg
+:format: png
+:scale: 2
+:alt: A blue circle, orange triangle, and green square on a pale background
+```
+
+See {doc}`image-quality` for the `scale`, `ppi`, and `quality` options.

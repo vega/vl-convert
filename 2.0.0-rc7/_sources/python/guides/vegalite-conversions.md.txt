@@ -1,0 +1,51 @@
+<!-- Generated from _topics/convert-and-export/vegalite-conversions.md. Do not edit. -->
+
+# Converting from Vega-Lite
+
+Use the Vega-Lite functions for charts authored in Vega-Lite. VlConvert compiles the specification to Vega with the bundled Vega-Lite library, then returns or renders the result.
+
+Available outputs: compiled Vega JSON, SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, an evaluated scenegraph. SVG, HTML, and URL outputs are text. PNG, JPEG, and PDF outputs are bytes.
+
+VlConvert bundles several Vega-Lite versions and uses the newest by default. See [Supported Vega-Lite Versions](#supported-vega-lite-versions) to select another compiler. The setting does not change the input's `$schema` field.
+
+The examples below use the same input from Quick Start:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+```python
+from pathlib import Path
+
+import vl_convert as vlc
+
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
+vega_spec = vlc.vegalite_to_vega(spec)
+svg = vlc.vegalite_to_svg(spec)
+png = vlc.vegalite_to_png(spec, scale=2)
+pdf = vlc.vegalite_to_pdf(spec)
+Path("chart.svg").write_text(svg, encoding="utf-8")
+Path("chart.png").write_bytes(png)
+Path("chart.pdf").write_bytes(pdf)
+```
+
+The functions also accept the specification as a dictionary.
+
+
+## Supported Vega-Lite Versions
+
+This VlConvert release accepts these major/minor versions, listed from oldest to newest. The newest is the default:
+
+```{program-output} python -c "import vl_convert as vlc; print(', '.join(vlc.get_vegalite_versions()))"
+```
+
+Each selects the bundled patch release for that major/minor version. A full version string such as `6.4.1` selects the same compiler as `6.4`, not that exact patch release.
+
+Pass `vl_version="6.4"` to a Vega-Lite conversion function. Use `vlc.get_vegalite_versions()` to list the versions in your installed package.
+
+
+Related guides: {doc}`data-loading` for specifications that load data from URLs or files, {doc}`image-quality` for size and resolution options, {doc}`themes` and {doc}`locales` for appearance and formatting, {doc}`html-output` for interactive pages, and {doc}`../advanced/scenegraph` and {doc}`../advanced/font-introspection` for the intermediate outputs.

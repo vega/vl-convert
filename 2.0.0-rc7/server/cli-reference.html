@@ -1,0 +1,949 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>CLI Reference &#8212; VlConvert</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=e741de7a" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../_static/documentation_options.js?v=69c16fac"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=cb5fb026"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'server/cli-reference';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://vega.github.io/vl-convert/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '2.0.0-rc7';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            false;
+        </script>
+    <script src="../_static/conversion-example.js?v=ca9e3140"></script>
+    <script src="../_static/terminal-prompts.js?v=df46982e"></script>
+    <link rel="canonical" href="https://vega.github.io/vl-convert/2.0.0-rc7/server/cli-reference.html" />
+    <link rel="icon" href="../_static/vl-convert-favicon.svg"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Architecture" href="../how-it-works/architecture.html" />
+    <link rel="prev" title="Admin Server API" href="admin-api.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+<aside class="bd-header-announcement" aria-label="Announcement">
+  <div class="bd-header-announcement__content">These docs cover the <strong>VlConvert 2.0 release candidate</strong>. <a href="https://github.com/vega/vl-convert/releases">View releases</a>.</div>
+</aside>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/vl-convert-logo.svg" class="logo__image only-light" alt="VlConvert"/>
+    <img src="../_static/vl-convert-logo.svg" class="logo__image only-dark pst-js-only" alt="VlConvert"/>
+  
+  
+    <p class="title logo__title">VlConvert</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../rust/index.html">
+    Rust
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../python/index.html">
+    Python
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cli/index.html">
+    CLI
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Server
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../how-it-works/architecture.html">
+    Architecture
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://github.com/vega/vl-convert/releases">
+    Changelog
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+  
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    v2.0.0-rc7  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div>
+</div>
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/vega/vl-convert" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../rust/index.html">
+    Rust
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../python/index.html">
+    Python
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../cli/index.html">
+    CLI
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Server
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../how-it-works/architecture.html">
+    Architecture
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://github.com/vega/vl-convert/releases">
+    Changelog
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+  
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    v2.0.0-rc7  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div>
+</div>
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/vega/vl-convert" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started/quick-start.html">Quick Start</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Convert and Export</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="guides/vegalite-conversions.html">Converting from Vega-Lite</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/vega-conversions.html">Converting from Vega</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/svg-conversions.html">Converting from SVG</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Output and Appearance</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="guides/image-quality.html">Image Size and Quality Recommendations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/html-output.html">Interactive HTML Output</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/url-output.html">Vega Editor URL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/fonts.html">Fonts and Google Fonts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/themes.html">Themes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/locales.html">Number and Time Locales</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Data and Security</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="guides/data-loading.html">Loading Data and Images</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/security.html">Security and Network Access</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Server</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Server Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="authentication.html">Authentication</a></li>
+<li class="toctree-l1"><a class="reference internal" href="rate-limiting.html">Render-Time Budgets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="logging.html">Server Logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment.html">Deploying the Server</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="advanced/configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced/conversion-overrides.html">Conversion Overrides</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced/memory-management.html">Memory and Execution Limits</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced/javascript-bundling.html">JavaScript Bundling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced/scenegraph.html">Evaluated Scenegraph Output</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced/font-introspection.html">Font Introspection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/plugins.html">Vega Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="advanced/plugin-loading.html">Plugin Loading and Security</a></li>
+<li class="toctree-l1"><a class="reference internal" href="guides/logging.html">Logging and Warnings</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="api-reference.html">Server API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="admin-api.html">Admin Server API</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">CLI Reference</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Server</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">CLI Reference</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- Generated from _topics/api-reference/server-cli.md. Do not edit. -->
+<section id="cli-reference">
+<h1>CLI Reference<a class="headerlink" href="#cli-reference" title="Link to this heading">#</a></h1>
+<p>Start the server with <code class="docutils literal notranslate"><span class="pre">vl-convert</span> <span class="pre">serve</span></code>. Global converter options can appear before or after <code class="docutils literal notranslate"><span class="pre">serve</span></code>. Server-specific options must follow it:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>vl-convert [GLOBAL OPTIONS] serve [SERVER OPTIONS]
+</pre></div>
+</div>
+<p>The help below is generated from the executable used to build the documentation. See <a class="reference internal" href="overview.html"><span class="doc">Server Overview</span></a> for a startup example and <a class="reference internal" href="advanced/configuration.html"><span class="doc">Configuration</span></a> for configuration files and environment variables.</p>
+<section id="serve">
+<h2><code class="docutils literal notranslate"><span class="pre">serve</span></code><a class="headerlink" href="#serve" title="Link to this heading">#</a></h2>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Run the HTTP conversion server
+
+Usage: vl-convert serve [OPTIONS]
+
+Options:
+      --host &lt;HOST&gt;
+          Bind address for the main HTTP listener (TCP). Mutually exclusive with `--unix-socket`
+          
+          [env: VLC_HOST=]
+
+      --vlc-config &lt;disabled|PATH&gt;
+          Converter config: a path to a JSONC config file, or the reserved value `disabled` to skip config-file loading. Relative paths resolve from the current working directory. When omitted, the platform default config path is loaded if it exists
+          
+          [env: VLC_CONFIG=]
+
+      --base-url &lt;default|disabled|URL|PATH&gt;
+          Base URL for resolving relative data and image paths. Reserved values: `default` (use vega-datasets CDN), `disabled` (relative paths error). Otherwise either a URL with scheme (`https://...`, `file://...`) or an absolute filesystem path. Relative paths are rejected
+          
+          [env: VLC_BASE_URL=]
+
+      --port &lt;PORT&gt;
+          Port for the main HTTP listener (TCP). Mutually exclusive with `--unix-socket`
+          
+          [env: VLC_PORT=]
+
+      --allowed-base-urls &lt;none|net|all|URL_PREFIX&gt;
+          Allowed base URLs for data and images. Reserved single-value shortcuts: `none` (block all), `net` (HTTP/HTTPS only, no filesystem), `all` (allow everything incl. filesystem). Otherwise a `;`-separated list of CSP-style patterns: `&quot;https:&quot;` (scheme), `&quot;https://example.com/&quot;` (prefix), `&quot;/data/&quot;` (absolute filesystem path). Long allowlists belong in `--vlc-config` JSONC
+          
+          [env: VLC_ALLOWED_BASE_URLS=]
+
+      --unix-socket &lt;PATH&gt;
+          Bind the main HTTP listener on a UDS path instead of TCP (Unix only). Mutually exclusive with `--host` and `--port`
+          
+          [env: VLC_UNIX_SOCKET=]
+
+      --google-font &lt;GOOGLE_FONT&gt;
+          Register a font from Google Fonts. Use &quot;Family&quot; for all variants, or &quot;Family:400,700italic&quot; for specific weight/style combinations. May be specified multiple times; `;` separates entries when passed via `VLC_GOOGLE_FONT`
+          
+          [env: VLC_GOOGLE_FONT=]
+
+      --socket-mode &lt;OCTAL&gt;
+          Unix permission mode for UDS listeners (octal, e.g. 0600). Defaults to 0o600 when unset
+          
+          [env: VLC_SOCKET_MODE=]
+
+      --admin-port &lt;PORT&gt;
+          Bind an admin listener on `&lt;--admin-host&gt;:&lt;port&gt;` for runtime reconfiguration (default host `127.0.0.1`). Mutually exclusive with `--admin-unix-socket`
+          
+          [env: VLC_ADMIN_PORT=]
+
+      --google-font-variant-threshold &lt;N&gt;
+          Maximum number of Google Font variants one conversion may load, counting configured, requested, and automatically discovered families. The conversion fails once the cap is reached; a single family may carry the total past it. `0` disables the cap
+          
+          [env: VLC_GOOGLE_FONT_VARIANT_THRESHOLD=]
+
+      --admin-host &lt;HOST&gt;
+          Bind address for the admin HTTP listener (TCP). Defaults to `127.0.0.1` and requires `--admin-port` (the admin listener is opt-in; setting only the host has no effect). Non-loopback values require `--admin-api-key` and fail validation without it
+          
+          [env: VLC_ADMIN_HOST=]
+
+      --auto-google-fonts[=&lt;BOOL&gt;]
+          Automatically download missing fonts from Google Fonts (default: false)
+          
+          [env: VLC_AUTO_GOOGLE_FONTS=]
+
+      --admin-unix-socket &lt;PATH&gt;
+          Bind the admin HTTP listener on a UDS path instead of TCP (Unix only). Mutually exclusive with `--admin-port`
+          
+          [env: VLC_ADMIN_UNIX_SOCKET=]
+
+      --embed-local-fonts[=&lt;BOOL&gt;]
+          Embed locally installed fonts as base64 @font-face in HTML and SVG output (default: false)
+          
+          [env: VLC_EMBED_LOCAL_FONTS=]
+
+      --admin-api-key &lt;KEY&gt;
+          API key for Bearer-token authentication on the admin listener. Independent of `--api-key`. When unset, access depends on UDS filesystem permissions or TCP loopback. A non-loopback TCP admin listener without a key fails startup
+          
+          [env: VLC_ADMIN_API_KEY=]
+
+      --subset-fonts[=&lt;BOOL&gt;]
+          Subset embedded fonts to only the characters used (default: true). Pass `=false` to embed full font files
+          
+          [env: VLC_SUBSET_FONTS=]
+
+      --dump-openapi[=&lt;SPEC&gt;]
+          Print an OpenAPI JSON document to stdout and exit. Defaults to the public API; pass `--dump-openapi=admin` for the admin API
+          
+          [possible values: public, admin]
+
+      --missing-fonts &lt;MISSING_FONTS&gt;
+          Missing-font behavior: fallback silently, warn, or error
+          
+          [env: VLC_MISSING_FONTS=]
+          [possible values: fallback, warn, error]
+
+      --api-key &lt;KEY&gt;
+          API key for Bearer-token authentication on the main listener
+          
+          [env: VLC_API_KEY=]
+
+      --max-v8-heap-size-mb &lt;MAX_V8_HEAP_SIZE_MB&gt;
+          Maximum V8 heap size per worker in megabytes, at least 64 [default: 0 = no limit]
+          
+          [env: VLC_MAX_V8_HEAP_SIZE_MB=]
+
+      --max-v8-execution-time-secs &lt;MAX_V8_EXECUTION_TIME_SECS&gt;
+          Maximum V8 execution time in seconds [default: 0 = no limit]
+          
+          [env: VLC_MAX_V8_EXECUTION_TIME_SECS=]
+
+      --workers &lt;N&gt;
+          Number of converter worker threads (must be &gt;= 1). Defaults to the value loaded from `--vlc-config`, or 1 when the config does not set it
+          
+          [env: VLC_WORKERS=]
+
+      --gc-after-conversion[=&lt;BOOL&gt;]
+          Run V8 garbage collection after each conversion to release memory (default: false)
+          
+          [env: VLC_GC_AFTER_CONVERSION=]
+
+      --max-concurrent-requests &lt;N&gt;
+          Maximum simultaneous in-flight requests
+          
+          [env: VLC_MAX_CONCURRENT_REQUESTS=]
+
+      --request-timeout-secs &lt;SECS&gt;
+          HTTP request timeout in seconds
+          
+          [env: VLC_REQUEST_TIMEOUT_SECS=]
+
+      --vega-plugin &lt;path|URL&gt;
+          Vega plugin: file path (`.js`/`.mjs`) or URL (`https://...`). The plugin must be a single ESM module that exports a default function accepting a vega object. Multi-file plugins should be pre-bundled with esbuild or Rollup. URL plugins auto-allow their domain for imports. May be specified multiple times; plugins execute in order. Put inline ESM plugins in `--vlc-config`
+          
+          [env: VLC_VEGA_PLUGIN=]
+
+      --drain-timeout-secs &lt;SECS&gt;
+          Graceful shutdown drain timeout in seconds (default: 30)
+          
+          [env: VLC_DRAIN_TIMEOUT_SECS=]
+          [default: 30]
+
+      --plugin-import-domains &lt;PLUGIN_IMPORT_DOMAINS&gt;
+          Domains allowed for HTTP imports in plugins, `;`-separated. Examples: `&#39;*&#39;` (any), `&#39;esm.sh&#39;`, `&#39;*.jsdelivr.net&#39;`. May be specified multiple times
+          
+          [env: VLC_PLUGIN_IMPORT_DOMAINS=]
+
+      --font-dir &lt;PATH&gt;
+          Additional directory to search for fonts. Repeat the flag to register multiple directories (`--font-dir /a --font-dir /b`). The combined list is registered when the process starts
+          
+          [env: VLC_FONT_DIR=]
+
+      --reconfig-drain-timeout-secs &lt;SECS&gt;
+          Per-reconfig drain timeout in seconds. Defaults to the same value as `--drain-timeout-secs`
+          
+          [env: VLC_RECONFIG_DRAIN_TIMEOUT_SECS=]
+
+      --google-fonts-cache-size-mb &lt;MB&gt;
+          Capacity of the on-disk Google Fonts cache, in megabytes. `0` uses the default capacity of 512 MB
+          
+          [env: VLC_GOOGLE_FONTS_CACHE_SIZE_MB=]
+
+      --max-body-size-mb &lt;MB&gt;
+          Maximum request body size in megabytes
+          
+          [env: VLC_MAX_BODY_SIZE_MB=]
+
+      --default-theme &lt;THEME|null&gt;
+          Default Vega-Lite theme applied when a request omits `theme`. Pass the literal string `null` to clear a value loaded from the `--vlc-config` file
+          
+          [env: VLC_DEFAULT_THEME=]
+
+      --opaque-errors[=&lt;BOOL&gt;]
+          Return only HTTP status codes on error (no message bodies)
+          
+          [env: VLC_OPAQUE_ERRORS=]
+
+      --default-format-locale &lt;LOCALE|JSON|FILE.json|FILE.jsonc|null&gt;
+          Default d3-format locale: a locale name string, an inline JSON object literal, a path to a `.json` / `.jsonc` file, or the literal string `null` to clear a value loaded from the `--vlc-config` file
+          
+          [env: VLC_DEFAULT_FORMAT_LOCALE=]
+
+      --require-user-agent[=&lt;BOOL&gt;]
+          Reject requests without a User-Agent header
+          
+          [env: VLC_REQUIRE_USER_AGENT=]
+
+      --default-time-format-locale &lt;LOCALE|JSON|FILE.json|FILE.jsonc|null&gt;
+          Default d3-time-format locale: a locale name string, an inline JSON object literal, a path to a `.json` / `.jsonc` file, or the literal string `null` to clear a value loaded from the `--vlc-config` file
+          
+          [env: VLC_DEFAULT_TIME_FORMAT_LOCALE=]
+
+      --trust-proxy[=&lt;BOOL&gt;]
+          Trust X-Forwarded-For and X-Real-IP headers for client IP extraction. Only enable behind a trusted reverse proxy
+          
+          [env: VLC_TRUST_PROXY=]
+
+      --cors-origin &lt;ORIGIN&gt;
+          Allowed CORS origin(s), comma-separated or `*`
+          
+          [env: VLC_CORS_ORIGIN=]
+
+      --themes &lt;JSON|FILE.json|FILE.jsonc|null&gt;
+          Custom named themes as an inline JSON object literal, a path to a `.json` / `.jsonc` file, or the literal string `null` to clear a map loaded from the `--vlc-config` file
+          
+          [env: VLC_THEMES=]
+
+      --log-level &lt;LOG_LEVEL&gt;
+          Log level for Vega/Vega-Lite messages
+          
+          [env: VLC_LOG_LEVEL=]
+          [default: warn]
+          [possible values: error, warn, info, debug]
+
+      --per-ip-budget-ms &lt;MS&gt;
+          Conversion-time budget per IP, in milliseconds per minute
+          
+          [env: VLC_PER_IP_BUDGET_MS=]
+
+      --global-budget-ms &lt;MS&gt;
+          Total conversion-time budget for the server, in milliseconds per minute
+          
+          [env: VLC_GLOBAL_BUDGET_MS=]
+
+      --log-format &lt;LOG_FORMAT&gt;
+          Log output format. `text` is human-readable; `json` emits one structured line per event for log aggregators
+
+          Possible values:
+          - text: Human-readable text logs
+          - json: Flat structured JSON logs
+          
+          [env: VLC_LOG_FORMAT=]
+          [default: text]
+
+      --budget-hold-ms &lt;MS&gt;
+          Per-request budget hold in milliseconds. Must be positive
+          
+          [env: VLC_BUDGET_HOLD_MS=]
+
+      --log-filter &lt;DIRECTIVE&gt;
+          Raw `tracing-subscriber::EnvFilter` directive (e.g. `&quot;vl_convert=debug,tower_http=info&quot;`). When set, this wins over `--log-level`. When unset, a directive is synthesized from `--log-level`
+          
+          [env: VLC_LOG_FILTER=]
+
+      --google-font-cache-miss-penalty-ms &lt;MS&gt;
+          Budget milliseconds charged for each Google Fonts cache miss
+          
+          [env: VLC_GOOGLE_FONT_CACHE_MISS_PENALTY_MS=]
+
+      --ready-json[=&lt;BOOL&gt;]
+          Emit one JSON readiness line on stdout after all listeners bind. Useful for orchestrators / process supervisors
+          
+          [env: VLC_READY_JSON=]
+          [default: false]
+
+      --exit-on-parent-close[=&lt;BOOL&gt;]
+          Exit when the parent process closes stdin (auto-enabled when a UDS listener is in use). Pass `=true`/`=false` to override the auto rule
+          
+          [env: VLC_EXIT_ON_PARENT_CLOSE=]
+
+      --allow-google-fonts[=&lt;BOOL&gt;]
+          Allow per-request `google_fonts` overrides
+          
+          [env: VLC_ALLOW_GOOGLE_FONTS=]
+
+      --allow-per-request-plugins[=&lt;BOOL&gt;]
+          Allow per-request Vega plugin overrides
+          
+          [env: VLC_ALLOW_PER_REQUEST_PLUGINS=]
+
+      --max-ephemeral-workers &lt;N&gt;
+          Maximum concurrent ephemeral workers for per-request plugins
+          
+          [env: VLC_MAX_EPHEMERAL_WORKERS=]
+
+      --per-request-plugin-import-domains &lt;DOMAIN;DOMAIN;...&gt;
+          Domains allowed for HTTP imports in per-request plugins. `;`-separated. May be specified multiple times
+          
+          [env: VLC_PER_REQUEST_PLUGIN_IMPORT_DOMAINS=]
+
+  -h, --help
+          Print help (see a summary with &#39;-h&#39;)
+</pre></div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="admin-api.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Admin Server API</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../how-it-works/architecture.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Architecture</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#serve"><code class="docutils literal notranslate"><span class="pre">serve</span></code></a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/server/cli-reference.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, Vega.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

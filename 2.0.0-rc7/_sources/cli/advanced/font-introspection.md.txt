@@ -1,0 +1,65 @@
+<!-- Generated from _topics/advanced/font-introspection.md. Do not edit. -->
+
+# Font Introspection
+
+Font introspection exposes the low-level font processing that supports VlConvert's PDF, SVG, and HTML exports. It identifies the fonts a chart uses and can generate the `@font-face` CSS used to embed them in SVG and HTML. These functions are public so you can reuse them for font checks, custom web pages, or other export workflows.
+
+The result lists resolved font families, weights, and styles for a Vega or Vega-Lite specification. Which fonts appear depends on the font settings:
+
+- Google Fonts are included when `auto_google_fonts` is enabled or the family is requested through `google_fonts`.
+- Fonts installed on the host or registered from a directory are listed only when `embed_local_fonts` is enabled.
+- Missing fonts are omitted when `missing_fonts` is `fallback` or `warn`. With `error`, inspection fails. See [Missing Fonts](#missing-fonts).
+
+The default settings return an empty list, even when the chart can render with local fonts.
+
+## Inspect Local and Google Fonts
+
+This chart uses Inter at weight 600 for its title and the bundled Liberation Sans family for its axis labels and titles. The examples enable both font sources and set `missing_fonts` to `error` so inspection fails if a first-choice font is unavailable. Google Fonts may require network access.
+
+Save this specification:
+
+:::{dropdown} font-introspection.vl.json
+:open:
+
+```{literalinclude} /_examples/font-introspection.vl.json
+:language: json
+```
+:::
+
+
+```console
+$ vl-convert --auto-google-fonts --embed-local-fonts --missing-fonts error \
+>   vl2fonts --input font-introspection.vl.json --output fonts.json --pretty
+```
+
+Use `vg2fonts` for Vega input. Add `--include-font-face` to include embedded font CSS.
+
+
+Output:
+
+```{program-output} python inspect-fonts.py
+:cwd: /_examples
+:language: json
+```
+
+Inter's record includes a stylesheet URL, an HTML link tag, and a CSS import rule. Liberation Sans has no remote URL and appears with weight 400 for axis labels and 700 for axis titles. The `font_face` fields are `null` because these examples omit embedded font CSS.
+
+Font subsetting keeps only the characters a chart needs, reducing the size of downloaded or embedded fonts without changing the chart's appearance. The `text=` parameter in Inter's URLs requests this subset. Set `subset_fonts` to false to disable subsetting.
+
+
+## Missing Fonts
+
+`missing_fonts` checks whether the first-choice font family is available locally or through the enabled Google Fonts settings. A local font excluded because `embed_local_fonts` is disabled is not missing.
+
+| Policy | When a first-choice font is unavailable |
+| --- | --- |
+| `fallback` (default) | Continue silently and omit the missing family from the result. |
+| `warn` | Log a warning, then continue and omit the missing family. |
+| `error` | Fail the inspection instead of returning font records. |
+
+For example, change the title's `font` to `"VLC Missing Example Font, Liberation Sans"`. The examples above fail because the first family is unavailable, even though Liberation Sans can render the text. A fallback does not satisfy the first-choice check, and the result does not list the fallback face used for that text.
+
+Warnings go through the interface's logging system, not into the font records. See {doc}`../guides/logging`.
+
+
+Font introspection evaluates the chart, which can load data and consume rendering resources. Apply the same access controls and resource limits as for conversions. See {doc}`../guides/fonts` for registration, fallback, and embedding options.

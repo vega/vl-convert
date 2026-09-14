@@ -1,0 +1,35 @@
+<!-- Generated from _topics/convert-and-export/vega-conversions.md. Do not edit. -->
+
+# Converting from Vega
+
+Use the Vega functions for charts authored in Vega or already compiled to Vega from Vega-Lite. VlConvert parses and evaluates the specification directly, so the Vega-Lite `theme` and `vl_version` options do not apply.
+
+Available outputs: SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, and an evaluated scenegraph.
+
+Save this Vega specification:
+
+:::{dropdown} chart.vg.json
+:open:
+
+```{literalinclude} /_examples/vega-demo.vg.json
+:language: json
+```
+:::
+
+
+```console
+$ vl-convert vg2svg --input chart.vg.json --output chart.svg
+$ vl-convert vg2png --input chart.vg.json --output chart.png
+```
+
+The other commands are `vg2jpeg`, `vg2pdf`, `vg2html`, `vg2url`, and `vg2sg`.
+
+
+The SVG conversion renders this chart:
+
+```{vl-chart} /_examples/vega-demo.vg.json
+:input-kind: vega
+:alt: Vega bar chart with five bars labeled A through E
+```
+
+Size, locale, and other per-conversion options work the same way as for Vega-Lite. See {doc}`image-quality`, {doc}`locales`, and {doc}`../advanced/conversion-overrides`.

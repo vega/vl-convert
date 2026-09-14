@@ -1,0 +1,37 @@
+<!-- Generated from _topics/getting-started/quick-start.md. Do not edit. -->
+
+# Quick Start
+
+This example renders a small Vega-Lite bar chart with inline data as `chart.png`. See {doc}`../guides/data-loading` for configuration options when a chart loads data from a URL or file.
+
+Save this specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+
+Render it at twice the default pixel dimensions:
+
+```console
+$ vl-convert vl2png --input chart.vl.json --output chart.png --scale 2
+```
+
+Conversion commands can also read standard input and write standard output:
+
+```console
+$ vl-convert vl2png --input - --output - < chart.vl.json > chart.png
+```
+
+See {doc}`../guides/vegalite-conversions` for the other supported output formats and {doc}`../advanced/cli-piping` for details on pipeline usage.
+
+
+The specification renders as this chart:
+
+```{vl-chart} /_examples/quick-start.vl.json
+:alt: Bar chart with five bars labeled A through E
+```

@@ -1,0 +1,88 @@
+<!-- Generated from _topics/output-and-appearance/locales.md. Do not edit. -->
+
+# Number and Time Locales
+
+Locales control how Vega formats certian values. `format_locale` sets number formatting options such as decimal marks, digit grouping, and currency symbols. `time_format_locale` sets the names and patterns used for dates and times.
+
+Use a built-in locale name such as `de-DE` or `ja-JP` for standard regional formats, or pass a locale object for custom rules. The built-in names match the locale files in [d3-format](https://github.com/d3/d3-format/tree/main/locale) and [d3-time-format](https://github.com/d3/d3-time-format/tree/main/locale). Locales change formatting only. They do not change the timezone or the data.
+
+## Use a Built-In Locale
+
+This chart uses `de-DE` (German language) as both the number and time locale. This alters the display of the `$,.0f` numeric format pattern on the y-axis and the display of month names on the x-axis.
+
+Save this specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/locale-demo.vl.json
+:language: json
+```
+:::
+
+
+```rust
+use vl_convert_rs::converter::{FormatLocale, TimeFormatLocale};
+use vl_convert_rs::{VlConverter, VlOpts};
+
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let converter = VlConverter::new();
+let options = VlOpts {
+    format_locale: Some(FormatLocale::Name("de-DE".to_string())),
+    time_format_locale: Some(TimeFormatLocale::Name("de-DE".to_string())),
+    ..Default::default()
+};
+
+let output = converter
+    .vegalite_to_svg(spec, options, Default::default())
+    .await?;
+std::fs::write("chart.svg", output.svg)?;
+```
+
+
+Rendered with `de-DE` locale for both settings, the y-axis groups thousands with a dot and places the euro sign after the number, and the x-axis uses German month names:
+
+```{vl-chart} /_examples/locale-demo.vl.json
+:format-locale: de-DE
+:time-format-locale: de-DE
+:alt: Line chart of monthly revenue with German number and month formatting
+```
+
+## Define Custom Number Rules
+
+A number locale follows the [d3-format locale definition](https://d3js.org/d3-format#locale_format). Save this example as `format-locale.json`:
+
+:::{dropdown} format-locale.json
+:open:
+
+```json
+{
+  "decimal": ",",
+  "thousands": ".",
+  "grouping": [3],
+  "currency": ["", " EUR"]
+}
+```
+:::
+
+
+```rust
+use vl_convert_rs::converter::FormatLocale;
+use vl_convert_rs::{serde_json, VlOpts};
+
+let options = VlOpts {
+    format_locale: Some(FormatLocale::Object(serde_json::json!({
+        "decimal": ",",
+        "thousands": ".",
+        "grouping": [3],
+        "currency": ["", " EUR"]
+    }))),
+    ..Default::default()
+};
+```
+
+
+Custom time locales follow the [d3-time-format locale definition](https://d3js.org/d3-time-format#locale_format) and define day and month names as well as date and time patterns. Prefer a built-in name when one fits.
+
+
+See {doc}`../advanced/configuration` to apply a locale to every conversion by default.

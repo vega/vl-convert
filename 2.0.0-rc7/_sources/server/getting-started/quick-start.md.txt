@@ -1,0 +1,49 @@
+<!-- Generated from _topics/getting-started/quick-start.md. Do not edit. -->
+
+# Quick Start
+
+This example renders a small Vega-Lite bar chart with inline data as `chart.png`. See {doc}`../guides/data-loading` for configuration options when a chart loads data from a URL or file.
+
+Save this specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+
+Start the server in one terminal:
+
+```console
+$ vl-convert serve --port 3000
+```
+
+Save this complete request body as `request.json`:
+
+:::{dropdown} request.json
+:open:
+
+```{literalinclude} /_generated/requests/quick-start-png.json
+:language: json
+```
+:::
+
+Use `curl` to POST the request from a second terminal:
+
+```console
+$ curl http://127.0.0.1:3000/vegalite/png \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.png
+```
+
+The endpoint returns PNG bytes, which `curl` writes to `chart.png`. See {doc}`../guides/vegalite-conversions` for the other endpoints and {doc}`../overview` for additional features the server provides.
+
+The specification renders as this chart:
+
+```{vl-chart} /_examples/quick-start.vl.json
+:alt: Bar chart with five bars labeled A through E
+```

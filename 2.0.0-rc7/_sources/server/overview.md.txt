@@ -1,0 +1,35 @@
+<!-- Generated from _topics/server/overview.md. Do not edit. -->
+
+# Server Overview
+
+`vl-convert serve` exposes VlConvert over HTTP. Use it when several applications share one rendering service, when the calling application is not written in Python or Rust, or when rendering should run outside the caller's process.
+
+## Start a Local Server
+
+```console
+$ vl-convert serve --port 3000
+```
+
+The server API provides these endpoint groups:
+
+| Path | Purpose |
+| --- | --- |
+| `/vegalite/*` | Compile and convert Vega-Lite input |
+| `/vega/*` | Convert Vega input |
+| `/svg/*` | Convert existing SVG |
+| `/themes` | List and inspect themes |
+| `/bundling/*` | Build browser JavaScript bundles |
+| `/healthz`, `/readyz`, `/infoz` | Liveness, readiness, and version information |
+| `/docs`, `/api-doc/openapi.json` | Interactive API documentation and the OpenAPI document |
+
+See {doc}`getting-started/quick-start` for a complete request and {doc}`api-reference` for every endpoint.
+
+By default the server binds to loopback, allows 30 seconds per request, accepts request bodies up to 50 MB, and accepts browser requests from loopback origins only. It does not require authentication, enforce render-time budgets, cap concurrent requests, or hide error details until you configure those options.
+
+## Server API and Admin API
+
+The server API provides conversion and health routes. The optional admin API uses a separate port or Unix socket for runtime management, so a deployment can expose rendering without exposing configuration, budget, font-cache, or worker controls.
+
+See {doc}`admin-api` for runtime management and {doc}`authentication` for API access controls.
+
+{doc}`deployment` covers TCP ports and Unix sockets, health checks, and shutdown. {doc}`rate-limiting` explains render-time budgets, and {doc}`logging` describes request logs.

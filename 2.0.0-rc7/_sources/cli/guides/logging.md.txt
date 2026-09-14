@@ -1,0 +1,37 @@
+<!-- Generated from _topics/advanced/logging.md. Do not edit. -->
+
+# Logging and Warnings
+
+Vega and Vega-Lite report warnings while compiling or evaluating a chart. A conversion can succeed even though Vega dropped an invalid property or recovered from a data problem, so check these messages when a chart does not look as expected.
+
+This examples use a logarithmic scale whose inferred domain includes zero. Save this Vega-Lite specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/warning-demo.vl.json
+:language: json
+```
+:::
+
+
+The CLI writes logs to standard error, so standard output stays available for conversion results.
+
+```console
+$ vl-convert --log-level warn \
+>   vl2svg --input chart.vl.json --output chart.svg
+```
+
+The command succeeds and writes a timestamped warning to standard error. The relevant part is:
+
+```text
+...
+WARN vl_convert: Log scale domain includes zero: [0,200]
+```
+
+`--log-filter` accepts a `tracing-subscriber` filter directive for finer control and takes priority over `--log-level`:
+
+```console
+$ vl-convert --log-filter 'vl_convert=debug' \
+>   vl2svg --input chart.vl.json --output chart.svg
+```

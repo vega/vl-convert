@@ -1,0 +1,11 @@
+---
+orphan: true
+---
+
+<!-- Generated from _topics/api-reference/rust.md. Do not edit. -->
+
+# Rust API Reference
+
+The {rust-api}`API reference on docs.rs <index.html>` documents the public types, functions, and methods in `vl-convert-rs`.
+
+See {doc}`advanced/rust-converter` for creating and sharing a converter, or {doc}`getting-started/quick-start` for a complete conversion example.

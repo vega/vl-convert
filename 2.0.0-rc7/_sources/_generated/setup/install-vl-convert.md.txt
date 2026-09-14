@@ -1,0 +1,7 @@
+Download a [prebuilt executable](/cli/getting-started/installation.md#prebuilt-executable), or build it with Cargo:
+
+```console
+$ cargo install vl-convert \
+>   --version '=2.0.0-rc7' \
+>   --locked
+```

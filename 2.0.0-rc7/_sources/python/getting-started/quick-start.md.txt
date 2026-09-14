@@ -1,0 +1,36 @@
+<!-- Generated from _topics/getting-started/quick-start.md. Do not edit. -->
+
+# Quick Start
+
+This example renders a small Vega-Lite bar chart with inline data as `chart.png`. See {doc}`../guides/data-loading` for configuration options when a chart loads data from a URL or file.
+
+Save this specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+`vegalite_to_png()` takes a Vega-Lite specification as a dictionary or JSON string and returns PNG bytes:
+
+```python
+from pathlib import Path
+
+import vl_convert as vlc
+
+spec = Path("chart.vl.json").read_text(encoding="utf-8")
+png = vlc.vegalite_to_png(spec, scale=2)
+Path("chart.png").write_bytes(png)
+```
+
+`scale=2` doubles the pixel dimensions of the output. See {doc}`../guides/vegalite-conversions` for the other output formats.
+
+
+The specification renders as this chart:
+
+```{vl-chart} /_examples/quick-start.vl.json
+:alt: Bar chart with five bars labeled A through E
+```

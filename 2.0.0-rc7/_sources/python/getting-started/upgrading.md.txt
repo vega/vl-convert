@@ -1,0 +1,44 @@
+<!-- Generated from _topics/getting-started/upgrading.md. Do not edit. -->
+
+# Upgrading from 1.x
+
+Version 2 keeps the conversions you already use but changes some details on how converters are configured, tightens data access, and replaces a few options. This page lists what to change when moving from 1.9 to 2.0, followed by behavior differences to check even when your code still runs.
+
+## Update Your Code
+
+**Options are keyword-only.** Every conversion function takes the specification positionally and everything else by keyword. A call such as `vegalite_to_svg(spec, "5.16")` now raises `TypeError`. Write `vegalite_to_svg(spec, vl_version="5.16")` instead.
+
+**`allowed_base_urls` moved to the new `vlc.configure()`.** The per-call argument was removed from every conversion function. Set the allowlist once for the process:
+
+```python
+import vl_convert as vlc
+
+vlc.configure(allowed_base_urls=["https://data.example.com/"])
+```
+
+**`show_warnings` is deprecated and ignored.** Passing `True` raises a `DeprecationWarning`. Vega and Vega-Lite warnings now go to the `vl_convert` logger, so configure Python logging instead. See {doc}`../guides/logging`.
+
+**PDF `scale` is retained only for backward compatibility.** `vegalite_to_pdf()`, `vega_to_pdf()`, and `svg_to_pdf()` still accept `scale=None` or `scale=1.0`. Other numeric values raise `ValueError`. The parameter never affected PDF output and is deprecated in version 2. Change the chart's `width` and `height` if the page needs a different size.
+
+**New, optional capabilities** include process-wide configuration, Google Fonts, plugins, asynchronous conversions, and more output options. See {doc}`../advanced/configuration` and {doc}`../api-reference`.
+
+Version 2 requires Python 3.10 or later.
+
+
+## Check Behavior Differences
+
+These differences can change results even when code and commands still run.
+
+**The allowlist now covers images as well as data.** HTTP and HTTPS URLs remain allowed by default. Custom `allowed_base_urls` settings now restrict image loading too, so include any image locations your charts use. Local data and image files remain blocked unless the allowlist permits them.
+
+**The default base URL has changed.** The default base_url, that relative URLs resolve against, is now `https://cdn.jsdelivr.net/npm/vega-datasets@v3.2.1/` instead of `https://vega.github.io/vega-datasets/`. If your allowlist only permits the old host, update it or set `base_url` to the old location. See {doc}`../guides/data-loading`.
+
+**Absolute data and image paths refer to local files.** Paths such as `/data/cars.csv` and, on Windows, `C:\data\cars.csv` no longer resolve against `base_url`. Allow the directory to load them without a `file://` prefix. For a remote resource, remove the leading slash to resolve `data/cars.csv` against `base_url`, or use an explicit HTTP or HTTPS URL. Chart hyperlinks keep their existing URL behavior.
+
+**Warnings are always captured.** 1.x dropped Vega and Vega-Lite warnings unless you asked for them. 2.0 records them on every conversion and reports them through each interface's logging, so expect to see messages you did not see before. They are worth reading! A warning often explains why a chart renders differently than expected. See {doc}`../guides/logging`.
+
+**PNG pixels may differ slightly.** To build a PNG image, 1.x first generated an SVG and then rasterized the SVG using the `resvg` crate. This approach generally worked well, but one limitation was that it did not support Vega's [label transform](https://vega.github.io/vega/docs/transforms/label/). Also, the SVG generation followed by SVG parsing had some overhead for charts with many mark instances.
+
+Version 2.0 renders PNGs using Vega's canvas renderer with a new Canvas 2D implementation based on [tinyskia](https://github.com/linebender/tiny-skia) and [cosmic-text](https://github.com/pop-os/cosmic-text). This may result in small pixel-level changes to PNGs. Regenerate image baselines in tests that compare PNG bytes.
+
+**Conversions run on a worker pool.** 1.x ran every conversion on one JavaScript runtime. 2.0 starts a pool on first use, with one worker by default, and can run conversions concurrently when you configure multiple workers. See {doc}`../advanced/memory-management` for sizing.

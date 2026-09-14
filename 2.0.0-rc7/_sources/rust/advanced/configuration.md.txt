@@ -1,0 +1,40 @@
+<!-- Generated from _topics/advanced/configuration.md. Do not edit. -->
+
+# Configuration
+
+The converter configuration holds settings that apply across all conversions: data access policy, fonts, plugins, worker resources, and default themes and locales. Values such as output format, dimensions, and scale belong to the individual conversion instead. See {doc}`conversion-overrides` for those.
+
+## JSONC Configuration Files
+
+Python, Rust, the CLI, and the server all read the same configuration format. This example limits worker resources and blocks external data and image loads. Save it as `production.vlc.jsonc`:
+
+:::{dropdown} production.vlc.jsonc
+:open:
+
+```{literalinclude} /_examples/production.vlc.jsonc
+:language: json
+```
+:::
+
+Note that JSONC is JSON with support for comments and trailing commas.
+
+Fields omitted from the file use their built-in defaults. This example changes some of those defaults: `base_url` normally points at the Vega datasets CDN, and `allowed_base_urls` permits any HTTP or HTTPS URL. Setting `base_url` to `false` rejects relative data and image URLs. Setting `allowed_base_urls` to an empty list rejects every external URL and local file.
+
+`allowed_base_urls` accepts Content Security Policy-style patterns. Grant only the paths, URL prefixes, or schemes the application needs, and use `"*"` only when every input is trusted. See {doc}`../guides/security`.
+
+
+## Configure a Rust Converter
+
+Load the file with `VlcConfig::from_file()`, update its fields, then pass it to `VlConverter::with_config()`. This example changes the worker count from 4 to 2:
+
+```rust
+use std::num::NonZeroU64;
+use std::path::Path;
+use vl_convert_rs::{VlcConfig, VlConverter};
+
+let mut config = VlcConfig::from_file(Path::new("production.vlc.jsonc"))?;
+config.num_workers = NonZeroU64::new(2).unwrap();
+let converter = VlConverter::with_config(config)?;
+```
+
+To configure without a file, start with `VlcConfig::default()`. The converter keeps its settings for its lifetime. See {doc}`rust-converter` for sharing and reusing it.

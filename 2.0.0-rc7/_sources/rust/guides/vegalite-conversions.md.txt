@@ -1,0 +1,53 @@
+<!-- Generated from _topics/convert-and-export/vegalite-conversions.md. Do not edit. -->
+
+# Converting from Vega-Lite
+
+Use the Vega-Lite functions for charts authored in Vega-Lite. VlConvert compiles the specification to Vega with the bundled Vega-Lite library, then returns or renders the result.
+
+Available outputs: compiled Vega JSON, SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, an evaluated scenegraph. SVG, HTML, and URL outputs are text. PNG, JPEG, and PDF outputs are bytes.
+
+VlConvert bundles several Vega-Lite versions and uses the newest by default. See [Supported Vega-Lite Versions](#supported-vega-lite-versions) to select another compiler. The setting does not change the input's `$schema` field.
+
+The examples below use the same input from Quick Start:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+
+```rust
+use vl_convert_rs::{VlConverter, VlOpts};
+
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let converter = VlConverter::new();
+let svg = converter
+    .vegalite_to_svg(spec.clone(), VlOpts::default(), Default::default())
+    .await?;
+let png = converter
+    .vegalite_to_png(spec, VlOpts::default(), Default::default())
+    .await?;
+std::fs::write("chart.svg", svg.svg)?;
+std::fs::write("chart.png", png.data)?;
+```
+
+Read the result from `svg.svg` or `png.data`. Every output struct also carries Vega's diagnostic messages in `logs`.
+
+
+## Supported Vega-Lite Versions
+
+This VlConvert release accepts these major/minor versions, listed from oldest to newest. The newest is the default:
+
+```{program-output} python -c "import vl_convert as vlc; print(', '.join(vlc.get_vegalite_versions()))"
+```
+
+Each selects the bundled patch release for that major/minor version. A full version string such as `6.4.1` selects the same compiler as `6.4`, not that exact patch release.
+
+
+Set `VlOpts.vl_version` to a `VlVersion` variant, such as `VlVersion::v6_4`, or parse a version string with `"6.4.1".parse::<VlVersion>()?`. The crate-root `VL_VERSIONS` constant lists the bundled versions.
+
+
+Related guides: {doc}`data-loading` for specifications that load data from URLs or files, {doc}`image-quality` for size and resolution options, {doc}`themes` and {doc}`locales` for appearance and formatting, {doc}`html-output` for interactive pages, and {doc}`../advanced/scenegraph` and {doc}`../advanced/font-introspection` for the intermediate outputs.

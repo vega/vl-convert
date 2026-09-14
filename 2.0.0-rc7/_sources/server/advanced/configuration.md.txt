@@ -1,0 +1,72 @@
+<!-- Generated from _topics/advanced/configuration.md. Do not edit. -->
+
+# Configuration
+
+The converter configuration holds settings that apply across all conversions: data access policy, fonts, plugins, worker resources, and default themes and locales. Values such as output format, dimensions, and scale belong to the individual conversion instead. See {doc}`conversion-overrides` for those.
+
+## JSONC Configuration Files
+
+Python, Rust, the CLI, and the server all read the same configuration format. This example limits worker resources and blocks external data and image loads. Save it as `production.vlc.jsonc`:
+
+:::{dropdown} production.vlc.jsonc
+:open:
+
+```{literalinclude} /_examples/production.vlc.jsonc
+:language: json
+```
+:::
+
+Note that JSONC is JSON with support for comments and trailing commas.
+
+Fields omitted from the file use their built-in defaults. This example changes some of those defaults: `base_url` normally points at the Vega datasets CDN, and `allowed_base_urls` permits any HTTP or HTTPS URL. Setting `base_url` to `false` rejects relative data and image URLs. Setting `allowed_base_urls` to an empty list rejects every external URL and local file.
+
+`allowed_base_urls` accepts Content Security Policy-style patterns. Grant only the paths, URL prefixes, or schemes the application needs, and use `"*"` only when every input is trusted. See {doc}`../guides/security`.
+
+
+## Configure a Server
+
+Pass the file with `--vlc-config` and use flags to override individual settings. This example lowers the heap limit from 1024 to 512 MB and starts the server on port 3000:
+
+```console
+$ vl-convert serve \
+>   --vlc-config production.vlc.jsonc \
+>   --max-v8-heap-size-mb 512 \
+>   --port 3000
+```
+
+Converter settings use the same precedence as the other CLI commands:
+
+```text
+command-line flags
+VLC_* environment variables
+--vlc-config or the platform-default config file
+built-in defaults
+```
+
+Converter options are global and can appear before or after `serve`. Server-specific options, such as addresses, ports, authentication, request limits, and budgets, follow `serve`.
+
+When the admin API is enabled, `PUT /admin/config` replaces the live converter configuration and `PATCH /admin/config` changes selected fields. New requests use the updated configuration. See {doc}`/server/admin-api`.
+
+Per-request values take priority over the server configuration, but requests cannot select Google Fonts or supply plugin code unless the server enables those capabilities explicitly.
+
+
+## Common Environment Variables
+
+Most global and `serve` flags have `VLC_*` equivalents. These are the server-specific variables used most often:
+
+| Variable | Purpose |
+| --- | --- |
+| `VLC_HOST`, `VLC_PORT`, `VLC_UNIX_SOCKET` | Server API address, port, or Unix socket |
+| `VLC_WORKERS` | Persistent conversion worker count |
+| `VLC_API_KEY` | Bearer token for the server API |
+| `VLC_ADMIN_HOST`, `VLC_ADMIN_PORT` | Admin API address and port |
+| `VLC_ADMIN_API_KEY` | Bearer token for the admin API |
+| `VLC_MAX_CONCURRENT_REQUESTS` | Maximum requests admitted at once |
+| `VLC_REQUEST_TIMEOUT_SECS` | Per-request timeout |
+| `VLC_MAX_BODY_SIZE_MB` | Maximum request body size |
+| `VLC_DRAIN_TIMEOUT_SECS` | Graceful shutdown window |
+| `VLC_PER_IP_BUDGET_MS`, `VLC_GLOBAL_BUDGET_MS` | Render-time budgets |
+| `VLC_CORS_ORIGIN` | Allowed browser origins |
+| `VLC_TRUST_PROXY` | Whether to use proxy-supplied client addresses |
+
+`PORT` is also accepted when `VLC_PORT` and `--port` are unset. Run `vl-convert serve --help` for the complete list.

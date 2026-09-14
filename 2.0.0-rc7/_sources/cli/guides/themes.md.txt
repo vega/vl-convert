@@ -1,0 +1,101 @@
+<!-- Generated from _topics/output-and-appearance/themes.md. Do not edit. -->
+
+# Themes
+
+A theme is a named configuration object that Vega-Lite applies while compiling a specification. Themes set defaults for colors, marks, axes, legends, fonts, and other visual properties. They apply to Vega-Lite input only because Vega input skips Vega-Lite compilation. For Vega input, pass a configuration object directly with `config` or `--config`.
+
+VlConvert bundles the themes from the `vega-themes` package. Select a theme per conversion, or set `default_theme` in the converter configuration.
+
+Every conversion example and image on this page uses this Vega-Lite specification. Save it as follows:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/theme-demo.vl.json
+:language: json
+```
+:::
+
+## Use a Built-In Theme
+
+Themes included in `vega-themes` can be referenced by name. Visit the [theme explorer](https://vega.github.io/vega-themes/) to preview available themes.
+
+
+```console
+$ vl-convert vl2svg \
+>   --input chart.vl.json --output chart.svg \
+>   --theme dark
+```
+
+
+The same chart with the default configuration and with the `dark` theme:
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item}
+```{vl-chart} /_examples/theme-demo.vl.json
+:alt: Stacked bar chart of revenue by quarter with the default configuration
+```
+:::
+
+:::{grid-item}
+```{vl-chart} /_examples/theme-demo.vl.json
+:theme: dark
+:alt: The same stacked bar chart with the dark theme
+```
+:::
+::::
+
+## List and Inspect Themes
+
+
+`ls-themes` prints the available names:
+
+```console
+$ vl-convert ls-themes
+```
+
+```{program-output} python ../tools/run_vl_convert.py ls-themes
+```
+
+`cat-theme` prints the configuration a theme applies. `dark` is the shortest:
+
+```console
+$ vl-convert cat-theme dark
+```
+
+```{program-output} python ../tools/run_vl_convert.py cat-theme dark
+```
+
+
+## Register a Custom Theme
+
+A custom theme file is a JSON object whose keys are theme names and whose values are Vega configuration objects. Save this example as `themes.json`:
+
+:::{dropdown} themes.json
+:open:
+
+```{literalinclude} /_examples/themes.json
+:language: json
+```
+:::
+
+A custom theme replaces a built-in theme with the same name.
+
+
+```console
+$ vl-convert --themes themes.json \
+>   vl2svg --theme brand --input chart.vl.json --output chart.svg
+```
+
+
+The `brand` theme applied to the same input. Only the selected theme changes:
+
+```{vl-chart} /_examples/theme-demo.vl.json
+:themes: /_examples/themes.json
+:theme: brand
+:alt: The stacked bar chart with the brand theme's blue and green palette
+```
+
+See {doc}`../advanced/configuration` to set a default theme for every conversion, and {doc}`../advanced/conversion-overrides` to pass a raw `config` object instead of a named theme.

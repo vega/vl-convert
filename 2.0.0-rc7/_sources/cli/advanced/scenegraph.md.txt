@@ -1,0 +1,43 @@
+<!-- Generated from _topics/advanced/scenegraph.md. Do not edit. -->
+
+# Evaluated Scenegraph Output
+
+A Vega scenegraph is the evaluated tree of groups, marks, and text with their computed positions and styles. It holds layout results rather than chart instructions. Use it when another system needs to inspect rendered marks or drive a custom renderer. Use SVG, PNG, JPEG, or PDF for ordinary image export.
+
+The scenegraph is available as JSON or as MessagePack, a compact binary encoding of the same structure.
+
+The examples use the Vega-Lite specification from Quick Start and the direct Vega specification from {doc}`../guides/vega-conversions`:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+:::{dropdown} chart.vg.json
+:open:
+
+```{literalinclude} /_examples/vega-demo.vg.json
+:language: json
+```
+:::
+
+
+```console
+$ vl-convert vl2sg \
+>   --input chart.vl.json \
+>   --output scenegraph.json \
+>   --pretty
+
+$ vl-convert vg2sg \
+>   --input chart.vg.json \
+>   --output scenegraph.msgpack \
+>   --format msgpack
+```
+
+`vl2sg` takes Vega-Lite input and `vg2sg` takes Vega input.
+
+
+The scenegraph follows Vega's internal representation and may change when Vega changes its layout or mark implementation.

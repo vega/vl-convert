@@ -1,0 +1,67 @@
+<!-- Generated from _topics/convert-and-export/vegalite-conversions.md. Do not edit. -->
+
+# Converting from Vega-Lite
+
+Use the Vega-Lite functions for charts authored in Vega-Lite. VlConvert compiles the specification to Vega with the bundled Vega-Lite library, then returns or renders the result.
+
+Available outputs: compiled Vega JSON, SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, an evaluated scenegraph. SVG, HTML, and URL outputs are text. PNG, JPEG, and PDF outputs are bytes.
+
+VlConvert bundles several Vega-Lite versions and uses the newest by default. See [Supported Vega-Lite Versions](#supported-vega-lite-versions) to select another compiler. The setting does not change the input's `$schema` field.
+
+The examples below use the same input from Quick Start:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+
+Send a request body to the endpoint for the output you need:
+
+| Output | Endpoint |
+| --- | --- |
+| Compiled Vega | `POST /vegalite/vega` |
+| SVG | `POST /vegalite/svg` |
+| PNG | `POST /vegalite/png` |
+| JPEG | `POST /vegalite/jpeg` |
+| PDF | `POST /vegalite/pdf` |
+| HTML | `POST /vegalite/html` |
+| Vega Editor URL | `POST /vegalite/url` |
+| Scenegraph | `POST /vegalite/scenegraph` |
+| Resolved fonts | `POST /vegalite/fonts` |
+
+For example, save this complete SVG request as `request.json`:
+
+:::{dropdown} request.json
+:open:
+
+```{literalinclude} /_generated/requests/vegalite-svg.json
+:language: json
+```
+:::
+
+```console
+$ curl http://127.0.0.1:3000/vegalite/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.svg
+```
+
+The response body contains the output directly. See {doc}`../api-reference` for the other request fields and response content types.
+
+## Supported Vega-Lite Versions
+
+This VlConvert release accepts these major/minor versions, listed from oldest to newest. The newest is the default:
+
+```{program-output} python -c "import vl_convert as vlc; print(', '.join(vlc.get_vegalite_versions()))"
+```
+
+Each selects the bundled patch release for that major/minor version. A full version string such as `6.4.1` selects the same compiler as `6.4`, not that exact patch release.
+
+
+Set `"vl_version": "6.4"` in the request body. `GET /info` returns the server's supported versions in `vegalite_versions`.
+
+Related guides: {doc}`data-loading` for specifications that load data from URLs or files, {doc}`image-quality` for size and resolution options, {doc}`themes` and {doc}`locales` for appearance and formatting, {doc}`html-output` for interactive pages, and {doc}`../advanced/scenegraph` and {doc}`../advanced/font-introspection` for the intermediate outputs.

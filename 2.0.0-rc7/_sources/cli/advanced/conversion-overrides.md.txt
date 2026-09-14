@@ -1,0 +1,49 @@
+<!-- Generated from _topics/advanced/conversion-overrides.md. Do not edit. -->
+
+# Conversion Overrides
+
+An override changes one conversion without affecting the converter configuration. Use {doc}`configuration` instead when the same value should apply to every conversion.
+
+| Override | Applies to | Effect |
+| --- | --- | --- |
+| `theme` | Vega-Lite | Applies a built-in or custom theme |
+| `config` | Vega-Lite and Vega | Merges a Vega or Vega-Lite configuration object into the input |
+| `format_locale` | Vega-Lite and Vega | Selects number formatting rules |
+| `time_format_locale` | Vega-Lite and Vega | Selects date and time formatting rules |
+| `background`, `width`, `height` | Vega-Lite and Vega | Sets the chart background and logical size before rendering |
+| `scale` | PNG and JPEG | Multiplies raster pixel dimensions |
+| `ppi` | PNG | Combines with `scale` as `scale * ppi / 72` |
+| `quality` | JPEG | Sets encoding quality from `0` through `100`, default `90` |
+| `bundle` | SVG and HTML | Embeds fonts and images in SVG, or browser dependencies in HTML |
+| `renderer` | HTML | Selects `svg`, `canvas`, or `hybrid` rendering in the browser |
+| `vl_version` | Vega-Lite | Selects a bundled Vega-Lite compiler version |
+| `google_fonts` | Vega-Lite and Vega | Makes selected Google Fonts available to one conversion |
+| `vega_plugin` | Vega-Lite and Vega | Registers plugin code for one conversion |
+| `fullscreen` | Vega Editor URLs | Selects the full-screen editor URL form |
+
+SVG input conversions accept only the raster options `scale`, `ppi`, and `quality`. Chart options such as `theme`, `width`, and `height` do not apply to them.
+
+The examples override this Vega-Lite input:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+
+Pass overrides as options after the conversion command:
+
+```console
+$ vl-convert vl2png \
+>   --input chart.vl.json \
+>   --output chart.png \
+>   --scale 2 \
+>   --width 640 \
+>   --height 360 \
+>   --theme dark
+```
+
+Run a command with `--help` to see its options. `--config` is available on the Vega-Lite and Vega chart commands except `vl2url` and `vg2url`, which only encode the input specification in a URL. Converter settings such as `--google-font` and `--vega-plugin` are global options and can appear before or after the command.

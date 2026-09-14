@@ -1,0 +1,751 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Configure Altair Exports &#8212; VlConvert</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=e741de7a" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../_static/documentation_options.js?v=69c16fac"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=cb5fb026"></script>
+    <script src="../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'python/guides/altair-integration';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.16.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://vega.github.io/vl-convert/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '2.0.0-rc7';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            false;
+        </script>
+    <script src="../../_static/conversion-example.js?v=ca9e3140"></script>
+    <script src="../../_static/terminal-prompts.js?v=df46982e"></script>
+    <link rel="canonical" href="https://vega.github.io/vl-convert/2.0.0-rc7/python/guides/altair-integration.html" />
+    <link rel="icon" href="../../_static/vl-convert-favicon.svg"/>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Image Size and Quality Recommendations" href="image-quality.html" />
+    <link rel="prev" title="Converting from SVG" href="svg-conversions.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+<aside class="bd-header-announcement" aria-label="Announcement">
+  <div class="bd-header-announcement__content">These docs cover the <strong>VlConvert 2.0 release candidate</strong>. <a href="https://github.com/vega/vl-convert/releases">View releases</a>.</div>
+</aside>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../_static/vl-convert-logo.svg" class="logo__image only-light" alt="VlConvert"/>
+    <img src="../../_static/vl-convert-logo.svg" class="logo__image only-dark pst-js-only" alt="VlConvert"/>
+  
+  
+    <p class="title logo__title">VlConvert</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../rust/index.html">
+    Rust
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../index.html">
+    Python
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cli/index.html">
+    CLI
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../server/index.html">
+    Server
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button"
+                data-bs-toggle="dropdown" aria-expanded="false"
+                aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="../../how-it-works/architecture.html">
+    Architecture
+  </a>
+</li>
+
+
+<li class=" ">
+  <a class="nav-link dropdown-item nav-external" href="https://github.com/vega/vl-convert/releases">
+    Changelog
+  </a>
+</li>
+
+                </ul>
+            </li>
+            
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+  
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    v2.0.0-rc7  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div>
+</div>
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/vega/vl-convert" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../rust/index.html">
+    Rust
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../index.html">
+    Python
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../cli/index.html">
+    CLI
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../server/index.html">
+    Server
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../how-it-works/architecture.html">
+    Architecture
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-external" href="https://github.com/vega/vl-convert/releases">
+    Changelog
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+  
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    v2.0.0-rc7  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div>
+</div>
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/vega/vl-convert" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/quick-start.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/upgrading.html">Upgrading from 1.x</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Convert and Export</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="vegalite-conversions.html">Converting from Vega-Lite</a></li>
+<li class="toctree-l1"><a class="reference internal" href="vega-conversions.html">Converting from Vega</a></li>
+<li class="toctree-l1"><a class="reference internal" href="svg-conversions.html">Converting from SVG</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Configure Altair Exports</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Output and Appearance</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="image-quality.html">Image Size and Quality Recommendations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="html-output.html">Interactive HTML Output</a></li>
+<li class="toctree-l1"><a class="reference internal" href="url-output.html">Vega Editor URL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fonts.html">Fonts and Google Fonts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="themes.html">Themes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="locales.html">Number and Time Locales</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Data and Security</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="data-loading.html">Loading Data and Images</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security.html">Security and Network Access</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Advanced</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../advanced/configuration.html">Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/conversion-overrides.html">Conversion Overrides</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/python-async.html">Python Async API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/memory-management.html">Memory and Execution Limits</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/javascript-bundling.html">JavaScript Bundling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/scenegraph.html">Evaluated Scenegraph Output</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/font-introspection.html">Font Introspection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Vega Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced/plugin-loading.html">Plugin Loading and Security</a></li>
+<li class="toctree-l1"><a class="reference internal" href="logging.html">Logging and Warnings</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../api-reference.html">Python Sync API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../async-api-reference.html">Python Async API Reference</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">Python</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Configure Altair Exports</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <!-- Generated from _topics/convert-and-export/altair-integration.md. Do not edit. -->
+<section id="configure-altair-exports">
+<h1>Configure Altair Exports<a class="headerlink" href="#configure-altair-exports" title="Link to this heading">#</a></h1>
+<p>Use Altair’s <code class="docutils literal notranslate"><span class="pre">chart.save()</span></code> to export charts. Altair calls VlConvert for PNG, SVG, and PDF output, so you can use <code class="docutils literal notranslate"><span class="pre">vlc.configure()</span></code> to set up fonts and file access before saving. See <a class="reference external" href="https://altair-viz.github.io/user_guide/saving_charts.html">Saving Altair Charts</a> for output formats, PNG resolution, and other <code class="docutils literal notranslate"><span class="pre">save()</span></code> options.</p>
+<p>The configuration examples below require VlConvert 2.0.0rc6 or later:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>uv<span class="w"> </span>add<span class="w"> </span>altair<span class="w"> </span><span class="s2">&quot;vl-convert-python&gt;=2.0.0rc6,&lt;3&quot;</span>
+</pre></div>
+</div>
+<section id="save-with-a-google-font">
+<h2>Save with a Google Font<a class="headerlink" href="#save-with-a-google-font" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">vlc.configure(google_fonts=...)</span></code> makes a font available to the converter. Altair’s <code class="docutils literal notranslate"><span class="pre">chart.configure(font=...)</span></code> selects that font for the chart. This example uses both to save a PNG and PDF:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">altair</span> <span class="k">as</span> <span class="nn">alt</span>
+<span class="kn">import</span> <span class="nn">vl_convert</span> <span class="k">as</span> <span class="nn">vlc</span>
+
+<span class="n">vlc</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span>
+    <span class="n">google_fonts</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Roboto Slab&quot;</span><span class="p">],</span>
+    <span class="n">missing_fonts</span><span class="o">=</span><span class="s2">&quot;error&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">data</span> <span class="o">=</span> <span class="n">alt</span><span class="o">.</span><span class="n">Data</span><span class="p">(</span>
+    <span class="n">values</span><span class="o">=</span><span class="p">[</span>
+        <span class="p">{</span><span class="s2">&quot;category&quot;</span><span class="p">:</span> <span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span>
+        <span class="p">{</span><span class="s2">&quot;category&quot;</span><span class="p">:</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">},</span>
+        <span class="p">{</span><span class="s2">&quot;category&quot;</span><span class="p">:</span> <span class="s2">&quot;C&quot;</span><span class="p">,</span> <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">},</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+<span class="n">chart</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">alt</span><span class="o">.</span><span class="n">Chart</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">mark_bar</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">encode</span><span class="p">(</span>
+        <span class="n">x</span><span class="o">=</span><span class="n">alt</span><span class="o">.</span><span class="n">X</span><span class="p">(</span><span class="s2">&quot;category:N&quot;</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Category&quot;</span><span class="p">),</span>
+        <span class="n">y</span><span class="o">=</span><span class="n">alt</span><span class="o">.</span><span class="n">Y</span><span class="p">(</span><span class="s2">&quot;value:Q&quot;</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Value&quot;</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">font</span><span class="o">=</span><span class="s2">&quot;Roboto Slab&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">chart</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;chart.png&quot;</span><span class="p">,</span> <span class="n">ppi</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+<span class="n">chart</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;chart.pdf&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>VlConvert downloads the font on first use and caches it for later conversions. <code class="docutils literal notranslate"><span class="pre">missing_fonts=&quot;error&quot;</span></code> fails the export if a first-choice font is unavailable, instead of substituting another font. The PNG contains rendered pixels, and the PDF embeds its fonts, so recipients do not need to install Roboto Slab.</p>
+<p>Configure VlConvert once before exporting. The settings apply to subsequent conversions throughout the Python process, including calls made by Altair. They are not stored in the chart specification. See <a class="reference internal" href="../advanced/configuration.html"><span class="doc">Configuration</span></a> for details.</p>
+<p>Altair forwards only selected options to VlConvert. Set <code class="docutils literal notranslate"><span class="pre">google_fonts</span></code> through <code class="docutils literal notranslate"><span class="pre">vlc.configure()</span></code>, not as an argument to <code class="docutils literal notranslate"><span class="pre">chart.save()</span></code>.</p>
+<section id="local-fonts-and-automatic-downloads">
+<h3>Local Fonts and Automatic Downloads<a class="headerlink" href="#local-fonts-and-automatic-downloads" title="Link to this heading">#</a></h3>
+<p>VlConvert also uses fonts installed on the host. To use an additional font directory, register its absolute path with <code class="docutils literal notranslate"><span class="pre">vlc.register_font_directory()</span></code> before saving. Continue to select the family in the Altair chart.</p>
+<p>For trusted charts, <code class="docutils literal notranslate"><span class="pre">vlc.configure(auto_google_fonts=True)</span></code> lets VlConvert look up missing first-choice fonts in Google Fonts. This requires network access when the font is not cached. See <a class="reference internal" href="fonts.html"><span class="doc">Fonts and Google Fonts</span></a> for local font registration, caching, and embedding options.</p>
+</section>
+</section>
+<section id="allow-local-data-and-images">
+<h2>Allow Local Data and Images<a class="headerlink" href="#allow-local-data-and-images" title="Link to this heading">#</a></h2>
+<p>VlConvert blocks local file access by default. Allow the directory and pass an absolute path to Altair. For example, given a <code class="docutils literal notranslate"><span class="pre">data/sales.csv</span></code> file with <code class="docutils literal notranslate"><span class="pre">category</span></code> and <code class="docutils literal notranslate"><span class="pre">sales</span></code> columns:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="n">data_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;data/sales.csv&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+<span class="n">vlc</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">allowed_base_urls</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">data_path</span><span class="o">.</span><span class="n">parent</span><span class="p">)])</span>
+
+<span class="n">local_chart</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">alt</span><span class="o">.</span><span class="n">Chart</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">data_path</span><span class="p">))</span>
+    <span class="o">.</span><span class="n">mark_bar</span><span class="p">()</span>
+    <span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="s2">&quot;category:N&quot;</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="s2">&quot;sales:Q&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">local_chart</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s2">&quot;sales.png&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Absolute paths work for image URLs too, without a <code class="docutils literal notranslate"><span class="pre">file://</span></code> prefix or a change to <code class="docutils literal notranslate"><span class="pre">base_url</span></code>. To use relative paths such as <code class="docutils literal notranslate"><span class="pre">sales.csv</span></code>, also set <code class="docutils literal notranslate"><span class="pre">base_url</span></code> to the directory that contains the files.</p>
+<p>For trusted charts, <code class="docutils literal notranslate"><span class="pre">vlc.configure(allowed_base_urls=[&quot;file:&quot;])</span></code> allows any local file the process can read. To also allow HTTP and HTTPS access, use <code class="docutils literal notranslate"><span class="pre">allowed_base_urls=[&quot;http:&quot;,</span> <span class="pre">&quot;https:&quot;,</span> <span class="pre">&quot;file:&quot;]</span></code>.</p>
+<p>Subsequent <code class="docutils literal notranslate"><span class="pre">chart.save()</span></code> calls use these settings for files loaded by VlConvert. This allowlist replaces the default HTTP and HTTPS access, so include any required remote prefixes too. DataFrames passed directly to Altair do not need local file access. These settings do not make local paths portable in browser-rendered HTML. See <a class="reference internal" href="data-loading.html"><span class="doc">Loading Data and Images</span></a> for complete examples and access rules.</p>
+</section>
+<section id="html-and-svg-limitations">
+<h2>HTML and SVG Limitations<a class="headerlink" href="#html-and-svg-limitations" title="Link to this heading">#</a></h2>
+<p>Altair does not yet expose all of VlConvert’s HTML and SVG export features:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">chart.save(&quot;chart.html&quot;)</span></code> uses Altair’s HTML templates, not VlConvert’s HTML converter. Even with <code class="docutils literal notranslate"><span class="pre">inline=True</span></code>, Altair uses VlConvert only to bundle JavaScript. It does not include the fonts configured above or transfer VlConvert’s file-access settings to the browser.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">chart.save(&quot;chart.svg&quot;)</span></code> delegates rendering to VlConvert but does not forward <code class="docutils literal notranslate"><span class="pre">bundle=True</span></code>. Google Fonts remain external references in the SVG, which some viewers cannot load.</p></li>
+</ul>
+<p>Call VlConvert directly when you need HTML with embedded fonts or SVG with embedded fonts and images. The following example reuses the Google Font chart above and its converter configuration.</p>
+<p>First, check the active data transformer. <a class="reference external" href="https://altair-viz.github.io/user_guide/large_datasets.html#vegafusion-data-transformer">VegaFusion</a> requires <code class="docutils literal notranslate"><span class="pre">chart.to_dict(format=&quot;vega&quot;)</span></code> and the <code class="docutils literal notranslate"><span class="pre">vega_to_*</span></code> functions. Otherwise, use a Vega-Lite specification and the <code class="docutils literal notranslate"><span class="pre">vegalite_to_*</span></code> functions:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="k">if</span> <span class="n">alt</span><span class="o">.</span><span class="n">data_transformers</span><span class="o">.</span><span class="n">active</span> <span class="o">==</span> <span class="s2">&quot;vegafusion&quot;</span><span class="p">:</span>
+    <span class="n">spec</span> <span class="o">=</span> <span class="n">chart</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;vega&quot;</span><span class="p">)</span>
+    <span class="n">html</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vega_to_html</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">bundle</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">svg</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vega_to_svg</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">bundle</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">alt</span><span class="o">.</span><span class="n">data_transformers</span><span class="o">.</span><span class="n">enable</span><span class="p">(</span><span class="s2">&quot;default&quot;</span><span class="p">,</span> <span class="n">max_rows</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="n">chart</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+    <span class="n">html</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vegalite_to_html</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">vl_version</span><span class="o">=</span><span class="n">alt</span><span class="o">.</span><span class="n">VEGALITE_VERSION</span><span class="p">,</span> <span class="n">bundle</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">svg</span> <span class="o">=</span> <span class="n">vlc</span><span class="o">.</span><span class="n">vegalite_to_svg</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">vl_version</span><span class="o">=</span><span class="n">alt</span><span class="o">.</span><span class="n">VEGALITE_VERSION</span><span class="p">,</span> <span class="n">bundle</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">Path</span><span class="p">(</span><span class="s2">&quot;chart.html&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">html</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+<span class="n">Path</span><span class="p">(</span><span class="s2">&quot;chart.svg&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">svg</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The Vega-Lite branch temporarily selects Altair’s default transformer to inline data without its row limit, then restores the previous transformer. Passing <code class="docutils literal notranslate"><span class="pre">alt.VEGALITE_VERSION</span></code> selects the bundled compiler for Altair’s major/minor version.</p>
+<p><code class="docutils literal notranslate"><span class="pre">bundle=True</span></code> embeds the Google Font in both outputs and the JavaScript libraries in HTML. HTML can still reference external data or images, so bundling alone does not make every chart work offline. See <a class="reference internal" href="html-output.html"><span class="doc">Interactive HTML Output</span></a> and <a class="reference internal" href="fonts.html"><span class="doc">Fonts and Google Fonts</span></a> for details.</p>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="svg-conversions.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Converting from SVG</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="image-quality.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Image Size and Quality Recommendations</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#save-with-a-google-font">Save with a Google Font</a><ul class="visible nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#local-fonts-and-automatic-downloads">Local Fonts and Automatic Downloads</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#allow-local-data-and-images">Allow Local Data and Images</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#html-and-svg-limitations">HTML and SVG Limitations</a></li>
+</ul>
+  </nav></div>
+
+  <div class="sidebar-secondary-item">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../../_sources/python/guides/altair-integration.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, Vega.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

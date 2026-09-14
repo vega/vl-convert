@@ -1,0 +1,156 @@
+<!-- Generated from _topics/api-reference/python-async.md. Do not edit. -->
+
+# Python Async API Reference
+
+This page documents `vl_convert.asyncio`. For a usage example, see {doc}`advanced/python-async`.
+
+These entries are generated from the async type stubs and share the synchronous functions' parameter documentation. See [Types](#types) for the types used by both APIs.
+
+Await functions marked `async`. Functions without that marker return directly and must not be awaited. The return type shown for an async function is the value returned by `await`.
+
+## Vega-Lite Conversions
+
+```{autodoc2-object} vl_convert.asyncio.vegalite_to_png
+```
+
+```{autodoc2-object} vl_convert.asyncio.vegalite_to_jpeg
+```
+
+```{autodoc2-object} vl_convert.asyncio.vegalite_to_pdf
+```
+
+```{autodoc2-object} vl_convert.asyncio.vegalite_to_svg
+```
+
+```{autodoc2-object} vl_convert.asyncio.vegalite_to_html
+```
+
+```{autodoc2-object} vl_convert.asyncio.vegalite_to_scenegraph
+```
+
+```{autodoc2-object} vl_convert.asyncio.vegalite_to_vega
+```
+
+```{autodoc2-object} vl_convert.asyncio.vegalite_to_url
+```
+
+## Vega Conversions
+
+```{autodoc2-object} vl_convert.asyncio.vega_to_png
+```
+
+```{autodoc2-object} vl_convert.asyncio.vega_to_jpeg
+```
+
+```{autodoc2-object} vl_convert.asyncio.vega_to_pdf
+```
+
+```{autodoc2-object} vl_convert.asyncio.vega_to_svg
+```
+
+```{autodoc2-object} vl_convert.asyncio.vega_to_html
+```
+
+```{autodoc2-object} vl_convert.asyncio.vega_to_scenegraph
+```
+
+```{autodoc2-object} vl_convert.asyncio.vega_to_url
+```
+
+## SVG Conversions
+
+```{autodoc2-object} vl_convert.asyncio.svg_to_png
+```
+
+```{autodoc2-object} vl_convert.asyncio.svg_to_jpeg
+```
+
+```{autodoc2-object} vl_convert.asyncio.svg_to_pdf
+```
+
+## JavaScript Bundling
+
+```{autodoc2-object} vl_convert.asyncio.javascript_bundle
+```
+
+## Fonts
+
+```{autodoc2-object} vl_convert.asyncio.register_font_directory
+```
+
+```{autodoc2-object} vl_convert.asyncio.set_font_directories
+```
+
+```{autodoc2-object} vl_convert.asyncio.current_font_directories
+```
+
+```{autodoc2-object} vl_convert.asyncio.google_fonts_cache_dir
+```
+
+```{autodoc2-object} vl_convert.asyncio.google_fonts_cache_size_mb
+```
+
+```{autodoc2-object} vl_convert.asyncio.set_google_fonts_cache_size_mb
+```
+
+```{autodoc2-object} vl_convert.asyncio.vegalite_fonts
+```
+
+```{autodoc2-object} vl_convert.asyncio.vega_fonts
+```
+
+## Configuration
+
+```{autodoc2-object} vl_convert.asyncio.configure
+```
+
+```{autodoc2-object} vl_convert.asyncio.load_config
+```
+
+```{autodoc2-object} vl_convert.asyncio.get_config_path
+```
+
+```{autodoc2-object} vl_convert.asyncio.get_config
+```
+
+## Worker Diagnostics
+
+```{autodoc2-object} vl_convert.asyncio.warm_up_workers
+```
+
+```{autodoc2-object} vl_convert.asyncio.get_worker_memory_usage
+```
+
+## Locales and Themes
+
+```{autodoc2-object} vl_convert.asyncio.get_format_locale
+```
+
+```{autodoc2-object} vl_convert.asyncio.get_time_format_locale
+```
+
+```{autodoc2-object} vl_convert.asyncio.get_themes
+```
+
+```{autodoc2-object} vl_convert.asyncio.get_local_tz
+```
+
+## Bundled JavaScript Versions
+
+```{autodoc2-object} vl_convert.asyncio.get_vega_version
+```
+
+```{autodoc2-object} vl_convert.asyncio.get_vega_themes_version
+```
+
+```{autodoc2-object} vl_convert.asyncio.get_vega_embed_version
+```
+
+```{autodoc2-object} vl_convert.asyncio.get_vegalite_versions
+```
+
+## Types
+
+```{include} /_topics/api-reference/python.md
+:start-after: "## Types"
+```

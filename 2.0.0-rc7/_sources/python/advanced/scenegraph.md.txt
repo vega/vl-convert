@@ -1,0 +1,47 @@
+<!-- Generated from _topics/advanced/scenegraph.md. Do not edit. -->
+
+# Evaluated Scenegraph Output
+
+A Vega scenegraph is the evaluated tree of groups, marks, and text with their computed positions and styles. It holds layout results rather than chart instructions. Use it when another system needs to inspect rendered marks or drive a custom renderer. Use SVG, PNG, JPEG, or PDF for ordinary image export.
+
+The scenegraph is available as JSON or as MessagePack, a compact binary encoding of the same structure.
+
+The examples use the Vega-Lite specification from Quick Start and the direct Vega specification from {doc}`../guides/vega-conversions`:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/quick-start.vl.json
+:language: json
+```
+:::
+
+:::{dropdown} chart.vg.json
+:open:
+
+```{literalinclude} /_examples/vega-demo.vg.json
+:language: json
+```
+:::
+
+```python
+import json
+from pathlib import Path
+
+import vl_convert as vlc
+
+vl_spec = Path("chart.vl.json").read_text(encoding="utf-8")
+vg_spec = Path("chart.vg.json").read_text(encoding="utf-8")
+scenegraph = vlc.vegalite_to_scenegraph(vl_spec)
+scenegraph_msgpack = vlc.vega_to_scenegraph(vg_spec, format="msgpack")
+Path("scenegraph.json").write_text(
+    json.dumps(scenegraph, indent=2),
+    encoding="utf-8",
+)
+Path("scenegraph.msgpack").write_bytes(scenegraph_msgpack)
+```
+
+The default result is a dictionary. The MessagePack result is bytes. Use `vega_to_scenegraph()` for an already compiled Vega specification.
+
+
+The scenegraph follows Vega's internal representation and may change when Vega changes its layout or mark implementation.

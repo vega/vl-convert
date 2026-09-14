@@ -1,0 +1,37 @@
+<!-- Generated from _topics/convert-and-export/svg-conversions.md. Do not edit. -->
+
+# Converting from SVG
+
+Use the SVG functions when another tool has already produced the vector image. VlConvert converts it to PNG, JPEG, or PDF without running Vega.
+
+The SVG must declare its size through `width` and `height` attributes or a `viewBox`. Fonts and images it references must be available to the rendering process. See {doc}`fonts` and {doc}`security` when the SVG is not self-contained.
+
+Save this SVG document:
+
+:::{dropdown} chart.svg
+:open:
+
+```{literalinclude} /_examples/svg-demo.svg
+:language: xml
+```
+:::
+
+
+```console
+$ vl-convert svg2png --input chart.svg --output chart.png --scale 2
+$ vl-convert svg2pdf --input chart.svg --output chart.pdf
+```
+
+`svg2jpeg` produces JPEG. `svg2png` accepts `--scale` and `--ppi`, `svg2jpeg` accepts `--scale` and `--quality`, and `svg2pdf` has no format options.
+
+
+The PNG conversion preserves the shapes and colors in the SVG document:
+
+```{vl-chart} /_examples/svg-demo.svg
+:input-kind: svg
+:format: png
+:scale: 2
+:alt: A blue circle, orange triangle, and green square on a pale background
+```
+
+See {doc}`image-quality` for the `scale`, `ppi`, and `quality` options.

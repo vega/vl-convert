@@ -1,0 +1,64 @@
+<!-- Generated from _topics/advanced/configuration.md. Do not edit. -->
+
+# Configuration
+
+The converter configuration holds settings that apply across all conversions: data access policy, fonts, plugins, worker resources, and default themes and locales. Values such as output format, dimensions, and scale belong to the individual conversion instead. See {doc}`conversion-overrides` for those.
+
+## JSONC Configuration Files
+
+Python, Rust, the CLI, and the server all read the same configuration format. This example limits worker resources and blocks external data and image loads. Save it as `production.vlc.jsonc`:
+
+:::{dropdown} production.vlc.jsonc
+:open:
+
+```{literalinclude} /_examples/production.vlc.jsonc
+:language: json
+```
+:::
+
+Note that JSONC is JSON with support for comments and trailing commas.
+
+Fields omitted from the file use their built-in defaults. This example changes some of those defaults: `base_url` normally points at the Vega datasets CDN, and `allowed_base_urls` permits any HTTP or HTTPS URL. Setting `base_url` to `false` rejects relative data and image URLs. Setting `allowed_base_urls` to an empty list rejects every external URL and local file.
+
+`allowed_base_urls` accepts Content Security Policy-style patterns. Grant only the paths, URL prefixes, or schemes the application needs, and use `"*"` only when every input is trusted. See {doc}`../guides/security`.
+
+## Configure a Python Process
+
+The Python package keeps one shared converter per process. Configure it during application startup, before concurrent conversions begin.
+
+Load the file with `load_config()`, then override selected fields with `configure()`. This example changes `num_workers` from 4 to 2 and prints the active settings with `get_config()`:
+
+```{literalinclude} /_examples/inspect-config.py
+:language: python
+```
+
+Output:
+
+```{program-output} python inspect-config.py
+:cwd: /_examples
+:language: json
+```
+
+`load_config()` replaces every setting with the built-in defaults plus the file's contents. `configure()` changes only the fields you pass and leaves the rest unchanged. Passing `None` for a field resets it to the built-in default. These settings apply to later conversions in the current process.
+
+You can also call `configure()` without loading a file.
+
+Without a path, `load_config()` reads the platform-standard file returned by `get_config_path()`. If that file does not exist, the converter resets to the built-in defaults.
+
+### Warm Workers Before Serving Traffic
+
+Workers normally start on the first conversion. After configuring the process, call `warm_up_workers()` during application startup when first-request latency matters:
+
+```python
+vlc.warm_up_workers()
+```
+
+`get_worker_memory_usage()` also starts the pool if it is not running yet and reports each worker's JavaScript heap statistics. See {doc}`memory-management` for memory and execution limits.
+
+### Change Configuration Safely
+
+Changing a setting with `configure()` creates a replacement converter with a fresh worker pool. Passing unchanged values keeps the current pool. `load_config()` always creates a replacement, even when the settings are unchanged.
+
+Conversions already in progress finish on the old pool. New calls use the replacement, whose workers start lazily. Frequent reconfiguration discards warm workers, so use per-call options for scale, dimensions, theme, and locale. Reserve `configure()` for process-level policy. See {doc}`conversion-overrides`.
+
+`vl_convert.asyncio` shares the same converter and configuration. Configure the process before starting concurrent work through either API. See {doc}`python-async` for async usage.

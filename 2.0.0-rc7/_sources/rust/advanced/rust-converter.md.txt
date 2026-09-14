@@ -1,0 +1,49 @@
+<!-- Generated from _topics/advanced/rust-converter.md. Do not edit. -->
+
+# Rust Converter Lifecycle
+
+Create one `VlConverter` per application and reuse it. The converter owns a lazily started pool of JavaScript workers. Creating a converter for every chart repeats that setup and prevents the pool from serving concurrent work.
+
+```rust
+use std::num::NonZeroU64;
+use vl_convert_rs::{VlcConfig, VlConverter};
+
+let converter = VlConverter::with_config(VlcConfig {
+    num_workers: NonZeroU64::new(4).unwrap(),
+    ..Default::default()
+})?;
+
+converter.warm_up()?;
+```
+
+`warm_up()` is optional. Call it when the application should pay the worker startup cost before accepting requests.
+
+## Share the Converter
+
+`VlConverter` is cheap to clone, and clones share the same worker pool. Store a clone in application state or hand clones to tasks. Each worker handles one conversion at a time, and additional conversions wait for a free worker. This example reads the `chart.vl.json` file from {doc}`../getting-started/quick-start`:
+
+```rust
+use vl_convert_rs::{PngOpts, VlOpts};
+
+let spec = std::fs::read_to_string("chart.vl.json")?;
+let task_converter = converter.clone();
+let output = task_converter
+    .vegalite_to_png(spec, VlOpts::default(), PngOpts::default())
+    .await?;
+
+std::fs::write("chart.png", output.data)?;
+
+for entry in output.logs {
+    eprintln!("{}: {}", entry.level, entry.message);
+}
+```
+
+Conversion methods are `async` and require a Tokio runtime for full functionality. The {doc}`../getting-started/quick-start` includes a complete Tokio application.
+
+## Configuration and Errors
+
+Use `VlcConfig` to set options when creating the converter with `VlConverter::with_config()`. See {doc}`configuration` for available settings and {doc}`memory-management` for resource controls.
+
+Methods return `Result` and keep the error context from compilation, data loading, fonts, plugins, and rendering. Successful outputs carry Vega's recoverable diagnostics in `logs`. See {doc}`../guides/logging`.
+
+The complete crate API is on {rust-api}`docs.rs <index.html>`.

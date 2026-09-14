@@ -1,0 +1,46 @@
+<!-- Generated from _topics/convert-and-export/vega-conversions.md. Do not edit. -->
+
+# Converting from Vega
+
+Use the Vega functions for charts authored in Vega or already compiled to Vega from Vega-Lite. VlConvert parses and evaluates the specification directly, so the Vega-Lite `theme` and `vl_version` options do not apply.
+
+Available outputs: SVG, PNG, JPEG, PDF, HTML, a Vega Editor URL, and an evaluated scenegraph.
+
+Save this Vega specification:
+
+:::{dropdown} chart.vg.json
+:open:
+
+```{literalinclude} /_examples/vega-demo.vg.json
+:language: json
+```
+:::
+
+
+Send a JSON body with the Vega specification in `spec` to the endpoint for the output you need: `/vega/svg`, `/vega/png`, `/vega/jpeg`, `/vega/pdf`, `/vega/html`, `/vega/url`, or `/vega/scenegraph`. All are `POST` endpoints. For example, save this body as `request.json`:
+
+:::{dropdown} request.json
+:open:
+
+```{literalinclude} /_generated/requests/vega-svg.json
+:language: json
+```
+:::
+
+```console
+$ curl http://127.0.0.1:3000/vega/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --output chart.svg
+```
+
+The request fields match the Vega-Lite endpoints, minus `theme` and `vl_version`. See {doc}`../api-reference` for the schemas.
+
+The SVG conversion renders this chart:
+
+```{vl-chart} /_examples/vega-demo.vg.json
+:input-kind: vega
+:alt: Vega bar chart with five bars labeled A through E
+```
+
+Size, locale, and other per-conversion options work the same way as for Vega-Lite. See {doc}`image-quality`, {doc}`locales`, and {doc}`../advanced/conversion-overrides`.

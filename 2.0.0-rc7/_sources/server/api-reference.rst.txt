@@ -1,0 +1,34 @@
+.. Generated from _topics/api-reference/server.rst. Do not edit.
+
+Server API
+==========
+
+This reference is generated from the version 2 executable with
+``vl-convert serve --dump-openapi=public``. A running server also serves the
+same document at ``/api-doc/openapi.json`` and an interactive Swagger UI at
+``/docs``. Both require the server API key when one is set. Start with
+:doc:`/server/getting-started/quick-start` for a complete request.
+
+This page documents the HTTP API. Rust applications that embed the server can
+use the :server-api:`vl-convert-server crate reference <index.html>` for the
+routing, socket binding, and lifecycle APIs.
+
+Vega and Vega-Lite conversion endpoints accept JSON request bodies shaped like
+``{"spec": <spec>, ...overrides}``. Overrides use the same names as the Python
+and Rust options, such as ``scale``, ``ppi``, ``theme``, ``format_locale``,
+``width``, and ``height``. Unknown request fields are rejected.
+
+SVG conversion endpoints take the markup in an ``svg`` string field. Binary
+results are returned directly in the response body. SVG, HTML, URL, and JSON
+results use their corresponding text or JSON content type. Successful render,
+compilation, HTML, and scenegraph responses carry Vega's diagnostic messages
+in the ``X-VLC-Logs`` header. URL and font-inspection responses do not include
+this header.
+
+The :doc:`/server/admin-api` uses a separate port or Unix socket and credential, so it has
+its own reference.
+
+.. openapi:: ../_generated/openapi-public.json
+   :group:
+   :examples:
+   :format: markdown

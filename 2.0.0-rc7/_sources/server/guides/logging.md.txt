@@ -1,0 +1,52 @@
+<!-- Generated from _topics/advanced/logging.md. Do not edit. -->
+
+# Logging and Warnings
+
+Vega and Vega-Lite report warnings while compiling or evaluating a chart. A conversion can succeed even though Vega dropped an invalid property or recovered from a data problem, so check these messages when a chart does not look as expected.
+
+This examples use a logarithmic scale whose inferred domain includes zero. Save this Vega-Lite specification:
+
+:::{dropdown} chart.vl.json
+:open:
+
+```{literalinclude} /_examples/warning-demo.vl.json
+:language: json
+```
+:::
+
+
+Use structured JSON logs in deployed services:
+
+```console
+$ vl-convert serve \
+>   --log-format json --log-level info \
+>   --port 3000
+```
+
+The server logs request identifiers, status, duration, and budget information alongside conversion diagnostics. See {doc}`/server/logging` for the request fields and proxy behavior.
+
+Each conversion response also carries Vega diagnostics in the `X-VLC-Logs` header. Save this body as `request.json`:
+
+:::{dropdown} request.json
+:open:
+
+```{literalinclude} /_generated/requests/logging-svg.json
+:language: json
+```
+:::
+
+Use `--dump-header` to save the response headers:
+
+```console
+$ curl http://127.0.0.1:3000/vegalite/svg \
+>   -H 'Content-Type: application/json' \
+>   --data-binary @request.json \
+>   --dump-header headers.txt \
+>   --output chart.svg
+```
+
+`X-VLC-Logs` contains a JSON array. Its first entry is:
+
+```text
+WARN: Log scale domain includes zero: [0,200]
+```
