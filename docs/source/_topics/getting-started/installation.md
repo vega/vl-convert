@@ -10,7 +10,7 @@ interfaces: [python, cli, rust, server]
 
 # Installation
 
-These docs require version 2.0.0-rc6 or later. The version constraints below allow version 2 prereleases.
+The commands below install VlConvert {vlc_version}, the release covered by these docs.
 
 ::::{not-interface} server
 Already using 1.x? See {doc}`upgrading` for what changed in version 2.
@@ -20,7 +20,7 @@ Already using 1.x? See {doc}`upgrading` for what changed in version 2.
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then add the package to a Python project. `uv add` records the dependency in `pyproject.toml`, updates `uv.lock`, and installs it in the project's environment. Prebuilt wheels are published for Linux, macOS, and Windows, and Python 3.10 or later is required.
 
 ```console
-$ uv add "vl-convert-python>=2.0.0rc6,<3"
+$ uv add "vl-convert-python=={vlc_python_version}"
 ```
 
 The PyPI package is named `vl-convert-python`, and Python imports it as `vl_convert`. Confirm that the installation works:
@@ -42,7 +42,7 @@ The server is the `serve` subcommand of the `vl-convert` CLI executable.
 ::::{interface} cli server
 ## Prebuilt Executable
 
-Download the ZIP archive for your platform and `SHA256SUMS` from the same [GitHub release](https://github.com/vega/vl-convert/releases). Choose version 2.0.0-rc6 or later.
+Download the ZIP archive for your platform and `SHA256SUMS` from the [VlConvert {vlc_version} release](https://github.com/vega/vl-convert/releases/tag/v{vlc_version}).
 
 | Platform | Archive |
 | --- | --- |
@@ -73,7 +73,7 @@ $ vl-convert --version
 To build the executable yourself, install a Rust toolchain and run:
 
 ```console
-$ cargo install vl-convert --version '^2.0.0-rc6' --locked
+$ cargo install vl-convert --version '={vlc_version}' --locked
 ```
 ::::
 
@@ -90,7 +90,7 @@ Add these dependencies to `Cargo.toml`:
 ```toml
 [dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-vl-convert-rs = "2.0.0-rc6"
+vl-convert-rs = "={vlc_version}"
 ```
 :::
 

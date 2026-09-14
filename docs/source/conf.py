@@ -44,7 +44,7 @@ LOGO_DIR = ROOT / "logo"
 html_favicon = str(LOGO_DIR / "vl-convert-favicon.svg")
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
-html_js_files = ["conversion-example.js", "terminal-prompts.js"]
+html_js_files = ["conversion-example.js", "terminal-prompts.js", "rust-api-links.js"]
 html_theme_options = {
     "github_url": "https://github.com/vega/vl-convert",
     "navbar_align": "left",
