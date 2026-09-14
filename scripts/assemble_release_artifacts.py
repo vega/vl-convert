@@ -17,11 +17,11 @@ def expected_artifacts(version: str) -> set[str]:
         "vl-convert_osx-64.zip",
         "vl-convert_osx-arm64.zip",
         "vl-convert_win-64.zip",
-        f"vl_convert_python-{version}-cp39-abi3-macosx_10_12_x86_64.whl",
-        f"vl_convert_python-{version}-cp39-abi3-macosx_11_0_arm64.whl",
-        f"vl_convert_python-{version}-cp39-abi3-manylinux_2_28_aarch64.whl",
-        f"vl_convert_python-{version}-cp39-abi3-manylinux_2_28_x86_64.whl",
-        f"vl_convert_python-{version}-cp39-abi3-win_amd64.whl",
+        f"vl_convert_python-{version}-cp310-abi3-macosx_10_12_x86_64.whl",
+        f"vl_convert_python-{version}-cp310-abi3-macosx_11_0_arm64.whl",
+        f"vl_convert_python-{version}-cp310-abi3-manylinux_2_28_aarch64.whl",
+        f"vl_convert_python-{version}-cp310-abi3-manylinux_2_28_x86_64.whl",
+        f"vl_convert_python-{version}-cp310-abi3-win_amd64.whl",
         f"vl_convert_python-{version}.tar.gz",
     }
 
