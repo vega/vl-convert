@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import tomllib
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,6 +97,12 @@ def parse_topic(path: Path) -> Topic:
         raise SystemExit(f"{path} missing body marker: {body_marker}")
     body = text.split(body_marker, 1)[1].lstrip()
 
+    external_url = meta.get("external_url")
+    if external_url:
+        with (repo_root() / "Cargo.toml").open("rb") as manifest:
+            version = tomllib.load(manifest)["workspace"]["package"]["version"]
+        external_url = external_url.replace("{version}", version)
+
     return Topic(
         source=path,
         title=str(meta["title"]),
@@ -105,7 +112,7 @@ def parse_topic(path: Path) -> Topic:
         interfaces=interfaces,
         suffix=path.suffix,
         body=body,
-        external_url=meta.get("external_url"),
+        external_url=external_url,
     )
 
 

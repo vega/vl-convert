@@ -1,7 +1,7 @@
 ---
 title: Rust API Reference
 path: api-reference
-external_url: https://docs.rs/vl-convert-rs/2.0.0-rc6/vl_convert_rs/
+external_url: https://docs.rs/vl-convert-rs/{version}/vl_convert_rs/
 section: API Reference
 order: 900
 interfaces: [rust]
