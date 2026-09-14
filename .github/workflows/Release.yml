@@ -19,6 +19,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  RUST_MIN_STACK: 8388608
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
   RUST_VERSION: 1.95.0
   MATURIN_VERSION: 1.15.0
 
@@ -173,7 +177,6 @@ jobs:
     runs-on: windows-2022
     env:
       EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
-      RUST_MIN_STACK: 8388608
     steps:
       - name: Enable long paths
         run: git config --system core.longpaths true
@@ -381,7 +384,6 @@ jobs:
     env:
       EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
       EXPECTED_PYTHON_VERSION: ${{ needs.validate.outputs.python_version }}
-      RUST_MIN_STACK: 8388608
     steps:
       - name: Enable long paths
         run: git config --system core.longpaths true
@@ -724,9 +726,11 @@ jobs:
       - uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
         with:
           pixi-version: v0.47.0
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
         with:
-          prefix-key: v1-docs
+          prefix-key: v2-rust
+          shared-key: pixi-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pixi.lock') }}
+          cmd-format: "pixi run {0}"
           cache-on-failure: true
       - name: Build documentation with warnings as errors
         run: pixi run docs-build-strict
