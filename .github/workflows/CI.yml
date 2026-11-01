@@ -39,7 +39,7 @@ jobs:
         with:
           pixi-version: v0.47.0
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           prefix-key: v2-rust
           shared-key: pixi-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pixi.lock') }}
@@ -72,7 +72,7 @@ jobs:
           toolchain: ${{ env.RUST_VERSION }}
           components: rustfmt, clippy
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           prefix-key: v2-rust
           shared-key: native-${{ runner.os }}-${{ runner.arch }}
@@ -114,7 +114,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           prefix-key: v2-rust
           shared-key: native-${{ runner.os }}-${{ runner.arch }}
@@ -166,7 +166,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           prefix-key: v2-rust
           shared-key: native-${{ runner.os }}-${{ runner.arch }}
@@ -205,7 +205,7 @@ jobs:
         with:
           python-version: "3.10"
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           prefix-key: v2-rust
           shared-key: native-${{ runner.os }}-${{ runner.arch }}
@@ -276,7 +276,7 @@ jobs:
         with:
           pixi-version: v0.47.0
       - name: Cache rust dependencies
-        uses: Swatinem/rust-cache@v2.9.2
+        uses: Swatinem/rust-cache@v2.9.3
         with:
           prefix-key: v2-rust
           shared-key: pixi-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pixi.lock') }}

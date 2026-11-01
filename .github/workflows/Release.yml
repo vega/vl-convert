@@ -726,7 +726,7 @@ jobs:
       - uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
         with:
           pixi-version: v0.47.0
-      - uses: Swatinem/rust-cache@63fed3e2fecf6f7b51dc6f043341b79ef82a9ae7 # v2.9.2
+      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2.9.2
         with:
           prefix-key: v2-rust
           shared-key: pixi-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pixi.lock') }}
