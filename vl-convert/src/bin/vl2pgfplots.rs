@@ -32,15 +32,20 @@ async fn main() -> anyhow::Result<()> {
         _ => Box::new(std::io::stdin()),
     };
     let mut source = String::new();
-    input.take(MAX_INPUT_BYTES + 1).read_to_string(&mut source)?;
+    input
+        .take(MAX_INPUT_BYTES + 1)
+        .read_to_string(&mut source)?;
     if source.len() as u64 > MAX_INPUT_BYTES {
         anyhow::bail!("PGFPlots: input exceeds the 8 MiB limit");
     }
     let output = VlConverter::new()
-        .vegalite_to_pgfplots(source, PgfplotsOpts {
-            standalone: args.standalone,
-            tex_labels: args.tex_labels,
-        })
+        .vegalite_to_pgfplots(
+            source,
+            PgfplotsOpts {
+                standalone: args.standalone,
+                tex_labels: args.tex_labels,
+            },
+        )
         .await?;
     // Conversion errors cannot truncate an existing output file.
     match &args.output {

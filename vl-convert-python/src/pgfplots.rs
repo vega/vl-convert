@@ -19,9 +19,15 @@ pub fn vegalite_to_pgfplots(
     tex_labels: bool,
 ) -> PyResult<String> {
     let spec = parse_json_spec(vl_spec)?;
-    let opts = PgfplotsOpts { standalone, tex_labels };
+    let opts = PgfplotsOpts {
+        standalone,
+        tex_labels,
+    };
     run_converter_future(move |converter| async move {
-        converter.vegalite_to_pgfplots(spec, opts).await.map(|o| o.tex)
+        converter
+            .vegalite_to_pgfplots(spec, opts)
+            .await
+            .map(|o| o.tex)
     })
     .map_err(|err| prefixed_py_error("Native PGFPlots compilation failed", err))
 }
@@ -36,11 +42,17 @@ pub fn vegalite_to_pgfplots_asyncio<'py>(
     tex_labels: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let spec = parse_json_spec(vl_spec)?;
-    let opts = PgfplotsOpts { standalone, tex_labels };
+    let opts = PgfplotsOpts {
+        standalone,
+        tex_labels,
+    };
     run_converter_future_async(
         py,
         move |converter| async move {
-            converter.vegalite_to_pgfplots(spec, opts).await.map(|o| o.tex)
+            converter
+                .vegalite_to_pgfplots(spec, opts)
+                .await
+                .map(|o| o.tex)
         },
         "Native PGFPlots compilation failed",
         |py, value| Ok(PyString::new(py, &value).into_any().unbind()),

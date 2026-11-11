@@ -79,7 +79,9 @@ async fn raw_math_requires_explicit_opt_in() {
         .vegalite_to_pgfplots(spec.clone(), PgfplotsOpts::default())
         .await
         .unwrap();
-    assert!(escaped.tex.contains(r"\$t\_\{\textbackslash{}mathrm\{exp\}\}\$"));
+    assert!(escaped
+        .tex
+        .contains(r"\$t\_\{\textbackslash{}mathrm\{exp\}\}\$"));
     let trusted = converter
         .vegalite_to_pgfplots(
             spec,
