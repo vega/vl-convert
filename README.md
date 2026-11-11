@@ -138,3 +138,8 @@ pixi run docs-build-strict
 ```
 
 VlConvert is distributed under the BSD 3-Clause license.
+
+
+## Experimental PGFPlots export
+
+A strict static-vector exporter is described in the [PGFPlots guide](docs/source/_topics/pgfplots.md). It does not preserve semantic plot data or interactive behavior.

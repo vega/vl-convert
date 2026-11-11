@@ -1613,3 +1613,25 @@ if TYPE_CHECKING:
             ...
 
     asyncio: _AsyncioModule
+
+
+def vegalite_to_pgfplots(
+    vl_spec: str | dict[str, Any],
+    *,
+    vl_version: str | None = None,
+    standalone: bool = False,
+) -> str:
+    """Export initial evaluated geometry; text is outlined, unsupported graphics fail."""
+    ...
+
+
+def vega_to_pgfplots(
+    vg_spec: str | dict[str, Any], *, standalone: bool = False,
+) -> str:
+    """Export a static vector subset, not source data or semantic plot axes."""
+    ...
+
+
+def svg_to_pgfplots(svg: str, *, standalone: bool = False) -> str:
+    """Export restricted SVG. Raises ValueError for unsupported graphics."""
+    ...

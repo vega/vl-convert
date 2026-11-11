@@ -19,6 +19,10 @@ mod image_loading;
 mod module_loader;
 pub(crate) mod svg_font;
 mod text;
+mod pgfplots;
+
+#[doc(inline)]
+pub use pgfplots::{svg_to_pgfplots, PgfplotsOpts, PgfplotsOutput};
 
 #[macro_use]
 extern crate lazy_static;

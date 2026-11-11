@@ -1,5 +1,6 @@
 [package]
 name = "vl-convert"
+default-run = "vl-convert"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

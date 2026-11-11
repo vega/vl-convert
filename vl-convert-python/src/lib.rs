@@ -9,6 +9,7 @@ mod config;
 mod conversions;
 mod fonts;
 mod info;
+mod pgfplots;
 mod utils;
 
 pub use config::*;
@@ -91,6 +92,9 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
 #[pymodule]
 fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     pyo3_log::init();
+    m.add_function(wrap_pyfunction!(pgfplots::vegalite_to_pgfplots, m)?)?;
+    m.add_function(wrap_pyfunction!(pgfplots::vega_to_pgfplots, m)?)?;
+    m.add_function(wrap_pyfunction!(pgfplots::svg_to_pgfplots, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;
