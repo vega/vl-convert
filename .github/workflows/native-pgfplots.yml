@@ -2,18 +2,32 @@ name: Native PGFPlots semantics and TeX
 on:
   pull_request:
     paths:
+      - 'vl-convert-rs/src/pgfplots.rs'
       - 'vl-convert-rs/src/js/native_pgfplots.js'
+      - 'vl-convert-rs/tests/test_pgfplots.rs'
       - 'vl-convert-rs/tests/native-pgfplots/**'
+      - 'vl-convert-python/src/**'
+      - 'vl-convert-python/tests/test_pgfplots.py'
+      - 'vl-convert/src/bin/vl2pgfplots.rs'
+      - 'vl-convert/tests/test_pgfplots_cli.rs'
       - '.github/workflows/native-pgfplots.yml'
   push:
     branches: [feature/experimental-pgfplots-export]
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: native-pgfplots-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  RUST_MIN_STACK: 8388608
+  CARGO_PROFILE_DEV_DEBUG: '0'
+  CARGO_PROFILE_TEST_DEBUG: '0'
+  CARGO_PROFILE_RELEASE_DEBUG: '0'
 jobs:
   semantics-and-tex:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,7 +37,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test the exact compiler source used by Rust
-        run: node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
+        run: node --test --experimental-test-coverage vl-convert-rs/tests/native-pgfplots/native.test.cjs
       - name: Install rendering test dependencies
         run: |
           sudo apt-get update
@@ -36,4 +50,53 @@ jobs:
         with:
           name: native-pgfplots-tex-evidence
           path: ${{ runner.temp }}/pgfplots-check
+          if-no-files-found: warn
+  native-interfaces:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt,clippy
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-pgfplots-linux
+          cache-on-failure: true
+      - name: Install TeX and Python test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-latex-extra texlive-pictures texlive-fonts-recommended
+          python -m venv .venv
+          .venv/bin/python -m pip install maturin 'pytest>=8,<9' 'PyMuPDF>=1.24,<2'
+      - name: Check Rust formatting and native interfaces
+        run: |
+          cargo fmt --all -- --check
+          cargo test -p vl-convert-rs --test test_pgfplots -- --test-threads=1
+          cargo test -p vl-convert --test test_pgfplots_cli -- --test-threads=1
+          cargo build -p vl-convert --bin vl2pgfplots
+      - name: Build and test the Python extension
+        run: |
+          source .venv/bin/activate
+          cd vl-convert-python
+          maturin develop
+          python -m pytest tests/test_pgfplots.py -v
+      - name: Compare all built interfaces and render actual native output
+        run: |
+          source .venv/bin/activate
+          python vl-convert-rs/tests/native-pgfplots/verify_tex.py "$RUNNER_TEMP/pgfplots-native" --native --cli "$PWD/target/debug/vl2pgfplots"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-pgfplots-built-interface-evidence
+          path: ${{ runner.temp }}/pgfplots-native
           if-no-files-found: warn
