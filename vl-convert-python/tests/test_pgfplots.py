@@ -1,4 +1,5 @@
-"""Native-interface tests: require the patched extension, never skip silently."""
+"""Tests the built PyO3 extension, not a Python implementation of the backend."""
+import asyncio
 import json
 
 import pytest
@@ -17,46 +18,51 @@ def spec():
     }
 
 
-def test_api_is_present():
-    for name in ("vegalite_to_pgfplots", "vega_to_pgfplots", "svg_to_pgfplots"):
-        assert callable(getattr(vlc, name))
-
-
-def test_dict_and_json_are_equivalent(spec):
-    assert vlc.vegalite_to_pgfplots(spec) == vlc.vegalite_to_pgfplots(json.dumps(spec))
-
-
-def test_compilation_is_shared(spec):
-    lite = vlc.vegalite_to_pgfplots(spec)
-    vega = vlc.vegalite_to_vega(spec)
-    assert lite == vlc.vega_to_pgfplots(vega)
+def test_native_axes_data_and_text(spec):
+    tex = vlc.vegalite_to_pgfplots(spec)
+    for text in (r"\begin{axis}", r"\addplot", "(1,2)", "(2,4)", "xlabel={x}"):
+        assert text in tex
+    for text in (r"\pgfpath", "includegraphics", "hide axis"):
+        assert text not in tex
+    assert tex == vlc.vegalite_to_pgfplots(json.dumps(spec))
 
 
 def test_standalone(spec):
-    text = vlc.vegalite_to_pgfplots(spec, standalone=True)
-    assert text.startswith("\\documentclass")
-    assert text.endswith("\\end{document}\n")
+    tex = vlc.vegalite_to_pgfplots(spec, standalone=True)
+    assert tex.startswith(r"\documentclass")
+    assert tex.endswith("\\end{document}\n")
 
 
-def test_invalid_svg_raises():
-    with pytest.raises(ValueError):
-        vlc.svg_to_pgfplots("not XML")
+def test_math_is_opt_in(spec):
+    spec["encoding"]["x"]["title"] = r"$E_{\mathrm{kin}}$"
+    escaped = vlc.vegalite_to_pgfplots(spec)
+    assert r"\$E\_\{" in escaped
+    trusted = vlc.vegalite_to_pgfplots(spec, tex_labels=True)
+    assert r"xlabel={$E_{\mathrm{kin}}$}" in trusted
 
 
-def test_raw_tex_is_never_executed():
-    text = vlc.svg_to_pgfplots(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40">'
-        '<text x="1" y="20">\\input{secret}</text></svg>'
-    )
-    assert "\\input" not in text
+def test_async_matches_sync(spec):
+    import vl_convert.asyncio as avlc
+
+    async def run():
+        return await avlc.vegalite_to_pgfplots(spec)
+
+    assert asyncio.run(run()) == vlc.vegalite_to_pgfplots(spec)
 
 
-@pytest.mark.parametrize("body", [
-    '<image href="file:///etc/passwd"/>',
-    '<linearGradient id="g"/>',
-    '<foreignObject/>',
+@pytest.mark.parametrize("invalid", [
+    "not JSON",
+    {"marks": []},
+    {"mark": "line", "data": {"url": "file:///etc/passwd"}},
+    {"mark": "line", "params": [{"name": "selection"}]},
+    {"mark": "line", "transform": [{"calculate": "1+1", "as": "x"}]},
 ])
-def test_unsupported_has_actionable_error(body):
-    svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">{body}</svg>'
-    with pytest.raises(ValueError, match="unsupported"):
-        vlc.svg_to_pgfplots(svg)
+def test_unsupported_input_raises(invalid):
+    with pytest.raises(ValueError):
+        vlc.vegalite_to_pgfplots(invalid)
+
+
+def test_failure_does_not_poison_worker(spec):
+    with pytest.raises(ValueError):
+        vlc.vegalite_to_pgfplots({"mark": "geoshape"})
+    assert r"\addplot" in vlc.vegalite_to_pgfplots(spec)

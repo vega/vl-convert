@@ -1,0 +1,39 @@
+name: Native PGFPlots semantics and TeX
+on:
+  pull_request:
+    paths:
+      - 'vl-convert-rs/src/js/native_pgfplots.js'
+      - 'vl-convert-rs/tests/native-pgfplots/**'
+      - '.github/workflows/native-pgfplots.yml'
+  push:
+    branches: [feature/experimental-pgfplots-export]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  semantics-and-tex:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test the exact compiler source used by Rust
+        run: node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
+      - name: Install rendering test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends texlive-latex-extra texlive-pictures texlive-fonts-recommended
+          python -m pip install 'PyMuPDF>=1.24,<2'
+      - name: Compile fixtures and verify PDF geometry
+        run: python vl-convert-rs/tests/native-pgfplots/verify_tex.py "$RUNNER_TEMP/pgfplots-check"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-pgfplots-tex-evidence
+          path: ${{ runner.temp }}/pgfplots-check
+          if-no-files-found: warn

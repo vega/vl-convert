@@ -1,123 +1,140 @@
-use vl_convert_rs::{svg_to_pgfplots, PgfplotsOpts, VlConverter, VlOpts};
+use vl_convert_rs::{serde_json::json, PgfplotsOpts, ValueOrString, VlConverter};
 
-fn svg(body: &str) -> String {
-    format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="120" height="90">{body}</svg>"#)
-}
-
-#[test]
-fn deterministic_self_contained_output() {
-    let source = svg(r##"<path d="M10 20L50 20L30 40Z" fill="#4080bf"/>"##);
-    let opts = PgfplotsOpts { standalone: true };
-    let a = svg_to_pgfplots(&source, opts).unwrap();
-    assert_eq!(a, svg_to_pgfplots(&source, opts).unwrap());
-    assert!(a.starts_with("\\documentclass"));
-    assert!(a.ends_with("\\end{document}\n"));
-    assert!(a.contains("{RGB}{64,128,191}"));
-    assert!(a.contains("{7.500000bp}{-15.000000bp}"));
-    assert!(!a.contains("includegraphics"));
-}
-
-#[test]
-fn fragment_has_no_document_wrapper() {
-    let a = svg_to_pgfplots(&svg(""), PgfplotsOpts::default()).unwrap();
-    assert!(!a.contains("documentclass"));
-    assert!(a.contains("width=90.000000bp,height=67.500000bp"));
-}
-
-#[test]
-fn curves_strokes_and_transform_are_lowered() {
-    let source = svg(r#"<g transform="translate(10 5) scale(2 1)">
-      <path d="M0 0Q10 20 20 0C30 20 40 20 50 0" fill="none"
-            stroke="black" stroke-width="2" stroke-dasharray="3 2"
-            stroke-linecap="round" stroke-linejoin="round"/></g>"#);
-    let result = svg_to_pgfplots(&source, PgfplotsOpts::default()).unwrap();
-    assert!(result.contains("\\pgfpathcurveto") || result.contains("\\pgfpathquadraticcurveto"));
-    // Strokes are outlines, not backend-dependent PGF pens.
-    assert!(result.contains("\\pgfusepath{fill}"));
-    assert!(!result.contains("\\pgfusepath{stroke}"));
-}
-
-#[test]
-fn clips_opacity_and_evenodd_are_retained() {
-    let source = svg(r##"<defs><clipPath id="c"><rect x="10" y="10" width="30" height="30"/></clipPath></defs>
-      <g clip-path="url(#c)" opacity="0.5"><path fill-rule="evenodd"
-       d="M0 0H60V60H0Z M10 10H50V50H10Z"/></g>"##);
-    let tex = svg_to_pgfplots(&source, PgfplotsOpts::default()).unwrap();
-    assert!(tex.contains("\\pgfseteorule"));
-    assert!(tex.matches("\\pgfusepath{clip}").count() >= 2);
-    assert!(tex.contains("opacity=0.500000,transparency group"));
-}
-
-#[test]
-fn untrusted_text_is_not_tex() {
-    let source = svg(r#"<text x="5" y="20">\input{secret} % &amp; $x$</text>"#);
-    let tex = svg_to_pgfplots(&source, PgfplotsOpts::default()).unwrap();
-    assert!(!tex.contains("\\input"));
-    assert!(!tex.contains("secret"));
-    assert!(!tex.contains("$x$"));
-    assert!(tex.contains("\\pgfusepath{fill}"));
-}
-
-#[test]
-fn unsupported_features_fail_closed() {
-    for body in [
-        r#"<image href="file:///etc/passwd"/>"#,
-        r#"<foreignObject/>"#,
-        r#"<rect width="10" height="10" fill="url(https://example.invalid/g.svg#gradient)"/>"#,
-        r#"<script/>"#,
-        r#"<style>rect { fill: red }</style>"#,
-        r#"<linearGradient id="g"/>"#,
-        r#"<mask id="m"/>"#,
-        r#"<path d="M0 0L10 10" vector-effect="non-scaling-stroke"/>"#,
-        r#"<use href="https://example.invalid/chart.svg#x"/>"#,
-        r#"<path d="M0 0L10 10" style="filter:blur(2px)"/>"#,
-    ] {
-        assert!(svg_to_pgfplots(&svg(body), PgfplotsOpts::default()).is_err(), "{body}");
-    }
-    for source in [
-        r#"<svg width="1" height="1"/>"#,
-        r#"<!DOCTYPE svg [<!ENTITY x "x">]><svg xmlns="http://www.w3.org/2000/svg">&x;</svg>"#,
-        "not XML",
-    ] {
-        assert!(svg_to_pgfplots(source, PgfplotsOpts::default()).is_err());
-    }
-}
-
-#[test]
-fn complex_clip_unions_are_not_approximated() {
-    let source = svg(r##"<defs><clipPath id="c"><circle r="20"/><circle cx="20" r="20"/></clipPath></defs><g clip-path="url(#c)"><rect width="60" height="60"/></g>"##);
-    assert!(svg_to_pgfplots(&source, PgfplotsOpts::default()).is_err());
+fn line() -> serde_json::Value {
+    json!({
+        "data": {"values": [{"x": 1, "y": 2}, {"x": 2, "y": 4}]},
+        "mark": "line",
+        "encoding": {
+            "x": {"field": "x", "type": "quantitative"},
+            "y": {"field": "y", "type": "quantitative"}
+        }
+    })
 }
 
 #[tokio::test]
-async fn chart_types_reuse_the_official_compiler() {
+async fn native_data_axes_and_text_not_outlines() {
     let converter = VlConverter::new();
-    for mark in ["point", "line", "bar", "area", "boxplot", "errorbar", "errorband"] {
-        let spec = serde_json::json!({
-            "width": 180, "height": 120,
-            "data": {"values": [
-                {"x": 1, "y": 2}, {"x": 1, "y": 3},
-                {"x": 2, "y": 4}, {"x": 2, "y": 6}
-            ]},
-            "mark": mark,
-            "encoding": {
-                "x": {"field": "x", "type": "ordinal"},
-                "y": {"field": "y", "type": "quantitative"}
-            }
-        });
-        let out = converter.vegalite_to_pgfplots(spec, VlOpts::default(), PgfplotsOpts::default())
-            .await.unwrap_or_else(|err| panic!("{mark}: {err}"));
-        assert!(out.tex.contains("\\begin{axis}"));
-        assert!(out.tex.contains("\\pgfusepath{fill}"));
+    let first = converter
+        .vegalite_to_pgfplots(line(), PgfplotsOpts::default())
+        .await
+        .unwrap();
+    let second = converter
+        .vegalite_to_pgfplots(line(), PgfplotsOpts::default())
+        .await
+        .unwrap();
+    assert_eq!(first.tex, second.tex);
+    for expected in ["\\begin{axis}", "\\addplot", "(1,2)", "(2,4)", "xlabel={x}"] {
+        assert!(first.tex.contains(expected), "missing {expected}");
+    }
+    for forbidden in ["\\pgfpath", "includegraphics", "hide axis", "documentclass"] {
+        assert!(!first.tex.contains(forbidden), "unexpected {forbidden}");
     }
 }
 
-#[test]
-fn dashed_strokes_are_not_silently_solid() {
-    let plain = svg(r#"<path d="M10 40H110" fill="none" stroke="black" stroke-width="2"/>"#);
-    let dashed = plain.replace("stroke-width=\"2\"", "stroke-width=\"2\" stroke-dasharray=\"5 5\"");
-    let solid_tex = svg_to_pgfplots(&plain, PgfplotsOpts::default()).unwrap();
-    let dashed_tex = svg_to_pgfplots(&dashed, PgfplotsOpts::default()).unwrap();
-    assert_ne!(solid_tex, dashed_tex);
-    assert!(dashed_tex.matches("\\pgfpathmoveto").count() > solid_tex.matches("\\pgfpathmoveto").count());
+#[tokio::test]
+async fn json_string_and_value_agree() {
+    let converter = VlConverter::new();
+    let value = line();
+    let a = converter
+        .vegalite_to_pgfplots(value.clone(), PgfplotsOpts::default())
+        .await
+        .unwrap();
+    let b = converter
+        .vegalite_to_pgfplots(value.to_string(), PgfplotsOpts::default())
+        .await
+        .unwrap();
+    assert_eq!(a.tex, b.tex);
+}
+
+#[tokio::test]
+async fn unsupported_inputs_fail_without_poisoning_worker() {
+    let converter = VlConverter::new();
+    for input in [
+        json!({"marks": []}),
+        json!({"mark": "line", "data": {"url": "file:///etc/passwd"}}),
+        json!({"mark": "line", "params": [{"name": "brush", "select": "interval"}]}),
+        json!({"mark": "line", "transform": [{"calculate": "1+1", "as": "y"}]}),
+    ] {
+        assert!(converter
+            .vegalite_to_pgfplots(input, PgfplotsOpts::default())
+            .await
+            .is_err());
+    }
+    assert!(converter
+        .vegalite_to_pgfplots("not JSON".to_owned(), PgfplotsOpts::default())
+        .await
+        .is_err());
+    assert!(converter
+        .vegalite_to_pgfplots(line(), PgfplotsOpts::default())
+        .await
+        .is_ok());
+}
+
+#[tokio::test]
+async fn raw_math_requires_explicit_opt_in() {
+    let mut spec = line();
+    spec["encoding"]["x"]["title"] = json!(r"$t_{\mathrm{exp}}$");
+    let converter = VlConverter::new();
+    let escaped = converter
+        .vegalite_to_pgfplots(spec.clone(), PgfplotsOpts::default())
+        .await
+        .unwrap();
+    assert!(escaped.tex.contains(r"\$t\_\{\textbackslash{}mathrm\{exp\}\}\$"));
+    let trusted = converter
+        .vegalite_to_pgfplots(
+            spec,
+            PgfplotsOpts {
+                standalone: true,
+                tex_labels: true,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(trusted.tex.contains(r"xlabel={$t_{\mathrm{exp}}$}"));
+    assert!(trusted.tex.starts_with("\\documentclass"));
+    assert!(trusted.tex.ends_with("\\end{document}\n"));
+}
+
+#[tokio::test]
+async fn quoted_input_remains_data_not_javascript() {
+    let converter = VlConverter::new();
+    let mut spec = line();
+    spec["encoding"]["x"]["title"] =
+        json!("');globalThis.compromised=1;//\n\u{2028}\\input{secret}");
+    let result = converter
+        .vegalite_to_pgfplots(spec, PgfplotsOpts::default())
+        .await
+        .unwrap();
+    assert!(result.tex.contains("textbackslash{}input"));
+    assert!(converter
+        .vegalite_to_pgfplots(line(), PgfplotsOpts::default())
+        .await
+        .is_ok());
+}
+
+#[tokio::test]
+async fn oversized_input_is_rejected_before_v8() {
+    let converter = VlConverter::new();
+    let source = ValueOrString::JsonString(" ".repeat(8 * 1024 * 1024 + 1));
+    let err = converter
+        .vegalite_to_pgfplots(source, PgfplotsOpts::default())
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("8 MiB"));
+}
+
+#[tokio::test]
+async fn explicit_uncertainty_is_emitted_as_native_error_bars() {
+    let mut spec = line();
+    spec["mark"] = json!("errorbar");
+    spec["data"]["values"] = json!([{"x": 1, "y": 4, "e": 0.25}]);
+    spec["encoding"]["yError"] = json!({"field": "e"});
+    let tex = VlConverter::new()
+        .vegalite_to_pgfplots(spec, PgfplotsOpts::default())
+        .await
+        .unwrap()
+        .tex;
+    assert!(tex.contains("error bars/.cd"));
+    assert!(tex.contains("0.25"));
+    assert!(!tex.contains("pgfpath"));
 }

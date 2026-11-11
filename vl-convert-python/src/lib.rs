@@ -38,6 +38,7 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
     let _ = pyo3_async_runtimes::tokio::init_with_runtime(&PYTHON_RUNTIME);
 
     let asyncio = PyModule::new(py, "asyncio")?;
+    asyncio.add_function(wrap_pyfunction!(pgfplots::vegalite_to_pgfplots_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vegalite_to_vega_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vegalite_to_svg_asyncio, &asyncio)?)?;
     asyncio.add_function(wrap_pyfunction!(vegalite_to_scenegraph_asyncio, &asyncio)?)?;
@@ -93,8 +94,6 @@ fn add_asyncio_submodule(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()
 fn vl_convert(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(pgfplots::vegalite_to_pgfplots, m)?)?;
-    m.add_function(wrap_pyfunction!(pgfplots::vega_to_pgfplots, m)?)?;
-    m.add_function(wrap_pyfunction!(pgfplots::svg_to_pgfplots, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_vega, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(vegalite_to_scenegraph, m)?)?;

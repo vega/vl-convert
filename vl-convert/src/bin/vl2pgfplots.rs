@@ -1,67 +1,51 @@
-//! Experimental PGFPlots frontend. No TeX process is launched by this program.
+//! Native PGFPlots frontend. This program does not invoke TeX.
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::str::FromStr;
 
-use clap::{Parser, ValueEnum};
-use vl_convert_rs::{anyhow, svg_to_pgfplots, PgfplotsOpts, VgOpts, VlConverter, VlOpts, VlVersion};
+use clap::Parser;
+use vl_convert_rs::{anyhow, PgfplotsOpts, VlConverter};
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
-enum InputFormat { VegaLite, Vega, Svg }
+const MAX_INPUT_BYTES: u64 = 8 * 1024 * 1024;
 
 #[derive(Parser)]
-#[command(about = "Export static Vega geometry to PGFPlots (strict vector subset)")]
+#[command(about = "Compile inline Vega-Lite to native PGFPlots plots and axes")]
 struct Args {
-    /// Input file; omit or use '-' for stdin.
+    /// Input JSON file; omit or use '-' for stdin.
     #[arg(short, long)]
     input: Option<PathBuf>,
-    /// Output file; omit or use '-' for stdout. Conversion completes before writing.
+    /// Output TeX file; omit or use '-' for stdout.
     #[arg(short, long)]
     output: Option<PathBuf>,
-    #[arg(long, value_enum, default_value = "vega-lite")]
-    input_format: InputFormat,
-    /// Bundled Vega-Lite version, e.g. v6_4.
-    #[arg(long)]
-    vl_version: Option<String>,
-    /// Include the standalone class and pgfplots package declarations.
+    /// Include document class and package declarations.
     #[arg(long)]
     standalone: bool,
+    /// Treat labels as trusted TeX. Never use for untrusted specifications.
+    #[arg(long)]
+    tex_labels: bool,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let mut source = String::new();
-    match &args.input {
-        Some(path) if path.as_os_str() != "-" => source = std::fs::read_to_string(path)?,
-        _ => { std::io::stdin().read_to_string(&mut source)?; }
-    }
-    let options = PgfplotsOpts { standalone: args.standalone };
-    let tex = match args.input_format {
-        InputFormat::Svg => {
-            if args.vl_version.is_some() { anyhow::bail!("--vl-version only applies to Vega-Lite"); }
-            svg_to_pgfplots(&source, options)?
-        }
-        format => {
-            if matches!(format, InputFormat::Vega) && args.vl_version.is_some() {
-                anyhow::bail!("--vl-version only applies to Vega-Lite");
-            }
-            let converter = VlConverter::new();
-            let output = if matches!(format, InputFormat::Vega) {
-                converter.vega_to_pgfplots(source, VgOpts::default(), options).await?
-            } else {
-                let vl_version = args.vl_version.as_deref()
-                    .map(VlVersion::from_str).transpose()?.unwrap_or_default();
-                converter.vegalite_to_pgfplots(source,
-                    VlOpts { vl_version, ..Default::default() }, options).await?
-            };
-            for entry in output.logs { eprintln!("{}: {}", entry.level, entry.message); }
-            output.tex
-        }
+    let input: Box<dyn Read> = match &args.input {
+        Some(path) if path.as_os_str() != "-" => Box::new(std::fs::File::open(path)?),
+        _ => Box::new(std::io::stdin()),
     };
+    let mut source = String::new();
+    input.take(MAX_INPUT_BYTES + 1).read_to_string(&mut source)?;
+    if source.len() as u64 > MAX_INPUT_BYTES {
+        anyhow::bail!("PGFPlots: input exceeds the 8 MiB limit");
+    }
+    let output = VlConverter::new()
+        .vegalite_to_pgfplots(source, PgfplotsOpts {
+            standalone: args.standalone,
+            tex_labels: args.tex_labels,
+        })
+        .await?;
+    // Conversion errors cannot truncate an existing output file.
     match &args.output {
-        Some(path) if path.as_os_str() != "-" => std::fs::write(path, tex)?,
-        _ => std::io::stdout().lock().write_all(tex.as_bytes())?,
+        Some(path) if path.as_os_str() != "-" => std::fs::write(path, output.tex)?,
+        _ => std::io::stdout().lock().write_all(output.tex.as_bytes())?,
     }
     Ok(())
 }

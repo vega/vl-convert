@@ -1,50 +1,48 @@
-//! Python bindings for the strict static PGFPlots exporter.
-use std::str::FromStr;
-
+//! Bindings for the shared native PGFPlots compiler.
 use pyo3::prelude::*;
-use vl_convert_rs::{PgfplotsOpts, VgOpts, VlOpts, VlVersion};
+use pyo3::types::PyString;
+use vl_convert_rs::PgfplotsOpts;
 
-use crate::utils::{parse_json_spec, prefixed_py_error, run_converter_future};
+use crate::utils::{
+    parse_json_spec, prefixed_py_error, run_converter_future, run_converter_future_async,
+};
 
-/// Export the initial Vega-Lite chart state as PGFPlots source.
+/// Compile inline Vega-Lite data to editable PGFPlots plots and axes.
 ///
-/// Text is outlined; unsupported graphics raise ValueError. This does not
-/// preserve source data, interactions, or semantic PGFPlots axes.
+/// Unsupported features raise ValueError. Labels are escaped unless tex_labels
+/// is enabled for trusted input. This function never invokes a TeX process.
 #[pyfunction]
-#[pyo3(signature = (vl_spec, *, vl_version=None, standalone=false))]
+#[pyo3(signature = (vl_spec, *, standalone=false, tex_labels=false))]
 pub fn vegalite_to_pgfplots(
     vl_spec: Py<PyAny>,
-    vl_version: Option<&str>,
     standalone: bool,
+    tex_labels: bool,
 ) -> PyResult<String> {
     let spec = parse_json_spec(vl_spec)?;
-    let vl_version = vl_version.map(VlVersion::from_str).transpose()?.unwrap_or_default();
+    let opts = PgfplotsOpts { standalone, tex_labels };
     run_converter_future(move |converter| async move {
-        converter.vegalite_to_pgfplots(
-            spec,
-            VlOpts { vl_version, ..Default::default() },
-            PgfplotsOpts { standalone },
-        ).await.map(|out| out.tex)
-    }).map_err(|err| prefixed_py_error("Vega-Lite to PGFPlots conversion failed", err))
+        converter.vegalite_to_pgfplots(spec, opts).await.map(|o| o.tex)
+    })
+    .map_err(|err| prefixed_py_error("Native PGFPlots compilation failed", err))
 }
 
-/// Export the initial Vega chart state as PGFPlots source.
-#[pyfunction]
-#[pyo3(signature = (vg_spec, *, standalone=false))]
-pub fn vega_to_pgfplots(vg_spec: Py<PyAny>, standalone: bool) -> PyResult<String> {
-    let spec = parse_json_spec(vg_spec)?;
-    run_converter_future(move |converter| async move {
-        converter.vega_to_pgfplots(
-            spec, VgOpts::default(), PgfplotsOpts { standalone },
-        ).await.map(|out| out.tex)
-    }).map_err(|err| prefixed_py_error("Vega to PGFPlots conversion failed", err))
-}
-
-/// Convert restricted SVG text to PGFPlots without evaluating Vega.
-#[pyfunction]
-#[pyo3(signature = (svg, *, standalone=false))]
-pub fn svg_to_pgfplots(py: Python<'_>, svg: String, standalone: bool) -> PyResult<String> {
-    py.detach(move || {
-        vl_convert_rs::svg_to_pgfplots(&svg, PgfplotsOpts { standalone })
-    }).map_err(|err| prefixed_py_error("SVG to PGFPlots conversion failed", err))
+/// Asynchronous variant of vegalite_to_pgfplots, using the existing worker pool.
+#[pyfunction(name = "vegalite_to_pgfplots")]
+#[pyo3(signature = (vl_spec, *, standalone=false, tex_labels=false))]
+pub fn vegalite_to_pgfplots_asyncio<'py>(
+    py: Python<'py>,
+    vl_spec: Py<PyAny>,
+    standalone: bool,
+    tex_labels: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let spec = parse_json_spec(vl_spec)?;
+    let opts = PgfplotsOpts { standalone, tex_labels };
+    run_converter_future_async(
+        py,
+        move |converter| async move {
+            converter.vegalite_to_pgfplots(spec, opts).await.map(|o| o.tex)
+        },
+        "Native PGFPlots compilation failed",
+        |py, value| Ok(PyString::new(py, &value).into_any().unbind()),
+    )
 }
