@@ -9,14 +9,27 @@ permissions:
 jobs:
   snapshot:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Record exact source for offline reproduction
+      - uses: actions/checkout@v4
+        with:
+          repository: vega/altair
+          ref: 27f89b8d4f2861d446cde8a13480ca5e366eb318
+          path: .gallery/altair
+      - uses: actions/checkout@v4
+        with:
+          repository: vega/vega-datasets
+          ref: v3.2.1
+          path: .gallery/vega-datasets
+      - name: Record exact sources for offline reproduction
         run: |
           mkdir -p "$RUNNER_TEMP/pgfplots-source"
           git archive --format=tar HEAD | gzip > "$RUNNER_TEMP/pgfplots-source/source.tar.gz"
           git rev-parse HEAD > "$RUNNER_TEMP/pgfplots-source/commit.txt"
+          git -C .gallery/altair archive --format=tar HEAD | gzip > "$RUNNER_TEMP/pgfplots-source/altair.tar.gz"
+          git -C .gallery/vega-datasets archive --format=tar HEAD | gzip > "$RUNNER_TEMP/pgfplots-source/datasets.tar.gz"
+          git -C .gallery/vega-datasets rev-parse HEAD > "$RUNNER_TEMP/pgfplots-source/datasets-commit.txt"
       - uses: actions/upload-artifact@v4
         with:
           name: pgfplots-diagnostic-source
