@@ -1,0 +1,33 @@
+name: Format PGFPlots contribution once
+on:
+  push:
+    branches: [feature/experimental-pgfplots-export]
+    paths: [.github/workflows/pgfplots-format-once.yml]
+permissions:
+  contents: write
+jobs:
+  format:
+    if: github.repository == 'marcusinthesky/vl-convert'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply formatters and remove this one-shot workflow
+        run: |
+          python -m pip install ruff==0.14.10
+          cargo fmt --all
+          ruff format vl-convert-python
+          git rm .github/workflows/pgfplots-format-once.yml
+          git add vl-convert/src/bin/vl2pgfplots.rs vl-convert/tests/test_pgfplots_cli.rs vl-convert-rs/src/pgfplots.rs vl-convert-rs/src/lib.rs vl-convert-rs/tests/test_pgfplots.rs vl-convert-python/src/pgfplots.rs vl-convert-python/src/lib.rs vl-convert-python/vl_convert.pyi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'style: apply rustfmt and ruff to native PGFPlots interfaces'
+          git push origin HEAD:feature/experimental-pgfplots-export
