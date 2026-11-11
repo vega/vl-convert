@@ -4,7 +4,8 @@ use pyo3::types::PyString;
 use vl_convert_rs::PgfplotsOpts;
 
 use crate::utils::{
-    parse_json_spec, prefixed_py_error, run_converter_future, run_converter_future_async,
+    async_variant_doc, parse_spec_to_value_or_string, prefixed_py_error, run_converter_future,
+    run_converter_future_async,
 };
 
 /// Compile inline Vega-Lite data to editable PGFPlots plots and axes.
@@ -18,7 +19,7 @@ pub fn vegalite_to_pgfplots(
     standalone: bool,
     tex_labels: bool,
 ) -> PyResult<String> {
-    let spec = parse_json_spec(vl_spec)?;
+    let spec = parse_spec_to_value_or_string(vl_spec)?;
     let opts = PgfplotsOpts {
         standalone,
         tex_labels,
@@ -32,7 +33,7 @@ pub fn vegalite_to_pgfplots(
     .map_err(|err| prefixed_py_error("Native PGFPlots compilation failed", err))
 }
 
-/// Asynchronous variant of vegalite_to_pgfplots, using the existing worker pool.
+#[doc = async_variant_doc!("vegalite_to_pgfplots")]
 #[pyfunction(name = "vegalite_to_pgfplots")]
 #[pyo3(signature = (vl_spec, *, standalone=false, tex_labels=false))]
 pub fn vegalite_to_pgfplots_asyncio<'py>(
@@ -41,7 +42,7 @@ pub fn vegalite_to_pgfplots_asyncio<'py>(
     standalone: bool,
     tex_labels: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let spec = parse_json_spec(vl_spec)?;
+    let spec = parse_spec_to_value_or_string(vl_spec)?;
     let opts = PgfplotsOpts {
         standalone,
         tex_labels,
