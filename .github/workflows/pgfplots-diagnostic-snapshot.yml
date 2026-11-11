@@ -1,0 +1,26 @@
+name: PGFPlots diagnostic snapshot
+on:
+  push:
+    branches: [feature/experimental-pgfplots-export]
+    paths: ['.github/workflows/pgfplots-diagnostic-snapshot.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record exact source for offline reproduction
+        run: |
+          mkdir -p "$RUNNER_TEMP/pgfplots-source"
+          git archive --format=tar HEAD | gzip > "$RUNNER_TEMP/pgfplots-source/source.tar.gz"
+          git rev-parse HEAD > "$RUNNER_TEMP/pgfplots-source/commit.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pgfplots-diagnostic-source
+          path: ${{ runner.temp }}/pgfplots-source
+          retention-days: 3
+      - name: Run dependency-free compiler tests
+        run: node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
