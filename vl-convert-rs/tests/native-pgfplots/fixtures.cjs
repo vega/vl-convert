@@ -36,6 +36,8 @@ function fixtures() {
  out.facets={data:{values:[{g:'one',x:'A',y:1},{g:'one',x:'B',y:3},{g:'two',x:'B',y:5},{g:'two',x:'C',y:2}]},facet:{field:'g',type:'nominal'},spec:{mark:'bar',encoding:{x:n('x'),y:q('y')}}};
  out.repeat={data:{values:[{x:1,a:2,b:3},{x:2,a:4,b:5}]},repeat:['a','b'],spec:{mark:'line',encoding:{x:q('x'),y:{field:{repeat:'repeat'},type:'quantitative'}}}};
  out.greek = clone(basic); out.greek.encoding.y.title=["α ± σ","measurement"];
+ out.decimal_histogram={data:{values:[.3,.3-1e-8,.6,.9].map(v=>({v}))},mark:'bar',encoding:{x:{...q('v'),bin:{step:.1,extent:[0,1]}},y:{aggregate:'count',type:'quantitative'}}};
+ out.single_normalized={data:{values:[{g:'A',v:2},{g:'B',v:4}]},mark:'bar',encoding:{x:n('g'),y:{...q('v'),stack:'normalize'}}};
  return out;
 }
 module.exports={fixtures,basic,q,n,clone};

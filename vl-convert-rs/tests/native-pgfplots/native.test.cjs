@@ -148,3 +148,30 @@ test('conflicting layer axes are rejected',()=>{
 test('secondary errors require primary errors',()=>{
  const s=fixtures().asymmetric;delete s.encoding.yError;assert.throws(()=>compile(s),/primary error/);
 });
+
+test('decimal histogram boundaries are stable against division roundoff',()=>{
+  const s={data:{values:[.3,.3-1e-8,.6,.9].map(v=>({v}))},mark:'bar',encoding:{x:{...q('v'),bin:{step:.1,extent:[0,1]}},y:{aggregate:'count',type:'quantitative'}}};
+  const bars=lower(s).panels[0].plots[0].bars;
+  assert.deepEqual(bars.map(b=>Math.round(b.c*10)),[2,3,6,9]);
+  assert.deepEqual(bars.map(b=>b.high),[1,1,1,1]);
+});
+test('explicit normalization also applies with one series',()=>{
+  const s={data:{values:[{g:'A',v:2},{g:'B',v:4}]},mark:'bar',encoding:{x:n('g'),y:{...q('v'),stack:'normalize'}}};
+  assert.deepEqual(lower(s).panels[0].plots[0].upper,[[0,1],[1,1]]);
+});
+test('explicit stacking is not silently ignored on points or log axes',()=>{
+  const s=clone(basic);s.mark='point';s.encoding.y.stack='zero';
+  assert.throws(()=>compile(s),/bar or area/);
+  s.mark='bar';s.encoding.y.scale={type:'log'};
+  assert.throws(()=>compile(s),/linear measure/);
+});
+test('generated aggregate fields cannot overwrite a grouping field',()=>{
+  const s={data:{values:[{v:2,__vlc_aggregate_x:'A'}]},mark:'point',encoding:{x:{...q('v'),aggregate:'mean'},y:{datum:1},color:n('__vlc_aggregate_x')}};
+  assert.throws(()=>compile(s),/aggregate field collision/);
+});
+test('shared scale semantics do not depend on JSON property order',()=>{
+  const a=clone(basic),b=clone(basic);delete a.width;delete a.height;delete b.width;delete b.height;
+  a.encoding.x.scale={domain:[0,5],reverse:true};
+  b.encoding.x.scale={reverse:true,domain:[0,5]};
+  assert.doesNotThrow(()=>compile({layer:[a,b]}));
+});

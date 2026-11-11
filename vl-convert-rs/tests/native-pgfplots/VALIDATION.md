@@ -41,3 +41,14 @@ probes independently check selected invariants; TeX typography and layout are
 intentionally native, not promised to be pixel-identical to Vega. Supported
 input is a documented subset, not the entire Vega-Lite grammar. Keep the PR in
 draft until native integration and upstream CI pass and the API scope is reviewed.
+
+## Follow-up numerical regression run
+
+The original evidence above remains a historical record for its pinned source.
+New regressions were first observed failing, then passed after fixes for decimal
+histogram roundoff, single-series normalization, invalid explicit stacks,
+aggregate field collisions, and object-property-order-independent scale comparison.
+Current compiler SHA-256: `9f8c43bb856987af72fa922fba9845a91956b6a3d047e3b04b1940fae7613c93`.
+The exact updated source passed **87 Node tests** in GitHub Actions.
+Two additional TeX fixtures cover decimal bins and single-series normalization;
+their rendering results must be checked in the Native PGFPlots workflow.

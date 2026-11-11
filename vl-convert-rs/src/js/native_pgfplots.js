@@ -21,7 +21,7 @@ globalThis.vlcNativePgfplots = (() => {
   function array(v, p) { if (!Array.isArray(v)) fail(p, "expected an array"); return v; }
   function boolean(v, p) { if (typeof v !== "boolean") fail(p, "expected a boolean"); return v; }
   function choice(v, values, p) { if (!values.includes(v)) fail(p, `unsupported value ${JSON.stringify(v)}`); return v; }
-  const id = v => JSON.stringify(v);
+  const id = v => JSON.stringify(v, (_, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(k => [k, x[k]])) : x);
   const unique = a => [...new Map(a.map(v => [id(v), v])).values()];
   const compare = (a, b) => typeof a === "number" && typeof b === "number" ? a - b : String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
   const numeric = v => typeof v === "number" && Number.isFinite(v);
@@ -232,7 +232,10 @@ globalThis.vlcNativePgfplots = (() => {
       if (rows.some(r => own(r, a) || own(r, b))) fail(p, "reserved bin field collision");
       rows = rows.filter(r => value(r, def, p) != null).map(r => {
         const v = number(value(r, def, p), p, lo, hi);
-        const i = Math.min(Math.round(count) - 1, Math.floor((v - lo) / step));
+        const quotient = (v - lo) / step, nearest = Math.round(quotient);
+        // Snap only division roundoff at an exact bin boundary.
+        const stable = Math.abs(quotient - nearest) <= 8 * Number.EPSILON * Math.max(1, Math.abs(quotient)) ? nearest : quotient;
+        const i = Math.min(Math.round(count) - 1, Math.floor(stable));
         return {...r, [a]: lo + i * step, [b]: lo + (i + 1) * step};
       });
       enc[channel] = {...def, field: a, bin: undefined, type: "quantitative"};
@@ -242,6 +245,7 @@ globalThis.vlcNativePgfplots = (() => {
     const terms = Object.entries(enc).filter(([, d]) => d.aggregate);
     for(const [,d] of terms) choice(d.aggregate,["count","sum","mean","average","min","max","median","q1","q3","stdev","stderr"],p);
     if (terms.length) {
+      for (const [c] of terms) if (rows.some(r => own(r, `__vlc_aggregate_${c}`))) fail(p, "reserved aggregate field collision");
       const by = unique(Object.values(enc).filter(d => !d.aggregate && d.field).map(d => d.field));
       rows = groups(rows, by).map(g => Object.fromEntries([
         ...by.map(f => [f, g[0][f]]),
@@ -467,7 +471,11 @@ globalThis.vlcNativePgfplots = (() => {
       if (m.type === "area" && e[category+"2"]) fail(at, "area secondary coordinates belong on the measure axis");
       if (["line", "point", "circle", "square", "bar", "area", "rect", "boxplot", "errorbar", "errorband", "text"].includes(m.type) && (!e.x || !e.y)) fail(at, `${m.type} requires both x and y coordinates`);
       if (e.x?.stack && measure !== "x" || e.y?.stack && measure !== "y") fail(at, "stack is only supported on the measure channel");
-      const stack = !offset && axes[measure].kind === "linear" && ["bar", "area"].includes(m.type) && allSeries.length > 1 && e.color?.field ? (e[measure]?.stack === undefined ? "zero" : e[measure].stack) : null;
+      const requestedStack = e[measure]?.stack;
+      if (requestedStack != null && !["bar", "area"].includes(m.type)) fail(at, "stacking requires a bar or area mark");
+      if (requestedStack != null && axes[measure].kind !== "linear") fail(at, "stacking requires a linear measure axis");
+      const stack = !offset && axes[measure].kind === "linear" && ["bar", "area"].includes(m.type)
+        ? (requestedStack === undefined ? (allSeries.length > 1 && e.color?.field ? "zero" : null) : requestedStack) : null;
       if(stack && e.order)fail(at,"custom stack order is not supported; set the color domain order");
       if (stack && m.type === "area") {
         const support = s => id(unique(s.rows.map(r => xy(r, e[category], axes[category], at))).sort((a,b)=>a-b));
