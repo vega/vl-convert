@@ -1,12 +1,12 @@
 //! Native, data-coordinate PGFPlots output for a strict Vega-Lite subset.
 //!
-//! The shared compiler runs in the existing V8 worker. It never renders SVG,
-//! executes input expressions, downloads data, or launches a TeX process.
+//! The existing Vega worker evaluates data and Vega expressions under the same
+//! resource policy as image conversion. TeX emission retains axes and original
+//! data coordinates; no SVG tracing or TeX subprocess is used.
 
 use crate::anyhow::{bail, Result};
-use crate::{ValueOrString, VlConverter};
+use crate::{LogEntry, ValueOrString, VlConverter, VlVersion};
 
-const COMPILER: &str = include_str!("js/native_pgfplots.js");
 const MAX_INPUT_BYTES: usize = 8 * 1024 * 1024;
 
 /// Options specific to native PGFPlots output.
@@ -26,6 +26,8 @@ pub struct PgfplotsOpts {
 pub struct PgfplotsOutput {
     /// TeX source. No auxiliary image files or outlined glyphs are generated.
     pub tex: String,
+    /// Diagnostics from official compilation, data evaluation, and normalization.
+    pub logs: Vec<LogEntry>,
 }
 
 impl VlConverter {
@@ -35,13 +37,25 @@ impl VlConverter {
     /// prepared box plots, heatmaps, layers, and simple multi-view composition.
     /// Unsupported properties return errors, rather than an approximate picture.
     ///
-    /// This is an independent semantic backend, not the bundled Vega-Lite-to-Vega
-    /// compiler. It does not inherit browser themes, fonts, locales, plugins, or
-    /// resource-loading settings. TeX controls typography. See the PGFPlots guide
-    /// for the precise supported subset and statistical definitions.
+    /// The official compiler/runtime evaluates supported static dataflows. Native
+    /// TeX controls typography. Unsupported graphical semantics return an error;
+    /// the converter never starts TeX. Resource loads use the configured policy.
     pub async fn vegalite_to_pgfplots(
         &self,
         spec: impl Into<ValueOrString>,
+        opts: PgfplotsOpts,
+    ) -> Result<PgfplotsOutput> {
+        self.vegalite_to_pgfplots_with_version(spec, VlVersion::default(), opts)
+            .await
+    }
+
+    /// Compile using an explicitly selected bundled Vega-Lite version.
+    ///
+    /// Resource permissions and execution limits are inherited from this converter.
+    pub async fn vegalite_to_pgfplots_with_version(
+        &self,
+        spec: impl Into<ValueOrString>,
+        version: VlVersion,
         opts: PgfplotsOpts,
     ) -> Result<PgfplotsOutput> {
         let json = match spec.into() {
@@ -51,17 +65,11 @@ impl VlConverter {
         if json.len() > MAX_INPUT_BYTES {
             bail!("PGFPlots: input exceeds the 8 MiB limit");
         }
-        // Serialize a string containing JSON, not JavaScript supplied by the
-        // caller. JSON.parse creates data; labels/expressions never become code.
-        let source = format!(
-            "{COMPILER}\nvlcNativePgfplots.compile(JSON.parse({}), {});",
-            serde_json::to_string(&json)?,
-            serde_json::to_string(&opts)?,
-        );
         self.run_on_worker(move |inner| {
             Box::pin(async move {
-                let tex = inner.execute_script_to_string(&source).await?;
-                Ok(PgfplotsOutput { tex })
+                inner
+                    .native_pgfplots(ValueOrString::JsonString(json), version, opts)
+                    .await
             })
         })
         .await

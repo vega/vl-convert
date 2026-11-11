@@ -8,8 +8,10 @@ This experimental backend emits **editable PGFPlots axes, data coordinates,
 legends, and TeX labels**. It replaces the earlier SVG-outline prototype. It does
 not reconstruct plots from SVG, hide a picture inside an axis, or embed a PDF.
 
-It is a strict, independent compiler for a static Cartesian **subset** of
-Vega-Lite v5/v6, not an implementation of the entire Vega-Lite language. Native
+It is a native emitter for a static Cartesian **subset** of Vega-Lite v5/v6.
+The bundled official Vega-Lite compiler and Vega runtime evaluate dataflows;
+the native emitter handles axes, series, and TeX. It is not an implementation
+of the entire Vega-Lite graphical language. Native
 TeX typography, tick selection, layout, and default padding differ from Vega.
 Numerical meaning, rather than pixel-identical appearance, is the contract.
 
@@ -33,13 +35,15 @@ Path("figure.tex").write_text(
 )
 ```
 
-Inputs may be dictionaries or JSON strings. The asynchronous counterpart is
+Inputs may be dictionaries or JSON strings. `vl_version="v5_8"` selects a
+bundled compiler; omitting it uses the default version. The asynchronous counterpart is
 `await vl_convert.asyncio.vegalite_to_pgfplots(spec, ...)`, with the same options.
 
 **Security:** `tex_labels=False` escapes TeX metacharacters. Set it to `True`
 only for trusted labels: arbitrary TeX can read files or execute commands when
-compiled. `-no-shell-escape` alone is not a complete TeX sandbox. Conversion
-itself never runs TeX, evaluates supplied expressions, or loads remote data.
+compiled. `-no-shell-escape` alone is not a complete TeX sandbox. Conversion itself never runs TeX. Vega evaluates its own restricted expression
+language, not arbitrary caller JavaScript. Data loading uses the same configured
+resource-access policy as other converter targets.
 
 ## Rust and CLI
 
@@ -62,10 +66,16 @@ pdflatex -no-shell-escape -halt-on-error figure.tex
 
 `--tex-labels` enables trusted mathematical labels. Conversion errors leave an
 existing output file untouched. The compiler returns TeX; it never launches a
-TeX process. Browser themes, Google Fonts, plugins, locales and `VlOpts` do not
-apply to this independent backend. The old draft's `vega_to_pgfplots` and
+TeX process. TeX controls fonts and layout rather than Google Fonts or browser themes.
+The existing converter resource policy and worker limits apply. Per-call theme,
+locale and plugin options are not exposed by this API. The old draft's `vega_to_pgfplots` and
 `svg_to_pgfplots` interfaces are removed: arbitrary Vega/SVG do not retain the
 high-level semantics required by this compiler.
+
+`--vl-version` selects a bundled compiler, and `--vlc-config PATH` loads the
+existing JSONC converter configuration, including resource permissions. Rust
+provides `vegalite_to_pgfplots_with_version(spec, version, opts)`; successful
+outputs retain official compiler/runtime diagnostics in `logs`.
 
 A fragment requires `pgfplots` and the `groupplots`, `fillbetween`, `statistics`,
 `patchplots`, and `colormaps` libraries. Standalone output includes those imports
@@ -77,16 +87,17 @@ coordinates remain in their original numerical units.
 
 | Input | Native output and conditions |
 |---|---|
-| Lines, points, steps | `addplot coordinates`; missing values interrupt paths |
+| Lines, points, steps, monotone curves | `addplot coordinates`; missing values interrupt paths; monotone controls come from Vega and remain data-coordinate paths |
 | Bars | Vertical/horizontal, explicit intervals, zero/normalized stacks; `stack: null` overlaps; grouped bars require the matching categorical `xOffset`/`yOffset` and color field |
 | Areas, error bands | Named data-coordinate paths and `fill between`; intervals can be supplied explicitly |
 | Error bars | Native asymmetric/symmetric errors on either axis; bounds are retained |
 | Box plots | `boxplot prepared`, R7 quartiles, Tukey whiskers/outliers or min–max; default whisker extent 1.5 IQR |
 | Heatmaps, colored points | Rectangular patches or scatter metadata, native colorbars; linear quantitative color with viridis or an explicit RGB range |
-| Axes and guides | Linear/log, categorical ticks, domains, reversal, grids, labels, explicit tick values, `.nf`/`.ne` numerical formatting |
+| Axes and guides | Linear/log, temporal coordinates/calendar labels, categorical ticks, domains, reversal, grids, labels, explicit tick values and Vega numeric formats |
+| Tick and variable-size/shape points | Native point/tick marks and size/shape legends; evaluated styles retain source data coordinates |
 | Annotations | Rules and editable text at `axis cs` coordinates |
-| Composition | Shared-scale layers, concatenation, simple row/column facets and repeat, native groupplots, explicit scale resolution |
-| Data | Inline values/named inline datasets; structured filters, aggregate, fold, explicit-step/extent histograms |
+| Composition | Shared-scale layers, two-layer independent y axes, concatenation, simple row/column facets and repeat, native groupplots, explicit scale resolution |
+| Data | Inline/named/permission-controlled external sources; official calculate, window, joinaggregate, timeUnit, bin, fold, aggregate and other static dataflow evaluation |
 
 Aggregates include count, sum, mean, min, max, median, quartiles, sample standard
 deviation, and standard error. Quantiles use linear interpolation at
@@ -98,17 +109,26 @@ are separated; normalized negative stacks are rejected. Histogram bins are
 left-closed/right-open except the final bin, which includes the explicit upper
 extent. Extent and step must define an integer number of bins.
 
-For reproducibility, **bootstrap confidence intervals are not recomputed**.
-Supply precomputed lower/upper bounds. A raw `errorband` whose default implies a
-confidence interval is rejected, not silently replaced with standard error.
+Raw confidence-interval composite marks are normalized by the official compiler;
+bootstrap intervals are not replaced with standard-error estimates. Randomized
+statistics and jitter can vary between evaluations. Supply precomputed intervals
+when exact repeated values are required; the exporter does not silently change
+Vega's random-number generator or claim seed-independent CI parity.
+
+The normalizer maps each primitive to the compiled mark's real data-source
+reference and traces dataflow ancestry to locate generated fields. It does not
+assume generated names such as `data_0`, and it rejects ambiguous or unsupported
+scopes. Datum-bound styles may be resolved from evaluated marks; plot geometry
+is emitted from data values, not traced SVG or scenegraph pixel positions.
 
 ## Explicit limitations
 
-Unsupported properties raise path-specific errors. Examples include temporal,
-polar/geographic/3D coordinates, external URLs, freeform expressions, arbitrary
-Vega signals and interactions, nested data-field paths, arbitrary interpolation,
-custom stack-order fields, and most browser-specific styling. Materialize
-unsupported transformations before export. Nested composition beyond the
+Unsupported properties raise path-specific errors. Examples include polar/geographic/3D coordinates, interactions, unsupported
+custom shapes or path-dependent styling, unsupported composition/guide options,
+and arbitrary JavaScript. Nested data fields are evaluated by Vega and flattened
+with collision checks. Unknown graphical options are not silently discarded.
+The available static transform set is wider than the native mark/layout set; a
+transform succeeding does not guarantee that its resulting chart is supported. Nested composition beyond the
 supported layer/panel structure is rejected. Facet/offset variants and color
 scale options are deliberately restricted; this is not full grammar coverage.
 
@@ -119,11 +139,14 @@ figure still needs journal-specific typography, accessibility and layout review.
 
 ## Reproducible tests
 
-The JavaScript source included by Rust is the same source tested by Node; there
-is no Python surrogate implementation.
+Both production JavaScript modules included by Rust are tested directly under
+Node against the same vendored Vega libraries. The test loader makes no network
+requests. There is no Python surrogate compiler.
 
 ```sh
 node --test vl-convert-rs/tests/native-pgfplots/native.test.cjs
+node --no-warnings --loader ./vl-convert-rs/tests/native-pgfplots/vendor-loader.mjs \
+  --test vl-convert-rs/tests/native-pgfplots/normalize.test.mjs
 python vl-convert-rs/tests/native-pgfplots/verify_tex.py /tmp/pgfplots-check
 cargo test -p vl-convert-rs --test test_pgfplots -- --test-threads=1
 cargo test -p vl-convert --test test_pgfplots_cli -- --test-threads=1
@@ -142,3 +165,19 @@ components fail these explicit checks rather than being silently skipped.
 The fork PR records which tests were actually run. Passing Node/TeX tests alone
 does not establish that Rust/PyO3 packaging builds, that every Vega-Lite feature
 is implemented, or that a figure meets a publication's requirements.
+
+## Gallery conformance (phase 0)
+
+`gallery_export.py` executes pinned Altair example sources and stores their
+unchanged emitted specifications. Example datasets are matched against Altair's
+recorded Git blob identities. `gallery_run.mjs` preserves the original spec,
+reference SVG, normalized spec, native IR, emitted TeX, and diagnostics.
+`gallery_render.py` compiles actual TeX and produces side-by-side images. Reports
+keep `reference`, `latex`, `numerical_parity`, and `visual_review` separate:
+LaTeX success alone is not a scientific-fidelity pass.
+
+The source pin is Altair `27f89b8d4f2861d446cde8a13480ca5e366eb318`.
+External-source acquisition failures are recorded separately from compiler
+failures. See the workflow artifact and `pgfplots-conformance.json` for observed
+results and unresolved cases; the earlier gallery registry is a planning
+classification, not a list of verified passes.

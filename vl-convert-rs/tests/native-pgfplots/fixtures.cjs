@@ -38,6 +38,10 @@ function fixtures() {
  out.greek = clone(basic); out.greek.encoding.y.title=["α ± σ","measurement"];
  out.decimal_histogram={data:{values:[.3,.3-1e-8,.6,.9].map(v=>({v}))},mark:'bar',encoding:{x:{...q('v'),bin:{step:.1,extent:[0,1]}},y:{aggregate:'count',type:'quantitative'}}};
  out.single_normalized={data:{values:[{g:'A',v:2},{g:'B',v:4}]},mark:'bar',encoding:{x:n('g'),y:{...q('v'),stack:'normalize'}}};
+ // Fixed plot-area domains make PDF-coordinate assertions independent of
+ // Vega-Lite's mark-dependent default `zero` policy.
+ out.line.encoding.x.scale={domain:[0,3]};
+ out.log.encoding.x.scale={domain:[0,3]};
  return out;
 }
 module.exports={fixtures,basic,q,n,clone};

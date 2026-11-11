@@ -1,9 +1,10 @@
 //! Native PGFPlots frontend. This program does not invoke TeX.
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use clap::Parser;
-use vl_convert_rs::{anyhow, PgfplotsOpts, VlConverter};
+use vl_convert_rs::{anyhow, PgfplotsOpts, VlConverter, VlVersion, VlcConfig};
 
 const MAX_INPUT_BYTES: u64 = 8 * 1024 * 1024;
 
@@ -22,6 +23,12 @@ struct Args {
     /// Treat labels as trusted TeX. Never use for untrusted specifications.
     #[arg(long)]
     tex_labels: bool,
+    /// Select a bundled Vega-Lite version, for example v6_4.
+    #[arg(long)]
+    vl_version: Option<String>,
+    /// Converter JSONC configuration, including resource and execution limits.
+    #[arg(long)]
+    vlc_config: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -38,15 +45,31 @@ async fn main() -> anyhow::Result<()> {
     if source.len() as u64 > MAX_INPUT_BYTES {
         anyhow::bail!("PGFPlots: input exceeds the 8 MiB limit");
     }
-    let output = VlConverter::new()
-        .vegalite_to_pgfplots(
+    let config = args
+        .vlc_config
+        .as_deref()
+        .map(VlcConfig::from_file)
+        .transpose()?
+        .unwrap_or_default();
+    let version = args
+        .vl_version
+        .as_deref()
+        .map(VlVersion::from_str)
+        .transpose()?
+        .unwrap_or_default();
+    let output = VlConverter::with_config(config)?
+        .vegalite_to_pgfplots_with_version(
             source,
+            version,
             PgfplotsOpts {
                 standalone: args.standalone,
                 tex_labels: args.tex_labels,
             },
         )
         .await?;
+    for entry in &output.logs {
+        eprintln!("{}: {}", entry.level, entry.message);
+    }
     // Conversion errors cannot truncate an existing output file.
     match &args.output {
         Some(path) if path.as_os_str() != "-" => std::fs::write(path, output.tex)?,

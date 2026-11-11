@@ -1243,7 +1243,7 @@ def get_vegalite_versions() -> list[str]:
 if TYPE_CHECKING:
     class _AsyncioModule:
         async def vegalite_to_pgfplots(
-            self, vl_spec: VlSpec, *, standalone: bool = False, tex_labels: bool = False
+            self, vl_spec: VlSpec, *, standalone: bool = False, tex_labels: bool = False, vl_version: str | None = None
         ) -> str:
             """Async native PGFPlots compilation. See the synchronous function."""
             ...
@@ -1618,13 +1618,14 @@ if TYPE_CHECKING:
     asyncio: _AsyncioModule
 
 def vegalite_to_pgfplots(
-    vl_spec: VlSpec, *, standalone: bool = False, tex_labels: bool = False
+    vl_spec: VlSpec, *, standalone: bool = False, tex_labels: bool = False, vl_version: str | None = None
 ) -> str:
     """
     Compile a static Vega-Lite subset to native PGFPlots axes and data coordinates.
 
     Unsupported features raise ValueError. Labels are escaped unless tex_labels
     is enabled for trusted input. Raw TeX can access files when later compiled.
-    This independent backend does not inherit browser themes, fonts or locales.
+    Data transforms use the selected bundled Vega runtime; resource access follows
+    converter configuration. Native TeX controls typography.
     """
     ...

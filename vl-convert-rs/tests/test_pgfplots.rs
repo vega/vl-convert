@@ -53,7 +53,7 @@ async fn unsupported_inputs_fail_without_poisoning_worker() {
         json!({"marks": []}),
         json!({"mark": "line", "data": {"url": "file:///etc/passwd"}}),
         json!({"mark": "line", "params": [{"name": "brush", "select": "interval"}]}),
-        json!({"mark": "line", "transform": [{"calculate": "1+1", "as": "y"}]}),
+        json!({"mark": "line", "transform": [{"calculate": "globalThis.process.exit()", "as": "y"}]}),
     ] {
         assert!(converter
             .vegalite_to_pgfplots(input, PgfplotsOpts::default())
@@ -139,4 +139,47 @@ async fn explicit_uncertainty_is_emitted_as_native_error_bars() {
     assert!(tex.contains("error bars/.cd"));
     assert!(tex.contains("0.25"));
     assert!(!tex.contains("pgfpath"));
+}
+
+#[tokio::test]
+async fn official_window_and_calculated_fields_are_materialized() {
+    let mut spec = line();
+    spec["transform"] = json!([
+        {"window": [{"op": "mean", "field": "y", "as": "average"}], "frame": [-1, 0], "sort": [{"field": "x"}]},
+        {"calculate": "datum.average * 2", "as": "z"}
+    ]);
+    spec["encoding"]["y"]["field"] = json!("z");
+    let output = VlConverter::new()
+        .vegalite_to_pgfplots(spec, PgfplotsOpts::default())
+        .await
+        .unwrap();
+    assert!(output.tex.contains("(1,4)"));
+    assert!(output.tex.contains("(2,6)"));
+}
+
+#[tokio::test]
+async fn data_urls_follow_converter_access_policy() {
+    let mut config = vl_convert_rs::VlcConfig::default();
+    config.allowed_base_urls.clear();
+    let converter = VlConverter::with_config(config).unwrap();
+    let mut spec = line();
+    spec["data"] = json!({"url": "https://example.invalid/blocked.csv"});
+    let error = converter
+        .vegalite_to_pgfplots(spec, PgfplotsOpts::default())
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("VLC_ACCESS_DENIED"), "{error}");
+}
+
+#[tokio::test]
+async fn an_older_bundled_compiler_can_be_selected() {
+    let out = VlConverter::new()
+        .vegalite_to_pgfplots_with_version(
+            line(),
+            vl_convert_rs::VlVersion::v5_8,
+            PgfplotsOpts::default(),
+        )
+        .await
+        .unwrap();
+    assert!(out.tex.contains("(2,4)"));
 }

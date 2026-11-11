@@ -207,11 +207,11 @@ globalThis.vlcNativePgfplots = (() => {
         if (def.scale.range !== undefined && channel !== "color") fail(at, "explicit pixel scale ranges are not native plot semantics");
       }
       if (def.axis !== undefined && def.axis !== null) {
-        keys(def.axis, ["title", "grid", "values", "labels", "labelAngle", "format"], `${at}.axis`);
+        keys(def.axis, ["title", "grid", "values", "labels", "labelAngle", "format", "_time", "tickLabels", "domain", "ticks", "tickSize", "titleColor", "labelColor", "gridColor", "domainColor", "tickColor", "labelFontSize", "titleFontSize", "labelPadding", "titlePadding"], `${at}.axis`);
         for (const key of ["grid", "labels"]) if (own(def.axis, key)) boolean(def.axis[key], `${at}.axis.${key}`);
         if (def.axis.labelAngle !== undefined) number(def.axis.labelAngle, at, -360, 360);
       }
-      if (def.legend !== undefined && def.legend !== null) keys(def.legend, ["title"], `${at}.legend`);
+      if (def.legend !== undefined && def.legend !== null) keys(def.legend, ["title", "orient", "direction"], `${at}.legend`);
       if (def.stack !== undefined && def.stack !== null) choice(def.stack, ["zero", "normalize"], `${at}.stack`);
       result[channel] = {...def, title: own(def, "title") ? def.title : def.aggregate ? `${def.aggregate}(${def.field || "rows"})` : def.field};
     }
@@ -257,14 +257,14 @@ globalThis.vlcNativePgfplots = (() => {
   }
   function mark(input, p) {
     const m = typeof input === "string" ? {type: input} : input;
-    keys(m, ["type", "color", "fill", "stroke", "opacity", "fillOpacity", "strokeOpacity", "strokeWidth", "strokeDash", "size", "shape", "filled", "point", "interpolate", "orient", "extent", "center", "text", "align", "baseline", "dx", "dy", "angle", "fontSize", "clip"], p);
-    choice(m.type, ["line", "point", "circle", "square", "bar", "area", "rect", "rule", "text", "errorbar", "errorband", "boxplot"], p);
+    keys(m, ["type", "color", "fill", "stroke", "opacity", "fillOpacity", "strokeOpacity", "strokeWidth", "strokeDash", "size", "shape", "filled", "point", "interpolate", "orient", "extent", "center", "text", "align", "baseline", "dx", "dy", "angle", "fontSize", "clip", "thickness", "_styleField", "_symbolLegends"], p);
+    choice(m.type, ["line", "point", "circle", "square", "bar", "area", "rect", "rule", "text", "tick", "errorbar", "errorband", "boxplot"], p);
     for (const k of ["opacity", "fillOpacity", "strokeOpacity"]) if (m[k] !== undefined) number(m[k], p, 0, 1);
     for (const k of ["strokeWidth", "size", "fontSize"]) if (m[k] !== undefined) number(m[k], p, 0, 10000);
     for (const k of ["dx", "dy", "angle"]) if (m[k] !== undefined) number(m[k], p, -10000, 10000);
     for (const k of ["filled", "point", "clip"]) if (m[k] !== undefined) boolean(m[k], p);
     if (m.clip === false) fail(p, "unclipped marks are not supported");
-    if (m.interpolate !== undefined) choice(m.interpolate, ["linear", "step", "step-before", "step-after"], p);
+    if (m.interpolate !== undefined) choice(m.interpolate, ["linear", "step", "step-before", "step-after", "monotone"], p);
     if (m.orient !== undefined) choice(m.orient, ["horizontal", "vertical"], p);
     if (m.center !== undefined) choice(m.center, ["mean", "median"], p);
     if (m.align !== undefined) choice(m.align, ["left", "center", "right"], p);
@@ -273,13 +273,15 @@ globalThis.vlcNativePgfplots = (() => {
     const special = {
       extent: ["boxplot", "errorbar", "errorband"], center: ["errorbar", "errorband"],
       point: ["line"], interpolate: ["line", "area", "errorband"],
-      shape: ["point", "circle", "square", "line"], size: ["point", "circle", "square", "bar", "line"],
+      shape: ["point", "circle", "square", "line"], size: ["point", "circle", "square", "bar", "line", "tick", "rule", "text"],
       text: ["text"], align: ["text"], baseline: ["text"], dx: ["text"], dy: ["text"], angle: ["text"], fontSize: ["text"],
     };
     for (const [key, marks] of Object.entries(special)) if (m[key] !== undefined && !marks.includes(m.type)) fail(p + "." + key, "not supported for this mark");
+    if(m._styleField!==undefined && typeof m._styleField!=="string")fail(p,"style field must be a string");
+    if(m.thickness!==undefined)number(m.thickness,p,0,10000);
     return {...m};
   }
-  const VIEW_KEYS = ["$schema", "description", "name", "usermeta", "data", "datasets", "transform", "encoding", "mark", "layer", "width", "height", "title", "config"];
+  const VIEW_KEYS = ["$schema", "description", "name", "usermeta", "data", "datasets", "transform", "encoding", "mark", "layer", "width", "height", "title", "config", "resolve"];
   function units(spec, inherited, datasets, p, depth = 0) {
     if (depth > LIMIT.depth) fail(p, "view nesting limit exceeded");
     keys(spec, VIEW_KEYS, p);
@@ -346,7 +348,7 @@ globalThis.vlcNativePgfplots = (() => {
   function style(m, override) {
     const base = override || m.color || PALETTE[0];
     return {
-      stroke: m.stroke === null || m.strokeWidth === 0 ? null : color(m.stroke || base, "stroke"), fill: m.fill === null ? null : color(m.fill || base, "fill"),
+      stroke: m.stroke === null || m.stroke === "none" || m.strokeWidth === 0 ? null : color(m.stroke || base, "stroke"), fill: m.fill === null || m.fill === "none" ? null : color(m.fill || base, "fill"),
       opacity: m.opacity ?? 1, fillOpacity: m.fillOpacity ?? 1, strokeOpacity: m.strokeOpacity ?? 1,
       width: m.strokeWidth ?? (m.type === "line" ? 2 : 1), dash: m.strokeDash || [],
       size: m.size ?? 30, shape: m.shape || (m.type === "square" ? "square" : "circle"),
@@ -371,7 +373,7 @@ globalThis.vlcNativePgfplots = (() => {
     }
     if (c?.field && !["nominal", "ordinal"].includes(c.type)) fail(p, "color fields require quantitative, nominal, or ordinal type");
     if (enc.detail && !enc.detail.field) fail(p, "detail requires a field");
-    const by = [c?.field, enc.detail?.field].filter(Boolean);
+    const by = [c?.field, enc.detail?.field, m._styleField].filter(Boolean);
     let domain = c?.field ? unique(rows.map(r => field(r, c.field, p))).sort(compare) : [];
     if (c?.sort !== undefined) {
       if (Array.isArray(c.sort)) domain = [...c.sort, ...domain.filter(v => !c.sort.some(a => id(a) === id(v)))];
@@ -389,7 +391,16 @@ globalThis.vlcNativePgfplots = (() => {
       const index = c?.field ? domain.findIndex(v => id(v) === id(cv)) : 0;
       if (index < 0) fail(p, "unknown color-domain value");
       const paint = c?.field ? colors[index % colors.length] : c ? value(g[0], c, p) : undefined;
-      return {rows: g, colorValue: cv, style: style(m, paint), legend: c?.field && c.legend !== null ? String(cv) : null};
+      let resolved=style(m,paint);
+      if(m._styleField) {
+        const v=field(g[0],m._styleField,p);
+        object(v,p);
+        for(const key of ["size","strokeWidth","opacity","fillOpacity","strokeOpacity"])if(v[key]!=null)number(v[key],p,0);
+        resolved=style({...m,...v,filled:v.fill!=null && v.fill!=="none"},paint);
+        if(v.fill==="none" || v.fill===null)resolved.fill=null;
+        if(v.stroke==="none" || v.stroke==null)resolved.stroke=null;
+      }
+      return {rows:g,colorValue:cv,style:resolved,legend:c?.field && c.legend!==null?String(cv):null};
     });
   }
   function numericRange(axis, p) {
@@ -416,10 +427,27 @@ globalThis.vlcNativePgfplots = (() => {
     axis.domain = domain;
   }
   function panel(spec, datasets, p) {
+    if(spec.resolve) {
+      keys(spec.resolve,["scale"],p+".resolve");
+      keys(spec.resolve.scale || {},["x","y","color"],p+".resolve.scale");
+      if(spec.resolve.scale?.y==="independent") {
+        if(!spec.layer || spec.layer.length!==2 || spec.resolve.scale?.x==="independent")fail(p,"dual axes require two layers and one shared x scale");
+        const base={...spec};delete base.resolve;delete base.layer;
+        const children=spec.layer.map((layer,i)=>panel({...base,...layer,encoding:{...spec.encoding,...layer.encoding}},datasets,p+`.layer[${i}]`));
+        shareAxes(children,["x"]);
+        children[0].secondary=children[1];children[1].title=null;
+        return children[0];
+      }
+      if(Object.values(spec.resolve.scale || {}).some(v=>v!=="shared"))fail(p,"only independent y is supported within a layered panel");
+      spec={...spec};delete spec.resolve;
+    }
+    return singlePanel(spec,datasets,p);
+  }
+  function singlePanel(spec, datasets, p) {
     const cfg = spec.config === undefined ? {} : spec.config;
     keys(cfg, ["view"], `${p}.config`);
-    if (cfg.view) keys(cfg.view, ["continuousWidth", "continuousHeight", "stroke"], `${p}.config.view`);
-    if (cfg.view?.stroke != null) fail(p, "view.stroke is only supported as null");
+    if (cfg.view) keys(cfg.view, ["continuousWidth", "continuousHeight", "stroke", "strokeWidth"], `${p}.config.view`);
+    if(cfg.view?.stroke != null)color(cfg.view.stroke,p);
     const unitsList = units(spec, {}, datasets, p);
     if (!unitsList.length || unitsList.length > 64) fail(p, "a panel requires 1 to 64 layers");
     if (unitsList.reduce((n, u) => n + u.rows.length, 0) > 1000000) fail(p, "total layer row limit exceeded");
@@ -469,7 +497,7 @@ globalThis.vlcNativePgfplots = (() => {
       if(offset && e[measure]?.stack != null)fail(at,"offset bars cannot also be explicitly stacked");
       if (["errorbar","errorband"].includes(m.type) && (e[category+"2"] || e[category+"Error"] || e[category+"Error2"])) fail(at, "uncertainty may only be encoded on its measure axis");
       if (m.type === "area" && e[category+"2"]) fail(at, "area secondary coordinates belong on the measure axis");
-      if (["line", "point", "circle", "square", "bar", "area", "rect", "boxplot", "errorbar", "errorband", "text"].includes(m.type) && (!e.x || !e.y)) fail(at, `${m.type} requires both x and y coordinates`);
+      if (["line", "point", "circle", "square", "bar", "area", "rect", "boxplot", "errorbar", "errorband", "text", "tick"].includes(m.type) && (!e.x || !e.y)) fail(at, `${m.type} requires both x and y coordinates`);
       if (e.x?.stack && measure !== "x" || e.y?.stack && measure !== "y") fail(at, "stack is only supported on the measure channel");
       const requestedStack = e[measure]?.stack;
       if (requestedStack != null && !["bar", "area"].includes(m.type)) fail(at, "stacking requires a bar or area mark");
@@ -578,6 +606,8 @@ globalThis.vlcNativePgfplots = (() => {
             if (axes[measure].kind === "log" && v[0] <= 0) fail(at, "logarithmic boxplot samples must be positive");
             add({...base, type: "boxplot", c, q1, median, q3, low, high, outliers: v.filter(x => x < low || x > high), boxWidth: .6, points: v.map(x => pair(c, x))});
           }
+        } else if (m.type === "tick") {
+          add({...base,type:"tick",points:rows.map(coordinates).filter(pt=>pt.every(v=>v!=null))});
         } else if (m.type === "rule") {
           for (const r of rows) {
             const a = coordinates(r), b = [e.x2 ? xy(r, e.x2, axes.x, at) : a[0], e.y2 ? xy(r, e.y2, axes.y, at) : a[1]];
@@ -607,7 +637,7 @@ globalThis.vlcNativePgfplots = (() => {
       }
     }
     numericRange(axes.x, p + ".x"); numericRange(axes.y, p + ".y");
-    return {axes, plots, legendTitle, colorAxis, colorDef: colored[0] || null, title: spec.title, width: number(spec.width ?? cfg.view?.continuousWidth ?? 300, p + ".width", 1, 10000), height: number(spec.height ?? cfg.view?.continuousHeight ?? 200, p + ".height", 1, 10000)};
+    return {axes, plots, border:cfg.view?.stroke, borderWidth:cfg.view?.strokeWidth || 1, symbolLegends: unitsList.flatMap(u=>u.mark._symbolLegends || []), legendTitle, colorAxis, colorDef: colored[0] || null, title: spec.title, width: number(spec.width ?? cfg.view?.continuousWidth ?? 300, p + ".width", 1, 10000), height: number(spec.height ?? cfg.view?.continuousHeight ?? 200, p + ".height", 1, 10000)};
   }
   function shareAxes(panels, channels) {
     for (const channel of channels) {
@@ -754,6 +784,16 @@ globalThis.vlcNativePgfplots = (() => {
     if (a.kind === "log") parts.push(`${c}mode=log`, `log basis ${c}=${fmt(a.scale.base || 10)}`);
     if (a.scale.reverse) parts.push(`${c} dir=reverse`);
     if (a.axis === null) return [...parts, `axis ${c} line=none`, `${c}tick=\\empty`];
+    if(a.axis.domain===false)parts.push(`${c} axis line style={draw=none}`);
+    if(a.axis.ticks===false)parts.push(`${c}tick style={draw=none}`);
+    if(a.axis.tickSize!=null)parts.push(`${c}tick style={}`,`major tick length=${bp(number(a.axis.tickSize,c,0))}`);
+    if(a.axis.titleColor)parts.push(`${c}label style={text=${texColor(color(a.axis.titleColor,c))}}`);
+    if(a.axis.labelColor)parts.push(`${c}ticklabel style={text=${texColor(color(a.axis.labelColor,c))}}`);
+    if(a.axis.gridColor)parts.push(`${c} grid style={draw=${texColor(color(a.axis.gridColor,c))}}`);
+    if(a.axis.domainColor)parts.push(`${c} axis line style={draw=${texColor(color(a.axis.domainColor,c))}}`);
+    if(a.axis.tickColor)parts.push(`${c}tick style={draw=${texColor(color(a.axis.tickColor,c))}}`);
+    if(a.axis.labelFontSize)parts.push(`${c}ticklabel style={font=\\fontsize{${bp(number(a.axis.labelFontSize,c,1))}}{${bp(a.axis.labelFontSize*1.2)}}\\selectfont}`);
+    if(a.axis.titleFontSize)parts.push(`${c}label style={font=\\fontsize{${bp(number(a.axis.titleFontSize,c,1))}}{${bp(a.axis.titleFontSize*1.2)}}\\selectfont}`);
     if (a.title != null) parts.push(`${c}label={${label(a.title, opts.tex_labels)}}`);
     if (a.axis.grid) parts.push(`${c}majorgrids=true`);
     if (a.axis.labels === false) parts.push(`${c}ticklabels={}`);
@@ -767,6 +807,10 @@ globalThis.vlcNativePgfplots = (() => {
       if (a.kind === "category" && ticks.some(v => v < 0)) fail(c, "unknown category tick");
       parts.push(`${c}tick={${ticks.map(fmt).join(",")}}`);
       if (a.kind === "category" && a.axis.labels !== false) parts.push(`${c}ticklabels={${a.axis.values.map(v => `{${label(v, opts.tex_labels)}}`).join(",")}}`);
+    }
+    if (a.axis.tickLabels && a.axis.labels !== false) {
+      if (!a.axis.values || a.axis.tickLabels.length !== a.axis.values.length) fail(c, "tick labels must match tick values");
+      parts.push(`${c}ticklabels={${a.axis.tickLabels.map(v => `{${label(v, opts.tex_labels)}}`).join(",")}}`);
     }
     if (a.axis.format) {
       const match = /^\.(\d{1,2})([fe])$/.exec(a.axis.format);
@@ -786,9 +830,9 @@ globalThis.vlcNativePgfplots = (() => {
     return out;
   }
   function pointStyle(s) {
-    const mapping = {circle: s.filled ? "*" : "o", square: s.filled ? "square*" : "square", diamond: s.filled ? "diamond*" : "diamond", "triangle-up": s.filled ? "triangle*" : "triangle", cross: "+"};
+    const mapping = {circle:s.filled?"*":"o",square:s.filled?"square*":"square",diamond:s.filled?"diamond*":"diamond","triangle-up":s.filled?"triangle*":"triangle","triangle-down":s.filled?"triangle*":"triangle","triangle-right":s.filled?"triangle*":"triangle","triangle-left":s.filled?"triangle*":"triangle",cross:"+",stroke:"-"};
     if (!own(mapping, s.shape)) fail("shape", "supported point shapes: circle, square, diamond, triangle-up, cross");
-    return [`mark=${mapping[s.shape]}`, `mark size=${bp(Math.sqrt(s.size / Math.PI))}`, `mark options={draw=${texColor(s.stroke)},fill=${s.filled ? texColor(s.fill) : "none"},fill opacity=${fmt(s.opacity*s.fillOpacity)}}`];
+    return [`mark=${mapping[s.shape]}`, `mark size=${bp(s.shape==="square"?Math.sqrt(s.size)/2:Math.sqrt(s.size / Math.PI))}`, `mark options={rotate=${({"triangle-down":180,"triangle-right":270,"triangle-left":90})[s.shape] || 0},draw=${texColor(s.stroke)},fill=${s.filled ? texColor(s.fill) : "none"},fill opacity=${fmt(s.opacity*s.fillOpacity)}}`];
   }
   const coord = pt => pt == null ? "(nan,nan)" : `(${fmt(pt[0])},${fmt(pt[1])})`;
   function stepped(points, mode, horizontal, axes) {
@@ -809,14 +853,31 @@ globalThis.vlcNativePgfplots = (() => {
     }
     return out;
   }
+  function curvePath(commands) {
+    return commands.map(c=>{
+      const pt=(i)=>`(axis cs:${fmt(c[i])},${fmt(c[i+1])})`;
+      if(c[0]==="M")return pt(1);
+      if(c[0]==="L")return "-- "+pt(1);
+      if(c[0]==="C")return `.. controls ${pt(1)} and ${pt(3)} .. ${pt(5)}`;
+      if(c[0]==="Z")return "-- cycle";
+      fail("curve","unknown command");
+    }).join(" ");
+  }
   function emit(figure, opts) {
     const out = [];
     if (opts.standalone) out.push("\\documentclass[border=2bp]{standalone}", "\\usepackage[T1]{fontenc}", "\\usepackage{amsmath,amssymb,pgfplots}", "\\usepgfplotslibrary{groupplots,fillbetween,statistics,patchplots,colormaps}", "\\pgfplotsset{compat=1.18}", "\\begin{document}");
     out.push("% Native axes and data coordinates. No SVG outlines or embedded pictures.", "\\begin{tikzpicture}");
     const multi = figure.panels.length > 1;
     if (multi) out.push(`\\begin{groupplot}[group style={group size=${figure.columns} by ${Math.ceil(figure.panels.length / figure.columns)},horizontal sep=2cm,vertical sep=2cm}]`);
-    for (const [pi, panel] of figure.panels.entries()) {
+    const tasks=figure.panels.map((panel,pi)=>({panel,pi,overlay:false}));
+    for(const [pi,panel] of figure.panels.entries())if(panel.secondary)tasks.push({panel:panel.secondary,pi,overlay:true});
+    let groupClosed=false;
+    for (const {panel,pi,overlay} of tasks) {
+      if(overlay && multi && !groupClosed){out.push("\\end{groupplot}");groupClosed=true;}
       const settings = [`width=${bp(panel.width)}`, `height=${bp(panel.height)}`, "scale only axis", "enlargelimits=false", "clip=true", "unbounded coords=jump", "legend style={at={(1.03,1)},anchor=north west}", ...axisOptions(panel.axes.x, "x", opts), ...axisOptions(panel.axes.y, "y", opts)];
+      if(panel.border!=null)settings.push(`axis background/.style={draw=${texColor(color(panel.border,"view.stroke"))},line width=${bp(panel.borderWidth)}}`);
+      if(overlay)settings.push(`at={(${multi?`group c${pi%figure.columns+1}r${Math.floor(pi/figure.columns)+1}`:`vlcaxis${pi}`}.south west)}`,"anchor=south west","axis y line*=right","axis x line=none","xtick=\\empty");
+      else settings.push(...(!multi?[`name=vlcaxis${pi}`]:[]),...(panel.secondary?["axis y line*=left"]:[]));
       if (panel.colorAxis) {
         const c=panel.colorAxis;
         settings.push(`point meta min=${fmt(c.domain[0])}`,`point meta max=${fmt(c.domain[1])}`);
@@ -825,14 +886,21 @@ globalThis.vlcNativePgfplots = (() => {
         if(c.show) settings.push("colorbar",`colorbar style={ylabel={${label(c.title,opts.tex_labels)}}}`);
       }
       if (panel.title != null) settings.push(`title={${label(panel.title, opts.tex_labels)}}`);
-      out.push(`${multi ? "\\nextgroupplot" : "\\begin{axis}"}[\n  ${settings.join(",\n  ")}\n]`);
+      out.push(`${multi && !overlay ? "\\nextgroupplot" : "\\begin{axis}"}[\n  ${settings.join(",\n  ")}\n]`);
       const legends = new Set();
       if (panel.legendTitle != null) out.push("\\addlegendimage{empty legend}", `\\addlegendentry{\\textbf{${label(panel.legendTitle,opts.tex_labels)}}}`);
       for (const [i, plot] of panel.plots.entries()) {
         const {style: s, mark: m, horizontal: h} = plot;
         const legend = plot.legend != null && !legends.has(plot.legend);
         const draw = (points, extra = [], fill = false) => out.push(`\\addplot[${[...plotStyle(s, fill), ...extra, ...(legend ? [] : ["forget plot"])].join(",")}] coordinates {\n${points.map(coord).join("\n")}\n};`);
-        if (plot.type === "line") draw(stepped(plot.points, m.interpolate, h, panel.axes), m.point ? pointStyle(s) : ["mark=none"]);
+        if(plot.type==="line" && m.interpolate==="monotone") {
+          if(!plot.curve)fail("interpolate","monotone requires the official normalization stage");
+          out.push(`\\draw[${plotStyle(s).join(",")}] ${curvePath(plot.curve)};`);
+          if(m.point)draw(plot.points,["only marks",...pointStyle(s)]);
+          else if(legend)out.push(`\\addlegendimage{${plotStyle(s).join(",")}}`);
+        }
+        else if (plot.type === "line") draw(stepped(plot.points, m.interpolate, h, panel.axes), m.point ? pointStyle(s) : ["mark=none"]);
+        else if(plot.type==="tick") draw(plot.points,["only marks",`mark=${m.orient==="vertical"?"|":"-"}`,`mark size=${bp((m.size || 20)/2)}`,`line width=${bp(m.thickness || 1)}`]);
         else if (plot.type === "point") {
           if (plot.meta) {
             const mapped = `scatter/use mapped color={draw=mapped color,fill=${s.filled ? "mapped color" : "none"}}`;
@@ -854,16 +922,23 @@ globalThis.vlcNativePgfplots = (() => {
             // Ranged/stacked bars remain explicit data-coordinate polygons.
             // For categorical bars the width is expressed in category units.
             for (const b of plot.bars) {
-              if (ca.kind !== "category" && b.c2 == null) fail("bar", "quantitative ranged bars require the secondary category bound");
               if (b.c2 != null && m.size !== undefined) fail("bar", "size and ranged category bounds cannot be combined");
               const fraction = width / (h ? panel.height : panel.width) * (ca.domain[1] - ca.domain[0]);
               const offset = shift / (h ? panel.height : panel.width) * (ca.domain[1] - ca.domain[0]);
-              const a = b.c2 == null ? b.c + offset - fraction / 2 : b.c, z = b.c2 == null ? b.c + offset + fraction / 2 : b.c2;
+              let a = b.c2 == null ? b.c + offset - fraction / 2 : b.c, z = b.c2 == null ? b.c + offset + fraction / 2 : b.c2;
+              if(ca.kind==="log" && b.c2==null){const half=width/(h?panel.height:panel.width)*Math.log(ca.domain[1]/ca.domain[0])/2;a=b.c*Math.exp(-half);z=b.c*Math.exp(half);}
               const points = [[a,b.low],[z,b.low],[z,b.high],[a,b.high],[a,b.low]].map(pt => h ? [pt[1],pt[0]] : pt);
               out.push(`\\addplot[${[...plotStyle(s,true),"mark=none","forget plot"].join(",")}] coordinates {${points.map(coord).join(" ")}};`);
             }
             if (legend) out.push(`\\addlegendimage{area legend,fill=${texColor(s.fill)},draw=${texColor(s.stroke)}}`);
           }
+        } else if(plot.type==="band" && m.interpolate==="monotone") {
+          if(!plot.curvedBands)fail("interpolate","monotone requires the official normalization stage");
+          for(const [bi,band] of plot.curvedBands.entries()){
+            const name=`vlc${pi}p${i}b${bi}`;
+            out.push(`\\path[name path=${name}lo] ${curvePath(band.lo)};`,`\\path[name path=${name}hi] ${curvePath(band.hi)};`,`\\addplot[${[...plotStyle(s,true),"draw=none","forget plot"].join(",")}] fill between[of=${name}lo and ${name}hi];`);
+          }
+          if(legend)out.push(`\\addlegendimage{area legend,fill=${texColor(s.fill)},draw=none}`);
         } else if (plot.type === "band") {
           const lower = stepped(plot.lower, m.interpolate, h, panel.axes), upper = stepped(plot.upper, m.interpolate, h, panel.axes);
           // Split at invalid rows so a band never bridges missing observations.
@@ -896,9 +971,13 @@ globalThis.vlcNativePgfplots = (() => {
         }
         if (legend) { out.push(`\\addlegendentry{${label(plot.legend,opts.tex_labels)}}`); legends.add(plot.legend); }
       }
-      if (!multi) out.push("\\end{axis}");
+      for(const guide of panel.symbolLegends || []) {
+        out.push("\\addlegendimage{empty legend}",`\\addlegendentry{${label(guide.title,opts.tex_labels)}}`);
+        for(const item of guide.items)out.push(`\\addlegendimage{only marks,${pointStyle(style({type:"point",filled:true,...item.mark})).join(",")}}`,`\\addlegendentry{${label(item.label,opts.tex_labels)}}`);
+      }
+      if (!multi || overlay) out.push("\\end{axis}");
     }
-    if (multi) out.push("\\end{groupplot}");
+    if (multi && !groupClosed) out.push("\\end{groupplot}");
     if (figure.title != null) out.push(`\\node[anchor=south] at (current bounding box.north) {${label(figure.title,opts.tex_labels)}};`);
     out.push("\\end{tikzpicture}");
     if (opts.standalone) out.push("\\end{document}");
@@ -906,5 +985,5 @@ globalThis.vlcNativePgfplots = (() => {
     if (tex.length > LIMIT.output) fail("output", "output size limit exceeded");
     return tex;
   }
-  return Object.freeze({lower, compile: (spec, options = {}) => emit(lower(spec, options), options)});
+  return Object.freeze({lower, emit, compile: (spec, options = {}) => emit(lower(spec, options), options)});
 })();

@@ -1,11 +1,9 @@
-// Generate actual backend output for TeX/integration tests; not a second emitter.
-const fs=require('node:fs'),path=require('node:path');
-require('../../src/js/native_pgfplots.js');
-const {fixtures}=require('./fixtures.cjs');
-const dir=process.argv[2];if(!dir)throw new Error('usage: node generate.cjs OUTPUT_DIRECTORY');
-fs.mkdirSync(dir,{recursive:true});
-for(const [name,spec] of Object.entries(fixtures())){
- fs.writeFileSync(path.join(dir,name+'.vl.json'),JSON.stringify(spec,null,2)+'\n');
- fs.writeFileSync(path.join(dir,name+'.tex'),globalThis.vlcNativePgfplots.compile(spec,{standalone:true,tex_labels:name==='math'}));
- fs.writeFileSync(path.join(dir,name+'.ir.json'),JSON.stringify(globalThis.vlcNativePgfplots.lower(spec),null,2)+'\n');
-}
+// Keep the rendering driver's stable entry point, but use production normalization.
+const {spawnSync}=require('node:child_process');
+const path=require('node:path');
+const result=spawnSync(process.execPath,[
+ '--no-warnings','--loader',path.join(__dirname,'vendor-loader.mjs'),
+ path.join(__dirname,'generate-normalized.mjs'),...process.argv.slice(2),
+],{stdio:'inherit',env:{...process.env,TZ:process.env.TZ || 'UTC'}});
+if(result.error)throw result.error;
+process.exit(result.status ?? 1);
