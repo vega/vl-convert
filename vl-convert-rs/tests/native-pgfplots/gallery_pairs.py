@@ -23,7 +23,7 @@ import vl_convert as vlc
 
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "gallery-comparisons").resolve()
 OUT.mkdir(parents=True, exist_ok=True)
-ROOT = Path(__file__).resolve().parents[4]
+ROOT = Path(__file__).resolve().parents[3]
 JS = ROOT / "vl-convert-rs/src/js/native_pgfplots.js"
 
 def examples():
